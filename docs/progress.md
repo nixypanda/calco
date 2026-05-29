@@ -132,6 +132,34 @@ CalCo/
 | just | 1.51.0 |
 | Nix | 2.34.7 |
 
+---
+
+## 2026-05-30 — Playwright E2E Testing
+
+### What was done
+
+1. **Installed `@playwright/test`** — added to `frontend/` as a dev dependency via pnpm.
+2. **Created `frontend/playwright.config.ts`** — test dir `./e2e`, Chromium only, auto-starts Vite dev server via `webServer` (port 5173, `reuseExistingServer: true`).
+3. **Created `frontend/e2e/app.spec.ts`** — smoke test asserting `<h1>CalCo</h1>` and `.status: "Frontend running ✓"` render correctly.
+4. **Created `frontend/tsconfig.e2e.json`** — extends main tsconfig with `@playwright/test` types, includes `e2e/`.
+5. **Created `AGENTS.md`** — project root, documents Playwright commands and setup for the opencode agent.
+6. **Updated `flake.nix`** — added `playwright-driver.browsers` to `buildInputs` and `PLAYWRIGHT_BROWSERS_PATH` env var in `shellHook`.
+7. **Updated `frontend/package.json`** — added `test:e2e` and `test:e2e:ui` scripts.
+8. **Updated `frontend/.gitignore`** — ignores `playwright-report/`, `test-results/`, `/playwright/.cache/`.
+9. **Updated `justfile`** — added `frontend-e2e` recipe (`npx playwright test`), included in `test`.
+10. **Added `frontend/pnpm-workspace.yaml`** — `allowBuilds: { esbuild: true }` (required by pnpm for Vite).
+11. **Installed Chromium browser** — downloaded to `~/.cache/ms-playwright/chromium-1223` (bypassed SSL cert via `NODE_TLS_REJECT_UNAUTHORIZED=0` behind corporate proxy).
+
+### Verified
+
+| Check | Result |
+|---|---|
+| `cd frontend && npx playwright test` | 1 passed (7.0s) |
+
+### Commit
+
+`405de48` — 10 files, 132 insertions.
+
 ### Next steps
 
 - Phase 1.3: Write auth migrations (identities, user_profiles, sessions, auth_audit_events)

@@ -72,6 +72,10 @@ frontend-build:
 frontend-test:
     cd frontend && npm run test
 
+# Run frontend e2e tests
+frontend-e2e:
+    cd frontend && npx playwright test
+
 # ──────────────────────────────────────────────
 # Combined
 # ──────────────────────────────────────────────
@@ -87,7 +91,7 @@ dev: db-wait
 build: backend-build frontend-build
 
 # Run all tests
-test: backend-test frontend-test
+test: backend-test frontend-test frontend-e2e
 
 # ──────────────────────────────────────────────
 # Misc

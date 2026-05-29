@@ -34,6 +34,7 @@
           # Frontend
           nodejs_22
           pnpm
+          playwright-driver.browsers
 
           # Tools
           just
@@ -41,6 +42,8 @@
         ];
 
         shellHook = ''
+          export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+
           echo "CalCo dev shell"
           echo "  Rust:  $(cargo --version)"
           echo "  Node:  $(node --version)"
