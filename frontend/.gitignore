@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+
+# Env files
+.env
+.env.local
+.env.development.local
+.env.production.local
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

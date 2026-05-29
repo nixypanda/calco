@@ -1,0 +1,11 @@
+/target
+
+# Rust cache files
+*.pdb
+
+# Env files
+.env
+
+# IDE
+.idea/
+.vscode/
