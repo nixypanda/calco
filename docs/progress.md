@@ -78,8 +78,62 @@ CalCo/
 | `nodePackages.pnpm` removed in nixpkgs 26.05 | Changed to `pkgs.pnpm` (top-level) |
 | `packages.default` referenced non-existent `Cargo.lock` | Removed package output (no Rust crate initialized yet) |
 
+---
+
+## 2026-05-30 — Backend + Frontend Hello World
+
+### What was done
+
+**1. .gitignore files** — root, backend/, frontend/
+- Root: `.direnv/`, `.env`, `.DS_Store`, editor dirs, `*.log`, Nix `result`
+- Backend: `/target`, `.env`
+- Frontend: `node_modules/`, `dist/`, `.env*`, `.tsbuildinfo`
+
+**2. Flake fix** — `nodePackages.pnpm` removed in nixpkgs 26.05, changed to `pkgs.pnpm`. Removed premature `packages.default` (no Cargo.lock existed yet).
+
+**3. Initial commit** (`067ee16`) — 18 files: project structure, all 6 design docs, implementation plan, Docker Compose, justfile, flake, .envrc, .gitignore files.
+
+**4. Rust backend initialized**
+- `cargo init backend/` with axum 0.8 + tokio + serde + tower-http (CORS) + tracing
+- `GET /health` → `ok`
+- `GET /version` → `0.1.0`
+- Config via `APP_HOST` (default `0.0.0.0`) and `APP_PORT` (default `3001`)
+- Builds and runs successfully
+
+**5. React frontend initialized** (manual setup — `create-vite` hung due to pnpm daemon issue)
+- Vite 6 + React 19 + TypeScript 5.7
+- `react-router-dom` 7 included
+- Vite proxy: `/api/*` → `localhost:3001`
+- Builds successfully (194 KB JS bundle)
+- Dev server on `:5173`, serves `<title>CalCo — Food Tracker</title>`
+
+**6. PostgreSQL started** via `docker compose up -d`
+- Postgres 16 Alpine on `:5432`
+- Database `calco`, user/pass `calco`, persistent volume `pgdata`
+
+**7. Second commit** (`ecb9e67`) — 17 files: all backend + frontend source code.
+
+### Verified
+
+| Service | Endpoint | Result |
+|---|---|---|
+| Backend | `GET /health` | `ok` |
+| Backend | `GET /version` | `0.1.0` |
+| Frontend | `GET /` | `CalCo — Food Tracker` |
+| Database | `pg_isready` | accepting connections |
+
+### Dev shell tools
+
+| Tool | Version |
+|---|---|
+| Rust/cargo | 1.96.0 |
+| Node | 22.22.3 |
+| pnpm | 11.1.2 |
+| just | 1.51.0 |
+| Nix | 2.34.7 |
+
 ### Next steps
 
-- Phase 1.1: `cargo init backend/` with dependencies (axum, sqlx, serde, tokio, argon2, etc.)
-- Phase 1.2: Start PostgreSQL via `just up`
-- Phase 1.3: Write auth migrations and seed reference data
+- Phase 1.3: Write auth migrations (identities, user_profiles, sessions, auth_audit_events)
+- Phase 1.4: Seed reference data (nutrients, units)
+- Phase 1.5: Implement auth domain + HTTP routes (bootstrap admin, login, session, user management)
