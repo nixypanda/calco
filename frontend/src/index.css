@@ -4,26 +4,253 @@
   background: #f5f5f5;
 }
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 0;
 }
 
-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100dvh;
-  text-align: center;
-}
-
-h1 {
-  font-size: 3rem;
+h1, h2, h3, p {
   margin: 0;
 }
 
-.status {
-  color: #16a34a;
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  font-size: 1.125rem;
+  color: #666;
+}
+
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 1rem;
+}
+
+.auth-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 360px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.auth-card h1 {
+  font-size: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.auth-card h2 {
+  font-size: 1.125rem;
+  margin-bottom: 0.5rem;
   font-weight: 500;
+  color: #555;
+}
+
+.auth-card p {
+  color: #666;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #444;
+}
+
+.auth-card input {
+  padding: 0.625rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.9375rem;
+}
+
+.auth-card input:focus {
+  outline: none;
+  border-color: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+}
+
+.auth-card button {
+  padding: 0.625rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.auth-card button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.auth-card .error {
+  color: #dc2626;
+  font-size: 0.8125rem;
+  margin: 0;
+}
+
+.admin-page, .user-home {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.admin-page header, .user-home header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.admin-page header h1, .user-home header h1 {
+  font-size: 1.25rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  color: #555;
+}
+
+.header-right button, .actions button {
+  padding: 0.375rem 0.75rem;
+  background: #e5e5e5;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.header-right button:hover, .actions button:hover {
+  background: #ccc;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.section-header h2 {
+  font-size: 1rem;
+}
+
+.section-header button {
+  padding: 0.375rem 0.75rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+th {
+  text-align: left;
+  padding: 0.5rem;
+  border-bottom: 2px solid #e5e5e5;
+  font-weight: 600;
+  color: #555;
+}
+
+td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.actions {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.create-user-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.create-user-form input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.create-user-form button {
+  padding: 0.5rem 0.75rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.reset-password-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.reset-password-form input {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.reset-password-form button {
+  padding: 0.5rem 0.75rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.placeholder {
+  text-align: center;
+  padding: 3rem 0;
+  color: #999;
+  font-size: 1rem;
 }

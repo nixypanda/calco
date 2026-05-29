@@ -165,3 +165,43 @@ CalCo/
 - Phase 1.3: Write auth migrations (identities, user_profiles, sessions, auth_audit_events)
 - Phase 1.4: Seed reference data (nutrients, units)
 - Phase 1.5: Implement auth domain + HTTP routes (bootstrap admin, login, session, user management)
+
+---
+
+## 2026-05-30 — Auth System (Backend + Frontend)
+
+### What was done
+
+**Backend (Rust/axum):**
+- 6 PostgreSQL migrations (extensions, identities, user_profiles, sessions, auth_audit_events, indexes)
+- Domain layer: Identity, UserProfile, Session entities; newtypes & enums (IdentityRole, IdentityStatus, AuthError)
+- Application layer: repository trait ports, use cases (bootstrap_status, create_bootstrap_admin, login, get_session, logout, admin_create_user, admin_list_users, admin_reset_password, admin_disable_user, admin_enable_user)
+- Infrastructure layer: PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository with sqlx queries, migration runner
+- HTTP layer: session cookie extractors (RawSessionToken, AuthIdentity, AuthUser, AuthAdmin), DTOs, route handlers for all endpoints under `/auth/*`
+- Config: AppConfig struct reading from env vars, dotenvy init
+- Route wiring in main.rs: `/api/*` prefix for health/version, auth routes merged at root
+
+**Frontend (React/Vite):**
+- API client layer: `api/client.ts` (fetch wrapper with credentials), `api/auth.ts` (auth endpoints), `api/admin.ts` (admin CRUD endpoints)
+- `hooks/AuthContext.tsx` — provider with login/logout/createAdmin/restoreSession, loading/identity/profile state
+- Route guards: ProtectedRoute (redirects to `/login`), AdminRoute (redirects to `/home` for non-admins)
+- Pages: BootstrapAdminSetup, LoginPage, AdminDashboard (user list, create, reset password, disable/enable), UserHome
+- Routing: RootRedirect with bootstrap check + role-based redirects, BootstrapGate for `/setup`
+- Styling: CSS for auth pages, admin dashboard, user home
+
+**Testing:**
+- 24 Vitest unit tests (5 files: AuthContext, 3 pages, route guards)
+- 1 Playwright E2E test covering full bootstrap→admin CRUD→user login→logout flow
+- vitest.config.ts, test-setup.ts, Playwright config
+
+### Verified
+
+| Check | Result |
+|---|---|
+| `cd frontend && pnpm vitest run` | 24/24 pass |
+| `cd frontend && pnpm exec playwright test e2e/auth.spec.ts` | 1 passed (3.4s) |
+| Backend endpoints via curl | All respond correctly |
+
+### Commit
+
+`03af22a` — "Implement password-based auth system with session management" (42 files, +5703 −54)
