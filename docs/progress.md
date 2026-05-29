@@ -205,3 +205,32 @@ CalCo/
 ### Commit
 
 `03af22a` — "Implement password-based auth system with session management" (42 files, +5703 −54)
+
+---
+
+## 2026-05-30 — Catalog Domain (Phase 1.5 + Phase 2)
+
+### What was done
+
+**Phase 1.5 — Seed reference data:**
+- Migration `20250530000007_create_nutrients.sql` — `nutrients` table (id, code, name, unit, category)
+- Migration `20250530000008_create_units.sql` — `units` table (code PK, name, kind)
+- Migration `20250530000009_seed_reference_data.sql` — idempotent seed of 12 units and 11 nutrients
+
+**Phase 2 — Catalog domain (consolidated, one file per layer):**
+- `domain/catalog.rs` — Product aggregate (Product, ProductNutrient, ProductServing), Nutrient entity, all value objects (ProductId, Source, ProductVisibility, NutrientCode, UnitCode, Barcode, etc.)
+- `domain/nutrition.rs` — NutritionCalculator service, Quantity, NutrientAmount, CalculatedNutrition
+- `application/catalog.rs` — Repository traits (ProductRepository, NutrientRepository, UnitRepository, TransactionManager), CatalogServices with all use cases (search, get, create/update/delete custom food, list nutrients/units)
+- `infrastructure/postgres/catalog.rs` — PostgresProductRepository (search, CRUD with nutrients/servings atomic), PostgresNutrientRepository, PostgresUnitRepository, inline row structs
+- `interfaces/http/catalog.rs` — All route handlers + DTOs for `/foods/*`, `/foods/custom/*`, `/nutrients/*`, `/units/*` with JSON error shape
+- Migration `20250530000010_create_products.sql` — products, product_nutrients, product_servings tables with indexes and FKs
+
+### Wired
+
+- All mod.rs files updated, main.rs wired with catalog repos + routes mounted at root level
+
+### Next steps
+
+- Phase 3: Logging + Summary domain (migrations, food_logs, food_log_nutrients, summary API)
+- Phase 4: Frontend catalog UI (search, detail, custom food forms)
+- Phase 5: Frontend diary/history view

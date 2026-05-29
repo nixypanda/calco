@@ -17,7 +17,14 @@ use crate::infrastructure::postgres::auth::{
     PostgresSessionRepository,
     PostgresUserProfileRepository,
 };
+use crate::infrastructure::postgres::catalog::{
+    PostgresProductRepository,
+    PostgresNutrientRepository,
+    PostgresUnitRepository,
+};
 use crate::interfaces::http::auth::{auth_routes, AppState};
+use crate::interfaces::http::catalog::{catalog_routes, CatalogState};
+use crate::application::catalog::{CatalogServices, ProductRepository, NutrientRepository, UnitRepository};
 
 #[tokio::main]
 async fn main() {
@@ -46,11 +53,19 @@ async fn main() {
     let session_repo = Arc::new(PostgresSessionRepository::new(pool.clone()));
     let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()));
 
-    let state = AppState {
+    let product_repo = Arc::new(PostgresProductRepository::new(pool.clone())) as Arc<dyn ProductRepository>;
+    let nutrient_repo = Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
+    let unit_repo = Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
+
+    let auth_state = AppState {
         identity_repo,
         session_repo,
         profile_repo,
         config: config.clone(),
+    };
+
+    let catalog_state = CatalogState {
+        services: CatalogServices::new(product_repo, nutrient_repo, unit_repo),
     };
 
     let api = Router::new()
@@ -59,7 +74,8 @@ async fn main() {
 
     let app = Router::new()
         .nest("/api", api)
-        .merge(auth_routes(state))
+        .merge(auth_routes(auth_state))
+        .merge(catalog_routes(catalog_state))
         .layer(CorsLayer::permissive());
 
     let addr = config.bind_addr;
