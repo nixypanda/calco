@@ -32,6 +32,32 @@ just test                 # runs all tests (backend + frontend unit + e2e)
 - `reuseExistingServer: true` (non-CI) means you can keep the dev server running for faster iteration.
 - Chromium path is set via `PLAYWRIGHT_BROWSERS_PATH` in the Nix flake dev shell.
 
+## Backend Rust Tests
+
+```bash
+# Run all backend tests
+cd backend && cargo test
+
+# Run specific test
+cd backend && cargo test test_log_food_success
+
+# Run tests for a specific module
+cd backend && cargo test domain::food_log
+```
+
+### Via just
+
+```bash
+just backend-test    # run backend unit tests
+just test            # runs all tests (backend + frontend unit + e2e)
+```
+
+### Notes
+
+- Backend tests use manual mock repos (no database required).
+- Tests are inline in source files under `#[cfg(test)] mod tests { ... }` blocks.
+- Domain tests are pure unit tests; application tests use `MockFoodLogRepo`, `MockProductLookup`, and `MockSummaryRepo`.
+
 ### If browser is not found
 
 Make sure you're in the Nix dev shell (`direnv allow` or `nix develop`). The `PLAYWRIGHT_BROWSERS_PATH` env var must point to the Nix-provided Chromium.

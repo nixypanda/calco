@@ -22,9 +22,15 @@ use crate::infrastructure::postgres::catalog::{
     PostgresNutrientRepository,
     PostgresUnitRepository,
 };
+use crate::infrastructure::postgres::food_log::{
+    PostgresFoodLogRepository,
+    PostgresSummaryRepository,
+};
 use crate::interfaces::http::auth::{auth_routes, AppState};
 use crate::interfaces::http::catalog::{catalog_routes, CatalogState};
+use crate::interfaces::http::food_log::food_log_routes;
 use crate::application::catalog::{CatalogServices, ProductRepository, NutrientRepository, UnitRepository};
+use crate::application::food_log::{FoodLogServices, FoodLogRepository, SummaryRepository, ProductLookup};
 
 #[tokio::main]
 async fn main() {
@@ -57,11 +63,19 @@ async fn main() {
     let nutrient_repo = Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
     let unit_repo = Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
 
+    let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
+    let food_log_repo = food_log_repo_impl.clone() as Arc<dyn FoodLogRepository>;
+    let product_lookup = food_log_repo_impl as Arc<dyn ProductLookup>;
+    let summary_repo = Arc::new(PostgresSummaryRepository::new(pool.clone())) as Arc<dyn SummaryRepository>;
+
+    let food_log_services = FoodLogServices::new(food_log_repo, product_lookup, summary_repo);
+
     let auth_state = AppState {
         identity_repo,
         session_repo,
         profile_repo,
         config: config.clone(),
+        food_log_services: Some(food_log_services),
     };
 
     let catalog_state = CatalogState {
@@ -74,8 +88,9 @@ async fn main() {
 
     let app = Router::new()
         .nest("/api", api)
-        .merge(auth_routes(auth_state))
+        .merge(auth_routes(auth_state.clone()))
         .merge(catalog_routes(catalog_state))
+        .merge(food_log_routes(auth_state))
         .layer(CorsLayer::permissive());
 
     let addr = config.bind_addr;

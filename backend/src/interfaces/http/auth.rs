@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::application::auth::*;
+use crate::application::food_log::FoodLogServices;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub session_repo: std::sync::Arc<dyn SessionRepository>,
     pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
+    pub food_log_services: Option<FoodLogServices>,
 }
 
 pub fn auth_routes(state: AppState) -> Router {

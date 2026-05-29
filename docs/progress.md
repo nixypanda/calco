@@ -231,6 +231,59 @@ CalCo/
 
 ### Next steps
 
-- Phase 3: Logging + Summary domain (migrations, food_logs, food_log_nutrients, summary API)
 - Phase 4: Frontend catalog UI (search, detail, custom food forms)
 - Phase 5: Frontend diary/history view
+
+---
+
+## 2026-05-30 — Phase 3: Food Log + Summary Domain
+
+### What was done
+
+**1. Migration `20250530000011_create_food_logs.sql`** — `food_logs` and `food_log_nutrients` tables with:
+   - FK constraints (`user_id → user_profiles`, `item_product_id → products`, cascade delete snapshots)
+   - CHECK constraint for exactly one item reference
+   - Indexes on `(user_id, logged_at)` and `(user_id, meal_slot, logged_at)`
+
+**2. Domain layer (`domain/food_log.rs`)** — `FoodLogId`, `MealSlot` (Breakfast/Lunch/Dinner/Snack), `LoggedItem::Product`, `FoodLogNutrientSnapshot`, `FoodLog` aggregate with `is_owned_by`
+
+**3. Application layer (`application/food_log.rs`)** — Repository ports (`FoodLogRepository`, `ProductLookup`, `SummaryRepository`), `FoodLogServices` with use cases:
+   - `log_food` — loads product, converts qty to grams, snapshots nutrients, creates log
+   - `get_food_log` / `get_logs_for_range` / `update_food_log` / `delete_food_log`
+   - `get_summary` — delegates to summary repo (SQL aggregation from snapshots)
+
+**4. Infrastructure (`infrastructure/postgres/food_log.rs`)** — `PostgresFoodLogRepository` (atomic create/update with snapshot replacement, range queries) and `PostgresSummaryRepository` (`SUM` with optional `WHERE code = ANY(...)`)
+
+**5. HTTP layer (`interfaces/http/food_log.rs`)** — 6 authenticated routes:
+   - `POST /logs`, `GET /logs/{id}`, `GET /logs?from=&to=`, `PUT /logs/{id}`, `DELETE /logs/{id}`
+   - `GET /summary?from=&to=&codes=`
+
+**6. Wiring** — All mod.rs files updated, `food_log_services: Option<FoodLogServices>` added to `AppState`, routes mounted in `main.rs`
+
+### Tests — 18 unit tests
+
+**Domain (5 tests):**
+- `test_meal_slot_roundtrip` — all 4 variants roundtrip via `as_str`/`from_str`
+- `test_meal_slot_from_str_invalid` — invalid input yields error
+- `test_food_log_id_generates_unique_ids` / `test_food_log_id_from_uuid`
+- `test_food_log_is_owned_by` — ownership check
+- `test_food_log_nutrient_snapshot` — struct construction
+
+**Application (13 tests with mock repos):**
+- `test_log_food_success` — full log flow with nutrient calculation
+- `test_log_food_product_not_found` — error on missing product
+- `test_log_food_invalid_meal_slot` — validation error
+- `test_get_food_log_success` / `test_get_food_log_not_found`
+- `test_update_food_log_success` / `test_update_food_log_forbidden`
+- `test_delete_food_log_success` / `test_delete_food_log_forbidden` / `test_delete_food_log_not_found`
+- `test_get_logs_for_range` — date range filtering
+- `test_summary_delegates_to_repo` — delegates properly
+
+### Verified
+
+| Check | Result |
+|---|---|
+| `cd backend && cargo test` | 18/18 pass |
+| `GET /api/health` | `ok` |
+| `GET /logs` (unauthenticated) | `401 Unauthorized` |
+| `GET /summary` (unauthenticated) | `401 Unauthorized` |
