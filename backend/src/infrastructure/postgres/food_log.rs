@@ -384,11 +384,11 @@ impl PostgresFoodLogRepository {
     ) -> Result<Product, FoodLogError> {
         Ok(Product {
             id: ProductId(r.id),
-            source: Source::from_str(&r.source).map_err(|e| FoodLogError::Internal(e))?,
+            source: Source::from_str(&r.source).map_err(FoodLogError::Internal)?,
             source_id: r.source_id,
             user_id: r.user_id,
             visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(|e| FoodLogError::Internal(e))?,
+                .map_err(FoodLogError::Internal)?,
             barcode: r.barcode.map(Barcode),
             name: ProductName(r.name),
             brand: r.brand.map(Brand),

@@ -128,7 +128,7 @@ impl FoodLogServices {
         let calculated = NutritionCalculator::calculate(grams, &nutrients);
 
         let meal_slot = match input.meal_slot {
-            Some(ref s) => Some(MealSlot::from_str(s).map_err(|e| FoodLogError::Validation(e))?),
+            Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
             None => None,
         };
 
@@ -215,7 +215,7 @@ impl FoodLogServices {
         }).collect();
 
         let meal_slot = match input.meal_slot {
-            Some(ref s) => Some(MealSlot::from_str(s).map_err(|e| FoodLogError::Validation(e))?),
+            Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
             None => None,
         };
 

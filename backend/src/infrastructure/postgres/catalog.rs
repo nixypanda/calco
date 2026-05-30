@@ -73,11 +73,11 @@ impl PostgresProductRepository {
     ) -> Result<Product, CatalogError> {
         Ok(Product {
             id: ProductId(r.id),
-            source: Source::from_str(&r.source).map_err(|e| CatalogError::Internal(e))?,
+            source: Source::from_str(&r.source).map_err(CatalogError::Internal)?,
             source_id: r.source_id,
             user_id: r.user_id,
             visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(|e| CatalogError::Internal(e))?,
+                .map_err(CatalogError::Internal)?,
             barcode: r.barcode.map(Barcode),
             name: ProductName(r.name),
             brand: r.brand.map(Brand),

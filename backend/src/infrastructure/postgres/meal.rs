@@ -79,7 +79,7 @@ impl MealRepository for PostgresMealRepository {
         .bind(meal.id.0)
         .bind(meal.user_id)
         .bind(&meal.name.0)
-        .bind(&meal.notes.as_ref().map(|n| n.0.as_str()))
+        .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
         .bind(meal.total_quantity_amount)
         .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
         .bind(meal.created_at)
@@ -170,7 +170,7 @@ impl MealRepository for PostgresMealRepository {
         )
         .bind(meal.id.0)
         .bind(&meal.name.0)
-        .bind(&meal.notes.as_ref().map(|n| n.0.as_str()))
+        .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
         .bind(meal.total_quantity_amount)
         .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
         .execute(&mut *tx)
@@ -301,11 +301,11 @@ impl PostgresMealRepository {
     ) -> Result<Product, MealError> {
         Ok(Product {
             id: ProductId(r.id),
-            source: Source::from_str(&r.source).map_err(|e| MealError::Internal(e))?,
+            source: Source::from_str(&r.source).map_err(MealError::Internal)?,
             source_id: r.source_id,
             user_id: r.user_id,
             visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(|e| MealError::Internal(e))?,
+                .map_err(MealError::Internal)?,
             barcode: r.barcode.map(Barcode),
             name: ProductName(r.name),
             brand: r.brand.map(Brand),
