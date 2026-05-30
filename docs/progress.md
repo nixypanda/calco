@@ -287,3 +287,84 @@ CalCo/
 | `GET /api/health` | `ok` |
 | `GET /logs` (unauthenticated) | `401 Unauthorized` |
 | `GET /summary` (unauthenticated) | `401 Unauthorized` |
+
+---
+
+## 2026-05-30 — Phase 5: Frontend Catalog UI
+
+### What was done
+
+**1. API client (`src/api/foods.ts`)** — Typed functions for all catalog endpoints:
+- `searchFoods`, `getFoodDetail`, `createCustomFood`, `updateCustomFood`, `deleteCustomFood`, `listNutrients`, `listUnits`
+- TypeScript interfaces matching backend response shapes (`SearchResult`, `ProductDetail`, `NutrientEntry`, `ServingEntry`, `CreateFoodRequest`, etc.)
+
+**2. FoodSearch page (`src/pages/FoodSearch.tsx`)** — Route `/search`:
+- Search input with 300ms debounce → `GET /foods/search?q=`
+- Results list: name, brand, category chip, source badge ("Custom" for USER source)
+- Loading skeleton (3 shimmer rows), empty state ("Search for a food to get started"), not-found state
+- Error display for failed requests
+- Tap result → navigate to `/foods/:id`
+
+**3. FoodDetail page (`src/pages/FoodDetail.tsx`)** — Route `/foods/:id`:
+- Header: name, brand, category, barcode, serving size
+- Per-100g nutrient table (code, amount, unit)
+- Serving options list with quantity/grams
+- Quantity picker + unit dropdown (populated from `GET /units`)
+- "Log Food" button (placeholder navigation to `/home`; actual logging comes in Phase 6)
+- Edit/Delete buttons for custom (USER source) foods only
+- Delete confirmation dialog → `DELETE /foods/custom/:id` → navigate to `/search`
+- Loading, error, not-found states
+
+**4. CustomFoodCreate page (`src/pages/CustomFoodCreate.tsx`)** — Route `/foods/custom/new`:
+- Basic info: name (required), brand, category
+- Portion info: serving size g, default quantity, default unit (dropdown from `GET /units`)
+- Dynamic nutrient rows: nutrient code dropdown (from `GET /nutrients`) + amount_per_100g, add/remove rows
+- Dynamic serving rows: label + quantity + unit + grams, add/remove rows
+- Validation: name required, empty nutrient/serving rows excluded from submission
+- Submit → `POST /foods/custom` → navigate to food detail
+
+**5. CustomFoodEdit page (`src/pages/CustomFoodEdit.tsx`)** — Route `/foods/custom/:id/edit`:
+- Loads existing food via `GET /foods/:id` → pre-populates all form fields
+- Same form layout as create (name, brand, category, portion info, nutrients, servings)
+- Submit → `PUT /foods/custom/:id` → navigate to food detail
+- Loading, error states
+
+**6. Routes wired in `App.tsx`** — 4 new routes added:
+- `/search` → FoodSearch
+- `/foods/:id` → FoodDetail
+- `/foods/custom/new` → CustomFoodCreate
+- `/foods/custom/:id/edit` → CustomFoodEdit
+- All wrapped in `ProtectedRoute` (user-only, rejects admin)
+
+**7. Navigation** — `UserHome.tsx` updated with "Search Foods" and "Create Custom Food" buttons linking to the new pages.
+
+**8. CSS (`src/index.css`)** — Full styling for:
+- Search bar, result items, category/source chips
+- Skeleton loading animation (`@keyframes shimmer`)
+- Food detail: nutrient table, serving list, log food form
+- Buttons (`.btn-primary`, `.btn-secondary`, `.btn-danger`, `.btn-danger-sm`)
+- Custom food form: input/select styling, nutrient/serving row layouts, section headers
+- Empty states, error states, responsive layout
+
+### Tests — 25 new tests (4 new files)
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `FoodSearch.test.tsx` | 7 | render, empty state, loading, results, no results, error, navigation |
+| `FoodDetail.test.tsx` | 7 | loading, detail display, error, custom food edit/delete buttons, delete flow, cancel delete |
+| `CustomFoodCreate.test.tsx` | 6 | render, empty name validation, submit, error on failure, add/remove nutrient rows, add/remove serving rows |
+| `CustomFoodEdit.test.tsx` | 5 | loading, pre-populated form, submit update, update error, load error |
+
+**Pre-existing fix:** `BootstrapAdminSetup.test.tsx` — fixed `getByPlaceholderText` truthy check that always evaluated to `true`.
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| `cd frontend && pnpm vitest run` | 49/49 pass (was 24) |
+| `cd frontend && pnpm tsc --noEmit` | Clean |
+| `cd frontend && pnpm run build` | Clean (258 KB JS, 8 KB CSS) |
+
+### Next steps
+
+- **Phase 6**: Frontend Diary + History (daily diary view, meal-slot grouping, food log CRUD, summary rings, history browsing)

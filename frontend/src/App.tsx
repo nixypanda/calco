@@ -7,6 +7,10 @@ import { BootstrapAdminSetup } from "./pages/BootstrapAdminSetup";
 import { LoginPage } from "./pages/LoginPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { UserHome } from "./pages/UserHome";
+import { FoodSearch } from "./pages/FoodSearch";
+import { FoodDetail } from "./pages/FoodDetail";
+import { CustomFoodCreate } from "./pages/CustomFoodCreate";
+import { CustomFoodEdit } from "./pages/CustomFoodEdit";
 import { checkBootstrapStatus } from "./api/auth";
 
 function RootRedirect() {
@@ -78,6 +82,38 @@ function App() {
             element={
               <ProtectedRoute>
                 <UserHome />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <FoodSearch />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/foods/:id"
+            element={
+              <ProtectedRoute>
+                <FoodDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/foods/custom/new"
+            element={
+              <ProtectedRoute>
+                <CustomFoodCreate />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/foods/custom/:id/edit"
+            element={
+              <ProtectedRoute>
+                <CustomFoodEdit />
               </ProtectedRoute>
             }
           />

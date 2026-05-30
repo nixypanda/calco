@@ -40,9 +40,7 @@ describe("BootstrapAdminSetup", () => {
     await waitFor(() => {
       expect(screen.getByText("First-Time Setup")).toBeInTheDocument();
     });
-    expect(
-      screen.getByPlaceholderText ? screen.getByText("Create Admin") : null,
-    ).toBeTruthy();
+    expect(screen.getByText("Create Admin")).toBeTruthy();
   });
 
   it("shows error for short password", async () => {
