@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, type SubmitEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { createCustomFood, listNutrients, listUnits } from "../api/foods";
 import type { NutrientItem, UnitItem } from "../api/foods";
@@ -102,7 +102,7 @@ export function CustomFoodCreate() {
     setServingRows(rows);
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
 

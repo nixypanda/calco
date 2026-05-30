@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type SubmitEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -20,7 +20,7 @@ export function LoginPage() {
     return null;
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     if (!username.trim() || !password) {

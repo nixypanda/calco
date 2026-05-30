@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type SubmitEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods } from "../api/foods";
@@ -174,7 +174,7 @@ export function MealForm() {
     setComponents((prev) => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSubmitting(true);
     setError("");

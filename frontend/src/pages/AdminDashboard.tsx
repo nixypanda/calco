@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, type SubmitEvent } from "react";
 import { useAuth } from "../hooks/AuthContext";
 import {
   listUsers,
@@ -53,7 +53,7 @@ export function AdminDashboard() {
     fetchUsers();
   }, []);
 
-  const handleCreate = async (e: FormEvent) => {
+  const handleCreate = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     try {

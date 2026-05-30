@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, type SubmitEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getFoodDetail,
@@ -136,7 +136,7 @@ export function CustomFoodEdit() {
     setServingRows(rows);
   };
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     if (!id) {
