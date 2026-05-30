@@ -108,10 +108,10 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
 
       <section>
-        <div className="section-header">
+        <div className="flex items-center justify-between gap-3 mb-3.5">
           <h2>Users</h2>
           <Button variant="outline" size="sm" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? "Cancel" : "Create User"}

@@ -166,23 +166,23 @@ export function CustomFoodEdit() {
 
   if (loading) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="btn-back"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
               onClick={() => navigate("/home")}
               aria-label="Back to Diary"
             >
-              <span aria-hidden="true">‹</span>
+              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
             </button>
-            <h1>Edit Custom Food</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Edit Custom Food</h1>
           </div>
         </header>
         <main>
-          <div className="skeleton">
-            <div className="skeleton-line w-80" />
-            <div className="skeleton-line w-60" />
+          <div className="flex flex-col gap-3">
+            <div className="skeleton-line w-4/5" />
+            <div className="skeleton-line w-3/5" />
           </div>
         </main>
       </div>
@@ -190,25 +190,25 @@ export function CustomFoodEdit() {
   }
 
   return (
-    <div className="catalog-page">
-      <header>
-        <div className="header-left">
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-          <h1>Edit Custom Food</h1>
+          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Edit Custom Food</h1>
         </div>
       </header>
 
       <main>
-        {error && <p className="error">{error}</p>}
+        {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-          <section className="detail-section">
+          <section className="mb-5">
             <h2>Basic Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
               <label className="text-xs font-bold text-muted-foreground">Name *</label>
@@ -241,7 +241,7 @@ export function CustomFoodEdit() {
             </div>
           </section>
 
-          <section className="detail-section">
+          <section className="mb-5">
             <h2>Portion Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
               <label className="text-xs font-bold text-muted-foreground">Serving Size (g)</label>
@@ -282,8 +282,8 @@ export function CustomFoodEdit() {
             </div>
           </section>
 
-          <section className="detail-section">
-            <div className="section-header">
+          <section className="mb-5">
+            <div className="flex items-center justify-between gap-3 mb-3.5">
               <h2>Nutrients (per 100g)</h2>
               <Button type="button" variant="outline" size="sm" onClick={addNutrientRow} disabled={submitting}>
                 + Add Nutrient
@@ -332,8 +332,8 @@ export function CustomFoodEdit() {
             ))}
           </section>
 
-          <section className="detail-section">
-            <div className="section-header">
+          <section className="mb-5">
+            <div className="flex items-center justify-between gap-3 mb-3.5">
               <h2>Servings</h2>
               <Button type="button" variant="outline" size="sm" onClick={addServingRow} disabled={submitting}>
                 + Add Serving

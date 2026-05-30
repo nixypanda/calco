@@ -148,23 +148,23 @@ export function MealDetail() {
 
   if (loading) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="btn-back"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
-              <span aria-hidden="true">‹</span>
+              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
             </button>
-            <h1>Meal</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meal</h1>
           </div>
         </header>
-        <div className="skeleton">
-          <div className="skeleton-line w-80" />
-          <div className="skeleton-line w-60" />
-          <div className="skeleton-line w-100" />
+        <div className="flex flex-col gap-3">
+          <div className="skeleton-line" style={{ width: "80%" }} />
+          <div className="skeleton-line" style={{ width: "60%" }} />
+          <div className="skeleton-line" style={{ width: "100%" }} />
         </div>
       </div>
     );
@@ -172,58 +172,58 @@ export function MealDetail() {
 
   if (error) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="btn-back"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
-              <span aria-hidden="true">‹</span>
+              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
             </button>
-            <h1>Meal</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meal</h1>
           </div>
         </header>
-        <p className="error">{error}</p>
+        <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
       </div>
     );
   }
 
   if (!meal) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="btn-back"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
-              <span aria-hidden="true">‹</span>
+              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
             </button>
-            <h1>Meal</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meal</h1>
           </div>
         </header>
-        <p className="empty-state">Meal not found.</p>
+        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">Meal not found.</p>
       </div>
     );
   }
 
   return (
-    <div className="catalog-page">
-      <header>
-        <div className="header-left">
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/meals")}
             aria-label="Back to Meals"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-          <h1>{meal.name}</h1>
+          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{meal.name}</h1>
         </div>
-        <div className="manage-actions">
+        <div className="flex flex-wrap gap-2.5">
           <Button
             variant="outline"
             onClick={() => navigate(`/meals/${id}/edit`)}
@@ -251,14 +251,14 @@ export function MealDetail() {
       </header>
 
       {meal.notes && (
-        <p className="meta-item" style={{ marginBottom: "1rem" }}>
+        <p className="text-muted-foreground text-sm" style={{ marginBottom: "1rem" }}>
           {meal.notes}
         </p>
       )}
 
-      <div className="detail-section">
+      <div className="mb-5">
         <h2>Components</h2>
-        <div className="serving-list">
+        <div className="flex flex-col gap-3">
           {meal.components.map((comp) => (
             <Card key={comp.id} className="flex items-center justify-between gap-4 min-h-[50px] p-3">
               <span className="font-bold">
@@ -272,7 +272,7 @@ export function MealDetail() {
         </div>
       </div>
 
-      <div className="detail-section">
+      <div className="mb-5">
         <h2>Log this meal</h2>
         <div className="flex flex-col gap-3.5">
           <div className="flex gap-2.5 items-stretch">
@@ -295,7 +295,7 @@ export function MealDetail() {
               {nutrientsLoading ? "..." : "Calculate"}
             </Button>
           </div>
-          {nutrientsError && <p className="error">{nutrientsError}</p>}
+          {nutrientsError && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{nutrientsError}</p>}
           {nutrients && (
             <>
               <Table>
@@ -319,7 +319,7 @@ export function MealDetail() {
               <Button onClick={handleLog} disabled={logging}>
                 {logging ? "Logging..." : "Log Meal"}
               </Button>
-              {logError && <p className="error">{logError}</p>}
+              {logError && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{logError}</p>}
             </>
           )}
         </div>

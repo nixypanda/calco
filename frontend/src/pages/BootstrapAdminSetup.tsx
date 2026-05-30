@@ -65,7 +65,7 @@ export function BootstrapAdminSetup() {
               disabled={submitting}
             />
           </div>
-          {error && <p className="error">{error}</p>}
+          {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
           <Button type="submit" disabled={submitting}>
             {submitting ? "Creating..." : "Create Admin"}
           </Button>

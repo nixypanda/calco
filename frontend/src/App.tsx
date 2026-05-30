@@ -32,7 +32,7 @@ function RootRedirect() {
   }, []);
 
   if (loading || status.loading) {
-    return <div className="page-loading">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-dvh p-4 text-muted-foreground text-base font-semibold">Loading...</div>;
   }
 
   if (!status.adminExists) return <Navigate to="/setup" replace />;
@@ -52,7 +52,7 @@ function BootstrapGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading || adminExists === null) {
-    return <div className="page-loading">Loading...</div>;
+    return <div className="flex items-center justify-center min-h-dvh p-4 text-muted-foreground text-base font-semibold">Loading...</div>;
   }
 
   if (adminExists && !isAuthenticated) return <Navigate to="/login" replace />;

@@ -97,24 +97,24 @@ export function FoodDetail() {
 
   if (loading) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
           </button>
-            <h1>Food Detail</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Detail</h1>
           </div>
         </header>
         <main>
-          <div className="skeleton">
-            <div className="skeleton-line w-80" />
-            <div className="skeleton-line w-60" />
-            <div className="skeleton-line w-100" />
+          <div className="flex flex-col gap-3">
+            <div className="skeleton-line w-4/5" />
+            <div className="skeleton-line w-3/5" />
+            <div className="skeleton-line w-full" />
           </div>
         </main>
       </div>
@@ -123,21 +123,21 @@ export function FoodDetail() {
 
   if (error && !food) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
           </button>
-            <h1>Food Detail</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Detail</h1>
           </div>
         </header>
         <main>
-          <p className="error">{error}</p>
+          <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
         </main>
       </div>
     );
@@ -145,21 +145,21 @@ export function FoodDetail() {
 
   if (!food) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
           </button>
-            <h1>Food Detail</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Detail</h1>
           </div>
         </header>
         <main>
-          <p className="empty-state">Food not found.</p>
+          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">Food not found.</p>
         </main>
       </div>
     );
@@ -168,37 +168,37 @@ export function FoodDetail() {
   const isCustom = food.source === "USER";
 
   return (
-    <div className="catalog-page">
-      <header>
-        <div className="header-left">
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
           </button>
-          <h1>{food.name}</h1>
+          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{food.name}</h1>
         </div>
       </header>
 
       <main>
-        <div className="food-detail-header">
-          <div className="food-detail-meta">
-            {food.brand && <span className="meta-item">{food.brand}</span>}
+        <div className="mb-5 flex flex-col gap-2">
+          <div className="flex items-center flex-wrap gap-1.5">
+            {food.brand && <span className="text-muted-foreground text-sm">{food.brand}</span>}
             {food.category && (
               <Badge variant="secondary">{food.category}</Badge>
             )}
             {isCustom && <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">Custom</Badge>}
           </div>
           {food.serving_size_g && (
-            <p className="serving-size">
+            <p className="text-muted-foreground text-sm">
               Serving size: {food.serving_size_g}g
             </p>
           )}
         </div>
 
-        <section className="detail-section">
+        <section className="mb-5">
           <h2>Nutrition per 100g</h2>
           <Table>
             <TableHeader>
@@ -221,9 +221,9 @@ export function FoodDetail() {
         </section>
 
         {food.servings.length > 0 && (
-          <section className="detail-section">
+          <section className="mb-5">
             <h2>Servings</h2>
-            <div className="serving-list">
+            <div className="flex flex-col gap-3">
               {food.servings.map((s, i) => (
                 <Card key={i} className="flex items-center justify-between gap-4 min-h-[50px] p-3">
                   <span className="font-bold">{s.label}</span>
@@ -236,10 +236,10 @@ export function FoodDetail() {
           </section>
         )}
 
-        <section className="detail-section">
+        <section className="mb-5">
           <h2>Log Food</h2>
           <div className="flex flex-col gap-3.5">
-            <div className="log-field">
+            <div className="flex flex-col gap-1.5">
               <label>Meal</label>
               <Select value={logSlot} onValueChange={setLogSlot}>
                 <SelectTrigger>
@@ -255,9 +255,9 @@ export function FoodDetail() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="log-field">
+            <div className="flex flex-col gap-1.5">
               <label>Amount</label>
-              <div className="amount-unit-row">
+              <div className="flex gap-2.5 items-stretch max-sm:flex-col">
                 <Input
                   type="number"
                   className="flex-1 min-w-0"
@@ -284,14 +284,14 @@ export function FoodDetail() {
             <Button onClick={handleLog} disabled={logging}>
               {logging ? "Logging..." : "Log Food"}
             </Button>
-            {error && <p className="error">{error}</p>}
+            {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
           </div>
         </section>
 
         {isCustom && (
-          <section className="detail-section">
+          <section className="mb-5">
             <h2>Manage Food</h2>
-            <div className="manage-actions">
+            <div className="flex flex-wrap gap-2.5">
               <Button
                 variant="outline"
                 onClick={() => navigate(`/foods/custom/${id}/edit`)}

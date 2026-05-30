@@ -219,44 +219,44 @@ export function MealForm() {
 
   if (fetching) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="btn-back"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
-              <span aria-hidden="true">‹</span>
+              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
             </button>
-            <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{isEdit ? "Edit Meal" : "Create Meal"}</h1>
           </div>
         </header>
-        <div className="skeleton">
-          <div className="skeleton-line w-80" />
-          <div className="skeleton-line w-60" />
-          <div className="skeleton-line w-100" />
+        <div className="flex flex-col gap-3">
+          <div className="skeleton-line w-4/5" />
+          <div className="skeleton-line w-3/5" />
+          <div className="skeleton-line w-full" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="catalog-page">
-      <header>
-        <div className="header-left">
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/meals")}
             aria-label="Back to Meals"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-          <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{isEdit ? "Edit Meal" : "Create Meal"}</h1>
         </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
 
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5">
@@ -279,7 +279,7 @@ export function MealForm() {
           />
         </div>
 
-        <div className="detail-section">
+        <div className="mb-5">
           <h2>Total Quantity (optional)</h2>
           <div className="flex gap-2.5">
             <Input
@@ -308,8 +308,8 @@ export function MealForm() {
           </div>
         </div>
 
-        <div className="detail-section">
-          <div className="section-header">
+        <div className="mb-5">
+          <div className="flex items-center justify-between gap-3 mb-3.5">
             <h2>Components</h2>
             <Button type="button" variant="outline" size="sm" onClick={addComponent}>
               + Add Component

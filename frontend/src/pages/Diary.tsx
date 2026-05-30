@@ -119,8 +119,8 @@ function NutrientRing({
   const offset = circumference * (1 - pct);
 
   return (
-    <div className="nutrient-ring-wrapper">
-      <svg width={size} height={size} className="nutrient-ring-svg">
+    <div className="relative flex flex-col items-center min-w-0 p-1 rounded-[10px] bg-transparent border-0 shadow-none">
+      <svg width={size} height={size} className="block">
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -142,11 +142,11 @@ function NutrientRing({
           strokeLinecap="round"
         />
       </svg>
-      <div className="ring-center">
-        <span className="ring-value">{Math.round(value)}</span>
-        <span className="ring-unit">{unit}</span>
+      <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
+        <span className="text-foreground text-base font-extrabold leading-tight">{Math.round(value)}</span>
+        <span className="text-[#8e8e93] dark:text-[#86868b] text-[0.625rem] font-bold uppercase">{unit}</span>
       </div>
-      <span className="ring-label">{label}</span>
+      <span className="mt-1.5 text-muted-foreground text-xs font-bold">{label}</span>
     </div>
   );
 }
@@ -165,7 +165,7 @@ function SlotMacroSummary({
   return (
     <button
       type="button"
-      className="slot-macro-summary"
+      className="inline-flex items-center flex-wrap w-fit max-w-full min-h-[24px] p-0 bg-transparent border-0 text-[#8e8e93] dark:text-[#86868b] text-[0.8125rem] font-semibold text-left cursor-pointer"
       onClick={onToggle}
       title="Toggle macro grams and percentages"
     >
@@ -297,19 +297,19 @@ export function Diary() {
   };
 
   const renderLogRow = (log: LogResponse) => (
-    <div key={log.id} className="log-row">
+    <div key={log.id} className="flex items-stretch w-full bg-card border-b border-border last:border-b-0 hover:bg-accent/50">
       <button
         type="button"
-        className="log-row-main"
+        className="flex items-center flex-1 min-w-0 min-h-[56px] gap-2 p-3 bg-transparent border-0 text-foreground cursor-pointer text-left"
         onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
       >
         <span className="flex-1 min-w-0 truncate font-medium">
           {foodNames[log.item.id] ?? "Loading..."}
         </span>
-        <span className="log-row-qty">
+        <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
           {log.quantity.amount} {log.quantity.unit}
         </span>
-        <span className="log-row-cal">
+        <span className="min-w-[64px] text-right text-muted-foreground text-sm font-semibold whitespace-nowrap">
           {Math.round(getCalories(log.nutrients))} kcal
         </span>
       </button>
@@ -318,9 +318,9 @@ export function Diary() {
   );
 
   return (
-    <div className="diary-page">
-      <header>
-        <h1>CalCo</h1>
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <h1 className="min-w-0 overflow-hidden text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold tracking-normal leading-tight text-ellipsis whitespace-nowrap">CalCo</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -351,20 +351,20 @@ export function Diary() {
       </div>
       </header>
 
-      {error && <p className="error">{error}</p>}
+      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
 
-      <div className="diary-summary-tile">
-        <div className="date-selector">
+      <div className="flex flex-col gap-3.5 mb-4 p-3.5 bg-card border border-border rounded-[20px] shadow-sm">
+        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3 p-0 bg-transparent border-0 rounded-none shadow-none">
           <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goPrev}>
             ←
           </Button>
-          <span className="date-label">{displayDate(currentDate)}</span>
+          <span className="min-w-0 overflow-hidden text-foreground text-base font-extrabold text-center text-ellipsis whitespace-nowrap">{displayDate(currentDate)}</span>
           <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goNext} disabled={isToday}>
             →
           </Button>
         </div>
 
-        <div className="summary-rings">
+        <div className="grid grid-cols-4 max-sm:grid-cols-2 gap-1 mb-0 px-20 max-sm:gap-2">
           <NutrientRing
             label="Calories"
             value={kcal?.amount ?? 0}
@@ -396,25 +396,25 @@ export function Diary() {
         </div>
       </div>
 
-      <main className="diary-main">
+      <main className="flex flex-col gap-3">
         {loading && (
-          <div className="skeleton">
-            <div className="skeleton-line w-80" />
-            <div className="skeleton-line w-60" />
-            <div className="skeleton-line w-100" />
+          <div className="flex flex-col gap-3">
+            <div className="skeleton-line w-4/5" />
+            <div className="skeleton-line w-3/5" />
+            <div className="skeleton-line w-full" />
           </div>
         )}
 
         {!loading && logs.length === 0 && !error && (
-          <p className="empty-state">No food logged for this day.</p>
+          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">No food logged for this day.</p>
         )}
 
         {!loading &&
           mealSlotLogs.map(({ value, label, items }) => (
-            <section key={value} className="meal-slot">
-              <div className="meal-slot-header">
-                <div className="meal-slot-title">
-                  <span className="meal-slot-name">{label}</span>
+            <section key={value} className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+              <div className="flex items-center gap-3 p-3.5 bg-[#f4f8ff] dark:bg-[#0d1f3c] border-b border-border">
+                <div className="flex flex-1 flex-col gap-1 min-w-0">
+                  <span className="text-foreground text-[1.0625rem] font-extrabold">{label}</span>
                   <SlotMacroSummary
                     logs={items}
                     mode={macroMode}
@@ -425,12 +425,12 @@ export function Diary() {
                     }
                   />
                 </div>
-                <span className="meal-slot-calories">
+                <span className="flex-none text-muted-foreground text-sm font-extrabold whitespace-nowrap">
                   {Math.round(slotCalories(value))} kcal
                 </span>
               </div>
               {items.length === 0 && (
-                <p className="meal-slot-empty">No items</p>
+                <p className="p-4 border-b border-border text-[#8e8e93] dark:text-[#86868b] text-[0.9375rem] text-center">No items</p>
               )}
               {items.map((log) => renderLogRow(log))}
               <Button
@@ -448,10 +448,10 @@ export function Diary() {
           ))}
 
         {!loading && otherLogs.length > 0 && (
-          <section className="meal-slot">
-            <div className="meal-slot-header">
-              <div className="meal-slot-title">
-                <span className="meal-slot-name">Other</span>
+          <section className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 p-3.5 bg-[#f4f8ff] dark:bg-[#0d1f3c] border-b border-border">
+              <div className="flex flex-1 flex-col gap-1 min-w-0">
+                <span className="text-foreground text-[1.0625rem] font-extrabold">Other</span>
                 <SlotMacroSummary
                   logs={otherLogs}
                   mode={macroMode}
@@ -462,7 +462,7 @@ export function Diary() {
                   }
                 />
               </div>
-              <span className="meal-slot-calories">
+              <span className="flex-none text-muted-foreground text-sm font-extrabold whitespace-nowrap">
                 {Math.round(slotCalories(""))} kcal
               </span>
             </div>

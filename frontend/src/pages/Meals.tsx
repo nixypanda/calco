@@ -30,23 +30,23 @@ export function Meals() {
 
   if (loading) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-            <h1>Meals</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meals</h1>
           </div>
         </header>
-        <div className="skeleton">
-          <div className="skeleton-line w-80" />
-          <div className="skeleton-line w-60" />
-          <div className="skeleton-line w-100" />
+        <div className="flex flex-col gap-3">
+          <div className="skeleton-line w-4/5" />
+          <div className="skeleton-line w-3/5" />
+          <div className="skeleton-line w-full" />
         </div>
       </div>
     );
@@ -54,36 +54,36 @@ export function Meals() {
 
   if (error) {
     return (
-      <div className="catalog-page">
-        <header>
-          <div className="header-left">
+      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+        <header className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-            <h1>Meals</h1>
+            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meals</h1>
           </div>
         </header>
-        <p className="error">{error}</p>
+        <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
       </div>
     );
   }
 
   return (
-    <div className="catalog-page">
-      <header>
-        <div className="header-left">
+    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <header className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="btn-back"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
-            <span aria-hidden="true">‹</span>
+            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
           </button>
-          <h1>Meals</h1>
+          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meals</h1>
         </div>
         <Button onClick={() => navigate("/meals/new")}>
           Create Meal
@@ -91,12 +91,12 @@ export function Meals() {
       </header>
 
       {meals.length === 0 && (
-        <p className="empty-state">
+        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">
           No meals yet. Create a meal to log common combinations faster.
         </p>
       )}
 
-      <div className="search-results">
+      <div className="flex flex-col gap-3">
         {meals.map((meal) => (
           <Card
             key={meal.id}
