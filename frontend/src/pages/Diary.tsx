@@ -5,14 +5,15 @@ import { useAuth } from "../hooks/AuthContext";
 import { listLogs, getSummary } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import type { LogResponse, SummaryEntry } from "../api/logs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -23,10 +24,10 @@ const MEAL_SLOTS = [
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const DEFAULT_CALORIE_GOAL = 2000;
 const MACRO_COLORS = {
-  calories: "#007aff",
-  protein: "#ff9f0a",
-  carbs: "#34c759",
-  fat: "#ffcc00",
+  calories: "hsl(var(--chart-1))",
+  protein: "hsl(var(--chart-2))",
+  carbs: "hsl(var(--chart-3))",
+  fat: "hsl(var(--chart-4))",
 } as const;
 
 function formatDate(date: Date): string {
@@ -46,7 +47,8 @@ function displayDate(date: Date): string {
 
 function parseAmount(val: string): number {
   const n = parseFloat(val);
-  return isNaN(n) ? 0 : n;
+  if (!isFinite(n) || n < 0) return 0;
+  return n;
 }
 
 function getCalories(nutrients: { code: string; amount: string }[]): number {
@@ -126,7 +128,7 @@ function NutrientRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="#e5e5e5"
+          stroke="hsl(var(--border))"
           strokeWidth={strokeWidth}
         />
         <circle
@@ -144,7 +146,7 @@ function NutrientRing({
       </svg>
       <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
         <span className="text-foreground text-base font-extrabold leading-tight">{Math.round(value)}</span>
-        <span className="text-[#8e8e93] dark:text-[#86868b] text-[0.625rem] font-bold uppercase">{unit}</span>
+        <span className="text-muted-foreground text-[0.625rem] font-bold uppercase">{unit}</span>
       </div>
       <span className="mt-1.5 text-muted-foreground text-xs font-bold">{label}</span>
     </div>
@@ -165,7 +167,7 @@ function SlotMacroSummary({
   return (
     <button
       type="button"
-      className="inline-flex items-center flex-wrap w-fit max-w-full min-h-[24px] p-0 bg-transparent border-0 text-[#8e8e93] dark:text-[#86868b] text-[0.8125rem] font-semibold text-left cursor-pointer"
+      className="inline-flex items-center flex-wrap w-fit max-w-full min-h-[24px] p-0 bg-transparent border-0 text-muted-foreground text-[0.8125rem] font-semibold text-left cursor-pointer"
       onClick={onToggle}
       title="Toggle macro grams and percentages"
     >
@@ -212,7 +214,17 @@ export function Diary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
-  const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
+  const [darkMode, setDarkMode] = useState(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark") return true;
+    if (stored === "light") return false;
+    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const dateStr = formatDate(currentDate);
   const displayName = profile?.display_name ?? identity?.username ?? "User";
@@ -238,12 +250,14 @@ export function Diary() {
       if (productIds.length > 0) {
         const details = await Promise.all(
           productIds.map((id) =>
-            getFoodDetail(id).catch(() => null),
+            getFoodDetail(id)
+              .then((d) => ({ id: d.id, name: d.name }))
+              .catch(() => ({ id, name: "Unknown food" })),
           ),
         );
         const nameMap: Record<string, string> = {};
         for (const d of details) {
-          if (d) nameMap[d.id] = d.name;
+          nameMap[d.id] = d.name;
         }
         setFoodNames(nameMap);
       } else {
@@ -325,41 +339,42 @@ export function Diary() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
-              document.documentElement.classList.toggle("dark");
-              setDarkMode(!darkMode);
-            }}
+            onClick={() => setDarkMode((d) => !d)}
+            aria-label="Toggle dark mode"
             title="Toggle dark mode"
           >
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
           <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="rounded-full gap-2 pl-2 pr-1 flex items-center h-auto py-1">
-              <Avatar className="w-[34px] h-[34px]">
-                <AvatarFallback className="bg-brand text-white text-[0.8125rem] font-extrabold">{getInitials(displayName)}</AvatarFallback>
-              </Avatar>
+            <Button
+              variant="outline"
+              className="rounded-full gap-2 pl-2 pr-1 flex items-center h-auto py-1"
+              aria-label="Open profile menu"
+            >
+              <div className="w-[34px] h-[34px] rounded-full bg-primary text-primary-foreground text-[0.8125rem] font-extrabold flex items-center justify-center">
+                {getInitials(displayName)}
+              </div>
               <span className="text-muted-foreground text-sm font-bold max-w-[9rem] truncate">{displayName}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[210px]">
             <DropdownMenuItem onClick={() => navigate("/meals")}>My Meals</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate("/history")}>History</DropdownMenuItem>
             <DropdownMenuItem className="text-destructive" onClick={handleLogout}>Logout</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
       </header>
 
-      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+      {error && <ErrorBanner message={error} />}
 
       <div className="flex flex-col gap-3.5 mb-4 p-3.5 bg-card border border-border rounded-[20px] shadow-sm">
         <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3 p-0 bg-transparent border-0 rounded-none shadow-none">
-          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goPrev}>
+          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-primary text-xl font-extrabold" onClick={goPrev}>
             ←
           </Button>
           <span className="min-w-0 overflow-hidden text-foreground text-base font-extrabold text-center text-ellipsis whitespace-nowrap">{displayDate(currentDate)}</span>
-          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goNext} disabled={isToday}>
+          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-primary text-xl font-extrabold" onClick={goNext} disabled={isToday}>
             →
           </Button>
         </div>
@@ -399,20 +414,20 @@ export function Diary() {
       <main className="flex flex-col gap-3">
         {loading && (
           <div className="flex flex-col gap-3">
-            <div className="skeleton-line w-4/5" />
-            <div className="skeleton-line w-3/5" />
-            <div className="skeleton-line w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-3/5" />
+            <Skeleton className="h-4 w-full" />
           </div>
         )}
 
         {!loading && logs.length === 0 && !error && (
-          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">No food logged for this day.</p>
+          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">No food logged for this day.</p>
         )}
 
         {!loading &&
           mealSlotLogs.map(({ value, label, items }) => (
             <section key={value} className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 p-3.5 bg-[#f4f8ff] dark:bg-[#0d1f3c] border-b border-border">
+              <div className="flex items-center gap-3 p-3.5 bg-muted/50 border-b border-border">
                 <div className="flex flex-1 flex-col gap-1 min-w-0">
                   <span className="text-foreground text-[1.0625rem] font-extrabold">{label}</span>
                   <SlotMacroSummary
@@ -430,12 +445,12 @@ export function Diary() {
                 </span>
               </div>
               {items.length === 0 && (
-                <p className="p-4 border-b border-border text-[#8e8e93] dark:text-[#86868b] text-[0.9375rem] text-center">No items</p>
+                <p className="p-4 border-b border-border text-muted-foreground text-[0.9375rem] text-center">No items</p>
               )}
               {items.map((log) => renderLogRow(log))}
               <Button
                 variant="ghost"
-                className="w-full justify-start rounded-none h-12 border-t border-border text-brand font-extrabold"
+                className="w-full justify-start rounded-none h-12 border-t border-border text-primary font-extrabold"
                 onClick={() =>
                   navigate("/search", {
                     state: { mealSlot: value },
@@ -449,7 +464,7 @@ export function Diary() {
 
         {!loading && otherLogs.length > 0 && (
           <section className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-            <div className="flex items-center gap-3 p-3.5 bg-[#f4f8ff] dark:bg-[#0d1f3c] border-b border-border">
+            <div className="flex items-center gap-3 p-3.5 bg-muted/50 border-b border-border">
               <div className="flex flex-1 flex-col gap-1 min-w-0">
                 <span className="text-foreground text-[1.0625rem] font-extrabold">Other</span>
                 <SlotMacroSummary

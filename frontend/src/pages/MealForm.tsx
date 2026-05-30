@@ -4,7 +4,9 @@ import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -12,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 interface ComponentRow {
   productId: string;
@@ -55,41 +58,43 @@ export function MealForm() {
     new Map(),
   );
 
-  const fetchMeal = useCallback(async () => {
+  useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     setFetching(true);
     setError("");
-    try {
-      const meal = await getMeal(id);
-      setName(meal.name);
-      setNotes(meal.notes ?? "");
-      if (meal.total_quantity) {
-        setTotalQty(meal.total_quantity.amount);
-        setTotalUnit(meal.total_quantity.unit);
-      }
-      setComponents(
-        meal.components.map((c) => ({
-          productId: c.item.id,
-          productName: "",
-          quantity: c.quantity.amount,
-          unit: c.quantity.unit,
-          searchQuery: "",
-          searchResults: [],
-          searching: false,
-        })),
-      );
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load meal",
-      );
-    } finally {
-      setFetching(false);
-    }
+    getMeal(id)
+      .then((meal) => {
+        if (cancelled) return;
+        setName(meal.name);
+        setNotes(meal.notes ?? "");
+        if (meal.total_quantity) {
+          setTotalQty(meal.total_quantity.amount);
+          setTotalUnit(meal.total_quantity.unit);
+        }
+        setComponents(
+          meal.components.map((c) => ({
+            productId: c.item.id,
+            productName: "",
+            quantity: c.quantity.amount,
+            unit: c.quantity.unit,
+            searchQuery: "",
+            searchResults: [],
+            searching: false,
+          })),
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load meal");
+      })
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
-
-  useEffect(() => {
-    if (isEdit) fetchMeal();
-  }, [isEdit, fetchMeal]);
 
   useEffect(() => {
     return () => {
@@ -223,7 +228,7 @@ export function MealForm() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
@@ -233,9 +238,9 @@ export function MealForm() {
           </div>
         </header>
         <div className="flex flex-col gap-3">
-          <div className="skeleton-line w-4/5" />
-          <div className="skeleton-line w-3/5" />
-          <div className="skeleton-line w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-4 w-full" />
         </div>
       </div>
     );
@@ -246,7 +251,7 @@ export function MealForm() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/meals")}
             aria-label="Back to Meals"
           >
@@ -256,12 +261,13 @@ export function MealForm() {
         </div>
       </header>
 
-      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+      {error && <ErrorBanner message={error} />}
 
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-muted-foreground">Name</label>
+          <Label htmlFor="mf-name" className="text-xs font-bold text-muted-foreground">Name</Label>
           <Input
+            id="mf-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -270,8 +276,9 @@ export function MealForm() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-bold text-muted-foreground">Notes</label>
+          <Label htmlFor="mf-notes" className="text-xs font-bold text-muted-foreground">Notes</Label>
           <Input
+            id="mf-notes"
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

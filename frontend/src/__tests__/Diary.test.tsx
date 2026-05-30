@@ -34,7 +34,6 @@ function renderAtHome() {
         <Routes>
           <Route path="/home" element={<Diary />} />
           <Route path="/search" element={<div>Search Page</div>} />
-          <Route path="/history" element={<div>History Page</div>} />
           <Route path="/meals" element={<div>Meals Page</div>} />
           <Route path="/logs/:id" element={<div>Log Detail Page</div>} />
         </Routes>
@@ -200,21 +199,6 @@ describe("Diary", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Search Page")).toBeInTheDocument();
-    });
-  });
-
-  it("navigates to history from the profile menu", async () => {
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
-    await userEvent.click(screen.getByText("History"));
-
-    await waitFor(() => {
-      expect(screen.getByText("History Page")).toBeInTheDocument();
     });
   });
 

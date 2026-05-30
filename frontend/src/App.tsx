@@ -8,7 +8,6 @@ import { LoginPage } from "./pages/LoginPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
 import { Diary } from "./pages/Diary";
 import { FoodLogDetail } from "./pages/FoodLogDetail";
-import { History } from "./pages/History";
 import { FoodSearch } from "./pages/FoodSearch";
 import { FoodDetail } from "./pages/FoodDetail";
 import { CustomFoodCreate } from "./pages/CustomFoodCreate";
@@ -95,14 +94,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <FoodLogDetail />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/history"
-            element={
-              <ProtectedRoute>
-                <History />
               </ProtectedRoute>
             }
           />

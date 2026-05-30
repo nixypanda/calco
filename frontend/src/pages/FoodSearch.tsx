@@ -5,7 +5,9 @@ import type { SearchResult } from "../api/foods";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function FoodSearch() {
   const navigate = useNavigate();
@@ -59,7 +61,7 @@ export function FoodSearch() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -79,15 +81,15 @@ export function FoodSearch() {
           />
         </div>
 
-        {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+        {error && <ErrorBanner message={error} />}
 
         {loading && (
           <div className="flex flex-col gap-3">
             {[1, 2, 3].map((i) => (
               <div key={i} className="flex items-start justify-center min-h-[72px] p-3.5 bg-card border border-border rounded-xl shadow-sm">
                 <div className="flex flex-col gap-2 w-full">
-                  <div className="skeleton-line w-3/5" />
-                  <div className="skeleton-line w-2/5" />
+                  <Skeleton className="h-4 w-3/5" />
+                  <Skeleton className="h-4 w-2/5" />
                 </div>
               </div>
             ))}
@@ -95,7 +97,7 @@ export function FoodSearch() {
         )}
 
         {!loading && !error && query.trim() && results.length === 0 && (
-          <div className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">
+          <div className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">
             <p>No foods found. Try a different search.</p>
             <Button
               onClick={goCreateCustomFood}
@@ -128,7 +130,7 @@ export function FoodSearch() {
                     <Badge variant="secondary">{item.category}</Badge>
                   )}
                   {item.source === "USER" && (
-                    <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">Custom</Badge>
+                    <Badge variant="outline">Custom</Badge>
                   )}
                 </div>
               </Card>
@@ -137,7 +139,7 @@ export function FoodSearch() {
         )}
 
         {!query.trim() && (
-          <div className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">
+          <div className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">
             <p>Search for a food to get started.</p>
             <Button
               onClick={goCreateCustomFood}

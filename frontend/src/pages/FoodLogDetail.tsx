@@ -2,16 +2,11 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getLog, updateLog, deleteLog } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
+import { getMeal } from "../api/meals";
 import type { LogResponse } from "../api/logs";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -20,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -28,9 +24,9 @@ const MEAL_SLOTS = [
   { value: "snack", label: "Snack" },
 ] as const;
 const MACRO_COLORS = {
-  protein: "#ff9f0a",
-  carbs: "#34c759",
-  fat: "#ffcc00",
+  protein: "hsl(var(--chart-2))",
+  carbs: "hsl(var(--chart-3))",
+  fat: "hsl(var(--chart-4))",
 } as const;
 
 function mealSlotLabel(value: string | null): string {
@@ -51,7 +47,8 @@ function formatTimestamp(ts: string): string {
 
 function parseAmount(val: string): number {
   const n = parseFloat(val);
-  return isNaN(n) ? 0 : n;
+  if (!isFinite(n) || n < 0) return 0;
+  return n;
 }
 
 function getNutrientAmount(log: LogResponse, code: string): number {
@@ -98,7 +95,7 @@ function MacroDonut({ log }: { log: LogResponse }) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="#e5e5e5"
+            stroke="hsl(var(--border))"
             strokeWidth={strokeWidth}
           />
           {hasData && (
@@ -147,24 +144,9 @@ function MacroDonut({ log }: { log: LogResponse }) {
         </div>
       </div>
       <div className="grid grid-cols-3 max-sm:grid-cols-3 gap-0 flex-1">
-        <MacroStat
-          name="Protein"
-          grams={macros.protein}
-          percent={macros.proteinPct}
-          color={MACRO_COLORS.protein}
-        />
-        <MacroStat
-          name="Carbs"
-          grams={macros.carbs}
-          percent={macros.carbsPct}
-          color={MACRO_COLORS.carbs}
-        />
-        <MacroStat
-          name="Fat"
-          grams={macros.fat}
-          percent={macros.fatPct}
-          color={MACRO_COLORS.fat}
-        />
+        <MacroStat name="Protein" grams={macros.protein} percent={macros.proteinPct} color={MACRO_COLORS.protein} />
+        <MacroStat name="Carbs" grams={macros.carbs} percent={macros.carbsPct} color={MACRO_COLORS.carbs} />
+        <MacroStat name="Fat" grams={macros.fat} percent={macros.fatPct} color={MACRO_COLORS.fat} />
       </div>
     </div>
   );
@@ -183,11 +165,44 @@ function MacroStat({
 }) {
   return (
     <div className="flex flex-col gap-[0.0625rem] min-w-0 p-[0.1875rem] bg-transparent border-l-[3px] text-center" style={{ borderColor: color }}>
-      <span className="text-muted-foreground text-xs font-bold" style={{ color }}>{Math.round(percent)}%</span>
+      <span className="text-xs font-bold" style={{ color }}>{Math.round(percent)}%</span>
       <span className="text-foreground text-[0.9375rem] font-extrabold">{grams.toFixed(1)}g</span>
       <span className="text-muted-foreground text-xs font-bold">{name}</span>
     </div>
   );
+}
+
+function Header({ title, onBack }: { title: string; onBack: () => void }) {
+  return (
+    <header className="flex items-center justify-between gap-4 mb-4">
+      <div className="flex items-center gap-2.5 min-w-0">
+        <button
+          className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
+          onClick={onBack}
+          aria-label="Back to Diary"
+        >
+          <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
+        </button>
+        <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{title}</h1>
+      </div>
+    </header>
+  );
+}
+
+async function fetchItemName(item: { type: string; id: string }): Promise<string> {
+  try {
+    if (item.type === "product") {
+      const detail = await getFoodDetail(item.id);
+      return detail.name;
+    }
+    if (item.type === "meal") {
+      const meal = await getMeal(item.id);
+      return meal.name;
+    }
+    return "Unknown item";
+  } catch {
+    return item.type === "meal" ? "Unknown meal" : "Unknown food";
+  }
 }
 
 export function FoodLogDetail() {
@@ -211,31 +226,32 @@ export function FoodLogDetail() {
 
   useEffect(() => {
     if (!id) return;
+    let cancelled = false;
     setLoading(true);
     setError("");
     getLog(id)
       .then(async (logRes) => {
+        if (cancelled) return;
         setLog(logRes);
         setEditQty(logRes.quantity.amount);
         setEditUnit(logRes.quantity.unit);
         setEditSlot(logRes.meal_slot ?? "__none__");
         setEditNotes(logRes.notes ?? "");
 
-        if (logRes.item.type === "product") {
-          try {
-            const detail = await getFoodDetail(logRes.item.id);
-            setFoodName(detail.name);
-          } catch {
-            setFoodName("Unknown food");
-          }
-        } else {
-          setFoodName("Unknown item");
-        }
+        const name = await fetchItemName(logRes.item);
+        if (!cancelled) setFoodName(name);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load log");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const handleSave = async () => {
@@ -272,26 +288,18 @@ export function FoodLogDetail() {
     }
   };
 
+  const goHome = () => navigate("/home");
+  const wrapperClass = "w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]";
+
   if (loading) {
     return (
-      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <header className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
-            onClick={() => navigate("/home")}
-            aria-label="Back to Diary"
-          >
-            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-          </button>
-            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Log</h1>
-          </div>
-        </header>
+      <div className={wrapperClass}>
+        <Header title="Food Log" onBack={goHome} />
         <main>
           <div className="flex flex-col gap-3">
-            <div className="skeleton-line w-4/5" />
-            <div className="skeleton-line w-3/5" />
-            <div className="skeleton-line w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-3/5" />
+            <Skeleton className="h-4 w-full" />
           </div>
         </main>
       </div>
@@ -300,65 +308,32 @@ export function FoodLogDetail() {
 
   if (error && !log) {
     return (
-      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <header className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
-            onClick={() => navigate("/home")}
-            aria-label="Back to Diary"
-          >
-            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-          </button>
-            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Log</h1>
-          </div>
-        </header>
-        <main>
-          <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
-        </main>
+      <div className={wrapperClass}>
+        <Header title="Food Log" onBack={goHome} />
+        <main><ErrorBanner message={error} /></main>
       </div>
     );
   }
 
   if (!log) {
     return (
-      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <header className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
-            onClick={() => navigate("/home")}
-            aria-label="Back to Diary"
-          >
-            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-          </button>
-            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Food Log</h1>
-          </div>
-        </header>
+      <div className={wrapperClass}>
+        <Header title="Food Log" onBack={goHome} />
         <main>
-          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">Log not found.</p>
+          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">Log not found.</p>
         </main>
       </div>
     );
   }
 
+  const selectClass = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-right text-muted-foreground font-semibold";
+
   return (
-    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-      <header className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
-            onClick={() => navigate("/home")}
-            aria-label="Back to Diary"
-          >
-            <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-          </button>
-          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{editing ? "Edit Log" : "Food Log"}</h1>
-        </div>
-      </header>
+    <div className={wrapperClass}>
+      <Header title={editing ? "Edit Log" : "Food Log"} onBack={goHome} />
 
       <main>
-        {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+        {error && <ErrorBanner message={error} />}
 
         <div className="mb-5 flex flex-col gap-2">
           <h2 className="mb-1 text-foreground text-xl font-extrabold">{foodName || "Loading..."}</h2>
@@ -371,17 +346,16 @@ export function FoodLogDetail() {
               <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
                 <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
                   <span>Meal Slot</span>
-                  <Select value={editSlot} onValueChange={setEditSlot}>
-                    <SelectTrigger className="text-right text-muted-foreground font-semibold">
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {MEAL_SLOTS.map((s) => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <select
+                    value={editSlot}
+                    onChange={(e) => setEditSlot(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="__none__">None</option>
+                    {MEAL_SLOTS.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
                 </label>
                 <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
                   <span>Amount</span>
@@ -414,17 +388,10 @@ export function FoodLogDetail() {
                   />
                 </label>
                 <div className="flex flex-wrap gap-2.5 p-3.5 border-t border-border">
-                  <Button
-                    onClick={handleSave}
-                    disabled={saving}
-                  >
+                  <Button onClick={handleSave} disabled={saving}>
                     {saving ? "Saving..." : "Save"}
                   </Button>
-                  <Button
-                    variant="destructive"
-                    onClick={handleDelete}
-                    disabled={deleting}
-                  >
+                  <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
                     {deleting ? "Deleting..." : "Delete"}
                   </Button>
                 </div>
@@ -457,7 +424,6 @@ export function FoodLogDetail() {
                 </TableBody>
               </Table>
             </section>
-
           </>
         ) : (
           <>
@@ -509,16 +475,8 @@ export function FoodLogDetail() {
             </section>
 
             <div className="flex flex-wrap gap-2.5">
-              <Button
-                onClick={() => setEditing(true)}
-              >
-                Edit
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDelete}
-                disabled={deleting}
-              >
+              <Button onClick={() => setEditing(true)}>Edit</Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
                 {deleting ? "Deleting..." : "Delete"}
               </Button>
             </div>

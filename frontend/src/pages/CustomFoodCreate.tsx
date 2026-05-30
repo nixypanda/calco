@@ -4,6 +4,7 @@ import { createCustomFood, listNutrients, listUnits } from "../api/foods";
 import type { NutrientItem, UnitItem } from "../api/foods";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -11,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 interface NutrientRow {
   code: string;
@@ -42,12 +44,22 @@ export function CustomFoodCreate() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([listNutrients(), listUnits()])
-      .then(([n, u]) => {
-        setNutrients(n.items);
-        setUnits(u.items);
-      })
-      .catch(() => setError("Failed to load reference data"));
+    let cancelled = false;
+    Promise.allSettled([listNutrients(), listUnits()]).then((results) => {
+      if (cancelled) return;
+      const [nRes, uRes] = results;
+      const failures: string[] = [];
+      if (nRes.status === "fulfilled") setNutrients(nRes.value.items);
+      else failures.push("nutrients");
+      if (uRes.status === "fulfilled") setUnits(uRes.value.items);
+      else failures.push("units");
+      if (failures.length > 0) {
+        setError(`Failed to load ${failures.join(" and ")}`);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const addNutrientRow = () => {
@@ -137,7 +149,7 @@ export function CustomFoodCreate() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -148,14 +160,15 @@ export function CustomFoodCreate() {
       </header>
 
       <main>
-        {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+        {error && <ErrorBanner message={error} />}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           <section className="mb-5">
             <h2>Basic Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Name *</label>
+              <Label htmlFor="cf-name" className="text-xs font-bold text-muted-foreground">Name *</Label>
               <Input
+                id="cf-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -165,8 +178,9 @@ export function CustomFoodCreate() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Brand</label>
+              <Label htmlFor="cf-brand" className="text-xs font-bold text-muted-foreground">Brand</Label>
               <Input
+                id="cf-brand"
                 type="text"
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
@@ -174,8 +188,9 @@ export function CustomFoodCreate() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Category</label>
+              <Label htmlFor="cf-category" className="text-xs font-bold text-muted-foreground">Category</Label>
               <Input
+                id="cf-category"
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -187,8 +202,9 @@ export function CustomFoodCreate() {
           <section className="mb-5">
             <h2>Portion Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Serving Size (g)</label>
+              <Label htmlFor="cf-serving" className="text-xs font-bold text-muted-foreground">Serving Size (g)</Label>
               <Input
+                id="cf-serving"
                 type="number"
                 value={servingSizeG}
                 onChange={(e) => setServingSizeG(e.target.value)}
@@ -198,8 +214,9 @@ export function CustomFoodCreate() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Default Quantity</label>
+              <Label htmlFor="cf-defqty" className="text-xs font-bold text-muted-foreground">Default Quantity</Label>
               <Input
+                id="cf-defqty"
                 type="number"
                 value={defaultQty}
                 onChange={(e) => setDefaultQty(e.target.value)}
@@ -209,7 +226,7 @@ export function CustomFoodCreate() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Default Unit</label>
+              <Label className="text-xs font-bold text-muted-foreground">Default Unit</Label>
               <Select value={defaultUnit} onValueChange={setDefaultUnit} disabled={submitting}>
                 <SelectTrigger>
                   <SelectValue />

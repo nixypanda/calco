@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
-import { Card, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -38,10 +39,10 @@ export function LoginPage() {
   };
 
   return (
-    <div className="auth-page">
-      <Card className="w-full max-w-sm mx-auto p-6">
+    <div className="min-h-dvh flex items-center justify-center p-4">
+      <Card className="w-full max-w-sm p-6">
         <CardTitle className="text-2xl font-extrabold">CalCo</CardTitle>
-        <CardDescription className="text-base">Log In</CardDescription>
+        <h1 className="text-base font-semibold text-muted-foreground">Log In</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="username">Username</Label>
@@ -64,7 +65,7 @@ export function LoginPage() {
               disabled={submitting}
             />
           </div>
-          {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+          {error && <ErrorBanner message={error} />}
           <Button type="submit" disabled={submitting}>
             {submitting ? "Logging in..." : "Log In"}
           </Button>

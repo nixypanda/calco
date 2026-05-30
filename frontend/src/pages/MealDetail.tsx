@@ -7,6 +7,7 @@ import type { MealResponse, MealNutritionResponse } from "../api/meals";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function MealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -51,6 +53,7 @@ export function MealDetail() {
 
   const [deleting, setDeleting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const [logging, setLogging] = useState(false);
   const [logError, setLogError] = useState("");
@@ -137,12 +140,14 @@ export function MealDetail() {
   const handleDelete = useCallback(async () => {
     if (!id) return;
     setDeleting(true);
+    setDeleteError("");
     try {
       await deleteMeal(id);
       navigate("/meals");
-    } catch {
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete meal");
+    } finally {
       setDeleting(false);
-      setShowConfirm(false);
     }
   }, [id, navigate]);
 
@@ -152,7 +157,7 @@ export function MealDetail() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
@@ -162,9 +167,9 @@ export function MealDetail() {
           </div>
         </header>
         <div className="flex flex-col gap-3">
-          <div className="skeleton-line" style={{ width: "80%" }} />
-          <div className="skeleton-line" style={{ width: "60%" }} />
-          <div className="skeleton-line" style={{ width: "100%" }} />
+          <Skeleton className="h-4" style={{ width: "80%" }} />
+          <Skeleton className="h-4" style={{ width: "60%" }} />
+          <Skeleton className="h-4" style={{ width: "100%" }} />
         </div>
       </div>
     );
@@ -176,7 +181,7 @@ export function MealDetail() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
@@ -185,7 +190,7 @@ export function MealDetail() {
             <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meal</h1>
           </div>
         </header>
-        <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
+        <ErrorBanner message={error} />
       </div>
     );
   }
@@ -196,7 +201,7 @@ export function MealDetail() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
               onClick={() => navigate("/meals")}
               aria-label="Back to Meals"
             >
@@ -205,7 +210,7 @@ export function MealDetail() {
             <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meal</h1>
           </div>
         </header>
-        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">Meal not found.</p>
+        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">Meal not found.</p>
       </div>
     );
   }
@@ -215,7 +220,7 @@ export function MealDetail() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/meals")}
             aria-label="Back to Meals"
           >
@@ -239,8 +244,9 @@ export function MealDetail() {
                 <DialogTitle>Delete meal?</DialogTitle>
                 <DialogDescription>This action cannot be undone.</DialogDescription>
               </DialogHeader>
+              {deleteError && <ErrorBanner message={deleteError} />}
               <DialogFooter>
-                <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                <Button variant="outline" onClick={() => { setShowConfirm(false); setDeleteError(""); }}>Cancel</Button>
                 <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
                   {deleting ? "Deleting..." : "Confirm Delete"}
                 </Button>
@@ -295,7 +301,7 @@ export function MealDetail() {
               {nutrientsLoading ? "..." : "Calculate"}
             </Button>
           </div>
-          {nutrientsError && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{nutrientsError}</p>}
+          {nutrientsError && <ErrorBanner message={nutrientsError} />}
           {nutrients && (
             <>
               <Table>
@@ -319,7 +325,7 @@ export function MealDetail() {
               <Button onClick={handleLog} disabled={logging}>
                 {logging ? "Logging..." : "Log Meal"}
               </Button>
-              {logError && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{logError}</p>}
+              {logError && <ErrorBanner message={logError} />}
             </>
           )}
         </div>

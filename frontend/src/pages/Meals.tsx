@@ -3,7 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { listMeals } from "../api/meals";
 import type { MealResponse } from "../api/meals";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card } from "@/components/ui/card";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { plural } from "@/lib/plural";
 
 export function Meals() {
   const navigate = useNavigate();
@@ -34,7 +37,7 @@ export function Meals() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -44,9 +47,9 @@ export function Meals() {
           </div>
         </header>
         <div className="flex flex-col gap-3">
-          <div className="skeleton-line w-4/5" />
-          <div className="skeleton-line w-3/5" />
-          <div className="skeleton-line w-full" />
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-4 w-full" />
         </div>
       </div>
     );
@@ -58,7 +61,7 @@ export function Meals() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -67,7 +70,7 @@ export function Meals() {
             <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">Meals</h1>
           </div>
         </header>
-        <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>
+        <ErrorBanner message={error} />
       </div>
     );
   }
@@ -77,7 +80,7 @@ export function Meals() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -91,7 +94,7 @@ export function Meals() {
       </header>
 
       {meals.length === 0 && (
-        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-[#8e8e93] dark:text-[#86868b] text-sm text-center">
+        <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">
           No meals yet. Create a meal to log common combinations faster.
         </p>
       )}
@@ -106,8 +109,7 @@ export function Meals() {
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-bold truncate">{meal.name}</span>
               <span className="text-muted-foreground text-sm">
-                {meal.components.length} component
-                {meal.components.length !== 1 ? "s" : ""}
+                {plural(meal.components.length, "component")}
                 {meal.notes ? ` — ${meal.notes}` : ""}
               </span>
             </div>

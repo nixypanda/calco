@@ -8,7 +8,9 @@ import {
 } from "../api/foods";
 import type { NutrientItem, UnitItem } from "../api/foods";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -16,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 interface NutrientRow {
   code: string;
@@ -47,9 +50,15 @@ export function CustomFoodEdit() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setError("Missing food id in URL");
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
     Promise.all([getFoodDetail(id), listNutrients(), listUnits()])
       .then(([food, n, u]) => {
+        if (cancelled) return;
         setName(food.name);
         setBrand(food.brand ?? "");
         setCategory(food.category ?? "");
@@ -76,9 +85,15 @@ export function CustomFoodEdit() {
         setUnits(u.items);
       })
       .catch((err: unknown) => {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load food");
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const addNutrientRow = () => {
@@ -124,6 +139,10 @@ export function CustomFoodEdit() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!id) {
+      setError("Missing food id in URL");
+      return;
+    }
     if (!name.trim()) {
       setError("Name is required");
       return;
@@ -138,7 +157,7 @@ export function CustomFoodEdit() {
 
     setSubmitting(true);
     try {
-      const res = await updateCustomFood(id!, {
+      const res = await updateCustomFood(id, {
         name: name.trim(),
         brand: brand.trim() || null,
         category: category.trim() || null,
@@ -170,7 +189,7 @@ export function CustomFoodEdit() {
         <header className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
             <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
               onClick={() => navigate("/home")}
               aria-label="Back to Diary"
             >
@@ -181,8 +200,8 @@ export function CustomFoodEdit() {
         </header>
         <main>
           <div className="flex flex-col gap-3">
-            <div className="skeleton-line w-4/5" />
-            <div className="skeleton-line w-3/5" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-3/5" />
           </div>
         </main>
       </div>
@@ -194,7 +213,7 @@ export function CustomFoodEdit() {
       <header className="flex items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-2.5 min-w-0">
           <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-brand cursor-pointer text-base font-bold hover:bg-brand/8"
+            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
             onClick={() => navigate("/home")}
             aria-label="Back to Diary"
           >
@@ -205,14 +224,15 @@ export function CustomFoodEdit() {
       </header>
 
       <main>
-        {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+        {error && <ErrorBanner message={error} />}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           <section className="mb-5">
             <h2>Basic Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Name *</label>
+              <Label htmlFor="cfe-name" className="text-xs font-bold text-muted-foreground">Name *</Label>
               <Input
+                id="cfe-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -222,8 +242,9 @@ export function CustomFoodEdit() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Brand</label>
+              <Label htmlFor="cfe-brand" className="text-xs font-bold text-muted-foreground">Brand</Label>
               <Input
+                id="cfe-brand"
                 type="text"
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
@@ -231,8 +252,9 @@ export function CustomFoodEdit() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Category</label>
+              <Label htmlFor="cfe-category" className="text-xs font-bold text-muted-foreground">Category</Label>
               <Input
+                id="cfe-category"
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -244,8 +266,9 @@ export function CustomFoodEdit() {
           <section className="mb-5">
             <h2>Portion Info</h2>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Serving Size (g)</label>
+              <Label htmlFor="cfe-serving" className="text-xs font-bold text-muted-foreground">Serving Size (g)</Label>
               <Input
+                id="cfe-serving"
                 type="number"
                 value={servingSizeG}
                 onChange={(e) => setServingSizeG(e.target.value)}
@@ -255,8 +278,9 @@ export function CustomFoodEdit() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Default Quantity</label>
+              <Label htmlFor="cfe-defqty" className="text-xs font-bold text-muted-foreground">Default Quantity</Label>
               <Input
+                id="cfe-defqty"
                 type="number"
                 value={defaultQty}
                 onChange={(e) => setDefaultQty(e.target.value)}
@@ -266,7 +290,7 @@ export function CustomFoodEdit() {
               />
             </div>
             <div className="flex flex-col gap-1.5 mb-2">
-              <label className="text-xs font-bold text-muted-foreground">Default Unit</label>
+              <Label className="text-xs font-bold text-muted-foreground">Default Unit</Label>
               <Select value={defaultUnit} onValueChange={setDefaultUnit} disabled={submitting}>
                 <SelectTrigger>
                   <SelectValue />
