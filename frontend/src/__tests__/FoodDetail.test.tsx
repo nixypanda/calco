@@ -7,7 +7,6 @@ import { FoodDetail } from "../pages/FoodDetail";
 
 const mockGetSession = vi.fn();
 const mockGetFoodDetail = vi.fn();
-const mockDeleteCustomFood = vi.fn();
 const mockListUnits = vi.fn();
 const mockCreateLog = vi.fn();
 
@@ -20,7 +19,6 @@ vi.mock("../api/auth", () => ({
 
 vi.mock("../api/foods", () => ({
   getFoodDetail: (...args: unknown[]) => mockGetFoodDetail(...args),
-  deleteCustomFood: (...args: unknown[]) => mockDeleteCustomFood(...args),
   listUnits: (...args: unknown[]) => mockListUnits(...args),
 }));
 
@@ -37,6 +35,7 @@ function renderAtDetail(
       <AuthProvider>
         <Routes>
           <Route path="/foods/:id" element={<FoodDetail />} />
+          <Route path="/foods/custom/:id/edit" element={<div>Edit Custom Food</div>} />
           <Route path="/search" element={<div>Search Page</div>} />
           <Route path="/home" element={<div>User Home</div>} />
         </Routes>
@@ -54,12 +53,12 @@ const mockProduct = {
   name: "Chicken Breast",
   brand: "Organic Farms",
   category: "Meat",
-  default_quantity: null,
-  default_unit: null,
+  default_quantity: "100",
+  default_unit: "g",
   serving_size_g: "100",
   nutrients: [
-    { code: "ENERGY_KCAL", amount_per_100g: "165", unit: "", source: null, confidence: null },
-    { code: "PROTEIN_G", amount_per_100g: "31", unit: "", source: null, confidence: null },
+    { code: "ENERGY_KCAL", amount_per_100g: "165", unit: "kcal", source: null, confidence: null },
+    { code: "PROTEIN_G", amount_per_100g: "31", unit: "g", source: null, confidence: null },
   ],
   servings: [
     { label: "fillet", quantity: "1", unit: "piece", grams: "150" },
@@ -73,7 +72,7 @@ const mockCustomProduct = {
   name: "My Protein Shake",
   brand: "Homemade",
   nutrients: [
-    { code: "ENERGY_KCAL", amount_per_100g: "120", unit: "", source: null, confidence: null },
+    { code: "ENERGY_KCAL", amount_per_100g: "120", unit: "kcal", source: null, confidence: null },
   ],
   servings: [],
 };
@@ -100,7 +99,7 @@ describe("FoodDetail", () => {
 
     renderAtDetail();
 
-    expect(screen.getByText("Food Detail")).toBeInTheDocument();
+    expect(screen.getByText("Log Food")).toBeInTheDocument();
   });
 
   it("shows food details when loaded", async () => {
@@ -112,11 +111,12 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Organic Farms")).toBeInTheDocument();
-    expect(screen.getByText("Meat")).toBeInTheDocument();
-    expect(screen.getByText("165")).toBeInTheDocument();
-    expect(screen.getByText("31")).toBeInTheDocument();
-    expect(screen.getByText("fillet")).toBeInTheDocument();
+    // Brand and category appear together in subtitle
+    expect(screen.getByText(/Organic Farms/)).toBeInTheDocument();
+    expect(screen.getByText(/Meat/)).toBeInTheDocument();
+    // Macro & nutrient values scaled to default amount (100g) = same as per-100g
+    expect(screen.getByText("165.0")).toBeInTheDocument();
+    expect(screen.getByText("31.0")).toBeInTheDocument();
   });
 
   it("shows error state", async () => {
@@ -129,7 +129,7 @@ describe("FoodDetail", () => {
     });
   });
 
-  it("shows edit/delete for custom foods", async () => {
+  it("shows Edit food link for custom foods", async () => {
     mockGetFoodDetail.mockResolvedValue(mockCustomProduct);
 
     renderAtDetail("custom-123");
@@ -138,11 +138,12 @@ describe("FoodDetail", () => {
       expect(screen.getByText("My Protein Shake")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Edit")).toBeInTheDocument();
-    expect(screen.getByText("Delete")).toBeInTheDocument();
+    const editLink = screen.getByRole("link", { name: "Edit food" });
+    expect(editLink).toBeInTheDocument();
+    expect(editLink).toHaveAttribute("href", "/foods/custom/custom-123/edit");
   });
 
-  it("does not show edit/delete for system foods", async () => {
+  it("does not show Edit food link for system foods", async () => {
     mockGetFoodDetail.mockResolvedValue(mockProduct);
 
     renderAtDetail();
@@ -151,8 +152,7 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.queryByText("Edit")).not.toBeInTheDocument();
-    expect(screen.queryByText("Delete")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Edit food" })).not.toBeInTheDocument();
   });
 
   it("preselects meal slot from navigation state", async () => {
@@ -167,37 +167,26 @@ describe("FoodDetail", () => {
     expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
   });
 
-  it("deletes custom food and navigates to search", async () => {
-    mockGetFoodDetail.mockResolvedValue(mockCustomProduct);
-    mockDeleteCustomFood.mockResolvedValue(undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("submits a log and navigates to diary", async () => {
+    mockGetFoodDetail.mockResolvedValue(mockProduct);
+    mockCreateLog.mockResolvedValue({});
 
-    renderAtDetail("custom-123");
-
-    await waitFor(() => {
-      expect(screen.getByText("My Protein Shake")).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByText("Delete"));
+    renderAtDetail("abc-123");
 
     await waitFor(() => {
-      expect(mockDeleteCustomFood).toHaveBeenCalledWith("custom-123");
-      expect(screen.getByText("Search Page")).toBeInTheDocument();
+      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
-  });
 
-  it("cancels delete when confirm is false", async () => {
-    mockGetFoodDetail.mockResolvedValue(mockCustomProduct);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-
-    renderAtDetail("custom-123");
+    await userEvent.click(screen.getByRole("button", { name: "Log Food" }));
 
     await waitFor(() => {
-      expect(screen.getByText("My Protein Shake")).toBeInTheDocument();
+      expect(mockCreateLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          item: { type: "product", id: "abc-123" },
+          quantity: { amount: "100", unit: "g" },
+        }),
+      );
+      expect(screen.getByText("User Home")).toBeInTheDocument();
     });
-
-    await userEvent.click(screen.getByText("Delete"));
-
-    expect(mockDeleteCustomFood).not.toHaveBeenCalled();
   });
 });

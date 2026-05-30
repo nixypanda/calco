@@ -10,6 +10,8 @@ const mockGetLog = vi.fn();
 const mockUpdateLog = vi.fn();
 const mockDeleteLog = vi.fn();
 const mockGetFoodDetail = vi.fn();
+const mockListUnits = vi.fn();
+const mockGetMeal = vi.fn();
 
 vi.mock("../api/auth", () => ({
   getSession: (...args: unknown[]) => mockGetSession(...args),
@@ -26,11 +28,16 @@ vi.mock("../api/logs", () => ({
 
 vi.mock("../api/foods", () => ({
   getFoodDetail: (...args: unknown[]) => mockGetFoodDetail(...args),
+  listUnits: (...args: unknown[]) => mockListUnits(...args),
 }));
 
-function renderAtDetail(logId = "log-1", state?: { editing?: boolean }) {
+vi.mock("../api/meals", () => ({
+  getMeal: (...args: unknown[]) => mockGetMeal(...args),
+}));
+
+function renderAtDetail(logId = "log-1") {
   return render(
-    <MemoryRouter initialEntries={[{ pathname: `/logs/${logId}`, state }]}>
+    <MemoryRouter initialEntries={[`/logs/${logId}`]}>
       <AuthProvider>
         <Routes>
           <Route path="/logs/:id" element={<FoodLogDetail />} />
@@ -56,6 +63,34 @@ const mockLog = {
   notes: "Post-workout meal",
 };
 
+const mockFood = {
+  id: "food-1",
+  source: "SYSTEM",
+  source_id: null,
+  visibility: "global",
+  barcode: null,
+  name: "Chicken Breast",
+  brand: null,
+  category: null,
+  default_quantity: null,
+  default_unit: "g",
+  serving_size_g: null,
+  nutrients: [
+    { code: "ENERGY_KCAL", amount_per_100g: "165", unit: "kcal", source: null, confidence: null },
+    { code: "PROTEIN_G", amount_per_100g: "31", unit: "g", source: null, confidence: null },
+    { code: "CARBS_G", amount_per_100g: "0", unit: "g", source: null, confidence: null },
+    { code: "FAT_G", amount_per_100g: "3.6", unit: "g", source: null, confidence: null },
+  ],
+  servings: [],
+};
+
+const mockUnits = {
+  items: [
+    { code: "g", name: "gram", kind: "mass" },
+    { code: "kg", name: "kilogram", kind: "mass" },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSession.mockResolvedValue({
@@ -63,7 +98,8 @@ beforeEach(() => {
     profile: { id: "p1", display_name: "Alice" },
   });
   mockGetLog.mockResolvedValue(mockLog);
-  mockGetFoodDetail.mockResolvedValue({ id: "food-1", name: "Chicken Breast" });
+  mockGetFoodDetail.mockResolvedValue(mockFood);
+  mockListUnits.mockResolvedValue(mockUnits);
 });
 
 describe("FoodLogDetail", () => {
@@ -72,7 +108,7 @@ describe("FoodLogDetail", () => {
 
     renderAtDetail();
 
-    expect(screen.getByText("Food Log")).toBeInTheDocument();
+    expect(screen.getByText("Edit Log")).toBeInTheDocument();
   });
 
   it("shows log details when loaded", async () => {
@@ -82,16 +118,16 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Lunch")).toBeInTheDocument();
-    expect(screen.getByText("150 g")).toBeInTheDocument();
-    expect(screen.getByText("Post-workout meal")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("150")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Post-workout meal")).toBeInTheDocument();
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
+    // Macros scaled from food.nutrients at 150g
     expect(screen.getByText("46.5g")).toBeInTheDocument();
-    expect(screen.getByText("protein g")).toBeInTheDocument();
   });
 
-  it("opens directly in edit mode from navigation state", async () => {
-    renderAtDetail("log-1", { editing: true });
+  it("renders the form in edit mode by default", async () => {
+    renderAtDetail();
 
     await waitFor(() => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
@@ -102,10 +138,9 @@ describe("FoodLogDetail", () => {
     expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
     expect(screen.getByText("Nutrients")).toBeInTheDocument();
-    expect(screen.queryByText("Cancel")).not.toBeInTheDocument();
   });
 
-  it("enters edit mode and saves changes", async () => {
+  it("saves changes", async () => {
     mockUpdateLog.mockResolvedValue({
       ...mockLog,
       quantity: { amount: "200", unit: "g" },
@@ -118,8 +153,6 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText("Edit"));
-
     const amountInput = screen.getByDisplayValue("150");
     await userEvent.clear(amountInput);
     await userEvent.type(amountInput, "200");
@@ -127,13 +160,16 @@ describe("FoodLogDetail", () => {
     const slotSelect = screen.getByDisplayValue("Lunch");
     await userEvent.selectOptions(slotSelect, "dinner");
 
-    await userEvent.click(screen.getByText("Save"));
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
-      expect(mockUpdateLog).toHaveBeenCalledWith("log-1", expect.objectContaining({
-        quantity: { amount: "200", unit: "g" },
-        meal_slot: "dinner",
-      }));
+      expect(mockUpdateLog).toHaveBeenCalledWith(
+        "log-1",
+        expect.objectContaining({
+          quantity: { amount: "200", unit: "g" },
+          meal_slot: "dinner",
+        }),
+      );
     });
   });
 
@@ -147,7 +183,7 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText("Delete"));
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
       expect(mockDeleteLog).toHaveBeenCalledWith("log-1");
@@ -164,7 +200,7 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText("Delete"));
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     expect(mockDeleteLog).not.toHaveBeenCalled();
   });

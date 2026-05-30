@@ -19,10 +19,26 @@ import { EmptyState } from "@/components/EmptyState";
 import { MacroRing } from "@/components/MacroRing";
 
 const MEAL_SLOTS = [
-  { value: "breakfast", label: "Breakfast" },
-  { value: "lunch", label: "Lunch" },
-  { value: "dinner", label: "Dinner" },
-  { value: "snack", label: "Snack" },
+  {
+    value: "breakfast",
+    label: "Breakfast",
+    tint: "bg-gradient-to-r from-rose-200/55 via-orange-200/45 to-amber-200/45 dark:from-rose-500/20 dark:via-orange-500/20 dark:to-amber-500/20",
+  },
+  {
+    value: "lunch",
+    label: "Lunch",
+    tint: "bg-gradient-to-r from-amber-200/55 via-yellow-200/45 to-orange-200/40 dark:from-amber-500/22 dark:via-yellow-500/18 dark:to-orange-500/20",
+  },
+  {
+    value: "dinner",
+    label: "Dinner",
+    tint: "bg-gradient-to-r from-violet-200/55 via-purple-200/45 to-fuchsia-200/45 dark:from-violet-500/22 dark:via-purple-500/20 dark:to-fuchsia-500/20",
+  },
+  {
+    value: "snack",
+    label: "Snack",
+    tint: "bg-gradient-to-r from-pink-200/55 via-rose-200/45 to-fuchsia-200/40 dark:from-pink-500/22 dark:via-rose-500/20 dark:to-fuchsia-500/20",
+  },
 ] as const;
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const DEFAULT_CALORIE_GOAL = 2000;
@@ -113,11 +129,11 @@ function NutrientRing({
         <span className={big ? "text-3xl font-extrabold leading-tight" : "text-base font-extrabold leading-tight"}>
           {Math.round(value)}
         </span>
-        <span className={`text-muted-foreground font-bold uppercase ${big ? "text-xs" : "text-[0.625rem]"}`}>
+        <span className={`text-muted-foreground font-semibold uppercase tracking-wider ${big ? "text-xs" : "text-[0.625rem]"}`}>
           {unit}
         </span>
       </MacroRing>
-      <span className={`mt-1.5 text-muted-foreground font-bold ${big ? "text-sm" : "text-xs"}`}>{label}</span>
+      <span className={`mt-1.5 text-muted-foreground font-medium ${big ? "text-sm" : "text-xs"}`}>{label}</span>
     </div>
   );
 }
@@ -139,7 +155,7 @@ function SlotMacroSummary({
       type="button"
       onClick={onToggle}
       title="Toggle macro grams and percentages"
-      className="text-left text-muted-foreground text-sm font-semibold"
+      className="text-left text-muted-foreground text-sm font-medium"
     >
       <span className="hidden sm:inline">
         carbs {fmt(m.carbs, m.carbsPct)} ⋅ protein {fmt(m.protein, m.proteinPct)} ⋅ fat {fmt(m.fat, m.fatPct)}
@@ -278,15 +294,15 @@ export function Diary() {
       key={log.id}
       type="button"
       onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
-      className="flex items-center w-full min-h-14 gap-2 p-3 text-left border-b border-border last:border-b-0 hover:bg-accent/50"
+      className="flex items-center w-full min-h-14 gap-2 p-3 text-left border-b border-border last:border-b-0 hover:bg-white/40 dark:hover:bg-white/[0.04]"
     >
       <span className="flex-1 min-w-0 truncate font-medium">
         {foodNames[log.item.id] ?? "Loading..."}
       </span>
-      <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
+      <span className="text-muted-foreground text-sm font-medium whitespace-nowrap">
         {log.quantity.amount} {log.quantity.unit}
       </span>
-      <span className="min-w-16 text-right text-muted-foreground text-sm font-semibold whitespace-nowrap">
+      <span className="min-w-16 text-right text-muted-foreground text-sm font-medium whitespace-nowrap">
         {Math.round(getCalories(log.nutrients))} kcal
       </span>
     </button>
@@ -312,10 +328,10 @@ export function Diary() {
                 className="rounded-full gap-2 pl-2 pr-3 h-auto py-1"
                 aria-label="Open profile menu"
               >
-                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">
+                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center">
                   {getInitials(displayName)}
                 </div>
-                <span className="text-muted-foreground text-sm font-bold max-w-36 truncate">
+                <span className="text-muted-foreground text-sm font-medium max-w-36 truncate">
                   {displayName}
                 </span>
               </Button>
@@ -335,9 +351,9 @@ export function Diary() {
       <Card className="flex flex-col gap-4 p-4 mb-4">
         <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
           <Button variant="ghost" size="icon" onClick={goPrev} aria-label="Previous day">
-            <span className="text-xl font-extrabold">←</span>
+            <span className="text-xl font-medium">←</span>
           </Button>
-          <span className="text-center font-extrabold truncate">{displayDate(currentDate)}</span>
+          <span className="text-center font-semibold truncate">{displayDate(currentDate)}</span>
           <Button
             variant="ghost"
             size="icon"
@@ -345,7 +361,7 @@ export function Diary() {
             disabled={isToday}
             aria-label="Next day"
           >
-            <span className="text-xl font-extrabold">→</span>
+            <span className="text-xl font-medium">→</span>
           </Button>
         </div>
 
@@ -456,14 +472,14 @@ export function Diary() {
         )}
 
         {!loading &&
-          mealSlotLogs.map(({ value, label, items }) => (
+          mealSlotLogs.map(({ value, label, items, tint }) => (
             <Card key={value} className="overflow-hidden p-0">
-              <div className="flex items-center gap-3 p-4 bg-muted/50 border-b border-border">
+              <div className={`flex items-center gap-3 p-4 ${tint}`}>
                 <div className="flex flex-1 flex-col gap-1 min-w-0">
-                  <span className="font-extrabold">{label}</span>
+                  <span className="font-semibold">{label}</span>
                   <SlotMacroSummary logs={items} mode={macroMode} onToggle={toggleMacroMode} />
                 </div>
-                <span className="text-muted-foreground text-sm font-extrabold whitespace-nowrap">
+                <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
                   {Math.round(slotCalories(value))} kcal
                 </span>
               </div>
@@ -474,7 +490,7 @@ export function Diary() {
               )}
               <Button
                 variant="ghost"
-                className="w-full justify-start rounded-none h-12 border-t border-border text-primary font-extrabold"
+                className="w-full justify-start rounded-none h-12 border-t border-border text-primary font-semibold"
                 onClick={() => navigate("/search", { state: { mealSlot: value } })}
               >
                 Add Food
@@ -484,12 +500,12 @@ export function Diary() {
 
         {!loading && otherLogs.length > 0 && (
           <Card className="overflow-hidden p-0">
-            <div className="flex items-center gap-3 p-4 bg-muted/50 border-b border-border">
+            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-200/50 via-slate-200/40 to-slate-200/30 dark:from-slate-500/20 dark:via-slate-500/15 dark:to-slate-500/10">
               <div className="flex flex-1 flex-col gap-1 min-w-0">
-                <span className="font-extrabold">Other</span>
+                <span className="font-semibold">Other</span>
                 <SlotMacroSummary logs={otherLogs} mode={macroMode} onToggle={toggleMacroMode} />
               </div>
-              <span className="text-muted-foreground text-sm font-extrabold whitespace-nowrap">
+              <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
                 {Math.round(slotCalories(""))} kcal
               </span>
             </div>

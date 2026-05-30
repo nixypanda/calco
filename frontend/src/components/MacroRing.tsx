@@ -55,7 +55,7 @@ export function MacroRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="hsl(var(--border))"
+          stroke="hsl(var(--ring-track))"
           strokeWidth={strokeWidth}
         />
         {arcs}
