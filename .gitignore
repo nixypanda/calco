@@ -26,3 +26,7 @@ result-*
 
 # Import pipeline data
 data/
+
+# Python cache
+__pycache__/
+*.pyc
