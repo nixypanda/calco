@@ -28,9 +28,12 @@ vi.mock("../api/logs", () => ({
   createLog: (...args: unknown[]) => mockCreateLog(...args),
 }));
 
-function renderAtDetail(foodId = "some-id") {
+function renderAtDetail(
+  foodId = "some-id",
+  state?: { mealSlot?: string },
+) {
   return render(
-    <MemoryRouter initialEntries={[`/foods/${foodId}`]}>
+    <MemoryRouter initialEntries={[{ pathname: `/foods/${foodId}`, state }]}>
       <AuthProvider>
         <Routes>
           <Route path="/foods/:id" element={<FoodDetail />} />
@@ -150,6 +153,18 @@ describe("FoodDetail", () => {
 
     expect(screen.queryByText("Edit")).not.toBeInTheDocument();
     expect(screen.queryByText("Delete")).not.toBeInTheDocument();
+  });
+
+  it("preselects meal slot from navigation state", async () => {
+    mockGetFoodDetail.mockResolvedValue(mockProduct);
+
+    renderAtDetail("abc-123", { mealSlot: "lunch" });
+
+    await waitFor(() => {
+      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
+    });
+
+    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
   });
 
   it("deletes custom food and navigates to search", async () => {

@@ -80,8 +80,16 @@ export function FoodDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Food Detail</h1>
-          <button onClick={() => navigate(-1)}>Back</button>
+          <div className="header-left">
+            <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+            <h1>Food Detail</h1>
+          </div>
         </header>
         <main>
           <div className="skeleton">
@@ -98,8 +106,16 @@ export function FoodDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Food Detail</h1>
-          <button onClick={() => navigate(-1)}>Back</button>
+          <div className="header-left">
+            <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+            <h1>Food Detail</h1>
+          </div>
         </header>
         <main>
           <p className="error">{error}</p>
@@ -112,8 +128,16 @@ export function FoodDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Food Detail</h1>
-          <button onClick={() => navigate(-1)}>Back</button>
+          <div className="header-left">
+            <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+            <h1>Food Detail</h1>
+          </div>
         </header>
         <main>
           <p className="empty-state">Food not found.</p>
@@ -127,8 +151,16 @@ export function FoodDetail() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>{food.name}</h1>
-        <button onClick={() => navigate(-1)}>Back</button>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>{food.name}</h1>
+        </div>
       </header>
 
       <main>

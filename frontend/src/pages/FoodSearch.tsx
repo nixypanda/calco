@@ -1,15 +1,21 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
 
 export function FoodSearch() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const mealSlot = (location.state as { mealSlot?: string } | null)?.mealSlot;
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const goCreateCustomFood = () => {
+    navigate("/foods/custom/new");
+  };
 
   useEffect(() => {
     if (debounceRef.current) {
@@ -47,8 +53,16 @@ export function FoodSearch() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>Search Foods</h1>
-        <button onClick={() => navigate("/home")}>Back to Diary</button>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>Search Foods</h1>
+        </div>
       </header>
       <main>
         <div className="search-bar">
@@ -75,7 +89,16 @@ export function FoodSearch() {
         )}
 
         {!loading && !error && query.trim() && results.length === 0 && (
-          <p className="empty-state">No foods found. Try a different search.</p>
+          <div className="empty-state">
+            <p>No foods found. Try a different search.</p>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={goCreateCustomFood}
+            >
+              Create Custom Food
+            </button>
+          </div>
         )}
 
         {!loading && !error && results.length > 0 && (
@@ -84,7 +107,11 @@ export function FoodSearch() {
               <button
                 key={item.id}
                 className="search-result"
-                onClick={() => navigate(`/foods/${item.id}`)}
+                onClick={() =>
+                  navigate(`/foods/${item.id}`, {
+                    state: mealSlot ? { mealSlot } : undefined,
+                  })
+                }
               >
                 <div className="search-result-main">
                   <span className="search-result-name">{item.name}</span>
@@ -106,7 +133,16 @@ export function FoodSearch() {
         )}
 
         {!query.trim() && (
-          <p className="empty-state">Search for a food to get started.</p>
+          <div className="empty-state">
+            <p>Search for a food to get started.</p>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={goCreateCustomFood}
+            >
+              Create Custom Food
+            </button>
+          </div>
         )}
       </main>
     </div>

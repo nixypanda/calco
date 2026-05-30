@@ -38,16 +38,23 @@ test.describe("Auth flow", () => {
     await page.getByLabel("Password").fill("alicepass123");
     await page.getByRole("button", { name: "Log In" }).click();
 
-    // 9. Should see user home
-    await expect(page.getByText("Welcome,")).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText("Alice")).toBeVisible();
-    await expect(page.getByText("Your food diary will appear here.")).toBeVisible();
+    // 9. Should see user diary
+    await expect(page.getByRole("heading", { name: "CalCo" })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(
+      page.getByRole("button", { name: "Open profile menu" }),
+    ).toBeVisible();
+    await expect(page.getByText("No food logged for this day.")).toBeVisible();
 
     // 10. Try navigating to /admin as user — should redirect away
     await page.goto("/admin");
-    await expect(page.getByText("Your food diary will appear here.")).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText("No food logged for this day.")).toBeVisible({
+      timeout: 5000,
+    });
 
     // 11. Logout as user
+    await page.getByRole("button", { name: "Open profile menu" }).click();
     await page.getByRole("button", { name: "Logout" }).click();
     await expect(page.getByRole("heading", { name: "Log In" })).toBeVisible();
   });

@@ -212,7 +212,16 @@ export function MealForm() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+          <div className="header-left">
+            <button
+              className="btn-back"
+              onClick={() => navigate("/meals")}
+              aria-label="Back to Meals"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+          </div>
         </header>
         <div className="skeleton">
           <div className="skeleton-line w-80" />
@@ -226,7 +235,16 @@ export function MealForm() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/meals")}
+            aria-label="Back to Meals"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>{isEdit ? "Edit Meal" : "Create Meal"}</h1>
+        </div>
       </header>
 
       {error && <p className="error">{error}</p>}

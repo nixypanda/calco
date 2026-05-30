@@ -28,9 +28,9 @@ vi.mock("../api/foods", () => ({
   getFoodDetail: (...args: unknown[]) => mockGetFoodDetail(...args),
 }));
 
-function renderAtDetail(logId = "log-1") {
+function renderAtDetail(logId = "log-1", state?: { editing?: boolean }) {
   return render(
-    <MemoryRouter initialEntries={[`/logs/${logId}`]}>
+    <MemoryRouter initialEntries={[{ pathname: `/logs/${logId}`, state }]}>
       <AuthProvider>
         <Routes>
           <Route path="/logs/:id" element={<FoodLogDetail />} />
@@ -50,6 +50,8 @@ const mockLog = {
   nutrients: [
     { code: "ENERGY_KCAL", amount: "247.5", unit: "kcal" },
     { code: "PROTEIN_G", amount: "46.5", unit: "g" },
+    { code: "CARBS_G", amount: "0", unit: "g" },
+    { code: "FAT_G", amount: "3.5", unit: "g" },
   ],
   notes: "Post-workout meal",
 };
@@ -83,6 +85,24 @@ describe("FoodLogDetail", () => {
     expect(screen.getByText("Lunch")).toBeInTheDocument();
     expect(screen.getByText("150 g")).toBeInTheDocument();
     expect(screen.getByText("Post-workout meal")).toBeInTheDocument();
+    expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("46.5g")).toBeInTheDocument();
+    expect(screen.getByText("protein g")).toBeInTheDocument();
+  });
+
+  it("opens directly in edit mode from navigation state", async () => {
+    renderAtDetail("log-1", { editing: true });
+
+    await waitFor(() => {
+      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("heading", { name: "Edit Log" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("150")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
+    expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("Nutrients")).toBeInTheDocument();
+    expect(screen.queryByText("Cancel")).not.toBeInTheDocument();
   });
 
   it("enters edit mode and saves changes", async () => {
@@ -115,19 +135,6 @@ describe("FoodLogDetail", () => {
         meal_slot: "dinner",
       }));
     });
-  });
-
-  it("cancels edit mode", async () => {
-    renderAtDetail();
-
-    await waitFor(() => {
-      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByText("Edit"));
-    await userEvent.click(screen.getByText("Cancel"));
-
-    expect(screen.getByText("Edit")).toBeInTheDocument();
   });
 
   it("deletes log and navigates to diary", async () => {

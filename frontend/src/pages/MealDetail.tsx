@@ -123,7 +123,16 @@ export function MealDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Meal</h1>
+          <div className="header-left">
+            <button
+              className="btn-back"
+              onClick={() => navigate("/meals")}
+              aria-label="Back to Meals"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h1>Meal</h1>
+          </div>
         </header>
         <div className="skeleton">
           <div className="skeleton-line w-80" />
@@ -138,7 +147,16 @@ export function MealDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Meal</h1>
+          <div className="header-left">
+            <button
+              className="btn-back"
+              onClick={() => navigate("/meals")}
+              aria-label="Back to Meals"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h1>Meal</h1>
+          </div>
         </header>
         <p className="error">{error}</p>
       </div>
@@ -149,7 +167,16 @@ export function MealDetail() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Meal</h1>
+          <div className="header-left">
+            <button
+              className="btn-back"
+              onClick={() => navigate("/meals")}
+              aria-label="Back to Meals"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h1>Meal</h1>
+          </div>
         </header>
         <p className="empty-state">Meal not found.</p>
       </div>
@@ -159,7 +186,16 @@ export function MealDetail() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>{meal.name}</h1>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/meals")}
+            aria-label="Back to Meals"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>{meal.name}</h1>
+        </div>
         <div className="manage-actions">
           <button
             className="btn-secondary"

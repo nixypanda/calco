@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "../hooks/AuthContext";
 import { FoodSearch } from "../pages/FoodSearch";
 
@@ -26,6 +26,30 @@ function renderAtSearch() {
         <Routes>
           <Route path="/search" element={<FoodSearch />} />
           <Route path="/foods/:id" element={<div>Food Detail Page</div>} />
+          <Route path="/foods/custom/new" element={<div>Create Food Page</div>} />
+          <Route path="/home" element={<div>User Home</div>} />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+}
+
+function renderAtSearchWithMealSlot() {
+  function FoodDetailProbe() {
+    const location = useLocation();
+    const mealSlot = (location.state as { mealSlot?: string } | null)?.mealSlot;
+    return <div>Food Detail Slot: {mealSlot}</div>;
+  }
+
+  return render(
+    <MemoryRouter
+      initialEntries={[{ pathname: "/search", state: { mealSlot: "lunch" } }]}
+    >
+      <AuthProvider>
+        <Routes>
+          <Route path="/search" element={<FoodSearch />} />
+          <Route path="/foods/:id" element={<FoodDetailProbe />} />
+          <Route path="/foods/custom/new" element={<div>Create Food Page</div>} />
           <Route path="/home" element={<div>User Home</div>} />
         </Routes>
       </AuthProvider>
@@ -59,6 +83,28 @@ describe("FoodSearch", () => {
       expect(
         screen.getByText("Search for a food to get started."),
       ).toBeInTheDocument();
+    });
+
+    expect(
+      screen.getAllByRole("button", { name: "Create Custom Food" }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("navigates to custom food creation", async () => {
+    renderAtSearch();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Search for a food..."),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Create Custom Food" })[0],
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Create Food Page")).toBeInTheDocument();
     });
   });
 
@@ -149,6 +195,10 @@ describe("FoodSearch", () => {
         screen.getByText("No foods found. Try a different search."),
       ).toBeInTheDocument();
     });
+
+    expect(
+      screen.getAllByRole("button", { name: "Create Custom Food" }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows error on search failure", async () => {
@@ -205,6 +255,44 @@ describe("FoodSearch", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Food Detail Page")).toBeInTheDocument();
+    });
+  });
+
+  it("forwards meal slot state to food detail", async () => {
+    mockSearchFoods.mockResolvedValue({
+      items: [
+        {
+          id: "abc-123",
+          source: "SYSTEM",
+          source_id: null,
+          barcode: null,
+          name: "Test Food",
+          brand: null,
+          category: null,
+          serving_size_g: null,
+        },
+      ],
+    });
+
+    renderAtSearchWithMealSlot();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Search for a food..."),
+      ).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText("Search for a food...");
+    await userEvent.type(input, "test");
+
+    await waitFor(() => {
+      expect(screen.getByText("Test Food")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByText("Test Food"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Food Detail Slot: lunch")).toBeInTheDocument();
     });
   });
 });

@@ -53,6 +53,7 @@ function renderAtCreate() {
       <AuthProvider>
         <Routes>
           <Route path="/meals/new" element={<MealForm />} />
+          <Route path="/meals" element={<div>Meals List Page</div>} />
           <Route path="/meals/:id" element={<div>Meal Detail Page</div>} />
         </Routes>
       </AuthProvider>
@@ -66,6 +67,7 @@ function renderAtEdit() {
       <AuthProvider>
         <Routes>
           <Route path="/meals/:id/edit" element={<MealForm />} />
+          <Route path="/meals" element={<div>Meals List Page</div>} />
           <Route path="/meals/:id" element={<div>Meal Detail Page</div>} />
         </Routes>
       </AuthProvider>
@@ -91,7 +93,24 @@ describe("MealForm (Create)", () => {
       ).toBeInTheDocument();
     });
 
+    expect(screen.getByLabelText("Back to Meals")).toBeInTheDocument();
     expect(screen.getByText("Components")).toBeInTheDocument();
+  });
+
+  it("navigates back to meals list", async () => {
+    renderAtCreate();
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: /Create Meal/i }),
+      ).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByLabelText("Back to Meals"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Meals List Page")).toBeInTheDocument();
+    });
   });
 
   it("shows error when submitting with empty name", async () => {

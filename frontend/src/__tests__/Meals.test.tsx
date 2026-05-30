@@ -35,6 +35,7 @@ function renderAtMeals() {
             path="/meals/:id"
             element={<div>Meal Detail Page</div>}
           />
+          <Route path="/home" element={<div>User Home</div>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -83,6 +84,7 @@ describe("Meals", () => {
     });
 
     expect(screen.getByText("Create Meal")).toBeInTheDocument();
+    expect(screen.getByLabelText("Back to Diary")).toBeInTheDocument();
   });
 
   it("shows empty state when no meals", async () => {
@@ -162,6 +164,21 @@ describe("Meals", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Create Meal Page")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates back to diary", async () => {
+    mockListMeals.mockResolvedValue({ items: [] });
+    renderAtMeals();
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Back to Diary")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByLabelText("Back to Diary"));
+
+    await waitFor(() => {
+      expect(screen.getByText("User Home")).toBeInTheDocument();
     });
   });
 

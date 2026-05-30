@@ -13,6 +13,12 @@ const MEAL_SLOTS = [
 ] as const;
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const DEFAULT_CALORIE_GOAL = 2000;
+const MACRO_COLORS = {
+  calories: "#007aff",
+  protein: "#ff9f0a",
+  carbs: "#34c759",
+  fat: "#ffcc00",
+} as const;
 
 function formatDate(date: Date): string {
   const y = date.getFullYear();
@@ -37,6 +43,39 @@ function parseAmount(val: string): number {
 function getCalories(nutrients: { code: string; amount: string }[]): number {
   const entry = nutrients.find((n) => n.code === "ENERGY_KCAL");
   return entry ? parseAmount(entry.amount) : 0;
+}
+
+function getNutrientAmount(
+  nutrients: { code: string; amount: string }[],
+  code: string,
+): number {
+  const entry = nutrients.find((n) => n.code === code);
+  return entry ? parseAmount(entry.amount) : 0;
+}
+
+function getMacroTotals(logs: LogResponse[]) {
+  const protein = logs.reduce(
+    (sum, log) => sum + getNutrientAmount(log.nutrients, "PROTEIN_G"),
+    0,
+  );
+  const carbs = logs.reduce(
+    (sum, log) => sum + getNutrientAmount(log.nutrients, "CARBS_G"),
+    0,
+  );
+  const fat = logs.reduce(
+    (sum, log) => sum + getNutrientAmount(log.nutrients, "FAT_G"),
+    0,
+  );
+  const totalMacroCalories = protein * 4 + carbs * 4 + fat * 9;
+
+  return {
+    protein,
+    carbs,
+    fat,
+    proteinPct: totalMacroCalories > 0 ? (protein * 4 / totalMacroCalories) * 100 : 0,
+    carbsPct: totalMacroCalories > 0 ? (carbs * 4 / totalMacroCalories) * 100 : 0,
+    fatPct: totalMacroCalories > 0 ? (fat * 9 / totalMacroCalories) * 100 : 0,
+  };
 }
 
 function getNutrientVal(
@@ -103,8 +142,42 @@ function NutrientRing({
   );
 }
 
+function SlotMacroSummary({
+  logs,
+  mode,
+  onToggle,
+}: {
+  logs: LogResponse[];
+  mode: "grams" | "percent";
+  onToggle: () => void;
+}) {
+  const macros = getMacroTotals(logs);
+
+  return (
+    <button
+      type="button"
+      className="slot-macro-summary"
+      onClick={onToggle}
+      title="Toggle macro grams and percentages"
+    >
+      carbs {mode === "grams" ? `${macros.carbs.toFixed(1)}g` : `${Math.round(macros.carbsPct)}%`}
+      {" ⋅ "}
+      protein {mode === "grams" ? `${macros.protein.toFixed(1)}g` : `${Math.round(macros.proteinPct)}%`}
+      {" ⋅ "}
+      fat {mode === "grams" ? `${macros.fat.toFixed(1)}g` : `${Math.round(macros.fatPct)}%`}
+    </button>
+  );
+}
+
 function todayString(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getInitials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
 export function Diary() {
@@ -129,8 +202,11 @@ export function Diary() {
   const [foodNames, setFoodNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   const dateStr = formatDate(currentDate);
+  const displayName = profile?.display_name ?? identity?.username ?? "User";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -207,78 +283,125 @@ export function Diary() {
       .filter((l) => l.meal_slot === slot)
       .reduce((sum, l) => sum + getCalories(l.nutrients), 0);
 
+  const handleProfileNavigate = (path: string) => {
+    setProfileMenuOpen(false);
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    setProfileMenuOpen(false);
+    await logout();
+  };
+
+  const renderLogRow = (log: LogResponse) => (
+    <div key={log.id} className="log-row">
+      <button
+        type="button"
+        className="log-row-main"
+        onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
+      >
+        <span className="log-row-name">
+          {foodNames[log.item.id] ?? "Loading..."}
+        </span>
+        <span className="log-row-qty">
+          {log.quantity.amount} {log.quantity.unit}
+        </span>
+        <span className="log-row-cal">
+          {Math.round(getCalories(log.nutrients))} kcal
+        </span>
+      </button>
+
+    </div>
+  );
+
   return (
     <div className="diary-page">
       <header>
         <h1>CalCo</h1>
-        <div className="header-right">
-          <span>
-            Welcome,{" "}
-            <strong>{profile?.display_name ?? identity?.username}</strong>
-          </span>
-          <button onClick={logout}>Logout</button>
+        <div className="profile-menu">
+          <button
+            type="button"
+            className="profile-button"
+            onClick={() => setProfileMenuOpen((open) => !open)}
+            aria-label="Open profile menu"
+            aria-expanded={profileMenuOpen}
+            aria-haspopup="menu"
+          >
+            <span className="profile-initials">{getInitials(displayName)}</span>
+            <span className="profile-name">{displayName}</span>
+          </button>
+          {profileMenuOpen && (
+            <div className="profile-popover" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleProfileNavigate("/meals")}
+              >
+                My Meals
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => handleProfileNavigate("/history")}
+              >
+                History
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="destructive"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <nav className="diary-nav">
-        <button className="btn-secondary" onClick={() => navigate("/search")}>
-          Search Foods
-        </button>
-        <button
-          className="btn-secondary"
-          onClick={() => navigate("/foods/custom/new")}
-        >
-          Create Food
-        </button>
-        <button className="btn-secondary" onClick={() => navigate("/history")}>
-          History
-        </button>
-        <button className="btn-secondary" onClick={() => navigate("/meals")}>
-          Meals
-        </button>
-      </nav>
-
-      <div className="date-selector">
-        <button className="date-arrow" onClick={goPrev}>
-          ←
-        </button>
-        <span className="date-label">{displayDate(currentDate)}</span>
-        <button className="date-arrow" onClick={goNext} disabled={isToday}>
-          →
-        </button>
-      </div>
-
       {error && <p className="error">{error}</p>}
 
-      <div className="summary-rings">
-        <NutrientRing
-          label="Calories"
-          value={kcal?.amount ?? 0}
-          unit={kcal?.unit ?? "kcal"}
-          max={DEFAULT_CALORIE_GOAL}
-          color="#16a34a"
-        />
-        <NutrientRing
-          label="Protein"
-          value={protein?.amount ?? 0}
-          unit={protein?.unit ?? "g"}
-          max={150}
-          color="#3b82f6"
-        />
-        <NutrientRing
-          label="Carbs"
-          value={carbs?.amount ?? 0}
-          unit={carbs?.unit ?? "g"}
-          max={250}
-          color="#f59e0b"
-        />
-        <NutrientRing
-          label="Fat"
-          value={fat?.amount ?? 0}
-          unit={fat?.unit ?? "g"}
-          max={65}
-          color="#f43f5e"
-        />
+      <div className="diary-summary-tile">
+        <div className="date-selector">
+          <button className="date-arrow" onClick={goPrev}>
+            ←
+          </button>
+          <span className="date-label">{displayDate(currentDate)}</span>
+          <button className="date-arrow" onClick={goNext} disabled={isToday}>
+            →
+          </button>
+        </div>
+
+        <div className="summary-rings">
+          <NutrientRing
+            label="Calories"
+            value={kcal?.amount ?? 0}
+            unit={kcal?.unit ?? "kcal"}
+            max={DEFAULT_CALORIE_GOAL}
+            color={MACRO_COLORS.calories}
+          />
+          <NutrientRing
+            label="Protein"
+            value={protein?.amount ?? 0}
+            unit={protein?.unit ?? "g"}
+            max={150}
+            color={MACRO_COLORS.protein}
+          />
+          <NutrientRing
+            label="Carbs"
+            value={carbs?.amount ?? 0}
+            unit={carbs?.unit ?? "g"}
+            max={250}
+            color={MACRO_COLORS.carbs}
+          />
+          <NutrientRing
+            label="Fat"
+            value={fat?.amount ?? 0}
+            unit={fat?.unit ?? "g"}
+            max={65}
+            color={MACRO_COLORS.fat}
+          />
+        </div>
       </div>
 
       <main className="diary-main">
@@ -298,70 +421,60 @@ export function Diary() {
           mealSlotLogs.map(({ value, label, items }) => (
             <section key={value} className="meal-slot">
               <div className="meal-slot-header">
-                <span className="meal-slot-name">{label}</span>
+                <div className="meal-slot-title">
+                  <span className="meal-slot-name">{label}</span>
+                  <SlotMacroSummary
+                    logs={items}
+                    mode={macroMode}
+                    onToggle={() =>
+                      setMacroMode((current) =>
+                        current === "grams" ? "percent" : "grams",
+                      )
+                    }
+                  />
+                </div>
                 <span className="meal-slot-calories">
                   {Math.round(slotCalories(value))} kcal
                 </span>
-                <button
-                  className="meal-add-btn"
-                  onClick={() =>
-                    navigate("/search", {
-                      state: { mealSlot: value },
-                    })
-                  }
-                  title={`Add to ${label}`}
-                >
-                  +
-                </button>
               </div>
               {items.length === 0 && (
                 <p className="meal-slot-empty">No items</p>
               )}
-              {items.map((log) => (
-                <button
-                  key={log.id}
-                  className="log-row"
-                  onClick={() => navigate(`/logs/${log.id}`)}
-                >
-                  <span className="log-row-name">
-                    {foodNames[log.item.id] ?? "Loading..."}
-                  </span>
-                  <span className="log-row-qty">
-                    {log.quantity.amount} {log.quantity.unit}
-                  </span>
-                  <span className="log-row-cal">
-                    {Math.round(getCalories(log.nutrients))} kcal
-                  </span>
-                </button>
-              ))}
+              {items.map((log) => renderLogRow(log))}
+              <button
+                className="meal-add-btn"
+                onClick={() =>
+                  navigate("/search", {
+                    state: { mealSlot: value },
+                  })
+                }
+                title={`Add to ${label}`}
+              >
+                Add Food
+              </button>
             </section>
           ))}
 
         {!loading && otherLogs.length > 0 && (
           <section className="meal-slot">
             <div className="meal-slot-header">
-              <span className="meal-slot-name">Other</span>
+              <div className="meal-slot-title">
+                <span className="meal-slot-name">Other</span>
+                <SlotMacroSummary
+                  logs={otherLogs}
+                  mode={macroMode}
+                  onToggle={() =>
+                    setMacroMode((current) =>
+                      current === "grams" ? "percent" : "grams",
+                    )
+                  }
+                />
+              </div>
               <span className="meal-slot-calories">
                 {Math.round(slotCalories(""))} kcal
               </span>
             </div>
-            {otherLogs.map((log) => (
-              <button
-                key={log.id}
-                className="log-row"
-                onClick={() => navigate(`/logs/${log.id}`)}
-              >
-                <span className="log-row-name">
-                  {foodNames[log.item.id] ?? "Loading..."}
-                </span>
-                <span className="log-row-qty">
-                  {log.quantity.amount} {log.quantity.unit}
-                </span>
-                <span className="log-row-cal">
-                  {Math.round(getCalories(log.nutrients))} kcal
-                </span>
-              </button>
-            ))}
+            {otherLogs.map((log) => renderLogRow(log))}
           </section>
         )}
       </main>

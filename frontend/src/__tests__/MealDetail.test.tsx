@@ -94,7 +94,22 @@ describe("MealDetail", () => {
       expect(screen.getByText("Oatmeal Breakfast")).toBeInTheDocument();
     });
 
+    expect(screen.getByLabelText("Back to Meals")).toBeInTheDocument();
     expect(screen.getByText("My go-to breakfast")).toBeInTheDocument();
+  });
+
+  it("navigates back to meals list", async () => {
+    renderAtDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Oatmeal Breakfast")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByLabelText("Back to Meals"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Meals List Page")).toBeInTheDocument();
+    });
   });
 
   it("shows components with product names", async () => {

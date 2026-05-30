@@ -101,8 +101,16 @@ export function History() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>History</h1>
-        <button onClick={() => navigate("/home")}>Back to Diary</button>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>History</h1>
+        </div>
       </header>
 
       <main>

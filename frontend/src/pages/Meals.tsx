@@ -30,7 +30,16 @@ export function Meals() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Meals</h1>
+          <div className="header-left">
+            <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+            <h1>Meals</h1>
+          </div>
         </header>
         <div className="skeleton">
           <div className="skeleton-line w-80" />
@@ -45,7 +54,16 @@ export function Meals() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Meals</h1>
+          <div className="header-left">
+            <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+            <h1>Meals</h1>
+          </div>
         </header>
         <p className="error">{error}</p>
       </div>
@@ -55,7 +73,16 @@ export function Meals() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>Meals</h1>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>Meals</h1>
+        </div>
         <button className="btn-primary" onClick={() => navigate("/meals/new")}>
           Create Meal
         </button>

@@ -9,11 +9,12 @@ const mockGetSession = vi.fn();
 const mockListLogs = vi.fn();
 const mockGetSummary = vi.fn();
 const mockGetFoodDetail = vi.fn();
+const mockLogout = vi.fn();
 
 vi.mock("../api/auth", () => ({
   getSession: (...args: unknown[]) => mockGetSession(...args),
   login: vi.fn(),
-  logout: vi.fn(),
+  logout: (...args: unknown[]) => mockLogout(...args),
   createAdmin: vi.fn(),
 }));
 
@@ -34,6 +35,7 @@ function renderAtHome() {
           <Route path="/home" element={<Diary />} />
           <Route path="/search" element={<div>Search Page</div>} />
           <Route path="/history" element={<div>History Page</div>} />
+          <Route path="/meals" element={<div>Meals Page</div>} />
           <Route path="/logs/:id" element={<div>Log Detail Page</div>} />
         </Routes>
       </AuthProvider>
@@ -52,6 +54,8 @@ const mockLogItem = {
   nutrients: [
     { code: "ENERGY_KCAL", amount: "247.5", unit: "kcal" },
     { code: "PROTEIN_G", amount: "46.5", unit: "g" },
+    { code: "CARBS_G", amount: "0", unit: "g" },
+    { code: "FAT_G", amount: "3.5", unit: "g" },
   ],
   notes: null,
 };
@@ -74,6 +78,7 @@ beforeEach(() => {
     profile: { id: "p1", display_name: "Alice" },
   });
   mockListLogs.mockResolvedValue({ from: today, to: today, items: [] });
+  mockLogout.mockResolvedValue(undefined);
   mockGetSummary.mockResolvedValue({
     from: today,
     to: today,
@@ -87,16 +92,16 @@ beforeEach(() => {
 });
 
 describe("Diary", () => {
-  it("renders header and nav", async () => {
+  it("renders header and profile button without old nav", async () => {
     renderAtHome();
 
     await waitFor(() => {
       expect(screen.getByText("CalCo")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Search Foods")).toBeInTheDocument();
-    expect(screen.getByText("Create Food")).toBeInTheDocument();
-    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    expect(screen.queryByText("Search Foods")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create Food")).not.toBeInTheDocument();
   });
 
   it("shows empty state when no logs", async () => {
@@ -142,33 +147,104 @@ describe("Diary", () => {
     });
 
     expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) =>
+        content.includes("carbs 0.0g") &&
+        content.includes("protein 46.5g") &&
+        content.includes("fat 3.5g"),
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("navigates to search on Search Foods click", async () => {
+  it("toggles meal slot macros from grams to percentages", async () => {
+    mockGetSummary.mockResolvedValue(mockSummary);
+    mockListLogs.mockResolvedValue({
+      from: today,
+      to: today,
+      items: [mockLogItem],
+    });
+    mockGetFoodDetail.mockResolvedValue({
+      id: "food-1",
+      name: "Chicken Breast",
+    });
+
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getByText("Search Foods")).toBeInTheDocument();
+      expect(
+        screen.getByText((content) => content.includes("protein 46.5g")),
+      ).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText("Search Foods"));
+    await userEvent.click(
+      screen.getByText((content) => content.includes("protein 46.5g")),
+    );
+
+    expect(
+      screen.getByText((content) =>
+        content.includes("carbs 0%") &&
+        content.includes("protein 86%") &&
+        content.includes("fat 14%"),
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("navigates to search from a meal add button", async () => {
+    renderAtHome();
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Add Food" })[0]).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Add Food" })[0]);
 
     await waitFor(() => {
       expect(screen.getByText("Search Page")).toBeInTheDocument();
     });
   });
 
-  it("navigates to history on History click", async () => {
+  it("navigates to history from the profile menu", async () => {
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getByText("History")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
     });
 
+    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
     await userEvent.click(screen.getByText("History"));
 
     await waitFor(() => {
       expect(screen.getByText("History Page")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates to meals from the profile menu", async () => {
+    renderAtHome();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await userEvent.click(screen.getByText("My Meals"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Meals Page")).toBeInTheDocument();
+    });
+  });
+
+  it("logs out from the profile menu", async () => {
+    renderAtHome();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await userEvent.click(screen.getByText("Logout"));
+
+    await waitFor(() => {
+      expect(mockLogout).toHaveBeenCalled();
     });
   });
 
@@ -196,6 +272,7 @@ describe("Diary", () => {
       expect(screen.getByText("Log Detail Page")).toBeInTheDocument();
     });
   });
+
 
   it("shows error state", async () => {
     mockListLogs.mockRejectedValue(new Error("Network error"));

@@ -159,8 +159,16 @@ export function CustomFoodEdit() {
     return (
       <div className="catalog-page">
         <header>
-          <h1>Edit Custom Food</h1>
-          <button onClick={() => navigate(-1)}>Back</button>
+          <div className="header-left">
+            <button
+              className="btn-back"
+              onClick={() => navigate("/home")}
+              aria-label="Back to Diary"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <h1>Edit Custom Food</h1>
+          </div>
         </header>
         <main>
           <div className="skeleton">
@@ -175,8 +183,16 @@ export function CustomFoodEdit() {
   return (
     <div className="catalog-page">
       <header>
-        <h1>Edit Custom Food</h1>
-        <button onClick={() => navigate(-1)}>Back</button>
+        <div className="header-left">
+          <button
+            className="btn-back"
+            onClick={() => navigate("/home")}
+            aria-label="Back to Diary"
+          >
+            <span aria-hidden="true">‹</span>
+          </button>
+          <h1>Edit Custom Food</h1>
+        </div>
       </header>
 
       <main>
