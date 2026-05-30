@@ -26,11 +26,14 @@ use crate::infrastructure::postgres::food_log::{
     PostgresFoodLogRepository,
     PostgresSummaryRepository,
 };
+use crate::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::interfaces::http::auth::{auth_routes, AppState};
 use crate::interfaces::http::catalog::{catalog_routes, CatalogState};
 use crate::interfaces::http::food_log::food_log_routes;
+use crate::interfaces::http::meal::meal_routes;
 use crate::application::catalog::{CatalogServices, ProductRepository, NutrientRepository, UnitRepository};
-use crate::application::food_log::{FoodLogServices, FoodLogRepository, SummaryRepository, ProductLookup};
+use crate::application::food_log::{FoodLogServices, FoodLogRepository, SummaryRepository, ProductLookup, MealLookup};
+use crate::application::meal::{MealServices, MealRepository, MealProductLookup};
 
 #[tokio::main]
 async fn main() {
@@ -65,10 +68,23 @@ async fn main() {
 
     let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
     let food_log_repo = food_log_repo_impl.clone() as Arc<dyn FoodLogRepository>;
-    let product_lookup = food_log_repo_impl as Arc<dyn ProductLookup>;
+    let product_lookup = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
+    let meal_lookup = food_log_repo_impl as Arc<dyn MealLookup>;
     let summary_repo = Arc::new(PostgresSummaryRepository::new(pool.clone())) as Arc<dyn SummaryRepository>;
 
-    let food_log_services = FoodLogServices::new(food_log_repo, product_lookup, summary_repo);
+    let meal_repo_impl = Arc::new(PostgresMealRepository::new(pool.clone()));
+    let meal_repo = meal_repo_impl.clone() as Arc<dyn MealRepository>;
+    let meal_product_lookup = meal_repo_impl as Arc<dyn MealProductLookup>;
+
+    let product_lookup_clone = Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn ProductLookup>;
+
+    let food_log_services = FoodLogServices::new(
+        food_log_repo,
+        product_lookup,
+        summary_repo,
+    ).with_meal_support(meal_lookup, product_lookup_clone);
+
+    let meal_services = MealServices::new(meal_repo, meal_product_lookup);
 
     let auth_state = AppState {
         identity_repo,
@@ -76,6 +92,7 @@ async fn main() {
         profile_repo,
         config: config.clone(),
         food_log_services: Some(food_log_services),
+        meal_services: Some(meal_services),
     };
 
     let catalog_state = CatalogState {
@@ -90,7 +107,8 @@ async fn main() {
         .nest("/api", api)
         .merge(auth_routes(auth_state.clone()))
         .merge(catalog_routes(catalog_state))
-        .merge(food_log_routes(auth_state))
+        .merge(food_log_routes(auth_state.clone()))
+        .merge(meal_routes(auth_state))
         .layer(CorsLayer::permissive());
 
     let addr = config.bind_addr;

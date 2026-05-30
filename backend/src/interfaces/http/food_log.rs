@@ -140,20 +140,19 @@ fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorRespons
     )
 }
 
-fn product_id_from_log(log: &FoodLog) -> Uuid {
-    match &log.item {
-        LoggedItem::Product(pid) => pid.0,
-    }
-}
-
 fn log_to_response(log: &FoodLog) -> LogResponse {
+    let (item_type, item_id) = match &log.item {
+        LoggedItem::Product(pid) => ("product", pid.0),
+        LoggedItem::Meal(mid) => ("meal", mid.0),
+    };
+
     LogResponse {
         id: log.id.0,
         logged_at: log.logged_at,
         meal_slot: log.meal_slot.as_ref().map(|m| m.as_str().to_string()),
         item: ItemResponse {
-            item_type: "product".to_string(),
-            id: product_id_from_log(log),
+            item_type: item_type.to_string(),
+            id: item_id,
         },
         quantity: QuantityDto {
             amount: log.quantity_amount,
@@ -182,13 +181,20 @@ async fn create_log_handler(
         user_id: auth.1.id,
         logged_at: req.logged_at,
         meal_slot: req.meal_slot,
-        product_id: req.item.id,
+        item_type: req.item.item_type,
+        item_id: req.item.id,
         quantity_amount: req.quantity.amount,
         quantity_unit: req.quantity.unit,
         notes: req.notes,
     };
 
-    match services.log_food(input).await {
+    let result = if input.item_type == "meal" {
+        services.log_meal(input).await
+    } else {
+        services.log_food(input).await
+    };
+
+    match result {
         Ok(log) => {
             let resp = log_to_response(&log);
             (StatusCode::CREATED, Json(serde_json::to_value(&resp).unwrap())).into_response()
@@ -268,7 +274,8 @@ async fn update_log_handler(
     let input = UpdateFoodInput {
         logged_at: req.logged_at,
         meal_slot: req.meal_slot,
-        product_id: req.item.as_ref().map(|i| i.id),
+        item_type: req.item.as_ref().map(|i| i.item_type.clone()),
+        item_id: req.item.as_ref().map(|i| i.id),
         quantity_amount: req.quantity.as_ref().map(|q| q.amount),
         quantity_unit: req.quantity.as_ref().map(|q| q.unit.clone()),
         notes: req.notes,

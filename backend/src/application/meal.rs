@@ -1,0 +1,693 @@
+use async_trait::async_trait;
+use chrono::Utc;
+use rust_decimal::Decimal;
+use std::sync::Arc;
+use uuid::Uuid;
+
+use crate::domain::catalog::*;
+use crate::domain::meal::*;
+use crate::domain::nutrition::Quantity;
+
+#[async_trait]
+pub trait MealRepository: Send + Sync {
+    async fn create(&self, meal: &Meal) -> Result<(), MealError>;
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError>;
+    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
+    async fn update(&self, meal: &Meal) -> Result<(), MealError>;
+    async fn delete(&self, id: MealId) -> Result<(), MealError>;
+}
+
+#[async_trait]
+pub trait MealProductLookup: Send + Sync {
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError>;
+}
+
+pub struct CreateMealInput {
+    pub user_id: Uuid,
+    pub name: String,
+    pub notes: Option<String>,
+    pub total_quantity_amount: Option<Decimal>,
+    pub total_quantity_unit: Option<String>,
+    pub components: Vec<CreateMealComponentInput>,
+}
+
+pub struct CreateMealComponentInput {
+    pub item_type: String,
+    pub item_id: Uuid,
+    pub quantity_amount: Decimal,
+    pub quantity_unit: String,
+}
+
+pub struct UpdateMealInput {
+    pub name: Option<String>,
+    pub notes: Option<String>,
+    pub total_quantity_amount: Option<Option<Decimal>>,
+    pub total_quantity_unit: Option<Option<String>>,
+    pub components: Option<Vec<CreateMealComponentInput>>,
+}
+
+pub struct MealNutritionOutput {
+    pub meal_id: Uuid,
+    pub quantity_amount: Decimal,
+    pub quantity_unit: String,
+    pub nutrients: Vec<MealNutrientEntry>,
+}
+
+pub struct MealNutrientEntry {
+    pub code: String,
+    pub amount: Decimal,
+    pub unit: String,
+}
+
+#[derive(Clone)]
+pub struct MealServices {
+    pub meal_repo: Arc<dyn MealRepository>,
+    pub product_lookup: Arc<dyn MealProductLookup>,
+}
+
+impl MealServices {
+    pub fn new(
+        meal_repo: Arc<dyn MealRepository>,
+        product_lookup: Arc<dyn MealProductLookup>,
+    ) -> Self {
+        Self { meal_repo, product_lookup }
+    }
+
+    pub async fn create_meal(&self, input: CreateMealInput) -> Result<Meal, MealError> {
+        if input.name.trim().is_empty() {
+            return Err(MealError::Validation("meal name is required".into()));
+        }
+        if input.components.is_empty() {
+            return Err(MealError::Validation("meal must have at least one component".into()));
+        }
+
+        for component in &input.components {
+            if component.item_type != "product" {
+                return Err(MealError::Validation(format!(
+                    "unsupported component item type: {}",
+                    component.item_type
+                )));
+            }
+            let product_id = ProductId(component.item_id);
+            self.product_lookup.find_by_id(product_id).await?
+                .ok_or_else(|| MealError::NotFound(format!("product {} not found", component.item_id)))?;
+        }
+
+        let now = Utc::now();
+        let meal = Meal {
+            id: MealId::new(),
+            user_id: input.user_id,
+            name: MealName(input.name),
+            notes: input.notes.map(MealNotes),
+            total_quantity_amount: input.total_quantity_amount,
+            total_quantity_unit: input.total_quantity_unit.map(UnitCode),
+            components: input.components.into_iter().map(|c| MealComponent {
+                id: Uuid::new_v4(),
+                item: MealComponentItem::Product(ProductId(c.item_id)),
+                quantity_amount: c.quantity_amount,
+                quantity_unit: UnitCode(c.quantity_unit),
+            }).collect(),
+            created_at: now,
+            updated_at: now,
+        };
+
+        self.meal_repo.create(&meal).await?;
+        Ok(meal)
+    }
+
+    pub async fn get_meal(&self, id: MealId) -> Result<Meal, MealError> {
+        self.meal_repo.find_by_id(id).await?
+            .ok_or_else(|| MealError::NotFound("meal not found".into()))
+    }
+
+    pub async fn list_meals(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
+        self.meal_repo.find_by_user(user_id).await
+    }
+
+    pub async fn update_meal(
+        &self,
+        id: MealId,
+        user_id: Uuid,
+        input: UpdateMealInput,
+    ) -> Result<Meal, MealError> {
+        let existing = self.meal_repo.find_by_id(id).await?
+            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+
+        if !existing.is_owned_by(user_id) {
+            return Err(MealError::Forbidden("not your meal".into()));
+        }
+
+        let components = match input.components {
+            Some(components) => {
+                if components.is_empty() {
+                    return Err(MealError::Validation("meal must have at least one component".into()));
+                }
+                for c in &components {
+                    if c.item_type != "product" {
+                        return Err(MealError::Validation(format!(
+                            "unsupported component item type: {}",
+                            c.item_type
+                        )));
+                    }
+                    let product_id = ProductId(c.item_id);
+                    self.product_lookup.find_by_id(product_id).await?
+                        .ok_or_else(|| MealError::NotFound(format!("product {} not found", c.item_id)))?;
+                }
+                components.into_iter().map(|c| MealComponent {
+                    id: Uuid::new_v4(),
+                    item: MealComponentItem::Product(ProductId(c.item_id)),
+                    quantity_amount: c.quantity_amount,
+                    quantity_unit: UnitCode(c.quantity_unit),
+                }).collect()
+            }
+            None => existing.components,
+        };
+
+        let name = match input.name {
+            Some(ref n) if n.trim().is_empty() => return Err(MealError::Validation("meal name is required".into())),
+            Some(n) => MealName(n),
+            None => existing.name,
+        };
+
+        let updated = Meal {
+            id,
+            user_id,
+            name,
+            notes: input.notes.map(MealNotes).or(existing.notes),
+            total_quantity_amount: input.total_quantity_amount.flatten().or(existing.total_quantity_amount),
+            total_quantity_unit: input.total_quantity_unit.flatten().map(UnitCode).or(existing.total_quantity_unit),
+            components,
+            created_at: existing.created_at,
+            updated_at: Utc::now(),
+        };
+
+        self.meal_repo.update(&updated).await?;
+        Ok(updated)
+    }
+
+    pub async fn delete_meal(&self, id: MealId, user_id: Uuid) -> Result<(), MealError> {
+        let existing = self.meal_repo.find_by_id(id).await?
+            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+
+        if !existing.is_owned_by(user_id) {
+            return Err(MealError::Forbidden("not your meal".into()));
+        }
+
+        self.meal_repo.delete(id).await
+    }
+
+    pub async fn get_meal_nutrients(
+        &self,
+        id: MealId,
+        quantity_amount: Decimal,
+        quantity_unit: String,
+    ) -> Result<MealNutritionOutput, MealError> {
+        let meal = self.meal_repo.find_by_id(id).await?
+            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+
+        let mut total_nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = Vec::new();
+        let total_grams = if quantity_unit == "g" {
+            quantity_amount
+        } else {
+            return Err(MealError::Validation(format!(
+                "cannot convert {} {} to grams for meal nutrition",
+                quantity_amount, quantity_unit
+            )));
+        };
+
+        for component in &meal.components {
+            match &component.item {
+                MealComponentItem::Product(product_id) => {
+                    let product = self.product_lookup.find_by_id(*product_id).await?
+                        .ok_or_else(|| MealError::NotFound(format!("product {} not found", product_id.0)))?;
+
+                    let component_qty = Quantity::new(component.quantity_amount, component.quantity_unit.clone());
+                    let component_grams = convert_to_grams_meal(&component_qty, &product)?;
+
+                    let contribution_ratio = component_grams / Decimal::new(100, 0);
+                    for pn in &product.nutrients {
+                        let existing = total_nutrients.iter_mut().find(|(code, _, _)| code == &pn.nutrient_code);
+                        let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
+                        match existing {
+                            Some((_, existing_amount, _)) => {
+                                existing_amount.0 = existing_amount.0 + contributed_amount;
+                            }
+                            None => {
+                                total_nutrients.push((
+                                    pn.nutrient_code.clone(),
+                                    AmountPer100g(contributed_amount),
+                                    UnitCode("g".to_string()),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let scale_factor = total_grams / Decimal::new(100, 0);
+        let scaled_nutrients: Vec<MealNutrientEntry> = total_nutrients.into_iter().map(|(code, amount, unit)| {
+            MealNutrientEntry {
+                code: code.0,
+                amount: amount.0 * scale_factor,
+                unit: unit.0,
+            }
+        }).collect();
+
+        Ok(MealNutritionOutput {
+            meal_id: id.0,
+            quantity_amount,
+            quantity_unit,
+            nutrients: scaled_nutrients,
+        })
+    }
+}
+
+fn convert_to_grams_meal(quantity: &Quantity, product: &Product) -> Result<Decimal, MealError> {
+    if quantity.unit.0 == "g" {
+        return Ok(quantity.amount);
+    }
+    if quantity.unit.0 == "kg" {
+        return Ok(quantity.amount * Decimal::new(1000, 0));
+    }
+    for serving in &product.servings {
+        if serving.unit.0 == quantity.unit.0 && serving.quantity == quantity.amount {
+            return Ok(serving.grams * (quantity.amount / serving.quantity));
+        }
+    }
+    if let Some(size_g) = product.serving_size_g {
+        let default_unit = product.default_unit.as_ref().map(|u| u.0.as_str()).unwrap_or("serving");
+        if quantity.unit.0 == default_unit {
+            return Ok(size_g * quantity.amount);
+        }
+    }
+    Err(MealError::Validation(format!("cannot convert {} {} to grams", quantity.amount, quantity.unit.0)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    struct MockMealRepo {
+        meals: Mutex<Vec<Meal>>,
+    }
+
+    impl MockMealRepo {
+        fn new() -> Self {
+            Self { meals: Mutex::new(vec![]) }
+        }
+    }
+
+    #[async_trait]
+    impl MealRepository for MockMealRepo {
+        async fn create(&self, meal: &Meal) -> Result<(), MealError> {
+            self.meals.lock().unwrap().push(meal.clone());
+            Ok(())
+        }
+
+        async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError> {
+            let meals = self.meals.lock().unwrap();
+            Ok(meals.iter().find(|m| m.id == id).cloned())
+        }
+
+        async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
+            let meals = self.meals.lock().unwrap();
+            Ok(meals.iter().filter(|m| m.user_id == user_id).cloned().collect())
+        }
+
+        async fn update(&self, meal: &Meal) -> Result<(), MealError> {
+            let mut meals = self.meals.lock().unwrap();
+            if let Some(existing) = meals.iter_mut().find(|m| m.id == meal.id) {
+                *existing = meal.clone();
+                Ok(())
+            } else {
+                Err(MealError::NotFound("not found".into()))
+            }
+        }
+
+        async fn delete(&self, id: MealId) -> Result<(), MealError> {
+            let mut meals = self.meals.lock().unwrap();
+            let idx = meals.iter().position(|m| m.id == id).ok_or_else(|| MealError::NotFound("not found".into()))?;
+            meals.remove(idx);
+            Ok(())
+        }
+    }
+
+    struct MockMealProductLookup {
+        product: Option<Product>,
+    }
+
+    impl MockMealProductLookup {
+        fn with_product(product: Product) -> Self {
+            Self { product: Some(product) }
+        }
+
+        fn empty() -> Self {
+            Self { product: None }
+        }
+    }
+
+    #[async_trait]
+    impl MealProductLookup for MockMealProductLookup {
+        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, MealError> {
+            Ok(self.product.clone())
+        }
+    }
+
+    fn sample_product() -> Product {
+        Product {
+            id: ProductId(Uuid::nil()),
+            source: Source::User,
+            source_id: None,
+            user_id: None,
+            visibility: ProductVisibility::UserPrivate,
+            barcode: None,
+            name: ProductName("Test Food".to_string()),
+            brand: None,
+            category: None,
+            default_quantity: Some(Decimal::new(100, 0)),
+            default_unit: Some(UnitCode("g".to_string())),
+            serving_size_g: Some(Decimal::new(100, 0)),
+            nutrients: vec![
+                ProductNutrient {
+                    nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
+                    amount_per_100g: AmountPer100g(Decimal::new(100, 0)),
+                    source: None,
+                    confidence: None,
+                },
+            ],
+            servings: vec![],
+            deleted_at: None,
+        }
+    }
+
+    fn make_services(product: Option<Product>) -> MealServices {
+        let meal_repo = Arc::new(MockMealRepo::new()) as Arc<dyn MealRepository>;
+        let product_lookup = match product {
+            Some(p) => Arc::new(MockMealProductLookup::with_product(p)) as Arc<dyn MealProductLookup>,
+            None => Arc::new(MockMealProductLookup::empty()) as Arc<dyn MealProductLookup>,
+        };
+        MealServices::new(meal_repo, product_lookup)
+    }
+
+    fn sample_component() -> CreateMealComponentInput {
+        CreateMealComponentInput {
+            item_type: "product".to_string(),
+            item_id: Uuid::nil(),
+            quantity_amount: Decimal::new(100, 0),
+            quantity_unit: "g".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_meal_success() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let result = services.create_meal(CreateMealInput {
+            user_id,
+            name: "Test Meal".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await;
+
+        assert!(result.is_ok());
+        let meal = result.unwrap();
+        assert_eq!(meal.user_id, user_id);
+        assert_eq!(meal.name.0, "Test Meal");
+        assert_eq!(meal.components.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_create_meal_empty_name() {
+        let services = make_services(Some(sample_product()));
+
+        let result = services.create_meal(CreateMealInput {
+            user_id: Uuid::new_v4(),
+            name: "".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::Validation(msg) => assert!(msg.contains("name")),
+            _ => panic!("expected Validation"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_meal_no_components() {
+        let services = make_services(Some(sample_product()));
+
+        let result = services.create_meal(CreateMealInput {
+            user_id: Uuid::new_v4(),
+            name: "Empty Meal".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![],
+        }).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::Validation(msg) => assert!(msg.contains("at least one component")),
+            _ => panic!("expected Validation"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_meal_product_not_found() {
+        let services = make_services(None);
+
+        let result = services.create_meal(CreateMealInput {
+            user_id: Uuid::new_v4(),
+            name: "Test Meal".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::NotFound(msg) => assert!(msg.contains("product")),
+            _ => panic!("expected NotFound"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_meal_success() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id,
+            name: "Test Meal".to_string(),
+            notes: Some("test notes".to_string()),
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let fetched = services.get_meal(created.id).await.unwrap();
+        assert_eq!(fetched.id, created.id);
+        assert_eq!(fetched.name.0, "Test Meal");
+    }
+
+    #[tokio::test]
+    async fn test_get_meal_not_found() {
+        let services = make_services(Some(sample_product()));
+        let result = services.get_meal(MealId::new()).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::NotFound(msg) => assert!(msg.contains("meal")),
+            _ => panic!("expected NotFound"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_meals() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+        let other_id = Uuid::new_v4();
+
+        services.create_meal(CreateMealInput {
+            user_id,
+            name: "Meal 1".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        services.create_meal(CreateMealInput {
+            user_id,
+            name: "Meal 2".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let meals = services.list_meals(user_id).await.unwrap();
+        assert_eq!(meals.len(), 2);
+
+        let other_meals = services.list_meals(other_id).await.unwrap();
+        assert_eq!(other_meals.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_update_meal_success() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id,
+            name: "Original".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let updated = services.update_meal(created.id, user_id, UpdateMealInput {
+            name: Some("Updated".to_string()),
+            notes: Some("new notes".to_string()),
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: None,
+        }).await.unwrap();
+
+        assert_eq!(updated.name.0, "Updated");
+        assert_eq!(updated.notes.as_ref().map(|n| n.0.as_str()), Some("new notes"));
+    }
+
+    #[tokio::test]
+    async fn test_update_meal_forbidden() {
+        let services = make_services(Some(sample_product()));
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id: owner,
+            name: "My Meal".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let result = services.update_meal(created.id, other, UpdateMealInput {
+            name: None,
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: None,
+        }).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::Forbidden(msg) => assert!(msg.contains("not your")),
+            _ => panic!("expected Forbidden"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_meal_success() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id,
+            name: "To Delete".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        assert!(services.delete_meal(created.id, user_id).await.is_ok());
+        let fetch_result = services.get_meal(created.id).await;
+        assert!(fetch_result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_meal_forbidden() {
+        let services = make_services(Some(sample_product()));
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id: owner,
+            name: "My Meal".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let result = services.delete_meal(created.id, other).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::Forbidden(msg) => assert!(msg.contains("not your")),
+            _ => panic!("expected Forbidden"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_delete_meal_not_found() {
+        let services = make_services(Some(sample_product()));
+        let result = services.delete_meal(MealId::new(), Uuid::new_v4()).await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            MealError::NotFound(msg) => assert!(msg.contains("meal")),
+            _ => panic!("expected NotFound"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_meal_nutrients_calculates_sum() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let meal = services.create_meal(CreateMealInput {
+            user_id,
+            name: "Double Food".to_string(),
+            notes: None,
+            total_quantity_amount: None,
+            total_quantity_unit: None,
+            components: vec![
+                sample_component(),
+                CreateMealComponentInput {
+                    item_type: "product".to_string(),
+                    item_id: Uuid::nil(),
+                    quantity_amount: Decimal::new(200, 0),
+                    quantity_unit: "g".to_string(),
+                },
+            ],
+        }).await.unwrap();
+
+        let nutrition = services.get_meal_nutrients(
+            meal.id,
+            Decimal::new(150, 0),
+            "g".to_string(),
+        ).await.unwrap();
+
+        assert_eq!(nutrition.meal_id, meal.id.0);
+        assert_eq!(nutrition.nutrients.len(), 1);
+        assert_eq!(nutrition.nutrients[0].code, "ENERGY_KCAL");
+
+        let product_energy_100g = Decimal::new(100, 0);
+        let component1_energy = product_energy_100g * Decimal::new(100, 0) / Decimal::new(100, 0);
+        let component2_energy = product_energy_100g * Decimal::new(200, 0) / Decimal::new(100, 0);
+        let total_energy = component1_energy + component2_energy;
+        let scaled = total_energy * Decimal::new(150, 0) / Decimal::new(100, 0);
+        assert_eq!(nutrition.nutrients[0].amount, scaled);
+    }
+}

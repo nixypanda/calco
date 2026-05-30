@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::application::auth::*;
 use crate::application::food_log::FoodLogServices;
+use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
 
@@ -20,6 +21,7 @@ pub struct AppState {
     pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
     pub food_log_services: Option<FoodLogServices>,
+    pub meal_services: Option<MealServices>,
 }
 
 pub fn auth_routes(state: AppState) -> Router {

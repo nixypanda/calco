@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::application::food_log::*;
 use crate::domain::catalog::*;
 use crate::domain::food_log::*;
+use crate::domain::meal::{Meal, MealId, MealComponent, MealComponentItem, MealName, MealNotes};
 
 #[derive(Clone)]
 pub struct PostgresFoodLogRepository {
@@ -43,14 +44,20 @@ impl PostgresFoodLogRepository {
     }
 
     fn row_to_food_log(&self, r: FoodLogRow, snapshots: Vec<FoodLogNutrientSnapshot>) -> Result<FoodLog, FoodLogError> {
+        let item = if let Some(pid) = r.item_product_id {
+            LoggedItem::Product(ProductId(pid))
+        } else if let Some(mid) = r.item_meal_id {
+            LoggedItem::Meal(MealId(mid))
+        } else {
+            return Err(FoodLogError::Internal("food log has no item reference".into()));
+        };
+
         Ok(FoodLog {
             id: FoodLogId(r.id),
             user_id: r.user_id,
             logged_at: r.logged_at,
             meal_slot: r.meal_slot.and_then(|s| MealSlot::from_str(&s).ok()),
-            item: LoggedItem::Product(ProductId(
-                r.item_product_id.ok_or_else(|| FoodLogError::Internal("missing product_id".into()))?
-            )),
+            item,
             quantity_amount: r.quantity,
             quantity_unit: UnitCode(r.unit),
             nutrient_snapshots: snapshots,
@@ -64,14 +71,15 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError> {
         let mut tx = self.pool.begin().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
 
-        let product_id = match &log.item {
-            LoggedItem::Product(pid) => pid.0,
+        let (product_id, meal_id) = match &log.item {
+            LoggedItem::Product(pid) => (Some(pid.0), None),
+            LoggedItem::Meal(mid) => (None, Some(mid.0)),
         };
 
         sqlx::query(
             r#"
-            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, quantity, unit, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, quantity, unit, notes)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             "#,
         )
         .bind(log.id.0)
@@ -79,6 +87,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(log.logged_at)
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
         .bind(product_id)
+        .bind(meal_id)
         .bind(log.quantity_amount)
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
@@ -167,14 +176,15 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError> {
         let mut tx = self.pool.begin().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
 
-        let product_id = match &log.item {
-            LoggedItem::Product(pid) => pid.0,
+        let (product_id, meal_id) = match &log.item {
+            LoggedItem::Product(pid) => (Some(pid.0), None),
+            LoggedItem::Meal(mid) => (None, Some(mid.0)),
         };
 
         sqlx::query(
             r#"
-            UPDATE food_logs SET logged_at=$2, meal_slot=$3, item_product_id=$4,
-                                 quantity=$5, unit=$6, notes=$7, updated_at=now()
+            UPDATE food_logs SET logged_at=$2, meal_slot=$3, item_product_id=$4, item_meal_id=$5,
+                                 quantity=$6, unit=$7, notes=$8, updated_at=now()
             WHERE id=$1
             "#,
         )
@@ -182,6 +192,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(log.logged_at)
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
         .bind(product_id)
+        .bind(meal_id)
         .bind(log.quantity_amount)
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
@@ -252,6 +263,66 @@ impl ProductLookup for PostgresFoodLogRepository {
                 let nutrients = self.load_product_nutrients(r.id).await?;
                 let servings = self.load_product_servings(r.id).await?;
                 Ok(Some(self.row_to_product(r, nutrients, servings)?))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+#[async_trait]
+impl MealLookup for PostgresFoodLogRepository {
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, FoodLogError> {
+        let row = sqlx::query_as::<_, MealLookupRow>(
+            r#"
+            SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
+                   created_at, updated_at
+            FROM meals WHERE id = $1
+            "#,
+        )
+        .bind(id.0)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+
+        match row {
+            Some(r) => {
+                let component_rows = sqlx::query_as::<_, MealComponentLookupRow>(
+                    r#"
+                    SELECT id, component_product_id, component_meal_id, quantity, unit
+                    FROM meal_components WHERE meal_id = $1 ORDER BY created_at
+                    "#,
+                )
+                .bind(id.0)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| FoodLogError::Database(e.to_string()))?;
+
+                let mut components = Vec::new();
+                for c in component_rows {
+                    let item = if let Some(pid) = c.component_product_id {
+                        MealComponentItem::Product(ProductId(pid))
+                    } else {
+                        continue;
+                    };
+                    components.push(MealComponent {
+                        id: c.id,
+                        item,
+                        quantity_amount: c.quantity,
+                        quantity_unit: crate::domain::catalog::UnitCode(c.unit),
+                    });
+                }
+
+                Ok(Some(Meal {
+                    id: MealId(r.id),
+                    user_id: r.user_id,
+                    name: MealName(r.name),
+                    notes: r.notes.map(MealNotes),
+                    total_quantity_amount: r.total_quantity_amount,
+                    total_quantity_unit: r.total_quantity_unit.map(crate::domain::catalog::UnitCode),
+                    components,
+                    created_at: r.created_at,
+                    updated_at: r.updated_at,
+                }))
             }
             None => Ok(None),
         }
@@ -465,5 +536,26 @@ struct ProductServingRow {
 struct SummaryRow {
     code: String,
     amount: Option<Decimal>,
+    unit: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct MealLookupRow {
+    id: Uuid,
+    user_id: Uuid,
+    name: String,
+    notes: Option<String>,
+    total_quantity_amount: Option<Decimal>,
+    total_quantity_unit: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct MealComponentLookupRow {
+    id: Uuid,
+    component_product_id: Option<Uuid>,
+    component_meal_id: Option<Uuid>,
+    quantity: Decimal,
     unit: String,
 }

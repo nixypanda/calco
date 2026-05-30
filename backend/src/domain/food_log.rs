@@ -3,6 +3,7 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use super::catalog::{NutrientCode, ProductId, UnitCode};
+use super::meal::MealId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FoodLogId(pub Uuid);
@@ -51,6 +52,7 @@ impl MealSlot {
 #[derive(Debug, Clone)]
 pub enum LoggedItem {
     Product(ProductId),
+    Meal(MealId),
 }
 
 #[derive(Debug, Clone)]

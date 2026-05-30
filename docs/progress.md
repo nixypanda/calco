@@ -440,7 +440,44 @@ CalCo/
 
 ### Next steps
 
-- **Phase 7**: Meals/Recipes — backend meals domain, extend logging for meals, frontend meal builder UI
 - **Phase 8**: Import System — admin bulk-import food datasets from JSONL
 - **Phase 9**: Goals + Admin Corrections
 - **Phase 10**: Exports + Reports + Barcode
+
+---
+
+## 2026-05-30 — Phase 7: Meals/Recipes (Backend)
+
+### What was done
+
+**1. New files (5):**
+
+- **`domain/meal.rs`** — Meal aggregate root entity, MealComponent child value object, MealComponentItem::Product enum, MealId/MealName/MealNotes/MealYield value objects, MealError enum, 8 domain tests
+- **`application/meal.rs`** — MealRepository + MealProductLookup traits, MealServices with 6 use cases (create, get, list, update, delete, get_meal_nutrients), 16 application tests with mock repos
+- **`infrastructure/postgres/meal.rs`** — PostgresMealRepository (atomic create/update with component replacement, aggregate reconstruction), + MealProductLookup impl
+- **`interfaces/http/meal.rs`** — 6 routes: `POST/GET/PUT/DELETE /meals`, `GET /meals/{id}/nutrients` with aggregate-shaped DTOs following the design spec
+- **Migration `20250530000012_create_meals.sql`** — meals + meal_components tables with FK constraints and CHECK constraint for exactly one component item reference
+
+**2. Modified files (9):**
+
+- `domain/food_log.rs` — added `Meal(MealId)` variant to `LoggedItem` enum
+- `application/food_log.rs` — added `MealLookup` trait, `log_meal()` method (loads meal → sums component nutrition → snapshots), `with_meal_support()` builder; extended `LogFoodInput`/`UpdateFoodInput` with `item_type`+`item_id` fields; 4 new tests for meal logging
+- `infrastructure/postgres/food_log.rs` — `row_to_food_log`/`create`/`update` handle `item_meal_id`; implemented `MealLookup`
+- `interfaces/http/food_log.rs` — log handlers route to `log_meal` when `item.type == "meal"`
+- `interfaces/http/auth.rs` — added `meal_services: Option<MealServices>` to `AppState`
+- `main.rs` — wired PostgresMealRepository, MealServices, meal_routes, with_meal_support
+- `domain/mod.rs`, `application/mod.rs`, `infrastructure/postgres/mod.rs`, `interfaces/http/mod.rs` — module registration
+
+**3. Key design decisions:**
+
+- Meal components are replaced atomically through the Meal aggregate (no standalone component endpoints)
+- Meal nutrition is calculated at log time from component products and snapshotted (historical logs stable)
+- `LoggedItem::Meal` reuses the existing food_logs infrastructure (item_meal_id column already existed)
+- `POST /logs` accepts `item.type: "meal"` alongside the existing `"product"`
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| `cargo test` | 42/42 pass (was 18) |
+| `cargo build` | Clean |
