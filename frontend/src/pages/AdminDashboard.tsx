@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function AdminDashboard() {
   const { identity, logout } = useAuth();
@@ -108,7 +109,7 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      {error && <p className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-500 font-semibold text-sm">{error}</p>}
+      {error && <ErrorBanner message={error} />}
 
       <section>
         <div className="flex items-center justify-between gap-3 mb-3.5">
