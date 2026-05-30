@@ -13,6 +13,9 @@ import { FoodSearch } from "./pages/FoodSearch";
 import { FoodDetail } from "./pages/FoodDetail";
 import { CustomFoodCreate } from "./pages/CustomFoodCreate";
 import { CustomFoodEdit } from "./pages/CustomFoodEdit";
+import { Meals } from "./pages/Meals";
+import { MealDetail } from "./pages/MealDetail";
+import { MealForm } from "./pages/MealForm";
 import { checkBootstrapStatus } from "./api/auth";
 
 function RootRedirect() {
@@ -132,6 +135,38 @@ function App() {
             element={
               <ProtectedRoute>
                 <CustomFoodEdit />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meals"
+            element={
+              <ProtectedRoute>
+                <Meals />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meals/new"
+            element={
+              <ProtectedRoute>
+                <MealForm />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meals/:id"
+            element={
+              <ProtectedRoute>
+                <MealDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/meals/:id/edit"
+            element={
+              <ProtectedRoute>
+                <MealForm />
               </ProtectedRoute>
             }
           />

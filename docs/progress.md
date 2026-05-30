@@ -481,3 +481,60 @@ CalCo/
 |-------|--------|
 | `cargo test` | 42/42 pass (was 18) |
 | `cargo build` | Clean |
+
+---
+
+## 2026-05-30 — Phase 7.4: Frontend Meals UI
+
+### What was done
+
+**1. API client (`src/api/meals.ts`)** — Typed functions for all 6 meal endpoints:
+- `listMeals`, `getMeal`, `createMeal`, `updateMeal`, `deleteMeal`, `getMealNutrients`
+- TypeScript interfaces matching backend DTOs (`MealResponse`, `MealComponentResponse`, `CreateMealRequest`, `MealNutritionResponse`, etc.)
+
+**2. Meals page (`src/pages/Meals.tsx`)** — Route `/meals`:
+- Fetches `GET /meals` on mount
+- Cards showing meal name, component count, notes preview
+- Tap → navigate to `/meals/:id`
+- "Create Meal" button → `/meals/new`
+- Loading (skeleton rows), empty ("No meals yet"), error states
+
+**3. MealDetail page (`src/pages/MealDetail.tsx`)** — Route `/meals/:id`:
+- Header: name, notes
+- Components list with product names (fetched via `getFoodDetail`)
+- "Log this meal" section: amount input + "Calculate" button → `GET /meals/:id/nutrients`
+- Nutrient table from calculated results
+- "Log Meal" button → `POST /logs` with `item.type: "meal"` → navigate to `/home`
+- Edit button → `/meals/:id/edit`
+- Delete with confirmation → `DELETE /meals/:id` → navigate to `/meals`
+- Loading, error, not-found states
+
+**4. MealForm page (`src/pages/MealForm.tsx`)** — Routes `/meals/new` and `/meals/:id/edit`:
+- Create mode: empty form
+- Edit mode: pre-populated from `GET /meals/:id`
+- Fields: name (required), notes (optional), total_quantity (optional amount + unit)
+- Dynamic component rows: debounced product search (300ms) with dropdown results, quantity + unit inputs, add/remove rows
+- Validation: name required, at least 1 component with selected product
+- Submit → `POST /meals` (create) or `PUT /meals/:id` (edit) → navigate to detail
+- Loading, error states
+
+**5. Navigation & routing:**
+- `App.tsx`: added 4 new routes (`/meals`, `/meals/new`, `/meals/:id`, `/meals/:id/edit`)
+- `Diary.tsx`: added "Meals" nav button to diary navigation bar
+- `index.css`: added styles for meals pages (search dropdown, component rows, etc.)
+
+**6. Tests — 28 new tests (3 new files):**
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `Meals.test.tsx` | 8 | render, empty, list, component count, notes, navigation to detail/create, error |
+| `MealDetail.test.tsx` | 9 | loading, display, components, calculate nutrients, log meal, edit, delete, error, not-found |
+| `MealForm.test.tsx` | 11 | render, validation, product search/select, add/remove components, create, create failure, edit load, edit update, edit load error |
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| `pnpm vitest run` | 102/102 pass (was 74) |
+| `pnpm tsc --noEmit` | Clean |
+| `pnpm run build` | Clean (287 KB JS, 13 KB CSS) |

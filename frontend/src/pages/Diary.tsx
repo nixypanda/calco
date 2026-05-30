@@ -225,6 +225,9 @@ export function Diary() {
         <button className="btn-secondary" onClick={() => navigate("/history")}>
           History
         </button>
+        <button className="btn-secondary" onClick={() => navigate("/meals")}>
+          Meals
+        </button>
       </nav>
 
       <div className="date-selector">

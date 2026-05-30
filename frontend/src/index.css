@@ -1034,3 +1034,68 @@ td {
 .history-row:hover {
   background: #f9f9f9;
 }
+
+/* ─── Meals Page ─── */
+
+.meal-component-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.meal-component-row .search-wrapper {
+  flex: 2;
+  min-width: 180px;
+  position: relative;
+}
+
+.meal-component-row .search-wrapper input {
+  width: 100%;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.search-dropdown button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid #f0f0f0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.search-dropdown button:last-child {
+  border-bottom: none;
+}
+
+.search-dropdown button:hover {
+  background: #f5f5f5;
+}
+
+.meal-component-row .qty-input {
+  width: 80px;
+}
+
+.meal-component-row .unit-select-sm {
+  width: 80px;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  background: #fff;
+}
