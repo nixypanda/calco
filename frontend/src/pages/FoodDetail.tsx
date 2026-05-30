@@ -45,7 +45,7 @@ export function FoodDetail() {
     try {
       await createLog({
         logged_at: new Date().toISOString(),
-        meal_slot: logSlot || undefined,
+        meal_slot: logSlot ? logSlot.toLowerCase() : undefined,
         item: { type: "product", id },
         quantity: { amount: logAmount, unit: logUnit },
       });

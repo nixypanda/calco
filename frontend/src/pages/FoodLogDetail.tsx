@@ -69,7 +69,7 @@ export function FoodLogDetail() {
     try {
       const updated = await updateLog(id, {
         quantity: { amount: editQty, unit: editUnit },
-        meal_slot: editSlot || undefined,
+        meal_slot: editSlot ? editSlot.toLowerCase() : undefined,
         notes: editNotes || undefined,
       });
       setLog(updated);

@@ -96,7 +96,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
         for snap in &log.nutrient_snapshots {
-            let row: Option<(i32,)> =
+            let row: Option<(Uuid,)> =
                 sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
                     .bind(&snap.nutrient_code.0)
                     .fetch_optional(&mut *tx)
@@ -207,7 +207,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
         for snap in &log.nutrient_snapshots {
-            let row: Option<(i32,)> =
+            let row: Option<(Uuid,)> =
                 sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
                     .bind(&snap.nutrient_code.0)
                     .fetch_optional(&mut *tx)
