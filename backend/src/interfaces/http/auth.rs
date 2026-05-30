@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::application::auth::*;
 use crate::application::food_log::FoodLogServices;
+use crate::application::import::ImportServices;
 use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
@@ -22,6 +23,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub food_log_services: Option<FoodLogServices>,
     pub meal_services: Option<MealServices>,
+    pub import_services: Option<ImportServices>,
 }
 
 pub fn auth_routes(state: AppState) -> Router {

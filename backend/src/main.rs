@@ -26,13 +26,16 @@ use crate::infrastructure::postgres::food_log::{
     PostgresFoodLogRepository,
     PostgresSummaryRepository,
 };
+use crate::infrastructure::postgres::import::PostgresImportRepository;
 use crate::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::interfaces::http::auth::{auth_routes, AppState};
 use crate::interfaces::http::catalog::{catalog_routes, CatalogState};
 use crate::interfaces::http::food_log::food_log_routes;
+use crate::interfaces::http::import::import_routes;
 use crate::interfaces::http::meal::meal_routes;
 use crate::application::catalog::{CatalogServices, ProductRepository, NutrientRepository, UnitRepository};
 use crate::application::food_log::{FoodLogServices, FoodLogRepository, SummaryRepository, ProductLookup, MealLookup};
+use crate::application::import::{ImportServices, ImportRepository};
 use crate::application::meal::{MealServices, MealRepository, MealProductLookup};
 
 #[tokio::main]
@@ -86,6 +89,9 @@ async fn main() {
 
     let meal_services = MealServices::new(meal_repo, meal_product_lookup);
 
+    let import_repo = Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
+    let import_services = ImportServices::new(import_repo);
+
     let auth_state = AppState {
         identity_repo,
         session_repo,
@@ -93,6 +99,7 @@ async fn main() {
         config: config.clone(),
         food_log_services: Some(food_log_services),
         meal_services: Some(meal_services),
+        import_services: Some(import_services),
     };
 
     let catalog_state = CatalogState {
@@ -108,7 +115,8 @@ async fn main() {
         .merge(auth_routes(auth_state.clone()))
         .merge(catalog_routes(catalog_state))
         .merge(food_log_routes(auth_state.clone()))
-        .merge(meal_routes(auth_state))
+        .merge(meal_routes(auth_state.clone()))
+        .merge(import_routes(auth_state))
         .layer(CorsLayer::permissive());
 
     let addr = config.bind_addr;

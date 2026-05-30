@@ -538,3 +538,52 @@ CalCo/
 | `pnpm vitest run` | 102/102 pass (was 74) |
 | `pnpm tsc --noEmit` | Clean |
 | `pnpm run build` | Clean (287 KB JS, 13 KB CSS) |
+
+---
+
+## 2026-05-30 — Phase 8: Backend Import Engine
+
+### What was done
+
+**1. Source enum expanded** (`domain/catalog.rs`):
+- Added `Usda` and `Ifct` variants to the `Source` enum for the three data source types.
+
+**2. Two new migrations:**
+- `20250530000013_create_imports.sql` — 4 tables: `imports`, `staging_products`, `staging_product_nutrients`, `import_errors` with FKs, cascading deletes, indexes.
+- `20250530000014_seed_more_nutrients.sql` — idempotent seed of 14 additional nutrients (CALCIUM, IRON, MAGNESIUM, ZINC, PHOSPHORUS, VITAMIN_A/C/D/E/B6/B12, FOLATE, MONOUNSATURATED_FAT, POLYUNSATURATED_FAT).
+
+**3. Domain layer (`domain/import.rs`)** — ImportJob entity with status lifecycle (Pending→Running→Committed/Failed), value objects (ImportId, ImportSource, ImportStatus), StagedImportProduct, StagedImportNutrient, ImportErrorRecord records, ImportDomainError enum.
+
+**4. Application layer (`application/import.rs`):**
+- `ImportRepository` trait with 9 methods (create_job, find_job, stage_foods, stage_nutrients, add_error, count_staged_foods, commit_import, get_errors, update_job_status).
+- `ImportServices` with 6 use cases: create_job, stage_foods (batched with validation), stage_nutrients (batched with validation), commit_job, get_job, get_errors.
+- Validation: rejects empty/invalid rows with per-row error tracking; rejects ops on non-pending imports; rejects commit with no staged foods.
+- `ImportCommitResult` with products_created/updated, nutrients_inserted, errors_logged.
+
+**5. Infrastructure layer (`infrastructure/postgres/import.rs`):**
+- `PostgresImportRepository` — SQLx implementation with batched staging (ON CONFLICT for idempotent re-staging).
+- Atomic `commit_import` transaction: marks running → upserts products by `(source, source_id)` via CTE → upserts resolved product_nutrients → logs unresolved nutrient codes as errors → marks committed.
+- Per-query row counting for accurate commit diagnostics.
+
+**6. HTTP layer (`interfaces/http/import.rs`):**
+- 6 admin-only routes: `POST /imports`, `POST /imports/{id}/foods`, `POST /imports/{id}/nutrients`, `POST /imports/{id}/commit`, `GET /imports/{id}`, `GET /imports/{id}/errors`.
+- DTOs with batch food/nutrient staging via `rows` array.
+- JSON error responses matching project convention.
+
+**7. Wiring:**
+- All mod.rs files updated.
+- `AppState` extended with `import_services: Option<ImportServices>`.
+- `main.rs` instantiates PostgresImportRepository → ImportServices → wires import_routes.
+
+### Tests — 11 new (53 total)
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `application/import.rs` | 11 | create job, stage foods (valid/invalid), stage nutrients (valid/invalid), commit success, commit fails no foods, job not found, stage fails non-pending job, get errors, commit with partial nutrient errors |
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| `cargo test` | 53/53 pass (was 42) |
+| `cargo build` | Clean |

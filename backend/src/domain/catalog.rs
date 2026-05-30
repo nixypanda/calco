@@ -22,6 +22,8 @@ pub enum Source {
     System,
     User,
     Off,
+    Usda,
+    Ifct,
 }
 
 impl Source {
@@ -30,6 +32,8 @@ impl Source {
             Source::System => "SYSTEM",
             Source::User => "USER",
             Source::Off => "OFF",
+            Source::Usda => "USDA",
+            Source::Ifct => "IFCT",
         }
     }
 
@@ -38,9 +42,12 @@ impl Source {
             "SYSTEM" => Ok(Source::System),
             "USER" => Ok(Source::User),
             "OFF" => Ok(Source::Off),
+            "USDA" => Ok(Source::Usda),
+            "IFCT" => Ok(Source::Ifct),
             _ => Err(format!("invalid source: {s}")),
         }
     }
+
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
