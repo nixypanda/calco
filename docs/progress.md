@@ -587,3 +587,75 @@ CalCo/
 |-------|--------|
 | `cargo test` | 53/53 pass (was 42) |
 | `cargo build` | Clean |
+
+---
+
+## 2026-05-30 — Phase 8b: Python Data Pipeline + Cross-Source Merging
+
+### What was done
+
+**1. New directory `tools/importers/` with uv-managed Python project:**
+
+```
+tools/importers/
+├── pyproject.toml                          # dependencies: requests, rapidfuzz
+├── nutrient_mapping/
+│   ├── usda_sr_codes.json                  # 25 USDA nutrient IDs → CalCo codes
+│   ├── off_fields.json                     # 25 OFF nutriments fields → CalCo codes
+│   └── ifct2017_codes.json                 # 24 IFCT column codes → CalCo codes
+├── convert_usda_sr.py                      # USDA SR Legacy JSON → JSONL
+├── convert_off_india.py                    # OFF CSV (tab-delimited, streamed) → India-filtered JSONL
+├── convert_ifct2017.py                     # IFCT 2017 compositions CSV → JSONL
+├── merge_sources.py                        # Cross-source dedup (name+barcode)
+└── import_pipeline.py                      # Orchestrator: upload to API → commit
+```
+
+**2. Conversion results:**
+
+| Source | Foods | Nutrients | Raw size | Jsonl size |
+|--------|-------|-----------|----------|------------|
+| USDA SR Legacy | 7,793 | 177,166 | 13 MB zip | 22 MB |
+| OFF India (filtered) | 1,479 | 15,047 | 1.2 GB gzip | 2.1 MB |
+| IFCT 2017 | 542 | 13,008 | 1.1 MB CSV | 1.5 MB |
+
+**3. Cross-source merge (`merge_sources.py`):**
+
+- **Barcode matching:** 0 matches (only OFF has barcodes; USDA/IFCT don't)
+- **Name similarity matching:** 15 matched groups (30 products → 15), zero false positives
+  - Uses `token_sort_ratio` ≥ 90 with subset-guard (penalize when short name is a token subset of a long name) and length-ratio guard (reject if shorter name <50% of longer)
+  - Macros checked for >30% divergence; mismatches logged as warnings but don't block
+- **Preference:** USDA > IFCT > OFF
+- **Output:** `data/processed/merged.jsonl` — 9,799 products (9,814 − 15 merged)
+
+**4. Notable issues caught during OFF conversion:**
+- OFF CSV uses tab delimiters, not commas — fixed via `csv.DictReader(..., delimiter="\t")`
+- USDA SR Legacy JSON nests nutrient IDs inside a `nutrient` object — fixed nested lookup
+- CSV field size limit hit on OFF large fields — fixed via `csv.field_size_limit(sys.maxsize)`
+- IFCT values use `"value±error"` format (e.g., `"9.20±0.40"`) — parsed by splitting on `±`
+
+**5. Project infrastructure:**
+- `.gitignore` updated to include `data/`
+- Virtual environment with `requests` and `rapidfuzz`
+- Pipeline supports `--source MERGED` for merged imports
+
+### Import execution (2026-05-30)
+
+**Pipeline run** (`import_pipeline.py --source MERGED`):
+
+| Metric | Result |
+|--------|--------|
+| Products created | 9,799 (7,793 USDA + 1,469 OFF + 537 IFCT) |
+| Nutrients inserted | 204,998 |
+| Cross-source merges applied | 15 groups (30 products → 15) |
+| Import errors | **0** |
+
+**One-time fix applied:** 42 OFF records with `name: null` in `merged.jsonl` were given placeholder names at upload time to pass backend validation.
+
+**Verification:**
+- `GET /foods/search?q=rice` returns 50 results spanning all 3 sources
+- Zero errors logged in import job
+- `git add tools/importers/` includes all converter scripts, merge logic, and the pipeline orchestrator
+
+### Next steps
+
+- Phase 9: Goals + Admin Corrections

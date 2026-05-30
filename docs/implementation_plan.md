@@ -406,7 +406,55 @@ Repository ports: `FoodLogRepository`, `SummaryRepository`
 - `GET /imports/{id}/errors` — row-level errors
 - Admin-only authorization
 
-### 8.3 — Frontend: Import UI (admin)
+### 8.3 — Python data pipeline (`tools/importers/`)
+
+**Goal:** Convert external datasets into the JSONL format expected by the import API, then orchestrate the full import flow.
+
+**Source converters** (one per dataset):
+- `convert_usda_sr.py` — reads USDA SR Legacy JSON (7,793 foods, ~25 nutrient mappings), writes JSONL
+- `convert_off_india.py` — streams OFF CSV (tab-delimited, ~4.5M rows), filters to India-only products with complete macros, writes JSONL
+- `convert_ifct2017.py` — reads IFCT 2017 compositions CSV (542 Indian foods, 151 nutrient columns), maps 24 CalCo codes, writes JSONL
+
+**Orchestrator** (`import_pipeline.py`):
+- `POST /imports` → create job → `POST /imports/{id}/foods` (batch 500) → `POST /imports/{id}/nutrients` (batch 1000) → `POST /imports/{id}/commit` → `GET /imports/{id}/errors`
+- Retry 3× with exponential backoff on network errors / 5xx
+- Session auth via `Cookie: calco_session=<token>`
+
+### 8.4 — Cross-source merging (`merge_sources.py`)
+
+**Goal:** Deduplicate products that appear in multiple sources before import.
+
+**Problem:** USDA, IFCT, and OFF share many foods (almonds, rice, oils, spices) but assign different `source_id` values. The backend's `UNIQUE (source, source_id)` constraint treats them as separate products.
+
+**Matching pipeline (run before import):**
+
+| Phase | Method | Threshold | Guard |
+|-------|--------|-----------|-------|
+| 1 | Exact barcode match | `barcode == barcode` | Only OFF carries barcodes; USDA/IFCT have none |
+| 2 | Name similarity (`token_sort_ratio`) | ≥ 90 | Reject if `token_set_ratio` exceeds sort by >15 (subset match) OR shorter name <50% length of longer |
+
+**Verification:**
+- Macro consistency: warn if ENERGY_KCAL / PROTEIN_G / CARBS_G / FAT_G differ by >30% between matched sources
+- Category/brand mismatches are logged but do not block the merge
+
+**Preference order (which source wins for overlapping data):** USDA → IFCT → OFF
+- The preferred source's product record (name, brand, category, etc.) survives
+- For overlapping nutrient codes, the preferred source's value is kept
+- Lower-priority sources fill in missing nutrients
+- Unmatched products pass through unchanged
+
+**Output:** `data/processed/merged.jsonl` — single JSONL that can be imported via `import_pipeline.py --source MERGED`
+
+**Example matches found (15 groups across 9,814 products):**
+- USDA "Oil, coconut" + IFCT "Coconut oil" → merged under USDA
+- USDA "Papad" + OFF "Papad" → merged under USDA
+- USDA "Soy protein isolate" + OFF "Soy Protein Isolate" → merged under USDA
+- IFCT "Turmeric powder" + OFF "Turmeric powder" → merged under IFCT
+- IFCT "Almond" + OFF "Almond" → merged under IFCT
+- IFCT "Coconut water" + OFF "Coconut Water" → merged under IFCT
+- IFCT "Pork, ham" + OFF "Pork Ham" → merged under IFCT
+
+### 8.5 — Frontend: Import UI (admin)
 
 - Import job list with status badges
 - Create import job (select source)

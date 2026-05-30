@@ -72,6 +72,14 @@ As an admin, I want Open Food Facts data converted into the generic import forma
 
 As an admin, I want USDA data converted into the generic import format so that base ingredients are available.
 
+As an admin, I want products from different data sources matched by name similarity before import so that the same food is not duplicated in the catalog.
+
+As an admin, I want barcode-based dedup between sources so that packaged foods from OFF are merged with other sources where they share a barcode.
+
+As an admin, I want macro consistency checks on matched products so that false matches are surfaced before they reach the catalog.
+
+As an admin, I want a configurable source preference order so that higher-quality sources override lower-quality ones during merges.
+
 ## Later User Stories
 
 As a user, I want to set calorie and macro goals so that I can compare intake against targets.
