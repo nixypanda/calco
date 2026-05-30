@@ -193,6 +193,7 @@ impl Product {
 pub struct ProductNutrient {
     pub nutrient_code: NutrientCode,
     pub amount_per_100g: AmountPer100g,
+    pub unit: UnitCode,
     pub source: Option<String>,
     pub confidence: Option<NutrientConfidence>,
 }

@@ -4,7 +4,12 @@ import { getFoodDetail, deleteCustomFood, listUnits } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { ProductDetail, UnitItem } from "../api/foods";
 
-const MEAL_SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+const MEAL_SLOTS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+] as const;
 
 export function FoodDetail() {
   const { id } = useParams<{ id: string }>();
@@ -45,7 +50,7 @@ export function FoodDetail() {
     try {
       await createLog({
         logged_at: new Date().toISOString(),
-        meal_slot: logSlot ? logSlot.toLowerCase() : undefined,
+        meal_slot: logSlot || undefined,
         item: { type: "product", id },
         quantity: { amount: logAmount, unit: logUnit },
       });
@@ -192,8 +197,8 @@ export function FoodDetail() {
               >
                 <option value="">No meal slot</option>
                 {MEAL_SLOTS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                  <option key={s.value} value={s.value}>
+                    {s.label}
                   </option>
                 ))}
               </select>

@@ -40,7 +40,7 @@ pub struct CreateMealComponentInput {
 
 pub struct UpdateMealInput {
     pub name: Option<String>,
-    pub notes: Option<String>,
+    pub notes: Option<Option<String>>,
     pub total_quantity_amount: Option<Option<Decimal>>,
     pub total_quantity_unit: Option<Option<String>>,
     pub components: Option<Vec<CreateMealComponentInput>>,
@@ -173,9 +173,15 @@ impl MealServices {
             id,
             user_id,
             name,
-            notes: input.notes.map(MealNotes).or(existing.notes),
-            total_quantity_amount: input.total_quantity_amount.flatten().or(existing.total_quantity_amount),
-            total_quantity_unit: input.total_quantity_unit.flatten().map(UnitCode).or(existing.total_quantity_unit),
+            notes: input.notes.map(|n| n.map(MealNotes)).unwrap_or(existing.notes),
+            total_quantity_amount: match input.total_quantity_amount {
+                Some(value) => value,
+                None => existing.total_quantity_amount,
+            },
+            total_quantity_unit: match input.total_quantity_unit {
+                Some(value) => value.map(UnitCode),
+                None => existing.total_quantity_unit,
+            },
             components,
             created_at: existing.created_at,
             updated_at: Utc::now(),
@@ -205,8 +211,11 @@ impl MealServices {
         let meal = self.meal_repo.find_by_id(id).await?
             .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
 
+        if quantity_amount <= Decimal::ZERO {
+            return Err(MealError::Validation("quantity amount must be positive".into()));
+        }
         let mut total_nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = Vec::new();
-        let total_grams = if quantity_unit == "g" {
+        let requested_grams = if quantity_unit == "g" {
             quantity_amount
         } else {
             return Err(MealError::Validation(format!(
@@ -214,6 +223,7 @@ impl MealServices {
                 quantity_amount, quantity_unit
             )));
         };
+        let mut total_component_grams = Decimal::ZERO;
 
         for component in &meal.components {
             match &component.item {
@@ -223,6 +233,7 @@ impl MealServices {
 
                     let component_qty = Quantity::new(component.quantity_amount, component.quantity_unit.clone());
                     let component_grams = convert_to_grams_meal(&component_qty, &product)?;
+                    total_component_grams += component_grams;
 
                     let contribution_ratio = component_grams / Decimal::new(100, 0);
                     for pn in &product.nutrients {
@@ -230,13 +241,13 @@ impl MealServices {
                         let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
                         match existing {
                             Some((_, existing_amount, _)) => {
-                                existing_amount.0 = existing_amount.0 + contributed_amount;
+                                existing_amount.0 += contributed_amount;
                             }
                             None => {
                                 total_nutrients.push((
                                     pn.nutrient_code.clone(),
                                     AmountPer100g(contributed_amount),
-                                    UnitCode("g".to_string()),
+                                    pn.unit.clone(),
                                 ));
                             }
                         }
@@ -245,7 +256,10 @@ impl MealServices {
             }
         }
 
-        let scale_factor = total_grams / Decimal::new(100, 0);
+        if total_component_grams <= Decimal::ZERO {
+            return Err(MealError::Validation("meal total quantity must be positive".into()));
+        }
+        let scale_factor = requested_grams / total_component_grams;
         let scaled_nutrients: Vec<MealNutrientEntry> = total_nutrients.into_iter().map(|(code, amount, unit)| {
             MealNutrientEntry {
                 code: code.0,
@@ -264,6 +278,9 @@ impl MealServices {
 }
 
 fn convert_to_grams_meal(quantity: &Quantity, product: &Product) -> Result<Decimal, MealError> {
+    if quantity.amount <= Decimal::ZERO {
+        return Err(MealError::Validation("quantity amount must be positive".into()));
+    }
     if quantity.unit.0 == "g" {
         return Ok(quantity.amount);
     }
@@ -271,7 +288,7 @@ fn convert_to_grams_meal(quantity: &Quantity, product: &Product) -> Result<Decim
         return Ok(quantity.amount * Decimal::new(1000, 0));
     }
     for serving in &product.servings {
-        if serving.unit.0 == quantity.unit.0 && serving.quantity == quantity.amount {
+        if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
             return Ok(serving.grams * (quantity.amount / serving.quantity));
         }
     }
@@ -373,6 +390,7 @@ mod tests {
                 ProductNutrient {
                     nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
                     amount_per_100g: AmountPer100g(Decimal::new(100, 0)),
+                    unit: UnitCode("kcal".to_string()),
                     source: None,
                     confidence: None,
                 },
@@ -558,7 +576,7 @@ mod tests {
 
         let updated = services.update_meal(created.id, user_id, UpdateMealInput {
             name: Some("Updated".to_string()),
-            notes: Some("new notes".to_string()),
+            notes: Some(Some("new notes".to_string())),
             total_quantity_amount: None,
             total_quantity_unit: None,
             components: None,
@@ -566,6 +584,33 @@ mod tests {
 
         assert_eq!(updated.name.0, "Updated");
         assert_eq!(updated.notes.as_ref().map(|n| n.0.as_str()), Some("new notes"));
+    }
+
+    #[tokio::test]
+    async fn test_update_meal_can_clear_optional_fields() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+
+        let created = services.create_meal(CreateMealInput {
+            user_id,
+            name: "Original".to_string(),
+            notes: Some("clear me".to_string()),
+            total_quantity_amount: Some(Decimal::new(100, 0)),
+            total_quantity_unit: Some("g".to_string()),
+            components: vec![sample_component()],
+        }).await.unwrap();
+
+        let updated = services.update_meal(created.id, user_id, UpdateMealInput {
+            name: None,
+            notes: Some(None),
+            total_quantity_amount: Some(None),
+            total_quantity_unit: Some(None),
+            components: None,
+        }).await.unwrap();
+
+        assert_eq!(updated.notes, None);
+        assert_eq!(updated.total_quantity_amount, None);
+        assert_eq!(updated.total_quantity_unit, None);
     }
 
     #[tokio::test]
@@ -687,7 +732,8 @@ mod tests {
         let component1_energy = product_energy_100g * Decimal::new(100, 0) / Decimal::new(100, 0);
         let component2_energy = product_energy_100g * Decimal::new(200, 0) / Decimal::new(100, 0);
         let total_energy = component1_energy + component2_energy;
-        let scaled = total_energy * Decimal::new(150, 0) / Decimal::new(100, 0);
+        let total_grams = Decimal::new(300, 0);
+        let scaled = total_energy * Decimal::new(150, 0) / total_grams;
         assert_eq!(nutrition.nutrients[0].amount, scaled);
     }
 }

@@ -4,7 +4,17 @@ import { getLog, updateLog, deleteLog } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import type { LogResponse } from "../api/logs";
 
-const MEAL_SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+const MEAL_SLOTS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+] as const;
+
+function mealSlotLabel(value: string | null): string {
+  if (!value) return "None";
+  return MEAL_SLOTS.find((slot) => slot.value === value)?.label ?? value;
+}
 
 function formatTimestamp(ts: string): string {
   const d = new Date(ts);
@@ -69,8 +79,8 @@ export function FoodLogDetail() {
     try {
       const updated = await updateLog(id, {
         quantity: { amount: editQty, unit: editUnit },
-        meal_slot: editSlot ? editSlot.toLowerCase() : undefined,
-        notes: editNotes || undefined,
+        meal_slot: editSlot || null,
+        notes: editNotes || null,
       });
       setLog(updated);
       setEditing(false);
@@ -165,7 +175,7 @@ export function FoodLogDetail() {
                 <tbody>
                   <tr>
                     <td>Meal Slot</td>
-                    <td>{log.meal_slot ?? "None"}</td>
+                    <td>{mealSlotLabel(log.meal_slot)}</td>
                   </tr>
                   <tr>
                     <td>Quantity</td>
@@ -236,8 +246,8 @@ export function FoodLogDetail() {
                   >
                     <option value="">None</option>
                     {MEAL_SLOTS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
+                      <option key={s.value} value={s.value}>
+                        {s.label}
                       </option>
                     ))}
                   </select>

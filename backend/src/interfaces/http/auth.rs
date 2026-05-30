@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::application::auth::*;
+use crate::application::catalog::CatalogServices;
 use crate::application::food_log::FoodLogServices;
 use crate::application::import::ImportServices;
 use crate::application::meal::MealServices;
@@ -21,6 +22,7 @@ pub struct AppState {
     pub session_repo: std::sync::Arc<dyn SessionRepository>,
     pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
+    pub catalog_services: Option<CatalogServices>,
     pub food_log_services: Option<FoodLogServices>,
     pub meal_services: Option<MealServices>,
     pub import_services: Option<ImportServices>,

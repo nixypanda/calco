@@ -44,7 +44,7 @@ function renderAtDetail(logId = "log-1") {
 const mockLog = {
   id: "log-1",
   logged_at: "2026-05-30T12:00:00Z",
-  meal_slot: "Lunch",
+  meal_slot: "lunch",
   item: { type: "product", id: "food-1" },
   quantity: { amount: "150", unit: "g" },
   nutrients: [
@@ -89,7 +89,7 @@ describe("FoodLogDetail", () => {
     mockUpdateLog.mockResolvedValue({
       ...mockLog,
       quantity: { amount: "200", unit: "g" },
-      meal_slot: "Dinner",
+      meal_slot: "dinner",
     });
 
     renderAtDetail();
@@ -105,13 +105,14 @@ describe("FoodLogDetail", () => {
     await userEvent.type(amountInput, "200");
 
     const slotSelect = screen.getByDisplayValue("Lunch");
-    await userEvent.selectOptions(slotSelect, "Dinner");
+    await userEvent.selectOptions(slotSelect, "dinner");
 
     await userEvent.click(screen.getByText("Save"));
 
     await waitFor(() => {
       expect(mockUpdateLog).toHaveBeenCalledWith("log-1", expect.objectContaining({
         quantity: { amount: "200", unit: "g" },
+        meal_slot: "dinner",
       }));
     });
   });

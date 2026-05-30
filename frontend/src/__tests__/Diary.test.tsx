@@ -46,7 +46,7 @@ const today = new Date().toISOString().slice(0, 10);
 const mockLogItem = {
   id: "log-1",
   logged_at: "2026-05-30T12:00:00Z",
-  meal_slot: "Lunch",
+  meal_slot: "lunch",
   item: { type: "product", id: "food-1" },
   quantity: { amount: "150", unit: "g" },
   nutrients: [

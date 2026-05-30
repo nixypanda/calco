@@ -85,10 +85,10 @@ pub struct LogQuery {
 #[derive(Deserialize)]
 pub struct UpdateLogRequest {
     pub logged_at: Option<DateTime<Utc>>,
-    pub meal_slot: Option<String>,
+    pub meal_slot: Option<Option<String>>,
     pub item: Option<ItemRef>,
     pub quantity: Option<QuantityDto>,
-    pub notes: Option<String>,
+    pub notes: Option<Option<String>>,
 }
 
 #[derive(Deserialize)]
@@ -243,7 +243,10 @@ async fn list_logs_handler(
         Err(_) => return error_response("validation", "invalid from date".into()).into_response(),
     };
     let to = match chrono::NaiveDate::parse_from_str(&query.to, "%Y-%m-%d") {
-        Ok(d) => d.and_hms_opt(23, 59, 59).unwrap().and_utc(),
+        Ok(d) => match d.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
+            Some(dt) => dt.and_utc(),
+            None => return error_response("validation", "invalid to date".into()).into_response(),
+        },
         Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
     };
 
@@ -326,7 +329,10 @@ async fn summary_handler(
         Err(_) => return error_response("validation", "invalid from date".into()).into_response(),
     };
     let to = match chrono::NaiveDate::parse_from_str(&query.to, "%Y-%m-%d") {
-        Ok(d) => d.and_hms_opt(23, 59, 59).unwrap().and_utc(),
+        Ok(d) => match d.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
+            Some(dt) => dt.and_utc(),
+            None => return error_response("validation", "invalid to date".into()).into_response(),
+        },
         Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
     };
 

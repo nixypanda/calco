@@ -5,7 +5,12 @@ import { listLogs, getSummary } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import type { LogResponse, SummaryEntry } from "../api/logs";
 
-const MEAL_SLOTS = ["Breakfast", "Lunch", "Dinner", "Snack"] as const;
+const MEAL_SLOTS = [
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
+] as const;
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const DEFAULT_CALORIE_GOAL = 2000;
 
@@ -192,8 +197,8 @@ export function Diary() {
   const fat = getNutrientVal(summary, "FAT_G");
 
   const mealSlotLogs = MEAL_SLOTS.map((slot) => ({
-    slot,
-    items: logs.filter((l) => l.meal_slot === slot),
+    ...slot,
+    items: logs.filter((l) => l.meal_slot === slot.value),
   }));
   const otherLogs = logs.filter((l) => !l.meal_slot);
 
@@ -290,21 +295,21 @@ export function Diary() {
         )}
 
         {!loading &&
-          mealSlotLogs.map(({ slot, items }) => (
-            <section key={slot} className="meal-slot">
+          mealSlotLogs.map(({ value, label, items }) => (
+            <section key={value} className="meal-slot">
               <div className="meal-slot-header">
-                <span className="meal-slot-name">{slot}</span>
+                <span className="meal-slot-name">{label}</span>
                 <span className="meal-slot-calories">
-                  {Math.round(slotCalories(slot))} kcal
+                  {Math.round(slotCalories(value))} kcal
                 </span>
                 <button
                   className="meal-add-btn"
                   onClick={() =>
                     navigate("/search", {
-                      state: { mealSlot: slot },
+                      state: { mealSlot: value },
                     })
                   }
-                  title={`Add to ${slot}`}
+                  title={`Add to ${label}`}
                 >
                   +
                 </button>

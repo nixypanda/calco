@@ -22,7 +22,7 @@ impl PostgresProductRepository {
     async fn load_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, CatalogError> {
         let rows = sqlx::query_as::<_, ProductNutrientRow>(
             r#"
-            SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code
+            SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
             FROM product_nutrients pn
             JOIN nutrients n ON n.id = pn.nutrient_id
             WHERE pn.product_id = $1
@@ -38,6 +38,7 @@ impl PostgresProductRepository {
             .map(|r| ProductNutrient {
                 nutrient_code: NutrientCode(r.code),
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
+                unit: UnitCode(r.unit),
                 source: r.source,
                 confidence: r.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
             })
@@ -93,7 +94,7 @@ impl PostgresProductRepository {
 
 #[async_trait]
 impl ProductRepository for PostgresProductRepository {
-    async fn search(&self, query: &str, _user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError> {
+    async fn search(&self, query: &str, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError> {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -101,6 +102,7 @@ impl ProductRepository for PostgresProductRepository {
                    created_at, updated_at
             FROM products
             WHERE deleted_at IS NULL
+              AND (visibility = 'global' OR user_id = $2)
               AND (name ILIKE '%' || $1 || '%'
                    OR brand ILIKE '%' || $1 || '%'
                    OR category ILIKE '%' || $1 || '%')
@@ -111,6 +113,7 @@ impl ProductRepository for PostgresProductRepository {
             "#,
         )
         .bind(query)
+        .bind(user_id)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| CatalogError::Database(e.to_string()))?;
@@ -352,6 +355,7 @@ struct ProductNutrientRow {
     source: Option<String>,
     confidence: Option<String>,
     code: String,
+    unit: String,
 }
 
 #[derive(sqlx::FromRow)]

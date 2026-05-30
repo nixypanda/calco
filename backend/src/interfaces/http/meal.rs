@@ -127,7 +127,7 @@ pub struct MealNutrientQuery {
 #[derive(Deserialize)]
 pub struct UpdateMealRequest {
     pub name: Option<String>,
-    pub notes: Option<String>,
+    pub notes: Option<Option<String>>,
     pub total_quantity: Option<Option<QuantityDto>>,
     pub components: Option<Vec<CreateMealComponentRequest>>,
 }

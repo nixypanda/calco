@@ -29,7 +29,7 @@ use crate::infrastructure::postgres::food_log::{
 use crate::infrastructure::postgres::import::PostgresImportRepository;
 use crate::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::interfaces::http::auth::{auth_routes, AppState};
-use crate::interfaces::http::catalog::{catalog_routes, CatalogState};
+use crate::interfaces::http::catalog::catalog_routes;
 use crate::interfaces::http::food_log::food_log_routes;
 use crate::interfaces::http::import::import_routes;
 use crate::interfaces::http::meal::meal_routes;
@@ -92,31 +92,30 @@ async fn main() {
     let import_repo = Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
     let import_services = ImportServices::new(import_repo);
 
+    let catalog_services = CatalogServices::new(product_repo, nutrient_repo, unit_repo);
+
     let auth_state = AppState {
         identity_repo,
         session_repo,
         profile_repo,
         config: config.clone(),
+        catalog_services: Some(catalog_services),
         food_log_services: Some(food_log_services),
         meal_services: Some(meal_services),
         import_services: Some(import_services),
     };
 
-    let catalog_state = CatalogState {
-        services: CatalogServices::new(product_repo, nutrient_repo, unit_repo),
-    };
-
     let api = Router::new()
         .route("/health", get(health))
-        .route("/version", get(version));
+        .route("/version", get(version))
+        .merge(auth_routes(auth_state.clone()))
+        .merge(catalog_routes(auth_state.clone()))
+        .merge(food_log_routes(auth_state.clone()))
+        .merge(meal_routes(auth_state.clone()))
+        .merge(import_routes(auth_state));
 
     let app = Router::new()
         .nest("/api", api)
-        .merge(auth_routes(auth_state.clone()))
-        .merge(catalog_routes(catalog_state))
-        .merge(food_log_routes(auth_state.clone()))
-        .merge(meal_routes(auth_state.clone()))
-        .merge(import_routes(auth_state))
         .layer(CorsLayer::permissive());
 
     let addr = config.bind_addr;

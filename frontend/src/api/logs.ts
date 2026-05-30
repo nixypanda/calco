@@ -46,18 +46,18 @@ export interface SummaryResponse {
 
 export interface CreateLogRequest {
   logged_at: string;
-  meal_slot?: string;
+  meal_slot?: string | null;
   item: { type: string; id: string };
   quantity: { amount: string; unit: string };
-  notes?: string;
+  notes?: string | null;
 }
 
 export interface UpdateLogRequest {
   logged_at?: string;
-  meal_slot?: string;
+  meal_slot?: string | null;
   item?: { type: string; id: string };
   quantity?: { amount: string; unit: string };
-  notes?: string;
+  notes?: string | null;
 }
 
 export async function createLog(data: CreateLogRequest): Promise<LogResponse> {

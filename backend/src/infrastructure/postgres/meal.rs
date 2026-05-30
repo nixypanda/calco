@@ -250,7 +250,7 @@ impl PostgresMealRepository {
     async fn load_product_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, MealError> {
         let rows = sqlx::query_as::<_, MealProductNutrientRow>(
             r#"
-            SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code
+            SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
             FROM product_nutrients pn
             JOIN nutrients n ON n.id = pn.nutrient_id
             WHERE pn.product_id = $1
@@ -266,6 +266,7 @@ impl PostgresMealRepository {
             .map(|r| ProductNutrient {
                 nutrient_code: NutrientCode(r.code),
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
+                unit: UnitCode(r.unit),
                 source: r.source,
                 confidence: r.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
             })
@@ -344,6 +345,7 @@ struct MealProductNutrientRow {
     source: Option<String>,
     confidence: Option<String>,
     code: String,
+    unit: String,
 }
 
 #[derive(sqlx::FromRow)]
