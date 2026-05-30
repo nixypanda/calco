@@ -3,6 +3,23 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getLog, updateLog, deleteLog } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import type { LogResponse } from "../api/logs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -189,7 +206,7 @@ export function FoodLogDetail() {
 
   const [editQty, setEditQty] = useState("");
   const [editUnit, setEditUnit] = useState("");
-  const [editSlot, setEditSlot] = useState("");
+  const [editSlot, setEditSlot] = useState("__none__");
   const [editNotes, setEditNotes] = useState("");
 
   useEffect(() => {
@@ -201,7 +218,7 @@ export function FoodLogDetail() {
         setLog(logRes);
         setEditQty(logRes.quantity.amount);
         setEditUnit(logRes.quantity.unit);
-        setEditSlot(logRes.meal_slot ?? "");
+        setEditSlot(logRes.meal_slot ?? "__none__");
         setEditNotes(logRes.notes ?? "");
 
         if (logRes.item.type === "product") {
@@ -228,7 +245,7 @@ export function FoodLogDetail() {
     try {
       const updated = await updateLog(id, {
         quantity: { amount: editQty, unit: editUnit },
-        meal_slot: editSlot || null,
+        meal_slot: editSlot === "__none__" ? null : editSlot,
         notes: editNotes || null,
       });
       setLog(updated);
@@ -354,60 +371,62 @@ export function FoodLogDetail() {
               <div className="log-edit-form">
                 <label className="log-edit-row">
                   <span>Meal Slot</span>
-                  <select
-                    value={editSlot}
-                    onChange={(e) => setEditSlot(e.target.value)}
-                  >
-                    <option value="">None</option>
-                    {MEAL_SLOTS.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={editSlot} onValueChange={setEditSlot}>
+                    <SelectTrigger className="text-right text-muted-foreground font-semibold">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">None</SelectItem>
+                      {MEAL_SLOTS.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <label className="log-edit-row">
                   <span>Amount</span>
-                  <input
+                  <Input
                     type="number"
                     value={editQty}
                     onChange={(e) => setEditQty(e.target.value)}
                     min={0}
                     step="any"
+                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
                   />
                 </label>
                 <label className="log-edit-row">
                   <span>Unit</span>
-                  <input
+                  <Input
                     type="text"
                     value={editUnit}
                     onChange={(e) => setEditUnit(e.target.value)}
+                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
                   />
                 </label>
                 <label className="log-edit-row">
                   <span>Notes</span>
-                  <input
+                  <Input
                     type="text"
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
                     placeholder="Optional notes"
+                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
                   />
                 </label>
                 <div className="manage-actions">
-                  <button
-                    className="btn-primary"
+                  <Button
                     onClick={handleSave}
                     disabled={saving}
                   >
                     {saving ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    className="btn-danger"
+                  </Button>
+                  <Button
+                    variant="destructive"
                     onClick={handleDelete}
                     disabled={deleting}
                   >
                     {deleting ? "Deleting..." : "Delete"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </section>
@@ -419,28 +438,24 @@ export function FoodLogDetail() {
 
             <section className="detail-section">
               <h2>Nutrients</h2>
-              <table className="nutrient-table">
-                <thead>
-                  <tr>
-                    <th>Nutrient</th>
-                    <th className="amount-col">Amount</th>
-                    <th className="unit-col">Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nutrient</TableHead>
+                    <TableHead className="text-right w-[92px]">Amount</TableHead>
+                    <TableHead className="text-right w-[92px]">Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {log.nutrients.map((n) => (
-                    <tr key={n.code}>
-                      <td>
-                        {n.code.replace(/_/g, " ").toLowerCase()}
-                      </td>
-                      <td className="amount-col">
-                        {parseFloat(n.amount).toFixed(1)}
-                      </td>
-                      <td className="unit-col">{n.unit || "-"}</td>
-                    </tr>
+                    <TableRow key={n.code}>
+                      <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
+                      <TableCell className="text-right">{parseFloat(n.amount).toFixed(1)}</TableCell>
+                      <TableCell className="text-right">{n.unit || "-"}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </section>
 
           </>
@@ -448,24 +463,22 @@ export function FoodLogDetail() {
           <>
             <section className="detail-section">
               <h2>Details</h2>
-              <table className="nutrient-table">
-                <tbody>
-                  <tr>
-                    <td>Meal Slot</td>
-                    <td>{mealSlotLabel(log.meal_slot)}</td>
-                  </tr>
-                  <tr>
-                    <td>Quantity</td>
-                    <td>
-                      {log.quantity.amount} {log.quantity.unit}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Notes</td>
-                    <td>{log.notes || "-"}</td>
-                  </tr>
-                </tbody>
-              </table>
+              <Table>
+                <TableBody>
+                  <TableRow>
+                    <TableCell className="font-medium">Meal Slot</TableCell>
+                    <TableCell className="text-right">{mealSlotLabel(log.meal_slot)}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Quantity</TableCell>
+                    <TableCell className="text-right">{log.quantity.amount} {log.quantity.unit}</TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell className="font-medium">Notes</TableCell>
+                    <TableCell className="text-right">{log.notes || "-"}</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </section>
 
             <section className="detail-section">
@@ -475,44 +488,39 @@ export function FoodLogDetail() {
 
             <section className="detail-section">
               <h2>Nutrients</h2>
-              <table className="nutrient-table">
-                <thead>
-                  <tr>
-                    <th>Nutrient</th>
-                    <th className="amount-col">Amount</th>
-                    <th className="unit-col">Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nutrient</TableHead>
+                    <TableHead className="text-right w-[92px]">Amount</TableHead>
+                    <TableHead className="text-right w-[92px]">Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {log.nutrients.map((n) => (
-                    <tr key={n.code}>
-                      <td>
-                        {n.code.replace(/_/g, " ").toLowerCase()}
-                      </td>
-                      <td className="amount-col">
-                        {parseFloat(n.amount).toFixed(1)}
-                      </td>
-                      <td className="unit-col">{n.unit || "-"}</td>
-                    </tr>
+                    <TableRow key={n.code}>
+                      <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
+                      <TableCell className="text-right">{parseFloat(n.amount).toFixed(1)}</TableCell>
+                      <TableCell className="text-right">{n.unit || "-"}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </section>
 
             <div className="manage-actions">
-              <button
-                className="btn-primary"
+              <Button
                 onClick={() => setEditing(true)}
               >
                 Edit
-              </button>
-              <button
-                className="btn-danger"
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={handleDelete}
                 disabled={deleting}
               >
                 {deleting ? "Deleting..." : "Delete"}
-              </button>
+              </Button>
             </div>
           </>
         )}

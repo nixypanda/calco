@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { listMeals } from "../api/meals";
 import type { MealResponse } from "../api/meals";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 
 export function Meals() {
   const navigate = useNavigate();
@@ -83,9 +85,9 @@ export function Meals() {
           </button>
           <h1>Meals</h1>
         </div>
-        <button className="btn-primary" onClick={() => navigate("/meals/new")}>
+        <Button onClick={() => navigate("/meals/new")}>
           Create Meal
-        </button>
+        </Button>
       </header>
 
       {meals.length === 0 && (
@@ -96,20 +98,20 @@ export function Meals() {
 
       <div className="search-results">
         {meals.map((meal) => (
-          <button
+          <Card
             key={meal.id}
-            className="search-result"
+            className="flex items-center w-full min-h-16 p-3.5 cursor-pointer hover:bg-muted/50"
             onClick={() => navigate(`/meals/${meal.id}`)}
           >
-            <div className="search-result-main">
-              <span className="search-result-name">{meal.name}</span>
-              <span className="search-result-brand">
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-bold truncate">{meal.name}</span>
+              <span className="text-muted-foreground text-sm">
                 {meal.components.length} component
                 {meal.components.length !== 1 ? "s" : ""}
                 {meal.notes ? ` — ${meal.notes}` : ""}
               </span>
             </div>
-          </button>
+          </Card>
         ))}
       </div>
     </div>

@@ -3,6 +3,15 @@ import { useNavigate, useParams } from "react-router-dom";
 import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ComponentRow {
   productId: string;
@@ -249,117 +258,92 @@ export function MealForm() {
 
       {error && <p className="error">{error}</p>}
 
-      <form className="custom-food-form" onSubmit={handleSubmit}>
-        <label>
-          Name
-          <input
+      <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-muted-foreground">Name</label>
+          <Input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Meal name"
           />
-        </label>
+        </div>
 
-        <label>
-          Notes
-          <input
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-bold text-muted-foreground">Notes</label>
+          <Input
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes"
           />
-        </label>
+        </div>
 
         <div className="detail-section">
           <h2>Total Quantity (optional)</h2>
-          <div className="amount-unit-row">
-            <input
-              className="amount-input"
+          <div className="flex gap-2.5">
+            <Input
               type="number"
               value={totalQty}
               onChange={(e) => setTotalQty(e.target.value)}
               placeholder="Amount"
+              className="flex-1"
             />
-            <select
-              className="unit-select"
-              value={totalUnit}
-              onChange={(e) => setTotalUnit(e.target.value)}
-            >
-              <option value="g">g</option>
-              <option value="kg">kg</option>
-              <option value="ml">ml</option>
-              <option value="cup">cup</option>
-              <option value="tbsp">tbsp</option>
-              <option value="tsp">tsp</option>
-              <option value="piece">piece</option>
-              <option value="packet">packet</option>
-              <option value="serving">serving</option>
-            </select>
+            <Select value={totalUnit} onValueChange={setTotalUnit}>
+              <SelectTrigger className="w-[132px] flex-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="g">g</SelectItem>
+                <SelectItem value="kg">kg</SelectItem>
+                <SelectItem value="ml">ml</SelectItem>
+                <SelectItem value="cup">cup</SelectItem>
+                <SelectItem value="tbsp">tbsp</SelectItem>
+                <SelectItem value="tsp">tsp</SelectItem>
+                <SelectItem value="piece">piece</SelectItem>
+                <SelectItem value="packet">packet</SelectItem>
+                <SelectItem value="serving">serving</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
         <div className="detail-section">
           <div className="section-header">
             <h2>Components</h2>
-            <button type="button" onClick={addComponent}>
+            <Button type="button" variant="outline" size="sm" onClick={addComponent}>
               + Add Component
-            </button>
+            </Button>
           </div>
 
           {components.map((comp, idx) => (
-            <div key={idx} className="nutrient-row" style={{ flexWrap: "wrap" }}>
-              <div style={{ flex: 2, minWidth: "180px", position: "relative" }}>
-                <input
+            <div key={idx} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
+              <div className="flex-[2] min-w-[180px] relative">
+                <Input
                   type="text"
                   value={comp.searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value, idx)}
                   placeholder="Search product..."
-                  style={{ width: "100%" }}
                 />
                 {comp.searchResults.length > 0 && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "100%",
-                      left: 0,
-                      right: 0,
-                      background: "#fff",
-                      border: "1px solid #ccc",
-                      borderRadius: "4px",
-                      zIndex: 10,
-                      maxHeight: "200px",
-                      overflowY: "auto",
-                    }}
-                  >
+                  <div className="absolute top-full left-0 right-0 z-10 max-h-[220px] overflow-y-auto bg-card border border-border rounded-lg shadow-lg">
                     {comp.searchResults.map((r) => (
                       <button
                         key={r.id}
                         type="button"
+                        className="block w-full text-left px-3.5 py-3 text-sm border-b border-border hover:bg-muted last:border-b-0"
                         onClick={() => selectProduct(r, idx)}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          padding: "0.5rem",
-                          textAlign: "left",
-                          border: "none",
-                          background: "transparent",
-                          cursor: "pointer",
-                          fontSize: "0.8125rem",
-                          borderBottom: "1px solid #f0f0f0",
-                        }}
                       >
                         <strong>{r.name}</strong>
                         {r.brand && (
-                          <span style={{ color: "#888", marginLeft: "0.25rem" }}>
-                            — {r.brand}
-                          </span>
+                          <span className="text-muted-foreground ml-1">— {r.brand}</span>
                         )}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
-              <input
+              <Input
                 type="number"
                 value={comp.quantity}
                 onChange={(e) =>
@@ -370,54 +354,54 @@ export function MealForm() {
                   )
                 }
                 placeholder="Qty"
-                style={{ width: "80px" }}
+                className="w-[80px] flex-none"
               />
-              <select
+              <Select
                 value={comp.unit}
-                onChange={(e) =>
+                onValueChange={(value) =>
                   setComponents((prev) =>
                     prev.map((r, i) =>
-                      i === idx ? { ...r, unit: e.target.value } : r,
+                      i === idx ? { ...r, unit: value } : r,
                     ),
                   )
                 }
-                style={{ width: "80px" }}
               >
-                <option value="g">g</option>
-                <option value="kg">kg</option>
-                <option value="ml">ml</option>
-                <option value="cup">cup</option>
-                <option value="tbsp">tbsp</option>
-                <option value="tsp">tsp</option>
-                <option value="piece">piece</option>
-                <option value="packet">packet</option>
-                <option value="serving">serving</option>
-              </select>
+                <SelectTrigger className="w-[80px] flex-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="g">g</SelectItem>
+                  <SelectItem value="kg">kg</SelectItem>
+                  <SelectItem value="ml">ml</SelectItem>
+                  <SelectItem value="cup">cup</SelectItem>
+                  <SelectItem value="tbsp">tbsp</SelectItem>
+                  <SelectItem value="tsp">tsp</SelectItem>
+                  <SelectItem value="piece">piece</SelectItem>
+                  <SelectItem value="packet">packet</SelectItem>
+                  <SelectItem value="serving">serving</SelectItem>
+                </SelectContent>
+              </Select>
               {components.length > 1 && (
-                <button
+                <Button
                   type="button"
-                  className="btn-danger-sm"
+                  variant="ghost"
+                  className="text-destructive w-11 h-11 p-0"
                   onClick={() => removeComponent(idx)}
                 >
                   ×
-                </button>
+                </Button>
               )}
             </div>
           ))}
         </div>
 
-        <button
-          type="submit"
-          className="btn-primary"
-          disabled={submitting}
-          style={{ alignSelf: "flex-start" }}
-        >
+        <Button type="submit" disabled={submitting} className="self-start">
           {submitting
             ? "Saving..."
             : isEdit
               ? "Update Meal"
               : "Create Meal"}
-        </button>
+        </Button>
       </form>
     </div>
   );

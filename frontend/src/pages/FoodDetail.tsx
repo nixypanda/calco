@@ -3,6 +3,25 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getFoodDetail, deleteCustomFood, listUnits } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { ProductDetail, UnitItem } from "../api/foods";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -23,7 +42,7 @@ export function FoodDetail() {
   const [logAmount, setLogAmount] = useState("1");
   const [logUnit, setLogUnit] = useState("g");
   const [logSlot, setLogSlot] = useState(
-    (location.state as { mealSlot?: string } | null)?.mealSlot ?? "",
+    (location.state as { mealSlot?: string } | null)?.mealSlot ?? "__none__",
   );
   const [logging, setLogging] = useState(false);
 
@@ -50,7 +69,7 @@ export function FoodDetail() {
     try {
       await createLog({
         logged_at: new Date().toISOString(),
-        meal_slot: logSlot || undefined,
+        meal_slot: logSlot === "__none__" ? undefined : logSlot,
         item: { type: "product", id },
         quantity: { amount: logAmount, unit: logUnit },
       });
@@ -168,9 +187,9 @@ export function FoodDetail() {
           <div className="food-detail-meta">
             {food.brand && <span className="meta-item">{food.brand}</span>}
             {food.category && (
-              <span className="category-chip">{food.category}</span>
+              <Badge variant="secondary">{food.category}</Badge>
             )}
-            {isCustom && <span className="source-chip">Custom</span>}
+            {isCustom && <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">Custom</Badge>}
           </div>
           {food.serving_size_g && (
             <p className="serving-size">
@@ -181,24 +200,24 @@ export function FoodDetail() {
 
         <section className="detail-section">
           <h2>Nutrition per 100g</h2>
-          <table className="nutrient-table">
-            <thead>
-              <tr>
-                <th>Nutrient</th>
-                <th className="amount-col">Amount</th>
-                <th className="unit-col">Unit</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nutrient</TableHead>
+                <TableHead className="text-right w-[92px]">Amount</TableHead>
+                <TableHead className="text-right w-[92px]">Unit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {food.nutrients.map((n) => (
-                <tr key={n.code}>
-                  <td>{n.code.replace(/_/g, " ").toLowerCase()}</td>
-                  <td className="amount-col">{n.amount_per_100g}</td>
-                  <td className="unit-col">{n.unit || "-"}</td>
-                </tr>
+                <TableRow key={n.code}>
+                  <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
+                  <TableCell className="text-right">{n.amount_per_100g}</TableCell>
+                  <TableCell className="text-right">{n.unit || "-"}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </section>
 
         {food.servings.length > 0 && (
@@ -206,12 +225,12 @@ export function FoodDetail() {
             <h2>Servings</h2>
             <div className="serving-list">
               {food.servings.map((s, i) => (
-                <div key={i} className="serving-item">
-                  <span className="serving-label">{s.label}</span>
-                  <span className="serving-amount">
+                <Card key={i} className="flex items-center justify-between gap-4 min-h-[50px] p-3">
+                  <span className="font-bold">{s.label}</span>
+                  <span className="text-muted-foreground text-sm">
                     {s.quantity} {s.unit} ({s.grams}g)
                   </span>
-                </div>
+                </Card>
               ))}
             </div>
           </section>
@@ -219,54 +238,52 @@ export function FoodDetail() {
 
         <section className="detail-section">
           <h2>Log Food</h2>
-          <div className="log-food-form">
+          <div className="flex flex-col gap-3.5">
             <div className="log-field">
               <label>Meal</label>
-              <select
-                className="meal-slot-select"
-                value={logSlot}
-                onChange={(e) => setLogSlot(e.target.value)}
-              >
-                <option value="">No meal slot</option>
-                {MEAL_SLOTS.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={logSlot} onValueChange={setLogSlot}>
+                <SelectTrigger>
+                  <SelectValue placeholder="No meal slot" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No meal slot</SelectItem>
+                  {MEAL_SLOTS.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="log-field">
               <label>Amount</label>
               <div className="amount-unit-row">
-                <input
+                <Input
                   type="number"
-                  className="amount-input"
+                  className="flex-1 min-w-0"
                   value={logAmount}
                   onChange={(e) => setLogAmount(e.target.value)}
                   min={0}
                   step="any"
                   placeholder="Amount"
                 />
-                <select
-                  className="unit-select"
-                  value={logUnit}
-                  onChange={(e) => setLogUnit(e.target.value)}
-                >
-                  {units.map((u) => (
-                    <option key={u.code} value={u.code}>
-                      {u.name} ({u.code})
-                    </option>
-                  ))}
-                </select>
+                <Select value={logUnit} onValueChange={setLogUnit}>
+                  <SelectTrigger className="w-[132px] flex-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map((u) => (
+                      <SelectItem key={u.code} value={u.code}>
+                        {u.name} ({u.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-            <button
-              className="btn-primary"
-              onClick={handleLog}
-              disabled={logging}
-            >
+            <Button onClick={handleLog} disabled={logging}>
               {logging ? "Logging..." : "Log Food"}
-            </button>
+            </Button>
             {error && <p className="error">{error}</p>}
           </div>
         </section>
@@ -275,19 +292,19 @@ export function FoodDetail() {
           <section className="detail-section">
             <h2>Manage Food</h2>
             <div className="manage-actions">
-              <button
-                className="btn-secondary"
+              <Button
+                variant="outline"
                 onClick={() => navigate(`/foods/custom/${id}/edit`)}
               >
                 Edit
-              </button>
-              <button
-                className="btn-danger"
+              </Button>
+              <Button
+                variant="destructive"
                 onClick={handleDelete}
                 disabled={deleting}
               >
                 {deleting ? "Deleting..." : "Delete"}
-              </button>
+              </Button>
             </div>
           </section>
         )}

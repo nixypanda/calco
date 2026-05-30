@@ -7,6 +7,15 @@ import {
   listUnits,
 } from "../api/foods";
 import type { NutrientItem, UnitItem } from "../api/foods";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface NutrientRow {
   code: string;
@@ -198,12 +207,12 @@ export function CustomFoodEdit() {
       <main>
         {error && <p className="error">{error}</p>}
 
-        <form onSubmit={handleSubmit} className="custom-food-form">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
           <section className="detail-section">
             <h2>Basic Info</h2>
-            <label>
-              Name *
-              <input
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Name *</label>
+              <Input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -211,32 +220,32 @@ export function CustomFoodEdit() {
                 autoFocus
                 disabled={submitting}
               />
-            </label>
-            <label>
-              Brand
-              <input
+            </div>
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Brand</label>
+              <Input
                 type="text"
                 value={brand}
                 onChange={(e) => setBrand(e.target.value)}
                 disabled={submitting}
               />
-            </label>
-            <label>
-              Category
-              <input
+            </div>
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Category</label>
+              <Input
                 type="text"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 disabled={submitting}
               />
-            </label>
+            </div>
           </section>
 
           <section className="detail-section">
             <h2>Portion Info</h2>
-            <label>
-              Serving Size (g)
-              <input
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Serving Size (g)</label>
+              <Input
                 type="number"
                 value={servingSizeG}
                 onChange={(e) => setServingSizeG(e.target.value)}
@@ -244,10 +253,10 @@ export function CustomFoodEdit() {
                 step="any"
                 disabled={submitting}
               />
-            </label>
-            <label>
-              Default Quantity
-              <input
+            </div>
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Default Quantity</label>
+              <Input
                 type="number"
                 value={defaultQty}
                 onChange={(e) => setDefaultQty(e.target.value)}
@@ -255,49 +264,50 @@ export function CustomFoodEdit() {
                 step="any"
                 disabled={submitting}
               />
-            </label>
-            <label>
-              Default Unit
-              <select
-                value={defaultUnit}
-                onChange={(e) => setDefaultUnit(e.target.value)}
-                disabled={submitting}
-              >
-                {units.map((u) => (
-                  <option key={u.code} value={u.code}>
-                    {u.name} ({u.code})
-                  </option>
-                ))}
-              </select>
-            </label>
+            </div>
+            <div className="flex flex-col gap-1.5 mb-2">
+              <label className="text-xs font-bold text-muted-foreground">Default Unit</label>
+              <Select value={defaultUnit} onValueChange={setDefaultUnit} disabled={submitting}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.code} value={u.code}>
+                      {u.name} ({u.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </section>
 
           <section className="detail-section">
             <div className="section-header">
               <h2>Nutrients (per 100g)</h2>
-              <button
-                type="button"
-                onClick={addNutrientRow}
-                disabled={submitting}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={addNutrientRow} disabled={submitting}>
                 + Add Nutrient
-              </button>
+              </Button>
             </div>
             {nutrientRows.map((row, i) => (
-              <div key={i} className="nutrient-row">
-                <select
+              <div key={i} className="flex gap-2.5 items-center mb-2.5">
+                <Select
                   value={row.code}
-                  onChange={(e) => updateNutrientRow(i, "code", e.target.value)}
+                  onValueChange={(value) => updateNutrientRow(i, "code", value)}
                   disabled={submitting}
                 >
-                  <option value="">Select nutrient...</option>
-                  {nutrients.map((n) => (
-                    <option key={n.code} value={n.code}>
-                      {n.name}
-                    </option>
-                  ))}
-                </select>
-                <input
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select nutrient..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nutrients.map((n) => (
+                      <SelectItem key={n.code} value={n.code}>
+                        {n.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
                   type="number"
                   placeholder="Amount per 100g"
                   value={row.amount_per_100g}
@@ -307,15 +317,17 @@ export function CustomFoodEdit() {
                   min={0}
                   step="any"
                   disabled={submitting}
+                  className="flex-1"
                 />
-                <button
+                <Button
                   type="button"
-                  className="btn-danger-sm"
+                  variant="ghost"
+                  className="w-11 h-11 p-0 text-destructive"
                   onClick={() => removeNutrientRow(i)}
                   disabled={nutrientRows.length <= 1 || submitting}
                 >
                   ×
-                </button>
+                </Button>
               </div>
             ))}
           </section>
@@ -323,48 +335,47 @@ export function CustomFoodEdit() {
           <section className="detail-section">
             <div className="section-header">
               <h2>Servings</h2>
-              <button
-                type="button"
-                onClick={addServingRow}
-                disabled={submitting}
-              >
+              <Button type="button" variant="outline" size="sm" onClick={addServingRow} disabled={submitting}>
                 + Add Serving
-              </button>
+              </Button>
             </div>
             {servingRows.map((row, i) => (
-              <div key={i} className="serving-row">
-                <input
+              <div key={i} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
+                <Input
                   type="text"
                   placeholder="Label (e.g. scoop)"
                   value={row.label}
-                  onChange={(e) =>
-                    updateServingRow(i, "label", e.target.value)
-                  }
+                  onChange={(e) => updateServingRow(i, "label", e.target.value)}
                   disabled={submitting}
+                  className="flex-1"
                 />
-                <input
+                <Input
                   type="number"
                   placeholder="Qty"
                   value={row.quantity}
-                  onChange={(e) =>
-                    updateServingRow(i, "quantity", e.target.value)
-                  }
+                  onChange={(e) => updateServingRow(i, "quantity", e.target.value)}
                   min={0}
                   step="any"
                   disabled={submitting}
+                  className="flex-1"
                 />
-                <select
+                <Select
                   value={row.unit}
-                  onChange={(e) => updateServingRow(i, "unit", e.target.value)}
+                  onValueChange={(value) => updateServingRow(i, "unit", value)}
                   disabled={submitting}
                 >
-                  {units.map((u) => (
-                    <option key={u.code} value={u.code}>
-                      {u.code}
-                    </option>
-                  ))}
-                </select>
-                <input
+                  <SelectTrigger className="w-[92px] flex-none">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map((u) => (
+                      <SelectItem key={u.code} value={u.code}>
+                        {u.code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
                   type="number"
                   placeholder="Grams"
                   value={row.grams}
@@ -372,22 +383,24 @@ export function CustomFoodEdit() {
                   min={0}
                   step="any"
                   disabled={submitting}
+                  className="flex-1"
                 />
-                <button
+                <Button
                   type="button"
-                  className="btn-danger-sm"
+                  variant="ghost"
+                  className="w-11 h-11 p-0 text-destructive"
                   onClick={() => removeServingRow(i)}
                   disabled={submitting}
                 >
                   ×
-                </button>
+                </Button>
               </div>
             ))}
           </section>
 
-          <button type="submit" className="btn-primary" disabled={submitting}>
+          <Button type="submit" disabled={submitting} className="self-start">
             {submitting ? "Saving..." : "Save Changes"}
-          </button>
+          </Button>
         </form>
       </main>
     </div>

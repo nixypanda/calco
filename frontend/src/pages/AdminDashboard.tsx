@@ -8,6 +8,16 @@ import {
   enableUser,
 } from "../api/admin";
 import type { UserItem } from "../api/admin";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export function AdminDashboard() {
   const { identity, logout } = useAuth();
@@ -94,7 +104,7 @@ export function AdminDashboard() {
         <h1>Admin Dashboard</h1>
         <div className="header-right">
           <span>Logged in as <strong>{identity?.username}</strong></span>
-          <button onClick={logout}>Logout</button>
+          <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
         </div>
       </header>
 
@@ -103,36 +113,39 @@ export function AdminDashboard() {
       <section>
         <div className="section-header">
           <h2>Users</h2>
-          <button onClick={() => setShowCreate(!showCreate)}>
+          <Button variant="outline" size="sm" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? "Cancel" : "Create User"}
-          </button>
+          </Button>
         </div>
 
         {showCreate && (
-          <form className="create-user-form" onSubmit={handleCreate}>
-            <input
+          <form className="flex gap-2.5 mb-4" onSubmit={handleCreate}>
+            <Input
               placeholder="Username"
               value={newUser.username}
               onChange={(e) =>
                 setNewUser({ ...newUser, username: e.target.value })
               }
+              className="flex-1"
             />
-            <input
+            <Input
               placeholder="Display Name"
               value={newUser.display_name}
               onChange={(e) =>
                 setNewUser({ ...newUser, display_name: e.target.value })
               }
+              className="flex-1"
             />
-            <input
+            <Input
               type="password"
               placeholder="Initial Password"
               value={newUser.initial_password}
               onChange={(e) =>
                 setNewUser({ ...newUser, initial_password: e.target.value })
               }
+              className="flex-1"
             />
-            <button type="submit">Save</button>
+            <Button type="submit">Save</Button>
           </form>
         )}
 
@@ -141,23 +154,25 @@ export function AdminDashboard() {
         ) : users.length === 0 ? (
           <p>No users yet.</p>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Username</th>
-                <th>Display Name</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Username</TableHead>
+                <TableHead>Display Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {users.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.username}</td>
-                  <td>{user.display_name}</td>
-                  <td>{user.status}</td>
-                  <td className="actions">
-                    <button
+                <TableRow key={user.id}>
+                  <TableCell>{user.username}</TableCell>
+                  <TableCell>{user.display_name}</TableCell>
+                  <TableCell>{user.status}</TableCell>
+                  <TableCell className="flex gap-2.5 flex-wrap">
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={() =>
                         setResetPass(
                           resetPass?.userId === user.id
@@ -167,36 +182,37 @@ export function AdminDashboard() {
                       }
                     >
                       Reset Password
-                    </button>
+                    </Button>
                     {user.status === "active" ? (
-                      <button onClick={() => handleDisable(user.id)}>
+                      <Button variant="outline" size="sm" onClick={() => handleDisable(user.id)}>
                         Disable
-                      </button>
+                      </Button>
                     ) : (
-                      <button onClick={() => handleEnable(user.id)}>
+                      <Button variant="outline" size="sm" onClick={() => handleEnable(user.id)}>
                         Enable
-                      </button>
+                      </Button>
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
 
         {resetPass && (
-          <div className="reset-password-form">
-            <input
+          <div className="flex gap-2.5 mb-4">
+            <Input
               type="password"
               placeholder="New password"
               value={resetPass.password}
               onChange={(e) =>
                 setResetPass({ ...resetPass, password: e.target.value })
               }
+              className="flex-1"
             />
-            <button onClick={() => handleResetPassword(resetPass.userId)}>
+            <Button onClick={() => handleResetPassword(resetPass.userId)}>
               Confirm Reset
-            </button>
+            </Button>
           </div>
         )}
       </section>

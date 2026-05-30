@@ -1,3 +1,81 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-brand: #007aff;
+  --color-brand-pressed: #0066d6;
+  --color-macro-calories: #007aff;
+  --color-macro-protein: #ff9f0a;
+  --color-macro-carbs: #34c759;
+  --color-macro-fat: #ffcc00;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius: 0.5rem;
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 3.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 0 0% 3.9%;
+  --primary: 211 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96.1%;
+  --secondary-foreground: 0 0% 9%;
+  --muted: 0 0% 96.1%;
+  --muted-foreground: 0 0% 45.1%;
+  --accent: 0 0% 96.1%;
+  --accent-foreground: 0 0% 9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 89.8%;
+  --input: 0 0% 89.8%;
+  --ring: 211 100% 50%;
+}
+
+.dark {
+  --background: 0 0% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --popover: 0 0% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 211 100% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 14.9%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 14.9%;
+  --muted-foreground: 0 0% 63.9%;
+  --accent: 0 0% 14.9%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 0 0% 14.9%;
+  --input: 0 0% 14.9%;
+  --ring: 211 100% 50%;
+}
+
 :root {
   font-family:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial,
@@ -135,145 +213,7 @@ textarea:focus-visible {
   min-height: 100dvh;
 }
 
-.auth-card {
-  width: 100%;
-  max-width: 390px;
-  padding: 1.25rem;
-  background: var(--ios-surface);
-  border: 1px solid var(--ios-separator-soft);
-  border-radius: var(--ios-radius-lg);
-  box-shadow: var(--ios-shadow-soft);
-}
-
-.auth-card h1 {
-  margin-bottom: 0.25rem;
-  font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: 0;
-}
-
-.auth-card h2 {
-  margin-bottom: 1rem;
-  color: var(--ios-text-muted);
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.auth-card p {
-  margin-bottom: 1rem;
-  color: var(--ios-text-muted);
-  font-size: 0.9375rem;
-}
-
-.auth-card form,
-.custom-food-form,
-.log-food-form,
-.log-edit-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.auth-card label,
-.custom-food-form label,
-.log-edit-form label,
-.log-field label,
-.history-range label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  color: var(--ios-text-muted);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.auth-card input,
-.create-user-form input,
-.reset-password-form input,
-.search-bar input,
-.amount-input,
-.unit-select,
-.custom-food-form input[type="text"],
-.custom-food-form input[type="number"],
-.custom-food-form select,
-.log-edit-form input,
-.log-edit-form select,
-.meal-slot-select,
-.history-range input[type="date"],
-.meal-component-row .unit-select-sm,
-.meal-component-row .search-wrapper input,
-.meal-component-row .qty-input {
-  width: 100%;
-  min-height: var(--tap-target);
-  padding: 0.6875rem 0.875rem;
-  background: var(--ios-surface);
-  border: 1px solid var(--ios-separator-soft);
-  border-radius: var(--ios-radius-sm);
-  color: var(--ios-text);
-  font-size: 1rem;
-  line-height: 1.2;
-}
-
-.auth-card input:focus,
-.create-user-form input:focus,
-.reset-password-form input:focus,
-.search-bar input:focus,
-.amount-input:focus,
-.unit-select:focus,
-.custom-food-form input:focus,
-.custom-food-form select:focus,
-.log-edit-form input:focus,
-.log-edit-form select:focus,
-.meal-slot-select:focus,
-.history-range input[type="date"]:focus {
-  border-color: var(--ios-blue);
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.14);
-}
-
-.auth-card button,
-.btn-primary,
-.btn-secondary,
-.btn-danger,
-.create-user-form button,
-.reset-password-form button,
-.section-header button,
-.btn-home {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--tap-target);
-  padding: 0.6875rem 1rem;
-  border: 0;
-  border-radius: var(--ios-radius);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.auth-card button,
-.btn-primary,
-.create-user-form button,
-.reset-password-form button,
-.section-header button,
-.btn-home {
-  background: var(--ios-blue);
-  color: #fff;
-}
-
-.auth-card button:hover:not(:disabled),
-.btn-primary:hover:not(:disabled),
-.create-user-form button:hover:not(:disabled),
-.reset-password-form button:hover:not(:disabled),
-.section-header button:hover:not(:disabled),
-.btn-home:hover:not(:disabled) {
-  background: var(--ios-blue-pressed);
-}
-
-.btn-secondary,
-.header-right button,
-.actions button {
+.header-right button {
   min-height: var(--tap-target);
   padding: 0.625rem 0.875rem;
   background: var(--ios-surface);
@@ -285,35 +225,8 @@ textarea:focus-visible {
   font-weight: 700;
 }
 
-.btn-secondary:hover,
-.header-right button:hover,
-.actions button:hover {
+.header-right button:hover {
   background: var(--ios-grouped);
-}
-
-.btn-danger {
-  background: var(--ios-red);
-  color: #fff;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #d70015;
-}
-
-.btn-danger-sm {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--tap-target);
-  min-height: var(--tap-target);
-  padding: 0.5rem 0.75rem;
-  background: var(--ios-red-bg);
-  border: 1px solid #ffd1cf;
-  border-radius: var(--ios-radius-sm);
-  color: var(--ios-red);
-  cursor: pointer;
-  font-size: 0.9375rem;
-  font-weight: 700;
 }
 
 button:disabled {
@@ -348,13 +261,7 @@ button:disabled {
 .nav-links,
 .actions,
 .manage-actions,
-.create-user-form,
-.reset-password-form,
-.history-range,
-.amount-unit-row,
-.nutrient-row,
-.serving-row,
-.meal-component-row {
+.amount-unit-row {
   display: flex;
   gap: 0.625rem;
 }
@@ -362,17 +269,6 @@ button:disabled {
 .actions,
 .manage-actions {
   flex-wrap: wrap;
-}
-
-.create-user-form,
-.reset-password-form {
-  margin-bottom: 1rem;
-}
-
-.create-user-form input,
-.reset-password-form input {
-  flex: 1;
-  min-width: 0;
 }
 
 .admin-page header,
@@ -437,89 +333,6 @@ button:disabled {
 
 .btn-back:hover {
   background: rgba(0, 122, 255, 0.08);
-}
-
-.profile-menu {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.profile-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-height: var(--tap-target);
-  padding: 0.25rem 0.25rem 0.25rem 0.625rem;
-  background: var(--ios-surface);
-  border: 1px solid var(--ios-separator-soft);
-  border-radius: 999px;
-  color: var(--ios-text);
-  cursor: pointer;
-  box-shadow: var(--ios-shadow-soft);
-}
-
-.profile-initials {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--ios-blue);
-  color: #fff;
-  font-size: 0.8125rem;
-  font-weight: 800;
-}
-
-.profile-name {
-  max-width: 9rem;
-  overflow: hidden;
-  color: var(--ios-text-muted);
-  font-size: 0.875rem;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.profile-popover {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  z-index: 20;
-  width: 210px;
-  overflow: hidden;
-  background: var(--ios-surface);
-  border: 1px solid var(--ios-separator-soft);
-  border-radius: var(--ios-radius-lg);
-  box-shadow: var(--ios-shadow);
-}
-
-.profile-popover button {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 48px;
-  padding: 0.75rem 1rem;
-  background: var(--ios-surface);
-  border: 0;
-  border-bottom: 1px solid var(--ios-separator-soft);
-  color: var(--ios-text);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 600;
-  text-align: left;
-}
-
-.profile-popover button:last-child {
-  border-bottom: 0;
-}
-
-.profile-popover button:hover {
-  background: var(--ios-grouped);
-}
-
-.profile-popover .destructive {
-  color: var(--ios-red);
 }
 
 .section-header {
@@ -612,27 +425,6 @@ button:disabled {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.375rem;
-}
-
-.category-chip,
-.source-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0.25rem 0.625rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
-.category-chip {
-  background: rgba(0, 122, 255, 0.1);
-  color: var(--ios-blue);
-}
-
-.source-chip {
-  background: rgba(52, 199, 89, 0.12);
-  color: #248a3d;
 }
 
 .skeleton {
@@ -729,56 +521,6 @@ button:disabled {
   align-items: stretch;
 }
 
-.amount-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.unit-select {
-  width: 132px;
-  flex: 0 0 132px;
-}
-
-.custom-food-form label {
-  margin-bottom: 0.5rem;
-}
-
-.nutrient-row,
-.serving-row,
-.meal-component-row {
-  align-items: center;
-  margin-bottom: 0.625rem;
-}
-
-.nutrient-row select,
-.nutrient-row input,
-.serving-row input,
-.meal-component-row .search-wrapper {
-  flex: 1;
-  min-width: 0;
-}
-
-.serving-row select {
-  width: 92px;
-  flex: 0 0 92px;
-}
-
-.meal-component-row .search-wrapper {
-  position: relative;
-  flex: 2;
-  min-width: 160px;
-}
-
-.meal-component-row .qty-input {
-  width: 88px;
-  flex: 0 0 88px;
-}
-
-.meal-component-row .unit-select-sm {
-  width: 88px;
-  flex: 0 0 88px;
-}
-
 .search-dropdown {
   position: absolute;
   top: calc(100% + 0.25rem);
@@ -833,26 +575,6 @@ button:disabled {
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.date-arrow {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--tap-target);
-  height: var(--tap-target);
-  background: var(--ios-grouped);
-  border: 0;
-  border-radius: 50%;
-  color: var(--ios-blue);
-  cursor: pointer;
-  font-size: 1.25rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.date-arrow:hover:not(:disabled) {
-  background: #e8e8ed;
 }
 
 .date-label {
@@ -976,26 +698,6 @@ button:disabled {
   font-size: 0.875rem;
   font-weight: 800;
   white-space: nowrap;
-}
-
-.meal-add-btn {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  min-height: 48px;
-  padding: 0.75rem 1rem;
-  background: rgba(0, 122, 255, 0.08);
-  border: 0;
-  border-top: 1px solid var(--ios-separator-soft);
-  color: var(--ios-blue);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 800;
-}
-
-.meal-add-btn:hover {
-  background: rgba(0, 122, 255, 0.14);
 }
 
 .meal-slot-empty {
@@ -1211,48 +913,9 @@ button:disabled {
   font-weight: 700;
 }
 
-.log-edit-row input,
-.log-edit-row select {
-  min-height: 38px;
-  padding: 0.375rem 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  color: var(--ios-text-muted);
-  font-size: 1rem;
-  font-weight: 600;
-  text-align: right;
-}
-
-.log-edit-row select {
-  text-align-last: right;
-}
-
 .log-edit-form .manage-actions {
   padding: 0.875rem;
   border-top: 1px solid var(--ios-separator-soft);
-}
-
-.history-range {
-  margin-bottom: 1rem;
-}
-
-.history-range label {
-  flex: 1;
-  min-width: 0;
-}
-
-.history-table-wrapper {
-  overflow-x: auto;
-  border-radius: var(--ios-radius);
-}
-
-.history-row {
-  cursor: pointer;
-}
-
-.history-row:hover {
-  background: var(--ios-grouped);
 }
 
 .nav-links {
@@ -1308,31 +971,8 @@ button:disabled {
     width: 100%;
   }
 
-  .amount-unit-row,
-  .history-range,
-  .create-user-form,
-  .reset-password-form {
+  .amount-unit-row {
     flex-direction: column;
-  }
-
-  .unit-select {
-    width: 100%;
-    flex-basis: auto;
-  }
-
-  .nutrient-row,
-  .serving-row,
-  .meal-component-row {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .meal-component-row .search-wrapper,
-  .meal-component-row .qty-input,
-  .meal-component-row .unit-select-sm,
-  .serving-row select {
-    width: 100%;
-    flex: 1 1 100%;
   }
 
   .macro-breakdown {

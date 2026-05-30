@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { getSummary } from "../api/logs";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const MAX_DAYS = 90;
@@ -114,10 +123,10 @@ export function History() {
       </header>
 
       <main>
-        <div className="history-range">
-          <label>
-            From
-            <input
+        <div className="flex gap-2.5 mb-4">
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+            <label className="text-xs font-bold text-muted-foreground">From</label>
+            <Input
               type="date"
               value={formatDate(fromDate)}
               onChange={(e) => {
@@ -125,10 +134,10 @@ export function History() {
                 if (!isNaN(d.getTime())) setFromDate(d);
               }}
             />
-          </label>
-          <label>
-            To
-            <input
+          </div>
+          <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+            <label className="text-xs font-bold text-muted-foreground">To</label>
+            <Input
               type="date"
               value={formatDate(toDate)}
               onChange={(e) => {
@@ -137,7 +146,7 @@ export function History() {
               }}
               max={formatDate(new Date())}
             />
-          </label>
+          </div>
         </div>
 
         {daysInRange > MAX_DAYS && (
@@ -161,36 +170,32 @@ export function History() {
         )}
 
         {!loading && days.length > 0 && (
-          <div className="history-table-wrapper">
-            <table className="history-table">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th className="num-col">Calories</th>
-                  <th className="num-col">Protein</th>
-                  <th className="num-col">Carbs</th>
-                  <th className="num-col">Fat</th>
-                </tr>
-              </thead>
-              <tbody>
-                {days.map((d) => (
-                  <tr
-                    key={d.date}
-                    className="history-row"
-                    onClick={() => navigate(`/home?date=${d.date}`)}
-                  >
-                    <td>{displayDate(new Date(d.date + "T00:00:00"))}</td>
-                    <td className="num-col">{Math.round(d.calories)}</td>
-                    <td className="num-col">
-                      {d.protein.toFixed(1)}
-                    </td>
-                    <td className="num-col">{d.carbs.toFixed(1)}</td>
-                    <td className="num-col">{d.fat.toFixed(1)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right w-[92px]">Calories</TableHead>
+                <TableHead className="text-right w-[92px]">Protein</TableHead>
+                <TableHead className="text-right w-[92px]">Carbs</TableHead>
+                <TableHead className="text-right w-[92px]">Fat</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {days.map((d) => (
+                <TableRow
+                  key={d.date}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/home?date=${d.date}`)}
+                >
+                  <TableCell>{displayDate(new Date(d.date + "T00:00:00"))}</TableCell>
+                  <TableCell className="text-right">{Math.round(d.calories)}</TableCell>
+                  <TableCell className="text-right">{d.protein.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{d.carbs.toFixed(1)}</TableCell>
+                  <TableCell className="text-right">{d.fat.toFixed(1)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </main>
     </div>

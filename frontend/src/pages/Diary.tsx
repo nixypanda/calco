@@ -1,9 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
+import { Moon, Sun } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { listLogs, getSummary } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import type { LogResponse, SummaryEntry } from "../api/logs";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -203,7 +212,7 @@ export function Diary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
 
   const dateStr = formatDate(currentDate);
   const displayName = profile?.display_name ?? identity?.username ?? "User";
@@ -283,13 +292,7 @@ export function Diary() {
       .filter((l) => l.meal_slot === slot)
       .reduce((sum, l) => sum + getCalories(l.nutrients), 0);
 
-  const handleProfileNavigate = (path: string) => {
-    setProfileMenuOpen(false);
-    navigate(path);
-  };
-
   const handleLogout = async () => {
-    setProfileMenuOpen(false);
     await logout();
   };
 
@@ -300,7 +303,7 @@ export function Diary() {
         className="log-row-main"
         onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
       >
-        <span className="log-row-name">
+        <span className="flex-1 min-w-0 truncate font-medium">
           {foodNames[log.item.id] ?? "Loading..."}
         </span>
         <span className="log-row-qty">
@@ -318,58 +321,47 @@ export function Diary() {
     <div className="diary-page">
       <header>
         <h1>CalCo</h1>
-        <div className="profile-menu">
-          <button
-            type="button"
-            className="profile-button"
-            onClick={() => setProfileMenuOpen((open) => !open)}
-            aria-label="Open profile menu"
-            aria-expanded={profileMenuOpen}
-            aria-haspopup="menu"
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              document.documentElement.classList.toggle("dark");
+              setDarkMode(!darkMode);
+            }}
+            title="Toggle dark mode"
           >
-            <span className="profile-initials">{getInitials(displayName)}</span>
-            <span className="profile-name">{displayName}</span>
-          </button>
-          {profileMenuOpen && (
-            <div className="profile-popover" role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => handleProfileNavigate("/meals")}
-              >
-                My Meals
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => handleProfileNavigate("/history")}
-              >
-                History
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="destructive"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </div>
-          )}
-        </div>
+            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
+          <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" className="rounded-full gap-2 pl-2 pr-1 flex items-center h-auto py-1">
+              <Avatar className="w-[34px] h-[34px]">
+                <AvatarFallback className="bg-brand text-white text-[0.8125rem] font-extrabold">{getInitials(displayName)}</AvatarFallback>
+              </Avatar>
+              <span className="text-muted-foreground text-sm font-bold max-w-[9rem] truncate">{displayName}</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[210px]">
+            <DropdownMenuItem onClick={() => navigate("/meals")}>My Meals</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/history")}>History</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>Logout</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
       </header>
 
       {error && <p className="error">{error}</p>}
 
       <div className="diary-summary-tile">
         <div className="date-selector">
-          <button className="date-arrow" onClick={goPrev}>
+          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goPrev}>
             ←
-          </button>
+          </Button>
           <span className="date-label">{displayDate(currentDate)}</span>
-          <button className="date-arrow" onClick={goNext} disabled={isToday}>
+          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-brand text-xl font-extrabold" onClick={goNext} disabled={isToday}>
             →
-          </button>
+          </Button>
         </div>
 
         <div className="summary-rings">
@@ -441,17 +433,17 @@ export function Diary() {
                 <p className="meal-slot-empty">No items</p>
               )}
               {items.map((log) => renderLogRow(log))}
-              <button
-                className="meal-add-btn"
+              <Button
+                variant="ghost"
+                className="w-full justify-start rounded-none h-12 border-t border-border text-brand font-extrabold"
                 onClick={() =>
                   navigate("/search", {
                     state: { mealSlot: value },
                   })
                 }
-                title={`Add to ${label}`}
               >
                 Add Food
-              </button>
+              </Button>
             </section>
           ))}
 

@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export function FoodSearch() {
   const navigate = useNavigate();
@@ -66,7 +70,7 @@ export function FoodSearch() {
       </header>
       <main>
         <div className="search-bar">
-          <input
+          <Input
             type="text"
             placeholder="Search for a food..."
             value={query}
@@ -91,43 +95,41 @@ export function FoodSearch() {
         {!loading && !error && query.trim() && results.length === 0 && (
           <div className="empty-state">
             <p>No foods found. Try a different search.</p>
-            <button
-              type="button"
-              className="btn-primary"
+            <Button
               onClick={goCreateCustomFood}
             >
               Create Custom Food
-            </button>
+            </Button>
           </div>
         )}
 
         {!loading && !error && results.length > 0 && (
           <div className="search-results">
             {results.map((item) => (
-              <button
+              <Card
                 key={item.id}
-                className="search-result"
+                className="flex items-center justify-between w-full min-h-16 p-3.5 cursor-pointer hover:bg-muted/50"
                 onClick={() =>
                   navigate(`/foods/${item.id}`, {
                     state: mealSlot ? { mealSlot } : undefined,
                   })
                 }
               >
-                <div className="search-result-main">
-                  <span className="search-result-name">{item.name}</span>
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="font-bold truncate">{item.name}</span>
                   {item.brand && (
-                    <span className="search-result-brand">{item.brand}</span>
+                    <span className="text-muted-foreground text-sm">{item.brand}</span>
                   )}
                 </div>
-                <div className="search-result-meta">
+                <div className="flex items-center flex-wrap gap-1.5">
                   {item.category && (
-                    <span className="category-chip">{item.category}</span>
+                    <Badge variant="secondary">{item.category}</Badge>
                   )}
                   {item.source === "USER" && (
-                    <span className="source-chip">Custom</span>
+                    <Badge variant="secondary" className="bg-green-100 text-green-800 hover:bg-green-100">Custom</Badge>
                   )}
                 </div>
-              </button>
+              </Card>
             ))}
           </div>
         )}
@@ -135,13 +137,11 @@ export function FoodSearch() {
         {!query.trim() && (
           <div className="empty-state">
             <p>Search for a food to get started.</p>
-            <button
-              type="button"
-              className="btn-primary"
+            <Button
               onClick={goCreateCustomFood}
             >
               Create Custom Food
-            </button>
+            </Button>
           </div>
         )}
       </main>

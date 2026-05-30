@@ -4,6 +4,33 @@ import { getMeal, deleteMeal, getMealNutrients } from "../api/meals";
 import { getFoodDetail } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { MealResponse, MealNutritionResponse } from "../api/meals";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export function MealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -197,15 +224,29 @@ export function MealDetail() {
           <h1>{meal.name}</h1>
         </div>
         <div className="manage-actions">
-          <button
-            className="btn-secondary"
+          <Button
+            variant="outline"
             onClick={() => navigate(`/meals/${id}/edit`)}
           >
             Edit
-          </button>
-          <button className="btn-danger" onClick={() => setShowConfirm(true)}>
-            Delete
-          </button>
+          </Button>
+          <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
+            <DialogTrigger asChild>
+              <Button variant="destructive">Delete</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Delete meal?</DialogTitle>
+                <DialogDescription>This action cannot be undone.</DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowConfirm(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                  {deleting ? "Deleting..." : "Confirm Delete"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </header>
 
@@ -219,98 +260,72 @@ export function MealDetail() {
         <h2>Components</h2>
         <div className="serving-list">
           {meal.components.map((comp) => (
-            <div key={comp.id} className="serving-item">
-              <span className="serving-label">
+            <Card key={comp.id} className="flex items-center justify-between gap-4 min-h-[50px] p-3">
+              <span className="font-bold">
                 {productNames[comp.item.id] ?? "Loading..."}
               </span>
-              <span className="serving-amount">
+              <span className="text-muted-foreground text-sm">
                 {comp.quantity.amount} {comp.quantity.unit}
               </span>
-            </div>
+            </Card>
           ))}
         </div>
       </div>
 
       <div className="detail-section">
         <h2>Log this meal</h2>
-        <div className="log-food-form">
-          <div className="amount-unit-row">
-            <input
-              className="amount-input"
+        <div className="flex flex-col gap-3.5">
+          <div className="flex gap-2.5 items-stretch">
+            <Input
               type="number"
               value={logAmount}
               onChange={(e) => setLogAmount(e.target.value)}
               placeholder="Amount"
+              className="flex-1"
             />
-            <select className="unit-select" value={logUnit} disabled>
-              <option value="g">g</option>
-            </select>
-            <button
-              className="btn-primary"
-              onClick={handleCalculate}
-              disabled={nutrientsLoading}
-            >
+            <Select value={logUnit} disabled>
+              <SelectTrigger className="w-[132px] flex-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="g">g</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button onClick={handleCalculate} disabled={nutrientsLoading}>
               {nutrientsLoading ? "..." : "Calculate"}
-            </button>
+            </Button>
           </div>
           {nutrientsError && <p className="error">{nutrientsError}</p>}
           {nutrients && (
             <>
-              <table className="nutrient-table">
-                <thead>
-                  <tr>
-                    <th>Nutrient</th>
-                    <th className="amount-col">Amount</th>
-                    <th className="unit-col">Unit</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nutrient</TableHead>
+                    <TableHead className="text-right w-[92px]">Amount</TableHead>
+                    <TableHead className="text-right w-[92px]">Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {nutrients.nutrients.map((n) => (
-                    <tr key={n.code}>
-                      <td>{n.code}</td>
-                      <td className="amount-col">{n.amount}</td>
-                      <td className="unit-col">{n.unit}</td>
-                    </tr>
+                    <TableRow key={n.code}>
+                      <TableCell>{n.code}</TableCell>
+                      <TableCell className="text-right">{n.amount}</TableCell>
+                      <TableCell className="text-right">{n.unit}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-              <button
-                className="btn-primary"
-                onClick={handleLog}
-                disabled={logging}
-              >
+                </TableBody>
+              </Table>
+              <Button onClick={handleLog} disabled={logging}>
                 {logging ? "Logging..." : "Log Meal"}
-              </button>
+              </Button>
               {logError && <p className="error">{logError}</p>}
             </>
           )}
         </div>
       </div>
 
-      {showConfirm && (
-        <div className="detail-section">
-          <p
-            style={{ marginBottom: "0.5rem", color: "#dc2626", fontSize: "0.875rem" }}
-          >
-            Delete this meal?
-          </p>
-          <div className="manage-actions">
-            <button
-              className="btn-danger"
-              onClick={handleDelete}
-              disabled={deleting}
-            >
-              {deleting ? "Deleting..." : "Confirm Delete"}
-            </button>
-            <button
-              className="btn-secondary"
-              onClick={() => setShowConfirm(false)}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }
