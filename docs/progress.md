@@ -365,6 +365,82 @@ CalCo/
 | `cd frontend && pnpm tsc --noEmit` | Clean |
 | `cd frontend && pnpm run build` | Clean (258 KB JS, 8 KB CSS) |
 
+---
+
+## 2026-05-30 — Phase 6: Frontend Diary + History
+
+### What was done
+
+**1. API client (`src/api/logs.ts`)** — Typed functions for all log endpoints:
+- `createLog`, `getLog`, `listLogs`, `updateLog`, `deleteLog`, `getSummary`
+- TypeScript interfaces matching backend response shapes (`LogResponse`, `LogListResponse`, `SummaryResponse`, `CreateLogRequest`, `UpdateLogRequest`)
+
+**2. Diary page (`src/pages/Diary.tsx`)** — Route `/home` (replaces `UserHome`):
+- Date selector with prev/next arrows and formatted date display
+- Summary rings (SVG circles with fill arcs) for calories (green), protein (blue), carbs (amber), fat (rose)
+- Calorie default goal of 2000 kcal (rings filled proportionally; goals from Phase 9)
+- Meal-slot grouping: Breakfast, Lunch, Dinner, Snack, Other
+- Each slot header: name + calorie total + "+" add button
+- Add button navigates to `/search` with `{ state: { mealSlot } }`
+- Food log rows: food name (fetched via `getFoodDetail` per unique product ID), quantity text, calorie amount
+- Tap row → navigates to `/logs/:id` for detail/edit
+- Loading, error, empty states
+- Query param `?date=YYYY-MM-DD` support (from history navigation)
+
+**3. Food Log Detail/Edit page (`src/pages/FoodLogDetail.tsx`)** — Route `/logs/:id`:
+- View mode: food name, timestamp, meal slot, quantity/unit, notes, full nutrient table
+- Edit mode: editable meal slot (dropdown), amount, unit, notes
+- Save → `PUT /logs/:id` → refreshes display
+- Delete → confirmation dialog → `DELETE /logs/:id` → navigates to `/home`
+- Loading, error, not-found states
+
+**4. History page (`src/pages/History.tsx`)** — Route `/history`:
+- Date range picker (from/to date inputs, default: last 7 days)
+- Fetches summary per day in parallel (max 90-day range)
+- Table: date, calories, protein, carbs, fat with numeric alignment
+- Rows are clickable → navigates to `/home?date=YYYY-MM-DD`
+- Loading, error states
+
+**5. FoodDetail logging updated (`src/pages/FoodDetail.tsx`)**:
+- Meal slot dropdown in "Log Food" section
+- "Log Food" button now calls `POST /api/logs` → navigates to `/home`
+- Meal slot preselected from `location.state.mealSlot` (passed by diary "+" button)
+
+**6. Routes wired in `App.tsx`**:
+- `/home` → `Diary` (replaces `UserHome`)
+- `/logs/:id` → `FoodLogDetail`
+- `/history` → `History`
+
+**7. CSS (`src/index.css`)** — Added styles for:
+- `.diary-page`, `.diary-nav`, `.date-selector`, `.date-arrow`, `.date-label`
+- `.summary-rings`, `.nutrient-ring-wrapper`, `.nutrient-ring-svg`, `.ring-center`, `.ring-value`, `.ring-unit`, `.ring-label`
+- `.meal-slot`, `.meal-slot-header`, `.meal-slot-name`, `.meal-slot-calories`, `.meal-add-btn`, `.meal-slot-empty`
+- `.log-row`, `.log-row-name`, `.log-row-qty`, `.log-row-cal`
+- `.log-detail-name`, `.log-detail-time`, `.log-edit-form`
+- `.meal-slot-select`
+- `.history-range`, `.history-table-wrapper`, `.history-table`, `.num-col`, `.history-row`
+
+### Tests — 25 new tests (4 new files + 1 updated)
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `Diary.test.tsx` | 7 | render, empty state, summary rings, meal slot + log rows, navigation to search/history/log detail, error |
+| `FoodLogDetail.test.tsx` | 7 | loading, detail display, edit + save, cancel edit, delete flow, cancel delete, error |
+| `History.test.tsx` | 3 | render + date inputs, daily summary rows, loading state |
+| `LogsApi.test.ts` | 7 | create/get/list/update/delete log, getSummary with/without codes |
+| `FoodDetail.test.tsx` | updated | added `createLog` mock for logging functionality |
+
+### Verified
+
+| Check | Result |
+|-------|--------|
+| `pnpm tsc --noEmit` | Clean |
+| `pnpm run build` | Clean (274 KB JS, 12 KB CSS) |
+| `pnpm vitest run` | 74/74 pass (was 49) |
+
 ### Next steps
 
-- **Phase 6**: Frontend Diary + History (daily diary view, meal-slot grouping, food log CRUD, summary rings, history browsing)
+- **Phase 7**: Meals/Recipes — backend meals domain, extend logging for meals, frontend meal builder UI
+- **Phase 8**: Import System — admin bulk-import food datasets from JSONL
+- **Phase 9**: Goals + Admin Corrections
+- **Phase 10**: Exports + Reports + Barcode

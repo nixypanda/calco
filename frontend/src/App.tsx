@@ -6,7 +6,9 @@ import { AdminRoute } from "./components/AdminRoute";
 import { BootstrapAdminSetup } from "./pages/BootstrapAdminSetup";
 import { LoginPage } from "./pages/LoginPage";
 import { AdminDashboard } from "./pages/AdminDashboard";
-import { UserHome } from "./pages/UserHome";
+import { Diary } from "./pages/Diary";
+import { FoodLogDetail } from "./pages/FoodLogDetail";
+import { History } from "./pages/History";
 import { FoodSearch } from "./pages/FoodSearch";
 import { FoodDetail } from "./pages/FoodDetail";
 import { CustomFoodCreate } from "./pages/CustomFoodCreate";
@@ -81,7 +83,23 @@ function App() {
             path="/home"
             element={
               <ProtectedRoute>
-                <UserHome />
+                <Diary />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/logs/:id"
+            element={
+              <ProtectedRoute>
+                <FoodLogDetail />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/history"
+            element={
+              <ProtectedRoute>
+                <History />
               </ProtectedRoute>
             }
           />

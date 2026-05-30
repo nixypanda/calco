@@ -9,6 +9,7 @@ const mockGetSession = vi.fn();
 const mockGetFoodDetail = vi.fn();
 const mockDeleteCustomFood = vi.fn();
 const mockListUnits = vi.fn();
+const mockCreateLog = vi.fn();
 
 vi.mock("../api/auth", () => ({
   getSession: (...args: unknown[]) => mockGetSession(...args),
@@ -23,6 +24,10 @@ vi.mock("../api/foods", () => ({
   listUnits: (...args: unknown[]) => mockListUnits(...args),
 }));
 
+vi.mock("../api/logs", () => ({
+  createLog: (...args: unknown[]) => mockCreateLog(...args),
+}));
+
 function renderAtDetail(foodId = "some-id") {
   return render(
     <MemoryRouter initialEntries={[`/foods/${foodId}`]}>
@@ -30,6 +35,7 @@ function renderAtDetail(foodId = "some-id") {
         <Routes>
           <Route path="/foods/:id" element={<FoodDetail />} />
           <Route path="/search" element={<div>Search Page</div>} />
+          <Route path="/home" element={<div>User Home</div>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
