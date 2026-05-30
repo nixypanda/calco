@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { PageHeader } from "@/components/PageHeader";
 
 interface ComponentRow {
   productId: string;
@@ -25,6 +26,8 @@ interface ComponentRow {
   searchResults: SearchResult[];
   searching: boolean;
 }
+
+const UNITS = ["g", "kg", "ml", "cup", "tbsp", "tsp", "piece", "packet", "serving"];
 
 function createEmptyRow(): ComponentRow {
   return {
@@ -38,6 +41,29 @@ function createEmptyRow(): ComponentRow {
   };
 }
 
+function UnitSelect({
+  value,
+  onChange,
+  width = "w-20",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  width?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className={`${width} flex-none`}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {UNITS.map((u) => (
+          <SelectItem key={u} value={u}>{u}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function MealForm() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -47,16 +73,12 @@ export function MealForm() {
   const [notes, setNotes] = useState("");
   const [totalQty, setTotalQty] = useState("");
   const [totalUnit, setTotalUnit] = useState("g");
-  const [components, setComponents] = useState<ComponentRow[]>([
-    createEmptyRow(),
-  ]);
+  const [components, setComponents] = useState<ComponentRow[]>([createEmptyRow()]);
   const [submitting, setSubmitting] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
   const [error, setError] = useState("");
 
-  const searchTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(
-    new Map(),
-  );
+  const searchTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     if (!id) return;
@@ -98,9 +120,7 @@ export function MealForm() {
 
   useEffect(() => {
     return () => {
-      for (const t of searchTimers.current.values()) {
-        clearTimeout(t);
-      }
+      for (const t of searchTimers.current.values()) clearTimeout(t);
       searchTimers.current.clear();
     };
   }, []);
@@ -108,15 +128,11 @@ export function MealForm() {
   const doSearch = useCallback(async (query: string, idx: number) => {
     if (query.length < 2) {
       setComponents((prev) =>
-        prev.map((r, i) =>
-          i === idx ? { ...r, searchResults: [], searching: false } : r,
-        ),
+        prev.map((r, i) => (i === idx ? { ...r, searchResults: [], searching: false } : r)),
       );
       return;
     }
-    setComponents((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, searching: true } : r)),
-    );
+    setComponents((prev) => prev.map((r, i) => (i === idx ? { ...r, searching: true } : r)));
     try {
       const res = await searchFoods(query);
       setComponents((prev) =>
@@ -126,26 +142,18 @@ export function MealForm() {
       );
     } catch {
       setComponents((prev) =>
-        prev.map((r, i) =>
-          i === idx ? { ...r, searching: false } : r,
-        ),
+        prev.map((r, i) => (i === idx ? { ...r, searching: false } : r)),
       );
     }
   }, []);
 
   const handleSearchChange = (value: string, idx: number) => {
     setComponents((prev) =>
-      prev.map((r, i) =>
-        i === idx ? { ...r, searchQuery: value } : r,
-      ),
+      prev.map((r, i) => (i === idx ? { ...r, searchQuery: value } : r)),
     );
-
     const existing = searchTimers.current.get(idx);
     if (existing) clearTimeout(existing);
-
-    const timer = setTimeout(() => {
-      doSearch(value, idx);
-    }, 300);
+    const timer = setTimeout(() => doSearch(value, idx), 300);
     searchTimers.current.set(idx, timer);
   };
 
@@ -166,13 +174,13 @@ export function MealForm() {
     );
   };
 
-  const addComponent = () => {
-    setComponents((prev) => [...prev, createEmptyRow()]);
-  };
+  const addComponent = () => setComponents((prev) => [...prev, createEmptyRow()]);
 
-  const removeComponent = (idx: number) => {
+  const removeComponent = (idx: number) =>
     setComponents((prev) => prev.filter((_, i) => i !== idx));
-  };
+
+  const updateRow = (idx: number, patch: Partial<ComponentRow>) =>
+    setComponents((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -195,10 +203,9 @@ export function MealForm() {
     const payload = {
       name: name.trim(),
       notes: notes.trim() || null,
-      total_quantity:
-        totalQty.trim()
-          ? { amount: totalQty.trim(), unit: totalUnit }
-          : null,
+      total_quantity: totalQty.trim()
+        ? { amount: totalQty.trim(), unit: totalUnit }
+        : null,
       components: validComponents.map((c) => ({
         item: { type: "product", id: c.productId },
         quantity: { amount: c.quantity || "100", unit: c.unit || "g" },
@@ -214,29 +221,19 @@ export function MealForm() {
         navigate(`/meals/${created.id}`);
       }
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to save meal",
-      );
+      setError(err instanceof Error ? err.message : "Failed to save meal");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const title = isEdit ? "Edit Meal" : "Create Meal";
+  const goMeals = () => navigate("/meals");
+
   if (fetching) {
     return (
-      <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-        <header className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
-              onClick={() => navigate("/meals")}
-              aria-label="Back to Meals"
-            >
-              <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
-            </button>
-            <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{isEdit ? "Edit Meal" : "Create Meal"}</h1>
-          </div>
-        </header>
+      <div className="page">
+        <PageHeader title={title} onBack={goMeals} backLabel="Back to Meals" />
         <div className="flex flex-col gap-3">
           <Skeleton className="h-4 w-4/5" />
           <Skeleton className="h-4 w-3/5" />
@@ -247,25 +244,14 @@ export function MealForm() {
   }
 
   return (
-    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
-      <header className="flex items-center justify-between gap-4 mb-4">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <button
-            className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
-            onClick={() => navigate("/meals")}
-            aria-label="Back to Meals"
-          >
-            <span className="text-[2rem] leading-[0.8]" aria-hidden="true">‹</span>
-          </button>
-          <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{isEdit ? "Edit Meal" : "Create Meal"}</h1>
-        </div>
-      </header>
+    <div className="page">
+      <PageHeader title={title} onBack={goMeals} backLabel="Back to Meals" />
 
       {error && <ErrorBanner message={error} />}
 
       <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="mf-name" className="text-xs font-bold text-muted-foreground">Name</Label>
+          <Label htmlFor="mf-name">Name</Label>
           <Input
             id="mf-name"
             type="text"
@@ -276,7 +262,7 @@ export function MealForm() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="mf-notes" className="text-xs font-bold text-muted-foreground">Notes</Label>
+          <Label htmlFor="mf-notes">Notes</Label>
           <Input
             id="mf-notes"
             type="text"
@@ -286,7 +272,7 @@ export function MealForm() {
           />
         </div>
 
-        <div className="mb-5">
+        <section className="mb-5">
           <h2>Total Quantity (optional)</h2>
           <div className="flex gap-2.5">
             <Input
@@ -296,28 +282,13 @@ export function MealForm() {
               placeholder="Amount"
               className="flex-1"
             />
-            <Select value={totalUnit} onValueChange={setTotalUnit}>
-              <SelectTrigger className="w-[132px] flex-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="g">g</SelectItem>
-                <SelectItem value="kg">kg</SelectItem>
-                <SelectItem value="ml">ml</SelectItem>
-                <SelectItem value="cup">cup</SelectItem>
-                <SelectItem value="tbsp">tbsp</SelectItem>
-                <SelectItem value="tsp">tsp</SelectItem>
-                <SelectItem value="piece">piece</SelectItem>
-                <SelectItem value="packet">packet</SelectItem>
-                <SelectItem value="serving">serving</SelectItem>
-              </SelectContent>
-            </Select>
+            <UnitSelect value={totalUnit} onChange={setTotalUnit} width="w-32" />
           </div>
-        </div>
+        </section>
 
-        <div className="mb-5">
+        <section className="mb-5">
           <div className="flex items-center justify-between gap-3 mb-3.5">
-            <h2>Components</h2>
+            <h2 className="mb-0">Components</h2>
             <Button type="button" variant="outline" size="sm" onClick={addComponent}>
               + Add Component
             </Button>
@@ -325,7 +296,7 @@ export function MealForm() {
 
           {components.map((comp, idx) => (
             <div key={idx} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
-              <div className="flex-[2] min-w-[180px] relative">
+              <div className="flex-[2] min-w-44 relative">
                 <Input
                   type="text"
                   value={comp.searchQuery}
@@ -333,7 +304,7 @@ export function MealForm() {
                   placeholder="Search product..."
                 />
                 {comp.searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-10 max-h-[220px] overflow-y-auto bg-card border border-border rounded-lg shadow-lg">
+                  <div className="absolute top-full left-0 right-0 z-10 max-h-56 overflow-y-auto bg-card border border-border rounded-lg shadow-lg">
                     {comp.searchResults.map((r) => (
                       <button
                         key={r.id}
@@ -353,46 +324,17 @@ export function MealForm() {
               <Input
                 type="number"
                 value={comp.quantity}
-                onChange={(e) =>
-                  setComponents((prev) =>
-                    prev.map((r, i) =>
-                      i === idx ? { ...r, quantity: e.target.value } : r,
-                    ),
-                  )
-                }
+                onChange={(e) => updateRow(idx, { quantity: e.target.value })}
                 placeholder="Qty"
-                className="w-[80px] flex-none"
+                className="w-20 flex-none"
               />
-              <Select
-                value={comp.unit}
-                onValueChange={(value) =>
-                  setComponents((prev) =>
-                    prev.map((r, i) =>
-                      i === idx ? { ...r, unit: value } : r,
-                    ),
-                  )
-                }
-              >
-                <SelectTrigger className="w-[80px] flex-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="g">g</SelectItem>
-                  <SelectItem value="kg">kg</SelectItem>
-                  <SelectItem value="ml">ml</SelectItem>
-                  <SelectItem value="cup">cup</SelectItem>
-                  <SelectItem value="tbsp">tbsp</SelectItem>
-                  <SelectItem value="tsp">tsp</SelectItem>
-                  <SelectItem value="piece">piece</SelectItem>
-                  <SelectItem value="packet">packet</SelectItem>
-                  <SelectItem value="serving">serving</SelectItem>
-                </SelectContent>
-              </Select>
+              <UnitSelect value={comp.unit} onChange={(v) => updateRow(idx, { unit: v })} />
               {components.length > 1 && (
                 <Button
                   type="button"
                   variant="ghost"
-                  className="text-destructive w-11 h-11 p-0"
+                  size="icon"
+                  className="text-destructive"
                   onClick={() => removeComponent(idx)}
                 >
                   ×
@@ -400,14 +342,10 @@ export function MealForm() {
               )}
             </div>
           ))}
-        </div>
+        </section>
 
         <Button type="submit" disabled={submitting} className="self-start">
-          {submitting
-            ? "Saving..."
-            : isEdit
-              ? "Update Meal"
-              : "Create Meal"}
+          {submitting ? "Saving..." : isEdit ? "Update Meal" : "Create Meal"}
         </Button>
       </form>
     </div>

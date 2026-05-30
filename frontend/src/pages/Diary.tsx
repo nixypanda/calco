@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
@@ -7,6 +7,7 @@ import { getFoodDetail } from "../api/foods";
 import type { LogResponse, SummaryEntry } from "../api/logs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -14,6 +15,8 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { EmptyState } from "@/components/EmptyState";
+import { MacroRing } from "@/components/MacroRing";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -65,27 +68,18 @@ function getNutrientAmount(
 }
 
 function getMacroTotals(logs: LogResponse[]) {
-  const protein = logs.reduce(
-    (sum, log) => sum + getNutrientAmount(log.nutrients, "PROTEIN_G"),
-    0,
-  );
-  const carbs = logs.reduce(
-    (sum, log) => sum + getNutrientAmount(log.nutrients, "CARBS_G"),
-    0,
-  );
-  const fat = logs.reduce(
-    (sum, log) => sum + getNutrientAmount(log.nutrients, "FAT_G"),
-    0,
-  );
-  const totalMacroCalories = protein * 4 + carbs * 4 + fat * 9;
-
+  const protein = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "PROTEIN_G"), 0);
+  const carbs = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "CARBS_G"), 0);
+  const fat = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "FAT_G"), 0);
+  const total = protein * 4 + carbs * 4 + fat * 9;
+  const pct = (kcal: number) => (total > 0 ? (kcal / total) * 100 : 0);
   return {
     protein,
     carbs,
     fat,
-    proteinPct: totalMacroCalories > 0 ? (protein * 4 / totalMacroCalories) * 100 : 0,
-    carbsPct: totalMacroCalories > 0 ? (carbs * 4 / totalMacroCalories) * 100 : 0,
-    fatPct: totalMacroCalories > 0 ? (fat * 9 / totalMacroCalories) * 100 : 0,
+    proteinPct: pct(protein * 4),
+    carbsPct: pct(carbs * 4),
+    fatPct: pct(fat * 9),
   };
 }
 
@@ -94,9 +88,7 @@ function getNutrientVal(
   code: string,
 ): { amount: number; unit: string } | null {
   const entry = entries.find((n) => n.code === code);
-  return entry
-    ? { amount: parseAmount(entry.amount), unit: entry.unit }
-    : null;
+  return entry ? { amount: parseAmount(entry.amount), unit: entry.unit } : null;
 }
 
 function NutrientRing({
@@ -114,41 +106,18 @@ function NutrientRing({
   color: string;
   size?: number;
 }) {
-  const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const pct = max > 0 ? Math.min(value / max, 1) : 0;
-  const offset = circumference * (1 - pct);
-
+  const big = size >= 120;
   return (
-    <div className="relative flex flex-col items-center min-w-0 p-1 rounded-[10px] bg-transparent border-0 shadow-none">
-      <svg width={size} height={size} className="block">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="hsl(var(--border))"
-          strokeWidth={strokeWidth}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-          strokeLinecap="round"
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
-        <span className="text-foreground text-base font-extrabold leading-tight">{Math.round(value)}</span>
-        <span className="text-muted-foreground text-[0.625rem] font-bold uppercase">{unit}</span>
-      </div>
-      <span className="mt-1.5 text-muted-foreground text-xs font-bold">{label}</span>
+    <div className="flex flex-col items-center">
+      <MacroRing segments={[{ value, color }]} total={max} size={size} strokeWidth={big ? 10 : 6}>
+        <span className={big ? "text-3xl font-extrabold leading-tight" : "text-base font-extrabold leading-tight"}>
+          {Math.round(value)}
+        </span>
+        <span className={`text-muted-foreground font-bold uppercase ${big ? "text-xs" : "text-[0.625rem]"}`}>
+          {unit}
+        </span>
+      </MacroRing>
+      <span className={`mt-1.5 text-muted-foreground font-bold ${big ? "text-sm" : "text-xs"}`}>{label}</span>
     </div>
   );
 }
@@ -162,20 +131,22 @@ function SlotMacroSummary({
   mode: "grams" | "percent";
   onToggle: () => void;
 }) {
-  const macros = getMacroTotals(logs);
-
+  const m = getMacroTotals(logs);
+  const fmt = (g: number, p: number) =>
+    mode === "grams" ? `${g.toFixed(1)}g` : `${Math.round(p)}%`;
   return (
     <button
       type="button"
-      className="inline-flex items-center flex-wrap w-fit max-w-full min-h-[24px] p-0 bg-transparent border-0 text-muted-foreground text-[0.8125rem] font-semibold text-left cursor-pointer"
       onClick={onToggle}
       title="Toggle macro grams and percentages"
+      className="text-left text-muted-foreground text-sm font-semibold"
     >
-      carbs {mode === "grams" ? `${macros.carbs.toFixed(1)}g` : `${Math.round(macros.carbsPct)}%`}
-      {" ⋅ "}
-      protein {mode === "grams" ? `${macros.protein.toFixed(1)}g` : `${Math.round(macros.proteinPct)}%`}
-      {" ⋅ "}
-      fat {mode === "grams" ? `${macros.fat.toFixed(1)}g` : `${Math.round(macros.fatPct)}%`}
+      <span className="hidden sm:inline">
+        carbs {fmt(m.carbs, m.carbsPct)} ⋅ protein {fmt(m.protein, m.proteinPct)} ⋅ fat {fmt(m.fat, m.fatPct)}
+      </span>
+      <span className="sm:hidden">
+        C {fmt(m.carbs, m.carbsPct)} ⋅ P {fmt(m.protein, m.proteinPct)} ⋅ F {fmt(m.fat, m.fatPct)}
+      </span>
     </button>
   );
 }
@@ -214,6 +185,8 @@ export function Diary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
+  const [ringTile, setRingTile] = useState(0);
+  const ringScrollRef = useRef<HTMLDivElement>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem("theme");
     if (stored === "dark") return true;
@@ -242,9 +215,7 @@ export function Diary() {
 
       const productIds = [
         ...new Set(
-          logRes.items
-            .filter((l) => l.item.type === "product")
-            .map((l) => l.item.id),
+          logRes.items.filter((l) => l.item.type === "product").map((l) => l.item.id),
         ),
       ];
       if (productIds.length > 0) {
@@ -256,9 +227,7 @@ export function Diary() {
           ),
         );
         const nameMap: Record<string, string> = {};
-        for (const d of details) {
-          nameMap[d.id] = d.name;
-        }
+        for (const d of details) nameMap[d.id] = d.name;
         setFoodNames(nameMap);
       } else {
         setFoodNames({});
@@ -283,13 +252,10 @@ export function Diary() {
   const goNext = () => {
     const next = new Date(currentDate);
     next.setDate(next.getDate() + 1);
-    if (formatDate(next) <= todayString()) {
-      setCurrentDate(next);
-    }
+    if (formatDate(next) <= todayString()) setCurrentDate(next);
   };
 
   const isToday = dateStr === todayString();
-
   const kcal = getNutrientVal(summary, "ENERGY_KCAL");
   const protein = getNutrientVal(summary, "PROTEIN_G");
   const carbs = getNutrientVal(summary, "CARBS_G");
@@ -302,84 +268,88 @@ export function Diary() {
   const otherLogs = logs.filter((l) => !l.meal_slot);
 
   const slotCalories = (slot: string) =>
-    logs
-      .filter((l) => l.meal_slot === slot)
-      .reduce((sum, l) => sum + getCalories(l.nutrients), 0);
+    logs.filter((l) => l.meal_slot === slot).reduce((s, l) => s + getCalories(l.nutrients), 0);
 
-  const handleLogout = async () => {
-    await logout();
-  };
+  const toggleMacroMode = () =>
+    setMacroMode((c) => (c === "grams" ? "percent" : "grams"));
 
   const renderLogRow = (log: LogResponse) => (
-    <div key={log.id} className="flex items-stretch w-full bg-card border-b border-border last:border-b-0 hover:bg-accent/50">
-      <button
-        type="button"
-        className="flex items-center flex-1 min-w-0 min-h-[56px] gap-2 p-3 bg-transparent border-0 text-foreground cursor-pointer text-left"
-        onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
-      >
-        <span className="flex-1 min-w-0 truncate font-medium">
-          {foodNames[log.item.id] ?? "Loading..."}
-        </span>
-        <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
-          {log.quantity.amount} {log.quantity.unit}
-        </span>
-        <span className="min-w-[64px] text-right text-muted-foreground text-sm font-semibold whitespace-nowrap">
-          {Math.round(getCalories(log.nutrients))} kcal
-        </span>
-      </button>
-
-    </div>
+    <button
+      key={log.id}
+      type="button"
+      onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
+      className="flex items-center w-full min-h-14 gap-2 p-3 text-left border-b border-border last:border-b-0 hover:bg-accent/50"
+    >
+      <span className="flex-1 min-w-0 truncate font-medium">
+        {foodNames[log.item.id] ?? "Loading..."}
+      </span>
+      <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
+        {log.quantity.amount} {log.quantity.unit}
+      </span>
+      <span className="min-w-16 text-right text-muted-foreground text-sm font-semibold whitespace-nowrap">
+        {Math.round(getCalories(log.nutrients))} kcal
+      </span>
+    </button>
   );
 
   return (
-    <div className="w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+    <div className="page">
       <header className="flex items-center justify-between gap-4 mb-4">
-        <h1 className="min-w-0 overflow-hidden text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold tracking-normal leading-tight text-ellipsis whitespace-nowrap">CalCo</h1>
+        <h1>CalCo</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setDarkMode((d) => !d)}
             aria-label="Toggle dark mode"
-            title="Toggle dark mode"
           >
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
           <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              className="rounded-full gap-2 pl-2 pr-1 flex items-center h-auto py-1"
-              aria-label="Open profile menu"
-            >
-              <div className="w-[34px] h-[34px] rounded-full bg-primary text-primary-foreground text-[0.8125rem] font-extrabold flex items-center justify-center">
-                {getInitials(displayName)}
-              </div>
-              <span className="text-muted-foreground text-sm font-bold max-w-[9rem] truncate">{displayName}</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[210px]">
-            <DropdownMenuItem onClick={() => navigate("/meals")}>My Meals</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive" onClick={handleLogout}>Logout</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="rounded-full gap-2 pl-2 pr-3 h-auto py-1"
+                aria-label="Open profile menu"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-extrabold flex items-center justify-center">
+                  {getInitials(displayName)}
+                </div>
+                <span className="text-muted-foreground text-sm font-bold max-w-36 truncate">
+                  {displayName}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => navigate("/meals")}>My Meals</DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onClick={() => logout()}>
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
       {error && <ErrorBanner message={error} />}
 
-      <div className="flex flex-col gap-3.5 mb-4 p-3.5 bg-card border border-border rounded-[20px] shadow-sm">
-        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3 p-0 bg-transparent border-0 rounded-none shadow-none">
-          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-primary text-xl font-extrabold" onClick={goPrev}>
-            ←
+      <Card className="flex flex-col gap-4 p-4 mb-4">
+        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={goPrev} aria-label="Previous day">
+            <span className="text-xl font-extrabold">←</span>
           </Button>
-          <span className="min-w-0 overflow-hidden text-foreground text-base font-extrabold text-center text-ellipsis whitespace-nowrap">{displayDate(currentDate)}</span>
-          <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 text-primary text-xl font-extrabold" onClick={goNext} disabled={isToday}>
-            →
+          <span className="text-center font-extrabold truncate">{displayDate(currentDate)}</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={goNext}
+            disabled={isToday}
+            aria-label="Next day"
+          >
+            <span className="text-xl font-extrabold">→</span>
           </Button>
         </div>
 
-        <div className="grid grid-cols-4 max-sm:grid-cols-2 gap-1 mb-0 px-20 max-sm:gap-2">
+        <div className="hidden sm:grid sm:grid-cols-4 gap-1 px-20">
           <NutrientRing
             label="Calories"
             value={kcal?.amount ?? 0}
@@ -409,7 +379,68 @@ export function Diary() {
             color={MACRO_COLORS.fat}
           />
         </div>
-      </div>
+
+        <div className="sm:hidden flex flex-col gap-3">
+          <div
+            ref={ringScrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              setRingTile(Math.round(el.scrollLeft / el.clientWidth));
+            }}
+            className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            <div className="snap-center shrink-0 w-full flex justify-center py-2">
+              <NutrientRing
+                label="Calories"
+                value={kcal?.amount ?? 0}
+                unit={kcal?.unit ?? "kcal"}
+                max={DEFAULT_CALORIE_GOAL}
+                color={MACRO_COLORS.calories}
+                size={140}
+              />
+            </div>
+            <div className="snap-center shrink-0 w-full flex justify-around py-2">
+              <NutrientRing
+                label="Protein"
+                value={protein?.amount ?? 0}
+                unit={protein?.unit ?? "g"}
+                max={150}
+                color={MACRO_COLORS.protein}
+              />
+              <NutrientRing
+                label="Carbs"
+                value={carbs?.amount ?? 0}
+                unit={carbs?.unit ?? "g"}
+                max={250}
+                color={MACRO_COLORS.carbs}
+              />
+              <NutrientRing
+                label="Fat"
+                value={fat?.amount ?? 0}
+                unit={fat?.unit ?? "g"}
+                max={65}
+                color={MACRO_COLORS.fat}
+              />
+            </div>
+          </div>
+          <div className="flex justify-center gap-1.5">
+            {[0, 1].map((i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={i === 0 ? "Show calories" : "Show macros"}
+                onClick={() => {
+                  const el = ringScrollRef.current;
+                  if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+                }}
+                className={`h-1.5 w-1.5 rounded-full transition-colors ${
+                  ringTile === i ? "bg-foreground" : "bg-border"
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </Card>
 
       <main className="flex flex-col gap-3">
         {loading && (
@@ -421,68 +452,49 @@ export function Diary() {
         )}
 
         {!loading && logs.length === 0 && !error && (
-          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">No food logged for this day.</p>
+          <EmptyState>No food logged for this day.</EmptyState>
         )}
 
         {!loading &&
           mealSlotLogs.map(({ value, label, items }) => (
-            <section key={value} className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-              <div className="flex items-center gap-3 p-3.5 bg-muted/50 border-b border-border">
+            <Card key={value} className="overflow-hidden p-0">
+              <div className="flex items-center gap-3 p-4 bg-muted/50 border-b border-border">
                 <div className="flex flex-1 flex-col gap-1 min-w-0">
-                  <span className="text-foreground text-[1.0625rem] font-extrabold">{label}</span>
-                  <SlotMacroSummary
-                    logs={items}
-                    mode={macroMode}
-                    onToggle={() =>
-                      setMacroMode((current) =>
-                        current === "grams" ? "percent" : "grams",
-                      )
-                    }
-                  />
+                  <span className="font-extrabold">{label}</span>
+                  <SlotMacroSummary logs={items} mode={macroMode} onToggle={toggleMacroMode} />
                 </div>
-                <span className="flex-none text-muted-foreground text-sm font-extrabold whitespace-nowrap">
+                <span className="text-muted-foreground text-sm font-extrabold whitespace-nowrap">
                   {Math.round(slotCalories(value))} kcal
                 </span>
               </div>
-              {items.length === 0 && (
-                <p className="p-4 border-b border-border text-muted-foreground text-[0.9375rem] text-center">No items</p>
+              {items.length === 0 ? (
+                <p className="p-4 text-muted-foreground text-center">No items</p>
+              ) : (
+                items.map(renderLogRow)
               )}
-              {items.map((log) => renderLogRow(log))}
               <Button
                 variant="ghost"
                 className="w-full justify-start rounded-none h-12 border-t border-border text-primary font-extrabold"
-                onClick={() =>
-                  navigate("/search", {
-                    state: { mealSlot: value },
-                  })
-                }
+                onClick={() => navigate("/search", { state: { mealSlot: value } })}
               >
                 Add Food
               </Button>
-            </section>
+            </Card>
           ))}
 
         {!loading && otherLogs.length > 0 && (
-          <section className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-            <div className="flex items-center gap-3 p-3.5 bg-muted/50 border-b border-border">
+          <Card className="overflow-hidden p-0">
+            <div className="flex items-center gap-3 p-4 bg-muted/50 border-b border-border">
               <div className="flex flex-1 flex-col gap-1 min-w-0">
-                <span className="text-foreground text-[1.0625rem] font-extrabold">Other</span>
-                <SlotMacroSummary
-                  logs={otherLogs}
-                  mode={macroMode}
-                  onToggle={() =>
-                    setMacroMode((current) =>
-                      current === "grams" ? "percent" : "grams",
-                    )
-                  }
-                />
+                <span className="font-extrabold">Other</span>
+                <SlotMacroSummary logs={otherLogs} mode={macroMode} onToggle={toggleMacroMode} />
               </div>
-              <span className="flex-none text-muted-foreground text-sm font-extrabold whitespace-nowrap">
+              <span className="text-muted-foreground text-sm font-extrabold whitespace-nowrap">
                 {Math.round(slotCalories(""))} kcal
               </span>
             </div>
-            {otherLogs.map((log) => renderLogRow(log))}
-          </section>
+            {otherLogs.map(renderLogRow)}
+          </Card>
         )}
       </main>
     </div>

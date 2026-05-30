@@ -63,6 +63,29 @@ body {
   color: hsl(var(--foreground));
 }
 
+@layer base {
+  h1 {
+    @apply text-3xl font-extrabold tracking-tight max-sm:text-2xl;
+  }
+  h2 {
+    @apply text-base font-extrabold mb-3;
+  }
+}
+
+@utility page {
+  @apply w-full max-w-[760px] mx-auto p-4;
+  padding-top: calc(1rem + env(safe-area-inset-top));
+  padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+}
+
+@utility empty-state {
+  @apply flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center;
+}
+
+@utility input-select {
+  @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50;
+}
+
 .dark {
   --background: 0 0% 3.9%;
   --foreground: 0 0% 98%;

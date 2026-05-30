@@ -5,6 +5,7 @@ import { createLog } from "../api/logs";
 import type { ProductDetail, UnitItem } from "../api/foods";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -31,25 +34,6 @@ const MEAL_SLOTS = [
   { value: "dinner", label: "Dinner" },
   { value: "snack", label: "Snack" },
 ] as const;
-
-const wrapperClass = "w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]";
-
-function Header({ title, onBack }: { title: string; onBack: () => void }) {
-  return (
-    <header className="flex items-center justify-between gap-4 mb-4">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <button
-          className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
-          onClick={onBack}
-          aria-label="Back to Diary"
-        >
-          <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-        </button>
-        <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{title}</h1>
-      </div>
-    </header>
-  );
-}
 
 export function FoodDetail() {
   const { id } = useParams<{ id: string }>();
@@ -129,161 +113,158 @@ export function FoodDetail() {
 
   if (loading) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Detail" onBack={goHome} />
-        <main>
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-4 w-4/5" />
-            <Skeleton className="h-4 w-3/5" />
-            <Skeleton className="h-4 w-full" />
-          </div>
-        </main>
+      <div className="page">
+        <PageHeader title="Food Detail" onBack={goHome} backLabel="Back to Diary" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-4 w-full" />
+        </div>
       </div>
     );
   }
 
   if (error && !food) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Detail" onBack={goHome} />
-        <main><ErrorBanner message={error} /></main>
+      <div className="page">
+        <PageHeader title="Food Detail" onBack={goHome} backLabel="Back to Diary" />
+        <ErrorBanner message={error} />
       </div>
     );
   }
 
   if (!food) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Detail" onBack={goHome} />
-        <main>
-          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">Food not found.</p>
-        </main>
+      <div className="page">
+        <PageHeader title="Food Detail" onBack={goHome} backLabel="Back to Diary" />
+        <EmptyState>Food not found.</EmptyState>
       </div>
     );
   }
 
   const isCustom = food.source === "USER";
-  const selectClass = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <div className={wrapperClass}>
-      <Header title={food.name} onBack={goHome} />
+    <div className="page">
+      <PageHeader title={food.name} onBack={goHome} backLabel="Back to Diary" />
 
-      <main>
-        <div className="mb-5 flex flex-col gap-2">
-          <div className="flex items-center flex-wrap gap-1.5">
-            {food.brand && <span className="text-muted-foreground text-sm">{food.brand}</span>}
-            {food.category && <Badge variant="secondary">{food.category}</Badge>}
-            {isCustom && <Badge variant="outline">Custom</Badge>}
-          </div>
-          {food.serving_size_g && (
-            <p className="text-muted-foreground text-sm">Serving size: {food.serving_size_g}g</p>
+      <div className="mb-5 flex flex-col gap-2">
+        <div className="flex items-center flex-wrap gap-1.5">
+          {food.brand && (
+            <span className="text-muted-foreground text-sm">{food.brand}</span>
           )}
+          {food.category && <Badge variant="secondary">{food.category}</Badge>}
+          {isCustom && <Badge variant="outline">Custom</Badge>}
         </div>
-
-        <section className="mb-5">
-          <h2>Nutrition per 100g</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nutrient</TableHead>
-                <TableHead className="text-right w-[92px]">Amount</TableHead>
-                <TableHead className="text-right w-[92px]">Unit</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {food.nutrients.map((n) => (
-                <TableRow key={n.code}>
-                  <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
-                  <TableCell className="text-right">{n.amount_per_100g}</TableCell>
-                  <TableCell className="text-right">{n.unit || "-"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </section>
-
-        {food.servings.length > 0 && (
-          <section className="mb-5">
-            <h2>Servings</h2>
-            <div className="flex flex-col gap-3">
-              {food.servings.map((s, i) => (
-                <Card key={i} className="flex items-center justify-between gap-4 min-h-[50px] p-3">
-                  <span className="font-bold">{s.label}</span>
-                  <span className="text-muted-foreground text-sm">
-                    {s.quantity} {s.unit} ({s.grams}g)
-                  </span>
-                </Card>
-              ))}
-            </div>
-          </section>
+        {food.serving_size_g && (
+          <p className="text-muted-foreground text-sm">
+            Serving size: {food.serving_size_g}g
+          </p>
         )}
+      </div>
 
+      <section className="mb-5">
+        <h2>Nutrition per 100g</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nutrient</TableHead>
+              <TableHead className="text-right w-24">Amount</TableHead>
+              <TableHead className="text-right w-24">Unit</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {food.nutrients.map((n) => (
+              <TableRow key={n.code}>
+                <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
+                <TableCell className="text-right">{n.amount_per_100g}</TableCell>
+                <TableCell className="text-right">{n.unit || "-"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </section>
+
+      {food.servings.length > 0 && (
         <section className="mb-5">
-          <h2>Log Food</h2>
-          <div className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="log-meal-slot">Meal</label>
-              <select
-                id="log-meal-slot"
-                value={logSlot}
-                onChange={(e) => setLogSlot(e.target.value)}
-                className={selectClass}
-              >
-                <option value="__none__">No meal slot</option>
-                {MEAL_SLOTS.map((s) => (
-                  <option key={s.value} value={s.value}>{s.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="log-amount">Amount</label>
-              <div className="flex gap-2.5 items-stretch max-sm:flex-col">
-                <Input
-                  id="log-amount"
-                  type="number"
-                  className="flex-1 min-w-0"
-                  value={logAmount}
-                  onChange={(e) => setLogAmount(e.target.value)}
-                  min={0}
-                  step="any"
-                  placeholder="Amount"
-                />
-                <Select value={logUnit} onValueChange={setLogUnit}>
-                  <SelectTrigger className="w-[132px] flex-none">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {units.map((u) => (
-                      <SelectItem key={u.code} value={u.code}>
-                        {u.name} ({u.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <Button onClick={handleLog} disabled={logging}>
-              {logging ? "Logging..." : "Log Food"}
-            </Button>
-            {error && <ErrorBanner message={error} />}
+          <h2>Servings</h2>
+          <div className="flex flex-col gap-3">
+            {food.servings.map((s, i) => (
+              <Card key={i} className="flex items-center justify-between gap-4 p-3">
+                <span className="font-bold">{s.label}</span>
+                <span className="text-muted-foreground text-sm">
+                  {s.quantity} {s.unit} ({s.grams}g)
+                </span>
+              </Card>
+            ))}
           </div>
         </section>
+      )}
 
-        {isCustom && (
-          <section className="mb-5">
-            <h2>Manage Food</h2>
-            <div className="flex flex-wrap gap-2.5">
-              <Button variant="outline" onClick={() => navigate(`/foods/custom/${id}/edit`)}>
-                Edit
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-                {deleting ? "Deleting..." : "Delete"}
-              </Button>
+      <section className="mb-5">
+        <h2>Log Food</h2>
+        <div className="flex flex-col gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="log-meal-slot">Meal</Label>
+            <select
+              id="log-meal-slot"
+              value={logSlot}
+              onChange={(e) => setLogSlot(e.target.value)}
+              className="input-select"
+            >
+              <option value="__none__">No meal slot</option>
+              {MEAL_SLOTS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="log-amount">Amount</Label>
+            <div className="flex gap-2.5 items-stretch max-sm:flex-col">
+              <Input
+                id="log-amount"
+                type="number"
+                className="flex-1 min-w-0"
+                value={logAmount}
+                onChange={(e) => setLogAmount(e.target.value)}
+                min={0}
+                step="any"
+                placeholder="Amount"
+              />
+              <Select value={logUnit} onValueChange={setLogUnit}>
+                <SelectTrigger className="w-32 flex-none">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {units.map((u) => (
+                    <SelectItem key={u.code} value={u.code}>
+                      {u.name} ({u.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </section>
-        )}
-      </main>
+          </div>
+          <Button onClick={handleLog} disabled={logging}>
+            {logging ? "Logging..." : "Log Food"}
+          </Button>
+          {error && <ErrorBanner message={error} />}
+        </div>
+      </section>
+
+      {isCustom && (
+        <section className="mb-5">
+          <h2>Manage Food</h2>
+          <div className="flex flex-wrap gap-2.5">
+            <Button variant="outline" onClick={() => navigate(`/foods/custom/${id}/edit`)}>
+              Edit
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

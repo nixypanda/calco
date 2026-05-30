@@ -6,6 +6,7 @@ import { getMeal } from "../api/meals";
 import type { LogResponse } from "../api/logs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -16,6 +17,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { PageHeader } from "@/components/PageHeader";
+import { FieldRow } from "@/components/FieldRow";
+import { EmptyState } from "@/components/EmptyState";
+import { MacroRing } from "@/components/MacroRing";
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -61,94 +66,40 @@ function getMacroBreakdown(log: LogResponse) {
   const carbs = getNutrientAmount(log, "CARBS_G");
   const fat = getNutrientAmount(log, "FAT_G");
   const calories = getNutrientAmount(log, "ENERGY_KCAL");
-  const macroCalories = protein * 4 + carbs * 4 + fat * 9;
-
+  const totalKcal = protein * 4 + carbs * 4 + fat * 9;
+  const pct = (kcal: number) => (totalKcal > 0 ? (kcal / totalKcal) * 100 : 0);
   return {
     calories,
     protein,
     carbs,
     fat,
-    proteinPct: macroCalories > 0 ? (protein * 4 / macroCalories) * 100 : 0,
-    carbsPct: macroCalories > 0 ? (carbs * 4 / macroCalories) * 100 : 0,
-    fatPct: macroCalories > 0 ? (fat * 9 / macroCalories) * 100 : 0,
+    proteinPct: pct(protein * 4),
+    carbsPct: pct(carbs * 4),
+    fatPct: pct(fat * 9),
   };
 }
 
-function MacroDonut({ log }: { log: LogResponse }) {
-  const macros = getMacroBreakdown(log);
-  const size = 80;
-  const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const totalPct = macros.proteinPct + macros.carbsPct + macros.fatPct;
-  const hasData = totalPct > 0;
-  const proteinLen = hasData ? (macros.proteinPct / 100) * circumference : 0;
-  const carbsLen = hasData ? (macros.carbsPct / 100) * circumference : 0;
-  const fatLen = hasData ? (macros.fatPct / 100) * circumference : 0;
-
+function MacroBreakdown({ log }: { log: LogResponse }) {
+  const m = getMacroBreakdown(log);
   return (
-    <div className="flex items-center gap-16 px-20 py-4 bg-card border border-border rounded-xl shadow-sm max-sm:flex-row max-sm:items-center">
-      <div className="relative grid place-items-center w-20 h-20 flex-none rounded-full self-center">
-        <svg width={size} height={size} className="absolute inset-0 w-full h-full rounded-full">
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke="hsl(var(--border))"
-            strokeWidth={strokeWidth}
-          />
-          {hasData && (
-            <>
-              <circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={MACRO_COLORS.protein}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${proteinLen} ${circumference - proteinLen}`}
-                strokeDashoffset={0}
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              />
-              <circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={MACRO_COLORS.carbs}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${carbsLen} ${circumference - carbsLen}`}
-                strokeDashoffset={-proteinLen}
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              />
-              <circle
-                cx={size / 2}
-                cy={size / 2}
-                r={radius}
-                fill="none"
-                stroke={MACRO_COLORS.fat}
-                strokeWidth={strokeWidth}
-                strokeDasharray={`${fatLen} ${circumference - fatLen}`}
-                strokeDashoffset={-(proteinLen + carbsLen)}
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-              />
-            </>
-          )}
-        </svg>
-        <div className="flex items-center justify-center flex-col w-auto h-auto bg-transparent rounded-none">
-          <span className="text-foreground text-base font-extrabold leading-none">
-            {Math.round(macros.calories)}
-          </span>
-          <span className="text-muted-foreground text-xs font-bold">kcal</span>
-        </div>
+    <Card className="flex items-center gap-8 p-4">
+      <MacroRing
+        segments={[
+          { value: m.proteinPct, color: MACRO_COLORS.protein },
+          { value: m.carbsPct, color: MACRO_COLORS.carbs },
+          { value: m.fatPct, color: MACRO_COLORS.fat },
+        ]}
+        total={100}
+      >
+        <span className="text-base font-extrabold leading-none">{Math.round(m.calories)}</span>
+        <span className="text-muted-foreground text-xs font-bold">kcal</span>
+      </MacroRing>
+      <div className="grid grid-cols-3 flex-1">
+        <MacroStat name="Protein" grams={m.protein} percent={m.proteinPct} color={MACRO_COLORS.protein} />
+        <MacroStat name="Carbs" grams={m.carbs} percent={m.carbsPct} color={MACRO_COLORS.carbs} />
+        <MacroStat name="Fat" grams={m.fat} percent={m.fatPct} color={MACRO_COLORS.fat} />
       </div>
-      <div className="grid grid-cols-3 max-sm:grid-cols-3 gap-0 flex-1">
-        <MacroStat name="Protein" grams={macros.protein} percent={macros.proteinPct} color={MACRO_COLORS.protein} />
-        <MacroStat name="Carbs" grams={macros.carbs} percent={macros.carbsPct} color={MACRO_COLORS.carbs} />
-        <MacroStat name="Fat" grams={macros.fat} percent={macros.fatPct} color={MACRO_COLORS.fat} />
-      </div>
-    </div>
+    </Card>
   );
 }
 
@@ -164,28 +115,11 @@ function MacroStat({
   color: string;
 }) {
   return (
-    <div className="flex flex-col gap-[0.0625rem] min-w-0 p-[0.1875rem] bg-transparent border-l-[3px] text-center" style={{ borderColor: color }}>
+    <div className="flex flex-col border-l-[3px] px-2 text-center" style={{ borderColor: color }}>
       <span className="text-xs font-bold" style={{ color }}>{Math.round(percent)}%</span>
-      <span className="text-foreground text-[0.9375rem] font-extrabold">{grams.toFixed(1)}g</span>
+      <span className="font-extrabold">{grams.toFixed(1)}g</span>
       <span className="text-muted-foreground text-xs font-bold">{name}</span>
     </div>
-  );
-}
-
-function Header({ title, onBack }: { title: string; onBack: () => void }) {
-  return (
-    <header className="flex items-center justify-between gap-4 mb-4">
-      <div className="flex items-center gap-2.5 min-w-0">
-        <button
-          className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] pr-2 bg-transparent border-0 rounded-xl text-muted-foreground cursor-pointer text-base font-bold hover:bg-accent"
-          onClick={onBack}
-          aria-label="Back to Diary"
-        >
-          <span aria-hidden="true" className="text-[2rem] leading-[0.8]">‹</span>
-        </button>
-        <h1 className="text-foreground text-[1.75rem] max-sm:text-[1.5rem] font-extrabold">{title}</h1>
-      </div>
-    </header>
   );
 }
 
@@ -209,8 +143,7 @@ export function FoodLogDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const startEditing =
-    (location.state as { editing?: boolean } | null)?.editing ?? false;
+  const startEditing = (location.state as { editing?: boolean } | null)?.editing ?? false;
   const [log, setLog] = useState<LogResponse | null>(null);
   const [foodName, setFoodName] = useState("");
   const [loading, setLoading] = useState(true);
@@ -237,7 +170,6 @@ export function FoodLogDetail() {
         setEditUnit(logRes.quantity.unit);
         setEditSlot(logRes.meal_slot ?? "__none__");
         setEditNotes(logRes.notes ?? "");
-
         const name = await fetchItemName(logRes.item);
         if (!cancelled) setFoodName(name);
       })
@@ -289,200 +221,180 @@ export function FoodLogDetail() {
   };
 
   const goHome = () => navigate("/home");
-  const wrapperClass = "w-full max-w-[760px] mx-auto p-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1.5rem+env(safe-area-inset-bottom))]";
 
   if (loading) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Log" onBack={goHome} />
-        <main>
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-4 w-4/5" />
-            <Skeleton className="h-4 w-3/5" />
-            <Skeleton className="h-4 w-full" />
-          </div>
-        </main>
+      <div className="page">
+        <PageHeader title="Food Log" onBack={goHome} backLabel="Back to Diary" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-4 w-4/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="h-4 w-full" />
+        </div>
       </div>
     );
   }
 
   if (error && !log) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Log" onBack={goHome} />
-        <main><ErrorBanner message={error} /></main>
+      <div className="page">
+        <PageHeader title="Food Log" onBack={goHome} backLabel="Back to Diary" />
+        <ErrorBanner message={error} />
       </div>
     );
   }
 
   if (!log) {
     return (
-      <div className={wrapperClass}>
-        <Header title="Food Log" onBack={goHome} />
-        <main>
-          <p className="flex flex-col items-center justify-center gap-3.5 py-10 px-4 text-muted-foreground text-sm text-center">Log not found.</p>
-        </main>
+      <div className="page">
+        <PageHeader title="Food Log" onBack={goHome} backLabel="Back to Diary" />
+        <EmptyState>Log not found.</EmptyState>
       </div>
     );
   }
 
-  const selectClass = "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-sm text-right text-muted-foreground font-semibold";
+  const nutrientTable = (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Nutrient</TableHead>
+          <TableHead className="text-right w-24">Amount</TableHead>
+          <TableHead className="text-right w-24">Unit</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {log.nutrients.map((n) => (
+          <TableRow key={n.code}>
+            <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
+            <TableCell className="text-right">{parseFloat(n.amount).toFixed(1)}</TableCell>
+            <TableCell className="text-right">{n.unit || "-"}</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
 
   return (
-    <div className={wrapperClass}>
-      <Header title={editing ? "Edit Log" : "Food Log"} onBack={goHome} />
+    <div className="page">
+      <PageHeader
+        title={editing ? "Edit Log" : "Food Log"}
+        onBack={goHome}
+        backLabel="Back to Diary"
+      />
 
-      <main>
-        {error && <ErrorBanner message={error} />}
+      {error && <ErrorBanner message={error} />}
 
-        <div className="mb-5 flex flex-col gap-2">
-          <h2 className="mb-1 text-foreground text-xl font-extrabold">{foodName || "Loading..."}</h2>
-          <p className="text-muted-foreground text-sm font-semibold">{formatTimestamp(log.logged_at)}</p>
-        </div>
+      <div className="mb-5 flex flex-col gap-2">
+        <h2 className="text-xl">{foodName || "Loading..."}</h2>
+        <p className="text-muted-foreground text-sm font-semibold">
+          {formatTimestamp(log.logged_at)}
+        </p>
+      </div>
 
-        {editing ? (
-          <>
-            <section className="mb-5">
-              <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
-                <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
-                  <span>Meal Slot</span>
-                  <select
-                    value={editSlot}
-                    onChange={(e) => setEditSlot(e.target.value)}
-                    className={selectClass}
-                  >
-                    <option value="__none__">None</option>
-                    {MEAL_SLOTS.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
-                  <span>Amount</span>
-                  <Input
-                    type="number"
-                    value={editQty}
-                    onChange={(e) => setEditQty(e.target.value)}
-                    min={0}
-                    step="any"
-                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
-                  />
-                </label>
-                <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
-                  <span>Unit</span>
-                  <Input
-                    type="text"
-                    value={editUnit}
-                    onChange={(e) => setEditUnit(e.target.value)}
-                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
-                  />
-                </label>
-                <label className="grid grid-cols-[minmax(96px,0.8fr)_minmax(0,1.4fr)] items-center gap-4 min-h-[56px] p-2.5 border-b border-border last:border-b-0 max-sm:grid-cols-[minmax(82px,0.7fr)_minmax(0,1.3fr)] max-sm:gap-3">
-                  <span>Notes</span>
-                  <Input
-                    type="text"
-                    value={editNotes}
-                    onChange={(e) => setEditNotes(e.target.value)}
-                    placeholder="Optional notes"
-                    className="text-right text-muted-foreground font-semibold border-0 bg-transparent h-[38px] px-0"
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2.5 p-3.5 border-t border-border">
-                  <Button onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving..." : "Save"}
-                  </Button>
-                  <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-                    {deleting ? "Deleting..." : "Delete"}
-                  </Button>
-                </div>
-              </div>
-            </section>
-
-            <section className="mb-5">
-              <h2>Macro Breakdown</h2>
-              <MacroDonut log={log} />
-            </section>
-
-            <section className="mb-5">
-              <h2>Nutrients</h2>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nutrient</TableHead>
-                    <TableHead className="text-right w-[92px]">Amount</TableHead>
-                    <TableHead className="text-right w-[92px]">Unit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {log.nutrients.map((n) => (
-                    <TableRow key={n.code}>
-                      <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
-                      <TableCell className="text-right">{parseFloat(n.amount).toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{n.unit || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </section>
-          </>
-        ) : (
-          <>
-            <section className="mb-5">
-              <h2>Details</h2>
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">Meal Slot</TableCell>
-                    <TableCell className="text-right">{mealSlotLabel(log.meal_slot)}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Quantity</TableCell>
-                    <TableCell className="text-right">{log.quantity.amount} {log.quantity.unit}</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Notes</TableCell>
-                    <TableCell className="text-right">{log.notes || "-"}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </section>
-
-            <section className="mb-5">
-              <h2>Macro Breakdown</h2>
-              <MacroDonut log={log} />
-            </section>
-
-            <section className="mb-5">
-              <h2>Nutrients</h2>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nutrient</TableHead>
-                    <TableHead className="text-right w-[92px]">Amount</TableHead>
-                    <TableHead className="text-right w-[92px]">Unit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {log.nutrients.map((n) => (
-                    <TableRow key={n.code}>
-                      <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
-                      <TableCell className="text-right">{parseFloat(n.amount).toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{n.unit || "-"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </section>
-
-            <div className="flex flex-wrap gap-2.5">
-              <Button onClick={() => setEditing(true)}>Edit</Button>
+      {editing ? (
+        <>
+          <Card className="mb-5 overflow-hidden p-0">
+            <FieldRow label="Meal Slot">
+              <select
+                value={editSlot}
+                onChange={(e) => setEditSlot(e.target.value)}
+                className="input-select text-right text-muted-foreground font-semibold"
+              >
+                <option value="__none__">None</option>
+                {MEAL_SLOTS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </FieldRow>
+            <FieldRow label="Amount">
+              <Input
+                type="number"
+                value={editQty}
+                onChange={(e) => setEditQty(e.target.value)}
+                min={0}
+                step="any"
+                className="text-right text-muted-foreground font-semibold border-0 bg-transparent px-0 shadow-none"
+              />
+            </FieldRow>
+            <FieldRow label="Unit">
+              <Input
+                type="text"
+                value={editUnit}
+                onChange={(e) => setEditUnit(e.target.value)}
+                className="text-right text-muted-foreground font-semibold border-0 bg-transparent px-0 shadow-none"
+              />
+            </FieldRow>
+            <FieldRow label="Notes">
+              <Input
+                type="text"
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                placeholder="Optional notes"
+                className="text-right text-muted-foreground font-semibold border-0 bg-transparent px-0 shadow-none"
+              />
+            </FieldRow>
+            <div className="flex flex-wrap gap-2.5 p-4 border-t border-border">
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? "Saving..." : "Save"}
+              </Button>
               <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
                 {deleting ? "Deleting..." : "Delete"}
               </Button>
             </div>
-          </>
-        )}
-      </main>
+          </Card>
+
+          <section className="mb-5">
+            <h2>Macro Breakdown</h2>
+            <MacroBreakdown log={log} />
+          </section>
+
+          <section className="mb-5">
+            <h2>Nutrients</h2>
+            {nutrientTable}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="mb-5">
+            <h2>Details</h2>
+            <Table>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">Meal Slot</TableCell>
+                  <TableCell className="text-right">{mealSlotLabel(log.meal_slot)}</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Quantity</TableCell>
+                  <TableCell className="text-right">
+                    {log.quantity.amount} {log.quantity.unit}
+                  </TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">Notes</TableCell>
+                  <TableCell className="text-right">{log.notes || "-"}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </section>
+
+          <section className="mb-5">
+            <h2>Macro Breakdown</h2>
+            <MacroBreakdown log={log} />
+          </section>
+
+          <section className="mb-5">
+            <h2>Nutrients</h2>
+            {nutrientTable}
+          </section>
+
+          <div className="flex flex-wrap gap-2.5">
+            <Button onClick={() => setEditing(true)}>Edit</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

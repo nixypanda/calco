@@ -73,9 +73,7 @@ export function AdminDashboard() {
       await resetPassword(userId, resetPass.password);
       setResetPass(null);
     } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "Failed to reset password",
-      );
+      setError(err instanceof Error ? err.message : "Failed to reset password");
     }
   };
 
@@ -100,11 +98,13 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="admin-page">
-      <header>
+    <div className="page">
+      <header className="flex items-center justify-between gap-4 mb-4">
         <h1>Admin Dashboard</h1>
-        <div className="header-right">
-          <span>Logged in as <strong>{identity?.username}</strong></span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">
+            Logged in as <strong>{identity?.username}</strong>
+          </span>
           <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
         </div>
       </header>
@@ -113,7 +113,7 @@ export function AdminDashboard() {
 
       <section>
         <div className="flex items-center justify-between gap-3 mb-3.5">
-          <h2>Users</h2>
+          <h2 className="mb-0">Users</h2>
           <Button variant="outline" size="sm" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? "Cancel" : "Create User"}
           </Button>
@@ -124,26 +124,20 @@ export function AdminDashboard() {
             <Input
               placeholder="Username"
               value={newUser.username}
-              onChange={(e) =>
-                setNewUser({ ...newUser, username: e.target.value })
-              }
+              onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
               className="flex-1"
             />
             <Input
               placeholder="Display Name"
               value={newUser.display_name}
-              onChange={(e) =>
-                setNewUser({ ...newUser, display_name: e.target.value })
-              }
+              onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
               className="flex-1"
             />
             <Input
               type="password"
               placeholder="Initial Password"
               value={newUser.initial_password}
-              onChange={(e) =>
-                setNewUser({ ...newUser, initial_password: e.target.value })
-              }
+              onChange={(e) => setNewUser({ ...newUser, initial_password: e.target.value })}
               className="flex-1"
             />
             <Button type="submit">Save</Button>
@@ -201,14 +195,12 @@ export function AdminDashboard() {
         )}
 
         {resetPass && (
-          <div className="flex gap-2.5 mb-4">
+          <div className="flex gap-2.5 mt-4">
             <Input
               type="password"
               placeholder="New password"
               value={resetPass.password}
-              onChange={(e) =>
-                setResetPass({ ...resetPass, password: e.target.value })
-              }
+              onChange={(e) => setResetPass({ ...resetPass, password: e.target.value })}
               className="flex-1"
             />
             <Button onClick={() => handleResetPassword(resetPass.userId)}>
