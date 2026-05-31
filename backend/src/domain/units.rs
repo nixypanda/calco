@@ -25,10 +25,6 @@ impl UnitConverter {
         self.mass_factors.get(&unit.0).map(|factor| amount * *factor)
     }
 
-    pub fn is_intrinsic_mass(&self, unit: &UnitCode) -> bool {
-        self.mass_factors.contains_key(&unit.0)
-    }
-
     pub fn mass_unit_codes(&self) -> impl Iterator<Item = &str> {
         self.mass_factors.keys().map(|s| s.as_str())
     }
@@ -84,10 +80,14 @@ mod tests {
 
     #[test]
     fn is_intrinsic_mass() {
+        fn is_intrinsic_mass(converter: &UnitConverter, unit: &UnitCode) -> bool {
+            converter.mass_to_grams(Decimal::from(1), unit).is_some()
+        }
+
         let c = sample();
-        assert!(c.is_intrinsic_mass(&UnitCode("g".into())));
-        assert!(c.is_intrinsic_mass(&UnitCode("mg".into())));
-        assert!(!c.is_intrinsic_mass(&UnitCode("cup".into())));
-        assert!(!c.is_intrinsic_mass(&UnitCode("serving".into())));
+        assert!(is_intrinsic_mass(&c, &UnitCode("g".into())));
+        assert!(is_intrinsic_mass(&c, &UnitCode("mg".into())));
+        assert!(!is_intrinsic_mass(&c, &UnitCode("cup".into())));
+        assert!(!is_intrinsic_mass(&c, &UnitCode("serving".into())));
     }
 }

@@ -57,10 +57,6 @@ impl Meal {
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == user_id
     }
-
-    pub fn has_at_least_one_component(&self) -> bool {
-        !self.components.is_empty()
-    }
 }
 
 #[derive(Debug)]
@@ -137,6 +133,10 @@ mod tests {
 
     #[test]
     fn test_meal_has_at_least_one_component() {
+        fn has_at_least_one_component(meal: &Meal) -> bool {
+            !meal.components.is_empty()
+        }
+
         let user_id = Uuid::new_v4();
         let meal_empty = Meal {
             id: MealId::new(),
@@ -149,7 +149,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
-        assert!(!meal_empty.has_at_least_one_component());
+        assert!(!has_at_least_one_component(&meal_empty));
 
         let meal_with_component = Meal {
             components: vec![MealComponent {
@@ -160,7 +160,7 @@ mod tests {
             }],
             ..meal_empty
         };
-        assert!(meal_with_component.has_at_least_one_component());
+        assert!(has_at_least_one_component(&meal_with_component));
     }
 
     #[test]

@@ -30,7 +30,6 @@ pub trait UserProfileRepository: Send + Sync {
     async fn find_by_identity_id(&self, identity_id: IdentityId) -> Result<Option<UserProfile>, AuthError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
-    async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError>;
     async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError>;
 }
 

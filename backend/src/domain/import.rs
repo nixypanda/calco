@@ -17,9 +17,6 @@ impl From<Uuid> for ImportId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImportSource(pub String);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportStatus {
     Pending,
@@ -72,16 +69,6 @@ impl ImportJob {
             failed_at: None,
         }
     }
-
-    pub fn mark_committed(&mut self) {
-        self.status = ImportStatus::Committed;
-        self.committed_at = Some(Utc::now());
-    }
-
-    pub fn mark_failed(&mut self) {
-        self.status = ImportStatus::Failed;
-        self.failed_at = Some(Utc::now());
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -125,20 +112,3 @@ pub struct ImportErrorRecord {
     pub error: String,
     pub raw_payload: Option<serde_json::Value>,
 }
-
-#[derive(Debug)]
-pub enum ImportDomainError {
-    InvalidStatus(String),
-    Validation(String),
-}
-
-impl std::fmt::Display for ImportDomainError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ImportDomainError::InvalidStatus(msg) => write!(f, "invalid status: {msg}"),
-            ImportDomainError::Validation(msg) => write!(f, "validation: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for ImportDomainError {}

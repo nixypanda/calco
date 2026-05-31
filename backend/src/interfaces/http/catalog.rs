@@ -139,11 +139,6 @@ pub struct CreateServingEntry {
 }
 
 #[derive(Serialize)]
-pub struct CreateFoodResponse {
-    pub id: Uuid,
-}
-
-#[derive(Serialize)]
 pub struct NutrientListResponse {
     pub items: Vec<NutrientItem>,
 }
@@ -183,7 +178,7 @@ async fn search_products_handler(
     let services = &state.catalog_services;
     let products = services.search_products(SearchCriteria {
         query: query.q,
-        user_id: Some(auth.1.id),
+        user_id: Some(auth.0.id),
     }).await;
 
     match products {
@@ -232,7 +227,7 @@ async fn product_detail_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_product(ProductId(id)).await {
-        Ok(product) if product.visibility == ProductVisibility::Global || product.is_owned_by(auth.1.id) => {
+        Ok(product) if product.visibility == ProductVisibility::Global || product.is_owned_by(auth.0.id) => {
             match services.allowed_units_for_product(&product).await {
                 Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap()).into_response(),
                 Err(e) => internal_error(e).into_response(),
@@ -254,7 +249,7 @@ async fn create_custom_food_handler(
     let services = &state.catalog_services;
 
     match services.create_custom_food(
-        auth.1.id,
+        auth.0.id,
         req.name,
         req.brand,
         req.category,
@@ -302,7 +297,7 @@ async fn update_custom_food_handler(
 
     match services.update_custom_food(
         ProductId(id),
-        auth.1.id,
+        auth.0.id,
         req.name,
         req.brand,
         req.category,
@@ -347,7 +342,7 @@ async fn delete_custom_food_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
 
-    match services.delete_custom_food(ProductId(id), auth.1.id).await {
+    match services.delete_custom_food(ProductId(id), auth.0.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("product {id} not found")).into_response()

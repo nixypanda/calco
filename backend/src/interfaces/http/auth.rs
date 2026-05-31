@@ -82,7 +82,7 @@ impl FromRequestParts<AppState> for AuthIdentity {
     }
 }
 
-pub struct AuthUser(pub Identity, pub UserProfile);
+pub struct AuthUser(pub UserProfile);
 
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AuthErrorResponse;
@@ -109,11 +109,11 @@ impl FromRequestParts<AppState> for AuthUser {
             .profile
             .ok_or_else(AuthErrorResponse::forbidden)?;
 
-        Ok(AuthUser(result.identity, profile))
+        Ok(AuthUser(profile))
     }
 }
 
-pub struct AuthAdmin(pub Identity);
+pub struct AuthAdmin;
 
 impl FromRequestParts<AppState> for AuthAdmin {
     type Rejection = AuthErrorResponse;
@@ -136,7 +136,7 @@ impl FromRequestParts<AppState> for AuthAdmin {
             return Err(AuthErrorResponse::forbidden());
         }
 
-        Ok(AuthAdmin(result.identity))
+        Ok(AuthAdmin)
     }
 }
 
@@ -170,7 +170,6 @@ impl AuthErrorResponse {
             AuthError::AdminAlreadyExists => (StatusCode::CONFLICT, "admin_already_exists"),
             AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
             AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            AuthError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
         };
         let message = match err {

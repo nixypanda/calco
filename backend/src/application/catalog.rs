@@ -30,13 +30,6 @@ pub trait UnitRepository: Send + Sync {
     async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
 }
 
-#[async_trait]
-pub trait TransactionManager: Send + Sync {
-    async fn run<F, T>(&self, f: F) -> Result<T, CatalogError>
-    where
-        F: Send + FnOnce() -> Result<T, CatalogError>;
-}
-
 // ─── Use Cases ─────────────────────────────────────────────────
 
 pub struct SearchCriteria {
@@ -197,7 +190,6 @@ impl CatalogServices {
                     grams: s.grams,
                 })
                 .collect(),
-            deleted_at: None,
         };
         self.product_repo.create(&product).await?;
         Ok(product)

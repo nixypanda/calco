@@ -105,7 +105,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let row = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes, created_at, updated_at
+                   quantity, unit, notes
             FROM food_logs WHERE id = $1
             "#,
         )
@@ -132,7 +132,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let rows = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes, created_at, updated_at
+                   quantity, unit, notes
             FROM food_logs
             WHERE user_id = $1 AND logged_at >= $2 AND logged_at < $3
             ORDER BY logged_at DESC
@@ -239,8 +239,7 @@ impl ProductLookup for PostgresFoodLogRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   category, default_quantity, default_unit, serving_size_g, deleted_at,
-                   created_at, updated_at
+                   category, default_quantity, default_unit, serving_size_g
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
@@ -279,7 +278,7 @@ impl MealLookup for PostgresFoodLogRepository {
             Some(r) => {
                 let component_rows = sqlx::query_as::<_, MealComponentLookupRow>(
                     r#"
-                    SELECT id, component_product_id, component_meal_id, quantity, unit
+                    SELECT id, component_product_id, quantity, unit
                     FROM meal_components WHERE meal_id = $1 ORDER BY created_at
                     "#,
                 )
@@ -389,7 +388,6 @@ impl PostgresFoodLogRepository {
             serving_size_g: r.serving_size_g,
             nutrients,
             servings,
-            deleted_at: r.deleted_at,
         })
     }
 }
@@ -478,8 +476,6 @@ struct FoodLogRow {
     quantity: Decimal,
     unit: String,
     notes: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -511,9 +507,6 @@ struct ProductRow {
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     serving_size_g: Option<Decimal>,
-    deleted_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -556,7 +549,6 @@ struct MealLookupRow {
 struct MealComponentLookupRow {
     id: Uuid,
     component_product_id: Option<Uuid>,
-    component_meal_id: Option<Uuid>,
     quantity: Decimal,
     unit: String,
 }

@@ -636,7 +636,6 @@ mod tests {
                 },
             ],
             servings: vec![],
-            deleted_at: None,
         }
     }
 

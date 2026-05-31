@@ -8,7 +8,6 @@ use crate::domain::import::*;
 pub trait ImportRepository: Send + Sync {
     async fn create_job(&self, job: &ImportJob) -> Result<(), ImportError>;
     async fn find_job(&self, id: ImportId) -> Result<Option<ImportJob>, ImportError>;
-    async fn update_job_status(&self, id: ImportId, status: &ImportStatus) -> Result<(), ImportError>;
     async fn stage_foods(&self, import_id: ImportId, foods: &[StagedImportProduct]) -> Result<(), ImportError>;
     async fn stage_nutrients(&self, import_id: ImportId, nutrients: &[StagedImportNutrient]) -> Result<(), ImportError>;
     async fn stage_servings(&self, import_id: ImportId, servings: &[StagedImportServing]) -> Result<(), ImportError>;
@@ -217,7 +216,6 @@ pub enum ImportError {
     InvalidStatus(String),
     Validation(String),
     Database(String),
-    Internal(String),
 }
 
 impl std::fmt::Display for ImportError {
@@ -227,21 +225,11 @@ impl std::fmt::Display for ImportError {
             ImportError::InvalidStatus(msg) => write!(f, "invalid status: {msg}"),
             ImportError::Validation(msg) => write!(f, "validation: {msg}"),
             ImportError::Database(msg) => write!(f, "database: {msg}"),
-            ImportError::Internal(msg) => write!(f, "internal: {msg}"),
         }
     }
 }
 
 impl std::error::Error for ImportError {}
-
-impl From<ImportDomainError> for ImportError {
-    fn from(e: ImportDomainError) -> Self {
-        match e {
-            ImportDomainError::InvalidStatus(msg) => ImportError::InvalidStatus(msg),
-            ImportDomainError::Validation(msg) => ImportError::Validation(msg),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -293,10 +281,6 @@ mod tests {
             Ok(jobs.iter().find(|j| j.id == id).cloned())
         }
 
-        async fn update_job_status(&self, _id: ImportId, _status: &ImportStatus) -> Result<(), ImportError> {
-            Ok(())
-        }
-
         async fn stage_foods(&self, _import_id: ImportId, foods: &[StagedImportProduct]) -> Result<(), ImportError> {
             self.foods.lock().unwrap().extend(foods.iter().cloned());
             Ok(())
@@ -322,7 +306,7 @@ mod tests {
         }
 
         async fn commit_import(&self, _import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
-            self.commit_result.lock().unwrap().clone().ok_or_else(|| ImportError::Internal("no result set".into()))
+            self.commit_result.lock().unwrap().clone().ok_or_else(|| ImportError::Database("no result set".into()))
         }
 
         async fn get_errors(&self, _import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError> {

@@ -1,4 +1,3 @@
-use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
@@ -100,10 +99,6 @@ impl NutrientConfidence {
 pub struct Nutrient(pub NutrientCode, pub String, pub UnitCode, pub String);
 
 impl Nutrient {
-    pub fn new(code: NutrientCode, name: String, unit: UnitCode, category: String) -> Self {
-        Self(code, name, unit, category)
-    }
-
     pub fn code(&self) -> &NutrientCode {
         &self.0
     }
@@ -124,20 +119,8 @@ impl Nutrient {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NutrientCode(pub String);
 
-impl NutrientCode {
-    pub fn new(s: String) -> Self {
-        Self(s)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnitCode(pub String);
-
-impl UnitCode {
-    pub fn new(s: String) -> Self {
-        Self(s)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Barcode(pub String);
@@ -173,16 +156,11 @@ pub struct Product {
     pub serving_size_g: Option<Decimal>,
     pub nutrients: Vec<ProductNutrient>,
     pub servings: Vec<ProductServing>,
-    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 impl Product {
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == Some(user_id)
-    }
-
-    pub fn mark_deleted(&mut self) {
-        self.deleted_at = Some(Utc::now());
     }
 }
 

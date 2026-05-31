@@ -116,7 +116,6 @@ pub enum AuthError {
     AdminAlreadyExists,
     UsernameTaken,
     Unauthorized,
-    Forbidden,
     Internal(String),
 }
 
@@ -132,7 +131,6 @@ impl std::fmt::Display for AuthError {
             AuthError::AdminAlreadyExists => write!(f, "Admin already exists"),
             AuthError::UsernameTaken => write!(f, "Username is already taken"),
             AuthError::Unauthorized => write!(f, "Unauthorized"),
-            AuthError::Forbidden => write!(f, "Forbidden"),
             AuthError::Internal(msg) => write!(f, "Internal error: {msg}"),
         }
     }

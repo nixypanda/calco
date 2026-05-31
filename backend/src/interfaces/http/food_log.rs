@@ -180,7 +180,7 @@ async fn create_log_handler(
     let services = &state.food_log_services;
 
     let input = LogFoodInput {
-        user_id: auth.1.id,
+        user_id: auth.0.id,
         logged_at: req.logged_at,
         meal_slot: req.meal_slot,
         item_type: req.item.item_type,
@@ -216,7 +216,7 @@ async fn get_log_handler(
 
     match services.get_food_log(FoodLogId(id)).await {
         Ok(log) => {
-            if !log.is_owned_by(auth.1.id) {
+            if !log.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your food log".into()).into_response();
             }
             let resp = log_to_response(&log);
@@ -246,7 +246,7 @@ async fn list_logs_handler(
         Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
     };
 
-    match services.get_logs_for_range(auth.1.id, from, to).await {
+    match services.get_logs_for_range(auth.0.id, from, to).await {
         Ok(logs) => {
             let items: Vec<LogResponse> = logs.iter().map(log_to_response).collect();
             Json(LogListResponse {
@@ -277,7 +277,7 @@ async fn update_log_handler(
         notes: req.notes,
     };
 
-    match services.update_food_log(FoodLogId(id), auth.1.id, input).await {
+    match services.update_food_log(FoodLogId(id), auth.0.id, input).await {
         Ok(log) => {
             let resp = log_to_response(&log);
             Json(resp).into_response()
@@ -296,7 +296,7 @@ async fn delete_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    match services.delete_food_log(FoodLogId(id), auth.1.id).await {
+    match services.delete_food_log(FoodLogId(id), auth.0.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(FoodLogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
@@ -325,7 +325,7 @@ async fn summary_handler(
 
     let codes = query.codes.map(|c| c.split(',').map(|s| s.trim().to_string()).collect());
 
-    match services.get_summary(auth.1.id, from, to, codes).await {
+    match services.get_summary(auth.0.id, from, to, codes).await {
         Ok(totals) => {
             Json(SummaryResponse {
                 from: query.from,

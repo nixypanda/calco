@@ -283,18 +283,6 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         Ok(())
     }
 
-    async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError> {
-        let rows = sqlx::query_as::<_, ProfileRow>(
-            "SELECT id, identity_id, display_name, created_at, updated_at \
-             FROM user_profiles ORDER BY created_at DESC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
-
-        Ok(rows.into_iter().map(|r| r.into()).collect())
-    }
-
     async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError> {
         let rows = sqlx::query_as::<_, ProfileWithIdentityRow>(
             "SELECT p.id AS profile_id, p.identity_id, p.display_name, \

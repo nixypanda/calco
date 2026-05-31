@@ -225,8 +225,7 @@ impl MealProductLookup for PostgresMealRepository {
         let row = sqlx::query_as::<_, MealProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   category, default_quantity, default_unit, serving_size_g, deleted_at,
-                   created_at, updated_at
+                   category, default_quantity, default_unit, serving_size_g
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
@@ -315,7 +314,6 @@ impl PostgresMealRepository {
             serving_size_g: r.serving_size_g,
             nutrients,
             servings,
-            deleted_at: r.deleted_at,
         })
     }
 }
@@ -334,9 +332,6 @@ struct MealProductRow {
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     serving_size_g: Option<Decimal>,
-    deleted_at: Option<DateTime<Utc>>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]

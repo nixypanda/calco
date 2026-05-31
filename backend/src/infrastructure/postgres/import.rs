@@ -47,26 +47,6 @@ impl ImportRepository for PostgresImportRepository {
         Ok(row.map(|r| r.into_job()))
     }
 
-    async fn update_job_status(&self, id: ImportId, status: &ImportStatus) -> Result<(), ImportError> {
-        let (status_str, committed_at, failed_at) = match status {
-            ImportStatus::Committed => (status.as_str(), Some(Utc::now()), None),
-            ImportStatus::Failed => (status.as_str(), None, Some(Utc::now())),
-            _ => (status.as_str(), None::<DateTime<Utc>>, None::<DateTime<Utc>>),
-        };
-
-        sqlx::query(
-            r#"UPDATE imports SET status = $1, committed_at = COALESCE($2, committed_at), failed_at = COALESCE($3, failed_at) WHERE id = $4"#,
-        )
-        .bind(status_str)
-        .bind(committed_at)
-        .bind(failed_at)
-        .bind(id.0)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
-        Ok(())
-    }
-
     async fn stage_foods(&self, import_id: ImportId, foods: &[StagedImportProduct]) -> Result<(), ImportError> {
         if foods.is_empty() {
             return Ok(());

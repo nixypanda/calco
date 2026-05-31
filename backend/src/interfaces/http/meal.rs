@@ -173,7 +173,7 @@ async fn create_meal_handler(
     let services = &state.meal_services;
 
     let input = CreateMealInput {
-        user_id: auth.1.id,
+        user_id: auth.0.id,
         name: req.name,
         notes: req.notes,
         total_quantity_amount: req.total_quantity.as_ref().map(|q| q.amount),
@@ -206,7 +206,7 @@ async fn get_meal_handler(
 
     match services.get_meal(MealId(id)).await {
         Ok(meal) => {
-            if !meal.is_owned_by(auth.1.id) {
+            if !meal.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your meal".into()).into_response();
             }
             let resp = meal_to_response(&meal);
@@ -223,7 +223,7 @@ async fn list_meals_handler(
 ) -> impl IntoResponse {
     let services = &state.meal_services;
 
-    match services.list_meals(auth.1.id).await {
+    match services.list_meals(auth.0.id).await {
         Ok(meals) => {
             let items: Vec<MealResponse> = meals.iter().map(meal_to_response).collect();
             Json(MealListResponse { items }).into_response()
@@ -256,7 +256,7 @@ async fn update_meal_handler(
         }),
     };
 
-    match services.update_meal(MealId(id), auth.1.id, input).await {
+    match services.update_meal(MealId(id), auth.0.id, input).await {
         Ok(meal) => {
             let resp = meal_to_response(&meal);
             Json(resp).into_response()
@@ -275,7 +275,7 @@ async fn delete_meal_handler(
 ) -> impl IntoResponse {
     let services = &state.meal_services;
 
-    match services.delete_meal(MealId(id), auth.1.id).await {
+    match services.delete_meal(MealId(id), auth.0.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
@@ -293,7 +293,7 @@ async fn meal_nutrients_handler(
 
     match services.get_meal(MealId(id)).await {
         Ok(meal) => {
-            if !meal.is_owned_by(auth.1.id) {
+            if !meal.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your meal".into()).into_response();
             }
         }
