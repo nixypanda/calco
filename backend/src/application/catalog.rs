@@ -4,6 +4,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::domain::catalog::*;
+use crate::domain::units::UnitConverter;
 
 // ─── Repository Ports ──────────────────────────────────────────
 
@@ -26,6 +27,7 @@ pub trait NutrientRepository: Send + Sync {
 #[async_trait]
 pub trait UnitRepository: Send + Sync {
     async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError>;
+    async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
 }
 
 #[async_trait]
@@ -46,6 +48,7 @@ pub struct CatalogServices {
     pub product_repo: Arc<dyn ProductRepository>,
     pub nutrient_repo: Arc<dyn NutrientRepository>,
     pub unit_repo: Arc<dyn UnitRepository>,
+    pub unit_converter: Arc<UnitConverter>,
 }
 
 impl Clone for CatalogServices {
@@ -54,6 +57,7 @@ impl Clone for CatalogServices {
             product_repo: self.product_repo.clone(),
             nutrient_repo: self.nutrient_repo.clone(),
             unit_repo: self.unit_repo.clone(),
+            unit_converter: self.unit_converter.clone(),
         }
     }
 }
@@ -63,8 +67,34 @@ impl CatalogServices {
         product_repo: Arc<dyn ProductRepository>,
         nutrient_repo: Arc<dyn NutrientRepository>,
         unit_repo: Arc<dyn UnitRepository>,
+        unit_converter: Arc<UnitConverter>,
     ) -> Self {
-        Self { product_repo, nutrient_repo, unit_repo }
+        Self { product_repo, nutrient_repo, unit_repo, unit_converter }
+    }
+
+    pub async fn allowed_units_for_product(
+        &self,
+        product: &Product,
+    ) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
+        let all_units = self.unit_repo.list_all().await?;
+
+        let mut allowed: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for code in self.unit_converter.mass_unit_codes() {
+            allowed.insert(code.to_string());
+        }
+        for serving in &product.servings {
+            allowed.insert(serving.unit.0.clone());
+        }
+        if product.serving_size_g.is_some() {
+            if let Some(default_unit) = product.default_unit.as_ref() {
+                allowed.insert(default_unit.0.clone());
+            }
+        }
+
+        Ok(all_units
+            .into_iter()
+            .filter(|(code, _, _)| allowed.contains(&code.0))
+            .collect())
     }
 
     async fn validate_product_inputs(

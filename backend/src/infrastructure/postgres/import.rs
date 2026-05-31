@@ -137,6 +137,43 @@ impl ImportRepository for PostgresImportRepository {
         Ok(())
     }
 
+    async fn stage_servings(&self, import_id: ImportId, servings: &[StagedImportServing]) -> Result<(), ImportError> {
+        if servings.is_empty() {
+            return Ok(());
+        }
+
+        let mut tx = self.pool.begin().await
+            .map_err(|e| ImportError::Database(e.to_string()))?;
+
+        for s in servings {
+            sqlx::query(
+                r#"INSERT INTO staging_product_servings (import_id, source, source_id, label, quantity, unit, grams, raw_payload, row_number)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                   ON CONFLICT (import_id, source, source_id, label, unit) DO UPDATE SET
+                       quantity = EXCLUDED.quantity,
+                       grams = EXCLUDED.grams,
+                       raw_payload = EXCLUDED.raw_payload,
+                       row_number = EXCLUDED.row_number"#,
+            )
+            .bind(import_id.0)
+            .bind(&s.source)
+            .bind(&s.source_id)
+            .bind(&s.label)
+            .bind(s.quantity)
+            .bind(&s.unit)
+            .bind(s.grams)
+            .bind(&s.raw_payload)
+            .bind(s.row_number)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| ImportError::Database(e.to_string()))?;
+        }
+
+        tx.commit().await
+            .map_err(|e| ImportError::Database(e.to_string()))?;
+        Ok(())
+    }
+
     async fn add_error(&self, import_id: ImportId, error: &ImportErrorRecord) -> Result<(), ImportError> {
         sqlx::query(
             r#"INSERT INTO import_errors (id, import_id, row_number, error, raw_payload, created_at)
@@ -233,6 +270,37 @@ impl ImportRepository for PostgresImportRepository {
         .await
         .map_err(|e| ImportError::Database(e.to_string()))?;
 
+        // Replace servings for any product touched by this import, then bulk-insert from staging.
+        sqlx::query(
+            r#"DELETE FROM product_servings
+               WHERE product_id IN (
+                   SELECT p.id FROM products p
+                   JOIN staging_product_servings ss
+                     ON ss.source = p.source AND ss.source_id = p.source_id
+                   WHERE ss.import_id = $1
+               )"#,
+        )
+        .bind(import_id.0)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| ImportError::Database(e.to_string()))?;
+
+        let servings_count: (i64,) = sqlx::query_as(
+            r#"WITH inserted AS (
+                   INSERT INTO product_servings (id, product_id, label, quantity, unit, grams, created_at)
+                   SELECT gen_random_uuid(), p.id, ss.label, ss.quantity, ss.unit, ss.grams, NOW()
+                   FROM staging_product_servings ss
+                   JOIN products p ON p.source = ss.source AND p.source_id = ss.source_id
+                   WHERE ss.import_id = $1
+                   RETURNING 1 AS flag
+               )
+               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,
+        )
+        .bind(import_id.0)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| ImportError::Database(e.to_string()))?;
+
         let errors: (i64,) = sqlx::query_as(
             r#"WITH errs AS (
                    INSERT INTO import_errors (id, import_id, row_number, error, raw_payload, created_at)
@@ -260,6 +328,7 @@ impl ImportRepository for PostgresImportRepository {
             products_created: created.0,
             products_updated: updated.0,
             nutrients_inserted: nutrients.0,
+            servings_inserted: servings_count.0,
             errors_logged: errors.0,
         })
     }

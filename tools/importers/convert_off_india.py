@@ -65,6 +65,7 @@ def main():
     total_scanned = 0
     total_kept = 0
     total_nutrients = 0
+    total_servings = 0
 
     with gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as gz_f, \
          open(out_path, "w") as out:
@@ -99,6 +100,21 @@ def main():
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")
             total_kept += 1
 
+            serving_grams = parse_float(row.get("serving_quantity"))
+            if serving_grams is not None and serving_grams > 0:
+                serving_label = (row.get("serving_size") or "").strip()[:80] or "serving"
+                serving_row = {
+                    "type": "serving",
+                    "source": "OFF",
+                    "source_id": source_id,
+                    "label": serving_label,
+                    "quantity": 1.0,
+                    "unit": "serving",
+                    "grams": serving_grams,
+                }
+                out.write(json.dumps(serving_row, ensure_ascii=False) + "\n")
+                total_servings += 1
+
             for csv_field, calco_code in nutrient_map.items():
                 v = parse_float(row.get(csv_field))
                 if v is None:
@@ -119,7 +135,7 @@ def main():
             if total_scanned % 500000 == 0:
                 print(f"  scanned {total_scanned} rows, kept {total_kept} products...")
 
-    print(f"OFF India: scanned {total_scanned}, kept {total_kept} products, {total_nutrients} nutrients -> {out_path}")
+    print(f"OFF India: scanned {total_scanned}, kept {total_kept} products, {total_nutrients} nutrients, {total_servings} servings -> {out_path}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ use crate::domain::catalog::*;
 use crate::domain::food_log::*;
 use crate::domain::meal::{Meal, MealId, MealComponentItem};
 use crate::domain::nutrition::{NutritionCalculator, Quantity};
+use crate::domain::units::UnitConverter;
 
 #[async_trait]
 pub trait FoodLogRepository: Send + Sync {
@@ -77,6 +78,7 @@ pub struct FoodLogServices {
     pub food_log_repo: Arc<dyn FoodLogRepository>,
     pub product_repo: Arc<dyn ProductLookup>,
     pub summary_repo: Arc<dyn SummaryRepository>,
+    pub unit_converter: Arc<UnitConverter>,
     pub meal_lookup: Option<Arc<dyn MealLookup>>,
     pub meal_product_lookup: Option<Arc<dyn ProductLookup>>,
 }
@@ -86,11 +88,13 @@ impl FoodLogServices {
         food_log_repo: Arc<dyn FoodLogRepository>,
         product_repo: Arc<dyn ProductLookup>,
         summary_repo: Arc<dyn SummaryRepository>,
+        unit_converter: Arc<UnitConverter>,
     ) -> Self {
         Self {
             food_log_repo,
             product_repo,
             summary_repo,
+            unit_converter,
             meal_lookup: None,
             meal_product_lookup: None,
         }
@@ -119,7 +123,7 @@ impl FoodLogServices {
             .ok_or_else(|| FoodLogError::NotFound(format!("product {} not found", input.item_id)))?;
 
         let quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let grams = convert_to_grams(&quantity, &product)?;
+        let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
 
         let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product.nutrients.iter().map(|pn| {
             (pn.nutrient_code.clone(), pn.amount_per_100g.clone(), pn.unit.clone())
@@ -163,7 +167,7 @@ impl FoodLogServices {
             .ok_or_else(|| FoodLogError::NotFound(format!("meal {} not found", input.item_id)))?;
 
         let scale_quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref()).await?;
+        let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref(), &self.unit_converter).await?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -223,7 +227,7 @@ impl FoodLogServices {
             let quantity_amount = input.quantity_amount.unwrap_or(existing.quantity_amount);
             let quantity_unit_str = input.quantity_unit.unwrap_or_else(|| existing.quantity_unit.0.clone());
             let quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let grams = convert_to_grams(&quantity, &product)?;
+            let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
 
             let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product.nutrients.iter().map(|pn| {
                 (pn.nutrient_code.clone(), pn.amount_per_100g.clone(), pn.unit.clone())
@@ -268,7 +272,7 @@ impl FoodLogServices {
             let quantity_amount = input.quantity_amount.unwrap_or(existing.quantity_amount);
             let quantity_unit_str = input.quantity_unit.unwrap_or_else(|| existing.quantity_unit.0.clone());
             let scale_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref()).await?;
+            let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref(), &self.unit_converter).await?;
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
                 Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -321,8 +325,9 @@ async fn compute_meal_snapshots(
     meal: &Meal,
     scale_quantity: &Quantity,
     product_lookup: &dyn ProductLookup,
+    unit_converter: &UnitConverter,
 ) -> Result<Vec<FoodLogNutrientSnapshot>, FoodLogError> {
-    let scale_grams = meal_quantity_to_grams(scale_quantity, meal)?;
+    let scale_grams = meal_quantity_to_grams(scale_quantity, meal, unit_converter)?;
 
     let mut total_nutrients: Vec<(NutrientCode, Decimal, UnitCode)> = Vec::new();
     let mut total_component_grams = Decimal::ZERO;
@@ -337,7 +342,7 @@ async fn compute_meal_snapshots(
                     )))?;
 
                 let component_qty = Quantity::new(component.quantity_amount, component.quantity_unit.clone());
-                let component_grams = convert_to_grams(&component_qty, &product)?;
+                let component_grams = convert_to_grams(&component_qty, &product, unit_converter)?;
                 total_component_grams += component_grams;
 
                 let contribution_ratio = component_grams / Decimal::new(100, 0);
@@ -370,15 +375,16 @@ async fn compute_meal_snapshots(
         .collect())
 }
 
-fn convert_to_grams(quantity: &Quantity, product: &Product) -> Result<Decimal, FoodLogError> {
+fn convert_to_grams(
+    quantity: &Quantity,
+    product: &Product,
+    unit_converter: &UnitConverter,
+) -> Result<Decimal, FoodLogError> {
     if quantity.amount <= Decimal::ZERO {
         return Err(FoodLogError::Validation("quantity amount must be positive".into()));
     }
-    if quantity.unit.0 == "g" {
-        return Ok(quantity.amount);
-    }
-    if quantity.unit.0 == "kg" {
-        return Ok(quantity.amount * Decimal::new(1000, 0));
+    if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+        return Ok(grams);
     }
     for serving in &product.servings {
         if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
@@ -394,18 +400,22 @@ fn convert_to_grams(quantity: &Quantity, product: &Product) -> Result<Decimal, F
     Err(FoodLogError::Validation(format!("cannot convert {} {} to grams", quantity.amount, quantity.unit.0)))
 }
 
-fn meal_quantity_to_grams(quantity: &Quantity, meal: &Meal) -> Result<Decimal, FoodLogError> {
+fn meal_quantity_to_grams(
+    quantity: &Quantity,
+    meal: &Meal,
+    unit_converter: &UnitConverter,
+) -> Result<Decimal, FoodLogError> {
     if quantity.amount <= Decimal::ZERO {
         return Err(FoodLogError::Validation("quantity amount must be positive".into()));
     }
-    if quantity.unit.0 == "g" {
-        return Ok(quantity.amount);
+    if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+        return Ok(grams);
     }
     match (&meal.total_quantity_amount, &meal.total_quantity_unit) {
         (Some(total_amount), Some(total_unit))
             if total_unit.0 == quantity.unit.0 && *total_amount > Decimal::ZERO =>
         {
-            Ok(quantity.amount / *total_amount * total_meal_declared_grams(meal)?)
+            Ok(quantity.amount / *total_amount * total_meal_declared_grams(meal, unit_converter)?)
         }
         _ => Err(FoodLogError::Validation(format!(
             "cannot convert {} {} to grams for meal logging",
@@ -414,11 +424,18 @@ fn meal_quantity_to_grams(quantity: &Quantity, meal: &Meal) -> Result<Decimal, F
     }
 }
 
-fn total_meal_declared_grams(meal: &Meal) -> Result<Decimal, FoodLogError> {
+fn total_meal_declared_grams(
+    meal: &Meal,
+    unit_converter: &UnitConverter,
+) -> Result<Decimal, FoodLogError> {
     match (&meal.total_quantity_amount, &meal.total_quantity_unit) {
-        (Some(amount), Some(unit)) if unit.0 == "g" && *amount > Decimal::ZERO => Ok(*amount),
+        (Some(amount), Some(unit)) if *amount > Decimal::ZERO => unit_converter
+            .mass_to_grams(*amount, unit)
+            .ok_or_else(|| FoodLogError::Validation(
+                "meal total quantity must be defined in a mass unit for non-mass logging".into(),
+            )),
         _ => Err(FoodLogError::Validation(
-            "meal total quantity must be defined in grams for non-gram logging".into(),
+            "meal total quantity must be defined in a mass unit for non-mass logging".into(),
         )),
     }
 }
@@ -655,6 +672,16 @@ mod tests {
         }
     }
 
+    fn sample_unit_converter() -> Arc<UnitConverter> {
+        use std::str::FromStr;
+        Arc::new(UnitConverter::from_entries([
+            ("g".to_string(), Decimal::from(1)),
+            ("kg".to_string(), Decimal::from(1000)),
+            ("mg".to_string(), Decimal::from_str("0.001").unwrap()),
+            ("ug".to_string(), Decimal::from_str("0.000001").unwrap()),
+        ]))
+    }
+
     fn make_services(product: Option<Product>) -> FoodLogServices {
         let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
         let product_repo = match product {
@@ -662,7 +689,7 @@ mod tests {
             None => Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>,
         };
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        FoodLogServices::new(food_log_repo, product_repo, summary_repo)
+        FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter())
     }
 
     fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogServices {
@@ -674,7 +701,7 @@ mod tests {
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
         let meal_lookup = Arc::new(MockMealLookup::with_meal(meal)) as Arc<dyn MealLookup>;
         let meal_product_lookup = product_repo.clone();
-        FoodLogServices::new(food_log_repo, product_repo, summary_repo)
+        FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter())
             .with_meal_support(meal_lookup, meal_product_lookup)
     }
 
@@ -922,6 +949,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_log_food_uses_unit_converter_for_kg() {
+        let services = make_services(Some(sample_product()));
+
+        let log = services.log_food(LogFoodInput {
+            user_id: Uuid::new_v4(),
+            logged_at: Utc::now(),
+            meal_slot: None,
+            item_type: "product".to_string(),
+            item_id: Uuid::nil(),
+            quantity_amount: Decimal::new(2, 0),
+            quantity_unit: "kg".to_string(),
+            notes: None,
+        }).await.unwrap();
+
+        // sample product has 100 kcal per 100g → 2 kg = 2000 g → 2000 kcal
+        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(2000, 0));
+    }
+
+    #[tokio::test]
+    async fn test_log_food_rejects_unknown_unit() {
+        let services = make_services(Some(sample_product()));
+
+        let result = services.log_food(LogFoodInput {
+            user_id: Uuid::new_v4(),
+            logged_at: Utc::now(),
+            meal_slot: None,
+            item_type: "product".to_string(),
+            item_id: Uuid::nil(),
+            quantity_amount: Decimal::new(1, 0),
+            quantity_unit: "cup".to_string(),
+            notes: None,
+        }).await;
+
+        assert!(matches!(result, Err(FoodLogError::Validation(_))));
+    }
+
+    #[tokio::test]
     async fn test_log_food_accepts_serving_multiples() {
         let services = make_services(Some(sample_product_with_serving()));
 
@@ -1012,7 +1076,7 @@ mod tests {
         let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
         let product_repo = Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>;
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        let services = FoodLogServices::new(food_log_repo, product_repo, summary_repo);
+        let services = FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter());
 
         let result = services.get_summary(
             Uuid::new_v4(),

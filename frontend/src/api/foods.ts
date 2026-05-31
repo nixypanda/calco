@@ -44,6 +44,7 @@ export interface ProductDetail {
   serving_size_g: string | null;
   nutrients: NutrientEntry[];
   servings: ServingEntry[];
+  allowed_units: UnitItem[];
 }
 
 export interface NutrientItem {

@@ -167,6 +167,39 @@ describe("FoodDetail", () => {
     expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
   });
 
+  it("renders exactly the allowed_units returned by the API", async () => {
+    mockGetFoodDetail.mockResolvedValue({
+      ...mockProduct,
+      allowed_units: [
+        { code: "g", name: "Gram", kind: "mass" },
+        { code: "kg", name: "Kilogram", kind: "mass" },
+        { code: "piece", name: "Piece", kind: "count" },
+      ],
+    });
+    // Global units list contains an extra "cup" that the product does NOT permit.
+    mockListUnits.mockResolvedValue({
+      items: [
+        { code: "g", name: "gram", kind: "mass" },
+        { code: "kg", name: "kilogram", kind: "mass" },
+        { code: "cup", name: "cup", kind: "volume" },
+        { code: "piece", name: "piece", kind: "count" },
+      ],
+    });
+
+    renderAtDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Unit" }));
+
+    expect(screen.getByRole("option", { name: "Gram (g)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Kilogram (kg)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Piece (piece)" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /cup/i })).not.toBeInTheDocument();
+  });
+
   it("submits a log and navigates to diary", async () => {
     mockGetFoodDetail.mockResolvedValue(mockProduct);
     mockCreateLog.mockResolvedValue({});

@@ -370,6 +370,17 @@ impl UnitRepository for PostgresUnitRepository {
             .map(|r| (UnitCode(r.code), r.name, r.kind))
             .collect())
     }
+
+    async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
+        let rows = sqlx::query_as::<_, MassFactorRow>(
+            "SELECT code, canonical_grams FROM units WHERE canonical_grams IS NOT NULL",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CatalogError::Database(e.to_string()))?;
+
+        Ok(rows.into_iter().map(|r| (r.code, r.canonical_grams)).collect())
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -377,6 +388,12 @@ struct UnitRow {
     code: String,
     name: String,
     kind: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct MassFactorRow {
+    code: String,
+    canonical_grams: Decimal,
 }
 
 async fn insert_product_nutrients(

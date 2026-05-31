@@ -9,6 +9,7 @@ import requests
 
 FOODS_BATCH_SIZE = 500
 NUTRIENTS_BATCH_SIZE = 1000
+SERVINGS_BATCH_SIZE = 1000
 MAX_RETRIES = 3
 BASE_DELAY_SECONDS = 1
 
@@ -97,10 +98,11 @@ def commit_job(api_url, headers, job_id):
     resp.raise_for_status()
     result = resp.json()
     log.info(
-        "Committed: created=%d updated=%d nutrients=%d errors=%d",
+        "Committed: created=%d updated=%d nutrients=%d servings=%d errors=%d",
         result.get("products_created", 0),
         result.get("products_updated", 0),
         result.get("nutrients_inserted", 0),
+        result.get("servings_inserted", 0),
         result.get("errors_logged", 0),
     )
     return result
@@ -122,6 +124,7 @@ def fetch_errors(api_url, headers, job_id):
 def load_jsonl(filepath):
     foods = []
     nutrients = []
+    servings = []
     with open(filepath, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -129,11 +132,14 @@ def load_jsonl(filepath):
                 continue
             obj = json.loads(line)
             row = {k: v for k, v in obj.items() if k != "type"}
-            if obj.get("type") == "food":
+            t = obj.get("type")
+            if t == "food":
                 foods.append(row)
-            elif obj.get("type") == "nutrient":
+            elif t == "nutrient":
                 nutrients.append(row)
-    return foods, nutrients
+            elif t == "serving":
+                servings.append(row)
+    return foods, nutrients, servings
 
 
 def main():
@@ -155,8 +161,8 @@ def main():
     headers = build_headers(args.session_token)
 
     log.info("Loading %s ...", jsonl_file)
-    foods, nutrients = load_jsonl(jsonl_file)
-    log.info("Loaded %d foods, %d nutrients", len(foods), len(nutrients))
+    foods, nutrients, servings = load_jsonl(jsonl_file)
+    log.info("Loaded %d foods, %d nutrients, %d servings", len(foods), len(nutrients), len(servings))
 
     for f in foods:
         if f.get("name") is None:
@@ -177,6 +183,12 @@ def main():
     nut_accepted, nut_rejected = batch_upload(args.api_url, headers, job_id, nutrients, "nutrients", NUTRIENTS_BATCH_SIZE)
     log.info("Nutrients done: accepted=%d rejected=%d", nut_accepted, nut_rejected)
 
+    serv_accepted = serv_rejected = 0
+    if servings:
+        log.info("Uploading servings (%d rows, batch=%d) ...", len(servings), SERVINGS_BATCH_SIZE)
+        serv_accepted, serv_rejected = batch_upload(args.api_url, headers, job_id, servings, "servings", SERVINGS_BATCH_SIZE)
+        log.info("Servings done: accepted=%d rejected=%d", serv_accepted, serv_rejected)
+
     result = commit_job(args.api_url, headers, job_id)
 
     errors = fetch_errors(args.api_url, headers, job_id)
@@ -185,12 +197,14 @@ def main():
 
     log.info("Pipeline complete for %s (job %s)", source, job_id)
     log.info(
-        "Summary: %d/%d foods, %d/%d nutrients, created=%d updated=%d nutrients_ins=%d errors=%d",
+        "Summary: %d/%d foods, %d/%d nutrients, %d/%d servings, created=%d updated=%d nutrients_ins=%d servings_ins=%d errors=%d",
         foods_accepted, len(foods),
         nut_accepted, len(nutrients),
+        serv_accepted, len(servings),
         result.get("products_created", 0),
         result.get("products_updated", 0),
         result.get("nutrients_inserted", 0),
+        result.get("servings_inserted", 0),
         result.get("errors_logged", 0),
     )
 

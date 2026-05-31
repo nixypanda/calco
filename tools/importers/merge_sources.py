@@ -37,6 +37,7 @@ def normalize_name(name):
 def load_source(filepath):
     foods = {}
     nutrients = defaultdict(dict)
+    servings = defaultdict(list)
     with open(filepath, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -49,13 +50,20 @@ def load_source(filepath):
                 foods[sid] = obj
             elif t == "nutrient":
                 nutrients[sid][obj["nutrient_code"]] = obj["amount_per_100g"]
-    return foods, nutrients
+            elif t == "serving":
+                servings[sid].append({
+                    "label": obj.get("label"),
+                    "quantity": obj.get("quantity"),
+                    "unit": obj.get("unit"),
+                    "grams": obj.get("grams"),
+                })
+    return foods, nutrients, servings
 
 
 def phase1_barcode(sources_data, matched, groups):
     bcode_map = defaultdict(list)
     for src in PREFERENCE:
-        foods, _ = sources_data[src]
+        foods, _, _ = sources_data[src]
         for sid, f in foods.items():
             bc = f.get("barcode")
             if bc:
@@ -76,7 +84,7 @@ def phase1_barcode(sources_data, matched, groups):
 def phase2_name(sources_data, matched, groups):
     unmatched = {}
     for src in PREFERENCE:
-        foods, _ = sources_data[src]
+        foods, _, _ = sources_data[src]
         lst = [(sid, foods[sid].get("name", "")) for sid in foods if (src, sid) not in matched and foods[sid].get("name")]
         unmatched[src] = lst
         log.info("  %s: %d unmatched after barcode phase", src, len(lst))
@@ -123,7 +131,7 @@ def check_macros(sources_data, group):
         for src in PREFERENCE:
             if src not in group:
                 continue
-            _, nutrients = sources_data[src]
+            _, nutrients, _ = sources_data[src]
             sid = group[src]
             if sid in nutrients and code in nutrients[sid]:
                 vals[src] = nutrients[sid][code]
@@ -138,7 +146,7 @@ def check_macros(sources_data, group):
             names = []
             for src in PREFERENCE:
                 if src in group:
-                    foods, _ = sources_data[src]
+                    foods, _, _ = sources_data[src]
                     sid = group[src]
                     names.append(f"{src}: {foods[sid].get('name', sid)}")
             log.warning("  %s differs by %.0f%% — [%s]", code, diff * 100, " | ".join(names))
@@ -147,21 +155,22 @@ def check_macros(sources_data, group):
 def merge_group(sources_data, group):
     canonical_src = next(s for s in PREFERENCE if s in group)
     canonical_sid = group[canonical_src]
-    foods, _ = sources_data[canonical_src]
+    foods, _, servings = sources_data[canonical_src]
     merged_food = dict(foods[canonical_sid])
+    merged_servings = list(servings.get(canonical_sid, []))
 
     merged_nutrients = {}
     for src in PREFERENCE:
         if src not in group:
             continue
-        _, nutrients = sources_data[src]
+        _, nutrients, _ = sources_data[src]
         sid = group[src]
         if sid in nutrients:
             for code, amount in nutrients[sid].items():
                 if code not in merged_nutrients:
                     merged_nutrients[code] = amount
 
-    return merged_food, merged_nutrients
+    return merged_food, merged_nutrients, merged_servings
 
 
 def main():
@@ -172,9 +181,10 @@ def main():
             log.error("%s not found at %s", src, fp)
             sys.exit(1)
         log.info("Loading %s ...", src)
-        foods, nutrients = load_source(fp)
-        sources_data[src] = (foods, nutrients)
-        log.info("  %s: %d foods, %d with nutrients", src, len(foods), len(nutrients))
+        foods, nutrients, servings = load_source(fp)
+        sources_data[src] = (foods, nutrients, servings)
+        log.info("  %s: %d foods, %d with nutrients, %d with servings",
+                 src, len(foods), len(nutrients), len(servings))
 
     matched = set()
     groups = []
@@ -194,13 +204,26 @@ def main():
     out_path = os.path.join(PROCESSED_DIR, "merged.jsonl")
     merged_food_count = 0
     merged_nutrient_count = 0
+    merged_serving_count = 0
 
     # Track which source_ids from each source have been written
     written = {src: set() for src in PREFERENCE}
 
+    def write_serving(out, src, sid, s):
+        row = {
+            "type": "serving",
+            "source": src,
+            "source_id": sid,
+            "label": s.get("label"),
+            "quantity": s.get("quantity"),
+            "unit": s.get("unit"),
+            "grams": s.get("grams"),
+        }
+        out.write(json.dumps(row, ensure_ascii=False) + "\n")
+
     with open(out_path, "w") as out:
         for group in groups:
-            food, nutrients = merge_group(sources_data, group)
+            food, nutrients, servings = merge_group(sources_data, group)
             food["type"] = "food"
             out.write(json.dumps(food, ensure_ascii=False) + "\n")
             merged_food_count += 1
@@ -214,13 +237,16 @@ def main():
                 }
                 out.write(json.dumps(row, ensure_ascii=False) + "\n")
                 merged_nutrient_count += 1
+            for s in servings:
+                write_serving(out, food["source"], food["source_id"], s)
+                merged_serving_count += 1
             for src in PREFERENCE:
                 if src in group:
                     written[src].add(group[src])
 
         # Write unmatched products from each source
         for src in PREFERENCE:
-            foods, nutrients = sources_data[src]
+            foods, nutrients, servings_by_sid = sources_data[src]
             for sid, food in foods.items():
                 if sid in written[src]:
                     continue
@@ -238,6 +264,9 @@ def main():
                         }
                         out.write(json.dumps(row, ensure_ascii=False) + "\n")
                         merged_nutrient_count += 1
+                for s in servings_by_sid.get(sid, []):
+                    write_serving(out, src, sid, s)
+                    merged_serving_count += 1
 
     total_products = sum(len(sources_data[s][0]) for s in PREFERENCE)
     log.info("")
@@ -245,6 +274,7 @@ def main():
     log.info("  Original sources had %d total products; %d merged, %d passed through unmatched",
              total_products, sum(len(g) for g in groups), merged_food_count - len(groups))
     log.info("  Nutrients in merged output: %d", merged_nutrient_count)
+    log.info("  Servings in merged output: %d", merged_serving_count)
 
 
 if __name__ == "__main__":

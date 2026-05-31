@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type SubmitEvent } from "react";
+import { useState, useEffect, type SubmitEvent } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   getFoodDetail,
@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
-import { buildAllowedUnitCodes, filterUnits } from "@/lib/convertibleUnits";
 
 interface NutrientRow {
   code: string;
@@ -123,13 +122,6 @@ export function CustomFoodEdit() {
     rows[i] = { ...rows[i], [field]: value };
     setServingRows(rows);
   };
-
-  const defaultUnitOptions = useMemo(() => {
-    // serving_size_g paired with default_unit makes any unit convertible to grams.
-    if (servingSizeG) return filterUnits(units, new Set(units.map((u) => u.code)), defaultUnit || undefined);
-    const allowed = buildAllowedUnitCodes(servingRows.map((r) => r.unit));
-    return filterUnits(units, allowed, defaultUnit || undefined);
-  }, [units, servingSizeG, servingRows, defaultUnit]);
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -264,7 +256,7 @@ export function CustomFoodEdit() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {defaultUnitOptions.map((u) => (
+                  {units.map((u) => (
                     <SelectItem key={u.code} value={u.code}>
                       {u.name} ({u.code})
                     </SelectItem>

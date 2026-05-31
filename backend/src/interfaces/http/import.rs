@@ -18,6 +18,7 @@ pub fn import_routes(state: AppState) -> Router {
         .route("/imports", post(create_import_handler))
         .route("/imports/{id}/foods", post(stage_foods_handler))
         .route("/imports/{id}/nutrients", post(stage_nutrients_handler))
+        .route("/imports/{id}/servings", post(stage_servings_handler))
         .route("/imports/{id}/commit", post(commit_import_handler))
         .route("/imports/{id}", get(get_import_handler))
         .route("/imports/{id}/errors", get(get_import_errors_handler))
@@ -180,12 +181,57 @@ async fn stage_nutrients_handler(
     }
 }
 
+#[derive(Deserialize)]
+struct StageServingsRequest {
+    rows: Vec<ServingRow>,
+}
+
+#[derive(Deserialize)]
+struct ServingRow {
+    row_number: Option<i32>,
+    source: String,
+    source_id: String,
+    label: String,
+    quantity: Decimal,
+    unit: String,
+    grams: Decimal,
+}
+
+async fn stage_servings_handler(
+    _admin: AuthAdmin,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(req): Json<StageServingsRequest>,
+) -> impl IntoResponse {
+    let services = &state.import_services;
+
+    let servings: Vec<StagedImportServing> = req.rows.into_iter().map(|r| StagedImportServing {
+        source: r.source,
+        source_id: r.source_id,
+        label: r.label,
+        quantity: r.quantity,
+        unit: r.unit,
+        grams: r.grams,
+        raw_payload: None,
+        row_number: r.row_number,
+    }).collect();
+
+    match services.stage_servings(ImportId(id), servings).await {
+        Ok(result) => Json(StageResponse {
+            accepted: result.accepted,
+            rejected: result.rejected,
+        }).into_response(),
+        Err(e) => import_error_response(&e).into_response(),
+    }
+}
+
 #[derive(Serialize)]
 struct CommitResponse {
     status: String,
     products_created: i64,
     products_updated: i64,
     nutrients_inserted: i64,
+    servings_inserted: i64,
     errors_logged: i64,
 }
 
@@ -202,6 +248,7 @@ async fn commit_import_handler(
             products_created: result.products_created,
             products_updated: result.products_updated,
             nutrients_inserted: result.nutrients_inserted,
+            servings_inserted: result.servings_inserted,
             errors_logged: result.errors_logged,
         }).into_response(),
         Err(e) => import_error_response(&e).into_response(),

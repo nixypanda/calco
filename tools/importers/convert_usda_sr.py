@@ -30,6 +30,7 @@ def main():
 
     total_foods = 0
     total_nutrients = 0
+    total_servings = 0
 
     with zipfile.ZipFile(zip_path, "r") as z:
         json_files = [n for n in z.namelist() if n.endswith(".json")]
@@ -82,6 +83,44 @@ def main():
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")
             total_foods += 1
 
+            seen_serving_keys = set()
+            for portion in food.get("foodPortions", []):
+                gram_weight = parse_amount(portion.get("gramWeight"))
+                amount = parse_amount(portion.get("amount"))
+                if gram_weight is None or amount is None or gram_weight <= 0 or amount <= 0:
+                    continue
+                measure_unit = portion.get("measureUnit") or {}
+                raw_unit = (
+                    measure_unit.get("abbreviation")
+                    or measure_unit.get("name")
+                    or portion.get("modifier")
+                    or "serving"
+                )
+                unit = (raw_unit or "serving").strip()
+                if not unit or unit.lower() == "undetermined":
+                    unit = "serving"
+                label = (
+                    portion.get("portionDescription")
+                    or portion.get("modifier")
+                    or unit
+                )
+                label = (label or "serving").strip()[:80] or "serving"
+                key = (label, unit)
+                if key in seen_serving_keys:
+                    continue
+                seen_serving_keys.add(key)
+                serving_row = {
+                    "type": "serving",
+                    "source": "USDA",
+                    "source_id": fdc_id,
+                    "label": label,
+                    "quantity": amount,
+                    "unit": unit,
+                    "grams": gram_weight,
+                }
+                out.write(json.dumps(serving_row, ensure_ascii=False) + "\n")
+                total_servings += 1
+
             food_nutrients = food.get("foodNutrients", [])
             for nutr in food_nutrients:
                 n_obj = nutr.get("nutrient", {})
@@ -103,7 +142,7 @@ def main():
                 out.write(json.dumps(nutrient_row, ensure_ascii=False) + "\n")
                 total_nutrients += 1
 
-    print(f"USDA SR: {total_foods} foods, {total_nutrients} nutrients -> {out_path}")
+    print(f"USDA SR: {total_foods} foods, {total_nutrients} nutrients, {total_servings} servings -> {out_path}")
 
 
 if __name__ == "__main__":

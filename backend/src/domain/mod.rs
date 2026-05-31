@@ -4,3 +4,4 @@ pub mod food_log;
 pub mod import;
 pub mod meal;
 pub mod nutrition;
+pub mod units;

@@ -36,6 +36,7 @@ use crate::interfaces::http::import::import_routes;
 use crate::interfaces::http::meal::meal_routes;
 use crate::application::catalog::{CatalogServices, ProductRepository, NutrientRepository, UnitRepository};
 use crate::application::food_log::{FoodLogServices, FoodLogRepository, SummaryRepository, ProductLookup, MealLookup};
+use crate::domain::units::UnitConverter;
 use crate::application::import::{ImportServices, ImportRepository};
 use crate::application::meal::{MealServices, MealRepository, MealProductLookup};
 
@@ -70,6 +71,12 @@ async fn main() {
     let nutrient_repo = Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
     let unit_repo = Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
 
+    let mass_factors = unit_repo
+        .mass_factors()
+        .await
+        .expect("failed to load mass-unit factors");
+    let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
+
     let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
     let food_log_repo = food_log_repo_impl.clone() as Arc<dyn FoodLogRepository>;
     let product_lookup = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
@@ -85,6 +92,7 @@ async fn main() {
         food_log_repo,
         product_lookup,
         summary_repo,
+        unit_converter.clone(),
     ).with_meal_support(meal_lookup, meal_product_lookup_for_food_log);
 
     let meal_services = MealServices::new(meal_repo, meal_product_lookup);
@@ -92,7 +100,7 @@ async fn main() {
     let import_repo = Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
     let import_services = ImportServices::new(import_repo);
 
-    let catalog_services = CatalogServices::new(product_repo, nutrient_repo, unit_repo);
+    let catalog_services = CatalogServices::new(product_repo, nutrient_repo, unit_repo, unit_converter);
 
     let auth_state = AppState {
         identity_repo,

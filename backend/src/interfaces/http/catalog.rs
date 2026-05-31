@@ -90,6 +90,7 @@ pub struct ProductDetailResponse {
     pub serving_size_g: Option<Decimal>,
     pub nutrients: Vec<NutrientEntry>,
     pub servings: Vec<ServingEntry>,
+    pub allowed_units: Vec<UnitItem>,
 }
 
 #[derive(Serialize)]
@@ -213,7 +214,10 @@ async fn barcode_lookup_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_product_by_barcode(&barcode).await {
-        Ok(product) => Json(serde_json::to_value(product_to_detail(&product)).unwrap()).into_response(),
+        Ok(product) => match services.allowed_units_for_product(&product).await {
+            Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap()).into_response(),
+            Err(e) => internal_error(e).into_response(),
+        },
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("product with barcode {barcode} not found")).into_response()
         }
@@ -229,7 +233,10 @@ async fn product_detail_handler(
     let services = &state.catalog_services;
     match services.get_product(ProductId(id)).await {
         Ok(product) if product.visibility == ProductVisibility::Global || product.is_owned_by(auth.1.id) => {
-            Json(serde_json::to_value(product_to_detail(&product)).unwrap()).into_response()
+            match services.allowed_units_for_product(&product).await {
+                Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap()).into_response(),
+                Err(e) => internal_error(e).into_response(),
+            }
         }
         Ok(_) => error_response("not_found", format!("product {id} not found")).into_response(),
         Err(CatalogError::NotFound(_)) => {
@@ -416,7 +423,10 @@ async fn list_units_handler(
     }
 }
 
-fn product_to_detail(product: &Product) -> ProductDetailResponse {
+fn product_to_detail(
+    product: &Product,
+    allowed_units: Vec<(UnitCode, String, String)>,
+) -> ProductDetailResponse {
     ProductDetailResponse {
         id: product.id.0,
         source: product.source.as_str().to_string(),
@@ -448,6 +458,14 @@ fn product_to_detail(product: &Product) -> ProductDetailResponse {
                 quantity: ps.quantity,
                 unit: ps.unit.0.clone(),
                 grams: ps.grams,
+            })
+            .collect(),
+        allowed_units: allowed_units
+            .into_iter()
+            .map(|(code, name, kind)| UnitItem {
+                code: code.0,
+                name,
+                kind,
             })
             .collect(),
     }

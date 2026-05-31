@@ -98,6 +98,18 @@ pub struct StagedImportProduct {
 }
 
 #[derive(Debug, Clone)]
+pub struct StagedImportServing {
+    pub source: String,
+    pub source_id: String,
+    pub label: String,
+    pub quantity: rust_decimal::Decimal,
+    pub unit: String,
+    pub grams: rust_decimal::Decimal,
+    pub raw_payload: Option<serde_json::Value>,
+    pub row_number: Option<i32>,
+}
+
+#[derive(Debug, Clone)]
 pub struct StagedImportNutrient {
     pub source: String,
     pub source_id: String,

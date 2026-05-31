@@ -11,6 +11,7 @@ pub trait ImportRepository: Send + Sync {
     async fn update_job_status(&self, id: ImportId, status: &ImportStatus) -> Result<(), ImportError>;
     async fn stage_foods(&self, import_id: ImportId, foods: &[StagedImportProduct]) -> Result<(), ImportError>;
     async fn stage_nutrients(&self, import_id: ImportId, nutrients: &[StagedImportNutrient]) -> Result<(), ImportError>;
+    async fn stage_servings(&self, import_id: ImportId, servings: &[StagedImportServing]) -> Result<(), ImportError>;
     async fn add_error(&self, import_id: ImportId, error: &ImportErrorRecord) -> Result<(), ImportError>;
     async fn count_staged_foods(&self, import_id: ImportId) -> Result<i64, ImportError>;
     async fn commit_import(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError>;
@@ -22,6 +23,7 @@ pub struct ImportCommitResult {
     pub products_created: i64,
     pub products_updated: i64,
     pub nutrients_inserted: i64,
+    pub servings_inserted: i64,
     pub errors_logged: i64,
 }
 
@@ -126,6 +128,57 @@ impl ImportServices {
         Ok(StageResult { accepted, rejected })
     }
 
+    pub async fn stage_servings(&self, import_id: ImportId, servings: Vec<StagedImportServing>) -> Result<StageResult, ImportError> {
+        let job = self.repo.find_job(import_id).await?
+            .ok_or_else(|| ImportError::NotFound("import job not found".into()))?;
+
+        if job.status != ImportStatus::Pending {
+            return Err(ImportError::InvalidStatus("can only stage servings on a pending import".into()));
+        }
+
+        let mut accepted = 0i64;
+        let mut rejected = 0i64;
+        let mut errors = Vec::new();
+
+        for s in &servings {
+            let invalid = s.source.is_empty()
+                || s.source_id.is_empty()
+                || s.label.is_empty()
+                || s.unit.is_empty()
+                || s.quantity <= rust_decimal::Decimal::ZERO
+                || s.grams <= rust_decimal::Decimal::ZERO;
+            if invalid {
+                rejected += 1;
+                errors.push(ImportErrorRecord {
+                    row_number: s.row_number,
+                    error: "source, source_id, label, unit, positive quantity and positive grams are required".into(),
+                    raw_payload: s.raw_payload.clone(),
+                });
+                continue;
+            }
+            accepted += 1;
+        }
+
+        let valid: Vec<StagedImportServing> = servings.into_iter()
+            .filter(|s| !s.source.is_empty()
+                && !s.source_id.is_empty()
+                && !s.label.is_empty()
+                && !s.unit.is_empty()
+                && s.quantity > rust_decimal::Decimal::ZERO
+                && s.grams > rust_decimal::Decimal::ZERO)
+            .collect();
+
+        if !valid.is_empty() {
+            self.repo.stage_servings(import_id, &valid).await?;
+        }
+
+        for err in &errors {
+            self.repo.add_error(import_id, err).await?;
+        }
+
+        Ok(StageResult { accepted, rejected })
+    }
+
     pub async fn commit_job(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
         let job = self.repo.find_job(import_id).await?
             .ok_or_else(|| ImportError::NotFound("import job not found".into()))?;
@@ -199,6 +252,7 @@ mod tests {
         jobs: Mutex<Vec<ImportJob>>,
         foods: Mutex<Vec<StagedImportProduct>>,
         nutrients: Mutex<Vec<StagedImportNutrient>>,
+        servings: Mutex<Vec<StagedImportServing>>,
         errors: Mutex<Vec<ImportErrorRecord>>,
         commit_result: Mutex<Option<ImportCommitResult>>,
     }
@@ -209,6 +263,7 @@ mod tests {
                 jobs: Mutex::new(vec![]),
                 foods: Mutex::new(vec![]),
                 nutrients: Mutex::new(vec![]),
+                servings: Mutex::new(vec![]),
                 errors: Mutex::new(vec![]),
                 commit_result: Mutex::new(None),
             }
@@ -219,6 +274,7 @@ mod tests {
                 jobs: Mutex::new(vec![]),
                 foods: Mutex::new(vec![]),
                 nutrients: Mutex::new(vec![]),
+                servings: Mutex::new(vec![]),
                 errors: Mutex::new(vec![]),
                 commit_result: Mutex::new(Some(result)),
             }
@@ -248,6 +304,11 @@ mod tests {
 
         async fn stage_nutrients(&self, _import_id: ImportId, nutrients: &[StagedImportNutrient]) -> Result<(), ImportError> {
             self.nutrients.lock().unwrap().extend(nutrients.iter().cloned());
+            Ok(())
+        }
+
+        async fn stage_servings(&self, _import_id: ImportId, servings: &[StagedImportServing]) -> Result<(), ImportError> {
+            self.servings.lock().unwrap().extend(servings.iter().cloned());
             Ok(())
         }
 
@@ -391,6 +452,7 @@ mod tests {
             products_created: 2,
             products_updated: 0,
             nutrients_inserted: 4,
+            servings_inserted: 0,
             errors_logged: 0,
         });
         let job = services.create_job("IFCT".into(), None).await.unwrap();
@@ -494,6 +556,7 @@ mod tests {
             products_created: 1,
             products_updated: 0,
             nutrients_inserted: 2,
+            servings_inserted: 0,
             errors_logged: 1,
         });
         let job = services.create_job("USDA".into(), None).await.unwrap();
