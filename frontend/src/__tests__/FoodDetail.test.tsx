@@ -46,7 +46,7 @@ function renderAtDetail(
 
 const mockProduct = {
   id: "abc-123",
-  source: "SYSTEM",
+  source: "USDA",
   source_id: null,
   visibility: "global",
   barcode: "123456789",

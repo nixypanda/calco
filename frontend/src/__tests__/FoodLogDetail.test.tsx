@@ -65,7 +65,7 @@ const mockLog = {
 
 const mockFood = {
   id: "food-1",
-  source: "SYSTEM",
+  source: "USDA",
   source_id: null,
   visibility: "global",
   barcode: null,

@@ -134,7 +134,7 @@ describe("FoodSearch", () => {
       items: [
         {
           id: "1",
-          source: "SYSTEM",
+          source: "USDA",
           source_id: null,
           barcode: null,
           name: "Chicken Breast",
@@ -225,7 +225,7 @@ describe("FoodSearch", () => {
       items: [
         {
           id: "abc-123",
-          source: "SYSTEM",
+          source: "USDA",
           source_id: null,
           barcode: null,
           name: "Test Food",
@@ -263,7 +263,7 @@ describe("FoodSearch", () => {
       items: [
         {
           id: "abc-123",
-          source: "SYSTEM",
+          source: "USDA",
           source_id: null,
           barcode: null,
           name: "Test Food",

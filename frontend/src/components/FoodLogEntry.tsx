@@ -17,6 +17,7 @@ import { FieldRow } from "@/components/FieldRow";
 import { MacroBreakdown } from "@/components/MacroBreakdown";
 import { NutrientsTable } from "@/components/NutrientsTable";
 import { scaleNutrients } from "@/lib/scaleNutrients";
+import { buildAllowedUnitCodes, filterUnits } from "@/lib/convertibleUnits";
 import type { ProductDetail, UnitItem } from "@/api/foods";
 import type { NutrientSnapshotDto } from "@/api/logs";
 
@@ -176,10 +177,20 @@ export function FoodLogEntry({
   }, [food, snapshot, values.amount, values.unit]);
 
   const unitOptions = useMemo(() => {
-    const present = units.some((u) => u.code === values.unit);
-    if (present || !values.unit) return units;
-    return [{ code: values.unit, name: values.unit, kind: "" }, ...units];
-  }, [units, values.unit]);
+    if (!food) {
+      const present = units.some((u) => u.code === values.unit);
+      if (present || !values.unit) return units;
+      return [{ code: values.unit, name: values.unit, kind: "" }, ...units];
+    }
+    const extras: (string | null | undefined)[] = (food.servings ?? []).map(
+      (s) => s.unit,
+    );
+    if (food.serving_size_g && food.default_unit) {
+      extras.push(food.default_unit);
+    }
+    const allowed = buildAllowedUnitCodes(extras);
+    return filterUnits(units, allowed, values.unit || undefined);
+  }, [units, values.unit, food]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
