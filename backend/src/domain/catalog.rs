@@ -19,7 +19,6 @@ impl From<Uuid> for ProductId {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    System,
     User,
     Off,
     Usda,
@@ -29,7 +28,6 @@ pub enum Source {
 impl Source {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Source::System => "SYSTEM",
             Source::User => "USER",
             Source::Off => "OFF",
             Source::Usda => "USDA",
@@ -39,7 +37,6 @@ impl Source {
 
     pub fn from_str(s: &str) -> Result<Self, String> {
         match s {
-            "SYSTEM" => Ok(Source::System),
             "USER" => Ok(Source::User),
             "OFF" => Ok(Source::Off),
             "USDA" => Ok(Source::Usda),

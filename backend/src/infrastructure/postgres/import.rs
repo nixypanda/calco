@@ -206,14 +206,24 @@ impl ImportRepository for PostgresImportRepository {
 
         let nutrients: (i64,) = sqlx::query_as(
             r#"WITH inserted AS (
-                   INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, created_at, updated_at)
-                   SELECT p.id, n.id, sn.amount_per_100g, NOW(), NOW()
+                   INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence, created_at, updated_at)
+                   SELECT p.id, n.id, sn.amount_per_100g, sn.source,
+                          CASE sn.source
+                              WHEN 'USDA' THEN 'approved'
+                              WHEN 'IFCT' THEN 'approved'
+                              WHEN 'OFF' THEN 'derived'
+                              ELSE 'unknown'
+                          END,
+                          NOW(), NOW()
                    FROM staging_product_nutrients sn
                    JOIN products p ON p.source = sn.source AND p.source_id = sn.source_id
                    JOIN nutrients n ON n.code = sn.nutrient_code
                    WHERE sn.import_id = $1
                    ON CONFLICT (product_id, nutrient_id) DO UPDATE SET
-                       amount_per_100g = EXCLUDED.amount_per_100g, updated_at = NOW()
+                       amount_per_100g = EXCLUDED.amount_per_100g,
+                       source = EXCLUDED.source,
+                       confidence = EXCLUDED.confidence,
+                       updated_at = NOW()
                    RETURNING 1 AS flag
                )
                SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,
