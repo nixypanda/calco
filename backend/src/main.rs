@@ -7,8 +7,9 @@ mod interfaces;
 use std::sync::Arc;
 
 use axum::{Router, routing::get};
+use axum::http::{HeaderValue, Method, header};
 use sqlx::postgres::PgPoolOptions;
-use tower_http::cors::CorsLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use crate::config::AppConfig;
@@ -72,6 +73,7 @@ async fn main() {
     let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
     let food_log_repo = food_log_repo_impl.clone() as Arc<dyn FoodLogRepository>;
     let product_lookup = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
+    let meal_product_lookup_for_food_log = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
     let meal_lookup = food_log_repo_impl as Arc<dyn MealLookup>;
     let summary_repo = Arc::new(PostgresSummaryRepository::new(pool.clone())) as Arc<dyn SummaryRepository>;
 
@@ -79,13 +81,11 @@ async fn main() {
     let meal_repo = meal_repo_impl.clone() as Arc<dyn MealRepository>;
     let meal_product_lookup = meal_repo_impl as Arc<dyn MealProductLookup>;
 
-    let product_lookup_clone = Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn ProductLookup>;
-
     let food_log_services = FoodLogServices::new(
         food_log_repo,
         product_lookup,
         summary_repo,
-    ).with_meal_support(meal_lookup, product_lookup_clone);
+    ).with_meal_support(meal_lookup, meal_product_lookup_for_food_log);
 
     let meal_services = MealServices::new(meal_repo, meal_product_lookup);
 
@@ -99,10 +99,10 @@ async fn main() {
         session_repo,
         profile_repo,
         config: config.clone(),
-        catalog_services: Some(catalog_services),
-        food_log_services: Some(food_log_services),
-        meal_services: Some(meal_services),
-        import_services: Some(import_services),
+        catalog_services,
+        food_log_services,
+        meal_services,
+        import_services,
     };
 
     let api = Router::new()
@@ -116,12 +116,46 @@ async fn main() {
 
     let app = Router::new()
         .nest("/api", api)
-        .layer(CorsLayer::permissive());
+        .layer(build_cors_layer(&config));
 
     let addr = config.bind_addr;
     tracing::info!("listening on {addr}");
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+fn build_cors_layer(config: &AppConfig) -> CorsLayer {
+    let methods = [
+        Method::GET,
+        Method::POST,
+        Method::PUT,
+        Method::DELETE,
+        Method::PATCH,
+        Method::OPTIONS,
+    ];
+    let headers = [header::CONTENT_TYPE, header::ACCEPT];
+
+    if config.cors_allowed_origins.is_empty() {
+        // Same-origin deployment: no cross-origin allowed.
+        return CorsLayer::new()
+            .allow_methods(methods)
+            .allow_headers(headers);
+    }
+
+    let origins: Vec<HeaderValue> = config
+        .cors_allowed_origins
+        .iter()
+        .map(|o| {
+            HeaderValue::from_str(o)
+                .unwrap_or_else(|_| panic!("invalid CORS_ALLOWED_ORIGINS entry: {o}"))
+        })
+        .collect();
+
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::list(origins))
+        .allow_credentials(true)
+        .allow_methods(methods)
+        .allow_headers(headers)
 }
 
 async fn health() -> &'static str {

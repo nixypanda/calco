@@ -49,6 +49,11 @@ fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorRespons
     )
 }
 
+fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
+    tracing::error!(error = %e, "meal request failed");
+    error_response("internal", "internal server error".into())
+}
+
 #[derive(Deserialize)]
 pub struct CreateMealRequest {
     pub name: String,
@@ -165,10 +170,7 @@ async fn create_meal_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateMealRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     let input = CreateMealInput {
         user_id: auth.1.id,
@@ -187,11 +189,11 @@ async fn create_meal_handler(
     match services.create_meal(input).await {
         Ok(meal) => {
             let resp = meal_to_response(&meal);
-            (StatusCode::CREATED, Json(serde_json::to_value(&resp).unwrap())).into_response()
+            (StatusCode::CREATED, Json(resp)).into_response()
         }
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -200,10 +202,7 @@ async fn get_meal_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     match services.get_meal(MealId(id)).await {
         Ok(meal) => {
@@ -211,10 +210,10 @@ async fn get_meal_handler(
                 return error_response("forbidden", "not your meal".into()).into_response();
             }
             let resp = meal_to_response(&meal);
-            Json(serde_json::to_value(&resp).unwrap()).into_response()
+            Json(resp).into_response()
         }
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -222,17 +221,14 @@ async fn list_meals_handler(
     auth: AuthUser,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     match services.list_meals(auth.1.id).await {
         Ok(meals) => {
             let items: Vec<MealResponse> = meals.iter().map(meal_to_response).collect();
             Json(MealListResponse { items }).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -242,10 +238,7 @@ async fn update_meal_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateMealRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     let total_qty = req.total_quantity;
     let input = UpdateMealInput {
@@ -266,12 +259,12 @@ async fn update_meal_handler(
     match services.update_meal(MealId(id), auth.1.id, input).await {
         Ok(meal) => {
             let resp = meal_to_response(&meal);
-            Json(serde_json::to_value(&resp).unwrap()).into_response()
+            Json(resp).into_response()
         }
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
         Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -280,16 +273,13 @@ async fn delete_meal_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     match services.delete_meal(MealId(id), auth.1.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -299,10 +289,7 @@ async fn meal_nutrients_handler(
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,
 ) -> impl IntoResponse {
-    let services = match &state.meal_services {
-        Some(s) => s,
-        None => return error_response("internal", "meal services not configured".into()).into_response(),
-    };
+    let services = &state.meal_services;
 
     match services.get_meal(MealId(id)).await {
         Ok(meal) => {
@@ -311,7 +298,7 @@ async fn meal_nutrients_handler(
             }
         }
         Err(MealError::NotFound(msg)) => return error_response("not_found", msg).into_response(),
-        Err(e) => return error_response("internal", e.to_string()).into_response(),
+        Err(e) => return internal_error(e).into_response(),
     }
 
     match services.get_meal_nutrients(MealId(id), query.amount, query.unit).await {
@@ -331,6 +318,6 @@ async fn meal_nutrients_handler(
         }
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }

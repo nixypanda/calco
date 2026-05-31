@@ -22,10 +22,10 @@ pub struct AppState {
     pub session_repo: std::sync::Arc<dyn SessionRepository>,
     pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
-    pub catalog_services: Option<CatalogServices>,
-    pub food_log_services: Option<FoodLogServices>,
-    pub meal_services: Option<MealServices>,
-    pub import_services: Option<ImportServices>,
+    pub catalog_services: CatalogServices,
+    pub food_log_services: FoodLogServices,
+    pub meal_services: MealServices,
+    pub import_services: ImportServices,
 }
 
 pub fn auth_routes(state: AppState) -> Router {
@@ -173,12 +173,19 @@ impl AuthErrorResponse {
             AuthError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
         };
+        let message = match err {
+            AuthError::Internal(_) => {
+                tracing::error!(error = %err, "auth request failed");
+                "internal server error".to_string()
+            }
+            _ => err.to_string(),
+        };
         Self {
             status,
             body: ErrorBody {
                 error: ApiError {
                     code: code.to_string(),
-                    message: err.to_string(),
+                    message,
                 },
             },
         }

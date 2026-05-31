@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::application::auth::{IdentityRepository, SessionRepository, UserProfileRepository};
+use crate::application::auth::{IdentityRepository, SessionRepository, UserProfileRepository, UserWithProfile};
 use crate::domain::auth::*;
 
 #[derive(Clone)]
@@ -294,6 +294,46 @@ impl UserProfileRepository for PostgresUserProfileRepository {
 
         Ok(rows.into_iter().map(|r| r.into()).collect())
     }
+
+    async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError> {
+        let rows = sqlx::query_as::<_, ProfileWithIdentityRow>(
+            "SELECT p.id AS profile_id, p.identity_id, p.display_name, \
+                    p.created_at AS profile_created_at, p.updated_at AS profile_updated_at, \
+                    i.username, i.password_hash, i.role, i.status, \
+                    i.created_at AS identity_created_at, i.updated_at AS identity_updated_at, \
+                    i.last_login_at \
+             FROM user_profiles p \
+             JOIN identities i ON i.id = p.identity_id \
+             ORDER BY p.created_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
+
+        rows.into_iter()
+            .map(|r| {
+                Ok(UserWithProfile {
+                    identity: Identity {
+                        id: IdentityId(r.identity_id),
+                        username: Username(r.username),
+                        password_hash: PasswordHash(r.password_hash),
+                        role: IdentityRole::from_str(&r.role)?,
+                        status: IdentityStatus::from_str(&r.status)?,
+                        created_at: r.identity_created_at,
+                        updated_at: r.identity_updated_at,
+                        last_login_at: r.last_login_at,
+                    },
+                    profile: UserProfile {
+                        id: r.profile_id,
+                        identity_id: IdentityId(r.identity_id),
+                        display_name: r.display_name,
+                        created_at: r.profile_created_at,
+                        updated_at: r.profile_updated_at,
+                    },
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -303,6 +343,22 @@ struct ProfileRow {
     display_name: String,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+}
+
+#[derive(sqlx::FromRow)]
+struct ProfileWithIdentityRow {
+    profile_id: Uuid,
+    identity_id: Uuid,
+    display_name: String,
+    profile_created_at: DateTime<Utc>,
+    profile_updated_at: DateTime<Utc>,
+    username: String,
+    password_hash: String,
+    role: String,
+    status: String,
+    identity_created_at: DateTime<Utc>,
+    identity_updated_at: DateTime<Utc>,
+    last_login_at: Option<DateTime<Utc>>,
 }
 
 impl From<ProfileRow> for UserProfile {

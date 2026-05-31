@@ -140,6 +140,11 @@ fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorRespons
     )
 }
 
+fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
+    tracing::error!(error = %e, "food log request failed");
+    error_response("internal", "internal server error".into())
+}
+
 fn log_to_response(log: &FoodLog) -> LogResponse {
     let (item_type, item_id) = match &log.item {
         LoggedItem::Product(pid) => ("product", pid.0),
@@ -172,10 +177,7 @@ async fn create_log_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateLogRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     let input = LogFoodInput {
         user_id: auth.1.id,
@@ -197,11 +199,11 @@ async fn create_log_handler(
     match result {
         Ok(log) => {
             let resp = log_to_response(&log);
-            (StatusCode::CREATED, Json(serde_json::to_value(&resp).unwrap())).into_response()
+            (StatusCode::CREATED, Json(resp)).into_response()
         }
         Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(FoodLogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -210,10 +212,7 @@ async fn get_log_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     match services.get_food_log(FoodLogId(id)).await {
         Ok(log) => {
@@ -221,10 +220,10 @@ async fn get_log_handler(
                 return error_response("forbidden", "not your food log".into()).into_response();
             }
             let resp = log_to_response(&log);
-            Json(serde_json::to_value(&resp).unwrap()).into_response()
+            Json(resp).into_response()
         }
         Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -233,10 +232,7 @@ async fn list_logs_handler(
     State(state): State<AppState>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     let from = match chrono::NaiveDate::parse_from_str(&query.from, "%Y-%m-%d") {
         Ok(d) => d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
@@ -259,7 +255,7 @@ async fn list_logs_handler(
                 items,
             }).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -269,10 +265,7 @@ async fn update_log_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLogRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     let input = UpdateFoodInput {
         logged_at: req.logged_at,
@@ -287,12 +280,12 @@ async fn update_log_handler(
     match services.update_food_log(FoodLogId(id), auth.1.id, input).await {
         Ok(log) => {
             let resp = log_to_response(&log);
-            Json(serde_json::to_value(&resp).unwrap()).into_response()
+            Json(resp).into_response()
         }
         Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(FoodLogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
         Err(FoodLogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -301,16 +294,13 @@ async fn delete_log_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     match services.delete_food_log(FoodLogId(id), auth.1.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(FoodLogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -319,10 +309,7 @@ async fn summary_handler(
     State(state): State<AppState>,
     Query(query): Query<SummaryQuery>,
 ) -> impl IntoResponse {
-    let services = match &state.food_log_services {
-        Some(s) => s,
-        None => return error_response("internal", "food log services not configured".into()).into_response(),
-    };
+    let services = &state.food_log_services;
 
     let from = match chrono::NaiveDate::parse_from_str(&query.from, "%Y-%m-%d") {
         Ok(d) => d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
@@ -350,6 +337,6 @@ async fn summary_handler(
                 }).collect(),
             }).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }

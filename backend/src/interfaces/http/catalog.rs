@@ -58,6 +58,11 @@ fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorRespons
     )
 }
 
+fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
+    tracing::error!(error = %e, "catalog request failed");
+    error_response("internal", "internal server error".into())
+}
+
 #[derive(Serialize)]
 pub struct SearchResult {
     pub id: Uuid,
@@ -174,10 +179,7 @@ async fn search_products_handler(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     let products = services.search_products(SearchCriteria {
         query: query.q,
         user_id: Some(auth.1.id),
@@ -200,7 +202,7 @@ async fn search_products_handler(
                 .collect();
             Json(serde_json::json!({ "items": results })).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -209,16 +211,13 @@ async fn barcode_lookup_handler(
     State(state): State<AppState>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     match services.get_product_by_barcode(&barcode).await {
         Ok(product) => Json(serde_json::to_value(product_to_detail(&product)).unwrap()).into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("product with barcode {barcode} not found")).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -227,10 +226,7 @@ async fn product_detail_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     match services.get_product(ProductId(id)).await {
         Ok(product) if product.visibility == ProductVisibility::Global || product.is_owned_by(auth.1.id) => {
             Json(serde_json::to_value(product_to_detail(&product)).unwrap()).into_response()
@@ -239,7 +235,7 @@ async fn product_detail_handler(
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("product {id} not found")).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -248,10 +244,7 @@ async fn create_custom_food_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
 
     match services.create_custom_food(
         auth.1.id,
@@ -288,7 +281,7 @@ async fn create_custom_food_handler(
         )
             .into_response(),
         Err(CatalogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -298,10 +291,7 @@ async fn update_custom_food_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
 
     match services.update_custom_food(
         ProductId(id),
@@ -339,7 +329,7 @@ async fn update_custom_food_handler(
         }
         Err(CatalogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
         Err(CatalogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -348,10 +338,7 @@ async fn delete_custom_food_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
 
     match services.delete_custom_food(ProductId(id), auth.1.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
@@ -359,7 +346,7 @@ async fn delete_custom_food_handler(
             error_response("not_found", format!("product {id} not found")).into_response()
         }
         Err(CatalogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -367,10 +354,7 @@ async fn list_nutrients_handler(
     _auth: AuthUser,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     match services.list_nutrients().await {
         Ok(nutrients) => {
             let items: Vec<NutrientItem> = nutrients
@@ -384,7 +368,7 @@ async fn list_nutrients_handler(
                 .collect();
             Json(NutrientListResponse { items }).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -393,10 +377,7 @@ async fn get_nutrient_handler(
     State(state): State<AppState>,
     Path(code): Path<String>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     match services.get_nutrient(&code).await {
         Ok(n) => {
             Json(serde_json::json!({
@@ -410,7 +391,7 @@ async fn get_nutrient_handler(
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("nutrient {code} not found")).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 
@@ -418,10 +399,7 @@ async fn list_units_handler(
     _auth: AuthUser,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let services = match &state.catalog_services {
-        Some(s) => s,
-        None => return error_response("internal", "catalog services not configured".into()).into_response(),
-    };
+    let services = &state.catalog_services;
     match services.list_units().await {
         Ok(units) => {
             let items: Vec<UnitItem> = units
@@ -434,7 +412,7 @@ async fn list_units_handler(
                 .collect();
             Json(UnitListResponse { items }).into_response()
         }
-        Err(e) => error_response("internal", e.to_string()).into_response(),
+        Err(e) => internal_error(e).into_response(),
     }
 }
 

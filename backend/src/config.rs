@@ -7,6 +7,7 @@ pub struct AppConfig {
     pub session_cookie_name: String,
     pub session_cookie_secure: bool,
     pub session_ttl_seconds: i64,
+    pub cors_allowed_origins: Vec<String>,
 }
 
 impl AppConfig {
@@ -16,6 +17,15 @@ impl AppConfig {
             .unwrap_or_else(|_| "3001".into())
             .parse()
             .expect("APP_PORT must be a valid port number");
+        let cors_allowed_origins = std::env::var("CORS_ALLOWED_ORIGINS")
+            .ok()
+            .map(|v| {
+                v.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
         Self {
             database_url: std::env::var("DATABASE_URL")
                 .expect("DATABASE_URL must be set"),
@@ -30,6 +40,7 @@ impl AppConfig {
                 .unwrap_or_else(|_| "604800".into())
                 .parse()
                 .expect("SESSION_TTL_SECONDS must be a valid i64"),
+            cors_allowed_origins,
         }
     }
 }

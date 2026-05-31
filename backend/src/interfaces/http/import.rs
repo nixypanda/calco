@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::application::import::{ImportError, ImportServices};
+use crate::application::import::ImportError;
 use crate::domain::import::*;
 use crate::interfaces::http::auth::{AppState, AuthAdmin};
 
@@ -24,29 +24,22 @@ pub fn import_routes(state: AppState) -> Router {
         .with_state(state)
 }
 
-fn get_services(state: &AppState) -> Result<ImportServices, ImportHttpError> {
-    state.import_services.clone()
-        .ok_or_else(|| ImportHttpError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            code: "not_configured".into(),
-            message: "import services not configured".into(),
-        })
-}
-
 fn import_error_response(err: &ImportError) -> (StatusCode, Json<ErrorBody>) {
-    let (status, code) = match err {
-        ImportError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
-        ImportError::InvalidStatus(_) => (StatusCode::CONFLICT, "invalid_status"),
-        ImportError::Validation(_) => (StatusCode::BAD_REQUEST, "validation_error"),
-        ImportError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "database_error"),
-        ImportError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+    let (status, code, message) = match err {
+        ImportError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
+        ImportError::InvalidStatus(msg) => (StatusCode::CONFLICT, "invalid_status", msg.clone()),
+        ImportError::Validation(msg) => (StatusCode::BAD_REQUEST, "validation_error", msg.clone()),
+        ImportError::Database(_) | ImportError::Internal(_) => {
+            tracing::error!(error = %err, "import request failed");
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "internal server error".to_string())
+        }
     };
     (
         status,
         Json(ErrorBody {
             error: ApiError {
                 code: code.to_string(),
-                message: err.to_string(),
+                message,
             },
         }),
     )
@@ -61,23 +54,6 @@ struct ApiError {
 #[derive(Serialize)]
 struct ErrorBody {
     error: ApiError,
-}
-
-struct ImportHttpError {
-    status: StatusCode,
-    code: String,
-    message: String,
-}
-
-impl IntoResponse for ImportHttpError {
-    fn into_response(self) -> axum::response::Response {
-        (self.status, Json(ErrorBody {
-            error: ApiError {
-                code: self.code,
-                message: self.message,
-            },
-        })).into_response()
-    }
 }
 
 #[derive(Deserialize)]
@@ -97,10 +73,7 @@ async fn create_import_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateImportRequest>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     match services.create_job(req.source.clone(), None).await {
         Ok(job) => (
@@ -144,10 +117,7 @@ async fn stage_foods_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<StageFoodsRequest>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     let foods: Vec<StagedImportProduct> = req.rows.into_iter().map(|r| StagedImportProduct {
         source: r.source,
@@ -190,10 +160,7 @@ async fn stage_nutrients_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<StageNutrientsRequest>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     let nutrients: Vec<StagedImportNutrient> = req.rows.into_iter().map(|r| StagedImportNutrient {
         source: r.source,
@@ -227,10 +194,7 @@ async fn commit_import_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     match services.commit_job(ImportId(id)).await {
         Ok(result) => Json(CommitResponse {
@@ -259,10 +223,7 @@ async fn get_import_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     match services.get_job(ImportId(id)).await {
         Ok(job) => Json(ImportStatusResponse {
@@ -301,10 +262,7 @@ async fn get_import_errors_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = match get_services(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
-    };
+    let services = &state.import_services;
 
     match services.get_errors(ImportId(id)).await {
         Ok(errors) => {

@@ -197,45 +197,8 @@ impl ProductRepository for PostgresProductRepository {
         .await
         .map_err(|e| CatalogError::Database(e.to_string()))?;
 
-        for pn in &product.nutrients {
-            let row: Option<(Uuid,)> =
-                sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
-                    .bind(&pn.nutrient_code.0)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(|e| CatalogError::Database(e.to_string()))?;
-
-            if let Some((nid,)) = row {
-                sqlx::query(
-                    r#"
-                    INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence)
-                    VALUES ($1, $2, $3, $4, $5)
-                    "#,
-                )
-                .bind(product.id.0)
-                .bind(nid)
-                .bind(pn.amount_per_100g.0)
-                .bind(&pn.source)
-                .bind(pn.confidence.as_ref().map(|c| c.as_str()))
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| CatalogError::Database(e.to_string()))?;
-            }
-        }
-
-        for ps in &product.servings {
-            sqlx::query(
-                "INSERT INTO product_servings (product_id, label, quantity, unit, grams) VALUES ($1, $2, $3, $4, $5)",
-            )
-            .bind(product.id.0)
-            .bind(&ps.label.0)
-            .bind(ps.quantity)
-            .bind(&ps.unit.0)
-            .bind(ps.grams)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
-        }
+        insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
+        insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
         tx.commit().await.map_err(|e| CatalogError::Database(e.to_string()))?;
         Ok(())
@@ -274,45 +237,8 @@ impl ProductRepository for PostgresProductRepository {
             .await
             .map_err(|e| CatalogError::Database(e.to_string()))?;
 
-        for pn in &product.nutrients {
-            let row: Option<(Uuid,)> =
-                sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
-                    .bind(&pn.nutrient_code.0)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(|e| CatalogError::Database(e.to_string()))?;
-
-            if let Some((nid,)) = row {
-                sqlx::query(
-                    r#"
-                    INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence)
-                    VALUES ($1, $2, $3, $4, $5)
-                    "#,
-                )
-                .bind(product.id.0)
-                .bind(nid)
-                .bind(pn.amount_per_100g.0)
-                .bind(&pn.source)
-                .bind(pn.confidence.as_ref().map(|c| c.as_str()))
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| CatalogError::Database(e.to_string()))?;
-            }
-        }
-
-        for ps in &product.servings {
-            sqlx::query(
-                "INSERT INTO product_servings (product_id, label, quantity, unit, grams) VALUES ($1, $2, $3, $4, $5)",
-            )
-            .bind(product.id.0)
-            .bind(&ps.label.0)
-            .bind(ps.quantity)
-            .bind(&ps.unit.0)
-            .bind(ps.grams)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
-        }
+        insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
+        insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
         tx.commit().await.map_err(|e| CatalogError::Database(e.to_string()))?;
         Ok(())
@@ -451,4 +377,86 @@ struct UnitRow {
     code: String,
     name: String,
     kind: String,
+}
+
+async fn insert_product_nutrients(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    product_id: Uuid,
+    nutrients: &[ProductNutrient],
+) -> Result<(), CatalogError> {
+    if nutrients.is_empty() {
+        return Ok(());
+    }
+
+    let codes: Vec<String> = nutrients.iter().map(|n| n.nutrient_code.0.clone()).collect();
+    let amounts: Vec<Decimal> = nutrients.iter().map(|n| n.amount_per_100g.0).collect();
+    let sources: Vec<Option<String>> = nutrients.iter().map(|n| n.source.clone()).collect();
+    let confidences: Vec<Option<String>> = nutrients
+        .iter()
+        .map(|n| n.confidence.as_ref().map(|c| c.as_str().to_string()))
+        .collect();
+
+    let inserted: i64 = sqlx::query_scalar(
+        r#"
+        WITH ins AS (
+            INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence)
+            SELECT $1, n.id, v.amount, v.source, v.confidence
+            FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::text[])
+                AS v(code, amount, source, confidence)
+            JOIN nutrients n ON n.code = v.code
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM ins
+        "#,
+    )
+    .bind(product_id)
+    .bind(&codes)
+    .bind(&amounts)
+    .bind(&sources)
+    .bind(&confidences)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| CatalogError::Database(e.to_string()))?;
+
+    if (inserted as usize) != nutrients.len() {
+        return Err(CatalogError::Validation(format!(
+            "unknown nutrient code in product (expected {} rows, inserted {})",
+            nutrients.len(),
+            inserted
+        )));
+    }
+    Ok(())
+}
+
+async fn insert_product_servings(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    product_id: Uuid,
+    servings: &[ProductServing],
+) -> Result<(), CatalogError> {
+    if servings.is_empty() {
+        return Ok(());
+    }
+
+    let labels: Vec<String> = servings.iter().map(|s| s.label.0.clone()).collect();
+    let quantities: Vec<Decimal> = servings.iter().map(|s| s.quantity).collect();
+    let units: Vec<String> = servings.iter().map(|s| s.unit.0.clone()).collect();
+    let grams: Vec<Decimal> = servings.iter().map(|s| s.grams).collect();
+
+    sqlx::query(
+        r#"
+        INSERT INTO product_servings (product_id, label, quantity, unit, grams)
+        SELECT $1, v.label, v.quantity, v.unit, v.grams
+        FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::numeric[])
+            AS v(label, quantity, unit, grams)
+        "#,
+    )
+    .bind(product_id)
+    .bind(&labels)
+    .bind(&quantities)
+    .bind(&units)
+    .bind(&grams)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| CatalogError::Database(e.to_string()))?;
+    Ok(())
 }

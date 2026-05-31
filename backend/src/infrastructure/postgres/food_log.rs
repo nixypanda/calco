@@ -95,27 +95,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .await
         .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
-        for snap in &log.nutrient_snapshots {
-            let row: Option<(Uuid,)> =
-                sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
-                    .bind(&snap.nutrient_code.0)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(|e| FoodLogError::Database(e.to_string()))?;
-
-            if let Some((nid,)) = row {
-                sqlx::query(
-                    "INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit) VALUES ($1, $2, $3, $4)",
-                )
-                .bind(log.id.0)
-                .bind(nid)
-                .bind(snap.amount)
-                .bind(&snap.unit.0)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| FoodLogError::Database(e.to_string()))?;
-            }
-        }
+        insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
         tx.commit().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
         Ok(())
@@ -165,9 +145,40 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .await
         .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
-        let mut results = Vec::new();
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let snapshot_rows = sqlx::query_as::<_, FoodLogSnapshotJoinRow>(
+            r#"
+            SELECT fln.food_log_id, fln.amount, fln.unit, n.code
+            FROM food_log_nutrients fln
+            JOIN nutrients n ON n.id = fln.nutrient_id
+            WHERE fln.food_log_id = ANY($1)
+            "#,
+        )
+        .bind(&ids)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+
+        let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
+            std::collections::HashMap::new();
+        for s in snapshot_rows {
+            snapshots_by_log
+                .entry(s.food_log_id)
+                .or_default()
+                .push(FoodLogNutrientSnapshot {
+                    nutrient_code: NutrientCode(s.code),
+                    amount: s.amount,
+                    unit: UnitCode(s.unit),
+                });
+        }
+
+        let mut results = Vec::with_capacity(rows.len());
         for r in rows {
-            let snapshots = self.load_snapshots(r.id).await?;
+            let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
             results.push(self.row_to_food_log(r, snapshots)?);
         }
         Ok(results)
@@ -206,27 +217,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             .await
             .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
-        for snap in &log.nutrient_snapshots {
-            let row: Option<(Uuid,)> =
-                sqlx::query_as("SELECT id FROM nutrients WHERE code = $1")
-                    .bind(&snap.nutrient_code.0)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(|e| FoodLogError::Database(e.to_string()))?;
-
-            if let Some((nid,)) = row {
-                sqlx::query(
-                    "INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit) VALUES ($1, $2, $3, $4)",
-                )
-                .bind(log.id.0)
-                .bind(nid)
-                .bind(snap.amount)
-                .bind(&snap.unit.0)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| FoodLogError::Database(e.to_string()))?;
-            }
-        }
+        insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
         tx.commit().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
         Ok(())
@@ -499,6 +490,14 @@ struct NutrientSnapshotRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct FoodLogSnapshotJoinRow {
+    food_log_id: Uuid,
+    amount: Decimal,
+    unit: String,
+    code: String,
+}
+
+#[derive(sqlx::FromRow)]
 struct ProductRow {
     id: Uuid,
     source: String,
@@ -560,4 +559,47 @@ struct MealComponentLookupRow {
     component_meal_id: Option<Uuid>,
     quantity: Decimal,
     unit: String,
+}
+
+async fn insert_food_log_nutrients(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    food_log_id: Uuid,
+    snapshots: &[FoodLogNutrientSnapshot],
+) -> Result<(), FoodLogError> {
+    if snapshots.is_empty() {
+        return Ok(());
+    }
+
+    let codes: Vec<String> = snapshots.iter().map(|s| s.nutrient_code.0.clone()).collect();
+    let amounts: Vec<Decimal> = snapshots.iter().map(|s| s.amount).collect();
+    let units: Vec<String> = snapshots.iter().map(|s| s.unit.0.clone()).collect();
+
+    let inserted: i64 = sqlx::query_scalar(
+        r#"
+        WITH ins AS (
+            INSERT INTO food_log_nutrients (food_log_id, nutrient_id, amount, unit)
+            SELECT $1, n.id, v.amount, v.unit
+            FROM UNNEST($2::text[], $3::numeric[], $4::text[]) AS v(code, amount, unit)
+            JOIN nutrients n ON n.code = v.code
+            RETURNING 1
+        )
+        SELECT COUNT(*) FROM ins
+        "#,
+    )
+    .bind(food_log_id)
+    .bind(&codes)
+    .bind(&amounts)
+    .bind(&units)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(|e| FoodLogError::Database(e.to_string()))?;
+
+    if (inserted as usize) != snapshots.len() {
+        return Err(FoodLogError::Validation(format!(
+            "unknown nutrient code in food log snapshot (expected {} rows, inserted {})",
+            snapshots.len(),
+            inserted
+        )));
+    }
+    Ok(())
 }
