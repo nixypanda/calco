@@ -164,7 +164,7 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
   });
 
   it("submits a log and navigates to diary", async () => {

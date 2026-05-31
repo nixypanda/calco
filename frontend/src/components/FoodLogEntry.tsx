@@ -1,8 +1,16 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { FieldRow } from "@/components/FieldRow";
@@ -11,6 +19,55 @@ import { NutrientsTable } from "@/components/NutrientsTable";
 import { scaleNutrients } from "@/lib/scaleNutrients";
 import type { ProductDetail, UnitItem } from "@/api/foods";
 import type { NutrientSnapshotDto } from "@/api/logs";
+
+function NumberStepper({
+  value,
+  onChange,
+  step = 1,
+  min,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  step?: number;
+  min?: number;
+}) {
+  const adjust = (delta: number) => {
+    const n = parseFloat(value);
+    const current = isFinite(n) ? n : 0;
+    let next = current + delta;
+    if (min != null && next < min) next = min;
+    onChange(Number.isInteger(next) ? String(next) : next.toFixed(2).replace(/\.?0+$/, ""));
+  };
+  const btn =
+    "h-8 w-8 inline-flex items-center justify-center rounded-full border border-white/60 bg-white/55 backdrop-blur-xl text-foreground shadow-[0_2px_8px_rgb(15_12_40_/_0.06)] hover:bg-white/80 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.14] disabled:opacity-40";
+  return (
+    <div className="flex items-center justify-end gap-2">
+      <button
+        type="button"
+        onClick={() => adjust(-step)}
+        className={btn}
+        aria-label="Decrement"
+      >
+        <Minus className="h-3.5 w-3.5" />
+      </button>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-16 text-center text-muted-foreground font-semibold bg-transparent border-0 outline-none focus:ring-2 focus:ring-ring/50 rounded-md"
+      />
+      <button
+        type="button"
+        onClick={() => adjust(step)}
+        className={btn}
+        aria-label="Increment"
+      >
+        <Plus className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
 
 const MEAL_SLOTS = [
   { value: "breakfast", label: "Breakfast" },
@@ -182,41 +239,52 @@ export function FoodLogEntry({
 
       <Card className="mb-5 overflow-hidden p-0">
         <FieldRow label="Meal">
-          <select
+          <Select
             value={values.slot}
-            onChange={(e) => setValues((v) => ({ ...v, slot: e.target.value }))}
-            className="input-select text-right text-muted-foreground font-semibold"
+            onValueChange={(v) => setValues((prev) => ({ ...prev, slot: v }))}
           >
-            <option value="__none__">None</option>
-            {MEAL_SLOTS.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label="Meal slot"
+              className="text-muted-foreground font-semibold"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None</SelectItem>
+              {MEAL_SLOTS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FieldRow>
         <FieldRow label="Amount">
-          <Input
-            type="number"
+          <NumberStepper
             value={values.amount}
+            onChange={(v) => setValues((prev) => ({ ...prev, amount: v }))}
             min={0}
-            step="any"
-            onChange={(e) => setValues((v) => ({ ...v, amount: e.target.value }))}
-            className="text-right text-muted-foreground font-semibold border-0 bg-transparent px-0 shadow-none"
           />
         </FieldRow>
         <FieldRow label="Unit">
-          <select
+          <Select
             value={values.unit}
-            onChange={(e) => setValues((v) => ({ ...v, unit: e.target.value }))}
-            className="input-select text-right text-muted-foreground font-semibold"
+            onValueChange={(v) => setValues((prev) => ({ ...prev, unit: v }))}
           >
-            {unitOptions.map((u) => (
-              <option key={u.code} value={u.code}>
-                {u.name === u.code ? u.code : `${u.name} (${u.code})`}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              aria-label="Unit"
+              className="text-muted-foreground font-semibold"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {unitOptions.map((u) => (
+                <SelectItem key={u.code} value={u.code}>
+                  {u.name === u.code ? u.code : `${u.name} (${u.code})`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FieldRow>
         <FieldRow label="Notes">
           <Input

@@ -4,6 +4,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import { listLogs, getSummary } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
+import { getMeal } from "../api/meals";
 import type { LogResponse, SummaryEntry } from "../api/logs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -168,7 +169,7 @@ function SlotMacroSummary({
 }
 
 function todayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatDate(new Date());
 }
 
 function getInitials(name: string): string {
@@ -234,14 +235,24 @@ export function Diary() {
           logRes.items.filter((l) => l.item.type === "product").map((l) => l.item.id),
         ),
       ];
-      if (productIds.length > 0) {
-        const details = await Promise.all(
-          productIds.map((id) =>
+      const mealIds = [
+        ...new Set(
+          logRes.items.filter((l) => l.item.type === "meal").map((l) => l.item.id),
+        ),
+      ];
+      if (productIds.length > 0 || mealIds.length > 0) {
+        const details = await Promise.all([
+          ...productIds.map((id) =>
             getFoodDetail(id)
               .then((d) => ({ id: d.id, name: d.name }))
               .catch(() => ({ id, name: "Unknown food" })),
           ),
-        );
+          ...mealIds.map((id) =>
+            getMeal(id)
+              .then((m) => ({ id: m.id, name: m.name }))
+              .catch(() => ({ id, name: "Unknown meal" })),
+          ),
+        ]);
         const nameMap: Record<string, string> = {};
         for (const d of details) nameMap[d.id] = d.name;
         setFoodNames(nameMap);

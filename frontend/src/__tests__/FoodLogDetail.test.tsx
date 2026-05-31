@@ -118,11 +118,10 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
     expect(screen.getByDisplayValue("150")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Post-workout meal")).toBeInTheDocument();
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
-    // Macros scaled from food.nutrients at 150g
     expect(screen.getByText("46.5g")).toBeInTheDocument();
   });
 
@@ -135,7 +134,7 @@ describe("FoodLogDetail", () => {
 
     expect(screen.getByRole("heading", { name: "Edit Log" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("150")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Lunch")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
     expect(screen.getByText("Nutrients")).toBeInTheDocument();
   });
@@ -157,8 +156,8 @@ describe("FoodLogDetail", () => {
     await userEvent.clear(amountInput);
     await userEvent.type(amountInput, "200");
 
-    const slotSelect = screen.getByDisplayValue("Lunch");
-    await userEvent.selectOptions(slotSelect, "dinner");
+    await userEvent.click(screen.getByRole("combobox", { name: "Meal slot" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Dinner" }));
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 
@@ -171,6 +170,18 @@ describe("FoodLogDetail", () => {
         }),
       );
     });
+  });
+
+  it("increments the amount with the stepper", async () => {
+    renderAtDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole("button", { name: "Increment" }));
+
+    expect(screen.getByDisplayValue("151")).toBeInTheDocument();
   });
 
   it("deletes log and navigates to diary", async () => {
