@@ -21,7 +21,6 @@ backend/src/
     import.rs
     meal.rs
   infrastructure/postgres/
-    migrations/
     auth.rs
     catalog.rs
     food_log.rs
@@ -201,10 +200,14 @@ GET  /imports/{id}/errors
 Migrations live in:
 
 ```text
-backend/src/infrastructure/postgres/migrations
+backend/migrations
 ```
 
-The backend runs embedded migrations on startup.
+Run migrations explicitly with:
+
+```bash
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
+```
 
 Important tables:
 

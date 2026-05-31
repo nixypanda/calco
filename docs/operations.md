@@ -49,6 +49,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:5173
 Run:
 
 ```bash
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
 DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-dev
 ```
 
@@ -90,30 +91,31 @@ Test:
 cd frontend && pnpm test
 ```
 
-The `justfile` still uses npm for some frontend recipes even though the repo has pnpm lock/workspace files. See [known issues](known_issues.md).
-
-## Test Command Caveat
-
-Use these reliable checks:
+Use these checks:
 
 ```bash
+just test
 just backend-test
 cd frontend
 pnpm test
 pnpm run build
 ```
 
-`just test` currently invokes a stale Playwright e2e command. Restore Playwright or remove that recipe before treating `just test` as authoritative.
-
 ## Database Migrations
 
-Migrations are embedded and run by the backend on startup:
+Migrations live in:
 
 ```text
-backend/src/infrastructure/postgres/migrations
+backend/migrations
 ```
 
-There is no separate migration binary in the current backend manifest.
+Run migrations separately from app startup:
+
+```bash
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
+```
+
+The current migration set is a squashed baseline. `just backend-migrate` uses `sqlx migrate run --ignore-missing` and the baseline SQL is written to tolerate local databases that already have the previous embedded schema, so running it records the new baseline without recreating existing tables.
 
 ## Import Operations
 

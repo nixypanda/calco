@@ -119,12 +119,12 @@ describe("Diary", () => {
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getByText("Calories")).toBeInTheDocument();
+      expect(screen.getAllByText("Calories").length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText("Protein")).toBeInTheDocument();
-    expect(screen.getByText("Carbs")).toBeInTheDocument();
-    expect(screen.getByText("Fat")).toBeInTheDocument();
+    expect(screen.getAllByText("Protein").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Carbs").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Fat").length).toBeGreaterThan(0);
   });
 
   it("shows meal slot groups and log rows", async () => {

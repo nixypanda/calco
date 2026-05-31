@@ -48,9 +48,9 @@ backend-build:
 backend-test:
     cargo test --manifest-path backend/Cargo.toml
 
-# Run backend migration (create/run)
+# Run backend migrations
 backend-migrate:
-    cargo run --manifest-path backend/Cargo.toml --bin migrate
+    cd backend && sqlx migrate run --ignore-missing
 
 # ──────────────────────────────────────────────
 # Frontend
@@ -58,23 +58,19 @@ backend-migrate:
 
 # Install frontend dependencies
 frontend-setup:
-    cd frontend && npm install
+    cd frontend && pnpm install
 
 # Run frontend dev server
 frontend-dev:
-    cd frontend && npm run dev
+    cd frontend && pnpm dev
 
 # Build frontend for production
 frontend-build:
-    cd frontend && npm run build
+    cd frontend && pnpm run build
 
 # Run frontend tests
 frontend-test:
-    cd frontend && npm run test
-
-# Run frontend e2e tests
-frontend-e2e:
-    cd frontend && npx playwright test
+    cd frontend && pnpm test
 
 # ──────────────────────────────────────────────
 # Combined
@@ -84,14 +80,14 @@ frontend-e2e:
 dev: db-wait
     @echo "Starting backend and frontend..."
     (cd backend && cargo run) &
-    (cd frontend && npm run dev) &
+    (cd frontend && pnpm dev) &
     wait
 
 # Build everything
 build: backend-build frontend-build
 
 # Run all tests
-test: backend-test frontend-test frontend-e2e
+test: backend-test frontend-test
 
 # ──────────────────────────────────────────────
 # Misc

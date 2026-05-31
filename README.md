@@ -36,6 +36,7 @@ Start PostgreSQL:
 ```bash
 just up
 just db-wait
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
 ```
 
 Run the backend:
@@ -59,13 +60,12 @@ The backend listens on port `3001` by default. The Vite frontend listens on port
 Reliable current checks:
 
 ```bash
+just test
 just backend-test
 cd frontend
 pnpm test
 pnpm run build
 ```
-
-`just test` currently includes a stale Playwright e2e recipe. See [known issues](docs/known_issues.md).
 
 ## Documentation
 

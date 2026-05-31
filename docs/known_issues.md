@@ -32,20 +32,3 @@ Examples currently dropped:
 Recovery is by re-running the converters against the raw archives in `data/raw/`, so no data is permanently lost — but adding any of these to the product model is a deliberate schema + domain change, not a "flip a flag" operation. Each field needs: a column on `products` (or a side table), a domain field, a converter mapping, a `FoodRow` field on the HTTP boundary, and a commit-SQL projection.
 
 Mitigation if ever needed: pick the specific fields worth surfacing (likely `ingredients_text` / `allergens` for OFF), then thread them through domain → staging → products in one go.
-
-## Tooling / Test Commands
-
-### Frontend package-manager commands are mixed
-The repository has `frontend/pnpm-lock.yaml` and `frontend/pnpm-workspace.yaml`, but `justfile` uses `npm install`, `npm run dev`, `npm run build`, and `npm run test` for frontend recipes. Direct developer commands elsewhere generally use `pnpm`.
-
-Mitigation: standardize the just recipes on `pnpm` if pnpm is the intended package manager.
-
-### E2E test recipe is stale
-`justfile` still defines `frontend-e2e` as `cd frontend && npx playwright test`, and `just test` depends on it. The current repository does not include `frontend/playwright.config.ts`, `frontend/e2e/`, `frontend/tsconfig.e2e.json`, or `@playwright/test` in `frontend/package.json`.
-
-Mitigation: either restore the Playwright setup and dependency, or remove `frontend-e2e` from `just test`. Until then, run `just backend-test` and `just frontend-test` separately for reliable local verification.
-
-### Backend migration recipe is stale
-`justfile` defines `backend-migrate` as `cargo run --manifest-path backend/Cargo.toml --bin migrate`, but the backend manifest does not define a `migrate` binary. Migrations are currently embedded and run by the backend on startup.
-
-Mitigation: remove the recipe or replace it with a command that starts the backend against the target database.

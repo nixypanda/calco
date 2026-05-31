@@ -15,7 +15,7 @@ tools/importers
   -> import API
 ```
 
-The backend runs database migrations on startup from `backend/src/infrastructure/postgres/migrations`.
+Database migrations live in `backend/migrations` and are applied explicitly with `sqlx-cli`.
 
 ## Product Boundaries
 

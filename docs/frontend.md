@@ -137,4 +137,4 @@ Build:
 cd frontend && pnpm run build
 ```
 
-There is no committed Playwright setup at the moment. See [known issues](known_issues.md).
+No e2e suite is configured at the moment.

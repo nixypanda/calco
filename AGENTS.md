@@ -2,10 +2,10 @@
 
 ## Current Codebase Shape
 
-- Backend: Rust 2024, axum, sqlx, PostgreSQL migrations embedded in the binary.
+- Backend: Rust 2024, axum, sqlx, PostgreSQL migrations run with `sqlx-cli`.
 - Frontend: React 19, Vite 6, TypeScript, Tailwind CSS v4, shadcn-style local UI components.
 - Database: PostgreSQL via `docker-compose.yml`.
-- Test runner commands are defined in `justfile`, but see the e2e note below.
+- Test runner commands are defined in `justfile`.
 
 ## Backend Rust Tests
 
@@ -30,7 +30,7 @@ just backend-test
 
 - Backend tests are inline under `#[cfg(test)] mod tests { ... }`.
 - Domain and application tests use manual mock repositories.
-- The app runs migrations on startup from `backend/src/infrastructure/postgres/migrations`.
+- Migrations live in `backend/migrations` and are run explicitly with `just backend-migrate`.
 
 ## Frontend Unit Tests
 
@@ -48,24 +48,13 @@ just frontend-test
 
 - Tests live in `frontend/src/__tests__/`.
 - Vitest is configured by `frontend/vitest.config.ts`.
-- The frontend currently has no committed Playwright config or `frontend/e2e/` directory.
-
-## Playwright / E2E Status
-
-`justfile` still contains `frontend-e2e` and includes it in `just test`, but the current frontend manifest does not include `@playwright/test`, and these files are not present:
-
-- `frontend/playwright.config.ts`
-- `frontend/e2e/`
-- `frontend/tsconfig.e2e.json`
-
-Until e2e support is restored, use:
+Run all tests:
 
 ```bash
-just backend-test
-just frontend-test
+just test
 ```
 
-or run the package commands directly:
+Or run the package commands directly:
 
 ```bash
 cd backend && cargo test
