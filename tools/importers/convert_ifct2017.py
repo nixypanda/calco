@@ -34,6 +34,13 @@ FOOD_GROUP_MAP = {
 RE_VALUE_ERROR = re.compile(r"^([\d.]+)\s*±")
 
 
+def categories_from_value(value):
+    if not value:
+        return []
+    normalized = value.strip().lower()
+    return [normalized] if normalized else []
+
+
 def parse_ifct_value(raw):
     if raw is None:
         return None
@@ -88,7 +95,7 @@ def main():
                 "source_id": code,
                 "name": name,
                 "brand": None,
-                "category": category,
+                "categories": categories_from_value(category),
                 "serving_size_g": None,
             }
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")

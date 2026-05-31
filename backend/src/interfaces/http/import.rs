@@ -102,7 +102,8 @@ struct FoodRow {
     barcode: Option<String>,
     name: String,
     brand: Option<String>,
-    category: Option<String>,
+    #[serde(default)]
+    categories: Vec<String>,
     serving_size_g: Option<Decimal>,
 }
 
@@ -126,7 +127,7 @@ async fn stage_foods_handler(
         barcode: r.barcode,
         name: r.name,
         brand: r.brand,
-        category: r.category,
+        categories: crate::application::catalog::normalize_categories(r.categories),
         serving_size_g: r.serving_size_g,
         raw_payload: None,
         row_number: r.row_number,

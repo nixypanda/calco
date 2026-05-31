@@ -80,7 +80,7 @@ impl PostgresProductRepository {
             barcode: r.barcode.map(Barcode),
             name: ProductName(r.name),
             brand: r.brand.map(Brand),
-            category: r.category.map(Category),
+            categories: r.categories.into_iter().map(Category).collect(),
             default_quantity: r.default_quantity,
             default_unit: r.default_unit.map(UnitCode),
             serving_size_g: r.serving_size_g,
@@ -92,25 +92,30 @@ impl PostgresProductRepository {
 
 #[async_trait]
 impl ProductRepository for PostgresProductRepository {
-    async fn search(&self, query: &str, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError> {
+    async fn search(&self, query: ProductSearchQuery, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError> {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   category, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g
             FROM products
             WHERE deleted_at IS NULL
               AND (visibility = 'global' OR user_id = $2)
-              AND (name ILIKE '%' || $1 || '%'
+              AND ($1 = ''
+                   OR name ILIKE '%' || $1 || '%'
                    OR brand ILIKE '%' || $1 || '%'
-                   OR category ILIKE '%' || $1 || '%')
+                   OR barcode ILIKE '%' || $1 || '%')
+              AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
+              AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
             ORDER BY
-                CASE WHEN name ILIKE $1 THEN 0 ELSE 1 END,
+                CASE WHEN name ILIKE $1 || '%' THEN 0 ELSE 1 END,
                 name
             LIMIT 50
             "#,
         )
-        .bind(query)
+        .bind(&query.text)
         .bind(user_id)
+        .bind(&query.include_categories)
+        .bind(&query.exclude_categories)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| CatalogError::Database(e.to_string()))?;
@@ -124,7 +129,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   category, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
@@ -147,7 +152,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   category, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g
             FROM products WHERE barcode = $1 AND deleted_at IS NULL
             "#,
         )
@@ -172,7 +177,7 @@ impl ProductRepository for PostgresProductRepository {
         sqlx::query(
             r#"
             INSERT INTO products (id, source, source_id, user_id, visibility, barcode, name,
-                                  brand, category, default_quantity, default_unit, serving_size_g)
+                                  brand, categories, default_quantity, default_unit, serving_size_g)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             "#,
         )
@@ -184,7 +189,7 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.barcode.as_ref().map(|b| &b.0))
         .bind(&product.name.0)
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(product.category.as_ref().map(|c| &c.0))
+        .bind(product.categories.iter().map(|c| c.0.clone()).collect::<Vec<_>>())
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
@@ -204,7 +209,7 @@ impl ProductRepository for PostgresProductRepository {
 
         sqlx::query(
             r#"
-            UPDATE products SET name=$2, brand=$3, category=$4, default_quantity=$5,
+            UPDATE products SET name=$2, brand=$3, categories=$4, default_quantity=$5,
                                 default_unit=$6, serving_size_g=$7, updated_at=now()
             WHERE id=$1
             "#,
@@ -212,7 +217,7 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.id.0)
         .bind(&product.name.0)
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(product.category.as_ref().map(|c| &c.0))
+        .bind(product.categories.iter().map(|c| c.0.clone()).collect::<Vec<_>>())
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
@@ -261,7 +266,7 @@ struct ProductRow {
     barcode: Option<String>,
     name: String,
     brand: Option<String>,
-    category: Option<String>,
+    categories: Vec<String>,
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     serving_size_g: Option<Decimal>,

@@ -71,7 +71,7 @@ const mockFood = {
   barcode: null,
   name: "Chicken Breast",
   brand: null,
-  category: null,
+  categories: [],
   default_quantity: null,
   default_unit: "g",
   serving_size_g: null,

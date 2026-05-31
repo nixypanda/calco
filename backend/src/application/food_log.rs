@@ -622,7 +622,7 @@ mod tests {
             barcode: None,
             name: ProductName("Test Food".to_string()),
             brand: None,
-            category: None,
+            categories: vec![],
             default_quantity: Some(Decimal::new(100, 0)),
             default_unit: Some(UnitCode("g".to_string())),
             serving_size_g: Some(Decimal::new(100, 0)),

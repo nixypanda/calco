@@ -4,6 +4,7 @@ import { Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -98,7 +99,7 @@ interface Props {
   initial: LogValues;
   loggedAt?: string;
   brand?: string | null;
-  category?: string | null;
+  categories?: string[];
   servingSizeG?: string | null;
   customFoodEditPath?: string;
   submitLabel: string;
@@ -129,7 +130,7 @@ export function FoodLogEntry({
   initial,
   loggedAt,
   brand,
-  category,
+  categories = [],
   servingSizeG,
   customFoodEditPath,
   submitLabel,
@@ -211,7 +212,6 @@ export function FoodLogEntry({
 
   const subtitleParts = [
     brand,
-    category,
     servingSizeG ? `Serving ${servingSizeG}g` : null,
     loggedAt ? formatTimestamp(loggedAt) : null,
   ].filter(Boolean) as string[];
@@ -223,8 +223,11 @@ export function FoodLogEntry({
       <div className="mb-5 flex flex-col gap-2">
         <h2 className="text-xl">{itemName}</h2>
         {(subtitleParts.length > 0 || customFoodEditPath) && (
-          <p className="text-muted-foreground text-sm flex items-center flex-wrap gap-x-1.5">
+          <div className="text-muted-foreground text-sm flex items-center flex-wrap gap-1.5">
             {subtitleParts.length > 0 && <span>{subtitleParts.join(" · ")}</span>}
+            {categories.map((category) => (
+              <Badge key={category} variant="secondary">{category}</Badge>
+            ))}
             {customFoodEditPath && (
               <Link
                 to={customFoodEditPath}
@@ -233,7 +236,7 @@ export function FoodLogEntry({
                 Edit food
               </Link>
             )}
-          </p>
+          </div>
         )}
       </div>
 

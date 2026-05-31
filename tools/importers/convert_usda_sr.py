@@ -8,6 +8,13 @@ RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw")
 PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed")
 
 
+def categories_from_value(value):
+    if not value:
+        return []
+    normalized = str(value).strip().lower()
+    return [normalized] if normalized else []
+
+
 def parse_amount(value):
     try:
         return round(float(value), 6)
@@ -77,7 +84,7 @@ def main():
                 "source_id": fdc_id,
                 "name": description,
                 "brand": brand,
-                "category": str(category) if category else None,
+                "categories": categories_from_value(category),
                 "serving_size_g": serving_size,
             }
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")

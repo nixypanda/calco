@@ -7,7 +7,7 @@ export interface SearchResult {
   barcode: string | null;
   name: string;
   brand: string | null;
-  category: string | null;
+  categories: string[];
   serving_size_g: string | null;
 }
 
@@ -38,7 +38,7 @@ export interface ProductDetail {
   barcode: string | null;
   name: string;
   brand: string | null;
-  category: string | null;
+  categories: string[];
   default_quantity: string | null;
   default_unit: string | null;
   serving_size_g: string | null;
@@ -71,7 +71,7 @@ export interface UnitListResponse {
 export interface CreateFoodRequest {
   name: string;
   brand?: string | null;
-  category?: string | null;
+  categories?: string[];
   serving_size_g?: string | null;
   default_quantity?: string | null;
   default_unit?: string | null;

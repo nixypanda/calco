@@ -22,7 +22,7 @@ Mitigation if ever needed: single join, or wrap reads in a `REPEATABLE READ` tra
 ## Import pipeline
 
 ### Source fields dropped during conversion
-Each converter projects the source dataset down to a narrow set of fields (`source`, `source_id`, `name`, `brand`, `category`, `serving_size_g`, plus mapped nutrients). Anything else in the source row is discarded, and `staging_*.raw_payload` is hardcoded to `None` in `interfaces/http/import.rs`, so there is no fallback either.
+Each converter projects the source dataset down to a narrow set of fields (`source`, `source_id`, `name`, `brand`, `categories`, `serving_size_g`, plus mapped nutrients). Anything else in the source row is discarded, and `staging_*.raw_payload` is hardcoded to `None` in `interfaces/http/import.rs`, so there is no fallback either.
 
 Examples currently dropped:
 - **USDA**: `gtinUpc` (barcode for branded items), `scientificName`, `ndbNumber`, `dataType`, `publicationDate`, `ingredients`, `dataSource`.

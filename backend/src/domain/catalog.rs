@@ -150,7 +150,7 @@ pub struct Product {
     pub barcode: Option<Barcode>,
     pub name: ProductName,
     pub brand: Option<Brand>,
-    pub category: Option<Category>,
+    pub categories: Vec<Category>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<UnitCode>,
     pub serving_size_g: Option<Decimal>,

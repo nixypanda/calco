@@ -71,7 +71,7 @@ pub struct SearchResult {
     pub barcode: Option<String>,
     pub name: String,
     pub brand: Option<String>,
-    pub category: Option<String>,
+    pub categories: Vec<String>,
     pub serving_size_g: Option<Decimal>,
 }
 
@@ -84,7 +84,7 @@ pub struct ProductDetailResponse {
     pub barcode: Option<String>,
     pub name: String,
     pub brand: Option<String>,
-    pub category: Option<String>,
+    pub categories: Vec<String>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub serving_size_g: Option<Decimal>,
@@ -114,7 +114,8 @@ pub struct ServingEntry {
 pub struct CreateCustomFoodRequest {
     pub name: String,
     pub brand: Option<String>,
-    pub category: Option<String>,
+    #[serde(default)]
+    pub categories: Vec<String>,
     pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
@@ -192,7 +193,7 @@ async fn search_products_handler(
                     barcode: p.barcode.map(|b| b.0),
                     name: p.name.0,
                     brand: p.brand.map(|b| b.0),
-                    category: p.category.map(|c| c.0),
+                    categories: p.categories.into_iter().map(|c| c.0).collect(),
                     serving_size_g: p.serving_size_g,
                 })
                 .collect();
@@ -252,7 +253,7 @@ async fn create_custom_food_handler(
         auth.0.id,
         req.name,
         req.brand,
-        req.category,
+        req.categories,
         req.serving_size_g,
         req.default_quantity,
         req.default_unit,
@@ -300,7 +301,7 @@ async fn update_custom_food_handler(
         auth.0.id,
         req.name,
         req.brand,
-        req.category,
+        req.categories,
         req.serving_size_g,
         req.default_quantity,
         req.default_unit,
@@ -430,7 +431,7 @@ fn product_to_detail(
         barcode: product.barcode.as_ref().map(|b| b.0.clone()),
         name: product.name.0.clone(),
         brand: product.brand.as_ref().map(|b| b.0.clone()),
-        category: product.category.as_ref().map(|c| c.0.clone()),
+        categories: product.categories.iter().map(|c| c.0.clone()).collect(),
         default_quantity: product.default_quantity,
         default_unit: product.default_unit.as_ref().map(|u| u.0.clone()),
         serving_size_g: product.serving_size_g,

@@ -117,7 +117,7 @@ export function FoodLogDetail() {
       }}
       loggedAt={log.logged_at}
       brand={food?.brand}
-      category={food?.category}
+      categories={food?.categories ?? []}
       servingSizeG={food?.serving_size_g}
       customFoodEditPath={
         food && food.source === "USER" ? `/foods/custom/${food.id}/edit` : undefined

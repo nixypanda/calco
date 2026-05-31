@@ -39,7 +39,7 @@ const mockProduct = {
   barcode: null,
   name: "Rolled Oats",
   brand: "Brand X",
-  category: "Grains",
+  categories: ["grains"],
   serving_size_g: "40",
   default_quantity: null,
   default_unit: null,

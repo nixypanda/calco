@@ -10,7 +10,7 @@ use crate::domain::units::UnitConverter;
 
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
-    async fn search(&self, query: &str, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError>;
+    async fn search(&self, query: ProductSearchQuery, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError>;
     async fn create(&self, product: &Product) -> Result<(), CatalogError>;
@@ -35,6 +35,13 @@ pub trait UnitRepository: Send + Sync {
 pub struct SearchCriteria {
     pub query: String,
     pub user_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ProductSearchQuery {
+    pub text: String,
+    pub include_categories: Vec<String>,
+    pub exclude_categories: Vec<String>,
 }
 
 pub struct CatalogServices {
@@ -124,7 +131,9 @@ impl CatalogServices {
         &self,
         criteria: SearchCriteria,
     ) -> Result<Vec<Product>, CatalogError> {
-        self.product_repo.search(&criteria.query, criteria.user_id).await
+        self.product_repo
+            .search(parse_search_query(&criteria.query), criteria.user_id)
+            .await
     }
 
     pub async fn get_product(&self, id: ProductId) -> Result<Product, CatalogError> {
@@ -146,7 +155,7 @@ impl CatalogServices {
         user_id: Uuid,
         name: String,
         brand: Option<String>,
-        category: Option<String>,
+        categories: Vec<String>,
         serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
@@ -167,7 +176,7 @@ impl CatalogServices {
             barcode: None,
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            category: category.map(Category),
+            categories: normalize_categories(categories).into_iter().map(Category).collect(),
             default_quantity,
             default_unit: default_unit.map(UnitCode),
             serving_size_g,
@@ -201,7 +210,7 @@ impl CatalogServices {
         user_id: Uuid,
         name: String,
         brand: Option<String>,
-        category: Option<String>,
+        categories: Vec<String>,
         serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
@@ -242,7 +251,7 @@ impl CatalogServices {
                 .collect(),
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            category: category.map(Category),
+            categories: normalize_categories(categories).into_iter().map(Category).collect(),
             serving_size_g,
             default_quantity,
             default_unit: default_unit.map(UnitCode),
@@ -277,6 +286,59 @@ impl CatalogServices {
     pub async fn list_units(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         self.unit_repo.list_all().await
     }
+}
+
+pub fn normalize_categories(categories: Vec<String>) -> Vec<String> {
+    let mut out = Vec::new();
+    for category in categories {
+        let normalized = category.trim().to_lowercase();
+        if !normalized.is_empty() && !out.contains(&normalized) {
+            out.push(normalized);
+        }
+    }
+    out
+}
+
+fn parse_search_query(input: &str) -> ProductSearchQuery {
+    let mut query = ProductSearchQuery::default();
+    let mut text_terms = Vec::new();
+
+    for token in tokenize_search(input) {
+        if let Some(value) = token.strip_prefix("category:") {
+            query.include_categories.extend(normalize_categories(vec![value.to_string()]));
+        } else if let Some(value) = token.strip_prefix("-category:") {
+            query.exclude_categories.extend(normalize_categories(vec![value.to_string()]));
+        } else {
+            text_terms.push(token);
+        }
+    }
+
+    query.text = text_terms.join(" ");
+    query
+}
+
+fn tokenize_search(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+
+    for ch in input.chars() {
+        match ch {
+            '"' => in_quotes = !in_quotes,
+            c if c.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            c => current.push(c),
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
 }
 
 // ─── Input Types ───────────────────────────────────────────────
@@ -330,3 +392,30 @@ impl std::fmt::Display for CatalogError {
 }
 
 impl std::error::Error for CatalogError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_categories_trims_lowercases_and_deduplicates() {
+        assert_eq!(
+            normalize_categories(vec![
+                " Snacks ".into(),
+                "snacks".into(),
+                "".into(),
+                "Beverages".into(),
+            ]),
+            vec!["snacks", "beverages"]
+        );
+    }
+
+    #[test]
+    fn parse_search_query_extracts_category_filters() {
+        let parsed = parse_search_query(r#"chicken category:meat -category:"processed food""#);
+
+        assert_eq!(parsed.text, "chicken");
+        assert_eq!(parsed.include_categories, vec!["meat"]);
+        assert_eq!(parsed.exclude_categories, vec!["processed food"]);
+    }
+}

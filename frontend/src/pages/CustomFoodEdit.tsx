@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
+import { formatCategoriesInput, parseCategoriesInput } from "@/lib/categories";
 
 interface NutrientRow {
   code: string;
@@ -62,7 +63,7 @@ export function CustomFoodEdit() {
         if (cancelled) return;
         setName(food.name);
         setBrand(food.brand ?? "");
-        setCategory(food.category ?? "");
+        setCategory(formatCategoriesInput(food.categories));
         setServingSizeG(food.serving_size_g ?? "");
         setDefaultQty(food.default_quantity ?? "");
         setDefaultUnit(food.default_unit ?? "g");
@@ -143,7 +144,7 @@ export function CustomFoodEdit() {
       const res = await updateCustomFood(id, {
         name: name.trim(),
         brand: brand.trim() || null,
-        category: category.trim() || null,
+        categories: parseCategoriesInput(category),
         serving_size_g: servingSizeG || null,
         default_quantity: defaultQty || null,
         default_unit: defaultUnit || null,

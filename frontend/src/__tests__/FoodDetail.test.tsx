@@ -52,7 +52,7 @@ const mockProduct = {
   barcode: "123456789",
   name: "Chicken Breast",
   brand: "Organic Farms",
-  category: "Meat",
+  categories: ["meat"],
   default_quantity: "100",
   default_unit: "g",
   serving_size_g: "100",
@@ -111,9 +111,9 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    // Brand and category appear together in subtitle
+    // Brand and categories appear in the subtitle area
     expect(screen.getByText(/Organic Farms/)).toBeInTheDocument();
-    expect(screen.getByText(/Meat/)).toBeInTheDocument();
+    expect(screen.getByText(/meat/)).toBeInTheDocument();
     // Macro & nutrient values scaled to default amount (100g) = same as per-100g
     expect(screen.getByText("165.0")).toBeInTheDocument();
     expect(screen.getByText("31.0")).toBeInTheDocument();

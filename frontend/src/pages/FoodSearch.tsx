@@ -107,7 +107,9 @@ export function FoodSearch() {
                 )}
               </div>
               <div className="flex items-center flex-wrap gap-1.5">
-                {item.category && <Badge variant="secondary">{item.category}</Badge>}
+                {item.categories.map((category) => (
+                  <Badge key={category} variant="secondary">{category}</Badge>
+                ))}
                 {item.source === "USER" && <Badge variant="outline">Custom</Badge>}
               </div>
             </Card>

@@ -50,7 +50,7 @@ backend-test:
 
 # Run backend migrations
 backend-migrate:
-    cd backend && sqlx migrate run --ignore-missing
+    cd backend && DATABASE_URL="${DATABASE_URL:-postgres://calco:calco@localhost:5432/calco}" sqlx migrate run --ignore-missing
 
 # ──────────────────────────────────────────────
 # Frontend

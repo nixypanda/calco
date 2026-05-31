@@ -78,7 +78,7 @@ pub struct StagedImportProduct {
     pub barcode: Option<String>,
     pub name: String,
     pub brand: Option<String>,
-    pub category: Option<String>,
+    pub categories: Vec<String>,
     pub serving_size_g: Option<rust_decimal::Decimal>,
     pub raw_payload: Option<serde_json::Value>,
     pub row_number: Option<i32>,

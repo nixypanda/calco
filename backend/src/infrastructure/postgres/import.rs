@@ -57,11 +57,11 @@ impl ImportRepository for PostgresImportRepository {
 
         for food in foods {
             sqlx::query(
-                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, category, serving_size_g, raw_payload, row_number)
+                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, categories, serving_size_g, raw_payload, row_number)
                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                    ON CONFLICT (import_id, source, source_id) DO UPDATE SET
                        barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
-                       category = EXCLUDED.category, serving_size_g = EXCLUDED.serving_size_g,
+                       categories = EXCLUDED.categories, serving_size_g = EXCLUDED.serving_size_g,
                        raw_payload = EXCLUDED.raw_payload, row_number = EXCLUDED.row_number"#,
             )
             .bind(import_id.0)
@@ -70,7 +70,7 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&food.barcode)
             .bind(&food.name)
             .bind(&food.brand)
-            .bind(&food.category)
+            .bind(&food.categories)
             .bind(food.serving_size_g)
             .bind(&food.raw_payload)
             .bind(food.row_number)
@@ -190,8 +190,8 @@ impl ImportRepository for PostgresImportRepository {
 
         let created: (i64,) = sqlx::query_as(
             r#"WITH inserted AS (
-                   INSERT INTO products (id, source, source_id, barcode, name, brand, category, serving_size_g, visibility, created_at, updated_at)
-                   SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.category, sp.serving_size_g, 'global', NOW(), NOW()
+                   INSERT INTO products (id, source, source_id, barcode, name, brand, categories, serving_size_g, visibility, created_at, updated_at)
+                   SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.categories, sp.serving_size_g, 'global', NOW(), NOW()
                    FROM staging_products sp
                    WHERE sp.import_id = $1
                      AND NOT EXISTS (SELECT 1 FROM products p WHERE p.source = sp.source AND p.source_id = sp.source_id)
@@ -208,7 +208,7 @@ impl ImportRepository for PostgresImportRepository {
             r#"WITH updated AS (
                    UPDATE products p SET
                        barcode = sp.barcode, name = sp.name, brand = sp.brand,
-                       category = sp.category, serving_size_g = sp.serving_size_g, updated_at = NOW()
+                       categories = sp.categories, serving_size_g = sp.serving_size_g, updated_at = NOW()
                    FROM staging_products sp
                    WHERE sp.import_id = $1
                      AND p.source = sp.source AND p.source_id = sp.source_id

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
+import { parseCategoriesInput } from "@/lib/categories";
 
 interface NutrientRow {
   code: string;
@@ -104,7 +105,7 @@ export function CustomFoodCreate() {
       const res = await createCustomFood({
         name: name.trim(),
         brand: brand.trim() || null,
-        category: category.trim() || null,
+        categories: parseCategoriesInput(category),
         serving_size_g: servingSizeG || null,
         default_quantity: defaultQty || null,
         default_unit: defaultUnit || null,

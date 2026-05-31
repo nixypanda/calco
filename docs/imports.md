@@ -49,7 +49,7 @@ Food row:
   "barcode": null,
   "name": "Rice, white, raw",
   "brand": null,
-  "category": "grain",
+  "categories": ["grain"],
   "serving_size_g": 100,
   "row_number": 1
 }
@@ -113,6 +113,6 @@ Pipeline:
 
 ## Data Loss Tradeoff
 
-Converters intentionally project raw datasets into the current CalCo product model. Many source-specific fields are dropped. This is accepted for now and tracked in [known issues](known_issues.md).
+Converters intentionally project raw datasets into the current CalCo product model. Many source-specific fields are dropped, and source category strings are normalized into `categories`. This is accepted for now and tracked in [known issues](known_issues.md).
 
 Adding fields such as ingredients or allergens is a schema/domain change, not a converter flag.

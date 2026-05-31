@@ -11,6 +11,15 @@ PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "pro
 REQUIRED_FIELDS = ["energy-kcal_100g", "proteins_100g", "carbohydrates_100g", "fat_100g"]
 
 
+def categories_from_csv(value):
+    categories = []
+    for raw in (value or "").split(","):
+        normalized = raw.strip().lower()
+        if normalized and normalized not in categories:
+            categories.append(normalized)
+    return categories
+
+
 def parse_float(value):
     if value is None:
         return None
@@ -94,7 +103,7 @@ def main():
                 "barcode": barcode,
                 "name": row.get("product_name", "").strip() or None,
                 "brand": row.get("brands", "").strip() or None,
-                "category": row.get("categories", "").strip() or None,
+                "categories": categories_from_csv(row.get("categories", "")),
                 "serving_size_g": None,
             }
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")

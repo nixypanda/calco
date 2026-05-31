@@ -46,7 +46,7 @@ const mockExistingFood = {
   barcode: null,
   name: "My Protein Shake",
   brand: "Homemade",
-  category: "Beverages",
+  categories: ["beverages"],
   default_quantity: "1",
   default_unit: "serving",
   serving_size_g: "250",
@@ -98,7 +98,7 @@ describe("CustomFoodEdit", () => {
     });
 
     expect(screen.getByDisplayValue("Homemade")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("Beverages")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("beverages")).toBeInTheDocument();
     expect(screen.getByDisplayValue("250")).toBeInTheDocument();
   });
 

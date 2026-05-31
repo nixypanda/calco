@@ -139,7 +139,7 @@ describe("FoodSearch", () => {
           barcode: null,
           name: "Chicken Breast",
           brand: null,
-          category: "Meat",
+          categories: ["meat"],
           serving_size_g: "100",
         },
         {
@@ -149,7 +149,7 @@ describe("FoodSearch", () => {
           barcode: null,
           name: "Protein Shake",
           brand: "MyBrand",
-          category: "Supplements",
+          categories: ["supplements"],
           serving_size_g: null,
         },
       ],
@@ -170,7 +170,7 @@ describe("FoodSearch", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Meat")).toBeInTheDocument();
+    expect(screen.getByText("meat")).toBeInTheDocument();
     expect(screen.getByText("Protein Shake")).toBeInTheDocument();
     expect(screen.getByText("MyBrand")).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
@@ -230,7 +230,7 @@ describe("FoodSearch", () => {
           barcode: null,
           name: "Test Food",
           brand: null,
-          category: null,
+          categories: [],
           serving_size_g: null,
         },
       ],
@@ -268,7 +268,7 @@ describe("FoodSearch", () => {
           barcode: null,
           name: "Test Food",
           brand: null,
-          category: null,
+          categories: [],
           serving_size_g: null,
         },
       ],
