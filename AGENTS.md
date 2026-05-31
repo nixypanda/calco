@@ -1,36 +1,11 @@
 # Agent Configuration
 
-## Playwright E2E Tests
+## Current Codebase Shape
 
-- **Location**: `frontend/e2e/`
-- **Config**: `frontend/playwright.config.ts`
-- **Browser**: Chromium (managed by Nix via `playwright-driver`)
-
-### Commands
-
-```bash
-# Run all e2e tests (auto-starts Vite dev server)
-cd frontend && pnpm exec playwright test
-
-# Run with UI mode
-cd frontend && pnpm exec playwright test --ui
-
-# Run a specific test file
-cd frontend && pnpm exec playwright test e2e/app.spec.ts
-```
-
-### Via just
-
-```bash
-just frontend-e2e        # run e2e tests
-just test                 # runs all tests (backend + frontend unit + e2e)
-```
-
-### Playwright config notes
-
-- The `webServer` option in `playwright.config.ts` auto-starts the Vite dev server on port 5173 before tests and kills it after.
-- `reuseExistingServer: true` (non-CI) means you can keep the dev server running for faster iteration.
-- Chromium path is set via `PLAYWRIGHT_BROWSERS_PATH` in the Nix flake dev shell.
+- Backend: Rust 2024, axum, sqlx, PostgreSQL migrations embedded in the binary.
+- Frontend: React 19, Vite 6, TypeScript, Tailwind CSS v4, shadcn-style local UI components.
+- Database: PostgreSQL via `docker-compose.yml`.
+- Test runner commands are defined in `justfile`, but see the e2e note below.
 
 ## Backend Rust Tests
 
@@ -48,22 +23,70 @@ cd backend && cargo test domain::food_log
 ### Via just
 
 ```bash
-just backend-test    # run backend unit tests
-just test            # runs all tests (backend + frontend unit + e2e)
+just backend-test
 ```
 
 ### Notes
 
-- Backend tests use manual mock repos (no database required).
-- Tests are inline in source files under `#[cfg(test)] mod tests { ... }` blocks.
-- Domain tests are pure unit tests; application tests use `MockFoodLogRepo`, `MockProductLookup`, and `MockSummaryRepo`.
+- Backend tests are inline under `#[cfg(test)] mod tests { ... }`.
+- Domain and application tests use manual mock repositories.
+- The app runs migrations on startup from `backend/src/infrastructure/postgres/migrations`.
 
-### If browser is not found
+## Frontend Unit Tests
 
-Make sure you're in the Nix dev shell (`direnv allow` or `nix develop`). The `PLAYWRIGHT_BROWSERS_PATH` env var must point to the Nix-provided Chromium.
-
-If you're **outside the Nix shell** (or on Darwin where Chromium isn't available via Nix):
 ```bash
-# The CDN may fail with self-signed cert errors behind corporate proxies/VPNs
-NODE_TLS_REJECT_UNAUTHORIZED=0 npx playwright install chromium
+cd frontend && pnpm test
 ```
+
+### Via just
+
+```bash
+just frontend-test
+```
+
+### Notes
+
+- Tests live in `frontend/src/__tests__/`.
+- Vitest is configured by `frontend/vitest.config.ts`.
+- The frontend currently has no committed Playwright config or `frontend/e2e/` directory.
+
+## Playwright / E2E Status
+
+`justfile` still contains `frontend-e2e` and includes it in `just test`, but the current frontend manifest does not include `@playwright/test`, and these files are not present:
+
+- `frontend/playwright.config.ts`
+- `frontend/e2e/`
+- `frontend/tsconfig.e2e.json`
+
+Until e2e support is restored, use:
+
+```bash
+just backend-test
+just frontend-test
+```
+
+or run the package commands directly:
+
+```bash
+cd backend && cargo test
+cd frontend && pnpm test
+```
+
+## Build Commands
+
+```bash
+just backend-build
+just frontend-build
+just build
+```
+
+## Development Commands
+
+```bash
+just up
+just db-wait
+just backend-dev
+just frontend-dev
+```
+
+`backend-dev` runs `cargo run --manifest-path backend/Cargo.toml`. The backend requires `DATABASE_URL` to be set and connects to PostgreSQL before serving.
