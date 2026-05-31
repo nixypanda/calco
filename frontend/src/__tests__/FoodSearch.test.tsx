@@ -7,6 +7,7 @@ import { FoodSearch } from "../pages/FoodSearch";
 
 const mockGetSession = vi.fn();
 const mockSearchFoods = vi.fn();
+const mockListCategorySuggestions = vi.fn();
 
 vi.mock("../api/auth", () => ({
   getSession: (...args: unknown[]) => mockGetSession(...args),
@@ -17,6 +18,8 @@ vi.mock("../api/auth", () => ({
 
 vi.mock("../api/foods", () => ({
   searchFoods: (...args: unknown[]) => mockSearchFoods(...args),
+  listCategorySuggestions: (...args: unknown[]) =>
+    mockListCategorySuggestions(...args),
 }));
 
 function renderAtSearch() {
@@ -59,6 +62,7 @@ function renderAtSearchWithMealSlot() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockListCategorySuggestions.mockResolvedValue({ items: [] });
   mockGetSession.mockResolvedValue({
     identity: { id: "1", username: "alice", role: "user" },
     profile: { id: "p1", display_name: "Alice" },
@@ -141,6 +145,8 @@ describe("FoodSearch", () => {
           brand: null,
           categories: ["meat"],
           serving_size_g: "100",
+          energy_kcal_per_100g: "165",
+          energy_kcal_per_serving: "165",
         },
         {
           id: "2",
@@ -151,6 +157,8 @@ describe("FoodSearch", () => {
           brand: "MyBrand",
           categories: ["supplements"],
           serving_size_g: null,
+          energy_kcal_per_100g: "120",
+          energy_kcal_per_serving: null,
         },
       ],
     });
@@ -171,8 +179,9 @@ describe("FoodSearch", () => {
     });
 
     expect(screen.getByText("meat")).toBeInTheDocument();
+    expect(screen.getByText("165 kcal · 1 serving")).toBeInTheDocument();
     expect(screen.getByText("Protein Shake")).toBeInTheDocument();
-    expect(screen.getByText("MyBrand")).toBeInTheDocument();
+    expect(screen.getByText("MyBrand · 120 kcal · per 100 g")).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
   });
 
@@ -220,6 +229,47 @@ describe("FoodSearch", () => {
     });
   });
 
+  it("autocompletes category operator with tab", async () => {
+    renderAtSearch();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Search for a food..."),
+      ).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText("Search for a food...");
+    await userEvent.type(input, "c");
+    await userEvent.tab();
+
+    expect(input).toHaveValue("category:");
+  });
+
+  it("autocompletes category values with tab", async () => {
+    mockListCategorySuggestions.mockResolvedValue({
+      items: [{ value: "food and beverages", count: 4 }],
+    });
+
+    renderAtSearch();
+
+    await waitFor(() => {
+      expect(
+        screen.getByPlaceholderText("Search for a food..."),
+      ).toBeInTheDocument();
+    });
+
+    const input = screen.getByPlaceholderText("Search for a food...");
+    await userEvent.type(input, "category:foo");
+
+    await waitFor(() => {
+      expect(mockListCategorySuggestions).toHaveBeenCalledWith("foo", 8);
+    });
+
+    await userEvent.tab();
+
+    expect(input).toHaveValue('category:"food and beverages"');
+  });
+
   it("navigates to food detail on click", async () => {
     mockSearchFoods.mockResolvedValue({
       items: [
@@ -232,6 +282,8 @@ describe("FoodSearch", () => {
           brand: null,
           categories: [],
           serving_size_g: null,
+          energy_kcal_per_100g: null,
+          energy_kcal_per_serving: null,
         },
       ],
     });
@@ -270,6 +322,8 @@ describe("FoodSearch", () => {
           brand: null,
           categories: [],
           serving_size_g: null,
+          energy_kcal_per_100g: null,
+          energy_kcal_per_serving: null,
         },
       ],
     });

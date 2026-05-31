@@ -109,11 +109,13 @@ API modules live in `frontend/src/api/`:
 
 The UI should stay functional and food-diary oriented:
 
-- Mobile-first responsive layouts.
+- Mobile-first responsive layouts. Small screens are the primary target, so UI/UX work should be designed and reviewed on mobile widths first.
 - Fast repeated logging.
 - Dense enough for daily use without becoming a spreadsheet.
 - No marketing landing page.
 - No analytics dashboard unless product scope changes.
+
+Search, diary, and logging surfaces should prioritize compact, scannable controls and rows. Avoid oversized cards, large text that truncates early, or layouts that only work comfortably on desktop widths.
 
 The app uses local UI primitives in `components/ui/` for buttons, inputs, selects, cards, dialogs, tables, badges, dropdown menus, labels, and skeleton states.
 

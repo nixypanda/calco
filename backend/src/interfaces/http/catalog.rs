@@ -18,6 +18,7 @@ use crate::interfaces::http::auth::{AppState, AuthUser};
 pub fn catalog_routes(state: AppState) -> Router {
     Router::new()
         .route("/foods/search", get(search_products_handler))
+        .route("/foods/categories", get(list_categories_handler))
         .route("/foods/barcode/{barcode}", get(barcode_lookup_handler))
         .route("/foods/{id}", get(product_detail_handler))
         .route("/foods/custom", post(create_custom_food_handler))
@@ -73,6 +74,8 @@ pub struct SearchResult {
     pub brand: Option<String>,
     pub categories: Vec<String>,
     pub serving_size_g: Option<Decimal>,
+    pub energy_kcal_per_100g: Option<Decimal>,
+    pub energy_kcal_per_serving: Option<Decimal>,
 }
 
 #[derive(Serialize)]
@@ -164,9 +167,27 @@ pub struct UnitItem {
     pub kind: String,
 }
 
+#[derive(Serialize)]
+pub struct CategoryListResponse {
+    pub items: Vec<CategoryItem>,
+}
+
+#[derive(Serialize)]
+pub struct CategoryItem {
+    pub value: String,
+    pub count: i64,
+}
+
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: String,
+}
+
+#[derive(Deserialize)]
+pub struct CategoryQuery {
+    #[serde(default)]
+    pub q: String,
+    pub limit: Option<i64>,
 }
 
 // ─── Handlers ─────────────────────────────────────────────────
@@ -186,18 +207,58 @@ async fn search_products_handler(
         Ok(items) => {
             let results: Vec<SearchResult> = items
                 .into_iter()
-                .map(|p| SearchResult {
-                    id: p.id.0,
-                    source: p.source.as_str().to_string(),
-                    source_id: p.source_id,
-                    barcode: p.barcode.map(|b| b.0),
-                    name: p.name.0,
-                    brand: p.brand.map(|b| b.0),
-                    categories: p.categories.into_iter().map(|c| c.0).collect(),
-                    serving_size_g: p.serving_size_g,
+                .map(|p| {
+                    let energy_kcal_per_100g = p
+                        .nutrients
+                        .iter()
+                        .find(|n| n.nutrient_code.0 == "ENERGY_KCAL")
+                        .map(|n| n.amount_per_100g.0);
+                    let energy_kcal_per_serving = match (energy_kcal_per_100g, p.serving_size_g) {
+                        (Some(kcal), Some(serving_size_g)) => {
+                            Some(kcal * serving_size_g / Decimal::new(100, 0))
+                        }
+                        _ => None,
+                    };
+
+                    SearchResult {
+                        id: p.id.0,
+                        source: p.source.as_str().to_string(),
+                        source_id: p.source_id,
+                        barcode: p.barcode.map(|b| b.0),
+                        name: p.name.0,
+                        brand: p.brand.map(|b| b.0),
+                        categories: p.categories.into_iter().map(|c| c.0).collect(),
+                        serving_size_g: p.serving_size_g,
+                        energy_kcal_per_100g,
+                        energy_kcal_per_serving,
+                    }
                 })
                 .collect();
             Json(serde_json::json!({ "items": results })).into_response()
+        }
+        Err(e) => internal_error(e).into_response(),
+    }
+}
+
+async fn list_categories_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Query(query): Query<CategoryQuery>,
+) -> impl IntoResponse {
+    let services = &state.catalog_services;
+    match services
+        .list_categories(&query.q, Some(auth.0.id), query.limit)
+        .await
+    {
+        Ok(categories) => {
+            let items = categories
+                .into_iter()
+                .map(|c| CategoryItem {
+                    value: c.value,
+                    count: c.count,
+                })
+                .collect();
+            Json(CategoryListResponse { items }).into_response()
         }
         Err(e) => internal_error(e).into_response(),
     }

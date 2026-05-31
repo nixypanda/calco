@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::application::catalog::*;
@@ -39,7 +40,9 @@ impl PostgresProductRepository {
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
                 unit: UnitCode(r.unit),
                 source: r.source,
-                confidence: r.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                confidence: r
+                    .confidence
+                    .and_then(|c| NutrientConfidence::from_str(&c).ok()),
             })
             .collect())
     }
@@ -92,7 +95,11 @@ impl PostgresProductRepository {
 
 #[async_trait]
 impl ProductRepository for PostgresProductRepository {
-    async fn search(&self, query: ProductSearchQuery, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError> {
+    async fn search(
+        &self,
+        query: ProductSearchQuery,
+        user_id: Option<Uuid>,
+    ) -> Result<Vec<Product>, CatalogError> {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -103,12 +110,26 @@ impl ProductRepository for PostgresProductRepository {
               AND ($1 = ''
                    OR name ILIKE '%' || $1 || '%'
                    OR brand ILIKE '%' || $1 || '%'
-                   OR barcode ILIKE '%' || $1 || '%')
+                   OR barcode ILIKE '%' || $1 || '%'
+                   OR lower(name) % lower($1)
+                   OR (brand IS NOT NULL AND lower(brand) % lower($1)))
               AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
               AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
             ORDER BY
-                CASE WHEN name ILIKE $1 || '%' THEN 0 ELSE 1 END,
-                name
+                CASE
+                    WHEN barcode = $1 THEN 0
+                    WHEN barcode ILIKE $1 || '%' THEN 1
+                    WHEN name ILIKE $1 || '%' THEN 2
+                    WHEN name ILIKE '%' || $1 || '%' THEN 3
+                    WHEN brand ILIKE $1 || '%' THEN 4
+                    WHEN brand ILIKE '%' || $1 || '%' THEN 5
+                    ELSE 6
+                END,
+                GREATEST(
+                    similarity(lower(name), lower($1)),
+                    similarity(lower(COALESCE(brand, '')), lower($1))
+                ) DESC,
+                lower(name)
             LIMIT 50
             "#,
         )
@@ -120,9 +141,99 @@ impl ProductRepository for PostgresProductRepository {
         .await
         .map_err(|e| CatalogError::Database(e.to_string()))?;
 
+        let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let energy_by_product = if product_ids.is_empty() {
+            HashMap::new()
+        } else {
+            let energy_rows = sqlx::query_as::<_, SearchEnergyRow>(
+                r#"
+                SELECT pn.product_id, pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
+                FROM product_nutrients pn
+                JOIN nutrients n ON n.id = pn.nutrient_id
+                WHERE pn.product_id = ANY($1)
+                  AND n.code = 'ENERGY_KCAL'
+                "#,
+            )
+            .bind(&product_ids)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| CatalogError::Database(e.to_string()))?;
+
+            energy_rows
+                .into_iter()
+                .map(|r| {
+                    (
+                        r.product_id,
+                        ProductNutrient {
+                            nutrient_code: NutrientCode(r.code),
+                            amount_per_100g: AmountPer100g(r.amount_per_100g),
+                            unit: UnitCode(r.unit),
+                            source: r.source,
+                            confidence: r
+                                .confidence
+                                .and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                        },
+                    )
+                })
+                .collect()
+        };
+
         rows.into_iter()
-            .map(|r| self.row_to_product(r, vec![], vec![]))
+            .map(|r| {
+                let nutrients = energy_by_product
+                    .get(&r.id)
+                    .cloned()
+                    .map(|n| vec![n])
+                    .unwrap_or_default();
+                self.row_to_product(r, nutrients, vec![])
+            })
             .collect()
+    }
+
+    async fn list_categories(
+        &self,
+        query: &str,
+        user_id: Option<Uuid>,
+        limit: i64,
+    ) -> Result<Vec<CategorySuggestion>, CatalogError> {
+        let rows = sqlx::query_as::<_, CategorySuggestionRow>(
+            r#"
+            SELECT category AS value, COUNT(*)::BIGINT AS count
+            FROM products p
+            CROSS JOIN LATERAL UNNEST(p.categories) AS category
+            WHERE p.deleted_at IS NULL
+              AND (p.visibility = 'global' OR p.user_id = $2)
+              AND ($1 = ''
+                   OR category ILIKE $1 || '%'
+                   OR category ILIKE '%' || $1 || '%'
+                   OR similarity(lower(category), lower($1)) > 0.30)
+            GROUP BY category
+            ORDER BY
+                CASE
+                    WHEN category ILIKE $1 || '%' THEN 0
+                    WHEN category ILIKE '%' || $1 || '%' THEN 1
+                    ELSE 2
+                END,
+                COUNT(*) DESC,
+                similarity(lower(category), lower($1)) DESC,
+                category
+            LIMIT $3
+            "#,
+        )
+        .bind(query)
+        .bind(user_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CatalogError::Database(e.to_string()))?;
+
+        Ok(rows
+            .into_iter()
+            .map(|r| CategorySuggestion {
+                value: r.value,
+                count: r.count,
+            })
+            .collect())
     }
 
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError> {
@@ -172,7 +283,11 @@ impl ProductRepository for PostgresProductRepository {
     }
 
     async fn create(&self, product: &Product) -> Result<(), CatalogError> {
-        let mut tx = self.pool.begin().await.map_err(|e| CatalogError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| CatalogError::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -189,7 +304,13 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.barcode.as_ref().map(|b| &b.0))
         .bind(&product.name.0)
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(product.categories.iter().map(|c| c.0.clone()).collect::<Vec<_>>())
+        .bind(
+            product
+                .categories
+                .iter()
+                .map(|c| c.0.clone())
+                .collect::<Vec<_>>(),
+        )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
@@ -200,12 +321,18 @@ impl ProductRepository for PostgresProductRepository {
         insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
         insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
-        tx.commit().await.map_err(|e| CatalogError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| CatalogError::Database(e.to_string()))?;
         Ok(())
     }
 
     async fn update(&self, product: &Product) -> Result<(), CatalogError> {
-        let mut tx = self.pool.begin().await.map_err(|e| CatalogError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| CatalogError::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -217,7 +344,13 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.id.0)
         .bind(&product.name.0)
         .bind(product.brand.as_ref().map(|b| &b.0))
-        .bind(product.categories.iter().map(|c| c.0.clone()).collect::<Vec<_>>())
+        .bind(
+            product
+                .categories
+                .iter()
+                .map(|c| c.0.clone())
+                .collect::<Vec<_>>(),
+        )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
@@ -240,7 +373,9 @@ impl ProductRepository for PostgresProductRepository {
         insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
         insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
-        tx.commit().await.map_err(|e| CatalogError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| CatalogError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -282,11 +417,27 @@ struct ProductNutrientRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct SearchEnergyRow {
+    product_id: Uuid,
+    amount_per_100g: Decimal,
+    source: Option<String>,
+    confidence: Option<String>,
+    code: String,
+    unit: String,
+}
+
+#[derive(sqlx::FromRow)]
 struct ProductServingRow {
     label: String,
     quantity: Decimal,
     unit: String,
     grams: Decimal,
+}
+
+#[derive(sqlx::FromRow)]
+struct CategorySuggestionRow {
+    value: String,
+    count: i64,
 }
 
 // ─── Nutrient Repository ───────────────────────────────────────
@@ -305,11 +456,12 @@ impl PostgresNutrientRepository {
 #[async_trait]
 impl NutrientRepository for PostgresNutrientRepository {
     async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError> {
-        let rows =
-            sqlx::query_as::<_, NutrientRow>("SELECT code, name, unit, category FROM nutrients ORDER BY code")
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|e| CatalogError::Database(e.to_string()))?;
+        let rows = sqlx::query_as::<_, NutrientRow>(
+            "SELECT code, name, unit, category FROM nutrients ORDER BY code",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| CatalogError::Database(e.to_string()))?;
 
         Ok(rows.into_iter().map(Into::into).collect())
     }
@@ -376,7 +528,10 @@ impl UnitRepository for PostgresUnitRepository {
         .await
         .map_err(|e| CatalogError::Database(e.to_string()))?;
 
-        Ok(rows.into_iter().map(|r| (r.code, r.canonical_grams)).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| (r.code, r.canonical_grams))
+            .collect())
     }
 }
 
@@ -402,7 +557,10 @@ async fn insert_product_nutrients(
         return Ok(());
     }
 
-    let codes: Vec<String> = nutrients.iter().map(|n| n.nutrient_code.0.clone()).collect();
+    let codes: Vec<String> = nutrients
+        .iter()
+        .map(|n| n.nutrient_code.0.clone())
+        .collect();
     let amounts: Vec<Decimal> = nutrients.iter().map(|n| n.amount_per_100g.0).collect();
     let sources: Vec<Option<String>> = nutrients.iter().map(|n| n.source.clone()).collect();
     let confidences: Vec<Option<String>> = nutrients

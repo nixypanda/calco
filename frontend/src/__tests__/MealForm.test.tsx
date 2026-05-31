@@ -10,6 +10,7 @@ const mockCreateMeal = vi.fn();
 const mockUpdateMeal = vi.fn();
 const mockGetMeal = vi.fn();
 const mockSearchFoods = vi.fn();
+const mockListCategorySuggestions = vi.fn();
 
 vi.mock("../api/auth", () => ({
   getSession: (...args: unknown[]) => mockGetSession(...args),
@@ -29,6 +30,8 @@ vi.mock("../api/meals", () => ({
 
 vi.mock("../api/foods", () => ({
   searchFoods: (...args: unknown[]) => mockSearchFoods(...args),
+  listCategorySuggestions: (...args: unknown[]) =>
+    mockListCategorySuggestions(...args),
   getFoodDetail: vi.fn(),
 }));
 
@@ -41,6 +44,8 @@ const mockProduct = {
   brand: "Brand X",
   categories: ["grains"],
   serving_size_g: "40",
+  energy_kcal_per_100g: "380",
+  energy_kcal_per_serving: "152",
   default_quantity: null,
   default_unit: null,
   nutrients: [],
@@ -77,6 +82,7 @@ function renderAtEdit() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockListCategorySuggestions.mockResolvedValue({ items: [] });
   mockGetSession.mockResolvedValue({
     identity: { id: "1", username: "alice", role: "user" },
     profile: { id: "p1", display_name: "Alice" },

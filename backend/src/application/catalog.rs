@@ -11,6 +11,12 @@ use crate::domain::units::UnitConverter;
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
     async fn search(&self, query: ProductSearchQuery, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError>;
+    async fn list_categories(
+        &self,
+        query: &str,
+        user_id: Option<Uuid>,
+        limit: i64,
+    ) -> Result<Vec<CategorySuggestion>, CatalogError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError>;
     async fn create(&self, product: &Product) -> Result<(), CatalogError>;
@@ -42,6 +48,12 @@ pub struct ProductSearchQuery {
     pub text: String,
     pub include_categories: Vec<String>,
     pub exclude_categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CategorySuggestion {
+    pub value: String,
+    pub count: i64,
 }
 
 pub struct CatalogServices {
@@ -133,6 +145,18 @@ impl CatalogServices {
     ) -> Result<Vec<Product>, CatalogError> {
         self.product_repo
             .search(parse_search_query(&criteria.query), criteria.user_id)
+            .await
+    }
+
+    pub async fn list_categories(
+        &self,
+        query: &str,
+        user_id: Option<Uuid>,
+        limit: Option<i64>,
+    ) -> Result<Vec<CategorySuggestion>, CatalogError> {
+        let limit = limit.unwrap_or(10).clamp(1, 50);
+        self.product_repo
+            .list_categories(query.trim(), user_id, limit)
             .await
     }
 

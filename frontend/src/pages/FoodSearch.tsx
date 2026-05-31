@@ -3,13 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { SearchQueryInput } from "@/components/SearchQueryInput";
+import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
 
 export function FoodSearch() {
   const navigate = useNavigate();
@@ -59,11 +59,10 @@ export function FoodSearch() {
       <PageHeader title="Search Foods" onBack={() => navigate("/home")} backLabel="Back to Diary" />
 
       <div className="mb-3">
-        <Input
-          type="text"
+        <SearchQueryInput
           placeholder="Search for a food..."
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           autoFocus
         />
       </div>
@@ -71,14 +70,19 @@ export function FoodSearch() {
       {error && <ErrorBanner message={error} />}
 
       {loading && (
-        <div className="flex flex-col gap-3">
+        <Card className="overflow-hidden p-0">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="flex flex-col gap-2 p-4">
-              <Skeleton className="h-4 w-3/5" />
-              <Skeleton className="h-4 w-2/5" />
-            </Card>
+            <div key={i} className="border-b border-border px-3 py-2 last:border-b-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-3 w-3/5" />
+                </div>
+                <Skeleton className="h-9 w-28" />
+              </div>
+            </div>
           ))}
-        </div>
+        </Card>
       )}
 
       {!loading && !error && query.trim() && results.length === 0 && (
@@ -89,32 +93,20 @@ export function FoodSearch() {
       )}
 
       {!loading && !error && results.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <Card className="overflow-hidden p-0">
           {results.map((item) => (
-            <Card
+            <FoodSearchResultRow
               key={item.id}
-              className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50"
-              onClick={() =>
+              item={item}
+              showBarcode={Boolean(item.barcode && /^\d+$/.test(query.trim()))}
+              onSelect={() =>
                 navigate(`/foods/${item.id}`, {
                   state: mealSlot ? { mealSlot } : undefined,
                 })
               }
-            >
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="font-bold truncate">{item.name}</span>
-                {item.brand && (
-                  <span className="text-muted-foreground text-sm">{item.brand}</span>
-                )}
-              </div>
-              <div className="flex items-center flex-wrap gap-1.5">
-                {item.categories.map((category) => (
-                  <Badge key={category} variant="secondary">{category}</Badge>
-                ))}
-                {item.source === "USER" && <Badge variant="outline">Custom</Badge>}
-              </div>
-            </Card>
+            />
           ))}
-        </div>
+        </Card>
       )}
 
       {!query.trim() && (

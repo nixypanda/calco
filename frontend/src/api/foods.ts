@@ -9,10 +9,21 @@ export interface SearchResult {
   brand: string | null;
   categories: string[];
   serving_size_g: string | null;
+  energy_kcal_per_100g: string | null;
+  energy_kcal_per_serving: string | null;
 }
 
 export interface SearchResponse {
   items: SearchResult[];
+}
+
+export interface CategorySuggestion {
+  value: string;
+  count: number;
+}
+
+export interface CategorySuggestionResponse {
+  items: CategorySuggestion[];
 }
 
 export interface NutrientEntry {
@@ -96,6 +107,19 @@ export interface CreateFoodResponse {
 export async function searchFoods(query: string): Promise<SearchResponse> {
   return apiRequest<SearchResponse>(
     `/api/foods/search?q=${encodeURIComponent(query)}`,
+  );
+}
+
+export async function listCategorySuggestions(
+  query: string,
+  limit = 10,
+): Promise<CategorySuggestionResponse> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  });
+  return apiRequest<CategorySuggestionResponse>(
+    `/api/foods/categories?${params.toString()}`,
   );
 }
 

@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
+import { SearchQueryInput } from "@/components/SearchQueryInput";
+import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
 
 interface ComponentRow {
   productId: string;
@@ -297,26 +299,19 @@ export function MealForm() {
           {components.map((comp, idx) => (
             <div key={idx} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
               <div className="flex-[2] min-w-44 relative">
-                <Input
-                  type="text"
+                <SearchQueryInput
                   value={comp.searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value, idx)}
+                  onChange={(value) => handleSearchChange(value, idx)}
                   placeholder="Search product..."
                 />
                 {comp.searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-10 max-h-56 overflow-y-auto bg-card border border-border rounded-lg shadow-lg">
+                  <div className="absolute top-full left-0 right-0 z-10 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
                     {comp.searchResults.map((r) => (
-                      <button
+                      <FoodSearchResultRow
                         key={r.id}
-                        type="button"
-                        className="block w-full text-left px-3.5 py-3 text-sm border-b border-border hover:bg-muted last:border-b-0"
-                        onClick={() => selectProduct(r, idx)}
-                      >
-                        <strong>{r.name}</strong>
-                        {r.brand && (
-                          <span className="text-muted-foreground ml-1">— {r.brand}</span>
-                        )}
-                      </button>
+                        item={r}
+                        onSelect={() => selectProduct(r, idx)}
+                      />
                     ))}
                   </div>
                 )}
