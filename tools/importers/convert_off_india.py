@@ -24,6 +24,15 @@ def parse_float(value):
         return None
 
 
+def scale_for_code(code):
+    # OFF reports minerals/vitamins in grams per 100 g; our codes are mg/µg.
+    if code.endswith("_MG"):
+        return 1000.0
+    if code.endswith("_UG"):
+        return 1_000_000.0
+    return 1.0
+
+
 def countries_contain_india(countries_str):
     if not countries_str:
         return False
@@ -95,12 +104,14 @@ def main():
                 if v is None:
                     continue
 
+                amount = round(v * scale_for_code(calco_code), 6)
+
                 nutrient_row = {
                     "type": "nutrient",
                     "source": "OFF",
                     "source_id": source_id,
                     "nutrient_code": calco_code,
-                    "amount_per_100g": v,
+                    "amount_per_100g": amount,
                 }
                 out.write(json.dumps(nutrient_row, ensure_ascii=False) + "\n")
                 total_nutrients += 1
