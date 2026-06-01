@@ -1,8 +1,7 @@
-pub mod application;
+pub mod auth;
 pub mod config;
-pub mod domain;
-pub mod infrastructure;
-pub mod interfaces;
+pub mod import;
+pub mod nutrition;
 
 use std::sync::Arc;
 
@@ -11,33 +10,51 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::application::auth::{AdminUserServices, AuthBootstrapServices, AuthSessionServices};
-use crate::application::food_log::FoodLogServices;
-use crate::application::import::ImportServices;
-use crate::application::meal::MealServices;
-use crate::config::AppConfig;
-use crate::domain::auth::{IdentityRepository, SessionRepository, UserProfileRepository};
-use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::domain::food_log::FoodLogRepository;
-use crate::domain::import::ImportRepository;
-use crate::domain::meal::MealRepository;
-use crate::domain::units::UnitConverter;
-use crate::infrastructure::postgres::auth::{
+use crate::auth::application::{AdminUserServices, AuthBootstrapServices, AuthSessionServices};
+use crate::auth::domain::{IdentityRepository, SessionRepository, UserProfileRepository};
+use crate::auth::infrastructure::postgres::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
 };
-use crate::infrastructure::postgres::catalog::{
+use crate::auth::interfaces::http::auth_routes;
+use crate::config::AppConfig;
+use crate::import::application::ImportServices;
+use crate::import::domain::ImportRepository;
+use crate::import::infrastructure::postgres::PostgresImportRepository;
+use crate::import::interfaces::http::import_routes;
+use crate::nutrition::application::food_log::FoodLogServices;
+use crate::nutrition::application::meal::MealServices;
+use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
+use crate::nutrition::domain::food_log::FoodLogRepository;
+use crate::nutrition::domain::meal::MealRepository;
+use crate::nutrition::domain::units::UnitConverter;
+use crate::nutrition::infrastructure::postgres::catalog::{
     PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
 };
-use crate::infrastructure::postgres::food_log::PostgresFoodLogRepository;
-use crate::infrastructure::postgres::import::PostgresImportRepository;
-use crate::infrastructure::postgres::meal::PostgresMealRepository;
-use crate::interfaces::http::auth::{AppState, auth_routes};
-use crate::interfaces::http::catalog::catalog_routes;
-use crate::interfaces::http::food_log::food_log_routes;
-use crate::interfaces::http::import::import_routes;
-use crate::interfaces::http::meal::meal_routes;
+use crate::nutrition::infrastructure::postgres::food_log::PostgresFoodLogRepository;
+use crate::nutrition::infrastructure::postgres::meal::PostgresMealRepository;
+use crate::nutrition::interfaces::http::catalog::catalog_routes;
+use crate::nutrition::interfaces::http::food_log::food_log_routes;
+use crate::nutrition::interfaces::http::meal::meal_routes;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: AppConfig,
+    pub auth_bootstrap: AuthBootstrapServices,
+    pub auth_sessions: AuthSessionServices,
+    pub admin_users: AdminUserServices,
+    pub product_repo: Arc<dyn ProductRepository>,
+    pub nutrient_repo: Arc<dyn NutrientRepository>,
+    pub unit_repo: Arc<dyn UnitRepository>,
+    pub unit_converter: Arc<UnitConverter>,
+    pub food_log_repo: Arc<dyn FoodLogRepository>,
+    pub meal_repo: Arc<dyn MealRepository>,
+    pub import_repo: Arc<dyn ImportRepository>,
+    pub food_log_services: FoodLogServices,
+    pub meal_services: MealServices,
+    pub import_services: ImportServices,
+}
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
     let identity_repo =

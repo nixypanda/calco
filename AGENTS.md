@@ -17,7 +17,7 @@ cd backend && cargo test
 cd backend && cargo test test_log_food_success
 
 # Run tests for a specific module
-cd backend && cargo test domain::food_log
+cd backend && cargo test nutrition::domain::food_log
 ```
 
 ### Via just

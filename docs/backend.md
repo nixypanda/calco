@@ -2,37 +2,44 @@
 
 ## Overview
 
-The backend is a Rust service built with axum and sqlx. The code is organized by layer and context:
+The backend is a Rust service built with axum and sqlx. The code is organized by bounded context first, then by layer:
 
 ```text
 backend/src/
-  domain/
-    auth.rs
-    catalog.rs
-    food_log.rs
-    import.rs
-    meal.rs
-    nutrition.rs
-    units.rs
-  application/
-    auth.rs
-    catalog.rs
-    food_log.rs
-    import.rs
-    meal.rs
-  infrastructure/postgres/
-    auth.rs
-    catalog.rs
-    food_log.rs
-    import.rs
-    meal.rs
-  interfaces/http/
-    auth.rs
-    catalog.rs
-    food_log.rs
-    import.rs
-    meal.rs
+  lib.rs                 # AppState, build_app_state, build_router
+  auth/
+    domain.rs
+    application.rs
+    infrastructure/postgres.rs
+    interfaces/http.rs
+  import/
+    domain.rs
+    application.rs
+    infrastructure/postgres.rs
+    interfaces/http.rs
+  nutrition/
+    domain/
+      calculation.rs     # Quantity, CalculatedNutrition, NutritionCalculator
+      error.rs           # NutritionError
+      units.rs           # UnitConverter
+      catalog.rs
+      meal.rs
+      food_log.rs
+    application/
+      meal.rs
+      food_log.rs        # catalog has no application service; handlers call repos directly
+    infrastructure/postgres/
+      catalog.rs
+      meal.rs
+      food_log.rs
+    interfaces/http/
+      mod.rs             # NutritionError -> IntoResponse, error_response, internal_error
+      catalog.rs
+      meal.rs
+      food_log.rs
 ```
+
+`AppState` is the app-wide composition root and lives in `lib.rs`. The `AuthUser` extractor lives in `auth/interfaces/http.rs` and is used by nutrition handlers — auth is a foundational dependency of nutrition, not the other way around.
 
 ## DDD Decisions
 
@@ -42,10 +49,10 @@ The backend follows this dependency direction:
 
 ```text
 interfaces/http -> application -> domain
-infrastructure/postgres -> application ports -> domain
+infrastructure/postgres -> domain ports
 ```
 
-The application layer defines repository traits. PostgreSQL repositories implement those traits. This keeps use cases independent of sqlx and keeps domain types independent of persistence concerns.
+Repository traits are defined in `domain`. PostgreSQL repositories implement them. The application layer composes domain operations and repositories into use cases. This keeps domain types independent of persistence concerns and keeps use cases independent of sqlx.
 
 ### Repository Ports
 
@@ -292,7 +299,6 @@ Type suffixes:
 
 - `Postgres*Repository`: public repository adapter implementing an application port.
 - `*Row`: private `sqlx::FromRow` query result type.
-- `*LookupRow`: private row type used by a repository when implementing a lookup port for another context.
 
 Function naming rules:
 

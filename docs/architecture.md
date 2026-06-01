@@ -41,12 +41,14 @@ Dependency direction:
 
 ```text
 interfaces/http -> application -> domain
-infrastructure/postgres -> application ports -> domain
+infrastructure/postgres -> domain ports
 ```
 
-The domain layer owns business concepts and invariants. It does not depend on HTTP, JSON DTOs, sqlx, or PostgreSQL. The application layer owns use cases and repository ports. Infrastructure implements those ports. HTTP handlers translate request/response DTOs into application inputs and outputs.
+The domain layer owns business concepts, invariants, and repository ports. It does not depend on HTTP, JSON DTOs, sqlx, or PostgreSQL. The application layer composes domain operations into use cases. Infrastructure implements the domain ports. HTTP handlers translate request/response DTOs into application or repository calls.
 
 ## Bounded Contexts
+
+Three bounded contexts: `auth`, `nutrition`, and `import`. Each lives under its own top-level module (`backend/src/{auth,nutrition,import}/`) with the four layers (`domain`, `application`, `infrastructure`, `interfaces`) nested inside.
 
 ### Auth
 
@@ -58,64 +60,29 @@ Auth separates login identity from application user ownership:
 
 Admin identities are for account recovery and import operations. They do not own food logs, custom foods, or meals.
 
-### Catalog
-
-Catalog owns products, product nutrients, product servings, canonical nutrients, and units.
-
-`Product` is an aggregate root. `ProductNutrient` and `ProductServing` are owned child values. They are replaced through product create/update flows, not independently managed as standalone resources.
-
-Product source fields are part of the core model:
-
-- `source`
-- `source_id`
-- `visibility`
-- `user_id`
-
-This lets imported global foods and user-private custom foods share one catalog model.
-
 ### Nutrition
 
-Nutrition calculation is a domain service:
+Nutrition is one bounded context with three aggregate roots:
 
-```text
-amount = amount_per_100g * grams / 100
-```
+- `Product` (catalog): owns `ProductNutrient` and `ProductServing` as child values. Imported global foods and user-private custom foods share this model via `source`, `source_id`, `visibility`, and `user_id`.
+- `Meal`: user-owned. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
+- `FoodLog`: user-owned. Records timestamp, meal slot, logged item, quantity, notes, and nutrient snapshots. `LoggedItem` supports `Product(ProductId)` and `Meal(MealId)`.
 
-Mass unit conversion is data-driven from `units.canonical_grams` and loaded into `UnitConverter`. Non-mass units such as servings and cups require product- or meal-specific serving definitions.
+These aggregates share one error type (`NutritionError`) and depend on each other directly via repositories — they are not separate contexts. The shared ubiquitous language ("nutrient", "quantity", "unit"), shared lifecycle, and lack of concept translation at the seams motivated unifying them.
 
-### Food Logging
+Supporting domain pieces in `nutrition/domain/`:
 
-`FoodLog` is an aggregate root owned by a user profile. It records:
+- `calculation.rs` — `Quantity`, `CalculatedNutrition`, and the `NutritionCalculator` service (`amount = amount_per_100g * grams / 100`).
+- `units.rs` — `UnitConverter`, data-driven from `units.canonical_grams`. Non-mass units (servings, cups) require product- or meal-specific serving definitions.
+- `error.rs` — `NutritionError`.
 
-- logged timestamp
-- meal slot
-- logged item
-- quantity
-- notes
-- nutrient snapshots
+The key data-integrity invariant is historical stability: `FoodLog` stores calculated nutrient snapshots at log time. Summaries aggregate snapshots, not current product data.
 
-The key invariant is historical stability: logs store calculated nutrient snapshots at log time. Summaries aggregate snapshots, not current product data.
-
-`LoggedItem` supports products and meals:
-
-```text
-LoggedItem::Product(ProductId)
-LoggedItem::Meal(MealId)
-```
-
-### Meals
-
-`Meal` is a user-owned aggregate root. `MealComponent` values are edited through the meal aggregate. Current meal components are product-only, which avoids recursive meal definitions.
-
-Meal nutrition is calculated from current component products when previewing or logging. When a meal is logged, the resulting nutrients are snapshotted into the food log.
-
-### Imports
+### Import
 
 Imports are an anti-corruption/staging layer around external food datasets.
 
-`ImportJob` owns staged products, nutrients, servings, and row-level errors. Staged rows become catalog data only when an import is committed.
-
-Imports are intentionally operated from CLI scripts in `tools/importers`, not from browser UI.
+`ImportJob` owns staged products, nutrients, servings, and row-level errors. Staged rows become catalog data only when an import is committed. Imports translate at the seam (their own `ImportError`, their own DTOs) and are intentionally operated from CLI scripts in `tools/importers`, not from browser UI.
 
 ## Transaction And Consistency Decisions
 
