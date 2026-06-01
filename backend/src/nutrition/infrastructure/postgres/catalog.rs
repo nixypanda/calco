@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::nutrition::domain::catalog::*;
@@ -34,16 +34,17 @@ impl PostgresProductRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows
-            .into_iter()
-            .map(|r| ProductNutrient {
-                nutrient_code: NutrientCode(r.code),
-                amount_per_100g: AmountPer100g(r.amount_per_100g),
-                unit: UnitCode(r.unit),
-                source: r.source,
-                confidence: r.confidence.and_then(|c| c.parse().ok()),
+        rows.into_iter()
+            .map(|r| {
+                Ok(ProductNutrient {
+                    nutrient_code: NutrientCode(r.code),
+                    amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
+                    unit: UnitCode(r.unit),
+                    source: r.source,
+                    confidence: r.confidence.and_then(|c| c.parse().ok()),
+                })
             })
-            .collect())
+            .collect()
     }
 
     async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, NutritionError> {
@@ -70,9 +71,19 @@ impl PostgresProductRepository {
 impl ProductRepository for PostgresProductRepository {
     async fn search(
         &self,
-        query: ProductSearchQuery,
+        query: ProductSearchSpec,
         user_id: Option<Uuid>,
     ) -> Result<Vec<Product>, NutritionError> {
+        let include: Vec<String> = query
+            .include_categories
+            .iter()
+            .map(|c| c.0.clone())
+            .collect();
+        let exclude: Vec<String> = query
+            .exclude_categories
+            .iter()
+            .map(|c| c.0.clone())
+            .collect();
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -108,8 +119,8 @@ impl ProductRepository for PostgresProductRepository {
         )
         .bind(&query.text)
         .bind(user_id)
-        .bind(&query.include_categories)
-        .bind(&query.exclude_categories)
+        .bind(&include)
+        .bind(&exclude)
         .fetch_all(&self.pool)
         .await?;
 
@@ -133,18 +144,18 @@ impl ProductRepository for PostgresProductRepository {
             energy_rows
                 .into_iter()
                 .map(|r| {
-                    (
+                    Ok::<_, NutritionError>((
                         r.product_id,
                         ProductNutrient {
                             nutrient_code: NutrientCode(r.code),
-                            amount_per_100g: AmountPer100g(r.amount_per_100g),
+                            amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
                             unit: UnitCode(r.unit),
                             source: r.source,
                             confidence: r.confidence.and_then(|c| c.parse().ok()),
                         },
-                    )
+                    ))
                 })
-                .collect()
+                .collect::<Result<HashMap<_, _>, _>>()?
         };
 
         rows.into_iter()
@@ -224,6 +235,19 @@ impl ProductRepository for PostgresProductRepository {
             }
             None => Ok(None),
         }
+    }
+
+    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError> {
+        if ids.is_empty() {
+            return Ok(HashSet::new());
+        }
+        let raw: Vec<Uuid> = ids.iter().map(|p| p.0).collect();
+        let rows: Vec<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM products WHERE id = ANY($1) AND deleted_at IS NULL")
+                .bind(&raw)
+                .fetch_all(&self.pool)
+                .await?;
+        Ok(rows.into_iter().map(|(id,)| ProductId(id)).collect())
     }
 
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError> {
@@ -538,7 +562,10 @@ async fn insert_product_nutrients(
         .iter()
         .map(|n| n.nutrient_code.0.clone())
         .collect();
-    let amounts: Vec<Decimal> = nutrients.iter().map(|n| n.amount_per_100g.0).collect();
+    let amounts: Vec<Decimal> = nutrients
+        .iter()
+        .map(|n| n.amount_per_100g.value())
+        .collect();
     let sources: Vec<Option<String>> = nutrients.iter().map(|n| n.source.clone()).collect();
     let confidences: Vec<Option<String>> = nutrients
         .iter()

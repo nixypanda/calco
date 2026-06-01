@@ -37,9 +37,63 @@ pub fn catalog_routes(state: AppState) -> Router {
 use crate::nutrition::interfaces::http::{error_response, internal_error};
 
 #[derive(Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SourceDto {
+    User,
+    Off,
+    Usda,
+    Ifct,
+}
+
+impl From<Source> for SourceDto {
+    fn from(source: Source) -> Self {
+        match source {
+            Source::User => SourceDto::User,
+            Source::Off => SourceDto::Off,
+            Source::Usda => SourceDto::Usda,
+            Source::Ifct => SourceDto::Ifct,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProductVisibilityDto {
+    Global,
+    UserPrivate,
+}
+
+impl From<ProductVisibility> for ProductVisibilityDto {
+    fn from(visibility: ProductVisibility) -> Self {
+        match visibility {
+            ProductVisibility::Global => ProductVisibilityDto::Global,
+            ProductVisibility::UserPrivate => ProductVisibilityDto::UserPrivate,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NutrientConfidenceDto {
+    Approved,
+    Derived,
+    Unknown,
+}
+
+impl From<NutrientConfidence> for NutrientConfidenceDto {
+    fn from(confidence: NutrientConfidence) -> Self {
+        match confidence {
+            NutrientConfidence::Approved => NutrientConfidenceDto::Approved,
+            NutrientConfidence::Derived => NutrientConfidenceDto::Derived,
+            NutrientConfidence::Unknown => NutrientConfidenceDto::Unknown,
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct ProductSearchItemDto {
     pub id: Uuid,
-    pub source: String,
+    pub source: SourceDto,
     pub source_id: Option<String>,
     pub barcode: Option<String>,
     pub name: String,
@@ -63,9 +117,9 @@ pub struct ProductIdResponse {
 #[derive(Serialize)]
 pub struct ProductDetailResponse {
     pub id: Uuid,
-    pub source: String,
+    pub source: SourceDto,
     pub source_id: Option<String>,
-    pub visibility: String,
+    pub visibility: ProductVisibilityDto,
     pub barcode: Option<String>,
     pub name: String,
     pub brand: Option<String>,
@@ -84,7 +138,7 @@ pub struct ProductNutrientDto {
     pub amount_per_100g: Decimal,
     pub unit: String,
     pub source: Option<String>,
-    pub confidence: Option<String>,
+    pub confidence: Option<NutrientConfidenceDto>,
 }
 
 #[derive(Serialize)]
@@ -192,7 +246,7 @@ async fn search_products_handler(
 ) -> impl IntoResponse {
     match state
         .product_repo
-        .search(ProductSearchQuery::parse(&query.q), Some(auth.0.id))
+        .search(ProductSearchSpec::parse(&query.q), Some(auth.0.id))
         .await
     {
         Ok(items) => Json(products_to_search_response(items)).into_response(),
@@ -495,7 +549,7 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
 
     ProductSearchItemDto {
         id: product.id.0,
-        source: product.source.as_str().to_string(),
+        source: product.source.into(),
         source_id: product.source_id,
         barcode: product.barcode.map(|b| b.0),
         name: product.name.0,
@@ -512,7 +566,7 @@ fn product_energy_kcal_per_100g(product: &Product) -> Option<Decimal> {
         .nutrients
         .iter()
         .find(|n| n.nutrient_code.0 == "ENERGY_KCAL")
-        .map(|n| n.amount_per_100g.0)
+        .map(|n| n.amount_per_100g.value())
 }
 
 fn energy_kcal_per_serving(
@@ -559,9 +613,9 @@ fn product_to_detail_response(
 ) -> ProductDetailResponse {
     ProductDetailResponse {
         id: product.id.0,
-        source: product.source.as_str().to_string(),
+        source: product.source.into(),
         source_id: product.source_id.clone(),
-        visibility: product.visibility.as_str().to_string(),
+        visibility: product.visibility.into(),
         barcode: product.barcode.as_ref().map(|b| b.0.clone()),
         name: product.name.0.clone(),
         brand: product.brand.as_ref().map(|b| b.0.clone()),
@@ -589,10 +643,10 @@ fn product_to_detail_response(
 fn product_nutrient_to_dto(nutrient: &ProductNutrient) -> ProductNutrientDto {
     ProductNutrientDto {
         code: nutrient.nutrient_code.0.clone(),
-        amount_per_100g: nutrient.amount_per_100g.0,
+        amount_per_100g: nutrient.amount_per_100g.value(),
         unit: nutrient.unit.0.clone(),
         source: nutrient.source.clone(),
-        confidence: nutrient.confidence.as_ref().map(|c| c.as_str().to_string()),
+        confidence: nutrient.confidence.map(Into::into),
     }
 }
 

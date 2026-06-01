@@ -43,7 +43,7 @@ impl IdentityRepository for PostgresIdentityRepository {
     }
 
     async fn create(&self, identity: &Identity) -> Result<(), AuthError> {
-        sqlx::query(
+        let result = sqlx::query(
             "INSERT INTO identities (id, username, password_hash, role, status, created_at, updated_at, last_login_at) \
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
@@ -56,9 +56,12 @@ impl IdentityRepository for PostgresIdentityRepository {
         .bind(identity.updated_at)
         .bind(identity.last_login_at)
         .execute(&self.pool)
-        .await?;
+        .await;
 
-        Ok(())
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => Err(map_identity_insert_error(e)),
+        }
     }
 
     async fn update(&self, identity: &Identity) -> Result<(), AuthError> {
@@ -85,6 +88,21 @@ impl IdentityRepository for PostgresIdentityRepository {
 
         Ok(row.0)
     }
+}
+
+fn map_identity_insert_error(err: sqlx::Error) -> AuthError {
+    if let sqlx::Error::Database(db_err) = &err
+        && db_err.is_unique_violation()
+    {
+        let constraint = db_err.constraint().unwrap_or("");
+        if constraint.contains("username") {
+            return AuthError::UsernameTaken;
+        }
+        if constraint.contains("admin") {
+            return AuthError::AdminAlreadyExists;
+        }
+    }
+    AuthError::Database(err)
 }
 
 #[derive(sqlx::FromRow)]

@@ -6,26 +6,6 @@ exposed beyond a small known group.
 
 ## Concurrency
 
-### TOCTOU on admin bootstrap
-
-`create_bootstrap_admin` (backend/src/auth/application.rs:32) checks
-`admin_exists()` and then inserts. Two concurrent requests can both pass the
-check, producing multiple admins. No DB constraint enforces a single admin.
-
-Mitigation if ever needed: add
-`CREATE UNIQUE INDEX ON identities ((role)) WHERE role = 'admin'` and map the
-unique-violation to `AdminAlreadyExists`.
-
-### TOCTOU on username uniqueness
-
-`admin_create_user` (backend/src/auth/application.rs:183) checks the username,
-then inserts. The `identities.username` unique constraint catches the race, but
-the violation surfaces as a `Database(...)` 500 instead of a clean
-`UsernameTaken` 409.
-
-Mitigation if ever needed: catch the unique-violation and map to
-`UsernameTaken`.
-
 ### Non-atomic reads of food logs
 
 `PostgresFoodLogRepository::find_by_id` / `find_by_user_and_range`
@@ -88,60 +68,10 @@ Mitigation if ever needed: define an opaque `RepositoryError` (or per-trait
 error) in domain, and have the postgres adapters map `sqlx::Error` into it
 before returning.
 
-### Repository traits carry HTTP/query-layer shapes
-
-`ProductRepository::search` takes a
-`ProductSearchQuery { text, include_categories: Vec<String>, exclude_categories: Vec<String> }`
-(`backend/src/nutrition/domain/catalog.rs:10`), and `SummaryRepository::get_summary`
-returns a `Vec<SummaryEntry>` shaped for the HTTP response. The repository port
-should express domain intent, not transport a request DTO with raw strings.
-Changing the HTTP API currently forces a domain edit.
-
-Mitigation if ever needed: introduce a domain-level search specification (e.g.
-`ProductSearchSpec` with typed `Category` filters) and return domain
-projections, then translate at the adapter boundary.
-
-### Primitive-obsessed quantity and nutrition values
-
-`Quantity { amount: Decimal, unit: UnitCode }`
-(`backend/src/nutrition/domain/calculation.rs:5`) and `ProductNutrient::amount_per_100g`
-have no smart constructor — the `amount > 0` check only runs inside
-`Product::quantity_to_grams` / `Meal::quantity_to_grams`
-(`backend/src/nutrition/domain/catalog.rs`, `backend/src/nutrition/domain/meal.rs`). An ill-formed
-`Quantity` is constructible anywhere in the crate.
-
-Mitigation if ever needed: make `Quantity::new(...) -> Result<Self, _>` the only
-way to build one, and reject non-positive amounts at construction. Same pattern
-for `AmountPer100g` (today the validator is a free function on the type, not a
-constructor).
-
-### Meal aggregate creation has no transaction boundary
-
-`nutrition/application/meal.rs:68-82` resolves `MealComponent`s by awaiting per-product lookups,
-then calls `meal_repo.create(&meal)`. Product existence is checked outside any
-transaction, and there's no compensation if a later lookup fails mid-way.
-Aggregates exist to define a consistency boundary; here it's implicit.
-
-Mitigation if ever needed: wrap component resolution + meal insert in a single
-transactional unit of work, or validate all referenced products in one batched
-query before constructing the aggregate.
-
-### Invariant parsing happens in the application layer
-
-`nutrition/application/food_log.rs` calls `MealSlot::from_str(s)` and maps the
-error to `NutritionError::Validation`. Parsing untrusted strings at the boundary
-is fine, but the application layer also owns the error mapping and reshaping.
-`MealComponentItem::parse` is similarly called from
-`nutrition/application/meal.rs:175`.
-
-Mitigation if ever needed: have HTTP DTOs parse into domain types at the edge
-(via `TryFrom`), so the application service only ever sees already-validated
-domain values.
-
 ## Application layer
 
 The application layer earns its keep on the write paths (auth flows,
-log_food/log_meal, create_meal, custom-food create/update, import staging) —
+log_item, create_meal, custom-food create/update, import staging) —
 anything that orchestrates multiple repos or assembles a domain aggregate from
 looked-up dependencies. The items below are about the parts that don't, plus
 inconsistencies in how the layer is shaped.
@@ -159,33 +89,14 @@ outside `MealServices`.
 Mitigation if ever needed: make this an explicit convention. Either handlers may
 call repos for read-only passthroughs, or every use case goes through a service.
 
-### Cross-layer leakage in `food_log`
-
-- `impl FoodLog { fn item_id(&self) -> Uuid }` is defined in
-  `nutrition/application/food_log.rs` — a method on a domain type, declared in
-  the application layer.
-- `log_item_id` / `log_item_type` (`nutrition/application/food_log.rs`)
-  pattern-match on `LoggedItem`; both belong as methods on the domain enum.
-
-Mitigation if ever needed: move them into `nutrition/domain/food_log.rs`.
-
 ### Duplicate / near-duplicate logic
 
-- `load_meal_products` exists twice — once as a free function in
-  `nutrition/application/food_log.rs:243` and once as a method
-  `MealServices::load_meal_products` in `nutrition/application/meal.rs:195`.
-  Both return `NutritionError` and run the same loop over `meal.components`.
-- `log_food` and `log_meal` (`nutrition/application/food_log.rs`) share ~90% of
-  their structure (`MealSlot` parse, quantity build, repo write); they diverge
-  only at the item-resolution step.
 - `ImportServices::stage_foods` / `stage_nutrients` / `stage_servings`
   (`import/application.rs`) are three ~50-line methods that vary only in the
   per-row validation predicate.
 
-Mitigation if ever needed: a shared helper on `Meal` (or in domain) for product
-loading; a private `resolve_item` helper inside `FoodLogServices`; a generic
-`stage<T>(...)` parameterized by a validator closure for the import staging
-trio.
+Mitigation if ever needed: a generic `stage<T>(...)` parameterized by a
+validator closure for the import staging trio.
 
 ### Domain validation living in application
 
@@ -193,37 +104,18 @@ trio.
 `nutrient_code.is_empty()`, `quantity <= 0`, `grams <= 0`) is invariant-checking
 on staged rows. The staged types (`StagedImportProduct`, `StagedImportNutrient`,
 `StagedImportServing`) own those invariants — application should be collecting
-`Ok`/`Err` from a domain constructor, not running the checks itself. This
-overlaps with the existing "Invariant parsing happens in the application layer"
-item.
+`Ok`/`Err` from a domain constructor, not running the checks itself.
 
 Mitigation if ever needed: `StagedImportProduct::try_new(...)` / equivalents on
 each staged type, returning a domain error the service maps once.
 
-### Inconsistent `Clone` impls
-
-`ImportServices` (`import/application.rs`) hand-writes `Clone`.
-`MealServices` and `FoodLogServices` use `#[derive(Clone)]`. `Arc<dyn Trait>` is
-`Clone`, so the derive form works here too. The previous `CatalogServices`
-example is gone with the deleted catalog service.
-
-Mitigation if ever needed: replace the hand impls with `#[derive(Clone)]`.
-
 ### Vestigial / undocumented
 
-- `get_session` (`auth/application.rs`) silently discards `update_last_seen`
-  errors via `let _ = ...`. Almost certainly intentional (best-effort heartbeat
-  refresh) but undocumented.
-- `ImportServices::commit_job` (`import/application.rs`) requires
-  `food_count > 0` to commit, but doesn't gate on nutrient or serving counts.
-  Either intentional (foods are the primary entity) and worth a comment, or a
-  bug.
 - `UpdateFoodInput` / `UpdateMealInput` use `Option<Option<T>>` for PATCH-style
   "absent vs explicit-null vs value" with no doc explaining the convention.
 
-Mitigation if ever needed: one-line comments on the silent-discard and the
-commit asymmetry; either a `Patch<T>` enum or a doc comment on the PATCH input
-structs.
+Mitigation if ever needed: either a `Patch<T>` enum or a doc comment on the
+PATCH input structs.
 
 ### Mock-by-singleton test smell
 
@@ -238,17 +130,6 @@ Mitigation if ever needed: replace with `HashMap<Id, Entity>`-backed mocks so
 tests describe the data they expect to find.
 
 ## Backend cleanup
-
-### HTTP enum string conversions are still manual
-
-After domain enum string conversion is moved to `strum`, the HTTP DTO layer can
-still be simplified. Several handlers currently map enum-like values into
-strings by hand, for example role/status/source/visibility fields.
-
-Mitigation if ever needed: use serde enum renaming on DTO-facing enums where the
-API value is stable, such as `#[serde(rename_all = "snake_case")]` or
-per-variant `#[serde(rename = "...")]`. This should reduce repeated
-`as_str().to_string()` conversions at the HTTP boundary.
 
 ### Error response shapes are duplicated per HTTP module
 

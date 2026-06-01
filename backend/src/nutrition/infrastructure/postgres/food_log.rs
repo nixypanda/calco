@@ -281,9 +281,9 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         Ok(rows
             .into_iter()
             .map(|r| SummaryEntry {
-                code: r.code,
+                code: NutrientCode(r.code),
                 amount: r.amount.unwrap_or(Decimal::ZERO),
-                unit: r.unit,
+                unit: UnitCode(r.unit),
             })
             .collect())
     }

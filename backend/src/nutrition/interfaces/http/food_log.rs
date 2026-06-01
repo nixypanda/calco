@@ -10,10 +10,16 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use std::str::FromStr;
+
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::application::food_log::*;
+use crate::nutrition::domain::calculation::Quantity;
+use crate::nutrition::domain::catalog::{ProductId, UnitCode};
+use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::food_log::*;
+use crate::nutrition::domain::meal::MealId;
 
 pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
@@ -51,10 +57,30 @@ pub struct QuantityDto {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MealSlotDto {
+    Breakfast,
+    Lunch,
+    Dinner,
+    Snack,
+}
+
+impl From<MealSlot> for MealSlotDto {
+    fn from(slot: MealSlot) -> Self {
+        match slot {
+            MealSlot::Breakfast => MealSlotDto::Breakfast,
+            MealSlot::Lunch => MealSlotDto::Lunch,
+            MealSlot::Dinner => MealSlotDto::Dinner,
+            MealSlot::Snack => MealSlotDto::Snack,
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct LogResponse {
     pub id: Uuid,
     pub logged_at: DateTime<Utc>,
-    pub meal_slot: Option<String>,
+    pub meal_slot: Option<MealSlotDto>,
     pub item: ItemDto,
     pub quantity: QuantityDto,
     pub nutrients: Vec<NutrientSnapshotDto>,
@@ -127,15 +153,12 @@ async fn create_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = food_log_create_request_to_input(req, auth.0.id);
-
-    let result = if input.item_type == "meal" {
-        services.log_meal(input).await
-    } else {
-        services.log_food(input).await
+    let input = match food_log_create_request_to_input(req, auth.0.id) {
+        Ok(input) => input,
+        Err(err) => return err.into_response(),
     };
 
-    match result {
+    match services.log_item(input).await {
         Ok(log) => {
             let resp = food_log_to_response(&log);
             (StatusCode::CREATED, Json(resp)).into_response()
@@ -190,7 +213,10 @@ async fn update_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = food_log_update_request_to_input(req);
+    let input = match food_log_update_request_to_input(req) {
+        Ok(input) => input,
+        Err(err) => return err.into_response(),
+    };
 
     match services
         .update_food_log(FoodLogId(id), auth.0.id, input)
@@ -258,29 +284,58 @@ struct SummaryParams {
     codes: Option<Vec<String>>,
 }
 
-fn food_log_create_request_to_input(req: CreateLogRequest, user_id: Uuid) -> LogFoodInput {
-    LogFoodInput {
-        user_id,
-        logged_at: req.logged_at,
-        meal_slot: req.meal_slot,
-        item_type: req.item.item_type,
-        item_id: req.item.id,
-        quantity_amount: req.quantity.amount,
-        quantity_unit: req.quantity.unit,
-        notes: req.notes,
+fn parse_meal_slot(s: &str) -> Result<MealSlot, NutritionError> {
+    MealSlot::from_str(s).map_err(NutritionError::Validation)
+}
+
+fn parse_logged_item(item: &ItemRefDto) -> Result<LoggedItem, NutritionError> {
+    match item.item_type.as_str() {
+        "product" => Ok(LoggedItem::Product(ProductId(item.id))),
+        "meal" => Ok(LoggedItem::Meal(MealId(item.id))),
+        other => Err(NutritionError::Validation(format!(
+            "unsupported item type: {other}"
+        ))),
     }
 }
 
-fn food_log_update_request_to_input(req: UpdateLogRequest) -> UpdateFoodInput {
-    UpdateFoodInput {
+fn parse_quantity(q: &QuantityDto) -> Result<Quantity, NutritionError> {
+    Quantity::new(q.amount, UnitCode(q.unit.clone()))
+}
+
+fn food_log_create_request_to_input(
+    req: CreateLogRequest,
+    user_id: Uuid,
+) -> Result<LogFoodInput, NutritionError> {
+    let meal_slot = req.meal_slot.as_deref().map(parse_meal_slot).transpose()?;
+    let item = parse_logged_item(&req.item)?;
+    let quantity = parse_quantity(&req.quantity)?;
+    Ok(LogFoodInput {
+        user_id,
         logged_at: req.logged_at,
-        meal_slot: req.meal_slot,
-        item_type: req.item.as_ref().map(|i| i.item_type.clone()),
-        item_id: req.item.as_ref().map(|i| i.id),
-        quantity_amount: req.quantity.as_ref().map(|q| q.amount),
-        quantity_unit: req.quantity.as_ref().map(|q| q.unit.clone()),
+        meal_slot,
+        item,
+        quantity,
         notes: req.notes,
-    }
+    })
+}
+
+fn food_log_update_request_to_input(
+    req: UpdateLogRequest,
+) -> Result<UpdateFoodInput, NutritionError> {
+    let meal_slot = match req.meal_slot {
+        Some(Some(s)) => Some(Some(parse_meal_slot(&s)?)),
+        Some(None) => Some(None),
+        None => None,
+    };
+    let item = req.item.as_ref().map(parse_logged_item).transpose()?;
+    let quantity = req.quantity.as_ref().map(parse_quantity).transpose()?;
+    Ok(UpdateFoodInput {
+        logged_at: req.logged_at,
+        meal_slot,
+        item,
+        quantity,
+        notes: req.notes,
+    })
 }
 
 fn food_log_query_to_range_params(
@@ -344,7 +399,7 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
     LogResponse {
         id: log.id.0,
         logged_at: log.logged_at,
-        meal_slot: log.meal_slot.as_ref().map(|m| m.as_str().to_string()),
+        meal_slot: log.meal_slot.map(Into::into),
         item: item_parts_to_dto(item_type, item_id),
         quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
         nutrients: log
@@ -398,8 +453,8 @@ fn food_log_summary_entries_to_response(
 
 fn food_log_summary_entry_to_dto(entry: SummaryEntry) -> SummaryEntryDto {
     SummaryEntryDto {
-        code: entry.code,
+        code: entry.code.0,
         amount: entry.amount,
-        unit: entry.unit,
+        unit: entry.unit.0,
     }
 }

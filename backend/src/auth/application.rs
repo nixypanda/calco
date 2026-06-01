@@ -181,6 +181,7 @@ impl AuthSessionServices {
             .should_refresh_last_seen(now, chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS))
         {
             let session = session.record_seen(now);
+            // Best-effort last-seen heartbeat: failure here must not break session validation.
             let _ = self.session_repo.update(&session).await;
         }
 

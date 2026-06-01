@@ -197,14 +197,15 @@ impl FoodLog {
         nutrition: CalculatedNutrition,
         notes: Option<String>,
     ) -> Self {
+        let (quantity_amount, quantity_unit) = quantity.into_parts();
         Self {
             id: FoodLogId::new(),
             user_id,
             logged_at,
             meal_slot,
             item,
-            quantity_amount: quantity.amount,
-            quantity_unit: quantity.unit,
+            quantity_amount,
+            quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
         }
@@ -219,14 +220,15 @@ impl FoodLog {
         nutrition: CalculatedNutrition,
         notes: Option<String>,
     ) -> Self {
+        let (quantity_amount, quantity_unit) = quantity.into_parts();
         Self {
             id: self.id,
             user_id: self.user_id,
             logged_at,
             meal_slot,
             item,
-            quantity_amount: quantity.amount,
-            quantity_unit: quantity.unit,
+            quantity_amount,
+            quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
         }
@@ -249,9 +251,9 @@ pub use super::error::NutritionError;
 
 #[derive(Debug, Clone)]
 pub struct SummaryEntry {
-    pub code: String,
+    pub code: NutrientCode,
     pub amount: Decimal,
-    pub unit: String,
+    pub unit: UnitCode,
 }
 
 #[async_trait]
@@ -301,7 +303,7 @@ mod tests {
             serving_size_g: None,
             nutrients: vec![ProductNutrient {
                 nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-                amount_per_100g: AmountPer100g(Decimal::new(250, 0)),
+                amount_per_100g: AmountPer100g::new(Decimal::new(250, 0)).unwrap(),
                 unit: UnitCode("kcal".to_string()),
                 source: None,
                 confidence: None,
@@ -367,7 +369,7 @@ mod tests {
             Utc::now(),
             Some(MealSlot::Breakfast),
             &product,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
+            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
             &converter,
             Some("notes".into()),
         )
@@ -393,7 +395,7 @@ mod tests {
             Utc::now(),
             Some(MealSlot::Dinner),
             &meal,
-            Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+            Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
             &[(product.id, product.clone())],
             &converter,
             None,
@@ -421,7 +423,7 @@ mod tests {
             Utc::now(),
             Some(MealSlot::Lunch),
             &meal,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
+            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
             &[(product.id, product.clone())],
             &converter,
             None,
@@ -435,7 +437,7 @@ mod tests {
                 logged_at,
                 Some(MealSlot::Snack),
                 &product,
-                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
                 &converter,
                 Some("updated".into()),
             )
@@ -466,7 +468,7 @@ mod tests {
             Utc::now(),
             None,
             &product,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
+            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
             &converter,
             None,
         )
@@ -479,7 +481,7 @@ mod tests {
                 logged_at,
                 Some(MealSlot::Dinner),
                 &meal,
-                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
                 &[(product.id, product.clone())],
                 &converter,
                 None,

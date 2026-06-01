@@ -39,17 +39,6 @@ pub enum MealComponentItem {
     Product(ProductId),
 }
 
-impl MealComponentItem {
-    pub fn parse(item_type: &str, item_id: Uuid) -> Result<Self, NutritionError> {
-        match item_type {
-            "product" => Ok(MealComponentItem::Product(ProductId(item_id))),
-            other => Err(NutritionError::Validation(format!(
-                "unsupported component item type: {other}"
-            ))),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct MealComponent {
     pub id: Uuid,
@@ -59,16 +48,8 @@ pub struct MealComponent {
 }
 
 impl MealComponent {
-    pub fn new(
-        item: MealComponentItem,
-        quantity_amount: Decimal,
-        quantity_unit: UnitCode,
-    ) -> Result<Self, NutritionError> {
-        if quantity_amount <= Decimal::ZERO {
-            return Err(NutritionError::Validation(
-                "component quantity must be positive".into(),
-            ));
-        }
+    pub fn new(item: MealComponentItem, quantity: Quantity) -> Result<Self, NutritionError> {
+        let (quantity_amount, quantity_unit) = quantity.into_parts();
         Ok(Self {
             id: Uuid::new_v4(),
             item,
@@ -164,21 +145,20 @@ impl Meal {
         quantity: &Quantity,
         unit_converter: &UnitConverter,
     ) -> Result<Decimal, String> {
-        if quantity.amount <= Decimal::ZERO {
-            return Err("quantity amount must be positive".into());
-        }
-        if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+        let amount = quantity.amount();
+        let unit = quantity.unit();
+        if let Some(grams) = unit_converter.mass_to_grams(amount, unit) {
             return Ok(grams);
         }
         match (&self.total_quantity_amount, &self.total_quantity_unit) {
             (Some(total_amount), Some(total_unit))
-                if total_unit.0 == quantity.unit.0 && *total_amount > Decimal::ZERO =>
+                if total_unit.0 == unit.0 && *total_amount > Decimal::ZERO =>
             {
-                Ok(quantity.amount / *total_amount * self.declared_grams(unit_converter)?)
+                Ok(amount / *total_amount * self.declared_grams(unit_converter)?)
             }
             _ => Err(format!(
                 "cannot convert {} {} to grams for meal logging",
-                quantity.amount, quantity.unit.0
+                amount, unit.0
             )),
         }
     }
@@ -219,14 +199,15 @@ impl Meal {
                         })?;
 
                     let component_qty =
-                        Quantity::new(component.quantity_amount, component.quantity_unit.clone());
+                        Quantity::new(component.quantity_amount, component.quantity_unit.clone())
+                            .map_err(|e| e.to_string())?;
                     let component_grams =
                         product.quantity_to_grams(&component_qty, unit_converter)?;
                     total_component_grams += component_grams;
 
                     let contribution_ratio = component_grams / Decimal::new(100, 0);
                     for pn in &product.nutrients {
-                        let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
+                        let contributed_amount = pn.amount_per_100g.value() * contribution_ratio;
                         match total_nutrients
                             .iter_mut()
                             .find(|(code, _, _)| code == &pn.nutrient_code)

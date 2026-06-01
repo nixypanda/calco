@@ -8,33 +8,33 @@ use crate::nutrition::domain::calculation::{CalculatedNutrition, NutritionCalcul
 use crate::nutrition::domain::units::UnitConverter;
 
 #[derive(Debug, Clone, Default)]
-pub struct ProductSearchQuery {
+pub struct ProductSearchSpec {
     pub text: String,
-    pub include_categories: Vec<String>,
-    pub exclude_categories: Vec<String>,
+    pub include_categories: Vec<Category>,
+    pub exclude_categories: Vec<Category>,
 }
 
-impl ProductSearchQuery {
+impl ProductSearchSpec {
     pub fn parse(input: &str) -> Self {
-        let mut query = ProductSearchQuery::default();
+        let mut spec = ProductSearchSpec::default();
         let mut text_terms = Vec::new();
 
         for token in tokenize_search_input(input) {
             if let Some(value) = token.strip_prefix("category:") {
                 if let Some(category) = Category::new(value) {
-                    query.include_categories.push(category.0);
+                    spec.include_categories.push(category);
                 }
             } else if let Some(value) = token.strip_prefix("-category:") {
                 if let Some(category) = Category::new(value) {
-                    query.exclude_categories.push(category.0);
+                    spec.exclude_categories.push(category);
                 }
             } else {
                 text_terms.push(token);
             }
         }
 
-        query.text = text_terms.join(" ");
-        query
+        spec.text = text_terms.join(" ");
+        spec
     }
 }
 
@@ -271,7 +271,22 @@ impl Category {
 pub struct ServingLabel(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AmountPer100g(pub Decimal);
+pub struct AmountPer100g(Decimal);
+
+impl AmountPer100g {
+    pub fn new(amount: Decimal) -> Result<Self, NutritionError> {
+        if amount < Decimal::ZERO {
+            return Err(NutritionError::Validation(
+                "nutrient amount must be non-negative".into(),
+            ));
+        }
+        Ok(Self(amount))
+    }
+
+    pub fn value(&self) -> Decimal {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Product {
@@ -377,15 +392,14 @@ impl Product {
         quantity: &Quantity,
         unit_converter: &UnitConverter,
     ) -> Result<Decimal, String> {
-        if quantity.amount <= Decimal::ZERO {
-            return Err("quantity amount must be positive".into());
-        }
-        if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+        let amount = quantity.amount();
+        let unit = quantity.unit();
+        if let Some(grams) = unit_converter.mass_to_grams(amount, unit) {
             return Ok(grams);
         }
         for serving in &self.servings {
-            if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
-                return Ok(serving.grams * (quantity.amount / serving.quantity));
+            if serving.unit.0 == unit.0 && serving.quantity > Decimal::ZERO {
+                return Ok(serving.grams * (amount / serving.quantity));
             }
         }
         if let Some(size_g) = self.serving_size_g {
@@ -394,14 +408,11 @@ impl Product {
                 .as_ref()
                 .map(|u| u.0.as_str())
                 .unwrap_or("serving");
-            if quantity.unit.0 == default_unit {
-                return Ok(size_g * quantity.amount);
+            if unit.0 == default_unit {
+                return Ok(size_g * amount);
             }
         }
-        Err(format!(
-            "cannot convert {} {} to grams",
-            quantity.amount, quantity.unit.0
-        ))
+        Err(format!("cannot convert {} {} to grams", amount, unit.0))
     }
 
     pub fn nutrition_for(
@@ -485,17 +496,6 @@ impl ProductServing {
     }
 }
 
-impl AmountPer100g {
-    pub fn validate(amount: Decimal) -> Result<(), NutritionError> {
-        if amount < Decimal::ZERO {
-            return Err(NutritionError::Validation(
-                "nutrient amount must be non-negative".into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
 fn build_product_nutrients(
     nutrients: Vec<ProductNutrientInput>,
     catalog: &NutrientCatalog,
@@ -503,13 +503,13 @@ fn build_product_nutrients(
     nutrients
         .into_iter()
         .map(|nutrient| {
-            AmountPer100g::validate(nutrient.amount_per_100g)?;
+            let amount_per_100g = AmountPer100g::new(nutrient.amount_per_100g)?;
             let reference = catalog.get(&nutrient.code).ok_or_else(|| {
                 NutritionError::Validation(format!("unknown nutrient code: {}", nutrient.code))
             })?;
             Ok(ProductNutrient {
                 nutrient_code: reference.code().clone(),
-                amount_per_100g: AmountPer100g(nutrient.amount_per_100g),
+                amount_per_100g,
                 unit: reference.unit().clone(),
                 source: nutrient.source,
                 confidence: nutrient
@@ -543,7 +543,7 @@ pub use super::error::NutritionError;
 pub trait ProductRepository: Send + Sync {
     async fn search(
         &self,
-        query: ProductSearchQuery,
+        spec: ProductSearchSpec,
         user_id: Option<Uuid>,
     ) -> Result<Vec<Product>, NutritionError>;
     async fn list_categories(
@@ -553,6 +553,7 @@ pub trait ProductRepository: Send + Sync {
         limit: i64,
     ) -> Result<Vec<CategorySuggestion>, NutritionError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
+    async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError>;
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError>;
     async fn create(&self, product: &Product) -> Result<(), NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
@@ -578,11 +579,14 @@ mod tests {
     #[test]
     fn product_search_query_parse_extracts_category_filters() {
         let parsed =
-            ProductSearchQuery::parse(r#"chicken category:meat -category:"processed food""#);
+            ProductSearchSpec::parse(r#"chicken category:meat -category:"processed food""#);
 
         assert_eq!(parsed.text, "chicken");
-        assert_eq!(parsed.include_categories, vec!["meat"]);
-        assert_eq!(parsed.exclude_categories, vec!["processed food"]);
+        assert_eq!(parsed.include_categories, vec![Category("meat".into())]);
+        assert_eq!(
+            parsed.exclude_categories,
+            vec![Category("processed food".into())]
+        );
     }
 
     #[test]

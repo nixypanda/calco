@@ -44,10 +44,30 @@ struct CreateImportRequest {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ImportStatusDto {
+    Pending,
+    Running,
+    Committed,
+    Failed,
+}
+
+impl From<ImportStatus> for ImportStatusDto {
+    fn from(status: ImportStatus) -> Self {
+        match status {
+            ImportStatus::Pending => ImportStatusDto::Pending,
+            ImportStatus::Running => ImportStatusDto::Running,
+            ImportStatus::Committed => ImportStatusDto::Committed,
+            ImportStatus::Failed => ImportStatusDto::Failed,
+        }
+    }
+}
+
+#[derive(Serialize)]
 struct CreateImportResponse {
     id: Uuid,
     source: String,
-    status: String,
+    status: ImportStatusDto,
 }
 
 async fn create_import_handler(
@@ -195,7 +215,7 @@ async fn commit_import_handler(
 struct ImportStatusResponse {
     id: Uuid,
     source: String,
-    status: String,
+    status: ImportStatusDto,
     created_at: String,
     committed_at: Option<String>,
     failed_at: Option<String>,
@@ -282,7 +302,7 @@ fn import_job_to_create_response(job: ImportJob) -> CreateImportResponse {
     CreateImportResponse {
         id: job.id.0,
         source: job.source,
-        status: job.status.as_str().to_string(),
+        status: job.status.into(),
     }
 }
 
@@ -374,7 +394,7 @@ fn import_job_to_status_response(job: ImportJob) -> ImportStatusResponse {
     ImportStatusResponse {
         id: job.id.0,
         source: job.source,
-        status: job.status.as_str().to_string(),
+        status: job.status.into(),
         created_at: job.created_at.to_rfc3339(),
         committed_at: job.committed_at.map(|time| time.to_rfc3339()),
         failed_at: job.failed_at.map(|time| time.to_rfc3339()),

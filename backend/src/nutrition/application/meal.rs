@@ -13,22 +13,20 @@ pub struct CreateMealInput {
     pub name: String,
     pub notes: Option<String>,
     pub total_quantity_amount: Option<Decimal>,
-    pub total_quantity_unit: Option<String>,
+    pub total_quantity_unit: Option<UnitCode>,
     pub components: Vec<CreateMealComponentInput>,
 }
 
 pub struct CreateMealComponentInput {
-    pub item_type: String,
-    pub item_id: Uuid,
-    pub quantity_amount: Decimal,
-    pub quantity_unit: String,
+    pub item: MealComponentItem,
+    pub quantity: Quantity,
 }
 
 pub struct UpdateMealInput {
     pub name: Option<String>,
     pub notes: Option<Option<String>>,
     pub total_quantity_amount: Option<Option<Decimal>>,
-    pub total_quantity_unit: Option<Option<String>>,
+    pub total_quantity_unit: Option<Option<UnitCode>>,
     pub components: Option<Vec<CreateMealComponentInput>>,
 }
 
@@ -74,7 +72,7 @@ impl MealServices {
             input.name,
             input.notes,
             input.total_quantity_amount,
-            input.total_quantity_unit.map(UnitCode),
+            input.total_quantity_unit,
             components,
             now,
         )?;
@@ -108,7 +106,7 @@ impl MealServices {
             input.name,
             input.notes,
             input.total_quantity_amount,
-            input.total_quantity_unit.map(|opt| opt.map(UnitCode)),
+            input.total_quantity_unit,
             components,
             Utc::now(),
         )?;
@@ -134,8 +132,7 @@ impl MealServices {
     pub async fn get_meal_nutrients(
         &self,
         id: MealId,
-        quantity_amount: Decimal,
-        quantity_unit: String,
+        quantity: Quantity,
     ) -> Result<MealNutritionOutput, NutritionError> {
         let meal = self
             .meal_repo
@@ -143,10 +140,13 @@ impl MealServices {
             .await?
             .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
 
-        let products = self.load_meal_products(&meal).await?;
-        let requested_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit.clone()));
+        let products = crate::nutrition::application::food_log::load_meal_products(
+            &meal,
+            self.product_repo.as_ref(),
+        )
+        .await?;
         let calculated = meal
-            .nutrition_for(&requested_quantity, &products, &self.unit_converter)
+            .nutrition_for(&quantity, &products, &self.unit_converter)
             .map_err(NutritionError::Validation)?;
         let nutrients: Vec<MealNutrientEntry> = calculated
             .amounts
@@ -158,10 +158,11 @@ impl MealServices {
             })
             .collect();
 
+        let (quantity_amount, quantity_unit) = quantity.into_parts();
         Ok(MealNutritionOutput {
             meal_id: id.0,
             quantity_amount,
-            quantity_unit,
+            quantity_unit: quantity_unit.0,
             nutrients,
         })
     }
@@ -170,48 +171,26 @@ impl MealServices {
         &self,
         inputs: Vec<CreateMealComponentInput>,
     ) -> Result<Vec<MealComponent>, NutritionError> {
-        let mut components = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            let item = MealComponentItem::parse(&input.item_type, input.item_id)?;
-            match &item {
-                MealComponentItem::Product(product_id) => {
-                    self.product_repo
-                        .find_by_id(*product_id)
-                        .await?
-                        .ok_or_else(|| {
-                            NutritionError::NotFound(format!("product {} not found", input.item_id))
-                        })?;
-                }
+        let product_ids: Vec<ProductId> = inputs
+            .iter()
+            .map(|i| match &i.item {
+                MealComponentItem::Product(id) => *id,
+            })
+            .collect();
+        let existing = self.product_repo.existing_ids(&product_ids).await?;
+        for id in &product_ids {
+            if !existing.contains(id) {
+                return Err(NutritionError::NotFound(format!(
+                    "product {} not found",
+                    id.0
+                )));
             }
-            components.push(MealComponent::new(
-                item,
-                input.quantity_amount,
-                UnitCode(input.quantity_unit),
-            )?);
         }
-        Ok(components)
-    }
 
-    async fn load_meal_products(
-        &self,
-        meal: &Meal,
-    ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
-        let mut products = Vec::new();
-        for component in &meal.components {
-            match &component.item {
-                MealComponentItem::Product(product_id) => {
-                    let product = self
-                        .product_repo
-                        .find_by_id(*product_id)
-                        .await?
-                        .ok_or_else(|| {
-                            NutritionError::NotFound(format!("product {} not found", product_id.0))
-                        })?;
-                    products.push((*product_id, product));
-                }
-            }
-        }
-        Ok(products)
+        inputs
+            .into_iter()
+            .map(|input| MealComponent::new(input.item, input.quantity))
+            .collect()
     }
 }
 
@@ -297,9 +276,20 @@ mod tests {
             Ok(self.product.clone())
         }
 
+        async fn existing_ids(
+            &self,
+            ids: &[ProductId],
+        ) -> Result<std::collections::HashSet<ProductId>, NutritionError> {
+            if self.product.is_some() {
+                Ok(ids.iter().copied().collect())
+            } else {
+                Ok(std::collections::HashSet::new())
+            }
+        }
+
         async fn search(
             &self,
-            _query: ProductSearchQuery,
+            _query: ProductSearchSpec,
             _user_id: Option<Uuid>,
         ) -> Result<Vec<Product>, NutritionError> {
             unimplemented!("not used in test")
@@ -347,7 +337,7 @@ mod tests {
             serving_size_g: Some(Decimal::new(100, 0)),
             nutrients: vec![ProductNutrient {
                 nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-                amount_per_100g: AmountPer100g(Decimal::new(100, 0)),
+                amount_per_100g: AmountPer100g::new(Decimal::new(100, 0)).unwrap(),
                 unit: UnitCode("kcal".to_string()),
                 source: None,
                 confidence: None,
@@ -371,10 +361,8 @@ mod tests {
 
     fn sample_component() -> CreateMealComponentInput {
         CreateMealComponentInput {
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
+            item: MealComponentItem::Product(ProductId(Uuid::nil())),
+            quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
         }
     }
 
@@ -517,7 +505,7 @@ mod tests {
                 name: "Original".to_string(),
                 notes: Some("clear me".to_string()),
                 total_quantity_amount: Some(Decimal::new(100, 0)),
-                total_quantity_unit: Some("g".to_string()),
+                total_quantity_unit: Some(UnitCode("g".to_string())),
                 components: vec![sample_component()],
             })
             .await
@@ -656,10 +644,9 @@ mod tests {
                 components: vec![
                     sample_component(),
                     CreateMealComponentInput {
-                        item_type: "product".to_string(),
-                        item_id: Uuid::nil(),
-                        quantity_amount: Decimal::new(200, 0),
-                        quantity_unit: "g".to_string(),
+                        item: MealComponentItem::Product(ProductId(Uuid::nil())),
+                        quantity: Quantity::new(Decimal::new(200, 0), UnitCode("g".to_string()))
+                            .unwrap(),
                     },
                 ],
             })
@@ -667,7 +654,10 @@ mod tests {
             .unwrap();
 
         let nutrition = services
-            .get_meal_nutrients(meal.id, Decimal::new(150, 0), "g".to_string())
+            .get_meal_nutrients(
+                meal.id,
+                Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string())).unwrap(),
+            )
             .await
             .unwrap();
 

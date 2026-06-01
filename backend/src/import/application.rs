@@ -2,16 +2,9 @@ use std::sync::Arc;
 
 use crate::import::domain::*;
 
+#[derive(Clone)]
 pub struct ImportServices {
     repo: Arc<dyn ImportRepository>,
-}
-
-impl Clone for ImportServices {
-    fn clone(&self) -> Self {
-        Self {
-            repo: self.repo.clone(),
-        }
-    }
 }
 
 impl ImportServices {
@@ -201,6 +194,8 @@ impl ImportServices {
             ));
         }
 
+        // Foods are the primary entity — nutrients and servings attach to them, so an
+        // import with zero foods has nothing to commit even if other rows were staged.
         let food_count = self.repo.count_staged_foods(import_id).await?;
         if food_count == 0 {
             return Err(ImportError::Validation("no staged foods to commit".into()));

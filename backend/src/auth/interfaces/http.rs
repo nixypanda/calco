@@ -168,10 +168,42 @@ pub struct LoginRequest {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IdentityRoleDto {
+    User,
+    Admin,
+}
+
+impl From<IdentityRole> for IdentityRoleDto {
+    fn from(role: IdentityRole) -> Self {
+        match role {
+            IdentityRole::User => IdentityRoleDto::User,
+            IdentityRole::Admin => IdentityRoleDto::Admin,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IdentityStatusDto {
+    Active,
+    Disabled,
+}
+
+impl From<IdentityStatus> for IdentityStatusDto {
+    fn from(status: IdentityStatus) -> Self {
+        match status {
+            IdentityStatus::Active => IdentityStatusDto::Active,
+            IdentityStatus::Disabled => IdentityStatusDto::Disabled,
+        }
+    }
+}
+
+#[derive(Serialize)]
 pub struct IdentityDto {
     pub id: Uuid,
     pub username: String,
-    pub role: String,
+    pub role: IdentityRoleDto,
 }
 
 #[derive(Serialize)]
@@ -198,7 +230,7 @@ pub struct UserItemDto {
     pub id: Uuid,
     pub username: String,
     pub display_name: String,
-    pub status: String,
+    pub status: IdentityStatusDto,
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
@@ -434,7 +466,7 @@ fn identity_to_dto(identity: Identity) -> IdentityDto {
     IdentityDto {
         id: identity.id.0,
         username: identity.username.0,
-        role: identity.role.as_str().to_string(),
+        role: identity.role.into(),
     }
 }
 
@@ -466,7 +498,7 @@ fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
         id: user.profile.id,
         username: user.identity.username.0,
         display_name: user.profile.display_name,
-        status: user.identity.status.as_str().to_string(),
+        status: user.identity.status.into(),
         created_at: user.profile.created_at,
     }
 }
