@@ -63,7 +63,7 @@ fn food_log_row_to_food_log(
         id: FoodLogId(row.id),
         user_id: row.user_id,
         logged_at: row.logged_at,
-        meal_slot: row.meal_slot.and_then(|s| MealSlot::from_str(&s).ok()),
+        meal_slot: row.meal_slot.and_then(|s| s.parse().ok()),
         item,
         quantity_amount: row.quantity,
         quantity_unit: UnitCode(row.unit),
@@ -341,9 +341,7 @@ impl PostgresFoodLogRepository {
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
                 unit: UnitCode(r.unit),
                 source: r.source,
-                confidence: r
-                    .confidence
-                    .and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                confidence: r.confidence.and_then(|c| c.parse().ok()),
             })
             .collect())
     }
@@ -510,10 +508,16 @@ fn product_lookup_row_to_product(
 ) -> Result<Product, FoodLogError> {
     Ok(Product {
         id: ProductId(row.id),
-        source: Source::from_str(&row.source).map_err(FoodLogError::Internal)?,
+        source: row
+            .source
+            .parse::<Source>()
+            .map_err(FoodLogError::Internal)?,
         source_id: row.source_id,
         user_id: row.user_id,
-        visibility: ProductVisibility::from_str(&row.visibility).map_err(FoodLogError::Internal)?,
+        visibility: row
+            .visibility
+            .parse::<ProductVisibility>()
+            .map_err(FoodLogError::Internal)?,
         barcode: row.barcode.map(Barcode),
         name: ProductName(row.name),
         brand: row.brand.map(Brand),

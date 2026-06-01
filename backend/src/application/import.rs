@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use uuid::Uuid;
 
 use crate::domain::import::*;
 
@@ -18,16 +17,6 @@ impl Clone for ImportServices {
 impl ImportServices {
     pub fn new(repo: Arc<dyn ImportRepository>) -> Self {
         Self { repo }
-    }
-
-    pub async fn create_job(
-        &self,
-        source: String,
-        created_by: Option<Uuid>,
-    ) -> Result<ImportJob, ImportError> {
-        let job = ImportJob::new(source, created_by);
-        self.repo.create_job(&job).await?;
-        Ok(job)
     }
 
     pub async fn stage_foods(
@@ -219,20 +208,6 @@ impl ImportServices {
 
         self.repo.commit_import(import_id).await
     }
-
-    pub async fn get_job(&self, import_id: ImportId) -> Result<ImportJob, ImportError> {
-        self.repo
-            .find_job(import_id)
-            .await?
-            .ok_or_else(|| ImportError::NotFound("import job not found".into()))
-    }
-
-    pub async fn get_errors(
-        &self,
-        import_id: ImportId,
-    ) -> Result<Vec<ImportErrorRecord>, ImportError> {
-        self.repo.get_errors(import_id).await
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -368,19 +343,16 @@ mod tests {
         ImportServices::new(repo)
     }
 
-    #[tokio::test]
-    async fn test_create_job_success() {
-        let services = make_services();
-        let job = services.create_job("USDA".into(), None).await.unwrap();
-        assert_eq!(job.source, "USDA");
-        assert_eq!(job.status, ImportStatus::Pending);
-        assert!(job.created_by.is_none());
+    async fn make_pending_job(services: &ImportServices, source: &str) -> ImportJob {
+        let job = ImportJob::new(source.into(), None);
+        services.repo.create_job(&job).await.unwrap();
+        job
     }
 
     #[tokio::test]
     async fn test_stage_foods_success() {
         let services = make_services();
-        let job = services.create_job("OFF".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "OFF").await;
 
         let result = services
             .stage_foods(
@@ -420,7 +392,7 @@ mod tests {
     #[tokio::test]
     async fn test_stage_foods_rejects_invalid() {
         let services = make_services();
-        let job = services.create_job("OFF".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "OFF").await;
 
         let result = services
             .stage_foods(
@@ -447,7 +419,7 @@ mod tests {
     #[tokio::test]
     async fn test_stage_nutrients_success() {
         let services = make_services();
-        let job = services.create_job("USDA".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "USDA").await;
 
         let result = services
             .stage_nutrients(
@@ -471,7 +443,7 @@ mod tests {
     #[tokio::test]
     async fn test_stage_nutrients_rejects_invalid() {
         let services = make_services();
-        let job = services.create_job("USDA".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "USDA").await;
 
         let result = services
             .stage_nutrients(
@@ -501,7 +473,7 @@ mod tests {
             servings_inserted: 0,
             errors_logged: 0,
         });
-        let job = services.create_job("IFCT".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "IFCT").await;
 
         services
             .stage_foods(
@@ -531,25 +503,12 @@ mod tests {
     #[tokio::test]
     async fn test_commit_fails_when_no_foods_staged() {
         let services = make_services();
-        let job = services.create_job("USDA".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "USDA").await;
 
         let err = services.commit_job(job.id).await.unwrap_err();
         match err {
             ImportError::Validation(_) => {}
             _ => panic!("expected validation error"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_get_job_not_found() {
-        let services = make_services();
-        let err = services
-            .get_job(ImportId(uuid::Uuid::nil()))
-            .await
-            .unwrap_err();
-        match err {
-            ImportError::NotFound(_) => {} // expected
-            _ => panic!("expected not found error"),
         }
     }
 
@@ -588,31 +547,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_errors_returns_staged_errors() {
-        let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
-
-        let job = ImportJob::new("USDA".into(), None);
-        repo.create_job(&job).await.unwrap();
-
-        repo.add_error(
-            job.id,
-            &ImportErrorRecord {
-                row_number: Some(5),
-                error: "Unknown nutrient code: UNKNOWN_X".into(),
-                raw_payload: None,
-            },
-        )
-        .await
-        .unwrap();
-
-        let services = ImportServices::new(repo);
-        let errors = services.get_errors(job.id).await.unwrap();
-        assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].row_number, Some(5));
-        assert!(errors[0].error.contains("UNKNOWN_X"));
-    }
-
-    #[tokio::test]
     async fn test_commit_job_with_errors() {
         let services = make_services_with_result(ImportCommitResult {
             products_created: 1,
@@ -621,7 +555,7 @@ mod tests {
             servings_inserted: 0,
             errors_logged: 1,
         });
-        let job = services.create_job("USDA".into(), None).await.unwrap();
+        let job = make_pending_job(&services, "USDA").await;
 
         services
             .stage_foods(

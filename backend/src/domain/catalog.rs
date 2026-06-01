@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::domain::nutrition::{CalculatedNutrition, NutritionCalculator, Quantity};
@@ -13,6 +14,54 @@ pub struct ProductSearchQuery {
     pub exclude_categories: Vec<String>,
 }
 
+impl ProductSearchQuery {
+    pub fn parse(input: &str) -> Self {
+        let mut query = ProductSearchQuery::default();
+        let mut text_terms = Vec::new();
+
+        for token in tokenize_search_input(input) {
+            if let Some(value) = token.strip_prefix("category:") {
+                if let Some(category) = Category::new(value) {
+                    query.include_categories.push(category.0);
+                }
+            } else if let Some(value) = token.strip_prefix("-category:") {
+                if let Some(category) = Category::new(value) {
+                    query.exclude_categories.push(category.0);
+                }
+            } else {
+                text_terms.push(token);
+            }
+        }
+
+        query.text = text_terms.join(" ");
+        query
+    }
+}
+
+fn tokenize_search_input(input: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut in_quotes = false;
+
+    for ch in input.chars() {
+        match ch {
+            '"' => in_quotes = !in_quotes,
+            c if c.is_whitespace() && !in_quotes => {
+                if !current.is_empty() {
+                    tokens.push(std::mem::take(&mut current));
+                }
+            }
+            c => current.push(c),
+        }
+    }
+
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    tokens
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CategorySuggestion {
     pub value: String,
@@ -21,6 +70,12 @@ pub struct CategorySuggestion {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ProductId(pub Uuid);
+
+impl Default for ProductId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ProductId {
     pub fn new() -> Self {
@@ -51,8 +106,12 @@ impl Source {
             Source::Ifct => "IFCT",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for Source {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "USER" => Ok(Source::User),
             "OFF" => Ok(Source::Off),
@@ -76,8 +135,12 @@ impl ProductVisibility {
             ProductVisibility::UserPrivate => "user_private",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for ProductVisibility {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "global" => Ok(ProductVisibility::Global),
             "user_private" => Ok(ProductVisibility::UserPrivate),
@@ -101,8 +164,12 @@ impl NutrientConfidence {
             NutrientConfidence::Unknown => "unknown",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for NutrientConfidence {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "approved" => Ok(NutrientConfidence::Approved),
             "derived" => Ok(NutrientConfidence::Derived),
@@ -139,17 +206,19 @@ pub struct NutrientCatalog {
 }
 
 impl NutrientCatalog {
-    pub fn from_iter<I: IntoIterator<Item = Nutrient>>(nutrients: I) -> Self {
+    pub fn get(&self, code: &str) -> Option<&Nutrient> {
+        self.by_code.get(code)
+    }
+}
+
+impl FromIterator<Nutrient> for NutrientCatalog {
+    fn from_iter<I: IntoIterator<Item = Nutrient>>(nutrients: I) -> Self {
         Self {
             by_code: nutrients
                 .into_iter()
                 .map(|n| (n.code().0.clone(), n))
                 .collect(),
         }
-    }
-
-    pub fn get(&self, code: &str) -> Option<&Nutrient> {
-        self.by_code.get(code)
     }
 }
 
@@ -223,6 +292,7 @@ pub struct Product {
 }
 
 impl Product {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_custom(
         user_id: Uuid,
         name: String,
@@ -255,6 +325,7 @@ impl Product {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_custom(
         &self,
         name: String,
@@ -291,6 +362,14 @@ impl Product {
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == Some(user_id)
+    }
+
+    pub fn assert_owned_by(&self, user_id: Uuid) -> Result<(), CatalogError> {
+        if self.is_owned_by(user_id) {
+            Ok(())
+        } else {
+            Err(CatalogError::Forbidden("not your custom food".into()))
+        }
     }
 
     pub fn quantity_to_grams(
@@ -435,7 +514,7 @@ fn build_product_nutrients(
                 source: nutrient.source,
                 confidence: nutrient
                     .confidence
-                    .and_then(|confidence| NutrientConfidence::from_str(&confidence).ok()),
+                    .and_then(|confidence| confidence.parse().ok()),
             })
         })
         .collect()
@@ -509,6 +588,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn product_search_query_parse_extracts_category_filters() {
+        let parsed =
+            ProductSearchQuery::parse(r#"chicken category:meat -category:"processed food""#);
+
+        assert_eq!(parsed.text, "chicken");
+        assert_eq!(parsed.include_categories, vec!["meat"]);
+        assert_eq!(parsed.exclude_categories, vec!["processed food"]);
+    }
+
+    #[test]
     fn category_normalize_list_trims_lowercases_and_deduplicates() {
         let categories = Category::normalize_list([" Snacks ", "snacks", "", "Beverages"]);
         assert_eq!(
@@ -536,12 +625,14 @@ mod tests {
     }
 
     fn test_catalog() -> NutrientCatalog {
-        NutrientCatalog::from_iter([Nutrient(
+        [Nutrient(
             NutrientCode("ENERGY_KCAL".into()),
             "Energy".into(),
             UnitCode("kcal".into()),
             "energy".into(),
-        )])
+        )]
+        .into_iter()
+        .collect()
     }
 
     #[test]

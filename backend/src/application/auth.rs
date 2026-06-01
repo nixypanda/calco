@@ -6,10 +6,6 @@ use uuid::Uuid;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
 
-pub struct BootstrapInfo {
-    pub admin_exists: bool,
-}
-
 pub struct LoginResult {
     pub identity: Identity,
     pub profile: Option<UserProfile>,
@@ -24,13 +20,6 @@ pub struct SessionResult {
 pub struct CreatedUser {
     pub identity: Identity,
     pub profile: UserProfile,
-}
-
-pub async fn bootstrap_status(
-    identity_repo: &dyn IdentityRepository,
-) -> Result<BootstrapInfo, AuthError> {
-    let admin_exists = identity_repo.admin_exists().await?;
-    Ok(BootstrapInfo { admin_exists })
 }
 
 pub async fn create_bootstrap_admin(
@@ -226,13 +215,6 @@ pub async fn admin_create_user(
     profile_repo.create(&profile).await?;
 
     Ok(CreatedUser { identity, profile })
-}
-
-pub async fn admin_list_users(
-    _identity_repo: &dyn IdentityRepository,
-    profile_repo: &dyn UserProfileRepository,
-) -> Result<Vec<UserWithProfile>, AuthError> {
-    profile_repo.list_all_with_identities().await
 }
 
 pub async fn admin_reset_password(

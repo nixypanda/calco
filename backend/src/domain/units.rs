@@ -85,5 +85,4 @@ mod tests {
             .unwrap();
         assert_eq!(result, Decimal::from_str("2500.0").unwrap());
     }
-
 }

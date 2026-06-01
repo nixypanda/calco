@@ -264,9 +264,7 @@ impl PostgresMealRepository {
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
                 unit: UnitCode(r.unit),
                 source: r.source,
-                confidence: r
-                    .confidence
-                    .and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                confidence: r.confidence.and_then(|c| c.parse().ok()),
             })
             .collect())
     }
@@ -334,10 +332,13 @@ fn product_lookup_row_to_product(
 ) -> Result<Product, MealError> {
     Ok(Product {
         id: ProductId(row.id),
-        source: Source::from_str(&row.source).map_err(MealError::Internal)?,
+        source: row.source.parse::<Source>().map_err(MealError::Internal)?,
         source_id: row.source_id,
         user_id: row.user_id,
-        visibility: ProductVisibility::from_str(&row.visibility).map_err(MealError::Internal)?,
+        visibility: row
+            .visibility
+            .parse::<ProductVisibility>()
+            .map_err(MealError::Internal)?,
         barcode: row.barcode.map(Barcode),
         name: ProductName(row.name),
         brand: row.brand.map(Brand),

@@ -20,8 +20,14 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
             { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }
         ]
     });
-    let created: Value =
-        post_json(router, "/api/foods/custom", user, &payload, StatusCode::CREATED).await;
+    let created: Value = post_json(
+        router,
+        "/api/foods/custom",
+        user,
+        &payload,
+        StatusCode::CREATED,
+    )
+    .await;
     created["id"].as_str().unwrap().to_string()
 }
 
@@ -40,8 +46,14 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
         "quantity": { "amount": 150, "unit": "g" },
         "notes": "with yogurt"
     });
-    let created: Value =
-        post_json(&router, "/api/logs", &user, &create_payload, StatusCode::CREATED).await;
+    let created: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &create_payload,
+        StatusCode::CREATED,
+    )
+    .await;
     let log_id = created["id"].as_str().unwrap().to_string();
     assert_eq!(created["item"]["type"], "product");
     assert_eq!(created["item"]["id"], product_id);
@@ -64,12 +76,7 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     assert_eq!(fetched["notes"], "with yogurt");
 
     // ── List by date range ──────────────────────────────────────────────
-    let list: Value = get_json(
-        &router,
-        "/api/logs?from=2026-06-01&to=2026-06-01",
-        &user,
-    )
-    .await;
+    let list: Value = get_json(&router, "/api/logs?from=2026-06-01&to=2026-06-01", &user).await;
     let items = list["items"].as_array().unwrap();
     assert!(items.iter().any(|l| l["id"] == log_id));
 

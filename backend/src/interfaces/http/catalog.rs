@@ -9,7 +9,6 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::application::catalog::*;
 use crate::domain::catalog::*;
 use crate::interfaces::http::auth::{AppState, AuthUser};
 
@@ -221,12 +220,11 @@ async fn search_products_handler(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    let products = services
-        .search_products(product_search_query_to_criteria(query, auth.0.id))
-        .await;
-
-    match products {
+    match state
+        .product_repo
+        .search(ProductSearchQuery::parse(&query.q), Some(auth.0.id))
+        .await
+    {
         Ok(items) => Json(products_to_search_response(items)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
@@ -237,9 +235,10 @@ async fn list_categories_handler(
     State(state): State<AppState>,
     Query(query): Query<CategoryQuery>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services
-        .list_categories(&query.q, Some(auth.0.id), query.limit)
+    let limit = query.limit.unwrap_or(10).clamp(1, 50);
+    match state
+        .product_repo
+        .list_categories(query.q.trim(), Some(auth.0.id), limit)
         .await
     {
         Ok(categories) => {
@@ -258,17 +257,20 @@ async fn barcode_lookup_handler(
     State(state): State<AppState>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services.get_product_by_barcode(&barcode).await {
-        Ok(product) => match services.allowed_units_for_product(&product).await {
-            Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
-            Err(e) => internal_error(e).into_response(),
-        },
-        Err(CatalogError::NotFound(_)) => error_response(
-            "not_found",
-            format!("product with barcode {barcode} not found"),
-        )
-        .into_response(),
+    let product = match state.product_repo.find_by_barcode(&barcode).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return error_response(
+                "not_found",
+                format!("product with barcode {barcode} not found"),
+            )
+            .into_response();
+        }
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    match load_allowed_units(&state, &product).await {
+        Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -278,21 +280,20 @@ async fn product_detail_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services.get_product(ProductId(id)).await {
-        Ok(product)
-            if product.visibility == ProductVisibility::Global
-                || product.is_owned_by(auth.0.id) =>
-        {
-            match services.allowed_units_for_product(&product).await {
-                Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
-                Err(e) => internal_error(e).into_response(),
-            }
+    let product = match state.product_repo.find_by_id(ProductId(id)).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return error_response("not_found", format!("product {id} not found")).into_response();
         }
-        Ok(_) => error_response("not_found", format!("product {id} not found")).into_response(),
-        Err(CatalogError::NotFound(_)) => {
-            error_response("not_found", format!("product {id} not found")).into_response()
-        }
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    if product.visibility != ProductVisibility::Global && !product.is_owned_by(auth.0.id) {
+        return error_response("not_found", format!("product {id} not found")).into_response();
+    }
+
+    match load_allowed_units(&state, &product).await {
+        Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -302,25 +303,34 @@ async fn create_custom_food_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
     let args = custom_food_request_to_params(req);
 
-    match services
-        .create_custom_food(
-            auth.0.id,
-            args.name,
-            args.brand,
-            args.categories,
-            args.serving_size_g,
-            args.default_quantity,
-            args.default_unit,
-            args.nutrients,
-            args.servings,
-        )
-        .await
-    {
-        Ok(product) => (StatusCode::CREATED, Json(product_to_id_response(product))).into_response(),
-        Err(CatalogError::Validation(msg)) => error_response("validation", msg).into_response(),
+    let catalog = match load_nutrient_catalog(&state).await {
+        Ok(c) => c,
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    let product = match Product::new_custom(
+        auth.0.id,
+        args.name,
+        args.brand,
+        args.categories,
+        args.serving_size_g,
+        args.default_quantity,
+        args.default_unit,
+        args.nutrients,
+        args.servings,
+        &catalog,
+    ) {
+        Ok(p) => p,
+        Err(CatalogError::Validation(msg)) => {
+            return error_response("validation", msg).into_response();
+        }
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    match state.product_repo.create(&product).await {
+        Ok(()) => (StatusCode::CREATED, Json(product_to_id_response(product))).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -331,30 +341,45 @@ async fn update_custom_food_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
     let args = custom_food_request_to_params(req);
 
-    match services
-        .update_custom_food(
-            ProductId(id),
-            auth.0.id,
-            args.name,
-            args.brand,
-            args.categories,
-            args.serving_size_g,
-            args.default_quantity,
-            args.default_unit,
-            args.nutrients,
-            args.servings,
-        )
-        .await
-    {
-        Ok(product) => Json(product_to_id_response(product)).into_response(),
-        Err(CatalogError::NotFound(_)) => {
-            error_response("not_found", format!("product {id} not found")).into_response()
+    let existing = match state.product_repo.find_by_id(ProductId(id)).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return error_response("not_found", format!("product {id} not found")).into_response();
         }
-        Err(CatalogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(CatalogError::Validation(msg)) => error_response("validation", msg).into_response(),
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    if let Err(CatalogError::Forbidden(msg)) = existing.assert_owned_by(auth.0.id) {
+        return error_response("forbidden", msg).into_response();
+    }
+
+    let catalog = match load_nutrient_catalog(&state).await {
+        Ok(c) => c,
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    let updated = match existing.update_custom(
+        args.name,
+        args.brand,
+        args.categories,
+        args.serving_size_g,
+        args.default_quantity,
+        args.default_unit,
+        args.nutrients,
+        args.servings,
+        &catalog,
+    ) {
+        Ok(p) => p,
+        Err(CatalogError::Validation(msg)) => {
+            return error_response("validation", msg).into_response();
+        }
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    match state.product_repo.update(&updated).await {
+        Ok(()) => Json(product_to_id_response(updated)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -364,14 +389,20 @@ async fn delete_custom_food_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-
-    match services.delete_custom_food(ProductId(id), auth.0.id).await {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(CatalogError::NotFound(_)) => {
-            error_response("not_found", format!("product {id} not found")).into_response()
+    let existing = match state.product_repo.find_by_id(ProductId(id)).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return error_response("not_found", format!("product {id} not found")).into_response();
         }
-        Err(CatalogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    if let Err(CatalogError::Forbidden(msg)) = existing.assert_owned_by(auth.0.id) {
+        return error_response("forbidden", msg).into_response();
+    }
+
+    match state.product_repo.soft_delete(ProductId(id)).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -380,8 +411,7 @@ async fn list_nutrients_handler(
     _auth: AuthUser,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services.list_nutrients().await {
+    match state.nutrient_repo.list_all().await {
         Ok(nutrients) => {
             let items: Vec<NutrientItemDto> =
                 nutrients.into_iter().map(nutrient_to_item_dto).collect();
@@ -396,10 +426,9 @@ async fn get_nutrient_handler(
     State(state): State<AppState>,
     Path(code): Path<String>,
 ) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services.get_nutrient(&code).await {
-        Ok(n) => Json(nutrient_to_item_dto(n)).into_response(),
-        Err(CatalogError::NotFound(_)) => {
+    match state.nutrient_repo.find_by_code(&code).await {
+        Ok(Some(n)) => Json(nutrient_to_item_dto(n)).into_response(),
+        Ok(None) => {
             error_response("not_found", format!("nutrient {code} not found")).into_response()
         }
         Err(e) => internal_error(e).into_response(),
@@ -407,8 +436,7 @@ async fn get_nutrient_handler(
 }
 
 async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
-    let services = &state.catalog_services;
-    match services.list_units().await {
+    match state.unit_repo.list_all().await {
         Ok(units) => {
             let items: Vec<UnitItemDto> = units.into_iter().map(unit_tuple_to_item_dto).collect();
             Json(UnitListResponse { items }).into_response()
@@ -417,14 +445,26 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
     }
 }
 
-// ─── Conversions ───────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────
 
-fn product_search_query_to_criteria(query: SearchQuery, user_id: Uuid) -> SearchCriteria {
-    SearchCriteria {
-        query: query.q,
-        user_id: Some(user_id),
-    }
+async fn load_nutrient_catalog(state: &AppState) -> Result<NutrientCatalog, CatalogError> {
+    let nutrients = state.nutrient_repo.list_all().await?;
+    Ok(nutrients.into_iter().collect())
 }
+
+async fn load_allowed_units(
+    state: &AppState,
+    product: &Product,
+) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
+    let all_units = state.unit_repo.list_all().await?;
+    let allowed = product.allowed_unit_codes(&state.unit_converter);
+    Ok(all_units
+        .into_iter()
+        .filter(|(code, _, _)| allowed.contains(&code.0))
+        .collect())
+}
+
+// ─── Conversions ───────────────────────────────────────────────
 
 fn custom_food_request_to_params(req: CreateCustomFoodRequest) -> CustomFoodParams {
     CustomFoodParams {

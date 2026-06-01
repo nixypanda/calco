@@ -46,37 +46,26 @@ pub struct UpdateFoodInput {
 pub struct FoodLogServices {
     pub food_log_repo: Arc<dyn FoodLogRepository>,
     pub product_repo: Arc<dyn ProductLookup>,
-    pub summary_repo: Arc<dyn SummaryRepository>,
     pub unit_converter: Arc<UnitConverter>,
-    pub meal_lookup: Option<Arc<dyn MealLookup>>,
-    pub meal_product_lookup: Option<Arc<dyn ProductLookup>>,
+    pub meal_lookup: Arc<dyn MealLookup>,
+    pub meal_product_lookup: Arc<dyn ProductLookup>,
 }
 
 impl FoodLogServices {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
         product_repo: Arc<dyn ProductLookup>,
-        summary_repo: Arc<dyn SummaryRepository>,
         unit_converter: Arc<UnitConverter>,
+        meal_lookup: Arc<dyn MealLookup>,
+        meal_product_lookup: Arc<dyn ProductLookup>,
     ) -> Self {
         Self {
             food_log_repo,
             product_repo,
-            summary_repo,
             unit_converter,
-            meal_lookup: None,
-            meal_product_lookup: None,
+            meal_lookup,
+            meal_product_lookup,
         }
-    }
-
-    pub fn with_meal_support(
-        mut self,
-        meal_lookup: Arc<dyn MealLookup>,
-        meal_product_lookup: Arc<dyn ProductLookup>,
-    ) -> Self {
-        self.meal_lookup = Some(meal_lookup);
-        self.meal_product_lookup = Some(meal_product_lookup);
-        self
     }
 
     pub async fn log_food(&self, input: LogFoodInput) -> Result<FoodLog, FoodLogError> {
@@ -99,7 +88,7 @@ impl FoodLogServices {
         let quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
 
         let meal_slot = match input.meal_slot {
-            Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
+            Some(ref s) => Some(s.parse::<MealSlot>().map_err(FoodLogError::Validation)?),
             None => None,
         };
 
@@ -118,27 +107,18 @@ impl FoodLogServices {
     }
 
     pub async fn log_meal(&self, input: LogFoodInput) -> Result<FoodLog, FoodLogError> {
-        let meal_lookup = self
-            .meal_lookup
-            .as_ref()
-            .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
-        let meal_product_lookup = self
-            .meal_product_lookup
-            .as_ref()
-            .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
-
         let meal_id = MealId(input.item_id);
-        let meal = meal_lookup
-            .find_by_id(meal_id)
-            .await?
-            .ok_or_else(|| FoodLogError::NotFound(format!("meal {} not found", input.item_id)))?;
+        let meal =
+            self.meal_lookup.find_by_id(meal_id).await?.ok_or_else(|| {
+                FoodLogError::NotFound(format!("meal {} not found", input.item_id))
+            })?;
 
         let scale_quantity =
             Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
+        let products = load_meal_products(&meal, self.meal_product_lookup.as_ref()).await?;
 
         let meal_slot = match input.meal_slot {
-            Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
+            Some(ref s) => Some(s.parse::<MealSlot>().map_err(FoodLogError::Validation)?),
             None => None,
         };
 
@@ -155,24 +135,6 @@ impl FoodLogServices {
 
         self.food_log_repo.create(&log).await?;
         Ok(log)
-    }
-
-    pub async fn get_food_log(&self, id: FoodLogId) -> Result<FoodLog, FoodLogError> {
-        self.food_log_repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| FoodLogError::NotFound("food log not found".into()))
-    }
-
-    pub async fn get_logs_for_range(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-    ) -> Result<Vec<FoodLog>, FoodLogError> {
-        self.food_log_repo
-            .find_by_user_and_range(user_id, from, to)
-            .await
     }
 
     pub async fn update_food_log(
@@ -212,7 +174,7 @@ impl FoodLogServices {
 
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
-                Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
+                Some(Some(ref s)) => Some(s.parse::<MealSlot>().map_err(FoodLogError::Validation)?),
                 Some(None) => None,
                 None => existing.meal_slot,
             };
@@ -230,16 +192,9 @@ impl FoodLogServices {
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
         } else if item_type == "meal" {
-            let meal_lookup = self
-                .meal_lookup
-                .as_ref()
-                .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
-            let meal_product_lookup = self
-                .meal_product_lookup
-                .as_ref()
-                .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
             let meal_id = MealId(item_id);
-            let meal = meal_lookup
+            let meal = self
+                .meal_lookup
                 .find_by_id(meal_id)
                 .await?
                 .ok_or_else(|| FoodLogError::NotFound("meal not found".into()))?;
@@ -249,10 +204,10 @@ impl FoodLogServices {
                 .unwrap_or_else(|| existing.quantity_unit.0.clone());
             let scale_quantity =
                 Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
+            let products = load_meal_products(&meal, self.meal_product_lookup.as_ref()).await?;
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
-                Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
+                Some(Some(ref s)) => Some(s.parse::<MealSlot>().map_err(FoodLogError::Validation)?),
                 Some(None) => None,
                 None => existing.meal_slot,
             };
@@ -289,18 +244,6 @@ impl FoodLogServices {
         }
 
         self.food_log_repo.delete(id).await
-    }
-
-    pub async fn get_summary(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-        codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, FoodLogError> {
-        self.summary_repo
-            .get_summary(user_id, from, to, codes)
-            .await
     }
 }
 
@@ -437,21 +380,6 @@ mod tests {
         }
     }
 
-    struct MockSummaryRepo;
-
-    #[async_trait]
-    impl SummaryRepository for MockSummaryRepo {
-        async fn get_summary(
-            &self,
-            _user_id: Uuid,
-            _from: DateTime<Utc>,
-            _to: DateTime<Utc>,
-            _codes: Option<Vec<String>>,
-        ) -> Result<Vec<SummaryEntry>, FoodLogError> {
-            Ok(vec![])
-        }
-    }
-
     struct MockMealLookup {
         meal_id: MealId,
         meal: Option<Meal>,
@@ -462,6 +390,13 @@ mod tests {
             Self {
                 meal_id: meal.id,
                 meal: Some(meal),
+            }
+        }
+
+        fn empty() -> Self {
+            Self {
+                meal_id: MealId::new(),
+                meal: None,
             }
         }
     }
@@ -543,36 +478,31 @@ mod tests {
     }
 
     fn make_services(product: Option<Product>) -> FoodLogServices {
-        let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
-        let product_repo = match product {
-            Some(p) => Arc::new(MockProductLookup::with_product(p)) as Arc<dyn ProductLookup>,
-            None => Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>,
-        };
-        let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        FoodLogServices::new(
-            food_log_repo,
-            product_repo,
-            summary_repo,
-            sample_unit_converter(),
-        )
+        build_services(product, None)
     }
 
     fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogServices {
+        build_services(product, Some(meal))
+    }
+
+    fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogServices {
         let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
         let product_repo = match product {
             Some(p) => Arc::new(MockProductLookup::with_product(p)) as Arc<dyn ProductLookup>,
             None => Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>,
         };
-        let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        let meal_lookup = Arc::new(MockMealLookup::with_meal(meal)) as Arc<dyn MealLookup>;
+        let meal_lookup = match meal {
+            Some(m) => Arc::new(MockMealLookup::with_meal(m)) as Arc<dyn MealLookup>,
+            None => Arc::new(MockMealLookup::empty()) as Arc<dyn MealLookup>,
+        };
         let meal_product_lookup = product_repo.clone();
         FoodLogServices::new(
             food_log_repo,
             product_repo,
-            summary_repo,
             sample_unit_converter(),
+            meal_lookup,
+            meal_product_lookup,
         )
-        .with_meal_support(meal_lookup, meal_product_lookup)
     }
 
     #[tokio::test]
@@ -675,43 +605,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_food_log_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .log_food(LogFoodInput {
-                user_id,
-                logged_at: Utc::now(),
-                meal_slot: None,
-                item_type: "product".to_string(),
-                item_id: Uuid::nil(),
-                quantity_amount: Decimal::new(50, 0),
-                quantity_unit: "g".to_string(),
-                notes: Some("test note".to_string()),
-            })
-            .await
-            .unwrap();
-
-        let fetched = services.get_food_log(created.id).await.unwrap();
-        assert_eq!(fetched.id, created.id);
-        assert_eq!(fetched.notes, Some("test note".to_string()));
-        assert_eq!(fetched.quantity_amount, Decimal::new(50, 0));
-    }
-
-    #[tokio::test]
-    async fn test_get_food_log_not_found() {
-        let services = make_services(Some(sample_product()));
-
-        let result = services.get_food_log(FoodLogId::new()).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            FoodLogError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
     async fn test_delete_food_log_success() {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
@@ -731,8 +624,8 @@ mod tests {
             .unwrap();
 
         assert!(services.delete_food_log(created.id, user_id).await.is_ok());
-        let fetch_result = services.get_food_log(created.id).await;
-        assert!(fetch_result.is_err());
+        let still_there = services.food_log_repo.find_by_id(created.id).await.unwrap();
+        assert!(still_there.is_none());
     }
 
     #[tokio::test]
@@ -964,74 +857,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_logs_for_range() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let now = Utc::now();
-
-        services
-            .log_food(LogFoodInput {
-                user_id,
-                logged_at: now,
-                meal_slot: Some("lunch".to_string()),
-                item_type: "product".to_string(),
-                item_id: Uuid::nil(),
-                quantity_amount: Decimal::new(100, 0),
-                quantity_unit: "g".to_string(),
-                notes: None,
-            })
-            .await
-            .unwrap();
-
-        services
-            .log_food(LogFoodInput {
-                user_id,
-                logged_at: now,
-                meal_slot: Some("dinner".to_string()),
-                item_type: "product".to_string(),
-                item_id: Uuid::nil(),
-                quantity_amount: Decimal::new(200, 0),
-                quantity_unit: "g".to_string(),
-                notes: None,
-            })
-            .await
-            .unwrap();
-
-        let from = now - chrono::Duration::hours(1);
-        let to = now + chrono::Duration::hours(1);
-        let logs = services
-            .get_logs_for_range(user_id, from, to)
-            .await
-            .unwrap();
-        assert_eq!(logs.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_summary_delegates_to_repo() {
-        let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
-        let product_repo = Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>;
-        let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        let services = FoodLogServices::new(
-            food_log_repo,
-            product_repo,
-            summary_repo,
-            sample_unit_converter(),
-        );
-
-        let result = services
-            .get_summary(
-                Uuid::new_v4(),
-                Utc::now() - chrono::Duration::days(1),
-                Utc::now(),
-                Some(vec!["ENERGY_KCAL".to_string()]),
-            )
-            .await;
-
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
-    }
-
-    #[tokio::test]
     async fn test_log_meal_success() {
         let services = make_services_with_meal(Some(sample_product()), sample_meal());
         let user_id = Uuid::new_v4();
@@ -1121,30 +946,6 @@ mod tests {
         match result.unwrap_err() {
             FoodLogError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_log_meal_no_meal_support() {
-        let services = make_services(Some(sample_product()));
-
-        let result = services
-            .log_meal(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
-                meal_slot: Some("lunch".to_string()),
-                item_type: "meal".to_string(),
-                item_id: Uuid::nil(),
-                quantity_amount: Decimal::new(100, 0),
-                quantity_unit: "g".to_string(),
-                notes: None,
-            })
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            FoodLogError::Internal(_) => {}
-            _ => panic!("expected Internal"),
         }
     }
 }

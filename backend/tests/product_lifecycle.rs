@@ -26,8 +26,14 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
             { "label": "1 bowl", "quantity": 1, "unit": "serving", "grams": 50 }
         ]
     });
-    let created: Value =
-        post_json(&router, "/api/foods/custom", &user, &create_payload, StatusCode::CREATED).await;
+    let created: Value = post_json(
+        &router,
+        "/api/foods/custom",
+        &user,
+        &create_payload,
+        StatusCode::CREATED,
+    )
+    .await;
     let id = created["id"].as_str().expect("id missing").to_string();
 
     // ── Read ────────────────────────────────────────────────────────────

@@ -181,17 +181,15 @@ async fn get_log_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.food_log_services;
-
-    match services.get_food_log(FoodLogId(id)).await {
-        Ok(log) => {
+    match state.food_log_repo.find_by_id(FoodLogId(id)).await {
+        Ok(Some(log)) => {
             if !log.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your food log".into()).into_response();
             }
             let resp = food_log_to_response(&log);
             Json(resp).into_response()
         }
-        Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
+        Ok(None) => error_response("not_found", "food log not found".into()).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -201,15 +199,14 @@ async fn list_logs_handler(
     State(state): State<AppState>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let services = &state.food_log_services;
-
     let range = match food_log_query_to_range_params(query) {
         Ok(range) => range,
         Err(response) => return response.into_response(),
     };
 
-    match services
-        .get_logs_for_range(auth.0.id, range.from_at, range.to_at)
+    match state
+        .food_log_repo
+        .find_by_user_and_range(auth.0.id, range.from_at, range.to_at)
         .await
     {
         Ok(logs) => Json(food_logs_to_list_response(range, logs)).into_response(),
@@ -262,14 +259,13 @@ async fn summary_handler(
     State(state): State<AppState>,
     Query(query): Query<SummaryQuery>,
 ) -> impl IntoResponse {
-    let services = &state.food_log_services;
-
     let args = match food_log_summary_query_to_params(query) {
         Ok(args) => args,
         Err(response) => return response.into_response(),
     };
 
-    match services
+    match state
+        .summary_repo
         .get_summary(auth.0.id, args.range.from_at, args.range.to_at, args.codes)
         .await
     {

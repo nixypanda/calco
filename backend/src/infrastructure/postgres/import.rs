@@ -365,7 +365,7 @@ fn import_row_to_job(row: ImportRow) -> ImportJob {
     ImportJob {
         id: ImportId(row.id),
         source: row.source,
-        status: ImportStatus::from_str(&row.status).unwrap_or(ImportStatus::Failed),
+        status: row.status.parse().unwrap_or(ImportStatus::Failed),
         created_by: row.created_by,
         created_at: row.created_at,
         committed_at: row.committed_at,

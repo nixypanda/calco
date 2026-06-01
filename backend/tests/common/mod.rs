@@ -79,9 +79,7 @@ pub fn json_request(
     if let Some(c) = cookie {
         builder = builder.header(header::COOKIE, c);
     }
-    builder
-        .body(Body::from(bytes))
-        .expect("build json request")
+    builder.body(Body::from(bytes)).expect("build json request")
 }
 
 pub fn empty_request(method: Method, uri: &str, cookie: Option<&str>) -> Request<Body> {

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use std::str::FromStr;
 use uuid::Uuid;
 
 use super::catalog::{NutrientCode, Product, ProductId, UnitCode};
@@ -10,6 +11,12 @@ use super::units::UnitConverter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FoodLogId(pub Uuid);
+
+impl Default for FoodLogId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl FoodLogId {
     pub fn new() -> Self {
@@ -40,8 +47,12 @@ impl MealSlot {
             MealSlot::Snack => "snack",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for MealSlot {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "breakfast" => Ok(MealSlot::Breakfast),
             "lunch" => Ok(MealSlot::Lunch),
@@ -102,6 +113,7 @@ impl FoodLog {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new_meal_log(
         user_id: Uuid,
         logged_at: DateTime<Utc>,
@@ -148,6 +160,7 @@ impl FoodLog {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_meal_log(
         &self,
         logged_at: DateTime<Utc>,
@@ -372,15 +385,15 @@ mod tests {
         ];
         for (slot, expected_str) in &variants {
             assert_eq!(slot.as_str(), *expected_str);
-            assert_eq!(MealSlot::from_str(expected_str).unwrap(), *slot);
+            assert_eq!(expected_str.parse::<MealSlot>().unwrap(), *slot);
         }
     }
 
     #[test]
     fn test_meal_slot_from_str_invalid() {
-        assert!(MealSlot::from_str("brunch").is_err());
-        assert!(MealSlot::from_str("").is_err());
-        assert!(MealSlot::from_str("LUNCH").is_err());
+        assert!("brunch".parse::<MealSlot>().is_err());
+        assert!("".parse::<MealSlot>().is_err());
+        assert!("LUNCH".parse::<MealSlot>().is_err());
     }
 
     #[test]

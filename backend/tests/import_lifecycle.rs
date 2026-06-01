@@ -124,8 +124,7 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
     assert_eq!(commit["products_created"], 2);
 
     // ── 6. Status reflects committed state ──────────────────────────────
-    let status: Value =
-        get_json(&router, &format!("/api/imports/{import_id}"), &admin).await;
+    let status: Value = get_json(&router, &format!("/api/imports/{import_id}"), &admin).await;
     assert_eq!(status["status"], "committed");
     assert!(status["committed_at"].is_string());
 

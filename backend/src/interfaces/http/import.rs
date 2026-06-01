@@ -54,10 +54,9 @@ async fn create_import_handler(
     State(state): State<AppState>,
     Json(req): Json<CreateImportRequest>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
-
-    match services.create_job(req.source, None).await {
-        Ok(job) => (
+    let job = ImportJob::new(req.source, None);
+    match state.import_repo.create_job(&job).await {
+        Ok(()) => (
             StatusCode::CREATED,
             Json(import_job_to_create_response(job)),
         )
@@ -206,11 +205,9 @@ async fn get_import_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
-
-    match services.get_job(ImportId(id)).await {
-        Ok(job) => Json(import_job_to_status_response(job)).into_response(),
-        Err(ImportError::NotFound(_)) => import_not_found_response(id).into_response(),
+    match state.import_repo.find_job(ImportId(id)).await {
+        Ok(Some(job)) => Json(import_job_to_status_response(job)).into_response(),
+        Ok(None) => import_not_found_response(id).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -231,9 +228,7 @@ async fn get_import_errors_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
-
-    match services.get_errors(ImportId(id)).await {
+    match state.import_repo.get_errors(ImportId(id)).await {
         Ok(errors) => Json(import_errors_to_error_list_response(errors)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }

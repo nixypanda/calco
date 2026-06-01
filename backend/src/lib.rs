@@ -11,7 +11,6 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::application::catalog::CatalogServices;
 use crate::application::food_log::FoodLogServices;
 use crate::application::import::ImportServices;
 use crate::application::meal::MealServices;
@@ -67,28 +66,36 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let meal_product_lookup = meal_repo_impl as Arc<dyn MealProductLookup>;
 
     let food_log_services = FoodLogServices::new(
-        food_log_repo,
+        food_log_repo.clone(),
         product_lookup,
-        summary_repo,
         unit_converter.clone(),
-    )
-    .with_meal_support(meal_lookup, meal_product_lookup_for_food_log);
+        meal_lookup,
+        meal_product_lookup_for_food_log,
+    );
 
-    let meal_services = MealServices::new(meal_repo, meal_product_lookup, unit_converter.clone());
+    let meal_services = MealServices::new(
+        meal_repo.clone(),
+        meal_product_lookup,
+        unit_converter.clone(),
+    );
 
     let import_repo =
         Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
-    let import_services = ImportServices::new(import_repo);
-
-    let catalog_services =
-        CatalogServices::new(product_repo, nutrient_repo, unit_repo, unit_converter);
+    let import_services = ImportServices::new(import_repo.clone());
 
     Ok(AppState {
         identity_repo,
         session_repo,
         profile_repo,
         config,
-        catalog_services,
+        product_repo,
+        nutrient_repo,
+        unit_repo,
+        unit_converter,
+        food_log_repo,
+        summary_repo,
+        meal_repo,
+        import_repo,
         food_log_services,
         meal_services,
         import_services,

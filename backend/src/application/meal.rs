@@ -83,17 +83,6 @@ impl MealServices {
         Ok(meal)
     }
 
-    pub async fn get_meal(&self, id: MealId) -> Result<Meal, MealError> {
-        self.meal_repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| MealError::NotFound("meal not found".into()))
-    }
-
-    pub async fn list_meals(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
-        self.meal_repo.find_by_user(user_id).await
-    }
-
     pub async fn update_meal(
         &self,
         id: MealId,
@@ -448,76 +437,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_meal_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .create_meal(CreateMealInput {
-                user_id,
-                name: "Test Meal".to_string(),
-                notes: Some("test notes".to_string()),
-                total_quantity_amount: None,
-                total_quantity_unit: None,
-                components: vec![sample_component()],
-            })
-            .await
-            .unwrap();
-
-        let fetched = services.get_meal(created.id).await.unwrap();
-        assert_eq!(fetched.id, created.id);
-        assert_eq!(fetched.name.0, "Test Meal");
-    }
-
-    #[tokio::test]
-    async fn test_get_meal_not_found() {
-        let services = make_services(Some(sample_product()));
-        let result = services.get_meal(MealId::new()).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            MealError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_list_meals() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let other_id = Uuid::new_v4();
-
-        services
-            .create_meal(CreateMealInput {
-                user_id,
-                name: "Meal 1".to_string(),
-                notes: None,
-                total_quantity_amount: None,
-                total_quantity_unit: None,
-                components: vec![sample_component()],
-            })
-            .await
-            .unwrap();
-
-        services
-            .create_meal(CreateMealInput {
-                user_id,
-                name: "Meal 2".to_string(),
-                notes: None,
-                total_quantity_amount: None,
-                total_quantity_unit: None,
-                components: vec![sample_component()],
-            })
-            .await
-            .unwrap();
-
-        let meals = services.list_meals(user_id).await.unwrap();
-        assert_eq!(meals.len(), 2);
-
-        let other_meals = services.list_meals(other_id).await.unwrap();
-        assert_eq!(other_meals.len(), 0);
-    }
-
-    #[tokio::test]
     async fn test_update_meal_success() {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
@@ -650,8 +569,8 @@ mod tests {
             .unwrap();
 
         assert!(services.delete_meal(created.id, user_id).await.is_ok());
-        let fetch_result = services.get_meal(created.id).await;
-        assert!(fetch_result.is_err());
+        let still_there = services.meal_repo.find_by_id(created.id).await.unwrap();
+        assert!(still_there.is_none());
     }
 
     #[tokio::test]

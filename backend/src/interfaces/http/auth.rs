@@ -9,12 +9,16 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::application::auth::*;
-use crate::application::catalog::CatalogServices;
 use crate::application::food_log::FoodLogServices;
 use crate::application::import::ImportServices;
 use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
+use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
+use crate::domain::food_log::{FoodLogRepository, SummaryRepository};
+use crate::domain::import::ImportRepository;
+use crate::domain::meal::MealRepository;
+use crate::domain::units::UnitConverter;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -22,7 +26,14 @@ pub struct AppState {
     pub session_repo: std::sync::Arc<dyn SessionRepository>,
     pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
-    pub catalog_services: CatalogServices,
+    pub product_repo: std::sync::Arc<dyn ProductRepository>,
+    pub nutrient_repo: std::sync::Arc<dyn NutrientRepository>,
+    pub unit_repo: std::sync::Arc<dyn UnitRepository>,
+    pub unit_converter: std::sync::Arc<UnitConverter>,
+    pub food_log_repo: std::sync::Arc<dyn FoodLogRepository>,
+    pub summary_repo: std::sync::Arc<dyn SummaryRepository>,
+    pub meal_repo: std::sync::Arc<dyn MealRepository>,
+    pub import_repo: std::sync::Arc<dyn ImportRepository>,
     pub food_log_services: FoodLogServices,
     pub meal_services: MealServices,
     pub import_services: ImportServices,
@@ -241,10 +252,12 @@ pub struct ResetPasswordRequest {
 async fn bootstrap_status_handler(
     State(state): State<AppState>,
 ) -> Result<Json<BootstrapStatusResponse>, AuthErrorResponse> {
-    let info = bootstrap_status(&*state.identity_repo)
+    let admin_exists = state
+        .identity_repo
+        .admin_exists()
         .await
         .map_err(|e| auth_error_to_response(&e))?;
-    Ok(Json(bootstrap_info_to_response(info)))
+    Ok(Json(BootstrapStatusResponse { admin_exists }))
 }
 
 type CookieHeader = (header::HeaderName, String);
@@ -344,7 +357,9 @@ async fn admin_list_users_handler(
     _admin: AuthAdmin,
     State(state): State<AppState>,
 ) -> Result<Json<UserListResponse>, AuthErrorResponse> {
-    let users = admin_list_users(&*state.identity_repo, &*state.profile_repo)
+    let users = state
+        .profile_repo
+        .list_all_with_identities()
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
@@ -450,12 +465,6 @@ fn forbidden_auth_error_response() -> AuthErrorResponse {
                 message: "Forbidden".into(),
             },
         },
-    }
-}
-
-fn bootstrap_info_to_response(info: BootstrapInfo) -> BootstrapStatusResponse {
-    BootstrapStatusResponse {
-        admin_exists: info.admin_exists,
     }
 }
 

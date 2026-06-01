@@ -20,8 +20,14 @@ async fn seed_product(router: &axum::Router, user: &str, name: &str, kcal: i64) 
             { "label": "100g", "quantity": 100, "unit": "g", "grams": 100 }
         ]
     });
-    let created: Value =
-        post_json(router, "/api/foods/custom", user, &payload, StatusCode::CREATED).await;
+    let created: Value = post_json(
+        router,
+        "/api/foods/custom",
+        user,
+        &payload,
+        StatusCode::CREATED,
+    )
+    .await;
     created["id"].as_str().unwrap().to_string()
 }
 
@@ -44,8 +50,14 @@ async fn meal_lifecycle_create_read_list_update_nutrients_delete(pool: PgPool) {
             { "item": { "type": "product", "id": milk_id }, "quantity": { "amount": 200, "unit": "g" } }
         ]
     });
-    let created: Value =
-        post_json(&router, "/api/meals", &user, &create_payload, StatusCode::CREATED).await;
+    let created: Value = post_json(
+        &router,
+        "/api/meals",
+        &user,
+        &create_payload,
+        StatusCode::CREATED,
+    )
+    .await;
     let meal_id = created["id"].as_str().unwrap().to_string();
     assert_eq!(created["name"], "Porridge");
     assert_eq!(created["components"].as_array().unwrap().len(), 2);
@@ -56,7 +68,13 @@ async fn meal_lifecycle_create_read_list_update_nutrients_delete(pool: PgPool) {
 
     // ── List ────────────────────────────────────────────────────────────
     let list: Value = get_json(&router, "/api/meals", &user).await;
-    assert!(list["items"].as_array().unwrap().iter().any(|m| m["id"] == meal_id));
+    assert!(
+        list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|m| m["id"] == meal_id)
+    );
 
     // ── Nutrients for the full 250g portion ─────────────────────────────
     // Oats: 50g * 380 kcal / 100g = 190 kcal

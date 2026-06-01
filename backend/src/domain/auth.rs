@@ -1,9 +1,16 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IdentityId(pub uuid::Uuid);
+
+impl Default for IdentityId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl IdentityId {
     pub fn new() -> Self {
@@ -42,8 +49,12 @@ impl IdentityRole {
             IdentityRole::Admin => "admin",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, AuthError> {
+impl FromStr for IdentityRole {
+    type Err = AuthError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "user" => Ok(IdentityRole::User),
             "admin" => Ok(IdentityRole::Admin),
@@ -65,8 +76,12 @@ impl IdentityStatus {
             IdentityStatus::Disabled => "disabled",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, AuthError> {
+impl FromStr for IdentityStatus {
+    type Err = AuthError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "active" => Ok(IdentityStatus::Active),
             "disabled" => Ok(IdentityStatus::Disabled),

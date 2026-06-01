@@ -1,10 +1,17 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json;
+use std::str::FromStr;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ImportId(pub Uuid);
+
+impl Default for ImportId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ImportId {
     pub fn new() -> Self {
@@ -35,8 +42,12 @@ impl ImportStatus {
             ImportStatus::Failed => "failed",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self, String> {
+impl FromStr for ImportStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "pending" => Ok(ImportStatus::Pending),
             "running" => Ok(ImportStatus::Running),

@@ -10,6 +10,12 @@ use super::units::UnitConverter;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MealId(pub Uuid);
 
+impl Default for MealId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MealId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
@@ -138,7 +144,9 @@ impl Meal {
             id: self.id,
             user_id: self.user_id,
             name,
-            notes: notes.map(|n| n.map(MealNotes)).unwrap_or(self.notes.clone()),
+            notes: notes
+                .map(|n| n.map(MealNotes))
+                .unwrap_or(self.notes.clone()),
             total_quantity_amount: total_quantity_amount.unwrap_or(self.total_quantity_amount),
             total_quantity_unit: total_quantity_unit.unwrap_or(self.total_quantity_unit.clone()),
             components,
@@ -177,11 +185,11 @@ impl Meal {
 
     fn declared_grams(&self, unit_converter: &UnitConverter) -> Result<Decimal, String> {
         match (&self.total_quantity_amount, &self.total_quantity_unit) {
-            (Some(amount), Some(unit)) if *amount > Decimal::ZERO => unit_converter
-                .mass_to_grams(*amount, unit)
-                .ok_or_else(|| {
+            (Some(amount), Some(unit)) if *amount > Decimal::ZERO => {
+                unit_converter.mass_to_grams(*amount, unit).ok_or_else(|| {
                     "meal total quantity must be defined in a mass unit for non-mass logging".into()
-                }),
+                })
+            }
             _ => Err(
                 "meal total quantity must be defined in a mass unit for non-mass logging".into(),
             ),
@@ -210,11 +218,10 @@ impl Meal {
                             format!("product {} in meal {} not found", product_id.0, self.id.0)
                         })?;
 
-                    let component_qty = Quantity::new(
-                        component.quantity_amount,
-                        component.quantity_unit.clone(),
-                    );
-                    let component_grams = product.quantity_to_grams(&component_qty, unit_converter)?;
+                    let component_qty =
+                        Quantity::new(component.quantity_amount, component.quantity_unit.clone());
+                    let component_grams =
+                        product.quantity_to_grams(&component_qty, unit_converter)?;
                     total_component_grams += component_grams;
 
                     let contribution_ratio = component_grams / Decimal::new(100, 0);
@@ -224,9 +231,7 @@ impl Meal {
                             .iter_mut()
                             .find(|(code, _, _)| code == &pn.nutrient_code)
                         {
-                            Some((_, existing_amount, _)) => {
-                                *existing_amount += contributed_amount
-                            }
+                            Some((_, existing_amount, _)) => *existing_amount += contributed_amount,
                             None => total_nutrients.push((
                                 pn.nutrient_code.clone(),
                                 contributed_amount,

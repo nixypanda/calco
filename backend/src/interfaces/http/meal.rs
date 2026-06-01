@@ -167,25 +167,21 @@ async fn get_meal_handler(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.meal_services;
-
-    match services.get_meal(MealId(id)).await {
-        Ok(meal) => {
+    match state.meal_repo.find_by_id(MealId(id)).await {
+        Ok(Some(meal)) => {
             if !meal.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your meal".into()).into_response();
             }
             let resp = meal_to_response(&meal);
             Json(resp).into_response()
         }
-        Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
+        Ok(None) => error_response("not_found", "meal not found".into()).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
 
 async fn list_meals_handler(auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
-    let services = &state.meal_services;
-
-    match services.list_meals(auth.0.id).await {
+    match state.meal_repo.find_by_user(auth.0.id).await {
         Ok(meals) => Json(meals_to_list_response(meals)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
@@ -234,18 +230,17 @@ async fn meal_nutrients_handler(
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,
 ) -> impl IntoResponse {
-    let services = &state.meal_services;
-
-    match services.get_meal(MealId(id)).await {
-        Ok(meal) => {
+    match state.meal_repo.find_by_id(MealId(id)).await {
+        Ok(Some(meal)) => {
             if !meal.is_owned_by(auth.0.id) {
                 return error_response("forbidden", "not your meal".into()).into_response();
             }
         }
-        Err(MealError::NotFound(msg)) => return error_response("not_found", msg).into_response(),
+        Ok(None) => return error_response("not_found", "meal not found".into()).into_response(),
         Err(e) => return internal_error(e).into_response(),
     }
 
+    let services = &state.meal_services;
     match services
         .get_meal_nutrients(MealId(id), query.amount, query.unit)
         .await

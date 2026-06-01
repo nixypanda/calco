@@ -49,8 +49,14 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
             }
         ]
     });
-    let meal: Value =
-        post_json(&router, "/api/meals", &user, &meal_payload, StatusCode::CREATED).await;
+    let meal: Value = post_json(
+        &router,
+        "/api/meals",
+        &user,
+        &meal_payload,
+        StatusCode::CREATED,
+    )
+    .await;
     let meal_id = meal["id"].as_str().unwrap().to_string();
 
     // ── 3. Log the meal at lunch ────────────────────────────────────────
@@ -113,11 +119,6 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
     );
 
     // Sanity: listing logs for the day yields both entries
-    let logs: Value = get_json(
-        &router,
-        "/api/logs?from=2026-06-01&to=2026-06-01",
-        &user,
-    )
-    .await;
+    let logs: Value = get_json(&router, "/api/logs?from=2026-06-01&to=2026-06-01", &user).await;
     assert_eq!(logs["items"].as_array().unwrap().len(), 2);
 }
