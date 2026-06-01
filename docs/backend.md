@@ -281,9 +281,12 @@ Function naming rules:
 
 ## Tests
 
-Backend tests are inline under `#[cfg(test)] mod tests`.
+Two kinds of backend tests:
 
-Run:
+- Unit tests are inline under `#[cfg(test)] mod tests` in domain and application modules, using mocked repositories.
+- Integration tests in `backend/tests/` drive the real Axum router against an isolated Postgres provisioned per-test by `#[sqlx::test]`.
+
+Run everything:
 
 ```bash
 cd backend && cargo test
@@ -294,3 +297,5 @@ or:
 ```bash
 just backend-test
 ```
+
+See [testing.md](testing.md) for the integration test harness, nextest, and coverage workflow.

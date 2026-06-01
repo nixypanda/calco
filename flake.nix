@@ -20,7 +20,7 @@
       };
 
       toolchain = pkgs.rust-bin.stable.latest.default.override {
-        extensions = ["rust-src" "rust-analyzer"];
+        extensions = ["rust-src" "rust-analyzer" "llvm-tools"];
       };
     in {
       # Dev shell with all tooling for both backend and frontend
@@ -29,6 +29,7 @@
           # Backend
           toolchain
           cargo-nextest
+          cargo-llvm-cov
           sqlx-cli
 
           # Frontend

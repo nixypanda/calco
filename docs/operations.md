@@ -65,6 +65,8 @@ Test:
 just backend-test
 ```
 
+See [testing.md](testing.md) for integration tests, nextest, and coverage.
+
 ## Frontend
 
 Install:
