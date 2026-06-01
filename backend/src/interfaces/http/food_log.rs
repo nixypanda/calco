@@ -150,37 +150,6 @@ fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse
     error_response("internal", "internal server error".into())
 }
 
-fn log_to_response(log: &FoodLog) -> LogResponse {
-    let (item_type, item_id) = match &log.item {
-        LoggedItem::Product(pid) => ("product", pid.0),
-        LoggedItem::Meal(mid) => ("meal", mid.0),
-    };
-
-    LogResponse {
-        id: log.id.0,
-        logged_at: log.logged_at,
-        meal_slot: log.meal_slot.as_ref().map(|m| m.as_str().to_string()),
-        item: ItemResponse {
-            item_type: item_type.to_string(),
-            id: item_id,
-        },
-        quantity: QuantityDto {
-            amount: log.quantity_amount,
-            unit: log.quantity_unit.0.clone(),
-        },
-        nutrients: log
-            .nutrient_snapshots
-            .iter()
-            .map(|ns| NutrientSnapshotDto {
-                code: ns.nutrient_code.0.clone(),
-                amount: ns.amount,
-                unit: ns.unit.0.clone(),
-            })
-            .collect(),
-        notes: log.notes.clone(),
-    }
-}
-
 async fn create_log_handler(
     auth: AuthUser,
     State(state): State<AppState>,
@@ -188,16 +157,7 @@ async fn create_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = LogFoodInput {
-        user_id: auth.0.id,
-        logged_at: req.logged_at,
-        meal_slot: req.meal_slot,
-        item_type: req.item.item_type,
-        item_id: req.item.id,
-        quantity_amount: req.quantity.amount,
-        quantity_unit: req.quantity.unit,
-        notes: req.notes,
-    };
+    let input = create_log_request_to_input(req, auth.0.id);
 
     let result = if input.item_type == "meal" {
         services.log_meal(input).await
@@ -243,28 +203,16 @@ async fn list_logs_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let from = match chrono::NaiveDate::parse_from_str(&query.from, "%Y-%m-%d") {
-        Ok(d) => d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
-        Err(_) => return error_response("validation", "invalid from date".into()).into_response(),
-    };
-    let to = match chrono::NaiveDate::parse_from_str(&query.to, "%Y-%m-%d") {
-        Ok(d) => match d.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
-            Some(dt) => dt.and_utc(),
-            None => return error_response("validation", "invalid to date".into()).into_response(),
-        },
-        Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
+    let range = match log_query_to_range(query) {
+        Ok(range) => range,
+        Err(response) => return response.into_response(),
     };
 
-    match services.get_logs_for_range(auth.0.id, from, to).await {
-        Ok(logs) => {
-            let items: Vec<LogResponse> = logs.iter().map(log_to_response).collect();
-            Json(LogListResponse {
-                from: query.from,
-                to: query.to,
-                items,
-            })
-            .into_response()
-        }
+    match services
+        .get_logs_for_range(auth.0.id, range.from_at, range.to_at)
+        .await
+    {
+        Ok(logs) => Json(logs_to_list_response(range, logs)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -277,15 +225,7 @@ async fn update_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = UpdateFoodInput {
-        logged_at: req.logged_at,
-        meal_slot: req.meal_slot,
-        item_type: req.item.as_ref().map(|i| i.item_type.clone()),
-        item_id: req.item.as_ref().map(|i| i.id),
-        quantity_amount: req.quantity.as_ref().map(|q| q.amount),
-        quantity_unit: req.quantity.as_ref().map(|q| q.unit.clone()),
-        notes: req.notes,
-    };
+    let input = update_log_request_to_input(req);
 
     match services
         .update_food_log(FoodLogId(id), auth.0.id, input)
@@ -324,36 +264,168 @@ async fn summary_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let from = match chrono::NaiveDate::parse_from_str(&query.from, "%Y-%m-%d") {
-        Ok(d) => d.and_hms_opt(0, 0, 0).unwrap().and_utc(),
-        Err(_) => return error_response("validation", "invalid from date".into()).into_response(),
-    };
-    let to = match chrono::NaiveDate::parse_from_str(&query.to, "%Y-%m-%d") {
-        Ok(d) => match d.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
-            Some(dt) => dt.and_utc(),
-            None => return error_response("validation", "invalid to date".into()).into_response(),
-        },
-        Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
+    let args = match summary_query_to_args(query) {
+        Ok(args) => args,
+        Err(response) => return response.into_response(),
     };
 
-    let codes = query
-        .codes
-        .map(|c| c.split(',').map(|s| s.trim().to_string()).collect());
-
-    match services.get_summary(auth.0.id, from, to, codes).await {
-        Ok(totals) => Json(SummaryResponse {
-            from: query.from,
-            to: query.to,
-            totals: totals
-                .into_iter()
-                .map(|e| SummaryEntryDto {
-                    code: e.code,
-                    amount: e.amount,
-                    unit: e.unit,
-                })
-                .collect(),
-        })
-        .into_response(),
+    match services
+        .get_summary(auth.0.id, args.range.from_at, args.range.to_at, args.codes)
+        .await
+    {
+        Ok(totals) => Json(summary_entries_to_response(args.range, totals)).into_response(),
         Err(e) => internal_error(e).into_response(),
+    }
+}
+
+// ─── Conversions ───────────────────────────────────────────────
+
+struct LogRange {
+    from: String,
+    to: String,
+    from_at: DateTime<Utc>,
+    to_at: DateTime<Utc>,
+}
+
+struct SummaryArgs {
+    range: LogRange,
+    codes: Option<Vec<String>>,
+}
+
+fn create_log_request_to_input(req: CreateLogRequest, user_id: Uuid) -> LogFoodInput {
+    LogFoodInput {
+        user_id,
+        logged_at: req.logged_at,
+        meal_slot: req.meal_slot,
+        item_type: req.item.item_type,
+        item_id: req.item.id,
+        quantity_amount: req.quantity.amount,
+        quantity_unit: req.quantity.unit,
+        notes: req.notes,
+    }
+}
+
+fn update_log_request_to_input(req: UpdateLogRequest) -> UpdateFoodInput {
+    UpdateFoodInput {
+        logged_at: req.logged_at,
+        meal_slot: req.meal_slot,
+        item_type: req.item.as_ref().map(|i| i.item_type.clone()),
+        item_id: req.item.as_ref().map(|i| i.id),
+        quantity_amount: req.quantity.as_ref().map(|q| q.amount),
+        quantity_unit: req.quantity.as_ref().map(|q| q.unit.clone()),
+        notes: req.notes,
+    }
+}
+
+fn log_query_to_range(query: LogQuery) -> Result<LogRange, (StatusCode, Json<ErrorResponse>)> {
+    query_dates_to_range(query.from, query.to)
+}
+
+fn summary_query_to_args(
+    query: SummaryQuery,
+) -> Result<SummaryArgs, (StatusCode, Json<ErrorResponse>)> {
+    let range = query_dates_to_range(query.from, query.to)?;
+    Ok(SummaryArgs {
+        range,
+        codes: query.codes.map(codes_string_to_list),
+    })
+}
+
+fn query_dates_to_range(
+    from: String,
+    to: String,
+) -> Result<LogRange, (StatusCode, Json<ErrorResponse>)> {
+    let from_at = match chrono::NaiveDate::parse_from_str(&from, "%Y-%m-%d") {
+        Ok(date) => date.and_hms_opt(0, 0, 0).unwrap().and_utc(),
+        Err(_) => return Err(error_response("validation", "invalid from date".into())),
+    };
+    let to_at = match chrono::NaiveDate::parse_from_str(&to, "%Y-%m-%d") {
+        Ok(date) => match date.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
+            Some(date_time) => date_time.and_utc(),
+            None => return Err(error_response("validation", "invalid to date".into())),
+        },
+        Err(_) => return Err(error_response("validation", "invalid to date".into())),
+    };
+
+    Ok(LogRange {
+        from,
+        to,
+        from_at,
+        to_at,
+    })
+}
+
+fn codes_string_to_list(codes: String) -> Vec<String> {
+    codes
+        .split(',')
+        .map(|code| code.trim().to_string())
+        .collect()
+}
+
+fn logs_to_list_response(range: LogRange, logs: Vec<FoodLog>) -> LogListResponse {
+    LogListResponse {
+        from: range.from,
+        to: range.to,
+        items: logs.iter().map(log_to_response).collect(),
+    }
+}
+
+fn log_to_response(log: &FoodLog) -> LogResponse {
+    let (item_type, item_id) = logged_item_to_parts(&log.item);
+
+    LogResponse {
+        id: log.id.0,
+        logged_at: log.logged_at,
+        meal_slot: log.meal_slot.as_ref().map(|m| m.as_str().to_string()),
+        item: item_parts_to_response(item_type, item_id),
+        quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
+        nutrients: log
+            .nutrient_snapshots
+            .iter()
+            .map(nutrient_snapshot_to_dto)
+            .collect(),
+        notes: log.notes.clone(),
+    }
+}
+
+fn logged_item_to_parts(item: &LoggedItem) -> (&'static str, Uuid) {
+    match item {
+        LoggedItem::Product(pid) => ("product", pid.0),
+        LoggedItem::Meal(mid) => ("meal", mid.0),
+    }
+}
+
+fn item_parts_to_response(item_type: &str, id: Uuid) -> ItemResponse {
+    ItemResponse {
+        item_type: item_type.to_string(),
+        id,
+    }
+}
+
+fn quantity_to_dto(amount: Decimal, unit: String) -> QuantityDto {
+    QuantityDto { amount, unit }
+}
+
+fn nutrient_snapshot_to_dto(snapshot: &FoodLogNutrientSnapshot) -> NutrientSnapshotDto {
+    NutrientSnapshotDto {
+        code: snapshot.nutrient_code.0.clone(),
+        amount: snapshot.amount,
+        unit: snapshot.unit.0.clone(),
+    }
+}
+
+fn summary_entries_to_response(range: LogRange, entries: Vec<SummaryEntry>) -> SummaryResponse {
+    SummaryResponse {
+        from: range.from,
+        to: range.to,
+        totals: entries.into_iter().map(summary_entry_to_dto).collect(),
+    }
+}
+
+fn summary_entry_to_dto(entry: SummaryEntry) -> SummaryEntryDto {
+    SummaryEntryDto {
+        code: entry.code,
+        amount: entry.amount,
+        unit: entry.unit,
     }
 }

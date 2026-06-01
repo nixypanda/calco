@@ -82,6 +82,16 @@ pub struct SearchResult {
 }
 
 #[derive(Serialize)]
+pub struct SearchListResponse {
+    pub items: Vec<SearchResult>,
+}
+
+#[derive(Serialize)]
+pub struct ProductIdResponse {
+    pub id: Uuid,
+}
+
+#[derive(Serialize)]
 pub struct ProductDetailResponse {
     pub id: Uuid,
     pub source: String,
@@ -193,6 +203,17 @@ pub struct CategoryQuery {
     pub limit: Option<i64>,
 }
 
+struct CustomFoodArgs {
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    serving_size_g: Option<Decimal>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<ProductNutrientInput>,
+    servings: Vec<ProductServingInput>,
+}
+
 // ─── Handlers ─────────────────────────────────────────────────
 
 async fn search_products_handler(
@@ -202,45 +223,11 @@ async fn search_products_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     let products = services
-        .search_products(SearchCriteria {
-            query: query.q,
-            user_id: Some(auth.0.id),
-        })
+        .search_products(search_query_to_criteria(query, auth.0.id))
         .await;
 
     match products {
-        Ok(items) => {
-            let results: Vec<SearchResult> = items
-                .into_iter()
-                .map(|p| {
-                    let energy_kcal_per_100g = p
-                        .nutrients
-                        .iter()
-                        .find(|n| n.nutrient_code.0 == "ENERGY_KCAL")
-                        .map(|n| n.amount_per_100g.0);
-                    let energy_kcal_per_serving = match (energy_kcal_per_100g, p.serving_size_g) {
-                        (Some(kcal), Some(serving_size_g)) => {
-                            Some(kcal * serving_size_g / Decimal::new(100, 0))
-                        }
-                        _ => None,
-                    };
-
-                    SearchResult {
-                        id: p.id.0,
-                        source: p.source.as_str().to_string(),
-                        source_id: p.source_id,
-                        barcode: p.barcode.map(|b| b.0),
-                        name: p.name.0,
-                        brand: p.brand.map(|b| b.0),
-                        categories: p.categories.into_iter().map(|c| c.0).collect(),
-                        serving_size_g: p.serving_size_g,
-                        energy_kcal_per_100g,
-                        energy_kcal_per_serving,
-                    }
-                })
-                .collect();
-            Json(serde_json::json!({ "items": results })).into_response()
-        }
+        Ok(items) => Json(products_to_search_list_response(items)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -258,10 +245,7 @@ async fn list_categories_handler(
         Ok(categories) => {
             let items = categories
                 .into_iter()
-                .map(|c| CategoryItem {
-                    value: c.value,
-                    count: c.count,
-                })
+                .map(category_suggestion_to_item)
                 .collect();
             Json(CategoryListResponse { items }).into_response()
         }
@@ -277,8 +261,7 @@ async fn barcode_lookup_handler(
     let services = &state.catalog_services;
     match services.get_product_by_barcode(&barcode).await {
         Ok(product) => match services.allowed_units_for_product(&product).await {
-            Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap())
-                .into_response(),
+            Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
             Err(e) => internal_error(e).into_response(),
         },
         Err(CatalogError::NotFound(_)) => error_response(
@@ -302,10 +285,7 @@ async fn product_detail_handler(
                 || product.is_owned_by(auth.0.id) =>
         {
             match services.allowed_units_for_product(&product).await {
-                Ok(units) => {
-                    Json(serde_json::to_value(product_to_detail(&product, units)).unwrap())
-                        .into_response()
-                }
+                Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
                 Err(e) => internal_error(e).into_response(),
             }
         }
@@ -323,42 +303,23 @@ async fn create_custom_food_handler(
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
+    let args = custom_food_request_to_args(req);
 
     match services
         .create_custom_food(
             auth.0.id,
-            req.name,
-            req.brand,
-            req.categories,
-            req.serving_size_g,
-            req.default_quantity,
-            req.default_unit,
-            req.nutrients
-                .into_iter()
-                .map(|n| ProductNutrientInput {
-                    code: n.code,
-                    amount_per_100g: n.amount_per_100g,
-                    source: n.source,
-                    confidence: n.confidence,
-                })
-                .collect(),
-            req.servings
-                .into_iter()
-                .map(|s| ProductServingInput {
-                    label: s.label,
-                    quantity: s.quantity,
-                    unit: s.unit,
-                    grams: s.grams,
-                })
-                .collect(),
+            args.name,
+            args.brand,
+            args.categories,
+            args.serving_size_g,
+            args.default_quantity,
+            args.default_unit,
+            args.nutrients,
+            args.servings,
         )
         .await
     {
-        Ok(product) => (
-            StatusCode::CREATED,
-            Json(serde_json::json!({ "id": product.id.0 })),
-        )
-            .into_response(),
+        Ok(product) => (StatusCode::CREATED, Json(product_to_id_response(product))).into_response(),
         Err(CatalogError::Validation(msg)) => error_response("validation", msg).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
@@ -371,39 +332,24 @@ async fn update_custom_food_handler(
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
+    let args = custom_food_request_to_args(req);
 
     match services
         .update_custom_food(
             ProductId(id),
             auth.0.id,
-            req.name,
-            req.brand,
-            req.categories,
-            req.serving_size_g,
-            req.default_quantity,
-            req.default_unit,
-            req.nutrients
-                .into_iter()
-                .map(|n| ProductNutrientInput {
-                    code: n.code,
-                    amount_per_100g: n.amount_per_100g,
-                    source: n.source,
-                    confidence: n.confidence,
-                })
-                .collect(),
-            req.servings
-                .into_iter()
-                .map(|s| ProductServingInput {
-                    label: s.label,
-                    quantity: s.quantity,
-                    unit: s.unit,
-                    grams: s.grams,
-                })
-                .collect(),
+            args.name,
+            args.brand,
+            args.categories,
+            args.serving_size_g,
+            args.default_quantity,
+            args.default_unit,
+            args.nutrients,
+            args.servings,
         )
         .await
     {
-        Ok(product) => Json(serde_json::json!({ "id": product.id.0 })).into_response(),
+        Ok(product) => Json(product_to_id_response(product)).into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("product {id} not found")).into_response()
         }
@@ -437,15 +383,7 @@ async fn list_nutrients_handler(
     let services = &state.catalog_services;
     match services.list_nutrients().await {
         Ok(nutrients) => {
-            let items: Vec<NutrientItem> = nutrients
-                .into_iter()
-                .map(|n| NutrientItem {
-                    code: n.code().0.clone(),
-                    name: n.name().to_string(),
-                    unit: n.unit().0.clone(),
-                    category: n.category().to_string(),
-                })
-                .collect();
+            let items: Vec<NutrientItem> = nutrients.into_iter().map(nutrient_to_item).collect();
             Json(NutrientListResponse { items }).into_response()
         }
         Err(e) => internal_error(e).into_response(),
@@ -459,13 +397,7 @@ async fn get_nutrient_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_nutrient(&code).await {
-        Ok(n) => Json(serde_json::json!({
-            "code": n.code().0,
-            "name": n.name(),
-            "unit": n.unit().0,
-            "category": n.category(),
-        }))
-        .into_response(),
+        Ok(n) => Json(nutrient_to_item(n)).into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("nutrient {code} not found")).into_response()
         }
@@ -477,21 +409,141 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
     let services = &state.catalog_services;
     match services.list_units().await {
         Ok(units) => {
-            let items: Vec<UnitItem> = units
-                .into_iter()
-                .map(|(code, name, kind)| UnitItem {
-                    code: code.0,
-                    name,
-                    kind,
-                })
-                .collect();
+            let items: Vec<UnitItem> = units.into_iter().map(unit_tuple_to_item).collect();
             Json(UnitListResponse { items }).into_response()
         }
         Err(e) => internal_error(e).into_response(),
     }
 }
 
-fn product_to_detail(
+// ─── Conversions ───────────────────────────────────────────────
+
+fn search_query_to_criteria(query: SearchQuery, user_id: Uuid) -> SearchCriteria {
+    SearchCriteria {
+        query: query.q,
+        user_id: Some(user_id),
+    }
+}
+
+fn custom_food_request_to_args(req: CreateCustomFoodRequest) -> CustomFoodArgs {
+    CustomFoodArgs {
+        name: req.name,
+        brand: req.brand,
+        categories: req.categories,
+        serving_size_g: req.serving_size_g,
+        default_quantity: req.default_quantity,
+        default_unit: req.default_unit,
+        nutrients: create_nutrient_entries_to_inputs(req.nutrients),
+        servings: create_serving_entries_to_inputs(req.servings),
+    }
+}
+
+fn create_nutrient_entries_to_inputs(
+    entries: Vec<CreateNutrientEntry>,
+) -> Vec<ProductNutrientInput> {
+    entries
+        .into_iter()
+        .map(create_nutrient_entry_to_input)
+        .collect()
+}
+
+fn create_nutrient_entry_to_input(entry: CreateNutrientEntry) -> ProductNutrientInput {
+    ProductNutrientInput {
+        code: entry.code,
+        amount_per_100g: entry.amount_per_100g,
+        source: entry.source,
+        confidence: entry.confidence,
+    }
+}
+
+fn create_serving_entries_to_inputs(entries: Vec<CreateServingEntry>) -> Vec<ProductServingInput> {
+    entries
+        .into_iter()
+        .map(create_serving_entry_to_input)
+        .collect()
+}
+
+fn create_serving_entry_to_input(entry: CreateServingEntry) -> ProductServingInput {
+    ProductServingInput {
+        label: entry.label,
+        quantity: entry.quantity,
+        unit: entry.unit,
+        grams: entry.grams,
+    }
+}
+
+fn products_to_search_list_response(products: Vec<Product>) -> SearchListResponse {
+    SearchListResponse {
+        items: products.into_iter().map(product_to_search_result).collect(),
+    }
+}
+
+fn product_to_search_result(product: Product) -> SearchResult {
+    let energy_kcal_per_100g = product_energy_kcal_per_100g(&product);
+    let energy_kcal_per_serving =
+        energy_kcal_per_serving(energy_kcal_per_100g, product.serving_size_g);
+
+    SearchResult {
+        id: product.id.0,
+        source: product.source.as_str().to_string(),
+        source_id: product.source_id,
+        barcode: product.barcode.map(|b| b.0),
+        name: product.name.0,
+        brand: product.brand.map(|b| b.0),
+        categories: product.categories.into_iter().map(|c| c.0).collect(),
+        serving_size_g: product.serving_size_g,
+        energy_kcal_per_100g,
+        energy_kcal_per_serving,
+    }
+}
+
+fn product_energy_kcal_per_100g(product: &Product) -> Option<Decimal> {
+    product
+        .nutrients
+        .iter()
+        .find(|n| n.nutrient_code.0 == "ENERGY_KCAL")
+        .map(|n| n.amount_per_100g.0)
+}
+
+fn energy_kcal_per_serving(
+    energy_kcal_per_100g: Option<Decimal>,
+    serving_size_g: Option<Decimal>,
+) -> Option<Decimal> {
+    match (energy_kcal_per_100g, serving_size_g) {
+        (Some(kcal), Some(serving_size_g)) => Some(kcal * serving_size_g / Decimal::new(100, 0)),
+        _ => None,
+    }
+}
+
+fn category_suggestion_to_item(category: CategorySuggestion) -> CategoryItem {
+    CategoryItem {
+        value: category.value,
+        count: category.count,
+    }
+}
+
+fn product_to_id_response(product: Product) -> ProductIdResponse {
+    ProductIdResponse { id: product.id.0 }
+}
+
+fn nutrient_to_item(nutrient: Nutrient) -> NutrientItem {
+    NutrientItem {
+        code: nutrient.code().0.clone(),
+        name: nutrient.name().to_string(),
+        unit: nutrient.unit().0.clone(),
+        category: nutrient.category().to_string(),
+    }
+}
+
+fn unit_tuple_to_item((code, name, kind): (UnitCode, String, String)) -> UnitItem {
+    UnitItem {
+        code: code.0,
+        name,
+        kind,
+    }
+}
+
+fn product_to_detail_response(
     product: &Product,
     allowed_units: Vec<(UnitCode, String, String)>,
 ) -> ProductDetailResponse {
@@ -510,31 +562,32 @@ fn product_to_detail(
         nutrients: product
             .nutrients
             .iter()
-            .map(|pn| NutrientEntry {
-                code: pn.nutrient_code.0.clone(),
-                amount_per_100g: pn.amount_per_100g.0,
-                unit: pn.unit.0.clone(),
-                source: pn.source.clone(),
-                confidence: pn.confidence.as_ref().map(|c| c.as_str().to_string()),
-            })
+            .map(product_nutrient_to_entry)
             .collect(),
         servings: product
             .servings
             .iter()
-            .map(|ps| ServingEntry {
-                label: ps.label.0.clone(),
-                quantity: ps.quantity,
-                unit: ps.unit.0.clone(),
-                grams: ps.grams,
-            })
+            .map(product_serving_to_entry)
             .collect(),
-        allowed_units: allowed_units
-            .into_iter()
-            .map(|(code, name, kind)| UnitItem {
-                code: code.0,
-                name,
-                kind,
-            })
-            .collect(),
+        allowed_units: allowed_units.into_iter().map(unit_tuple_to_item).collect(),
+    }
+}
+
+fn product_nutrient_to_entry(nutrient: &ProductNutrient) -> NutrientEntry {
+    NutrientEntry {
+        code: nutrient.nutrient_code.0.clone(),
+        amount_per_100g: nutrient.amount_per_100g.0,
+        unit: nutrient.unit.0.clone(),
+        source: nutrient.source.clone(),
+        confidence: nutrient.confidence.as_ref().map(|c| c.as_str().to_string()),
+    }
+}
+
+fn product_serving_to_entry(serving: &ProductServing) -> ServingEntry {
+    ServingEntry {
+        label: serving.label.0.clone(),
+        quantity: serving.quantity,
+        unit: serving.unit.0.clone(),
+        grams: serving.grams,
     }
 }

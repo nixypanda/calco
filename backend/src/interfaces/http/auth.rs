@@ -89,7 +89,7 @@ impl FromRequestParts<AppState> for AuthIdentity {
             &token,
         )
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
         Ok(AuthIdentity(result.identity))
     }
 }
@@ -111,13 +111,13 @@ impl FromRequestParts<AppState> for AuthUser {
             &token,
         )
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
 
         if result.identity.role != IdentityRole::User {
-            return Err(AuthErrorResponse::forbidden());
+            return Err(forbidden_auth_error_response());
         }
 
-        let profile = result.profile.ok_or_else(AuthErrorResponse::forbidden)?;
+        let profile = result.profile.ok_or_else(forbidden_auth_error_response)?;
 
         Ok(AuthUser(profile))
     }
@@ -140,10 +140,10 @@ impl FromRequestParts<AppState> for AuthAdmin {
             &token,
         )
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
 
         if result.identity.role != IdentityRole::Admin {
-            return Err(AuthErrorResponse::forbidden());
+            return Err(forbidden_auth_error_response());
         }
 
         Ok(AuthAdmin)
@@ -166,61 +166,6 @@ pub struct ErrorBody {
 pub struct AuthErrorResponse {
     status: StatusCode,
     body: ErrorBody,
-}
-
-impl AuthErrorResponse {
-    fn from_auth_error(err: &AuthError) -> Self {
-        let (status, code) = match err {
-            AuthError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
-            AuthError::IdentityDisabled => (StatusCode::FORBIDDEN, "identity_disabled"),
-            AuthError::IdentityNotFound => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
-            AuthError::SessionNotFound => (StatusCode::UNAUTHORIZED, "session_not_found"),
-            AuthError::SessionExpired => (StatusCode::UNAUTHORIZED, "session_expired"),
-            AuthError::SessionRevoked => (StatusCode::UNAUTHORIZED, "session_revoked"),
-            AuthError::AdminAlreadyExists => (StatusCode::CONFLICT, "admin_already_exists"),
-            AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
-            AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-            AuthError::PasswordHash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-            AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-        };
-        let message = match err {
-            AuthError::Database(_) => {
-                tracing::error!(error = %err, "auth request failed");
-                "internal server error".to_string()
-            }
-            AuthError::PasswordHash(_) => {
-                tracing::error!(error = %err, "auth request failed");
-                "internal server error".to_string()
-            }
-            AuthError::Internal(_) => {
-                tracing::error!(error = %err, "auth request failed");
-                "internal server error".to_string()
-            }
-            _ => err.to_string(),
-        };
-        Self {
-            status,
-            body: ErrorBody {
-                error: ApiError {
-                    code: code.to_string(),
-                    message,
-                },
-            },
-        }
-    }
-
-    fn forbidden() -> Self {
-        Self {
-            status: StatusCode::FORBIDDEN,
-            body: ErrorBody {
-                error: ApiError {
-                    code: "forbidden".into(),
-                    message: "Forbidden".into(),
-                },
-            },
-        }
-    }
 }
 
 impl IntoResponse for AuthErrorResponse {
@@ -298,10 +243,8 @@ async fn bootstrap_status_handler(
 ) -> Result<Json<BootstrapStatusResponse>, AuthErrorResponse> {
     let info = bootstrap_status(&*state.identity_repo)
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
-    Ok(Json(BootstrapStatusResponse {
-        admin_exists: info.admin_exists,
-    }))
+        .map_err(|e| auth_error_to_response(&e))?;
+    Ok(Json(bootstrap_info_to_response(info)))
 }
 
 type CookieHeader = (header::HeaderName, String);
@@ -318,20 +261,10 @@ async fn bootstrap_create_admin_handler(
         &body.password,
     )
     .await
-    .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+    .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
-    let resp = LoginSessionResponse {
-        identity: IdentityResponse {
-            id: result.identity.id.0,
-            username: result.identity.username.0,
-            role: result.identity.role.as_str().to_string(),
-        },
-        profile: result.profile.map(|p| ProfileResponse {
-            id: p.id,
-            display_name: p.display_name,
-        }),
-    };
+    let resp = login_result_to_response(result);
 
     Ok((StatusCode::CREATED, [cookie], Json(resp)))
 }
@@ -349,20 +282,10 @@ async fn login_handler(
         &body.password,
     )
     .await
-    .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+    .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
-    let resp = LoginSessionResponse {
-        identity: IdentityResponse {
-            id: result.identity.id.0,
-            username: result.identity.username.0,
-            role: result.identity.role.as_str().to_string(),
-        },
-        profile: result.profile.map(|p| ProfileResponse {
-            id: p.id,
-            display_name: p.display_name,
-        }),
-    };
+    let resp = login_result_to_response(result);
 
     Ok((StatusCode::OK, [cookie], Json(resp)))
 }
@@ -376,22 +299,12 @@ async fn session_handler(
             .profile_repo
             .find_by_identity_id(identity.id)
             .await
-            .map_err(|e| AuthErrorResponse::from_auth_error(&e))?
+            .map_err(|e| auth_error_to_response(&e))?
     } else {
         None
     };
 
-    Ok(Json(LoginSessionResponse {
-        identity: IdentityResponse {
-            id: identity.id.0,
-            username: identity.username.0,
-            role: identity.role.as_str().to_string(),
-        },
-        profile: profile.map(|p| ProfileResponse {
-            id: p.id,
-            display_name: p.display_name,
-        }),
-    }))
+    Ok(Json(identity_and_profile_to_response(identity, profile)))
 }
 
 async fn logout_handler(
@@ -400,7 +313,7 @@ async fn logout_handler(
 ) -> Result<(StatusCode, [CookieHeader; 1]), AuthErrorResponse> {
     logout(&*state.session_repo, &token)
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
 
     let clear_cookie = build_clear_cookie(&state.config);
     Ok((StatusCode::OK, [clear_cookie]))
@@ -419,21 +332,11 @@ async fn admin_create_user_handler(
         &body.initial_password,
     )
     .await
-    .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+    .map_err(|e| auth_error_to_response(&e))?;
 
     Ok((
         StatusCode::CREATED,
-        Json(LoginSessionResponse {
-            identity: IdentityResponse {
-                id: result.identity.id.0,
-                username: result.identity.username.0,
-                role: result.identity.role.as_str().to_string(),
-            },
-            profile: Some(ProfileResponse {
-                id: result.profile.id,
-                display_name: result.profile.display_name,
-            }),
-        }),
+        Json(created_user_to_login_session_response(result)),
     ))
 }
 
@@ -443,20 +346,9 @@ async fn admin_list_users_handler(
 ) -> Result<Json<ListUsersResponse>, AuthErrorResponse> {
     let users = admin_list_users(&*state.identity_repo, &*state.profile_repo)
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
 
-    Ok(Json(ListUsersResponse {
-        users: users
-            .into_iter()
-            .map(|u| UserItem {
-                id: u.profile.id,
-                username: u.identity.username.0,
-                display_name: u.profile.display_name,
-                status: u.identity.status.as_str().to_string(),
-                created_at: u.profile.created_at,
-            })
-            .collect(),
-    }))
+    Ok(Json(users_to_list_response(users)))
 }
 
 async fn admin_reset_password_handler(
@@ -473,7 +365,7 @@ async fn admin_reset_password_handler(
         &body.new_password,
     )
     .await
-    .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+    .map_err(|e| auth_error_to_response(&e))?;
 
     Ok(StatusCode::OK)
 }
@@ -490,7 +382,7 @@ async fn admin_disable_user_handler(
         user_id,
     )
     .await
-    .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+    .map_err(|e| auth_error_to_response(&e))?;
 
     Ok(StatusCode::OK)
 }
@@ -502,9 +394,121 @@ async fn admin_enable_user_handler(
 ) -> Result<StatusCode, AuthErrorResponse> {
     admin_enable_user(&*state.identity_repo, &*state.profile_repo, user_id)
         .await
-        .map_err(|e| AuthErrorResponse::from_auth_error(&e))?;
+        .map_err(|e| auth_error_to_response(&e))?;
 
     Ok(StatusCode::OK)
+}
+
+// ─── Conversions ───────────────────────────────────────────────
+
+fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
+    let (status, code) = auth_error_to_status_and_code(err);
+    AuthErrorResponse {
+        status,
+        body: ErrorBody {
+            error: ApiError {
+                code: code.to_string(),
+                message: auth_error_to_message(err),
+            },
+        },
+    }
+}
+
+fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) {
+    match err {
+        AuthError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+        AuthError::IdentityDisabled => (StatusCode::FORBIDDEN, "identity_disabled"),
+        AuthError::IdentityNotFound => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+        AuthError::SessionNotFound => (StatusCode::UNAUTHORIZED, "session_not_found"),
+        AuthError::SessionExpired => (StatusCode::UNAUTHORIZED, "session_expired"),
+        AuthError::SessionRevoked => (StatusCode::UNAUTHORIZED, "session_revoked"),
+        AuthError::AdminAlreadyExists => (StatusCode::CONFLICT, "admin_already_exists"),
+        AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
+        AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+        AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+        AuthError::PasswordHash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+        AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+    }
+}
+
+fn auth_error_to_message(err: &AuthError) -> String {
+    match err {
+        AuthError::Database(_) | AuthError::PasswordHash(_) | AuthError::Internal(_) => {
+            tracing::error!(error = %err, "auth request failed");
+            "internal server error".to_string()
+        }
+        _ => err.to_string(),
+    }
+}
+
+fn forbidden_auth_error_response() -> AuthErrorResponse {
+    AuthErrorResponse {
+        status: StatusCode::FORBIDDEN,
+        body: ErrorBody {
+            error: ApiError {
+                code: "forbidden".into(),
+                message: "Forbidden".into(),
+            },
+        },
+    }
+}
+
+fn bootstrap_info_to_response(info: BootstrapInfo) -> BootstrapStatusResponse {
+    BootstrapStatusResponse {
+        admin_exists: info.admin_exists,
+    }
+}
+
+fn login_result_to_response(result: LoginResult) -> LoginSessionResponse {
+    identity_and_profile_to_response(result.identity, result.profile)
+}
+
+fn identity_and_profile_to_response(
+    identity: Identity,
+    profile: Option<UserProfile>,
+) -> LoginSessionResponse {
+    LoginSessionResponse {
+        identity: identity_to_response(identity),
+        profile: profile.map(profile_to_response),
+    }
+}
+
+fn identity_to_response(identity: Identity) -> IdentityResponse {
+    IdentityResponse {
+        id: identity.id.0,
+        username: identity.username.0,
+        role: identity.role.as_str().to_string(),
+    }
+}
+
+fn profile_to_response(profile: UserProfile) -> ProfileResponse {
+    ProfileResponse {
+        id: profile.id,
+        display_name: profile.display_name,
+    }
+}
+
+fn created_user_to_login_session_response(user: CreatedUser) -> LoginSessionResponse {
+    LoginSessionResponse {
+        identity: identity_to_response(user.identity),
+        profile: Some(profile_to_response(user.profile)),
+    }
+}
+
+fn users_to_list_response(users: Vec<UserWithProfile>) -> ListUsersResponse {
+    ListUsersResponse {
+        users: users.into_iter().map(user_with_profile_to_item).collect(),
+    }
+}
+
+fn user_with_profile_to_item(user: UserWithProfile) -> UserItem {
+    UserItem {
+        id: user.profile.id,
+        username: user.identity.username.0,
+        display_name: user.profile.display_name,
+        status: user.identity.status.as_str().to_string(),
+        created_at: user.profile.created_at,
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -514,7 +518,7 @@ fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, Au
         .headers
         .get(header::COOKIE)
         .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| AuthErrorResponse::from_auth_error(&AuthError::Unauthorized))?;
+        .ok_or_else(|| auth_error_to_response(&AuthError::Unauthorized))?;
 
     for pair in cookie_header.split(';') {
         let pair = pair.trim();
@@ -523,7 +527,7 @@ fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, Au
         }
     }
 
-    Err(AuthErrorResponse::from_auth_error(&AuthError::Unauthorized))
+    Err(auth_error_to_response(&AuthError::Unauthorized))
 }
 
 fn build_session_cookie(token: &str, config: &AppConfig) -> CookieHeader {

@@ -3,3 +3,5 @@ pub mod catalog;
 pub mod food_log;
 pub mod import;
 pub mod meal;
+
+// ─── Conversions ───────────────────────────────────────────────
