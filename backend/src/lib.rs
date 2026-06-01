@@ -11,10 +11,12 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::application::auth::{AdminUserServices, AuthBootstrapServices, AuthSessionServices};
 use crate::application::food_log::FoodLogServices;
 use crate::application::import::ImportServices;
 use crate::application::meal::MealServices;
 use crate::config::AppConfig;
+use crate::domain::auth::{IdentityRepository, SessionRepository, UserProfileRepository};
 use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::domain::food_log::{FoodLogRepository, MealLookup, ProductLookup, SummaryRepository};
 use crate::domain::import::ImportRepository;
@@ -40,9 +42,26 @@ use crate::interfaces::http::meal::meal_routes;
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
-    let identity_repo = Arc::new(PostgresIdentityRepository::new(pool.clone()));
-    let session_repo = Arc::new(PostgresSessionRepository::new(pool.clone()));
-    let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()));
+    let identity_repo =
+        Arc::new(PostgresIdentityRepository::new(pool.clone())) as Arc<dyn IdentityRepository>;
+    let session_repo =
+        Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
+    let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
+        as Arc<dyn UserProfileRepository>;
+
+    let auth_bootstrap =
+        AuthBootstrapServices::new(identity_repo.clone(), session_repo.clone(), config.clone());
+    let auth_sessions = AuthSessionServices::new(
+        identity_repo.clone(),
+        session_repo.clone(),
+        profile_repo.clone(),
+        config.clone(),
+    );
+    let admin_users = AdminUserServices::new(
+        identity_repo.clone(),
+        session_repo.clone(),
+        profile_repo.clone(),
+    );
 
     let product_repo =
         Arc::new(PostgresProductRepository::new(pool.clone())) as Arc<dyn ProductRepository>;
@@ -84,10 +103,10 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let import_services = ImportServices::new(import_repo.clone());
 
     Ok(AppState {
-        identity_repo,
-        session_repo,
-        profile_repo,
         config,
+        auth_bootstrap,
+        auth_sessions,
+        admin_users,
         product_repo,
         nutrient_repo,
         unit_repo,

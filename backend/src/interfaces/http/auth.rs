@@ -22,10 +22,10 @@ use crate::domain::units::UnitConverter;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub identity_repo: std::sync::Arc<dyn IdentityRepository>,
-    pub session_repo: std::sync::Arc<dyn SessionRepository>,
-    pub profile_repo: std::sync::Arc<dyn UserProfileRepository>,
     pub config: AppConfig,
+    pub auth_bootstrap: AuthBootstrapServices,
+    pub auth_sessions: AuthSessionServices,
+    pub admin_users: AdminUserServices,
     pub product_repo: std::sync::Arc<dyn ProductRepository>,
     pub nutrient_repo: std::sync::Arc<dyn NutrientRepository>,
     pub unit_repo: std::sync::Arc<dyn UnitRepository>,
@@ -93,14 +93,11 @@ impl FromRequestParts<AppState> for AuthIdentity {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = get_session(
-            &*state.session_repo,
-            &*state.identity_repo,
-            &*state.profile_repo,
-            &token,
-        )
-        .await
-        .map_err(|e| auth_error_to_response(&e))?;
+        let result = state
+            .auth_sessions
+            .get_session(&token)
+            .await
+            .map_err(|e| auth_error_to_response(&e))?;
         Ok(AuthIdentity(result.identity))
     }
 }
@@ -115,14 +112,11 @@ impl FromRequestParts<AppState> for AuthUser {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = get_session(
-            &*state.session_repo,
-            &*state.identity_repo,
-            &*state.profile_repo,
-            &token,
-        )
-        .await
-        .map_err(|e| auth_error_to_response(&e))?;
+        let result = state
+            .auth_sessions
+            .get_session(&token)
+            .await
+            .map_err(|e| auth_error_to_response(&e))?;
 
         if result.identity.role != IdentityRole::User {
             return Err(forbidden_auth_error_response());
@@ -144,14 +138,11 @@ impl FromRequestParts<AppState> for AuthAdmin {
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = get_session(
-            &*state.session_repo,
-            &*state.identity_repo,
-            &*state.profile_repo,
-            &token,
-        )
-        .await
-        .map_err(|e| auth_error_to_response(&e))?;
+        let result = state
+            .auth_sessions
+            .get_session(&token)
+            .await
+            .map_err(|e| auth_error_to_response(&e))?;
 
         if result.identity.role != IdentityRole::Admin {
             return Err(forbidden_auth_error_response());
@@ -253,7 +244,7 @@ async fn bootstrap_status_handler(
     State(state): State<AppState>,
 ) -> Result<Json<BootstrapStatusResponse>, AuthErrorResponse> {
     let admin_exists = state
-        .identity_repo
+        .auth_bootstrap
         .admin_exists()
         .await
         .map_err(|e| auth_error_to_response(&e))?;
@@ -266,15 +257,11 @@ async fn bootstrap_create_admin_handler(
     State(state): State<AppState>,
     Json(body): Json<CreateAdminRequest>,
 ) -> Result<(StatusCode, [CookieHeader; 1], Json<LoginSessionResponse>), AuthErrorResponse> {
-    let result = create_bootstrap_admin(
-        &*state.identity_repo,
-        &*state.session_repo,
-        &state.config,
-        &body.username,
-        &body.password,
-    )
-    .await
-    .map_err(|e| auth_error_to_response(&e))?;
+    let result = state
+        .auth_bootstrap
+        .create_bootstrap_admin(&body.username, &body.password)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
     let resp = login_result_to_response(result);
@@ -286,16 +273,11 @@ async fn login_handler(
     State(state): State<AppState>,
     Json(body): Json<LoginRequest>,
 ) -> Result<(StatusCode, [CookieHeader; 1], Json<LoginSessionResponse>), AuthErrorResponse> {
-    let result = login(
-        &*state.identity_repo,
-        &*state.session_repo,
-        &*state.profile_repo,
-        &state.config,
-        &body.username,
-        &body.password,
-    )
-    .await
-    .map_err(|e| auth_error_to_response(&e))?;
+    let result = state
+        .auth_sessions
+        .login(&body.username, &body.password)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
     let resp = login_result_to_response(result);
@@ -304,27 +286,28 @@ async fn login_handler(
 }
 
 async fn session_handler(
-    AuthIdentity(identity): AuthIdentity,
     State(state): State<AppState>,
+    RawSessionToken(token): RawSessionToken,
 ) -> Result<Json<LoginSessionResponse>, AuthErrorResponse> {
-    let profile = if identity.role == IdentityRole::User {
-        state
-            .profile_repo
-            .find_by_identity_id(identity.id)
-            .await
-            .map_err(|e| auth_error_to_response(&e))?
-    } else {
-        None
-    };
+    let result = state
+        .auth_sessions
+        .get_session(&token)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
-    Ok(Json(identity_and_profile_to_response(identity, profile)))
+    Ok(Json(identity_and_profile_to_response(
+        result.identity,
+        result.profile,
+    )))
 }
 
 async fn logout_handler(
     State(state): State<AppState>,
     RawSessionToken(token): RawSessionToken,
 ) -> Result<(StatusCode, [CookieHeader; 1]), AuthErrorResponse> {
-    logout(&*state.session_repo, &token)
+    state
+        .auth_sessions
+        .logout(&token)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
@@ -337,15 +320,11 @@ async fn admin_create_user_handler(
     State(state): State<AppState>,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<LoginSessionResponse>), AuthErrorResponse> {
-    let result = admin_create_user(
-        &*state.identity_repo,
-        &*state.profile_repo,
-        &body.username,
-        &body.display_name,
-        &body.initial_password,
-    )
-    .await
-    .map_err(|e| auth_error_to_response(&e))?;
+    let result = state
+        .admin_users
+        .create_user(&body.username, &body.display_name, &body.initial_password)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
     Ok((
         StatusCode::CREATED,
@@ -358,8 +337,8 @@ async fn admin_list_users_handler(
     State(state): State<AppState>,
 ) -> Result<Json<UserListResponse>, AuthErrorResponse> {
     let users = state
-        .profile_repo
-        .list_all_with_identities()
+        .admin_users
+        .list_users()
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
@@ -372,15 +351,11 @@ async fn admin_reset_password_handler(
     Path(user_id): Path<Uuid>,
     Json(body): Json<ResetPasswordRequest>,
 ) -> Result<StatusCode, AuthErrorResponse> {
-    admin_reset_password(
-        &*state.identity_repo,
-        &*state.session_repo,
-        &*state.profile_repo,
-        user_id,
-        &body.new_password,
-    )
-    .await
-    .map_err(|e| auth_error_to_response(&e))?;
+    state
+        .admin_users
+        .reset_password(user_id, &body.new_password)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
     Ok(StatusCode::OK)
 }
@@ -390,14 +365,11 @@ async fn admin_disable_user_handler(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {
-    admin_disable_user(
-        &*state.identity_repo,
-        &*state.session_repo,
-        &*state.profile_repo,
-        user_id,
-    )
-    .await
-    .map_err(|e| auth_error_to_response(&e))?;
+    state
+        .admin_users
+        .disable_user(user_id)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
 
     Ok(StatusCode::OK)
 }
@@ -407,7 +379,9 @@ async fn admin_enable_user_handler(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {
-    admin_enable_user(&*state.identity_repo, &*state.profile_repo, user_id)
+    state
+        .admin_users
+        .enable_user(user_id)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 

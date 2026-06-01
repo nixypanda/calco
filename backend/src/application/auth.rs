@@ -1,6 +1,7 @@
 use argon2::Argon2;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::config::AppConfig;
@@ -22,277 +23,333 @@ pub struct CreatedUser {
     pub profile: UserProfile,
 }
 
-pub async fn create_bootstrap_admin(
-    identity_repo: &dyn IdentityRepository,
-    session_repo: &dyn SessionRepository,
-    config: &AppConfig,
-    username: &str,
-    password: &str,
-) -> Result<LoginResult, AuthError> {
-    if identity_repo.admin_exists().await? {
-        return Err(AuthError::AdminAlreadyExists);
-    }
-
-    let username = normalize_username(username)?;
-    validate_password(password)?;
-
-    let salt = SaltString::generate(&mut rand::rngs::OsRng);
-    let argon2 = Argon2::default();
-    let hash = argon2
-        .hash_password(password.as_bytes(), &salt)
-        .map_err(AuthError::PasswordHash)?
-        .to_string();
-
-    let now = Utc::now();
-    let identity = Identity {
-        id: IdentityId::new(),
-        username: Username(username),
-        password_hash: PasswordHash(hash),
-        role: IdentityRole::Admin,
-        status: IdentityStatus::Active,
-        created_at: now,
-        updated_at: now,
-        last_login_at: None,
-    };
-
-    identity_repo.create(&identity).await?;
-
-    let (session_token, session) = create_session(&identity, config, now)?;
-    session_repo.create(&session).await?;
-
-    Ok(LoginResult {
-        identity,
-        profile: None,
-        session_token,
-    })
+#[derive(Clone)]
+pub struct AuthBootstrapServices {
+    identity_repo: Arc<dyn IdentityRepository>,
+    session_repo: Arc<dyn SessionRepository>,
+    config: AppConfig,
 }
 
-pub async fn login(
-    identity_repo: &dyn IdentityRepository,
-    session_repo: &dyn SessionRepository,
-    profile_repo: &dyn UserProfileRepository,
-    config: &AppConfig,
-    username: &str,
-    password: &str,
-) -> Result<LoginResult, AuthError> {
-    let username = normalize_username(username).map_err(|_| AuthError::InvalidCredentials)?;
-    let identity = identity_repo
-        .find_by_username(&username)
-        .await?
-        .ok_or(AuthError::InvalidCredentials)?;
-
-    if identity.status == IdentityStatus::Disabled {
-        return Err(AuthError::IdentityDisabled);
+impl AuthBootstrapServices {
+    pub fn new(
+        identity_repo: Arc<dyn IdentityRepository>,
+        session_repo: Arc<dyn SessionRepository>,
+        config: AppConfig,
+    ) -> Self {
+        Self {
+            identity_repo,
+            session_repo,
+            config,
+        }
     }
 
-    let parsed_hash =
-        PasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
-    Argon2::default()
-        .verify_password(password.as_bytes(), &parsed_hash)
-        .map_err(|_| AuthError::InvalidCredentials)?;
+    pub async fn admin_exists(&self) -> Result<bool, AuthError> {
+        self.identity_repo.admin_exists().await
+    }
 
-    let now = Utc::now();
-    let mut updated_identity = identity.clone();
-    updated_identity.last_login_at = Some(now);
-    identity_repo.update(&updated_identity).await?;
+    pub async fn create_bootstrap_admin(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<LoginResult, AuthError> {
+        if self.identity_repo.admin_exists().await? {
+            return Err(AuthError::AdminAlreadyExists);
+        }
 
-    let (session_token, session) = create_session(&updated_identity, config, now)?;
-    session_repo.create(&session).await?;
+        let username = normalize_username(username)?;
+        validate_password(password)?;
 
-    let profile = if updated_identity.role == IdentityRole::User {
-        profile_repo
-            .find_by_identity_id(updated_identity.id)
+        let salt = SaltString::generate(&mut rand::rngs::OsRng);
+        let argon2 = Argon2::default();
+        let hash = argon2
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(AuthError::PasswordHash)?
+            .to_string();
+
+        let now = Utc::now();
+        let identity = Identity {
+            id: IdentityId::new(),
+            username: Username(username),
+            password_hash: PasswordHash(hash),
+            role: IdentityRole::Admin,
+            status: IdentityStatus::Active,
+            created_at: now,
+            updated_at: now,
+            last_login_at: None,
+        };
+
+        self.identity_repo.create(&identity).await?;
+
+        let (session_token, session) = create_session(&identity, &self.config, now)?;
+        self.session_repo.create(&session).await?;
+
+        Ok(LoginResult {
+            identity,
+            profile: None,
+            session_token,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct AuthSessionServices {
+    identity_repo: Arc<dyn IdentityRepository>,
+    session_repo: Arc<dyn SessionRepository>,
+    profile_repo: Arc<dyn UserProfileRepository>,
+    config: AppConfig,
+}
+
+impl AuthSessionServices {
+    pub fn new(
+        identity_repo: Arc<dyn IdentityRepository>,
+        session_repo: Arc<dyn SessionRepository>,
+        profile_repo: Arc<dyn UserProfileRepository>,
+        config: AppConfig,
+    ) -> Self {
+        Self {
+            identity_repo,
+            session_repo,
+            profile_repo,
+            config,
+        }
+    }
+
+    pub async fn login(&self, username: &str, password: &str) -> Result<LoginResult, AuthError> {
+        let username = normalize_username(username).map_err(|_| AuthError::InvalidCredentials)?;
+        let identity = self
+            .identity_repo
+            .find_by_username(&username)
             .await?
-    } else {
-        None
-    };
+            .ok_or(AuthError::InvalidCredentials)?;
 
-    Ok(LoginResult {
-        identity: updated_identity,
-        profile,
-        session_token,
-    })
-}
+        if identity.status == IdentityStatus::Disabled {
+            return Err(AuthError::IdentityDisabled);
+        }
 
-pub async fn get_session(
-    session_repo: &dyn SessionRepository,
-    identity_repo: &dyn IdentityRepository,
-    profile_repo: &dyn UserProfileRepository,
-    raw_token: &str,
-) -> Result<SessionResult, AuthError> {
-    let token_hash = hash_session_token(raw_token);
-    let session = session_repo
-        .find_by_token_hash(&token_hash)
-        .await?
-        .ok_or(AuthError::SessionNotFound)?;
+        let parsed_hash =
+            PasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
+        Argon2::default()
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .map_err(|_| AuthError::InvalidCredentials)?;
 
-    if session.revoked_at.is_some() {
-        return Err(AuthError::SessionRevoked);
+        let now = Utc::now();
+        let mut updated_identity = identity.clone();
+        updated_identity.last_login_at = Some(now);
+        self.identity_repo.update(&updated_identity).await?;
+
+        let (session_token, session) = create_session(&updated_identity, &self.config, now)?;
+        self.session_repo.create(&session).await?;
+
+        let profile = if updated_identity.role == IdentityRole::User {
+            self.profile_repo
+                .find_by_identity_id(updated_identity.id)
+                .await?
+        } else {
+            None
+        };
+
+        Ok(LoginResult {
+            identity: updated_identity,
+            profile,
+            session_token,
+        })
     }
 
-    if session.expires_at < Utc::now() {
-        return Err(AuthError::SessionExpired);
+    pub async fn get_session(&self, raw_token: &str) -> Result<SessionResult, AuthError> {
+        let token_hash = hash_session_token(raw_token);
+        let session = self
+            .session_repo
+            .find_by_token_hash(&token_hash)
+            .await?
+            .ok_or(AuthError::SessionNotFound)?;
+
+        if session.revoked_at.is_some() {
+            return Err(AuthError::SessionRevoked);
+        }
+
+        if session.expires_at < Utc::now() {
+            return Err(AuthError::SessionExpired);
+        }
+
+        let identity = self
+            .identity_repo
+            .find_by_id(session.identity_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+
+        if identity.status == IdentityStatus::Disabled {
+            return Err(AuthError::IdentityDisabled);
+        }
+
+        let now = Utc::now();
+        if (now - session.last_seen_at) >= chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS) {
+            let _ = self.session_repo.update_last_seen(session.id, now).await;
+        }
+
+        let profile = if identity.role == IdentityRole::User {
+            self.profile_repo.find_by_identity_id(identity.id).await?
+        } else {
+            None
+        };
+
+        Ok(SessionResult { identity, profile })
     }
 
-    let identity = identity_repo
-        .find_by_id(session.identity_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
+    pub async fn logout(&self, raw_token: &str) -> Result<(), AuthError> {
+        let token_hash = hash_session_token(raw_token);
+        let session = self
+            .session_repo
+            .find_by_token_hash(&token_hash)
+            .await?
+            .ok_or(AuthError::SessionNotFound)?;
 
-    if identity.status == IdentityStatus::Disabled {
-        return Err(AuthError::IdentityDisabled);
+        self.session_repo.revoke(session.id).await
+    }
+}
+
+#[derive(Clone)]
+pub struct AdminUserServices {
+    identity_repo: Arc<dyn IdentityRepository>,
+    session_repo: Arc<dyn SessionRepository>,
+    profile_repo: Arc<dyn UserProfileRepository>,
+}
+
+impl AdminUserServices {
+    pub fn new(
+        identity_repo: Arc<dyn IdentityRepository>,
+        session_repo: Arc<dyn SessionRepository>,
+        profile_repo: Arc<dyn UserProfileRepository>,
+    ) -> Self {
+        Self {
+            identity_repo,
+            session_repo,
+            profile_repo,
+        }
     }
 
-    let now = Utc::now();
-    if (now - session.last_seen_at) >= chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS) {
-        let _ = session_repo.update_last_seen(session.id, now).await;
+    pub async fn list_users(&self) -> Result<Vec<UserWithProfile>, AuthError> {
+        self.profile_repo.list_all_with_identities().await
     }
 
-    let profile = if identity.role == IdentityRole::User {
-        profile_repo.find_by_identity_id(identity.id).await?
-    } else {
-        None
-    };
+    pub async fn create_user(
+        &self,
+        username: &str,
+        display_name: &str,
+        initial_password: &str,
+    ) -> Result<CreatedUser, AuthError> {
+        let username = normalize_username(username)?;
+        validate_password(initial_password)?;
 
-    Ok(SessionResult { identity, profile })
-}
+        if self
+            .identity_repo
+            .find_by_username(&username)
+            .await?
+            .is_some()
+        {
+            return Err(AuthError::UsernameTaken);
+        }
 
-pub async fn logout(
-    session_repo: &dyn SessionRepository,
-    raw_token: &str,
-) -> Result<(), AuthError> {
-    let token_hash = hash_session_token(raw_token);
-    let session = session_repo
-        .find_by_token_hash(&token_hash)
-        .await?
-        .ok_or(AuthError::SessionNotFound)?;
+        let salt = argon2::password_hash::SaltString::generate(&mut rand::rngs::OsRng);
+        let argon2 = argon2::Argon2::default();
+        let hash = argon2
+            .hash_password(initial_password.as_bytes(), &salt)
+            .map_err(AuthError::PasswordHash)?
+            .to_string();
 
-    session_repo.revoke(session.id).await
-}
+        let now = Utc::now();
+        let identity = Identity {
+            id: IdentityId::new(),
+            username: Username(username),
+            password_hash: PasswordHash(hash),
+            role: IdentityRole::User,
+            status: IdentityStatus::Active,
+            created_at: now,
+            updated_at: now,
+            last_login_at: None,
+        };
 
-pub async fn admin_create_user(
-    identity_repo: &dyn IdentityRepository,
-    profile_repo: &dyn UserProfileRepository,
-    username: &str,
-    display_name: &str,
-    initial_password: &str,
-) -> Result<CreatedUser, AuthError> {
-    let username = normalize_username(username)?;
-    validate_password(initial_password)?;
+        self.identity_repo.create(&identity).await?;
 
-    if identity_repo.find_by_username(&username).await?.is_some() {
-        return Err(AuthError::UsernameTaken);
+        let profile = UserProfile {
+            id: Uuid::new_v4(),
+            identity_id: identity.id,
+            display_name: display_name.to_string(),
+            created_at: now,
+            updated_at: now,
+        };
+        self.profile_repo.create(&profile).await?;
+
+        Ok(CreatedUser { identity, profile })
     }
 
-    let salt = argon2::password_hash::SaltString::generate(&mut rand::rngs::OsRng);
-    let argon2 = argon2::Argon2::default();
-    let hash = argon2
-        .hash_password(initial_password.as_bytes(), &salt)
-        .map_err(AuthError::PasswordHash)?
-        .to_string();
+    pub async fn reset_password(&self, user_id: Uuid, new_password: &str) -> Result<(), AuthError> {
+        let profile = self
+            .profile_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
 
-    let now = Utc::now();
-    let identity = Identity {
-        id: IdentityId::new(),
-        username: Username(username),
-        password_hash: PasswordHash(hash),
-        role: IdentityRole::User,
-        status: IdentityStatus::Active,
-        created_at: now,
-        updated_at: now,
-        last_login_at: None,
-    };
+        validate_password(new_password)?;
 
-    identity_repo.create(&identity).await?;
+        let salt = argon2::password_hash::SaltString::generate(&mut rand::rngs::OsRng);
+        let argon2 = argon2::Argon2::default();
+        let hash = argon2
+            .hash_password(new_password.as_bytes(), &salt)
+            .map_err(AuthError::PasswordHash)?
+            .to_string();
 
-    let profile = UserProfile {
-        id: Uuid::new_v4(),
-        identity_id: identity.id,
-        display_name: display_name.to_string(),
-        created_at: now,
-        updated_at: now,
-    };
-    profile_repo.create(&profile).await?;
+        let mut identity = self
+            .identity_repo
+            .find_by_id(profile.identity_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+        identity.password_hash = PasswordHash(hash);
+        identity.updated_at = Utc::now();
 
-    Ok(CreatedUser { identity, profile })
-}
+        self.identity_repo.update(&identity).await?;
+        self.session_repo
+            .revoke_all_for_identity(profile.identity_id)
+            .await
+    }
 
-pub async fn admin_reset_password(
-    identity_repo: &dyn IdentityRepository,
-    session_repo: &dyn SessionRepository,
-    profile_repo: &dyn UserProfileRepository,
-    user_id: Uuid,
-    new_password: &str,
-) -> Result<(), AuthError> {
-    let profile = profile_repo
-        .find_by_id(user_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
+    pub async fn disable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
+        let profile = self
+            .profile_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
 
-    validate_password(new_password)?;
+        let mut identity = self
+            .identity_repo
+            .find_by_id(profile.identity_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+        identity.status = IdentityStatus::Disabled;
+        identity.updated_at = Utc::now();
 
-    let salt = argon2::password_hash::SaltString::generate(&mut rand::rngs::OsRng);
-    let argon2 = argon2::Argon2::default();
-    let hash = argon2
-        .hash_password(new_password.as_bytes(), &salt)
-        .map_err(AuthError::PasswordHash)?
-        .to_string();
+        self.identity_repo.update(&identity).await?;
+        self.session_repo
+            .revoke_all_for_identity(profile.identity_id)
+            .await
+    }
 
-    let mut identity = identity_repo
-        .find_by_id(profile.identity_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
-    identity.password_hash = PasswordHash(hash);
-    identity.updated_at = Utc::now();
+    pub async fn enable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
+        let profile = self
+            .profile_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
 
-    identity_repo.update(&identity).await?;
-    session_repo
-        .revoke_all_for_identity(profile.identity_id)
-        .await
-}
+        let mut identity = self
+            .identity_repo
+            .find_by_id(profile.identity_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+        identity.status = IdentityStatus::Active;
+        identity.updated_at = Utc::now();
 
-pub async fn admin_disable_user(
-    identity_repo: &dyn IdentityRepository,
-    session_repo: &dyn SessionRepository,
-    profile_repo: &dyn UserProfileRepository,
-    user_id: Uuid,
-) -> Result<(), AuthError> {
-    let profile = profile_repo
-        .find_by_id(user_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
-
-    let mut identity = identity_repo
-        .find_by_id(profile.identity_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
-    identity.status = IdentityStatus::Disabled;
-    identity.updated_at = Utc::now();
-
-    identity_repo.update(&identity).await?;
-    session_repo
-        .revoke_all_for_identity(profile.identity_id)
-        .await
-}
-
-pub async fn admin_enable_user(
-    identity_repo: &dyn IdentityRepository,
-    profile_repo: &dyn UserProfileRepository,
-    user_id: Uuid,
-) -> Result<(), AuthError> {
-    let profile = profile_repo
-        .find_by_id(user_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
-
-    let mut identity = identity_repo
-        .find_by_id(profile.identity_id)
-        .await?
-        .ok_or(AuthError::IdentityNotFound)?;
-    identity.status = IdentityStatus::Active;
-    identity.updated_at = Utc::now();
-
-    identity_repo.update(&identity).await
+        self.identity_repo.update(&identity).await
+    }
 }
 
 fn create_session(

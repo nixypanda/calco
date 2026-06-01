@@ -8,7 +8,7 @@ exposed beyond a small known group.
 
 ### TOCTOU on admin bootstrap
 
-`create_bootstrap_admin` (backend/src/application/auth.rs:75) checks
+`create_bootstrap_admin` (backend/src/application/auth.rs:32) checks
 `admin_exists()` and then inserts. Two concurrent requests can both pass the
 check, producing multiple admins. No DB constraint enforces a single admin.
 
@@ -18,7 +18,7 @@ unique-violation to `AdminAlreadyExists`.
 
 ### TOCTOU on username uniqueness
 
-`admin_create_user` (backend/src/application/auth.rs:222) checks the username,
+`admin_create_user` (backend/src/application/auth.rs:183) checks the username,
 then inserts. The `identities.username` unique constraint catches the race, but
 the violation surfaces as a `Database(...)` 500 instead of a clean
 `UsernameTaken` 409.
@@ -29,7 +29,7 @@ Mitigation if ever needed: catch the unique-violation and map to
 ### Non-atomic reads of food logs
 
 `PostgresFoodLogRepository::find_by_id` / `find_by_user_and_range`
-(backend/src/infrastructure/postgres/food_log.rs:124, 146) fetch the log header
+(backend/src/infrastructure/postgres/food_log.rs:109, 130) fetch the log header
 and the nutrient snapshots in separate non-transactional statements. A
 concurrent `update_food_log` between the two reads can return a log header from
 one version with snapshots from another.
@@ -42,15 +42,16 @@ transaction.
 ### Source fields dropped during conversion
 
 Each converter projects the source dataset down to a narrow set of fields
-(`source`, `source_id`, `name`, `brand`, `categories`, `serving_size_g`, plus
-mapped nutrients). Anything else in the source row is discarded, and
+(`source`, `source_id`, `barcode`, `name`, `brand`, `categories`,
+`serving_size_g`, plus mapped nutrients and servings). Anything else in the
+source row is discarded, and
 `staging_*.raw_payload` is hardcoded to `None` in `interfaces/http/import.rs`,
 so there is no fallback either.
 
 Examples currently dropped:
 
-- **USDA**: `gtinUpc` (barcode for branded items), `scientificName`,
-  `ndbNumber`, `dataType`, `publicationDate`, `ingredients`, `dataSource`.
+- **USDA SR**: `scientificName`, `ndbNumber`, source-specific metadata, and
+  fields not emitted by `tools/importers/convert_usda_sr.py`.
 - **OFF**: `ingredients_text`, `allergens`, `additives_tags`, `nova_group`,
   `nutriscore_grade`, `ecoscore_grade`, `labels`, `packaging`, image URLs,
   `*_serving` nutrient variants.
@@ -61,7 +62,7 @@ Recovery is by re-running the converters against the raw archives in
 `data/raw/`, so no data is permanently lost — but adding any of these to the
 product model is a deliberate schema + domain change, not a "flip a flag"
 operation. Each field needs: a column on `products` (or a side table), a domain
-field, a converter mapping, a `FoodRow` field on the HTTP boundary, and a
+field, a converter mapping, an import DTO field on the HTTP boundary, and a
 commit-SQL projection.
 
 Mitigation if ever needed: pick the specific fields worth surfacing (likely
@@ -78,8 +79,8 @@ enforce. Listed roughly by severity.
 
 `CatalogError`, `FoodLogError`, `MealError`, `AuthError`, and `ImportError` each
 have a `Database(#[from] sqlx::Error)` variant
-(`backend/src/domain/catalog.rs:363`, `domain/food_log.rs:229`,
-`domain/meal.rs:120`, `domain/auth.rs:131`, `domain/import.rs:126`). The domain
+(`backend/src/domain/catalog.rs:531`, `domain/food_log.rs:249`,
+`domain/meal.rs:289`, `domain/auth.rs:136`, `domain/import.rs:131`). The domain
 layer is the inner ring and should not depend on the DB driver — right now
 `domain/` cannot compile without sqlx, and every consumer of a domain error
 transitively pulls it in.
@@ -92,7 +93,7 @@ before returning.
 
 `ProductRepository::search` takes a
 `ProductSearchQuery { text, include_categories: Vec<String>, exclude_categories: Vec<String> }`
-(`backend/src/domain/catalog.rs:5`), and `SummaryRepository::get_summary`
+(`backend/src/domain/catalog.rs:10`), and `SummaryRepository::get_summary`
 returns a `Vec<SummaryEntry>` shaped for the HTTP response. The repository port
 should express domain intent, not transport a request DTO with raw strings.
 Changing the HTTP API currently forces a domain edit.
@@ -104,7 +105,7 @@ projections, then translate at the adapter boundary.
 ### Primitive-obsessed quantity and nutrition values
 
 `Quantity { amount: Decimal, unit: UnitCode }`
-(`backend/src/domain/nutrition.rs:7`) and `ProductNutrient::amount_per_100g`
+(`backend/src/domain/nutrition.rs:5`) and `ProductNutrient::amount_per_100g`
 have no smart constructor — the `amount > 0` check only runs inside
 `Product::quantity_to_grams` / `Meal::quantity_to_grams`
 (`backend/src/domain/catalog.rs`, `backend/src/domain/meal.rs`). An ill-formed
@@ -118,7 +119,7 @@ constructor).
 ### FoodLog still reaches across aggregates
 
 `application/food_log.rs` imports `domain::catalog::*` and
-`domain::meal::{Meal, MealComponentItem}`, then calls
+`domain::meal::{Meal, MealComponentItem, MealId}`, then calls
 `product.nutrition_for(...)` / `meal.nutrition_for(...)` (and uses
 `MealComponentItem` in `load_meal_products`). The calculation is now on the
 aggregates rather than free functions, but Food Log still directly depends on
@@ -131,7 +132,7 @@ of importing sibling aggregate internals.
 
 ### Meal aggregate creation has no transaction boundary
 
-`application/meal.rs` resolves `MealComponent`s by awaiting per-product lookups,
+`application/meal.rs:68-82` resolves `MealComponent`s by awaiting per-product lookups,
 then calls `meal_repo.create(&meal)`. Product existence is checked outside any
 transaction, and there's no compensation if a later lookup fails mid-way.
 Aggregates exist to define a consistency boundary; here it's implicit.
@@ -142,12 +143,10 @@ query before constructing the aggregate.
 
 ### Invariant parsing happens in the application layer
 
-`application/food_log.rs:103` calls `MealSlot::from_str(s)` and maps the error
+`application/food_log.rs` calls `MealSlot::from_str(s)` and maps the error
 to `FoodLogError::Validation`. Parsing untrusted strings at the boundary is
-fine, but the application layer also owns the error mapping and reshaping —
-domain knowledge bleeding upward. Same pattern appears for `Source::from_str`,
-`ProductVisibility::from_str`, `NutrientConfidence::from_str` whenever they're
-invoked outside the persistence adapter.
+fine, but the application layer also owns the error mapping and reshaping.
+`MealComponentItem::parse` is similarly called from `application/meal.rs:175`.
 
 Mitigation if ever needed: have HTTP DTOs parse into domain types at the edge
 (via `TryFrom`), so the application service only ever sees already-validated
@@ -161,37 +160,25 @@ anything that orchestrates multiple repos or assembles a domain aggregate from
 looked-up dependencies. The items below are about the parts that don't, plus
 inconsistencies in how the layer is shaped.
 
-### Inconsistent service shape
+### Passthroughs moved into HTTP handlers
 
-`auth.rs` is a module of free functions that take repo references directly.
-Everything else (`catalog.rs`, `food_log.rs`, `meal.rs`, `import.rs`) is a
-`Services` struct holding `Arc<dyn Repo>` fields. Both shapes work; mixing them
-means readers have to context-switch per module.
+The old catalog service passthroughs are gone; catalog handlers now call
+`product_repo`, `nutrient_repo`, and `unit_repo` directly
+(`interfaces/http/catalog.rs:223-465`). The same mixed boundary still exists in
+other places: `summary_handler` calls `summary_repo.get_summary(...)` directly
+(`interfaces/http/food_log.rs:257-276`), import error lookup calls
+`import_repo.get_errors(...)` directly, and meal list/detail are handled
+outside `MealServices`.
 
-Mitigation if ever needed: pick one. The free-function style reads better when
-the call site already owns the repos; the struct style is better when the same
-set of dependencies is reused across many handlers (which is the case for the
-HTTP layer here).
-
-### Roughly 40% of service methods are trivial passthroughs
-
-Methods like `get_food_log`, `get_meal`, `list_meals`, `list_nutrients`,
-`get_nutrient`, `list_units`, `get_summary`, `get_logs_for_range`, `get_job`,
-`get_errors`, `get_product`, and `get_product_by_barcode` either forward
-straight to the repo or map `Option::None` to `NotFound`. They don't coordinate
-anything; they just exist because the surrounding methods do.
-
-Mitigation if ever needed: inline these into the HTTP handlers (handler calls
-`repo.find_by_id(...)` directly and does the `None → 404` mapping inline). Keep
-the service struct for the methods that actually orchestrate. Doing this
-collapses ~40% of the layer.
+Mitigation if ever needed: make this an explicit convention. Either handlers may
+call repos for read-only passthroughs, or every use case goes through a service.
 
 ### Cross-layer leakage in `food_log`
 
 - `impl FoodLog { fn item_id(&self) -> Uuid }` is defined in
-  `application/food_log.rs:345-349` — a method on a domain type, declared in the
+  `application/food_log.rs:289-293` — a method on a domain type, declared in the
   application layer.
-- `log_item_id` / `log_item_type` (`application/food_log.rs:331-343`)
+- `log_item_id` / `log_item_type` (`application/food_log.rs:275-287`)
   pattern-match on `LoggedItem`; both belong as methods on the domain enum.
 - `From<domain::meal::MealError> for FoodLogError`
   (`application/food_log.rs:12-22`) is a conversion between two domain errors,
@@ -201,11 +188,11 @@ Mitigation if ever needed: move all three into `domain/food_log.rs`.
 
 ### Duplicate / near-duplicate logic
 
-- `load_meal_products` exists twice — `application/food_log.rs:307` returning
+- `load_meal_products` exists twice — `application/food_log.rs:251` returning
   `FoodLogError`, and `MealServices::load_meal_products`
-  (`application/meal.rs:206`) returning `MealError`. Same loop over
+  (`application/meal.rs:187`) returning `MealError`. Same loop over
   `meal.components`.
-- `log_food` and `log_meal` (`application/food_log.rs:82-158`) share ~90% of
+- `log_food` and `log_meal` (`application/food_log.rs:72-139`) share ~90% of
   their structure (`MealSlot` parse, quantity build, repo write); they diverge
   only at the item-resolution step.
 - `ImportServices::stage_foods` / `stage_nutrients` / `stage_servings`
@@ -232,30 +219,28 @@ each staged type, returning a domain error the service maps once.
 
 ### Inconsistent `Clone` impls
 
-`CatalogServices` (`application/catalog.rs:22-31`) and `ImportServices`
-(`application/import.rs:10-16`) hand-write `Clone`. `MealServices` and
-`FoodLogServices` use `#[derive(Clone)]`. `Arc<dyn Trait>` is `Clone`, so the
-derive form works everywhere.
+`ImportServices` (`application/import.rs:9-15`) hand-writes `Clone`.
+`MealServices` and `FoodLogServices` use `#[derive(Clone)]`. `Arc<dyn Trait>` is
+`Clone`, so the derive form works here too. The previous `CatalogServices`
+example is gone with the deleted catalog service.
 
 Mitigation if ever needed: replace the hand impls with `#[derive(Clone)]`.
 
 ### Vestigial / undocumented
 
-- `auth::admin_list_users` (`application/auth.rs:231`) takes
-  `_identity_repo: &dyn IdentityRepository` and never uses it. Drop the arg.
-- `get_session` (`application/auth.rs:159`) silently discards `update_last_seen`
+- `get_session` (`application/auth.rs:141`) silently discards `update_last_seen`
   errors via `let _ = ...`. Almost certainly intentional (best-effort heartbeat
   refresh) but undocumented.
-- `ImportServices::commit_job` (`application/import.rs:202-221`) requires
+- `ImportServices::commit_job` (`application/import.rs:191-211`) requires
   `food_count > 0` to commit, but doesn't gate on nutrient or serving counts.
   Either intentional (foods are the primary entity) and worth a comment, or a
   bug.
 - `UpdateFoodInput` / `UpdateMealInput` use `Option<Option<T>>` for PATCH-style
   "absent vs explicit-null vs value" with no doc explaining the convention.
 
-Mitigation if ever needed: drop the dead arg; one-line comments on the
-silent-discard and the commit asymmetry; either a `Patch<T>` enum or a doc
-comment on the PATCH input structs.
+Mitigation if ever needed: one-line comments on the silent-discard and the
+commit asymmetry; either a `Patch<T>` enum or a doc comment on the PATCH input
+structs.
 
 ### Mock-by-singleton test smell
 
