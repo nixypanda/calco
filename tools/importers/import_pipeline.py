@@ -121,6 +121,35 @@ def fetch_errors(api_url, headers, job_id):
     return items
 
 
+def normalize_categories(row):
+    values = []
+
+    raw_categories = row.get("categories")
+    if isinstance(raw_categories, list):
+        values.extend(raw_categories)
+    elif raw_categories:
+        values.append(raw_categories)
+
+    raw_category = row.get("category")
+    if raw_category:
+        values.append(raw_category)
+
+    normalized = []
+    for value in values:
+        for part in str(value).split(","):
+            category = part.strip().lower()
+            if category and category not in normalized:
+                normalized.append(category)
+
+    return normalized
+
+
+def normalize_food_row(row):
+    row["categories"] = normalize_categories(row)
+    row.pop("category", None)
+    return row
+
+
 def load_jsonl(filepath):
     foods = []
     nutrients = []
@@ -134,6 +163,7 @@ def load_jsonl(filepath):
             row = {k: v for k, v in obj.items() if k != "type"}
             t = obj.get("type")
             if t == "food":
+                row = normalize_food_row(row)
                 foods.append(row)
             elif t == "nutrient":
                 nutrients.append(row)

@@ -34,6 +34,31 @@ def normalize_name(name):
     return re.sub(r"\s+", " ", name).strip()
 
 
+def normalize_categories(row):
+    values = []
+
+    raw_categories = row.get("categories")
+    if isinstance(raw_categories, list):
+        values.extend(raw_categories)
+    elif raw_categories:
+        values.append(raw_categories)
+
+    raw_category = row.get("category")
+    if raw_category:
+        values.append(raw_category)
+
+    normalized = []
+    for value in values:
+        for part in str(value).split(","):
+            category = part.strip().lower()
+            if category and category not in normalized:
+                normalized.append(category)
+
+    row["categories"] = normalized
+    row.pop("category", None)
+    return row
+
+
 def load_source(filepath):
     foods = {}
     nutrients = defaultdict(dict)
@@ -47,6 +72,7 @@ def load_source(filepath):
             t = obj.pop("type", None)
             sid = obj.get("source_id", "")
             if t == "food":
+                obj = normalize_categories(obj)
                 foods[sid] = obj
             elif t == "nutrient":
                 nutrients[sid][obj["nutrient_code"]] = obj["amount_per_100g"]
