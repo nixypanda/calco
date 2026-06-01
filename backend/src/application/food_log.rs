@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::domain::catalog::*;
 use crate::domain::food_log::*;
-use crate::domain::meal::{Meal, MealId, MealComponentItem};
+use crate::domain::meal::{Meal, MealComponentItem, MealId};
 use crate::domain::nutrition::{NutritionCalculator, Quantity};
 use crate::domain::units::UnitConverter;
 
@@ -119,15 +119,28 @@ impl FoodLogServices {
         }
 
         let product_id = ProductId(input.item_id);
-        let product = self.product_repo.find_by_id(product_id).await?
-            .ok_or_else(|| FoodLogError::NotFound(format!("product {} not found", input.item_id)))?;
+        let product = self
+            .product_repo
+            .find_by_id(product_id)
+            .await?
+            .ok_or_else(|| {
+                FoodLogError::NotFound(format!("product {} not found", input.item_id))
+            })?;
 
         let quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
         let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
 
-        let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product.nutrients.iter().map(|pn| {
-            (pn.nutrient_code.clone(), pn.amount_per_100g.clone(), pn.unit.clone())
-        }).collect();
+        let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product
+            .nutrients
+            .iter()
+            .map(|pn| {
+                (
+                    pn.nutrient_code.clone(),
+                    pn.amount_per_100g.clone(),
+                    pn.unit.clone(),
+                )
+            })
+            .collect();
 
         let calculated = NutritionCalculator::calculate(grams, &nutrients);
 
@@ -144,11 +157,15 @@ impl FoodLogServices {
             item: LoggedItem::Product(product_id),
             quantity_amount: input.quantity_amount,
             quantity_unit: UnitCode(input.quantity_unit),
-            nutrient_snapshots: calculated.amounts.into_iter().map(|na| FoodLogNutrientSnapshot {
-                nutrient_code: na.nutrient_code,
-                amount: na.amount,
-                unit: na.unit,
-            }).collect(),
+            nutrient_snapshots: calculated
+                .amounts
+                .into_iter()
+                .map(|na| FoodLogNutrientSnapshot {
+                    nutrient_code: na.nutrient_code,
+                    amount: na.amount,
+                    unit: na.unit,
+                })
+                .collect(),
             notes: input.notes,
         };
 
@@ -157,17 +174,30 @@ impl FoodLogServices {
     }
 
     pub async fn log_meal(&self, input: LogFoodInput) -> Result<FoodLog, FoodLogError> {
-        let meal_lookup = self.meal_lookup.as_ref()
+        let meal_lookup = self
+            .meal_lookup
+            .as_ref()
             .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
-        let meal_product_lookup = self.meal_product_lookup.as_ref()
+        let meal_product_lookup = self
+            .meal_product_lookup
+            .as_ref()
             .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
 
         let meal_id = MealId(input.item_id);
-        let meal = meal_lookup.find_by_id(meal_id).await?
+        let meal = meal_lookup
+            .find_by_id(meal_id)
+            .await?
             .ok_or_else(|| FoodLogError::NotFound(format!("meal {} not found", input.item_id)))?;
 
-        let scale_quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref(), &self.unit_converter).await?;
+        let scale_quantity =
+            Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
+        let snapshots = compute_meal_snapshots(
+            &meal,
+            &scale_quantity,
+            meal_product_lookup.as_ref(),
+            &self.unit_converter,
+        )
+        .await?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -191,7 +221,9 @@ impl FoodLogServices {
     }
 
     pub async fn get_food_log(&self, id: FoodLogId) -> Result<FoodLog, FoodLogError> {
-        self.food_log_repo.find_by_id(id).await?
+        self.food_log_repo
+            .find_by_id(id)
+            .await?
             .ok_or_else(|| FoodLogError::NotFound("food log not found".into()))
     }
 
@@ -201,7 +233,9 @@ impl FoodLogServices {
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<Vec<FoodLog>, FoodLogError> {
-        self.food_log_repo.find_by_user_and_range(user_id, from, to).await
+        self.food_log_repo
+            .find_by_user_and_range(user_id, from, to)
+            .await
     }
 
     pub async fn update_food_log(
@@ -210,28 +244,47 @@ impl FoodLogServices {
         user_id: Uuid,
         input: UpdateFoodInput,
     ) -> Result<FoodLog, FoodLogError> {
-        let existing = self.food_log_repo.find_by_id(id).await?
+        let existing = self
+            .food_log_repo
+            .find_by_id(id)
+            .await?
             .ok_or_else(|| FoodLogError::NotFound("food log not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
             return Err(FoodLogError::Forbidden("not your food log".into()));
         }
 
-        let item_type = input.item_type.as_deref().unwrap_or_else(|| log_item_type(&existing.item));
+        let item_type = input
+            .item_type
+            .as_deref()
+            .unwrap_or_else(|| log_item_type(&existing.item));
         let item_id = input.item_id.unwrap_or_else(|| existing.item_id());
 
         if item_type == "product" {
-            let product = self.product_repo.find_by_id(ProductId(item_id)).await?
+            let product = self
+                .product_repo
+                .find_by_id(ProductId(item_id))
+                .await?
                 .ok_or_else(|| FoodLogError::NotFound("product not found".into()))?;
 
             let quantity_amount = input.quantity_amount.unwrap_or(existing.quantity_amount);
-            let quantity_unit_str = input.quantity_unit.unwrap_or_else(|| existing.quantity_unit.0.clone());
+            let quantity_unit_str = input
+                .quantity_unit
+                .unwrap_or_else(|| existing.quantity_unit.0.clone());
             let quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
             let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
 
-            let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product.nutrients.iter().map(|pn| {
-                (pn.nutrient_code.clone(), pn.amount_per_100g.clone(), pn.unit.clone())
-            }).collect();
+            let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product
+                .nutrients
+                .iter()
+                .map(|pn| {
+                    (
+                        pn.nutrient_code.clone(),
+                        pn.amount_per_100g.clone(),
+                        pn.unit.clone(),
+                    )
+                })
+                .collect();
 
             let calculated = NutritionCalculator::calculate(grams, &nutrients);
 
@@ -251,28 +304,47 @@ impl FoodLogServices {
                 item: LoggedItem::Product(ProductId(item_id)),
                 quantity_amount,
                 quantity_unit: UnitCode(quantity_unit_str),
-                nutrient_snapshots: calculated.amounts.into_iter().map(|na| FoodLogNutrientSnapshot {
-                    nutrient_code: na.nutrient_code,
-                    amount: na.amount,
-                    unit: na.unit,
-                }).collect(),
+                nutrient_snapshots: calculated
+                    .amounts
+                    .into_iter()
+                    .map(|na| FoodLogNutrientSnapshot {
+                        nutrient_code: na.nutrient_code,
+                        amount: na.amount,
+                        unit: na.unit,
+                    })
+                    .collect(),
                 notes,
             };
 
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
         } else if item_type == "meal" {
-            let meal_lookup = self.meal_lookup.as_ref()
+            let meal_lookup = self
+                .meal_lookup
+                .as_ref()
                 .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
-            let meal_product_lookup = self.meal_product_lookup.as_ref()
+            let meal_product_lookup = self
+                .meal_product_lookup
+                .as_ref()
                 .ok_or_else(|| FoodLogError::Internal("meal support not configured".into()))?;
             let meal_id = MealId(item_id);
-            let meal = meal_lookup.find_by_id(meal_id).await?
+            let meal = meal_lookup
+                .find_by_id(meal_id)
+                .await?
                 .ok_or_else(|| FoodLogError::NotFound("meal not found".into()))?;
             let quantity_amount = input.quantity_amount.unwrap_or(existing.quantity_amount);
-            let quantity_unit_str = input.quantity_unit.unwrap_or_else(|| existing.quantity_unit.0.clone());
-            let scale_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let snapshots = compute_meal_snapshots(&meal, &scale_quantity, meal_product_lookup.as_ref(), &self.unit_converter).await?;
+            let quantity_unit_str = input
+                .quantity_unit
+                .unwrap_or_else(|| existing.quantity_unit.0.clone());
+            let scale_quantity =
+                Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
+            let snapshots = compute_meal_snapshots(
+                &meal,
+                &scale_quantity,
+                meal_product_lookup.as_ref(),
+                &self.unit_converter,
+            )
+            .await?;
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
                 Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -295,12 +367,18 @@ impl FoodLogServices {
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
         } else {
-            Err(FoodLogError::Validation(format!("unsupported item type: {}", item_type)))
+            Err(FoodLogError::Validation(format!(
+                "unsupported item type: {}",
+                item_type
+            )))
         }
     }
 
     pub async fn delete_food_log(&self, id: FoodLogId, user_id: Uuid) -> Result<(), FoodLogError> {
-        let existing = self.food_log_repo.find_by_id(id).await?
+        let existing = self
+            .food_log_repo
+            .find_by_id(id)
+            .await?
             .ok_or_else(|| FoodLogError::NotFound("food log not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
@@ -317,7 +395,9 @@ impl FoodLogServices {
         to: DateTime<Utc>,
         codes: Option<Vec<String>>,
     ) -> Result<Vec<SummaryEntry>, FoodLogError> {
-        self.summary_repo.get_summary(user_id, from, to, codes).await
+        self.summary_repo
+            .get_summary(user_id, from, to, codes)
+            .await
     }
 }
 
@@ -335,20 +415,28 @@ async fn compute_meal_snapshots(
     for component in &meal.components {
         match &component.item {
             MealComponentItem::Product(product_id) => {
-                let product = product_lookup.find_by_id(*product_id).await?
-                    .ok_or_else(|| FoodLogError::NotFound(format!(
-                        "product {} in meal {} not found",
-                        product_id.0, meal.id.0
-                    )))?;
+                let product = product_lookup
+                    .find_by_id(*product_id)
+                    .await?
+                    .ok_or_else(|| {
+                        FoodLogError::NotFound(format!(
+                            "product {} in meal {} not found",
+                            product_id.0, meal.id.0
+                        ))
+                    })?;
 
-                let component_qty = Quantity::new(component.quantity_amount, component.quantity_unit.clone());
+                let component_qty =
+                    Quantity::new(component.quantity_amount, component.quantity_unit.clone());
                 let component_grams = convert_to_grams(&component_qty, &product, unit_converter)?;
                 total_component_grams += component_grams;
 
                 let contribution_ratio = component_grams / Decimal::new(100, 0);
                 for pn in &product.nutrients {
                     let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
-                    match total_nutrients.iter_mut().find(|(code, _, _)| code == &pn.nutrient_code) {
+                    match total_nutrients
+                        .iter_mut()
+                        .find(|(code, _, _)| code == &pn.nutrient_code)
+                    {
                         Some((_, existing_amount, _)) => *existing_amount += contributed_amount,
                         None => total_nutrients.push((
                             pn.nutrient_code.clone(),
@@ -362,7 +450,9 @@ async fn compute_meal_snapshots(
     }
 
     if total_component_grams <= Decimal::ZERO {
-        return Err(FoodLogError::Validation("meal total quantity must be positive".into()));
+        return Err(FoodLogError::Validation(
+            "meal total quantity must be positive".into(),
+        ));
     }
     let scale_factor = scale_grams / total_component_grams;
     Ok(total_nutrients
@@ -381,7 +471,9 @@ fn convert_to_grams(
     unit_converter: &UnitConverter,
 ) -> Result<Decimal, FoodLogError> {
     if quantity.amount <= Decimal::ZERO {
-        return Err(FoodLogError::Validation("quantity amount must be positive".into()));
+        return Err(FoodLogError::Validation(
+            "quantity amount must be positive".into(),
+        ));
     }
     if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
         return Ok(grams);
@@ -392,12 +484,19 @@ fn convert_to_grams(
         }
     }
     if let Some(size_g) = product.serving_size_g {
-        let default_unit = product.default_unit.as_ref().map(|u| u.0.as_str()).unwrap_or("serving");
+        let default_unit = product
+            .default_unit
+            .as_ref()
+            .map(|u| u.0.as_str())
+            .unwrap_or("serving");
         if quantity.unit.0 == default_unit {
             return Ok(size_g * quantity.amount);
         }
     }
-    Err(FoodLogError::Validation(format!("cannot convert {} {} to grams", quantity.amount, quantity.unit.0)))
+    Err(FoodLogError::Validation(format!(
+        "cannot convert {} {} to grams",
+        quantity.amount, quantity.unit.0
+    )))
 }
 
 fn meal_quantity_to_grams(
@@ -406,7 +505,9 @@ fn meal_quantity_to_grams(
     unit_converter: &UnitConverter,
 ) -> Result<Decimal, FoodLogError> {
     if quantity.amount <= Decimal::ZERO {
-        return Err(FoodLogError::Validation("quantity amount must be positive".into()));
+        return Err(FoodLogError::Validation(
+            "quantity amount must be positive".into(),
+        ));
     }
     if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
         return Ok(grams);
@@ -429,11 +530,14 @@ fn total_meal_declared_grams(
     unit_converter: &UnitConverter,
 ) -> Result<Decimal, FoodLogError> {
     match (&meal.total_quantity_amount, &meal.total_quantity_unit) {
-        (Some(amount), Some(unit)) if *amount > Decimal::ZERO => unit_converter
-            .mass_to_grams(*amount, unit)
-            .ok_or_else(|| FoodLogError::Validation(
-                "meal total quantity must be defined in a mass unit for non-mass logging".into(),
-            )),
+        (Some(amount), Some(unit)) if *amount > Decimal::ZERO => {
+            unit_converter.mass_to_grams(*amount, unit).ok_or_else(|| {
+                FoodLogError::Validation(
+                    "meal total quantity must be defined in a mass unit for non-mass logging"
+                        .into(),
+                )
+            })
+        }
         _ => Err(FoodLogError::Validation(
             "meal total quantity must be defined in a mass unit for non-mass logging".into(),
         )),
@@ -487,8 +591,12 @@ impl From<crate::application::catalog::CatalogError> for FoodLogError {
     fn from(e: crate::application::catalog::CatalogError) -> Self {
         match e {
             crate::application::catalog::CatalogError::NotFound(msg) => FoodLogError::NotFound(msg),
-            crate::application::catalog::CatalogError::Forbidden(msg) => FoodLogError::Forbidden(msg),
-            crate::application::catalog::CatalogError::Validation(msg) => FoodLogError::Validation(msg),
+            crate::application::catalog::CatalogError::Forbidden(msg) => {
+                FoodLogError::Forbidden(msg)
+            }
+            crate::application::catalog::CatalogError::Validation(msg) => {
+                FoodLogError::Validation(msg)
+            }
             crate::application::catalog::CatalogError::Database(msg) => FoodLogError::Database(msg),
             crate::application::catalog::CatalogError::Internal(msg) => FoodLogError::Internal(msg),
         }
@@ -507,7 +615,9 @@ mod tests {
 
     impl MockFoodLogRepo {
         fn new() -> Self {
-            Self { logs: Mutex::new(vec![]) }
+            Self {
+                logs: Mutex::new(vec![]),
+            }
         }
     }
 
@@ -530,7 +640,11 @@ mod tests {
             to: DateTime<Utc>,
         ) -> Result<Vec<FoodLog>, FoodLogError> {
             let logs = self.logs.lock().unwrap();
-            Ok(logs.iter().filter(|l| l.user_id == user_id && l.logged_at >= from && l.logged_at <= to).cloned().collect())
+            Ok(logs
+                .iter()
+                .filter(|l| l.user_id == user_id && l.logged_at >= from && l.logged_at <= to)
+                .cloned()
+                .collect())
         }
 
         async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError> {
@@ -545,7 +659,10 @@ mod tests {
 
         async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError> {
             let mut logs = self.logs.lock().unwrap();
-            let idx = logs.iter().position(|l| l.id == id).ok_or_else(|| FoodLogError::NotFound("not found".into()))?;
+            let idx = logs
+                .iter()
+                .position(|l| l.id == id)
+                .ok_or_else(|| FoodLogError::NotFound("not found".into()))?;
             logs.remove(idx);
             Ok(())
         }
@@ -557,7 +674,9 @@ mod tests {
 
     impl MockProductLookup {
         fn with_product(product: Product) -> Self {
-            Self { product: Some(product) }
+            Self {
+                product: Some(product),
+            }
         }
 
         fn empty() -> Self {
@@ -626,15 +745,13 @@ mod tests {
             default_quantity: Some(Decimal::new(100, 0)),
             default_unit: Some(UnitCode("g".to_string())),
             serving_size_g: Some(Decimal::new(100, 0)),
-            nutrients: vec![
-                ProductNutrient {
-                    nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-                    amount_per_100g: AmountPer100g(Decimal::new(100, 0)),
-                    unit: UnitCode("kcal".to_string()),
-                    source: None,
-                    confidence: None,
-                },
-            ],
+            nutrients: vec![ProductNutrient {
+                nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
+                amount_per_100g: AmountPer100g(Decimal::new(100, 0)),
+                unit: UnitCode("kcal".to_string()),
+                source: None,
+                confidence: None,
+            }],
             servings: vec![],
         }
     }
@@ -658,14 +775,12 @@ mod tests {
             notes: None,
             total_quantity_amount: None,
             total_quantity_unit: None,
-            components: vec![
-                MealComponent {
-                    id: Uuid::new_v4(),
-                    item: MealComponentItem::Product(ProductId(Uuid::nil())),
-                    quantity_amount: Decimal::new(100, 0),
-                    quantity_unit: UnitCode("g".to_string()),
-                },
-            ],
+            components: vec![MealComponent {
+                id: Uuid::new_v4(),
+                item: MealComponentItem::Product(ProductId(Uuid::nil())),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: UnitCode("g".to_string()),
+            }],
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -688,7 +803,12 @@ mod tests {
             None => Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>,
         };
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter())
+        FoodLogServices::new(
+            food_log_repo,
+            product_repo,
+            summary_repo,
+            sample_unit_converter(),
+        )
     }
 
     fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogServices {
@@ -700,8 +820,13 @@ mod tests {
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
         let meal_lookup = Arc::new(MockMealLookup::with_meal(meal)) as Arc<dyn MealLookup>;
         let meal_product_lookup = product_repo.clone();
-        FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter())
-            .with_meal_support(meal_lookup, meal_product_lookup)
+        FoodLogServices::new(
+            food_log_repo,
+            product_repo,
+            summary_repo,
+            sample_unit_converter(),
+        )
+        .with_meal_support(meal_lookup, meal_product_lookup)
     }
 
     #[tokio::test]
@@ -709,16 +834,18 @@ mod tests {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
-        let result = services.log_food(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_ok());
         let log = result.unwrap();
@@ -733,16 +860,18 @@ mod tests {
     async fn test_log_food_product_not_found() {
         let services = make_services(None);
 
-        let result = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::new_v4(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::new_v4(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -755,16 +884,18 @@ mod tests {
     async fn test_log_food_invalid_meal_slot() {
         let services = make_services(Some(sample_product()));
 
-        let result = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: Some("brunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: Some("brunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -777,16 +908,18 @@ mod tests {
     async fn test_log_food_wrong_item_type() {
         let services = make_services(Some(sample_product()));
 
-        let result = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "meal".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "meal".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -800,16 +933,19 @@ mod tests {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: None,
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(50, 0),
-            quantity_unit: "g".to_string(),
-            notes: Some("test note".to_string()),
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: None,
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(50, 0),
+                quantity_unit: "g".to_string(),
+                notes: Some("test note".to_string()),
+            })
+            .await
+            .unwrap();
 
         let fetched = services.get_food_log(created.id).await.unwrap();
         assert_eq!(fetched.id, created.id);
@@ -834,16 +970,19 @@ mod tests {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
         assert!(services.delete_food_log(created.id, user_id).await.is_ok());
         let fetch_result = services.get_food_log(created.id).await;
@@ -856,16 +995,19 @@ mod tests {
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id: owner,
-            logged_at: Utc::now(),
-            meal_slot: Some("breakfast".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id: owner,
+                logged_at: Utc::now(),
+                meal_slot: Some("breakfast".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
         let result = services.delete_food_log(created.id, other).await;
         assert!(result.is_err());
@@ -878,7 +1020,9 @@ mod tests {
     #[tokio::test]
     async fn test_delete_food_log_not_found() {
         let services = make_services(Some(sample_product()));
-        let result = services.delete_food_log(FoodLogId::new(), Uuid::new_v4()).await;
+        let result = services
+            .delete_food_log(FoodLogId::new(), Uuid::new_v4())
+            .await;
         assert!(result.is_err());
         match result.unwrap_err() {
             FoodLogError::NotFound(msg) => assert!(msg.contains("food log")),
@@ -891,26 +1035,36 @@ mod tests {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
-        let updated = services.update_food_log(created.id, user_id, UpdateFoodInput {
-            logged_at: Some(Utc::now()),
-            meal_slot: Some(Some("dinner".to_string())),
-            item_type: None,
-            item_id: None,
-            quantity_amount: Some(Decimal::new(200, 0)),
-            quantity_unit: Some("g".to_string()),
-            notes: Some(Some("updated notes".to_string())),
-        }).await.unwrap();
+        let updated = services
+            .update_food_log(
+                created.id,
+                user_id,
+                UpdateFoodInput {
+                    logged_at: Some(Utc::now()),
+                    meal_slot: Some(Some("dinner".to_string())),
+                    item_type: None,
+                    item_id: None,
+                    quantity_amount: Some(Decimal::new(200, 0)),
+                    quantity_unit: Some("g".to_string()),
+                    notes: Some(Some("updated notes".to_string())),
+                },
+            )
+            .await
+            .unwrap();
 
         assert_eq!(updated.meal_slot, Some(MealSlot::Dinner));
         assert_eq!(updated.quantity_amount, Decimal::new(200, 0));
@@ -922,26 +1076,36 @@ mod tests {
         let services = make_services(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: Some("clear me".to_string()),
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: Some("clear me".to_string()),
+            })
+            .await
+            .unwrap();
 
-        let updated = services.update_food_log(created.id, user_id, UpdateFoodInput {
-            logged_at: None,
-            meal_slot: Some(None),
-            item_type: None,
-            item_id: None,
-            quantity_amount: None,
-            quantity_unit: None,
-            notes: Some(None),
-        }).await.unwrap();
+        let updated = services
+            .update_food_log(
+                created.id,
+                user_id,
+                UpdateFoodInput {
+                    logged_at: None,
+                    meal_slot: Some(None),
+                    item_type: None,
+                    item_id: None,
+                    quantity_amount: None,
+                    quantity_unit: None,
+                    notes: Some(None),
+                },
+            )
+            .await
+            .unwrap();
 
         assert_eq!(updated.meal_slot, None);
         assert_eq!(updated.notes, None);
@@ -951,16 +1115,19 @@ mod tests {
     async fn test_log_food_uses_unit_converter_for_kg() {
         let services = make_services(Some(sample_product()));
 
-        let log = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: None,
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(2, 0),
-            quantity_unit: "kg".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let log = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: None,
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(2, 0),
+                quantity_unit: "kg".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
         // sample product has 100 kcal per 100g → 2 kg = 2000 g → 2000 kcal
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(2000, 0));
@@ -970,16 +1137,18 @@ mod tests {
     async fn test_log_food_rejects_unknown_unit() {
         let services = make_services(Some(sample_product()));
 
-        let result = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: None,
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(1, 0),
-            quantity_unit: "cup".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: None,
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(1, 0),
+                quantity_unit: "cup".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(matches!(result, Err(FoodLogError::Validation(_))));
     }
@@ -988,16 +1157,19 @@ mod tests {
     async fn test_log_food_accepts_serving_multiples() {
         let services = make_services(Some(sample_product_with_serving()));
 
-        let log = services.log_food(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: None,
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(2, 0),
-            quantity_unit: "slice".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let log = services
+            .log_food(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: None,
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(2, 0),
+                quantity_unit: "slice".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(60, 0));
     }
@@ -1008,26 +1180,35 @@ mod tests {
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
 
-        let created = services.log_food(LogFoodInput {
-            user_id: owner,
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let created = services
+            .log_food(LogFoodInput {
+                user_id: owner,
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
-        let result = services.update_food_log(created.id, other, UpdateFoodInput {
-            logged_at: None,
-            meal_slot: None,
-            item_type: None,
-            item_id: None,
-            quantity_amount: None,
-            quantity_unit: None,
-            notes: None,
-        }).await;
+        let result = services
+            .update_food_log(
+                created.id,
+                other,
+                UpdateFoodInput {
+                    logged_at: None,
+                    meal_slot: None,
+                    item_type: None,
+                    item_id: None,
+                    quantity_amount: None,
+                    quantity_unit: None,
+                    notes: None,
+                },
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -1042,31 +1223,40 @@ mod tests {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
 
-        services.log_food(LogFoodInput {
-            user_id,
-            logged_at: now,
-            meal_slot: Some("lunch".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: now,
+                meal_slot: Some("lunch".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
-        services.log_food(LogFoodInput {
-            user_id,
-            logged_at: now,
-            meal_slot: Some("dinner".to_string()),
-            item_type: "product".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(200, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        services
+            .log_food(LogFoodInput {
+                user_id,
+                logged_at: now,
+                meal_slot: Some("dinner".to_string()),
+                item_type: "product".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(200, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
         let from = now - chrono::Duration::hours(1);
         let to = now + chrono::Duration::hours(1);
-        let logs = services.get_logs_for_range(user_id, from, to).await.unwrap();
+        let logs = services
+            .get_logs_for_range(user_id, from, to)
+            .await
+            .unwrap();
         assert_eq!(logs.len(), 2);
     }
 
@@ -1075,14 +1265,21 @@ mod tests {
         let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
         let product_repo = Arc::new(MockProductLookup::empty()) as Arc<dyn ProductLookup>;
         let summary_repo = Arc::new(MockSummaryRepo) as Arc<dyn SummaryRepository>;
-        let services = FoodLogServices::new(food_log_repo, product_repo, summary_repo, sample_unit_converter());
+        let services = FoodLogServices::new(
+            food_log_repo,
+            product_repo,
+            summary_repo,
+            sample_unit_converter(),
+        );
 
-        let result = services.get_summary(
-            Uuid::new_v4(),
-            Utc::now() - chrono::Duration::days(1),
-            Utc::now(),
-            Some(vec!["ENERGY_KCAL".to_string()]),
-        ).await;
+        let result = services
+            .get_summary(
+                Uuid::new_v4(),
+                Utc::now() - chrono::Duration::days(1),
+                Utc::now(),
+                Some(vec!["ENERGY_KCAL".to_string()]),
+            )
+            .await;
 
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -1093,16 +1290,18 @@ mod tests {
         let services = make_services_with_meal(Some(sample_product()), sample_meal());
         let user_id = Uuid::new_v4();
 
-        let result = services.log_meal(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("dinner".to_string()),
-            item_type: "meal".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(150, 0),
-            quantity_unit: "g".to_string(),
-            notes: Some("meal note".to_string()),
-        }).await;
+        let result = services
+            .log_meal(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("dinner".to_string()),
+                item_type: "meal".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(150, 0),
+                quantity_unit: "g".to_string(),
+                notes: Some("meal note".to_string()),
+            })
+            .await;
 
         assert!(result.is_ok());
         let log = result.unwrap();
@@ -1119,26 +1318,36 @@ mod tests {
         let services = make_services_with_meal(Some(sample_product()), sample_meal());
         let user_id = Uuid::new_v4();
 
-        let created = services.log_meal(LogFoodInput {
-            user_id,
-            logged_at: Utc::now(),
-            meal_slot: Some("dinner".to_string()),
-            item_type: "meal".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await.unwrap();
+        let created = services
+            .log_meal(LogFoodInput {
+                user_id,
+                logged_at: Utc::now(),
+                meal_slot: Some("dinner".to_string()),
+                item_type: "meal".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await
+            .unwrap();
 
-        let updated = services.update_food_log(created.id, user_id, UpdateFoodInput {
-            logged_at: None,
-            meal_slot: None,
-            item_type: None,
-            item_id: None,
-            quantity_amount: Some(Decimal::new(200, 0)),
-            quantity_unit: None,
-            notes: None,
-        }).await.unwrap();
+        let updated = services
+            .update_food_log(
+                created.id,
+                user_id,
+                UpdateFoodInput {
+                    logged_at: None,
+                    meal_slot: None,
+                    item_type: None,
+                    item_id: None,
+                    quantity_amount: Some(Decimal::new(200, 0)),
+                    quantity_unit: None,
+                    notes: None,
+                },
+            )
+            .await
+            .unwrap();
 
         assert!(matches!(updated.item, LoggedItem::Meal(_)));
         assert_eq!(updated.quantity_amount, Decimal::new(200, 0));
@@ -1149,16 +1358,18 @@ mod tests {
     async fn test_log_meal_not_found() {
         let services = make_services_with_meal(Some(sample_product()), sample_meal());
 
-        let result = services.log_meal(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "meal".to_string(),
-            item_id: MealId::new().0,
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_meal(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "meal".to_string(),
+                item_id: MealId::new().0,
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -1171,16 +1382,18 @@ mod tests {
     async fn test_log_meal_no_meal_support() {
         let services = make_services(Some(sample_product()));
 
-        let result = services.log_meal(LogFoodInput {
-            user_id: Uuid::new_v4(),
-            logged_at: Utc::now(),
-            meal_slot: Some("lunch".to_string()),
-            item_type: "meal".to_string(),
-            item_id: Uuid::nil(),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: "g".to_string(),
-            notes: None,
-        }).await;
+        let result = services
+            .log_meal(LogFoodInput {
+                user_id: Uuid::new_v4(),
+                logged_at: Utc::now(),
+                meal_slot: Some("lunch".to_string()),
+                item_type: "meal".to_string(),
+                item_id: Uuid::nil(),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: "g".to_string(),
+                notes: None,
+            })
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {

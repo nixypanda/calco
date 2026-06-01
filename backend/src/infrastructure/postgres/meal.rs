@@ -52,9 +52,13 @@ fn row_to_component(r: MealComponentRow) -> Result<MealComponent, MealError> {
     let item = if let Some(pid) = r.component_product_id {
         MealComponentItem::Product(ProductId(pid))
     } else if let Some(_mid) = r.component_meal_id {
-        return Err(MealError::Internal("meal components of type meal not yet supported".into()));
+        return Err(MealError::Internal(
+            "meal components of type meal not yet supported".into(),
+        ));
     } else {
-        return Err(MealError::Internal("meal component has no item reference".into()));
+        return Err(MealError::Internal(
+            "meal component has no item reference".into(),
+        ));
     };
 
     Ok(MealComponent {
@@ -68,7 +72,11 @@ fn row_to_component(r: MealComponentRow) -> Result<MealComponent, MealError> {
 #[async_trait]
 impl MealRepository for PostgresMealRepository {
     async fn create(&self, meal: &Meal) -> Result<(), MealError> {
-        let mut tx = self.pool.begin().await.map_err(|e| MealError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| MealError::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -110,7 +118,9 @@ impl MealRepository for PostgresMealRepository {
             .map_err(|e| MealError::Database(e.to_string()))?;
         }
 
-        tx.commit().await.map_err(|e| MealError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| MealError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -159,7 +169,11 @@ impl MealRepository for PostgresMealRepository {
     }
 
     async fn update(&self, meal: &Meal) -> Result<(), MealError> {
-        let mut tx = self.pool.begin().await.map_err(|e| MealError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| MealError::Database(e.to_string()))?;
 
         sqlx::query(
             r#"
@@ -205,7 +219,9 @@ impl MealRepository for PostgresMealRepository {
             .map_err(|e| MealError::Database(e.to_string()))?;
         }
 
-        tx.commit().await.map_err(|e| MealError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| MealError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -246,7 +262,10 @@ impl MealProductLookup for PostgresMealRepository {
 }
 
 impl PostgresMealRepository {
-    async fn load_product_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, MealError> {
+    async fn load_product_nutrients(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductNutrient>, MealError> {
         let rows = sqlx::query_as::<_, MealProductNutrientRow>(
             r#"
             SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
@@ -267,12 +286,17 @@ impl PostgresMealRepository {
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
                 unit: UnitCode(r.unit),
                 source: r.source,
-                confidence: r.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                confidence: r
+                    .confidence
+                    .and_then(|c| NutrientConfidence::from_str(&c).ok()),
             })
             .collect())
     }
 
-    async fn load_product_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, MealError> {
+    async fn load_product_servings(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductServing>, MealError> {
         let rows = sqlx::query_as::<_, MealProductServingRow>(
             "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
         )
@@ -303,8 +327,7 @@ impl PostgresMealRepository {
             source: Source::from_str(&r.source).map_err(MealError::Internal)?,
             source_id: r.source_id,
             user_id: r.user_id,
-            visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(MealError::Internal)?,
+            visibility: ProductVisibility::from_str(&r.visibility).map_err(MealError::Internal)?,
             barcode: r.barcode.map(Barcode),
             name: ProductName(r.name),
             brand: r.brand.map(Brand),

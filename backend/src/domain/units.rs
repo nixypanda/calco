@@ -22,7 +22,9 @@ impl UnitConverter {
     }
 
     pub fn mass_to_grams(&self, amount: Decimal, unit: &UnitCode) -> Option<Decimal> {
-        self.mass_factors.get(&unit.0).map(|factor| amount * *factor)
+        self.mass_factors
+            .get(&unit.0)
+            .map(|factor| amount * *factor)
     }
 
     pub fn mass_unit_codes(&self) -> impl Iterator<Item = &str> {
@@ -65,8 +67,14 @@ mod tests {
     #[test]
     fn mass_to_grams_unknown_code() {
         let c = sample();
-        assert_eq!(c.mass_to_grams(Decimal::from(1), &UnitCode("cup".into())), None);
-        assert_eq!(c.mass_to_grams(Decimal::from(1), &UnitCode("".into())), None);
+        assert_eq!(
+            c.mass_to_grams(Decimal::from(1), &UnitCode("cup".into())),
+            None
+        );
+        assert_eq!(
+            c.mass_to_grams(Decimal::from(1), &UnitCode("".into())),
+            None
+        );
     }
 
     #[test]

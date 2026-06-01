@@ -43,7 +43,6 @@ impl Source {
             _ => Err(format!("invalid source: {s}")),
         }
     }
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

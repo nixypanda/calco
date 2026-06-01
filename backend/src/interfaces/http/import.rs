@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -32,7 +32,11 @@ fn import_error_response(err: &ImportError) -> (StatusCode, Json<ErrorBody>) {
         ImportError::Validation(msg) => (StatusCode::BAD_REQUEST, "validation_error", msg.clone()),
         ImportError::Database(_) => {
             tracing::error!(error = %err, "import request failed");
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal_error", "internal server error".to_string())
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "internal_error",
+                "internal server error".to_string(),
+            )
         }
     };
     (
@@ -84,7 +88,8 @@ async fn create_import_handler(
                 source: job.source,
                 status: job.status.as_str().to_string(),
             }),
-        ).into_response(),
+        )
+            .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -121,23 +126,28 @@ async fn stage_foods_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let foods: Vec<StagedImportProduct> = req.rows.into_iter().map(|r| StagedImportProduct {
-        source: r.source,
-        source_id: r.source_id,
-        barcode: r.barcode,
-        name: r.name,
-        brand: r.brand,
-        categories: crate::application::catalog::normalize_categories(r.categories),
-        serving_size_g: r.serving_size_g,
-        raw_payload: None,
-        row_number: r.row_number,
-    }).collect();
+    let foods: Vec<StagedImportProduct> = req
+        .rows
+        .into_iter()
+        .map(|r| StagedImportProduct {
+            source: r.source,
+            source_id: r.source_id,
+            barcode: r.barcode,
+            name: r.name,
+            brand: r.brand,
+            categories: crate::application::catalog::normalize_categories(r.categories),
+            serving_size_g: r.serving_size_g,
+            raw_payload: None,
+            row_number: r.row_number,
+        })
+        .collect();
 
     match services.stage_foods(ImportId(id), foods).await {
         Ok(result) => Json(StageResponse {
             accepted: result.accepted,
             rejected: result.rejected,
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -164,20 +174,25 @@ async fn stage_nutrients_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let nutrients: Vec<StagedImportNutrient> = req.rows.into_iter().map(|r| StagedImportNutrient {
-        source: r.source,
-        source_id: r.source_id,
-        nutrient_code: r.nutrient_code,
-        amount_per_100g: r.amount_per_100g,
-        raw_payload: None,
-        row_number: r.row_number,
-    }).collect();
+    let nutrients: Vec<StagedImportNutrient> = req
+        .rows
+        .into_iter()
+        .map(|r| StagedImportNutrient {
+            source: r.source,
+            source_id: r.source_id,
+            nutrient_code: r.nutrient_code,
+            amount_per_100g: r.amount_per_100g,
+            raw_payload: None,
+            row_number: r.row_number,
+        })
+        .collect();
 
     match services.stage_nutrients(ImportId(id), nutrients).await {
         Ok(result) => Json(StageResponse {
             accepted: result.accepted,
             rejected: result.rejected,
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -206,22 +221,27 @@ async fn stage_servings_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let servings: Vec<StagedImportServing> = req.rows.into_iter().map(|r| StagedImportServing {
-        source: r.source,
-        source_id: r.source_id,
-        label: r.label,
-        quantity: r.quantity,
-        unit: r.unit,
-        grams: r.grams,
-        raw_payload: None,
-        row_number: r.row_number,
-    }).collect();
+    let servings: Vec<StagedImportServing> = req
+        .rows
+        .into_iter()
+        .map(|r| StagedImportServing {
+            source: r.source,
+            source_id: r.source_id,
+            label: r.label,
+            quantity: r.quantity,
+            unit: r.unit,
+            grams: r.grams,
+            raw_payload: None,
+            row_number: r.row_number,
+        })
+        .collect();
 
     match services.stage_servings(ImportId(id), servings).await {
         Ok(result) => Json(StageResponse {
             accepted: result.accepted,
             rejected: result.rejected,
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -251,7 +271,8 @@ async fn commit_import_handler(
             nutrients_inserted: result.nutrients_inserted,
             servings_inserted: result.servings_inserted,
             errors_logged: result.errors_logged,
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -281,15 +302,18 @@ async fn get_import_handler(
             created_at: job.created_at.to_rfc3339(),
             committed_at: job.committed_at.map(|t| t.to_rfc3339()),
             failed_at: job.failed_at.map(|t| t.to_rfc3339()),
-        }).into_response(),
-        Err(ImportError::NotFound(_)) => {
-            (StatusCode::NOT_FOUND, Json(ErrorBody {
+        })
+        .into_response(),
+        Err(ImportError::NotFound(_)) => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorBody {
                 error: ApiError {
                     code: "not_found".into(),
                     message: format!("import {id} not found"),
                 },
-            })).into_response()
-        }
+            }),
+        )
+            .into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -314,10 +338,13 @@ async fn get_import_errors_handler(
 
     match services.get_errors(ImportId(id)).await {
         Ok(errors) => {
-            let items: Vec<ErrorItem> = errors.into_iter().map(|e| ErrorItem {
-                row_number: e.row_number,
-                error: e.error,
-            }).collect();
+            let items: Vec<ErrorItem> = errors
+                .into_iter()
+                .map(|e| ErrorItem {
+                    row_number: e.row_number,
+                    error: e.error,
+                })
+                .collect();
             Json(ErrorListResponse { items }).into_response()
         }
         Err(e) => import_error_response(&e).into_response(),

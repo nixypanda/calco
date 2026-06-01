@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router,
 };
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -17,7 +17,12 @@ use crate::interfaces::http::auth::{AppState, AuthUser};
 pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
         .route("/logs", post(create_log_handler).get(list_logs_handler))
-        .route("/logs/{id}", get(get_log_handler).put(update_log_handler).delete(delete_log_handler))
+        .route(
+            "/logs/{id}",
+            get(get_log_handler)
+                .put(update_log_handler)
+                .delete(delete_log_handler),
+        )
         .route("/summary", get(summary_handler))
         .with_state(state)
 }
@@ -163,11 +168,15 @@ fn log_to_response(log: &FoodLog) -> LogResponse {
             amount: log.quantity_amount,
             unit: log.quantity_unit.0.clone(),
         },
-        nutrients: log.nutrient_snapshots.iter().map(|ns| NutrientSnapshotDto {
-            code: ns.nutrient_code.0.clone(),
-            amount: ns.amount,
-            unit: ns.unit.0.clone(),
-        }).collect(),
+        nutrients: log
+            .nutrient_snapshots
+            .iter()
+            .map(|ns| NutrientSnapshotDto {
+                code: ns.nutrient_code.0.clone(),
+                amount: ns.amount,
+                unit: ns.unit.0.clone(),
+            })
+            .collect(),
         notes: log.notes.clone(),
     }
 }
@@ -253,7 +262,8 @@ async fn list_logs_handler(
                 from: query.from,
                 to: query.to,
                 items,
-            }).into_response()
+            })
+            .into_response()
         }
         Err(e) => internal_error(e).into_response(),
     }
@@ -277,7 +287,10 @@ async fn update_log_handler(
         notes: req.notes,
     };
 
-    match services.update_food_log(FoodLogId(id), auth.0.id, input).await {
+    match services
+        .update_food_log(FoodLogId(id), auth.0.id, input)
+        .await
+    {
         Ok(log) => {
             let resp = log_to_response(&log);
             Json(resp).into_response()
@@ -323,20 +336,24 @@ async fn summary_handler(
         Err(_) => return error_response("validation", "invalid to date".into()).into_response(),
     };
 
-    let codes = query.codes.map(|c| c.split(',').map(|s| s.trim().to_string()).collect());
+    let codes = query
+        .codes
+        .map(|c| c.split(',').map(|s| s.trim().to_string()).collect());
 
     match services.get_summary(auth.0.id, from, to, codes).await {
-        Ok(totals) => {
-            Json(SummaryResponse {
-                from: query.from,
-                to: query.to,
-                totals: totals.into_iter().map(|e| SummaryEntryDto {
+        Ok(totals) => Json(SummaryResponse {
+            from: query.from,
+            to: query.to,
+            totals: totals
+                .into_iter()
+                .map(|e| SummaryEntryDto {
                     code: e.code,
                     amount: e.amount,
                     unit: e.unit,
-                }).collect(),
-            }).into_response()
-        }
+                })
+                .collect(),
+        })
+        .into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }

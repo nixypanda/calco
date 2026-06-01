@@ -1,11 +1,11 @@
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use argon2::Argon2;
+use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::domain::auth::*;
 use crate::config::AppConfig;
+use crate::domain::auth::*;
 
 #[async_trait]
 pub trait IdentityRepository: Send + Sync {
@@ -22,12 +22,19 @@ pub trait SessionRepository: Send + Sync {
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
     async fn revoke(&self, session_id: Uuid) -> Result<(), AuthError>;
     async fn revoke_all_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError>;
-    async fn update_last_seen(&self, session_id: Uuid, last_seen: DateTime<Utc>) -> Result<(), AuthError>;
+    async fn update_last_seen(
+        &self,
+        session_id: Uuid,
+        last_seen: DateTime<Utc>,
+    ) -> Result<(), AuthError>;
 }
 
 #[async_trait]
 pub trait UserProfileRepository: Send + Sync {
-    async fn find_by_identity_id(&self, identity_id: IdentityId) -> Result<Option<UserProfile>, AuthError>;
+    async fn find_by_identity_id(
+        &self,
+        identity_id: IdentityId,
+    ) -> Result<Option<UserProfile>, AuthError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
     async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError>;
@@ -143,7 +150,9 @@ pub async fn login(
     session_repo.create(&session).await?;
 
     let profile = if updated_identity.role == IdentityRole::User {
-        profile_repo.find_by_identity_id(updated_identity.id).await?
+        profile_repo
+            .find_by_identity_id(updated_identity.id)
+            .await?
     } else {
         None
     };
@@ -294,7 +303,9 @@ pub async fn admin_reset_password(
     identity.updated_at = Utc::now();
 
     identity_repo.update(&identity).await?;
-    session_repo.revoke_all_for_identity(profile.identity_id).await
+    session_repo
+        .revoke_all_for_identity(profile.identity_id)
+        .await
 }
 
 pub async fn admin_disable_user(
@@ -316,7 +327,9 @@ pub async fn admin_disable_user(
     identity.updated_at = Utc::now();
 
     identity_repo.update(&identity).await?;
-    session_repo.revoke_all_for_identity(profile.identity_id).await
+    session_repo
+        .revoke_all_for_identity(profile.identity_id)
+        .await
 }
 
 pub async fn admin_enable_user(
@@ -347,12 +360,10 @@ fn create_session(
     use rand::RngCore;
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
-    let raw_token = SessionToken(
-        base64::Engine::encode(
-            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-            bytes,
-        ),
-    );
+    let raw_token = SessionToken(base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        bytes,
+    ));
     let token_hash = SessionTokenHash(hash_session_token(&raw_token.0));
 
     let session = Session {

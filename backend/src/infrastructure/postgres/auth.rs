@@ -3,7 +3,9 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::application::auth::{IdentityRepository, SessionRepository, UserProfileRepository, UserWithProfile};
+use crate::application::auth::{
+    IdentityRepository, SessionRepository, UserProfileRepository, UserWithProfile,
+};
 use crate::domain::auth::*;
 
 #[derive(Clone)]
@@ -83,12 +85,11 @@ impl IdentityRepository for PostgresIdentityRepository {
     }
 
     async fn admin_exists(&self) -> Result<bool, AuthError> {
-        let row: (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM identities WHERE role = 'admin')",
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        let row: (bool,) =
+            sqlx::query_as("SELECT EXISTS(SELECT 1 FROM identities WHERE role = 'admin')")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         Ok(row.0)
     }
@@ -180,17 +181,23 @@ impl SessionRepository for PostgresSessionRepository {
     }
 
     async fn revoke_all_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError> {
-        sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE identity_id = $2 AND revoked_at IS NULL")
-            .bind(Utc::now())
-            .bind(identity_id.0)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| AuthError::Internal(e.to_string()))?;
+        sqlx::query(
+            "UPDATE sessions SET revoked_at = $1 WHERE identity_id = $2 AND revoked_at IS NULL",
+        )
+        .bind(Utc::now())
+        .bind(identity_id.0)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AuthError::Internal(e.to_string()))?;
 
         Ok(())
     }
 
-    async fn update_last_seen(&self, session_id: Uuid, last_seen: DateTime<Utc>) -> Result<(), AuthError> {
+    async fn update_last_seen(
+        &self,
+        session_id: Uuid,
+        last_seen: DateTime<Utc>,
+    ) -> Result<(), AuthError> {
         sqlx::query("UPDATE sessions SET last_seen_at = $1 WHERE id = $2")
             .bind(last_seen)
             .bind(session_id)
@@ -240,7 +247,10 @@ impl PostgresUserProfileRepository {
 
 #[async_trait]
 impl UserProfileRepository for PostgresUserProfileRepository {
-    async fn find_by_identity_id(&self, identity_id: IdentityId) -> Result<Option<UserProfile>, AuthError> {
+    async fn find_by_identity_id(
+        &self,
+        identity_id: IdentityId,
+    ) -> Result<Option<UserProfile>, AuthError> {
         let row = sqlx::query_as::<_, ProfileRow>(
             "SELECT id, identity_id, display_name, created_at, updated_at \
              FROM user_profiles WHERE identity_id = $1",

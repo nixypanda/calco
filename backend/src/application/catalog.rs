@@ -10,7 +10,11 @@ use crate::domain::units::UnitConverter;
 
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
-    async fn search(&self, query: ProductSearchQuery, user_id: Option<Uuid>) -> Result<Vec<Product>, CatalogError>;
+    async fn search(
+        &self,
+        query: ProductSearchQuery,
+        user_id: Option<Uuid>,
+    ) -> Result<Vec<Product>, CatalogError>;
     async fn list_categories(
         &self,
         query: &str,
@@ -81,7 +85,12 @@ impl CatalogServices {
         unit_repo: Arc<dyn UnitRepository>,
         unit_converter: Arc<UnitConverter>,
     ) -> Self {
-        Self { product_repo, nutrient_repo, unit_repo, unit_converter }
+        Self {
+            product_repo,
+            nutrient_repo,
+            unit_repo,
+            unit_converter,
+        }
     }
 
     pub async fn allowed_units_for_product(
@@ -133,7 +142,9 @@ impl CatalogServices {
                 .nutrient_repo
                 .find_by_code(&nutrient.code)
                 .await?
-                .ok_or_else(|| CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code)))?;
+                .ok_or_else(|| {
+                    CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
+                })?;
             validated.push((nutrient.clone(), reference.unit().clone()));
         }
         Ok(validated)
@@ -200,7 +211,10 @@ impl CatalogServices {
             barcode: None,
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            categories: normalize_categories(categories).into_iter().map(Category).collect(),
+            categories: normalize_categories(categories)
+                .into_iter()
+                .map(Category)
+                .collect(),
             default_quantity,
             default_unit: default_unit.map(UnitCode),
             serving_size_g,
@@ -211,7 +225,9 @@ impl CatalogServices {
                     amount_per_100g: AmountPer100g(n.amount_per_100g),
                     unit,
                     source: n.source,
-                    confidence: n.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                    confidence: n
+                        .confidence
+                        .and_then(|c| NutrientConfidence::from_str(&c).ok()),
                 })
                 .collect(),
             servings: servings
@@ -244,7 +260,10 @@ impl CatalogServices {
         if name.trim().is_empty() {
             return Err(CatalogError::Validation("food name is required".into()));
         }
-        let existing = self.product_repo.find_by_id(id).await?
+        let existing = self
+            .product_repo
+            .find_by_id(id)
+            .await?
             .ok_or(CatalogError::NotFound("product not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
@@ -261,7 +280,9 @@ impl CatalogServices {
                     amount_per_100g: AmountPer100g(n.amount_per_100g),
                     unit,
                     source: n.source,
-                    confidence: n.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                    confidence: n
+                        .confidence
+                        .and_then(|c| NutrientConfidence::from_str(&c).ok()),
                 })
                 .collect(),
             servings: servings
@@ -275,7 +296,10 @@ impl CatalogServices {
                 .collect(),
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            categories: normalize_categories(categories).into_iter().map(Category).collect(),
+            categories: normalize_categories(categories)
+                .into_iter()
+                .map(Category)
+                .collect(),
             serving_size_g,
             default_quantity,
             default_unit: default_unit.map(UnitCode),
@@ -285,8 +309,15 @@ impl CatalogServices {
         Ok(updated)
     }
 
-    pub async fn delete_custom_food(&self, id: ProductId, user_id: Uuid) -> Result<(), CatalogError> {
-        let existing = self.product_repo.find_by_id(id).await?
+    pub async fn delete_custom_food(
+        &self,
+        id: ProductId,
+        user_id: Uuid,
+    ) -> Result<(), CatalogError> {
+        let existing = self
+            .product_repo
+            .find_by_id(id)
+            .await?
             .ok_or(CatalogError::NotFound("product not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
@@ -329,9 +360,13 @@ fn parse_search_query(input: &str) -> ProductSearchQuery {
 
     for token in tokenize_search(input) {
         if let Some(value) = token.strip_prefix("category:") {
-            query.include_categories.extend(normalize_categories(vec![value.to_string()]));
+            query
+                .include_categories
+                .extend(normalize_categories(vec![value.to_string()]));
         } else if let Some(value) = token.strip_prefix("-category:") {
-            query.exclude_categories.extend(normalize_categories(vec![value.to_string()]));
+            query
+                .exclude_categories
+                .extend(normalize_categories(vec![value.to_string()]));
         } else {
             text_terms.push(token);
         }

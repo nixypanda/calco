@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -16,7 +16,12 @@ use crate::interfaces::http::auth::{AppState, AuthUser};
 pub fn meal_routes(state: AppState) -> Router {
     Router::new()
         .route("/meals", post(create_meal_handler).get(list_meals_handler))
-        .route("/meals/{id}", get(get_meal_handler).put(update_meal_handler).delete(delete_meal_handler))
+        .route(
+            "/meals/{id}",
+            get(get_meal_handler)
+                .put(update_meal_handler)
+                .delete(delete_meal_handler),
+        )
         .route("/meals/{id}/nutrients", get(meal_nutrients_handler))
         .with_state(state)
 }
@@ -144,24 +149,32 @@ fn meal_to_response(meal: &Meal) -> MealResponse {
         notes: meal.notes.as_ref().map(|n| n.0.clone()),
         total_quantity: meal.total_quantity_amount.map(|a| QuantityDto {
             amount: a,
-            unit: meal.total_quantity_unit.as_ref().map(|u| u.0.clone()).unwrap_or_default(),
+            unit: meal
+                .total_quantity_unit
+                .as_ref()
+                .map(|u| u.0.clone())
+                .unwrap_or_default(),
         }),
-        components: meal.components.iter().map(|c| {
-            let (item_type, item_id) = match &c.item {
-                MealComponentItem::Product(pid) => ("product", pid.0),
-            };
-            MealComponentResponse {
-                id: c.id,
-                item: ItemResponse {
-                    item_type: item_type.to_string(),
-                    id: item_id,
-                },
-                quantity: QuantityDto {
-                    amount: c.quantity_amount,
-                    unit: c.quantity_unit.0.clone(),
-                },
-            }
-        }).collect(),
+        components: meal
+            .components
+            .iter()
+            .map(|c| {
+                let (item_type, item_id) = match &c.item {
+                    MealComponentItem::Product(pid) => ("product", pid.0),
+                };
+                MealComponentResponse {
+                    id: c.id,
+                    item: ItemResponse {
+                        item_type: item_type.to_string(),
+                        id: item_id,
+                    },
+                    quantity: QuantityDto {
+                        amount: c.quantity_amount,
+                        unit: c.quantity_unit.0.clone(),
+                    },
+                }
+            })
+            .collect(),
     }
 }
 
@@ -178,12 +191,16 @@ async fn create_meal_handler(
         notes: req.notes,
         total_quantity_amount: req.total_quantity.as_ref().map(|q| q.amount),
         total_quantity_unit: req.total_quantity.as_ref().map(|q| q.unit.clone()),
-        components: req.components.into_iter().map(|c| CreateMealComponentInput {
-            item_type: c.item.item_type,
-            item_id: c.item.id,
-            quantity_amount: c.quantity.amount,
-            quantity_unit: c.quantity.unit,
-        }).collect(),
+        components: req
+            .components
+            .into_iter()
+            .map(|c| CreateMealComponentInput {
+                item_type: c.item.item_type,
+                item_id: c.item.id,
+                quantity_amount: c.quantity.amount,
+                quantity_unit: c.quantity.unit,
+            })
+            .collect(),
     };
 
     match services.create_meal(input).await {
@@ -217,10 +234,7 @@ async fn get_meal_handler(
     }
 }
 
-async fn list_meals_handler(
-    auth: AuthUser,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn list_meals_handler(auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
     let services = &state.meal_services;
 
     match services.list_meals(auth.0.id).await {
@@ -247,12 +261,15 @@ async fn update_meal_handler(
         total_quantity_amount: total_qty.as_ref().map(|tq| tq.as_ref().map(|q| q.amount)),
         total_quantity_unit: total_qty.map(|tq| tq.map(|q| q.unit)),
         components: req.components.map(|components| {
-            components.into_iter().map(|c| CreateMealComponentInput {
-                item_type: c.item.item_type,
-                item_id: c.item.id,
-                quantity_amount: c.quantity.amount,
-                quantity_unit: c.quantity.unit,
-            }).collect()
+            components
+                .into_iter()
+                .map(|c| CreateMealComponentInput {
+                    item_type: c.item.item_type,
+                    item_id: c.item.id,
+                    quantity_amount: c.quantity.amount,
+                    quantity_unit: c.quantity.unit,
+                })
+                .collect()
         }),
     };
 
@@ -301,21 +318,27 @@ async fn meal_nutrients_handler(
         Err(e) => return internal_error(e).into_response(),
     }
 
-    match services.get_meal_nutrients(MealId(id), query.amount, query.unit).await {
-        Ok(nutrition) => {
-            Json(MealNutritionResponse {
-                meal_id: nutrition.meal_id,
-                quantity: QuantityDto {
-                    amount: nutrition.quantity_amount,
-                    unit: nutrition.quantity_unit,
-                },
-                nutrients: nutrition.nutrients.into_iter().map(|n| NutrientEntry {
+    match services
+        .get_meal_nutrients(MealId(id), query.amount, query.unit)
+        .await
+    {
+        Ok(nutrition) => Json(MealNutritionResponse {
+            meal_id: nutrition.meal_id,
+            quantity: QuantityDto {
+                amount: nutrition.quantity_amount,
+                unit: nutrition.quantity_unit,
+            },
+            nutrients: nutrition
+                .nutrients
+                .into_iter()
+                .map(|n| NutrientEntry {
                     code: n.code,
                     amount: n.amount,
                     unit: n.unit,
-                }).collect(),
-            }).into_response()
-        }
+                })
+                .collect(),
+        })
+        .into_response(),
         Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
         Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
         Err(e) => internal_error(e).into_response(),

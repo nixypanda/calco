@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Json},
     routing::{get, post, put},
-    Router,
 };
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,10 @@ pub fn catalog_routes(state: AppState) -> Router {
         .route("/foods/barcode/{barcode}", get(barcode_lookup_handler))
         .route("/foods/{id}", get(product_detail_handler))
         .route("/foods/custom", post(create_custom_food_handler))
-        .route("/foods/custom/{id}", put(update_custom_food_handler).delete(delete_custom_food_handler))
+        .route(
+            "/foods/custom/{id}",
+            put(update_custom_food_handler).delete(delete_custom_food_handler),
+        )
         .route("/nutrients", get(list_nutrients_handler))
         .route("/nutrients/{code}", get(get_nutrient_handler))
         .route("/units", get(list_units_handler))
@@ -198,10 +201,12 @@ async fn search_products_handler(
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
-    let products = services.search_products(SearchCriteria {
-        query: query.q,
-        user_id: Some(auth.0.id),
-    }).await;
+    let products = services
+        .search_products(SearchCriteria {
+            query: query.q,
+            user_id: Some(auth.0.id),
+        })
+        .await;
 
     match products {
         Ok(items) => {
@@ -272,12 +277,15 @@ async fn barcode_lookup_handler(
     let services = &state.catalog_services;
     match services.get_product_by_barcode(&barcode).await {
         Ok(product) => match services.allowed_units_for_product(&product).await {
-            Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap()).into_response(),
+            Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap())
+                .into_response(),
             Err(e) => internal_error(e).into_response(),
         },
-        Err(CatalogError::NotFound(_)) => {
-            error_response("not_found", format!("product with barcode {barcode} not found")).into_response()
-        }
+        Err(CatalogError::NotFound(_)) => error_response(
+            "not_found",
+            format!("product with barcode {barcode} not found"),
+        )
+        .into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -289,9 +297,15 @@ async fn product_detail_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_product(ProductId(id)).await {
-        Ok(product) if product.visibility == ProductVisibility::Global || product.is_owned_by(auth.0.id) => {
+        Ok(product)
+            if product.visibility == ProductVisibility::Global
+                || product.is_owned_by(auth.0.id) =>
+        {
             match services.allowed_units_for_product(&product).await {
-                Ok(units) => Json(serde_json::to_value(product_to_detail(&product, units)).unwrap()).into_response(),
+                Ok(units) => {
+                    Json(serde_json::to_value(product_to_detail(&product, units)).unwrap())
+                        .into_response()
+                }
                 Err(e) => internal_error(e).into_response(),
             }
         }
@@ -310,34 +324,35 @@ async fn create_custom_food_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
 
-    match services.create_custom_food(
-        auth.0.id,
-        req.name,
-        req.brand,
-        req.categories,
-        req.serving_size_g,
-        req.default_quantity,
-        req.default_unit,
-        req.nutrients
-            .into_iter()
-            .map(|n| ProductNutrientInput {
-                code: n.code,
-                amount_per_100g: n.amount_per_100g,
-                source: n.source,
-                confidence: n.confidence,
-            })
-            .collect(),
-        req.servings
-            .into_iter()
-            .map(|s| ProductServingInput {
-                label: s.label,
-                quantity: s.quantity,
-                unit: s.unit,
-                grams: s.grams,
-            })
-            .collect(),
-    )
-    .await
+    match services
+        .create_custom_food(
+            auth.0.id,
+            req.name,
+            req.brand,
+            req.categories,
+            req.serving_size_g,
+            req.default_quantity,
+            req.default_unit,
+            req.nutrients
+                .into_iter()
+                .map(|n| ProductNutrientInput {
+                    code: n.code,
+                    amount_per_100g: n.amount_per_100g,
+                    source: n.source,
+                    confidence: n.confidence,
+                })
+                .collect(),
+            req.servings
+                .into_iter()
+                .map(|s| ProductServingInput {
+                    label: s.label,
+                    quantity: s.quantity,
+                    unit: s.unit,
+                    grams: s.grams,
+                })
+                .collect(),
+        )
+        .await
     {
         Ok(product) => (
             StatusCode::CREATED,
@@ -357,35 +372,36 @@ async fn update_custom_food_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
 
-    match services.update_custom_food(
-        ProductId(id),
-        auth.0.id,
-        req.name,
-        req.brand,
-        req.categories,
-        req.serving_size_g,
-        req.default_quantity,
-        req.default_unit,
-        req.nutrients
-            .into_iter()
-            .map(|n| ProductNutrientInput {
-                code: n.code,
-                amount_per_100g: n.amount_per_100g,
-                source: n.source,
-                confidence: n.confidence,
-            })
-            .collect(),
-        req.servings
-            .into_iter()
-            .map(|s| ProductServingInput {
-                label: s.label,
-                quantity: s.quantity,
-                unit: s.unit,
-                grams: s.grams,
-            })
-            .collect(),
-    )
-    .await
+    match services
+        .update_custom_food(
+            ProductId(id),
+            auth.0.id,
+            req.name,
+            req.brand,
+            req.categories,
+            req.serving_size_g,
+            req.default_quantity,
+            req.default_unit,
+            req.nutrients
+                .into_iter()
+                .map(|n| ProductNutrientInput {
+                    code: n.code,
+                    amount_per_100g: n.amount_per_100g,
+                    source: n.source,
+                    confidence: n.confidence,
+                })
+                .collect(),
+            req.servings
+                .into_iter()
+                .map(|s| ProductServingInput {
+                    label: s.label,
+                    quantity: s.quantity,
+                    unit: s.unit,
+                    grams: s.grams,
+                })
+                .collect(),
+        )
+        .await
     {
         Ok(product) => Json(serde_json::json!({ "id": product.id.0 })).into_response(),
         Err(CatalogError::NotFound(_)) => {
@@ -443,15 +459,13 @@ async fn get_nutrient_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_nutrient(&code).await {
-        Ok(n) => {
-            Json(serde_json::json!({
-                "code": n.code().0,
-                "name": n.name(),
-                "unit": n.unit().0,
-                "category": n.category(),
-            }))
-            .into_response()
-        }
+        Ok(n) => Json(serde_json::json!({
+            "code": n.code().0,
+            "name": n.name(),
+            "unit": n.unit().0,
+            "category": n.category(),
+        }))
+        .into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("nutrient {code} not found")).into_response()
         }
@@ -459,10 +473,7 @@ async fn get_nutrient_handler(
     }
 }
 
-async fn list_units_handler(
-    _auth: AuthUser,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.list_units().await {
         Ok(units) => {

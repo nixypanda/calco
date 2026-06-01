@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::application::food_log::*;
 use crate::domain::catalog::*;
 use crate::domain::food_log::*;
-use crate::domain::meal::{Meal, MealId, MealComponent, MealComponentItem, MealName, MealNotes};
+use crate::domain::meal::{Meal, MealComponent, MealComponentItem, MealId, MealName, MealNotes};
 
 #[derive(Clone)]
 pub struct PostgresFoodLogRepository {
@@ -19,7 +19,10 @@ impl PostgresFoodLogRepository {
         Self { pool }
     }
 
-    async fn load_snapshots(&self, food_log_id: Uuid) -> Result<Vec<FoodLogNutrientSnapshot>, FoodLogError> {
+    async fn load_snapshots(
+        &self,
+        food_log_id: Uuid,
+    ) -> Result<Vec<FoodLogNutrientSnapshot>, FoodLogError> {
         let rows = sqlx::query_as::<_, NutrientSnapshotRow>(
             r#"
             SELECT fln.amount, fln.unit, n.code
@@ -43,13 +46,19 @@ impl PostgresFoodLogRepository {
             .collect())
     }
 
-    fn row_to_food_log(&self, r: FoodLogRow, snapshots: Vec<FoodLogNutrientSnapshot>) -> Result<FoodLog, FoodLogError> {
+    fn row_to_food_log(
+        &self,
+        r: FoodLogRow,
+        snapshots: Vec<FoodLogNutrientSnapshot>,
+    ) -> Result<FoodLog, FoodLogError> {
         let item = if let Some(pid) = r.item_product_id {
             LoggedItem::Product(ProductId(pid))
         } else if let Some(mid) = r.item_meal_id {
             LoggedItem::Meal(MealId(mid))
         } else {
-            return Err(FoodLogError::Internal("food log has no item reference".into()));
+            return Err(FoodLogError::Internal(
+                "food log has no item reference".into(),
+            ));
         };
 
         Ok(FoodLog {
@@ -69,7 +78,11 @@ impl PostgresFoodLogRepository {
 #[async_trait]
 impl FoodLogRepository for PostgresFoodLogRepository {
     async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError> {
-        let mut tx = self.pool.begin().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
         let (product_id, meal_id) = match &log.item {
             LoggedItem::Product(pid) => (Some(pid.0), None),
@@ -97,7 +110,9 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 
         insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
-        tx.commit().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| FoodLogError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -185,7 +200,11 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError> {
-        let mut tx = self.pool.begin().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| FoodLogError::Database(e.to_string()))?;
 
         let (product_id, meal_id) = match &log.item {
             LoggedItem::Product(pid) => (Some(pid.0), None),
@@ -219,7 +238,9 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 
         insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
-        tx.commit().await.map_err(|e| FoodLogError::Database(e.to_string()))?;
+        tx.commit()
+            .await
+            .map_err(|e| FoodLogError::Database(e.to_string()))?;
         Ok(())
     }
 
@@ -308,7 +329,9 @@ impl MealLookup for PostgresFoodLogRepository {
                     name: MealName(r.name),
                     notes: r.notes.map(MealNotes),
                     total_quantity_amount: r.total_quantity_amount,
-                    total_quantity_unit: r.total_quantity_unit.map(crate::domain::catalog::UnitCode),
+                    total_quantity_unit: r
+                        .total_quantity_unit
+                        .map(crate::domain::catalog::UnitCode),
                     components,
                     created_at: r.created_at,
                     updated_at: r.updated_at,
@@ -320,7 +343,10 @@ impl MealLookup for PostgresFoodLogRepository {
 }
 
 impl PostgresFoodLogRepository {
-    async fn load_product_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, FoodLogError> {
+    async fn load_product_nutrients(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductNutrient>, FoodLogError> {
         let rows = sqlx::query_as::<_, ProductNutrientRow>(
             r#"
             SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
@@ -341,12 +367,17 @@ impl PostgresFoodLogRepository {
                 amount_per_100g: AmountPer100g(r.amount_per_100g),
                 unit: UnitCode(r.unit),
                 source: r.source,
-                confidence: r.confidence.and_then(|c| NutrientConfidence::from_str(&c).ok()),
+                confidence: r
+                    .confidence
+                    .and_then(|c| NutrientConfidence::from_str(&c).ok()),
             })
             .collect())
     }
 
-    async fn load_product_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, FoodLogError> {
+    async fn load_product_servings(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductServing>, FoodLogError> {
         let rows = sqlx::query_as::<_, ProductServingRow>(
             "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
         )
@@ -562,7 +593,10 @@ async fn insert_food_log_nutrients(
         return Ok(());
     }
 
-    let codes: Vec<String> = snapshots.iter().map(|s| s.nutrient_code.0.clone()).collect();
+    let codes: Vec<String> = snapshots
+        .iter()
+        .map(|s| s.nutrient_code.0.clone())
+        .collect();
     let amounts: Vec<Decimal> = snapshots.iter().map(|s| s.amount).collect();
     let units: Vec<String> = snapshots.iter().map(|s| s.unit.0.clone()).collect();
 

@@ -1,9 +1,9 @@
 use axum::{
+    Router,
     extract::{FromRequestParts, Path, State},
-    http::{request::Parts, Response, StatusCode, header},
+    http::{Response, StatusCode, header, request::Parts},
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -31,13 +31,25 @@ pub struct AppState {
 pub fn auth_routes(state: AppState) -> Router {
     Router::new()
         .route("/auth/bootstrap/status", get(bootstrap_status_handler))
-        .route("/auth/bootstrap/admin", post(bootstrap_create_admin_handler))
+        .route(
+            "/auth/bootstrap/admin",
+            post(bootstrap_create_admin_handler),
+        )
         .route("/auth/login", post(login_handler))
         .route("/auth/session", get(session_handler))
         .route("/auth/logout", post(logout_handler))
-        .route("/admin/users", get(admin_list_users_handler).post(admin_create_user_handler))
-        .route("/admin/users/{id}/reset-password", post(admin_reset_password_handler))
-        .route("/admin/users/{id}/disable", post(admin_disable_user_handler))
+        .route(
+            "/admin/users",
+            get(admin_list_users_handler).post(admin_create_user_handler),
+        )
+        .route(
+            "/admin/users/{id}/reset-password",
+            post(admin_reset_password_handler),
+        )
+        .route(
+            "/admin/users/{id}/disable",
+            post(admin_disable_user_handler),
+        )
         .route("/admin/users/{id}/enable", post(admin_enable_user_handler))
         .with_state(state)
 }
@@ -105,9 +117,7 @@ impl FromRequestParts<AppState> for AuthUser {
             return Err(AuthErrorResponse::forbidden());
         }
 
-        let profile = result
-            .profile
-            .ok_or_else(AuthErrorResponse::forbidden)?;
+        let profile = result.profile.ok_or_else(AuthErrorResponse::forbidden)?;
 
         Ok(AuthUser(profile))
     }
@@ -489,10 +499,7 @@ async fn admin_enable_user_handler(
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-fn extract_session_token(
-    parts: &Parts,
-    config: &AppConfig,
-) -> Result<String, AuthErrorResponse> {
+fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, AuthErrorResponse> {
     let cookie_header = parts
         .headers
         .get(header::COOKIE)
@@ -509,10 +516,7 @@ fn extract_session_token(
     Err(AuthErrorResponse::from_auth_error(&AuthError::Unauthorized))
 }
 
-fn build_session_cookie(
-    token: &str,
-    config: &AppConfig,
-) -> CookieHeader {
+fn build_session_cookie(token: &str, config: &AppConfig) -> CookieHeader {
     let mut cookie = format!(
         "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
         config.session_cookie_name, token, config.session_ttl_seconds

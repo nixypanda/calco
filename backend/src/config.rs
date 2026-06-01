@@ -27,8 +27,7 @@ impl AppConfig {
             })
             .unwrap_or_default();
         Self {
-            database_url: std::env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
+            database_url: std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
             bind_addr: SocketAddr::new(host.parse().unwrap(), port),
             session_cookie_name: std::env::var("SESSION_COOKIE_NAME")
                 .unwrap_or_else(|_| "calco_session".into()),
