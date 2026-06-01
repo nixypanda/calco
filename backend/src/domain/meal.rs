@@ -59,28 +59,19 @@ impl Meal {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum MealError {
+    #[error("not_found: {0}")]
     NotFound(String),
+    #[error("forbidden: {0}")]
     Forbidden(String),
+    #[error("validation: {0}")]
     Validation(String),
-    Database(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("internal: {0}")]
     Internal(String),
 }
-
-impl std::fmt::Display for MealError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MealError::NotFound(msg) => write!(f, "not found: {msg}"),
-            MealError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
-            MealError::Validation(msg) => write!(f, "validation: {msg}"),
-            MealError::Database(msg) => write!(f, "database: {msg}"),
-            MealError::Internal(msg) => write!(f, "internal: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for MealError {}
 
 impl From<MealError> for FoodLogError {
     fn from(e: MealError) -> Self {
@@ -88,7 +79,7 @@ impl From<MealError> for FoodLogError {
             MealError::NotFound(msg) => FoodLogError::NotFound(msg),
             MealError::Forbidden(msg) => FoodLogError::Forbidden(msg),
             MealError::Validation(msg) => FoodLogError::Validation(msg),
-            MealError::Database(msg) => FoodLogError::Database(msg),
+            MealError::Database(err) => FoodLogError::Database(err),
             MealError::Internal(msg) => FoodLogError::Internal(msg),
         }
     }
@@ -180,13 +171,13 @@ mod tests {
     #[test]
     fn test_meal_error_display() {
         let err = MealError::NotFound("meal not found".into());
-        assert_eq!(format!("{err}"), "not found: meal not found");
+        assert_eq!(format!("{err}"), "not_found: meal not found");
         let err = MealError::Forbidden("not your meal".into());
         assert_eq!(format!("{err}"), "forbidden: not your meal");
         let err = MealError::Validation("name required".into());
         assert_eq!(format!("{err}"), "validation: name required");
-        let err = MealError::Database("connection failed".into());
-        assert_eq!(format!("{err}"), "database: connection failed");
+        let err = MealError::Database(sqlx::Error::RowNotFound);
+        assert!(format!("{err}").starts_with("database: "));
         let err = MealError::Internal("unexpected".into());
         assert_eq!(format!("{err}"), "internal: unexpected");
     }

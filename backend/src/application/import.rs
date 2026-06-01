@@ -280,26 +280,17 @@ pub struct StageResult {
     pub rejected: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ImportError {
+    #[error("not_found: {0}")]
     NotFound(String),
+    #[error("invalid_status: {0}")]
     InvalidStatus(String),
+    #[error("validation: {0}")]
     Validation(String),
-    Database(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
 }
-
-impl std::fmt::Display for ImportError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ImportError::NotFound(msg) => write!(f, "not found: {msg}"),
-            ImportError::InvalidStatus(msg) => write!(f, "invalid status: {msg}"),
-            ImportError::Validation(msg) => write!(f, "validation: {msg}"),
-            ImportError::Database(msg) => write!(f, "database: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for ImportError {}
 
 #[cfg(test)]
 mod tests {
@@ -405,7 +396,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .clone()
-                .ok_or_else(|| ImportError::Database("no result set".into()))
+                .ok_or(ImportError::Database(sqlx::Error::RowNotFound))
         }
 
         async fn get_errors(

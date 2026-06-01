@@ -90,7 +90,7 @@ pub async fn create_bootstrap_admin(
     let argon2 = Argon2::default();
     let hash = argon2
         .hash_password(password.as_bytes(), &salt)
-        .map_err(|e| AuthError::Internal(e.to_string()))?
+        .map_err(AuthError::PasswordHash)?
         .to_string();
 
     let now = Utc::now();
@@ -135,8 +135,8 @@ pub async fn login(
         return Err(AuthError::IdentityDisabled);
     }
 
-    let parsed_hash = PasswordHash::new(&identity.password_hash.0)
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+    let parsed_hash =
+        PasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
     Argon2::default()
         .verify_password(password.as_bytes(), &parsed_hash)
         .map_err(|_| AuthError::InvalidCredentials)?;
@@ -238,7 +238,7 @@ pub async fn admin_create_user(
     let argon2 = argon2::Argon2::default();
     let hash = argon2
         .hash_password(initial_password.as_bytes(), &salt)
-        .map_err(|e| AuthError::Internal(e.to_string()))?
+        .map_err(AuthError::PasswordHash)?
         .to_string();
 
     let now = Utc::now();
@@ -292,7 +292,7 @@ pub async fn admin_reset_password(
     let argon2 = argon2::Argon2::default();
     let hash = argon2
         .hash_password(new_password.as_bytes(), &salt)
-        .map_err(|e| AuthError::Internal(e.to_string()))?
+        .map_err(AuthError::PasswordHash)?
         .to_string();
 
     let mut identity = identity_repo

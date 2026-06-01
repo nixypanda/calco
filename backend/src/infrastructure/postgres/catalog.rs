@@ -30,8 +30,7 @@ impl PostgresProductRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -53,8 +52,7 @@ impl PostgresProductRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -138,8 +136,7 @@ impl ProductRepository for PostgresProductRepository {
         .bind(&query.include_categories)
         .bind(&query.exclude_categories)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let energy_by_product = if product_ids.is_empty() {
@@ -156,8 +153,7 @@ impl ProductRepository for PostgresProductRepository {
             )
             .bind(&product_ids)
             .fetch_all(&self.pool)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+            .await?;
 
             energy_rows
                 .into_iter()
@@ -224,8 +220,7 @@ impl ProductRepository for PostgresProductRepository {
         .bind(user_id)
         .bind(limit)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -246,8 +241,7 @@ impl ProductRepository for PostgresProductRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -269,8 +263,7 @@ impl ProductRepository for PostgresProductRepository {
         )
         .bind(barcode)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -283,11 +276,7 @@ impl ProductRepository for PostgresProductRepository {
     }
 
     async fn create(&self, product: &Product) -> Result<(), CatalogError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
@@ -315,24 +304,17 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
         insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
-        tx.commit()
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
     async fn update(&self, product: &Product) -> Result<(), CatalogError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
@@ -355,27 +337,22 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.default_unit.as_ref().map(|u| &u.0))
         .bind(product.serving_size_g)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         sqlx::query("DELETE FROM product_nutrients WHERE product_id = $1")
             .bind(product.id.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+            .await?;
 
         sqlx::query("DELETE FROM product_servings WHERE product_id = $1")
             .bind(product.id.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+            .await?;
 
         insert_product_nutrients(&mut tx, product.id.0, &product.nutrients).await?;
         insert_product_servings(&mut tx, product.id.0, &product.servings).await?;
 
-        tx.commit()
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -383,8 +360,7 @@ impl ProductRepository for PostgresProductRepository {
         sqlx::query("UPDATE products SET deleted_at = now() WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 }
@@ -460,8 +436,7 @@ impl NutrientRepository for PostgresNutrientRepository {
             "SELECT code, name, unit, category FROM nutrients ORDER BY code",
         )
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows.into_iter().map(Into::into).collect())
     }
@@ -472,8 +447,7 @@ impl NutrientRepository for PostgresNutrientRepository {
         )
         .bind(code)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(row.map(Into::into))
     }
@@ -511,8 +485,7 @@ impl UnitRepository for PostgresUnitRepository {
     async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         let rows = sqlx::query_as::<_, UnitRow>("SELECT code, name, kind FROM units ORDER BY code")
             .fetch_all(&self.pool)
-            .await
-            .map_err(|e| CatalogError::Database(e.to_string()))?;
+            .await?;
 
         Ok(rows
             .into_iter()
@@ -525,8 +498,7 @@ impl UnitRepository for PostgresUnitRepository {
             "SELECT code, canonical_grams FROM units WHERE canonical_grams IS NOT NULL",
         )
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| CatalogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -587,8 +559,7 @@ async fn insert_product_nutrients(
     .bind(&sources)
     .bind(&confidences)
     .fetch_one(&mut **tx)
-    .await
-    .map_err(|e| CatalogError::Database(e.to_string()))?;
+    .await?;
 
     if (inserted as usize) != nutrients.len() {
         return Err(CatalogError::Validation(format!(
@@ -628,7 +599,6 @@ async fn insert_product_servings(
     .bind(&units)
     .bind(&grams)
     .execute(&mut **tx)
-    .await
-    .map_err(|e| CatalogError::Database(e.to_string()))?;
+    .await?;
     Ok(())
 }

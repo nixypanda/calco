@@ -28,8 +28,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         )
         .bind(username)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         row.map(|r| r.try_into()).transpose()
     }
@@ -41,8 +40,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         row.map(|r| r.try_into()).transpose()
     }
@@ -61,8 +59,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         .bind(identity.updated_at)
         .bind(identity.last_login_at)
         .execute(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(())
     }
@@ -78,8 +75,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         .bind(identity.last_login_at)
         .bind(identity.id.0)
         .execute(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(())
     }
@@ -88,8 +84,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         let row: (bool,) =
             sqlx::query_as("SELECT EXISTS(SELECT 1 FROM identities WHERE role = 'admin')")
                 .fetch_one(&self.pool)
-                .await
-                .map_err(|e| AuthError::Internal(e.to_string()))?;
+                .await?;
 
         Ok(row.0)
     }
@@ -150,8 +145,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(session.expires_at)
         .bind(session.revoked_at)
         .execute(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(())
     }
@@ -163,8 +157,7 @@ impl SessionRepository for PostgresSessionRepository {
         )
         .bind(token_hash)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(row.map(|r| r.into()))
     }
@@ -174,8 +167,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(Utc::now())
             .bind(session_id)
             .execute(&self.pool)
-            .await
-            .map_err(|e| AuthError::Internal(e.to_string()))?;
+            .await?;
 
         Ok(())
     }
@@ -187,8 +179,7 @@ impl SessionRepository for PostgresSessionRepository {
         .bind(Utc::now())
         .bind(identity_id.0)
         .execute(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(())
     }
@@ -202,8 +193,7 @@ impl SessionRepository for PostgresSessionRepository {
             .bind(last_seen)
             .bind(session_id)
             .execute(&self.pool)
-            .await
-            .map_err(|e| AuthError::Internal(e.to_string()))?;
+            .await?;
 
         Ok(())
     }
@@ -257,8 +247,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         )
         .bind(identity_id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(row.map(|r| r.into()))
     }
@@ -270,8 +259,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         )
         .bind(id)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(row.map(|r| r.into()))
     }
@@ -287,8 +275,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         .bind(profile.created_at)
         .bind(profile.updated_at)
         .execute(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         Ok(())
     }
@@ -305,8 +292,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
              ORDER BY p.created_at DESC",
         )
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| AuthError::Internal(e.to_string()))?;
+        .await?;
 
         rows.into_iter()
             .map(|r| {

@@ -105,35 +105,30 @@ pub struct Session {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AuthError {
+    #[error("invalid_credentials")]
     InvalidCredentials,
+    #[error("identity_disabled")]
     IdentityDisabled,
+    #[error("identity_not_found")]
     IdentityNotFound,
+    #[error("session_not_found")]
     SessionNotFound,
+    #[error("session_expired")]
     SessionExpired,
+    #[error("session_revoked")]
     SessionRevoked,
+    #[error("admin_already_exists")]
     AdminAlreadyExists,
+    #[error("username_taken")]
     UsernameTaken,
+    #[error("unauthorized")]
     Unauthorized,
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("password_hash: {0}")]
+    PasswordHash(argon2::password_hash::Error),
+    #[error("internal: {0}")]
     Internal(String),
 }
-
-impl std::fmt::Display for AuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AuthError::InvalidCredentials => write!(f, "Invalid credentials"),
-            AuthError::IdentityDisabled => write!(f, "Account is disabled"),
-            AuthError::IdentityNotFound => write!(f, "Identity not found"),
-            AuthError::SessionNotFound => write!(f, "Session not found"),
-            AuthError::SessionExpired => write!(f, "Session expired"),
-            AuthError::SessionRevoked => write!(f, "Session revoked"),
-            AuthError::AdminAlreadyExists => write!(f, "Admin already exists"),
-            AuthError::UsernameTaken => write!(f, "Username is already taken"),
-            AuthError::Unauthorized => write!(f, "Unauthorized"),
-            AuthError::Internal(msg) => write!(f, "Internal error: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for AuthError {}

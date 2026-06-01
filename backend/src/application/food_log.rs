@@ -564,28 +564,19 @@ impl FoodLog {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum FoodLogError {
+    #[error("not_found: {0}")]
     NotFound(String),
+    #[error("forbidden: {0}")]
     Forbidden(String),
+    #[error("validation: {0}")]
     Validation(String),
-    Database(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("internal: {0}")]
     Internal(String),
 }
-
-impl std::fmt::Display for FoodLogError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FoodLogError::NotFound(msg) => write!(f, "not found: {msg}"),
-            FoodLogError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
-            FoodLogError::Validation(msg) => write!(f, "validation: {msg}"),
-            FoodLogError::Database(msg) => write!(f, "database: {msg}"),
-            FoodLogError::Internal(msg) => write!(f, "internal: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for FoodLogError {}
 
 impl From<crate::application::catalog::CatalogError> for FoodLogError {
     fn from(e: crate::application::catalog::CatalogError) -> Self {
@@ -597,7 +588,7 @@ impl From<crate::application::catalog::CatalogError> for FoodLogError {
             crate::application::catalog::CatalogError::Validation(msg) => {
                 FoodLogError::Validation(msg)
             }
-            crate::application::catalog::CatalogError::Database(msg) => FoodLogError::Database(msg),
+            crate::application::catalog::CatalogError::Database(err) => FoodLogError::Database(err),
             crate::application::catalog::CatalogError::Internal(msg) => FoodLogError::Internal(msg),
         }
     }

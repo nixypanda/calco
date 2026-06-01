@@ -429,28 +429,19 @@ pub struct ProductServingInput {
 
 // ─── Errors ────────────────────────────────────────────────────
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum CatalogError {
+    #[error("not_found: {0}")]
     NotFound(String),
+    #[error("forbidden: {0}")]
     Forbidden(String),
+    #[error("validation: {0}")]
     Validation(String),
-    Database(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("internal: {0}")]
     Internal(String),
 }
-
-impl std::fmt::Display for CatalogError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CatalogError::NotFound(msg) => write!(f, "not found: {msg}"),
-            CatalogError::Forbidden(msg) => write!(f, "forbidden: {msg}"),
-            CatalogError::Validation(msg) => write!(f, "validation: {msg}"),
-            CatalogError::Database(msg) => write!(f, "database: {msg}"),
-            CatalogError::Internal(msg) => write!(f, "internal: {msg}"),
-        }
-    }
-}
-
-impl std::error::Error for CatalogError {}
 
 #[cfg(test)]
 mod tests {

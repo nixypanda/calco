@@ -27,8 +27,7 @@ impl PostgresMealRepository {
         )
         .bind(meal_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         rows.into_iter().map(row_to_component).collect()
     }
@@ -72,11 +71,7 @@ fn row_to_component(r: MealComponentRow) -> Result<MealComponent, MealError> {
 #[async_trait]
 impl MealRepository for PostgresMealRepository {
     async fn create(&self, meal: &Meal) -> Result<(), MealError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
@@ -93,8 +88,7 @@ impl MealRepository for PostgresMealRepository {
         .bind(meal.created_at)
         .bind(meal.updated_at)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         for component in &meal.components {
             let (product_id, meal_id) = match &component.item {
@@ -114,13 +108,10 @@ impl MealRepository for PostgresMealRepository {
             .bind(component.quantity_amount)
             .bind(&component.quantity_unit.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+            .await?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -134,8 +125,7 @@ impl MealRepository for PostgresMealRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -157,8 +147,7 @@ impl MealRepository for PostgresMealRepository {
         )
         .bind(user_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         let mut results = Vec::new();
         for r in rows {
@@ -169,11 +158,7 @@ impl MealRepository for PostgresMealRepository {
     }
 
     async fn update(&self, meal: &Meal) -> Result<(), MealError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         sqlx::query(
             r#"
@@ -188,14 +173,12 @@ impl MealRepository for PostgresMealRepository {
         .bind(meal.total_quantity_amount)
         .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
         .execute(&mut *tx)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         sqlx::query("DELETE FROM meal_components WHERE meal_id = $1")
             .bind(meal.id.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+            .await?;
 
         for component in &meal.components {
             let (product_id, meal_id) = match &component.item {
@@ -215,13 +198,10 @@ impl MealRepository for PostgresMealRepository {
             .bind(component.quantity_amount)
             .bind(&component.quantity_unit.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+            .await?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -229,8 +209,7 @@ impl MealRepository for PostgresMealRepository {
         sqlx::query("DELETE FROM meals WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
-            .await
-            .map_err(|e| MealError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 }
@@ -247,8 +226,7 @@ impl MealProductLookup for PostgresMealRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -276,8 +254,7 @@ impl PostgresMealRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -302,8 +279,7 @@ impl PostgresMealRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| MealError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()

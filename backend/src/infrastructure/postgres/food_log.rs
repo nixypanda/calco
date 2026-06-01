@@ -33,8 +33,7 @@ impl PostgresFoodLogRepository {
         )
         .bind(food_log_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -78,11 +77,7 @@ impl PostgresFoodLogRepository {
 #[async_trait]
 impl FoodLogRepository for PostgresFoodLogRepository {
     async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         let (product_id, meal_id) = match &log.item {
             LoggedItem::Product(pid) => (Some(pid.0), None),
@@ -105,14 +100,11 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
-        tx.commit()
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -126,8 +118,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -157,8 +148,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(from)
         .bind(to)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         if rows.is_empty() {
             return Ok(Vec::new());
@@ -175,8 +165,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         )
         .bind(&ids)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
             std::collections::HashMap::new();
@@ -200,11 +189,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         let (product_id, meal_id) = match &log.item {
             LoggedItem::Product(pid) => (Some(pid.0), None),
@@ -227,20 +212,16 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         sqlx::query("DELETE FROM food_log_nutrients WHERE food_log_id = $1")
             .bind(log.id.0)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+            .await?;
 
         insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
 
-        tx.commit()
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -248,8 +229,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         sqlx::query("DELETE FROM food_logs WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?;
+            .await?;
         Ok(())
     }
 }
@@ -266,8 +246,7 @@ impl ProductLookup for PostgresFoodLogRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -292,8 +271,7 @@ impl MealLookup for PostgresFoodLogRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         match row {
             Some(r) => {
@@ -305,8 +283,7 @@ impl MealLookup for PostgresFoodLogRepository {
                 )
                 .bind(id.0)
                 .fetch_all(&self.pool)
-                .await
-                .map_err(|e| FoodLogError::Database(e.to_string()))?;
+                .await?;
 
                 let mut components = Vec::new();
                 for c in component_rows {
@@ -357,8 +334,7 @@ impl PostgresFoodLogRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -383,8 +359,7 @@ impl PostgresFoodLogRepository {
         )
         .bind(product_id)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| FoodLogError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows
             .into_iter()
@@ -462,8 +437,7 @@ impl SummaryRepository for PostgresSummaryRepository {
             .bind(to)
             .bind(code_list)
             .fetch_all(&self.pool)
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?
+            .await?
         } else {
             sqlx::query_as::<_, SummaryRow>(
                 r#"
@@ -481,8 +455,7 @@ impl SummaryRepository for PostgresSummaryRepository {
             .bind(from)
             .bind(to)
             .fetch_all(&self.pool)
-            .await
-            .map_err(|e| FoodLogError::Database(e.to_string()))?
+            .await?
         };
 
         Ok(rows
@@ -617,8 +590,7 @@ async fn insert_food_log_nutrients(
     .bind(&amounts)
     .bind(&units)
     .fetch_one(&mut **tx)
-    .await
-    .map_err(|e| FoodLogError::Database(e.to_string()))?;
+    .await?;
 
     if (inserted as usize) != snapshots.len() {
         return Err(FoodLogError::Validation(format!(

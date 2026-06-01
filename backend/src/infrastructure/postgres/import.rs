@@ -29,8 +29,7 @@ impl ImportRepository for PostgresImportRepository {
         .bind(job.created_by)
         .bind(job.created_at)
         .execute(&self.pool)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
         Ok(())
     }
 
@@ -41,8 +40,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(id.0)
         .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         Ok(row.map(|r| r.into_job()))
     }
@@ -56,11 +54,7 @@ impl ImportRepository for PostgresImportRepository {
             return Ok(());
         }
 
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         for food in foods {
             sqlx::query(
@@ -82,13 +76,10 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&food.raw_payload)
             .bind(food.row_number)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+            .await?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -101,11 +92,7 @@ impl ImportRepository for PostgresImportRepository {
             return Ok(());
         }
 
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         for nutrient in nutrients {
             sqlx::query(
@@ -123,13 +110,10 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&nutrient.raw_payload)
             .bind(nutrient.row_number)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+            .await?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -142,11 +126,7 @@ impl ImportRepository for PostgresImportRepository {
             return Ok(());
         }
 
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         for s in servings {
             sqlx::query(
@@ -168,13 +148,10 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&s.raw_payload)
             .bind(s.row_number)
             .execute(&mut *tx)
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+            .await?;
         }
 
-        tx.commit()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -194,8 +171,7 @@ impl ImportRepository for PostgresImportRepository {
         .bind(&error.raw_payload)
         .bind(Utc::now())
         .execute(&self.pool)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
         Ok(())
     }
 
@@ -204,17 +180,12 @@ impl ImportRepository for PostgresImportRepository {
             sqlx::query_as(r#"SELECT COUNT(*)::BIGINT FROM staging_products WHERE import_id = $1"#)
                 .bind(import_id.0)
                 .fetch_one(&self.pool)
-                .await
-                .map_err(|e| ImportError::Database(e.to_string()))?;
+                .await?;
         Ok(row.0)
     }
 
     async fn commit_import(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        let mut tx = self.pool.begin().await?;
 
         self.update_job_status_in_tx(&mut tx, import_id, &ImportStatus::Running)
             .await?;
@@ -232,8 +203,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         let updated: (i64,) = sqlx::query_as(
             r#"WITH updated AS (
@@ -249,8 +219,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         let nutrients: (i64,) = sqlx::query_as(
             r#"WITH inserted AS (
@@ -278,8 +247,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         // Replace servings for any product touched by this import, then bulk-insert from staging.
         sqlx::query(
@@ -293,8 +261,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         let servings_count: (i64,) = sqlx::query_as(
             r#"WITH inserted AS (
@@ -309,8 +276,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         let errors: (i64,) = sqlx::query_as(
             r#"WITH errs AS (
@@ -327,15 +293,12 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         self.update_job_status_in_tx(&mut tx, import_id, &ImportStatus::Committed)
             .await?;
 
-        tx.commit()
-            .await
-            .map_err(|e| ImportError::Database(e.to_string()))?;
+        tx.commit().await?;
 
         Ok(ImportCommitResult {
             products_created: created.0,
@@ -352,8 +315,7 @@ impl ImportRepository for PostgresImportRepository {
         )
         .bind(import_id.0)
         .fetch_all(&self.pool)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
 
         Ok(rows.into_iter().map(|r| r.into_record()).collect())
     }
@@ -384,8 +346,7 @@ impl PostgresImportRepository {
         .bind(failed_at)
         .bind(id.0)
         .execute(&mut **tx)
-        .await
-        .map_err(|e| ImportError::Database(e.to_string()))?;
+        .await?;
         Ok(())
     }
 }

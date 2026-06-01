@@ -180,9 +180,19 @@ impl AuthErrorResponse {
             AuthError::AdminAlreadyExists => (StatusCode::CONFLICT, "admin_already_exists"),
             AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
             AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+            AuthError::PasswordHash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
             AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
         };
         let message = match err {
+            AuthError::Database(_) => {
+                tracing::error!(error = %err, "auth request failed");
+                "internal server error".to_string()
+            }
+            AuthError::PasswordHash(_) => {
+                tracing::error!(error = %err, "auth request failed");
+                "internal server error".to_string()
+            }
             AuthError::Internal(_) => {
                 tracing::error!(error = %err, "auth request failed");
                 "internal server error".to_string()
