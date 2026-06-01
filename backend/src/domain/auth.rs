@@ -1,4 +1,6 @@
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IdentityId(pub uuid::Uuid);
@@ -131,4 +133,42 @@ pub enum AuthError {
     PasswordHash(argon2::password_hash::Error),
     #[error("internal: {0}")]
     Internal(String),
+}
+
+pub struct UserWithProfile {
+    pub identity: Identity,
+    pub profile: UserProfile,
+}
+
+#[async_trait]
+pub trait IdentityRepository: Send + Sync {
+    async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError>;
+    async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError>;
+    async fn create(&self, identity: &Identity) -> Result<(), AuthError>;
+    async fn update(&self, identity: &Identity) -> Result<(), AuthError>;
+    async fn admin_exists(&self) -> Result<bool, AuthError>;
+}
+
+#[async_trait]
+pub trait SessionRepository: Send + Sync {
+    async fn create(&self, session: &Session) -> Result<(), AuthError>;
+    async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
+    async fn revoke(&self, session_id: Uuid) -> Result<(), AuthError>;
+    async fn revoke_all_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError>;
+    async fn update_last_seen(
+        &self,
+        session_id: Uuid,
+        last_seen: DateTime<Utc>,
+    ) -> Result<(), AuthError>;
+}
+
+#[async_trait]
+pub trait UserProfileRepository: Send + Sync {
+    async fn find_by_identity_id(
+        &self,
+        identity_id: IdentityId,
+    ) -> Result<Option<UserProfile>, AuthError>;
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
+    async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
+    async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError>;
 }

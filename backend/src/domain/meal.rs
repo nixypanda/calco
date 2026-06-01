@@ -1,10 +1,9 @@
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use super::catalog::{ProductId, UnitCode};
-
-use crate::application::food_log::FoodLogError;
+use super::catalog::{Product, ProductId, UnitCode};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MealId(pub Uuid);
@@ -73,16 +72,18 @@ pub enum MealError {
     Internal(String),
 }
 
-impl From<MealError> for FoodLogError {
-    fn from(e: MealError) -> Self {
-        match e {
-            MealError::NotFound(msg) => FoodLogError::NotFound(msg),
-            MealError::Forbidden(msg) => FoodLogError::Forbidden(msg),
-            MealError::Validation(msg) => FoodLogError::Validation(msg),
-            MealError::Database(err) => FoodLogError::Database(err),
-            MealError::Internal(msg) => FoodLogError::Internal(msg),
-        }
-    }
+#[async_trait]
+pub trait MealRepository: Send + Sync {
+    async fn create(&self, meal: &Meal) -> Result<(), MealError>;
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError>;
+    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
+    async fn update(&self, meal: &Meal) -> Result<(), MealError>;
+    async fn delete(&self, id: MealId) -> Result<(), MealError>;
+}
+
+#[async_trait]
+pub trait MealProductLookup: Send + Sync {
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError>;
 }
 
 #[cfg(test)]
@@ -180,15 +181,5 @@ mod tests {
         assert!(format!("{err}").starts_with("database: "));
         let err = MealError::Internal("unexpected".into());
         assert_eq!(format!("{err}"), "internal: unexpected");
-    }
-
-    #[test]
-    fn test_meal_error_conversion_to_food_log_error() {
-        let meal_err = MealError::NotFound("test".into());
-        let fl_err: FoodLogError = meal_err.into();
-        match fl_err {
-            FoodLogError::NotFound(msg) => assert_eq!(msg, "test"),
-            _ => panic!("expected NotFound"),
-        }
     }
 }

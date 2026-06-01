@@ -4,7 +4,6 @@ use sqlx::postgres::PgPool;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::application::catalog::*;
 use crate::domain::catalog::*;
 
 // ─── Product Repository ────────────────────────────────────────

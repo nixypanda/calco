@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::Utc;
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -7,20 +6,6 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::meal::*;
 use crate::domain::nutrition::Quantity;
-
-#[async_trait]
-pub trait MealRepository: Send + Sync {
-    async fn create(&self, meal: &Meal) -> Result<(), MealError>;
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError>;
-    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
-    async fn update(&self, meal: &Meal) -> Result<(), MealError>;
-    async fn delete(&self, id: MealId) -> Result<(), MealError>;
-}
-
-#[async_trait]
-pub trait MealProductLookup: Send + Sync {
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError>;
-}
 
 pub struct CreateMealInput {
     pub user_id: Uuid,
@@ -364,6 +349,7 @@ fn convert_to_grams_meal(quantity: &Quantity, product: &Product) -> Result<Decim
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::Mutex;
 
     struct MockMealRepo {

@@ -3,9 +3,6 @@ use chrono::{DateTime, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::application::auth::{
-    IdentityRepository, SessionRepository, UserProfileRepository, UserWithProfile,
-};
 use crate::domain::auth::*;
 
 #[derive(Clone)]

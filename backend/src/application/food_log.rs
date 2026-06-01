@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -10,46 +9,16 @@ use crate::domain::meal::{Meal, MealComponentItem, MealId};
 use crate::domain::nutrition::{NutritionCalculator, Quantity};
 use crate::domain::units::UnitConverter;
 
-#[async_trait]
-pub trait FoodLogRepository: Send + Sync {
-    async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError>;
-    async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, FoodLogError>;
-    async fn find_by_user_and_range(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-    ) -> Result<Vec<FoodLog>, FoodLogError>;
-    async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError>;
-    async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError>;
-}
-
-#[async_trait]
-pub trait ProductLookup: Send + Sync {
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, FoodLogError>;
-}
-
-#[async_trait]
-pub trait MealLookup: Send + Sync {
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, FoodLogError>;
-}
-
-#[async_trait]
-pub trait SummaryRepository: Send + Sync {
-    async fn get_summary(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-        codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, FoodLogError>;
-}
-
-#[derive(Debug, Clone)]
-pub struct SummaryEntry {
-    pub code: String,
-    pub amount: Decimal,
-    pub unit: String,
+impl From<crate::domain::meal::MealError> for FoodLogError {
+    fn from(e: crate::domain::meal::MealError) -> Self {
+        match e {
+            crate::domain::meal::MealError::NotFound(msg) => FoodLogError::NotFound(msg),
+            crate::domain::meal::MealError::Forbidden(msg) => FoodLogError::Forbidden(msg),
+            crate::domain::meal::MealError::Validation(msg) => FoodLogError::Validation(msg),
+            crate::domain::meal::MealError::Database(err) => FoodLogError::Database(err),
+            crate::domain::meal::MealError::Internal(msg) => FoodLogError::Internal(msg),
+        }
+    }
 }
 
 pub struct LogFoodInput {
@@ -564,40 +533,11 @@ impl FoodLog {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum FoodLogError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("forbidden: {0}")]
-    Forbidden(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-    #[error("internal: {0}")]
-    Internal(String),
-}
-
-impl From<crate::application::catalog::CatalogError> for FoodLogError {
-    fn from(e: crate::application::catalog::CatalogError) -> Self {
-        match e {
-            crate::application::catalog::CatalogError::NotFound(msg) => FoodLogError::NotFound(msg),
-            crate::application::catalog::CatalogError::Forbidden(msg) => {
-                FoodLogError::Forbidden(msg)
-            }
-            crate::application::catalog::CatalogError::Validation(msg) => {
-                FoodLogError::Validation(msg)
-            }
-            crate::application::catalog::CatalogError::Database(err) => FoodLogError::Database(err),
-            crate::application::catalog::CatalogError::Internal(msg) => FoodLogError::Internal(msg),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::domain::meal::*;
+    use async_trait::async_trait;
     use std::sync::Mutex;
 
     struct MockFoodLogRepo {

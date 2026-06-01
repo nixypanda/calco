@@ -1,46 +1,7 @@
-use async_trait::async_trait;
 use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::domain::import::*;
-
-#[async_trait]
-pub trait ImportRepository: Send + Sync {
-    async fn create_job(&self, job: &ImportJob) -> Result<(), ImportError>;
-    async fn find_job(&self, id: ImportId) -> Result<Option<ImportJob>, ImportError>;
-    async fn stage_foods(
-        &self,
-        import_id: ImportId,
-        foods: &[StagedImportProduct],
-    ) -> Result<(), ImportError>;
-    async fn stage_nutrients(
-        &self,
-        import_id: ImportId,
-        nutrients: &[StagedImportNutrient],
-    ) -> Result<(), ImportError>;
-    async fn stage_servings(
-        &self,
-        import_id: ImportId,
-        servings: &[StagedImportServing],
-    ) -> Result<(), ImportError>;
-    async fn add_error(
-        &self,
-        import_id: ImportId,
-        error: &ImportErrorRecord,
-    ) -> Result<(), ImportError>;
-    async fn count_staged_foods(&self, import_id: ImportId) -> Result<i64, ImportError>;
-    async fn commit_import(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError>;
-    async fn get_errors(&self, import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError>;
-}
-
-#[derive(Debug, Clone)]
-pub struct ImportCommitResult {
-    pub products_created: i64,
-    pub products_updated: i64,
-    pub nutrients_inserted: i64,
-    pub servings_inserted: i64,
-    pub errors_logged: i64,
-}
 
 pub struct ImportServices {
     repo: Arc<dyn ImportRepository>,
@@ -280,21 +241,10 @@ pub struct StageResult {
     pub rejected: i64,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum ImportError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("invalid_status: {0}")]
-    InvalidStatus(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use std::sync::Mutex;
 
     struct MockImportRepo {

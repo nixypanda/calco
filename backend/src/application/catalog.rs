@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use rust_decimal::Decimal;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -6,58 +5,11 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::units::UnitConverter;
 
-// ─── Repository Ports ──────────────────────────────────────────
-
-#[async_trait]
-pub trait ProductRepository: Send + Sync {
-    async fn search(
-        &self,
-        query: ProductSearchQuery,
-        user_id: Option<Uuid>,
-    ) -> Result<Vec<Product>, CatalogError>;
-    async fn list_categories(
-        &self,
-        query: &str,
-        user_id: Option<Uuid>,
-        limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, CatalogError>;
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
-    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError>;
-    async fn create(&self, product: &Product) -> Result<(), CatalogError>;
-    async fn update(&self, product: &Product) -> Result<(), CatalogError>;
-    async fn soft_delete(&self, id: ProductId) -> Result<(), CatalogError>;
-}
-
-#[async_trait]
-pub trait NutrientRepository: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError>;
-    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError>;
-}
-
-#[async_trait]
-pub trait UnitRepository: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError>;
-    async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
-}
-
 // ─── Use Cases ─────────────────────────────────────────────────
 
 pub struct SearchCriteria {
     pub query: String,
     pub user_id: Option<Uuid>,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ProductSearchQuery {
-    pub text: String,
-    pub include_categories: Vec<String>,
-    pub exclude_categories: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CategorySuggestion {
-    pub value: String,
-    pub count: i64,
 }
 
 pub struct CatalogServices {
@@ -425,22 +377,6 @@ pub struct ProductServingInput {
     pub quantity: Decimal,
     pub unit: String,
     pub grams: Decimal,
-}
-
-// ─── Errors ────────────────────────────────────────────────────
-
-#[derive(Debug, thiserror::Error)]
-pub enum CatalogError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("forbidden: {0}")]
-    Forbidden(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-    #[error("internal: {0}")]
-    Internal(String),
 }
 
 #[cfg(test)]

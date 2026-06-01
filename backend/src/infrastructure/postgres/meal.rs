@@ -4,7 +4,6 @@ use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::application::meal::*;
 use crate::domain::catalog::*;
 use crate::domain::meal::*;
 

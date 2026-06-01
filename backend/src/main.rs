@@ -12,15 +12,15 @@ use sqlx::postgres::PgPoolOptions;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
-use crate::application::catalog::{
-    CatalogServices, NutrientRepository, ProductRepository, UnitRepository,
-};
-use crate::application::food_log::{
-    FoodLogRepository, FoodLogServices, MealLookup, ProductLookup, SummaryRepository,
-};
-use crate::application::import::{ImportRepository, ImportServices};
-use crate::application::meal::{MealProductLookup, MealRepository, MealServices};
+use crate::application::catalog::CatalogServices;
+use crate::application::food_log::FoodLogServices;
+use crate::application::import::ImportServices;
+use crate::application::meal::MealServices;
 use crate::config::AppConfig;
+use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
+use crate::domain::food_log::{FoodLogRepository, MealLookup, ProductLookup, SummaryRepository};
+use crate::domain::import::ImportRepository;
+use crate::domain::meal::{MealProductLookup, MealRepository};
 use crate::domain::units::UnitConverter;
 use crate::infrastructure::postgres::auth::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,

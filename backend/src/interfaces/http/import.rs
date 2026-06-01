@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::application::catalog::normalize_categories;
-use crate::application::import::{ImportCommitResult, ImportError, StageResult};
+use crate::application::import::StageResult;
 use crate::domain::import::*;
 use crate::interfaces::http::auth::{AppState, AuthAdmin};
 

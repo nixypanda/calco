@@ -1,9 +1,10 @@
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use super::catalog::{NutrientCode, ProductId, UnitCode};
-use super::meal::MealId;
+use super::catalog::{NutrientCode, Product, ProductId, UnitCode};
+use super::meal::{Meal, MealId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FoodLogId(pub Uuid);
@@ -79,6 +80,74 @@ impl FoodLog {
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == user_id
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum FoodLogError {
+    #[error("not_found: {0}")]
+    NotFound(String),
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+    #[error("validation: {0}")]
+    Validation(String),
+    #[error("database: {0}")]
+    Database(#[from] sqlx::Error),
+    #[error("internal: {0}")]
+    Internal(String),
+}
+
+impl From<super::catalog::CatalogError> for FoodLogError {
+    fn from(e: super::catalog::CatalogError) -> Self {
+        match e {
+            super::catalog::CatalogError::NotFound(msg) => FoodLogError::NotFound(msg),
+            super::catalog::CatalogError::Forbidden(msg) => FoodLogError::Forbidden(msg),
+            super::catalog::CatalogError::Validation(msg) => FoodLogError::Validation(msg),
+            super::catalog::CatalogError::Database(err) => FoodLogError::Database(err),
+            super::catalog::CatalogError::Internal(msg) => FoodLogError::Internal(msg),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SummaryEntry {
+    pub code: String,
+    pub amount: Decimal,
+    pub unit: String,
+}
+
+#[async_trait]
+pub trait FoodLogRepository: Send + Sync {
+    async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError>;
+    async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, FoodLogError>;
+    async fn find_by_user_and_range(
+        &self,
+        user_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<FoodLog>, FoodLogError>;
+    async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError>;
+    async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError>;
+}
+
+#[async_trait]
+pub trait ProductLookup: Send + Sync {
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, FoodLogError>;
+}
+
+#[async_trait]
+pub trait MealLookup: Send + Sync {
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, FoodLogError>;
+}
+
+#[async_trait]
+pub trait SummaryRepository: Send + Sync {
+    async fn get_summary(
+        &self,
+        user_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        codes: Option<Vec<String>>,
+    ) -> Result<Vec<SummaryEntry>, FoodLogError>;
 }
 
 #[cfg(test)]
