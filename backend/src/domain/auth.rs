@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -102,6 +102,43 @@ pub struct Identity {
     pub last_login_at: Option<DateTime<Utc>>,
 }
 
+impl Identity {
+    pub fn is_active(&self) -> bool {
+        self.status == IdentityStatus::Active
+    }
+
+    pub fn record_login(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            last_login_at: Some(now),
+            ..self.clone()
+        }
+    }
+
+    pub fn change_password(&self, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
+        Self {
+            password_hash,
+            updated_at: now,
+            ..self.clone()
+        }
+    }
+
+    pub fn disable(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            status: IdentityStatus::Disabled,
+            updated_at: now,
+            ..self.clone()
+        }
+    }
+
+    pub fn enable(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            status: IdentityStatus::Active,
+            updated_at: now,
+            ..self.clone()
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct UserProfile {
     pub id: uuid::Uuid,
@@ -120,6 +157,36 @@ pub struct Session {
     pub last_seen_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl Session {
+    pub fn ensure_usable(&self, now: DateTime<Utc>) -> Result<(), AuthError> {
+        if self.revoked_at.is_some() {
+            return Err(AuthError::SessionRevoked);
+        }
+        if self.expires_at < now {
+            return Err(AuthError::SessionExpired);
+        }
+        Ok(())
+    }
+
+    pub fn should_refresh_last_seen(&self, now: DateTime<Utc>, threshold: Duration) -> bool {
+        now - self.last_seen_at >= threshold
+    }
+
+    pub fn record_seen(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            last_seen_at: now,
+            ..self.clone()
+        }
+    }
+
+    pub fn revoke(&self, now: DateTime<Utc>) -> Self {
+        Self {
+            revoked_at: Some(now),
+            ..self.clone()
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -168,13 +235,10 @@ pub trait IdentityRepository: Send + Sync {
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
-    async fn revoke(&self, session_id: Uuid) -> Result<(), AuthError>;
-    async fn revoke_all_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError>;
-    async fn update_last_seen(
-        &self,
-        session_id: Uuid,
-        last_seen: DateTime<Utc>,
-    ) -> Result<(), AuthError>;
+    async fn find_by_identity_id(&self, identity_id: IdentityId)
+    -> Result<Vec<Session>, AuthError>;
+    async fn update(&self, session: &Session) -> Result<(), AuthError>;
+    async fn update_many(&self, sessions: &[Session]) -> Result<(), AuthError>;
 }
 
 #[async_trait]

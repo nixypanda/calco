@@ -155,38 +155,83 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(row.map(session_row_to_session))
     }
 
-    async fn revoke(&self, session_id: Uuid) -> Result<(), AuthError> {
-        sqlx::query("UPDATE sessions SET revoked_at = $1 WHERE id = $2")
-            .bind(Utc::now())
-            .bind(session_id)
-            .execute(&self.pool)
-            .await?;
+    async fn find_by_identity_id(
+        &self,
+        identity_id: IdentityId,
+    ) -> Result<Vec<Session>, AuthError> {
+        let rows = sqlx::query_as::<_, SessionRow>(
+            "SELECT id, identity_id, session_token_hash, created_at, last_seen_at, expires_at, revoked_at \
+             FROM sessions WHERE identity_id = $1",
+        )
+        .bind(identity_id.0)
+        .fetch_all(&self.pool)
+        .await?;
 
-        Ok(())
+        Ok(rows.into_iter().map(session_row_to_session).collect())
     }
 
-    async fn revoke_all_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError> {
+    async fn update(&self, session: &Session) -> Result<(), AuthError> {
         sqlx::query(
-            "UPDATE sessions SET revoked_at = $1 WHERE identity_id = $2 AND revoked_at IS NULL",
+            "UPDATE sessions SET identity_id = $1, session_token_hash = $2, created_at = $3, \
+             last_seen_at = $4, expires_at = $5, revoked_at = $6 WHERE id = $7",
         )
-        .bind(Utc::now())
-        .bind(identity_id.0)
+        .bind(session.identity_id.0)
+        .bind(&session.session_token_hash.0)
+        .bind(session.created_at)
+        .bind(session.last_seen_at)
+        .bind(session.expires_at)
+        .bind(session.revoked_at)
+        .bind(session.id)
         .execute(&self.pool)
         .await?;
 
         Ok(())
     }
 
-    async fn update_last_seen(
-        &self,
-        session_id: Uuid,
-        last_seen: DateTime<Utc>,
-    ) -> Result<(), AuthError> {
-        sqlx::query("UPDATE sessions SET last_seen_at = $1 WHERE id = $2")
-            .bind(last_seen)
-            .bind(session_id)
-            .execute(&self.pool)
-            .await?;
+    async fn update_many(&self, sessions: &[Session]) -> Result<(), AuthError> {
+        if sessions.is_empty() {
+            return Ok(());
+        }
+
+        let ids: Vec<Uuid> = sessions.iter().map(|session| session.id).collect();
+        let identity_ids: Vec<Uuid> = sessions
+            .iter()
+            .map(|session| session.identity_id.0)
+            .collect();
+        let token_hashes: Vec<String> = sessions
+            .iter()
+            .map(|session| session.session_token_hash.0.clone())
+            .collect();
+        let created_at: Vec<DateTime<Utc>> =
+            sessions.iter().map(|session| session.created_at).collect();
+        let last_seen_at: Vec<DateTime<Utc>> = sessions
+            .iter()
+            .map(|session| session.last_seen_at)
+            .collect();
+        let expires_at: Vec<DateTime<Utc>> =
+            sessions.iter().map(|session| session.expires_at).collect();
+        let revoked_at: Vec<Option<DateTime<Utc>>> =
+            sessions.iter().map(|session| session.revoked_at).collect();
+
+        sqlx::query(
+            "UPDATE sessions AS s SET identity_id = data.identity_id, \
+             session_token_hash = data.session_token_hash, created_at = data.created_at, \
+             last_seen_at = data.last_seen_at, expires_at = data.expires_at, \
+             revoked_at = data.revoked_at \
+             FROM UNNEST($1::uuid[], $2::uuid[], $3::text[], $4::timestamptz[], \
+                         $5::timestamptz[], $6::timestamptz[], $7::timestamptz[]) \
+                  AS data(id, identity_id, session_token_hash, created_at, last_seen_at, expires_at, revoked_at) \
+             WHERE s.id = data.id",
+        )
+        .bind(ids)
+        .bind(identity_ids)
+        .bind(token_hashes)
+        .bind(created_at)
+        .bind(last_seen_at)
+        .bind(expires_at)
+        .bind(revoked_at)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }

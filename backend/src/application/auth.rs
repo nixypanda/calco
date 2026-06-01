@@ -1,5 +1,7 @@
 use argon2::Argon2;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::{
+    PasswordHash as ArgonPasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -122,19 +124,18 @@ impl AuthSessionServices {
             .await?
             .ok_or(AuthError::InvalidCredentials)?;
 
-        if identity.status == IdentityStatus::Disabled {
+        if !identity.is_active() {
             return Err(AuthError::IdentityDisabled);
         }
 
         let parsed_hash =
-            PasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
+            ArgonPasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
         Argon2::default()
             .verify_password(password.as_bytes(), &parsed_hash)
             .map_err(|_| AuthError::InvalidCredentials)?;
 
         let now = Utc::now();
-        let mut updated_identity = identity.clone();
-        updated_identity.last_login_at = Some(now);
+        let updated_identity = identity.record_login(now);
         self.identity_repo.update(&updated_identity).await?;
 
         let (session_token, session) = create_session(&updated_identity, &self.config, now)?;
@@ -163,13 +164,8 @@ impl AuthSessionServices {
             .await?
             .ok_or(AuthError::SessionNotFound)?;
 
-        if session.revoked_at.is_some() {
-            return Err(AuthError::SessionRevoked);
-        }
-
-        if session.expires_at < Utc::now() {
-            return Err(AuthError::SessionExpired);
-        }
+        let now = Utc::now();
+        session.ensure_usable(now)?;
 
         let identity = self
             .identity_repo
@@ -177,13 +173,15 @@ impl AuthSessionServices {
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
-        if identity.status == IdentityStatus::Disabled {
+        if !identity.is_active() {
             return Err(AuthError::IdentityDisabled);
         }
 
-        let now = Utc::now();
-        if (now - session.last_seen_at) >= chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS) {
-            let _ = self.session_repo.update_last_seen(session.id, now).await;
+        if session
+            .should_refresh_last_seen(now, chrono::Duration::seconds(LAST_SEEN_REFRESH_SECONDS))
+        {
+            let session = session.record_seen(now);
+            let _ = self.session_repo.update(&session).await;
         }
 
         let profile = if identity.role == IdentityRole::User {
@@ -203,7 +201,8 @@ impl AuthSessionServices {
             .await?
             .ok_or(AuthError::SessionNotFound)?;
 
-        self.session_repo.revoke(session.id).await
+        let session = session.revoke(Utc::now());
+        self.session_repo.update(&session).await
     }
 }
 
@@ -298,18 +297,15 @@ impl AdminUserServices {
             .map_err(AuthError::PasswordHash)?
             .to_string();
 
-        let mut identity = self
+        let identity = self
             .identity_repo
             .find_by_id(profile.identity_id)
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
-        identity.password_hash = PasswordHash(hash);
-        identity.updated_at = Utc::now();
+        let identity = identity.change_password(PasswordHash(hash), Utc::now());
 
         self.identity_repo.update(&identity).await?;
-        self.session_repo
-            .revoke_all_for_identity(profile.identity_id)
-            .await
+        self.revoke_sessions_for_identity(profile.identity_id).await
     }
 
     pub async fn disable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
@@ -319,18 +315,15 @@ impl AdminUserServices {
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
-        let mut identity = self
+        let identity = self
             .identity_repo
             .find_by_id(profile.identity_id)
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
-        identity.status = IdentityStatus::Disabled;
-        identity.updated_at = Utc::now();
+        let identity = identity.disable(Utc::now());
 
         self.identity_repo.update(&identity).await?;
-        self.session_repo
-            .revoke_all_for_identity(profile.identity_id)
-            .await
+        self.revoke_sessions_for_identity(profile.identity_id).await
     }
 
     pub async fn enable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
@@ -340,15 +333,26 @@ impl AdminUserServices {
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
-        let mut identity = self
+        let identity = self
             .identity_repo
             .find_by_id(profile.identity_id)
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
-        identity.status = IdentityStatus::Active;
-        identity.updated_at = Utc::now();
+        let identity = identity.enable(Utc::now());
 
         self.identity_repo.update(&identity).await
+    }
+
+    async fn revoke_sessions_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError> {
+        let now = Utc::now();
+        let sessions = self.session_repo.find_by_identity_id(identity_id).await?;
+        let revoked_sessions: Vec<Session> = sessions
+            .into_iter()
+            .filter(|session| session.revoked_at.is_none())
+            .map(|session| session.revoke(now))
+            .collect();
+
+        self.session_repo.update_many(&revoked_sessions).await
     }
 }
 

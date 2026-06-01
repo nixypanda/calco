@@ -47,6 +47,71 @@ infrastructure/postgres -> application ports -> domain
 
 The application layer defines repository traits. PostgreSQL repositories implement those traits. This keeps use cases independent of sqlx and keeps domain types independent of persistence concerns.
 
+### Repository Ports
+
+Repositories are persistence and query ports, not business-action services. Domain and application code owns business decisions and state transitions, then hands already-decided state to the repository.
+
+Single-entity write flow:
+
+```rust
+let updated = entity.operation(...)?;
+repo.update(&updated).await?;
+```
+
+Multi-entity write flow:
+
+```rust
+let updated = entities
+    .into_iter()
+    .map(|entity| entity.operation(...))
+    .collect::<Vec<_>>();
+
+repo.update_many(&updated).await?;
+```
+
+Allowed repository method families:
+
+- `create(&Entity)` and `create_many(&[Entity])`
+- `find_by_<criteria>(...) -> Option<Entity>`
+- `list_by_<criteria>(...) -> Vec<Entity>`
+- `list_all(...) -> Vec<Entity>`
+- `update(&Entity)` and `update_many(&[Entity])`
+- `delete(id)` and `delete_many(&[Id])`
+- Read-only aggregate queries such as `exists_by_<criteria>`, `count_by_<criteria>`, or `sum_by_<criteria>` when they are storage-shaped.
+
+Naming rules:
+
+- Use `create`, not `save`; `save` is ambiguous between create, update, and upsert.
+- Use `find_by_*`, not `get_by_*`, for optional single-row lookups.
+- Use `list_by_*` for multi-row lookups.
+- Avoid `get_by_*` in repositories unless a future repository intentionally returns `T` and maps absence to an error.
+
+Allowed examples:
+
+```rust
+find_by_id(id)
+find_by_username(username)
+list_by_user(user_id)
+list_by_user_and_range(user_id, range)
+update(&entity)
+update_many(&entities)
+delete(id)
+delete_many(&ids)
+```
+
+Disallowed examples:
+
+```rust
+update_last_seen(session_id, now)
+revoke_all_for_identity(identity_id)
+disable_user(user_id)
+mark_complete(id)
+```
+
+If the method name says what happened in the business, it belongs in domain or application code. If the method name says how to persist or query already-decided state, it can belong in the repository.
+
+The import repository is an explicit exception for now because imports are primarily an infrastructure and data-ingestion workflow. Do not use import repository patterns as precedent for normal domain repositories.
+
 ### Aggregate Roots
 
 Current aggregate roots:
