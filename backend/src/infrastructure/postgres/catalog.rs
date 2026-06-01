@@ -64,31 +64,6 @@ impl PostgresProductRepository {
             })
             .collect())
     }
-
-    fn row_to_product(
-        &self,
-        r: ProductRow,
-        nutrients: Vec<ProductNutrient>,
-        servings: Vec<ProductServing>,
-    ) -> Result<Product, CatalogError> {
-        Ok(Product {
-            id: ProductId(r.id),
-            source: Source::from_str(&r.source).map_err(CatalogError::Internal)?,
-            source_id: r.source_id,
-            user_id: r.user_id,
-            visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(CatalogError::Internal)?,
-            barcode: r.barcode.map(Barcode),
-            name: ProductName(r.name),
-            brand: r.brand.map(Brand),
-            categories: r.categories.into_iter().map(Category).collect(),
-            default_quantity: r.default_quantity,
-            default_unit: r.default_unit.map(UnitCode),
-            serving_size_g: r.serving_size_g,
-            nutrients,
-            servings,
-        })
-    }
 }
 
 #[async_trait]
@@ -181,7 +156,7 @@ impl ProductRepository for PostgresProductRepository {
                     .cloned()
                     .map(|n| vec![n])
                     .unwrap_or_default();
-                self.row_to_product(r, nutrients, vec![])
+                product_row_to_product(r, nutrients, vec![])
             })
             .collect()
     }
@@ -247,7 +222,7 @@ impl ProductRepository for PostgresProductRepository {
             Some(r) => {
                 let nutrients = self.load_nutrients(r.id).await?;
                 let servings = self.load_servings(r.id).await?;
-                Ok(Some(self.row_to_product(r, nutrients, servings)?))
+                Ok(Some(product_row_to_product(r, nutrients, servings)?))
             }
             None => Ok(None),
         }
@@ -269,7 +244,7 @@ impl ProductRepository for PostgresProductRepository {
             Some(r) => {
                 let nutrients = self.load_nutrients(r.id).await?;
                 let servings = self.load_servings(r.id).await?;
-                Ok(Some(self.row_to_product(r, nutrients, servings)?))
+                Ok(Some(product_row_to_product(r, nutrients, servings)?))
             }
             None => Ok(None),
         }
@@ -416,6 +391,29 @@ struct CategorySuggestionRow {
     count: i64,
 }
 
+fn product_row_to_product(
+    row: ProductRow,
+    nutrients: Vec<ProductNutrient>,
+    servings: Vec<ProductServing>,
+) -> Result<Product, CatalogError> {
+    Ok(Product {
+        id: ProductId(row.id),
+        source: Source::from_str(&row.source).map_err(CatalogError::Internal)?,
+        source_id: row.source_id,
+        user_id: row.user_id,
+        visibility: ProductVisibility::from_str(&row.visibility).map_err(CatalogError::Internal)?,
+        barcode: row.barcode.map(Barcode),
+        name: ProductName(row.name),
+        brand: row.brand.map(Brand),
+        categories: row.categories.into_iter().map(Category).collect(),
+        default_quantity: row.default_quantity,
+        default_unit: row.default_unit.map(UnitCode),
+        serving_size_g: row.serving_size_g,
+        nutrients,
+        servings,
+    })
+}
+
 // ─── Nutrient Repository ───────────────────────────────────────
 
 #[derive(Clone)]
@@ -438,7 +436,7 @@ impl NutrientRepository for PostgresNutrientRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(Into::into).collect())
+        Ok(rows.into_iter().map(nutrient_row_to_nutrient).collect())
     }
 
     async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError> {
@@ -449,7 +447,7 @@ impl NutrientRepository for PostgresNutrientRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(Into::into))
+        Ok(row.map(nutrient_row_to_nutrient))
     }
 }
 
@@ -461,10 +459,13 @@ struct NutrientRow {
     category: String,
 }
 
-impl From<NutrientRow> for Nutrient {
-    fn from(r: NutrientRow) -> Self {
-        Nutrient(NutrientCode(r.code), r.name, UnitCode(r.unit), r.category)
-    }
+fn nutrient_row_to_nutrient(row: NutrientRow) -> Nutrient {
+    Nutrient(
+        NutrientCode(row.code),
+        row.name,
+        UnitCode(row.unit),
+        row.category,
+    )
 }
 
 // ─── Unit Repository ───────────────────────────────────────────

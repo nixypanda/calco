@@ -219,6 +219,24 @@ Important tables:
 
 Search uses PostgreSQL full-text search and trigram indexes.
 
+## Database Naming Conventions
+
+PostgreSQL adapter names should keep persistence-specific concepts visible without leaking them into application or domain layers.
+
+Type suffixes:
+
+- `Postgres*Repository`: public repository adapter implementing an application port.
+- `*Row`: private `sqlx::FromRow` query result type.
+- `*LookupRow`: private row type used by a repository when implementing a lookup port for another context.
+
+Function naming rules:
+
+- Keep pure row-to-domain conversions as free functions, not repository methods.
+- Use `{row_type}_row_to_{domain_type}` for row-to-domain conversion helpers, for example `product_row_to_product`.
+- Use context-owned names when the row type is context-specific, for example `import_error_row_to_record`.
+- Keep repository `impl` blocks focused on repository behavior, SQL execution, transactions, and data-loading helpers.
+- Keep insert/update helpers outside repository `impl` blocks when they are shared by multiple repository methods or only need a transaction.
+
 ## Error Shape
 
 HTTP errors use:
@@ -233,6 +251,33 @@ HTTP errors use:
 ```
 
 Some older docs mention `details`; the current handlers generally return `code` and `message`.
+
+## HTTP Naming Conventions
+
+HTTP boundary names should keep application and domain concepts first, with the HTTP-layer role expressed by the suffix.
+
+Type suffixes:
+
+- `*Request`: top-level JSON request body.
+- `*Query`: URL query extractor.
+- `*Response`: top-level JSON response body.
+- `*Dto`: nested or reusable transport object.
+- `*ItemDto`: element inside a list response.
+- `*RowDto`: import staging row payload.
+- `*Params` / `*RangeParams`: internal parsed handler data, not public API DTOs.
+
+Function naming rules:
+
+- Put the source domain/application concept first.
+- Put the HTTP artifact or mapping target last.
+- Use `*_request_to_input` for request-body to application-input conversion.
+- Use `*_query_to_criteria` or `*_query_to_params` for query conversion.
+- Use `*_to_response` for top-level response conversion.
+- Use `*_to_list_response` for list response conversion.
+- Use `*_to_dto` for nested DTO conversion.
+- Use `*_dto_to_input` or `*_dto_to_{domain}` for DTO-to-application/domain conversion.
+- Keep error mappings context-owned with `*_error_to_response`, `*_error_to_status_*`, or `*_error_to_message`.
+- Keep handler and route names axum-oriented with `*_handler` and `*_routes`.
 
 ## Tests
 

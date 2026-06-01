@@ -42,7 +42,7 @@ impl ImportRepository for PostgresImportRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| r.into_job()))
+        Ok(row.map(import_row_to_job))
     }
 
     async fn stage_foods(
@@ -310,14 +310,14 @@ impl ImportRepository for PostgresImportRepository {
     }
 
     async fn get_errors(&self, import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError> {
-        let rows = sqlx::query_as::<_, ErrorRow>(
+        let rows = sqlx::query_as::<_, ImportErrorRow>(
             r#"SELECT row_number, error, raw_payload FROM import_errors WHERE import_id = $1 ORDER BY created_at"#,
         )
         .bind(import_id.0)
         .fetch_all(&self.pool)
         .await?;
 
-        Ok(rows.into_iter().map(|r| r.into_record()).collect())
+        Ok(rows.into_iter().map(import_error_row_to_record).collect())
     }
 }
 
@@ -362,33 +362,29 @@ struct ImportRow {
     failed_at: Option<DateTime<Utc>>,
 }
 
-impl ImportRow {
-    fn into_job(self) -> ImportJob {
-        ImportJob {
-            id: ImportId(self.id),
-            source: self.source,
-            status: ImportStatus::from_str(&self.status).unwrap_or(ImportStatus::Failed),
-            created_by: self.created_by,
-            created_at: self.created_at,
-            committed_at: self.committed_at,
-            failed_at: self.failed_at,
-        }
+fn import_row_to_job(row: ImportRow) -> ImportJob {
+    ImportJob {
+        id: ImportId(row.id),
+        source: row.source,
+        status: ImportStatus::from_str(&row.status).unwrap_or(ImportStatus::Failed),
+        created_by: row.created_by,
+        created_at: row.created_at,
+        committed_at: row.committed_at,
+        failed_at: row.failed_at,
     }
 }
 
 #[derive(sqlx::FromRow)]
-struct ErrorRow {
+struct ImportErrorRow {
     row_number: Option<i32>,
     error: String,
     raw_payload: Option<serde_json::Value>,
 }
 
-impl ErrorRow {
-    fn into_record(self) -> ImportErrorRecord {
-        ImportErrorRecord {
-            row_number: self.row_number,
-            error: self.error,
-            raw_payload: self.raw_payload,
-        }
+fn import_error_row_to_record(row: ImportErrorRow) -> ImportErrorRecord {
+    ImportErrorRecord {
+        row_number: row.row_number,
+        error: row.error,
+        raw_payload: row.raw_payload,
     }
 }

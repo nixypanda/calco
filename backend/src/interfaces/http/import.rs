@@ -27,14 +27,14 @@ pub fn import_routes(state: AppState) -> Router {
 }
 
 #[derive(Serialize)]
-struct ApiError {
+struct ErrorBody {
     code: String,
     message: String,
 }
 
 #[derive(Serialize)]
-struct ErrorBody {
-    error: ApiError,
+struct ErrorResponse {
+    error: ErrorBody,
 }
 
 #[derive(Deserialize)]
@@ -68,11 +68,11 @@ async fn create_import_handler(
 
 #[derive(Deserialize)]
 struct StageFoodsRequest {
-    rows: Vec<FoodRow>,
+    rows: Vec<ImportFoodRowDto>,
 }
 
 #[derive(Deserialize)]
-struct FoodRow {
+struct ImportFoodRowDto {
     row_number: Option<i32>,
     source: String,
     source_id: String,
@@ -85,7 +85,7 @@ struct FoodRow {
 }
 
 #[derive(Serialize)]
-struct StageResponse {
+struct ImportStageResponse {
     accepted: i64,
     rejected: i64,
 }
@@ -98,21 +98,21 @@ async fn stage_foods_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let foods = stage_foods_request_to_products(req);
+    let foods = import_stage_foods_request_to_products(req);
 
     match services.stage_foods(ImportId(id), foods).await {
-        Ok(result) => Json(stage_result_to_response(result)).into_response(),
+        Ok(result) => Json(import_stage_result_to_response(result)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
 
 #[derive(Deserialize)]
 struct StageNutrientsRequest {
-    rows: Vec<NutrientRow>,
+    rows: Vec<ImportNutrientRowDto>,
 }
 
 #[derive(Deserialize)]
-struct NutrientRow {
+struct ImportNutrientRowDto {
     row_number: Option<i32>,
     source: String,
     source_id: String,
@@ -128,21 +128,21 @@ async fn stage_nutrients_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let nutrients = stage_nutrients_request_to_nutrients(req);
+    let nutrients = import_stage_nutrients_request_to_nutrients(req);
 
     match services.stage_nutrients(ImportId(id), nutrients).await {
-        Ok(result) => Json(stage_result_to_response(result)).into_response(),
+        Ok(result) => Json(import_stage_result_to_response(result)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
 
 #[derive(Deserialize)]
 struct StageServingsRequest {
-    rows: Vec<ServingRow>,
+    rows: Vec<ImportServingRowDto>,
 }
 
 #[derive(Deserialize)]
-struct ServingRow {
+struct ImportServingRowDto {
     row_number: Option<i32>,
     source: String,
     source_id: String,
@@ -160,16 +160,16 @@ async fn stage_servings_handler(
 ) -> impl IntoResponse {
     let services = &state.import_services;
 
-    let servings = stage_servings_request_to_servings(req);
+    let servings = import_stage_servings_request_to_servings(req);
 
     match services.stage_servings(ImportId(id), servings).await {
-        Ok(result) => Json(stage_result_to_response(result)).into_response(),
+        Ok(result) => Json(import_stage_result_to_response(result)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
 
 #[derive(Serialize)]
-struct CommitResponse {
+struct ImportCommitResponse {
     status: String,
     products_created: i64,
     products_updated: i64,
@@ -186,7 +186,7 @@ async fn commit_import_handler(
     let services = &state.import_services;
 
     match services.commit_job(ImportId(id)).await {
-        Ok(result) => Json(commit_result_to_response(result)).into_response(),
+        Ok(result) => Json(import_commit_result_to_response(result)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
@@ -216,12 +216,12 @@ async fn get_import_handler(
 }
 
 #[derive(Serialize)]
-struct ErrorListResponse {
-    items: Vec<ErrorItem>,
+struct ImportErrorListResponse {
+    items: Vec<ImportErrorItemDto>,
 }
 
 #[derive(Serialize)]
-struct ErrorItem {
+struct ImportErrorItemDto {
     row_number: Option<i32>,
     error: String,
 }
@@ -234,19 +234,19 @@ async fn get_import_errors_handler(
     let services = &state.import_services;
 
     match services.get_errors(ImportId(id)).await {
-        Ok(errors) => Json(import_errors_to_list_response(errors)).into_response(),
+        Ok(errors) => Json(import_errors_to_error_list_response(errors)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }
 }
 
 // ─── Conversions ───────────────────────────────────────────────
 
-fn import_error_response(err: &ImportError) -> (StatusCode, Json<ErrorBody>) {
+fn import_error_response(err: &ImportError) -> (StatusCode, Json<ErrorResponse>) {
     let (status, code, message) = import_error_to_status_code_message(err);
     (
         status,
-        Json(ErrorBody {
-            error: ApiError {
+        Json(ErrorResponse {
+            error: ErrorBody {
                 code: code.to_string(),
                 message,
             },
@@ -270,11 +270,11 @@ fn import_error_to_status_code_message(err: &ImportError) -> (StatusCode, &'stat
     }
 }
 
-fn import_not_found_response(id: Uuid) -> (StatusCode, Json<ErrorBody>) {
+fn import_not_found_response(id: Uuid) -> (StatusCode, Json<ErrorResponse>) {
     (
         StatusCode::NOT_FOUND,
-        Json(ErrorBody {
-            error: ApiError {
+        Json(ErrorResponse {
+            error: ErrorBody {
                 code: "not_found".into(),
                 message: format!("import {id} not found"),
             },
@@ -290,11 +290,14 @@ fn import_job_to_create_response(job: ImportJob) -> CreateImportResponse {
     }
 }
 
-fn stage_foods_request_to_products(req: StageFoodsRequest) -> Vec<StagedImportProduct> {
-    req.rows.into_iter().map(food_row_to_product).collect()
+fn import_stage_foods_request_to_products(req: StageFoodsRequest) -> Vec<StagedImportProduct> {
+    req.rows
+        .into_iter()
+        .map(import_food_row_dto_to_product)
+        .collect()
 }
 
-fn food_row_to_product(row: FoodRow) -> StagedImportProduct {
+fn import_food_row_dto_to_product(row: ImportFoodRowDto) -> StagedImportProduct {
     StagedImportProduct {
         source: row.source,
         source_id: row.source_id,
@@ -308,11 +311,16 @@ fn food_row_to_product(row: FoodRow) -> StagedImportProduct {
     }
 }
 
-fn stage_nutrients_request_to_nutrients(req: StageNutrientsRequest) -> Vec<StagedImportNutrient> {
-    req.rows.into_iter().map(nutrient_row_to_nutrient).collect()
+fn import_stage_nutrients_request_to_nutrients(
+    req: StageNutrientsRequest,
+) -> Vec<StagedImportNutrient> {
+    req.rows
+        .into_iter()
+        .map(import_nutrient_row_dto_to_nutrient)
+        .collect()
 }
 
-fn nutrient_row_to_nutrient(row: NutrientRow) -> StagedImportNutrient {
+fn import_nutrient_row_dto_to_nutrient(row: ImportNutrientRowDto) -> StagedImportNutrient {
     StagedImportNutrient {
         source: row.source,
         source_id: row.source_id,
@@ -323,11 +331,16 @@ fn nutrient_row_to_nutrient(row: NutrientRow) -> StagedImportNutrient {
     }
 }
 
-fn stage_servings_request_to_servings(req: StageServingsRequest) -> Vec<StagedImportServing> {
-    req.rows.into_iter().map(serving_row_to_serving).collect()
+fn import_stage_servings_request_to_servings(
+    req: StageServingsRequest,
+) -> Vec<StagedImportServing> {
+    req.rows
+        .into_iter()
+        .map(import_serving_row_dto_to_serving)
+        .collect()
 }
 
-fn serving_row_to_serving(row: ServingRow) -> StagedImportServing {
+fn import_serving_row_dto_to_serving(row: ImportServingRowDto) -> StagedImportServing {
     StagedImportServing {
         source: row.source,
         source_id: row.source_id,
@@ -340,15 +353,15 @@ fn serving_row_to_serving(row: ServingRow) -> StagedImportServing {
     }
 }
 
-fn stage_result_to_response(result: StageResult) -> StageResponse {
-    StageResponse {
+fn import_stage_result_to_response(result: StageResult) -> ImportStageResponse {
+    ImportStageResponse {
         accepted: result.accepted,
         rejected: result.rejected,
     }
 }
 
-fn commit_result_to_response(result: ImportCommitResult) -> CommitResponse {
-    CommitResponse {
+fn import_commit_result_to_response(result: ImportCommitResult) -> ImportCommitResponse {
+    ImportCommitResponse {
         status: "committed".into(),
         products_created: result.products_created,
         products_updated: result.products_updated,
@@ -369,14 +382,14 @@ fn import_job_to_status_response(job: ImportJob) -> ImportStatusResponse {
     }
 }
 
-fn import_errors_to_list_response(errors: Vec<ImportErrorRecord>) -> ErrorListResponse {
-    ErrorListResponse {
-        items: errors.into_iter().map(import_error_to_item).collect(),
+fn import_errors_to_error_list_response(errors: Vec<ImportErrorRecord>) -> ImportErrorListResponse {
+    ImportErrorListResponse {
+        items: errors.into_iter().map(import_error_to_item_dto).collect(),
     }
 }
 
-fn import_error_to_item(error: ImportErrorRecord) -> ErrorItem {
-    ErrorItem {
+fn import_error_to_item_dto(error: ImportErrorRecord) -> ImportErrorItemDto {
+    ImportErrorItemDto {
         row_number: error.row_number,
         error: error.error,
     }

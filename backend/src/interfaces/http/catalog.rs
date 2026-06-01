@@ -68,7 +68,7 @@ fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse
 }
 
 #[derive(Serialize)]
-pub struct SearchResult {
+pub struct ProductSearchItemDto {
     pub id: Uuid,
     pub source: String,
     pub source_id: Option<String>,
@@ -83,7 +83,7 @@ pub struct SearchResult {
 
 #[derive(Serialize)]
 pub struct SearchListResponse {
-    pub items: Vec<SearchResult>,
+    pub items: Vec<ProductSearchItemDto>,
 }
 
 #[derive(Serialize)]
@@ -104,13 +104,13 @@ pub struct ProductDetailResponse {
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub serving_size_g: Option<Decimal>,
-    pub nutrients: Vec<NutrientEntry>,
-    pub servings: Vec<ServingEntry>,
-    pub allowed_units: Vec<UnitItem>,
+    pub nutrients: Vec<ProductNutrientDto>,
+    pub servings: Vec<ProductServingDto>,
+    pub allowed_units: Vec<UnitItemDto>,
 }
 
 #[derive(Serialize)]
-pub struct NutrientEntry {
+pub struct ProductNutrientDto {
     pub code: String,
     pub amount_per_100g: Decimal,
     pub unit: String,
@@ -119,7 +119,7 @@ pub struct NutrientEntry {
 }
 
 #[derive(Serialize)]
-pub struct ServingEntry {
+pub struct ProductServingDto {
     pub label: String,
     pub quantity: Decimal,
     pub unit: String,
@@ -135,12 +135,12 @@ pub struct CreateCustomFoodRequest {
     pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
-    pub nutrients: Vec<CreateNutrientEntry>,
-    pub servings: Vec<CreateServingEntry>,
+    pub nutrients: Vec<CreateProductNutrientDto>,
+    pub servings: Vec<CreateProductServingDto>,
 }
 
 #[derive(Deserialize)]
-pub struct CreateNutrientEntry {
+pub struct CreateProductNutrientDto {
     pub code: String,
     pub amount_per_100g: Decimal,
     pub source: Option<String>,
@@ -148,7 +148,7 @@ pub struct CreateNutrientEntry {
 }
 
 #[derive(Deserialize)]
-pub struct CreateServingEntry {
+pub struct CreateProductServingDto {
     pub label: String,
     pub quantity: Decimal,
     pub unit: String,
@@ -157,11 +157,11 @@ pub struct CreateServingEntry {
 
 #[derive(Serialize)]
 pub struct NutrientListResponse {
-    pub items: Vec<NutrientItem>,
+    pub items: Vec<NutrientItemDto>,
 }
 
 #[derive(Serialize)]
-pub struct NutrientItem {
+pub struct NutrientItemDto {
     pub code: String,
     pub name: String,
     pub unit: String,
@@ -170,11 +170,11 @@ pub struct NutrientItem {
 
 #[derive(Serialize)]
 pub struct UnitListResponse {
-    pub items: Vec<UnitItem>,
+    pub items: Vec<UnitItemDto>,
 }
 
 #[derive(Serialize)]
-pub struct UnitItem {
+pub struct UnitItemDto {
     pub code: String,
     pub name: String,
     pub kind: String,
@@ -182,11 +182,11 @@ pub struct UnitItem {
 
 #[derive(Serialize)]
 pub struct CategoryListResponse {
-    pub items: Vec<CategoryItem>,
+    pub items: Vec<CategoryItemDto>,
 }
 
 #[derive(Serialize)]
-pub struct CategoryItem {
+pub struct CategoryItemDto {
     pub value: String,
     pub count: i64,
 }
@@ -203,7 +203,7 @@ pub struct CategoryQuery {
     pub limit: Option<i64>,
 }
 
-struct CustomFoodArgs {
+struct CustomFoodParams {
     name: String,
     brand: Option<String>,
     categories: Vec<String>,
@@ -223,11 +223,11 @@ async fn search_products_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     let products = services
-        .search_products(search_query_to_criteria(query, auth.0.id))
+        .search_products(product_search_query_to_criteria(query, auth.0.id))
         .await;
 
     match products {
-        Ok(items) => Json(products_to_search_list_response(items)).into_response(),
+        Ok(items) => Json(products_to_search_response(items)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -245,7 +245,7 @@ async fn list_categories_handler(
         Ok(categories) => {
             let items = categories
                 .into_iter()
-                .map(category_suggestion_to_item)
+                .map(category_suggestion_to_item_dto)
                 .collect();
             Json(CategoryListResponse { items }).into_response()
         }
@@ -303,7 +303,7 @@ async fn create_custom_food_handler(
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
-    let args = custom_food_request_to_args(req);
+    let args = custom_food_request_to_params(req);
 
     match services
         .create_custom_food(
@@ -332,7 +332,7 @@ async fn update_custom_food_handler(
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
-    let args = custom_food_request_to_args(req);
+    let args = custom_food_request_to_params(req);
 
     match services
         .update_custom_food(
@@ -383,7 +383,8 @@ async fn list_nutrients_handler(
     let services = &state.catalog_services;
     match services.list_nutrients().await {
         Ok(nutrients) => {
-            let items: Vec<NutrientItem> = nutrients.into_iter().map(nutrient_to_item).collect();
+            let items: Vec<NutrientItemDto> =
+                nutrients.into_iter().map(nutrient_to_item_dto).collect();
             Json(NutrientListResponse { items }).into_response()
         }
         Err(e) => internal_error(e).into_response(),
@@ -397,7 +398,7 @@ async fn get_nutrient_handler(
 ) -> impl IntoResponse {
     let services = &state.catalog_services;
     match services.get_nutrient(&code).await {
-        Ok(n) => Json(nutrient_to_item(n)).into_response(),
+        Ok(n) => Json(nutrient_to_item_dto(n)).into_response(),
         Err(CatalogError::NotFound(_)) => {
             error_response("not_found", format!("nutrient {code} not found")).into_response()
         }
@@ -409,7 +410,7 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
     let services = &state.catalog_services;
     match services.list_units().await {
         Ok(units) => {
-            let items: Vec<UnitItem> = units.into_iter().map(unit_tuple_to_item).collect();
+            let items: Vec<UnitItemDto> = units.into_iter().map(unit_tuple_to_item_dto).collect();
             Json(UnitListResponse { items }).into_response()
         }
         Err(e) => internal_error(e).into_response(),
@@ -418,36 +419,36 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
 
 // ─── Conversions ───────────────────────────────────────────────
 
-fn search_query_to_criteria(query: SearchQuery, user_id: Uuid) -> SearchCriteria {
+fn product_search_query_to_criteria(query: SearchQuery, user_id: Uuid) -> SearchCriteria {
     SearchCriteria {
         query: query.q,
         user_id: Some(user_id),
     }
 }
 
-fn custom_food_request_to_args(req: CreateCustomFoodRequest) -> CustomFoodArgs {
-    CustomFoodArgs {
+fn custom_food_request_to_params(req: CreateCustomFoodRequest) -> CustomFoodParams {
+    CustomFoodParams {
         name: req.name,
         brand: req.brand,
         categories: req.categories,
         serving_size_g: req.serving_size_g,
         default_quantity: req.default_quantity,
         default_unit: req.default_unit,
-        nutrients: create_nutrient_entries_to_inputs(req.nutrients),
-        servings: create_serving_entries_to_inputs(req.servings),
+        nutrients: product_nutrient_dtos_to_inputs(req.nutrients),
+        servings: product_serving_dtos_to_inputs(req.servings),
     }
 }
 
-fn create_nutrient_entries_to_inputs(
-    entries: Vec<CreateNutrientEntry>,
+fn product_nutrient_dtos_to_inputs(
+    entries: Vec<CreateProductNutrientDto>,
 ) -> Vec<ProductNutrientInput> {
     entries
         .into_iter()
-        .map(create_nutrient_entry_to_input)
+        .map(product_nutrient_dto_to_input)
         .collect()
 }
 
-fn create_nutrient_entry_to_input(entry: CreateNutrientEntry) -> ProductNutrientInput {
+fn product_nutrient_dto_to_input(entry: CreateProductNutrientDto) -> ProductNutrientInput {
     ProductNutrientInput {
         code: entry.code,
         amount_per_100g: entry.amount_per_100g,
@@ -456,14 +457,16 @@ fn create_nutrient_entry_to_input(entry: CreateNutrientEntry) -> ProductNutrient
     }
 }
 
-fn create_serving_entries_to_inputs(entries: Vec<CreateServingEntry>) -> Vec<ProductServingInput> {
+fn product_serving_dtos_to_inputs(
+    entries: Vec<CreateProductServingDto>,
+) -> Vec<ProductServingInput> {
     entries
         .into_iter()
-        .map(create_serving_entry_to_input)
+        .map(product_serving_dto_to_input)
         .collect()
 }
 
-fn create_serving_entry_to_input(entry: CreateServingEntry) -> ProductServingInput {
+fn product_serving_dto_to_input(entry: CreateProductServingDto) -> ProductServingInput {
     ProductServingInput {
         label: entry.label,
         quantity: entry.quantity,
@@ -472,18 +475,21 @@ fn create_serving_entry_to_input(entry: CreateServingEntry) -> ProductServingInp
     }
 }
 
-fn products_to_search_list_response(products: Vec<Product>) -> SearchListResponse {
+fn products_to_search_response(products: Vec<Product>) -> SearchListResponse {
     SearchListResponse {
-        items: products.into_iter().map(product_to_search_result).collect(),
+        items: products
+            .into_iter()
+            .map(product_to_search_item_dto)
+            .collect(),
     }
 }
 
-fn product_to_search_result(product: Product) -> SearchResult {
+fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
     let energy_kcal_per_100g = product_energy_kcal_per_100g(&product);
     let energy_kcal_per_serving =
         energy_kcal_per_serving(energy_kcal_per_100g, product.serving_size_g);
 
-    SearchResult {
+    ProductSearchItemDto {
         id: product.id.0,
         source: product.source.as_str().to_string(),
         source_id: product.source_id,
@@ -515,8 +521,8 @@ fn energy_kcal_per_serving(
     }
 }
 
-fn category_suggestion_to_item(category: CategorySuggestion) -> CategoryItem {
-    CategoryItem {
+fn category_suggestion_to_item_dto(category: CategorySuggestion) -> CategoryItemDto {
+    CategoryItemDto {
         value: category.value,
         count: category.count,
     }
@@ -526,8 +532,8 @@ fn product_to_id_response(product: Product) -> ProductIdResponse {
     ProductIdResponse { id: product.id.0 }
 }
 
-fn nutrient_to_item(nutrient: Nutrient) -> NutrientItem {
-    NutrientItem {
+fn nutrient_to_item_dto(nutrient: Nutrient) -> NutrientItemDto {
+    NutrientItemDto {
         code: nutrient.code().0.clone(),
         name: nutrient.name().to_string(),
         unit: nutrient.unit().0.clone(),
@@ -535,8 +541,8 @@ fn nutrient_to_item(nutrient: Nutrient) -> NutrientItem {
     }
 }
 
-fn unit_tuple_to_item((code, name, kind): (UnitCode, String, String)) -> UnitItem {
-    UnitItem {
+fn unit_tuple_to_item_dto((code, name, kind): (UnitCode, String, String)) -> UnitItemDto {
+    UnitItemDto {
         code: code.0,
         name,
         kind,
@@ -562,19 +568,22 @@ fn product_to_detail_response(
         nutrients: product
             .nutrients
             .iter()
-            .map(product_nutrient_to_entry)
+            .map(product_nutrient_to_dto)
             .collect(),
         servings: product
             .servings
             .iter()
-            .map(product_serving_to_entry)
+            .map(product_serving_to_dto)
             .collect(),
-        allowed_units: allowed_units.into_iter().map(unit_tuple_to_item).collect(),
+        allowed_units: allowed_units
+            .into_iter()
+            .map(unit_tuple_to_item_dto)
+            .collect(),
     }
 }
 
-fn product_nutrient_to_entry(nutrient: &ProductNutrient) -> NutrientEntry {
-    NutrientEntry {
+fn product_nutrient_to_dto(nutrient: &ProductNutrient) -> ProductNutrientDto {
+    ProductNutrientDto {
         code: nutrient.nutrient_code.0.clone(),
         amount_per_100g: nutrient.amount_per_100g.0,
         unit: nutrient.unit.0.clone(),
@@ -583,8 +592,8 @@ fn product_nutrient_to_entry(nutrient: &ProductNutrient) -> NutrientEntry {
     }
 }
 
-fn product_serving_to_entry(serving: &ProductServing) -> ServingEntry {
-    ServingEntry {
+fn product_serving_to_dto(serving: &ProductServing) -> ProductServingDto {
+    ProductServingDto {
         label: serving.label.0.clone(),
         quantity: serving.quantity,
         unit: serving.unit.0.clone(),

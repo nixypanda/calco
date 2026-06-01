@@ -30,7 +30,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        row.map(|r| r.try_into()).transpose()
+        row.map(identity_row_to_identity).transpose()
     }
 
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError> {
@@ -42,7 +42,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        row.map(|r| r.try_into()).transpose()
+        row.map(identity_row_to_identity).transpose()
     }
 
     async fn create(&self, identity: &Identity) -> Result<(), AuthError> {
@@ -102,21 +102,17 @@ struct IdentityRow {
     last_login_at: Option<DateTime<Utc>>,
 }
 
-impl TryFrom<IdentityRow> for Identity {
-    type Error = AuthError;
-
-    fn try_from(row: IdentityRow) -> Result<Self, AuthError> {
-        Ok(Identity {
-            id: IdentityId(row.id),
-            username: Username(row.username),
-            password_hash: PasswordHash(row.password_hash),
-            role: IdentityRole::from_str(&row.role)?,
-            status: IdentityStatus::from_str(&row.status)?,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-            last_login_at: row.last_login_at,
-        })
-    }
+fn identity_row_to_identity(row: IdentityRow) -> Result<Identity, AuthError> {
+    Ok(Identity {
+        id: IdentityId(row.id),
+        username: Username(row.username),
+        password_hash: PasswordHash(row.password_hash),
+        role: IdentityRole::from_str(&row.role)?,
+        status: IdentityStatus::from_str(&row.status)?,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        last_login_at: row.last_login_at,
+    })
 }
 
 #[derive(Clone)]
@@ -159,7 +155,7 @@ impl SessionRepository for PostgresSessionRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| r.into()))
+        Ok(row.map(session_row_to_session))
     }
 
     async fn revoke(&self, session_id: Uuid) -> Result<(), AuthError> {
@@ -210,17 +206,15 @@ struct SessionRow {
     revoked_at: Option<DateTime<Utc>>,
 }
 
-impl From<SessionRow> for Session {
-    fn from(row: SessionRow) -> Self {
-        Session {
-            id: row.id,
-            identity_id: IdentityId(row.identity_id),
-            session_token_hash: SessionTokenHash(row.session_token_hash),
-            created_at: row.created_at,
-            last_seen_at: row.last_seen_at,
-            expires_at: row.expires_at,
-            revoked_at: row.revoked_at,
-        }
+fn session_row_to_session(row: SessionRow) -> Session {
+    Session {
+        id: row.id,
+        identity_id: IdentityId(row.identity_id),
+        session_token_hash: SessionTokenHash(row.session_token_hash),
+        created_at: row.created_at,
+        last_seen_at: row.last_seen_at,
+        expires_at: row.expires_at,
+        revoked_at: row.revoked_at,
     }
 }
 
@@ -249,7 +243,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| r.into()))
+        Ok(row.map(profile_row_to_user_profile))
     }
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError> {
@@ -261,7 +255,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(row.map(|r| r.into()))
+        Ok(row.map(profile_row_to_user_profile))
     }
 
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError> {
@@ -295,27 +289,7 @@ impl UserProfileRepository for PostgresUserProfileRepository {
         .await?;
 
         rows.into_iter()
-            .map(|r| {
-                Ok(UserWithProfile {
-                    identity: Identity {
-                        id: IdentityId(r.identity_id),
-                        username: Username(r.username),
-                        password_hash: PasswordHash(r.password_hash),
-                        role: IdentityRole::from_str(&r.role)?,
-                        status: IdentityStatus::from_str(&r.status)?,
-                        created_at: r.identity_created_at,
-                        updated_at: r.identity_updated_at,
-                        last_login_at: r.last_login_at,
-                    },
-                    profile: UserProfile {
-                        id: r.profile_id,
-                        identity_id: IdentityId(r.identity_id),
-                        display_name: r.display_name,
-                        created_at: r.profile_created_at,
-                        updated_at: r.profile_updated_at,
-                    },
-                })
-            })
+            .map(profile_with_identity_row_to_user_with_profile)
             .collect()
     }
 }
@@ -345,14 +319,36 @@ struct ProfileWithIdentityRow {
     last_login_at: Option<DateTime<Utc>>,
 }
 
-impl From<ProfileRow> for UserProfile {
-    fn from(row: ProfileRow) -> Self {
-        UserProfile {
-            id: row.id,
+fn profile_row_to_user_profile(row: ProfileRow) -> UserProfile {
+    UserProfile {
+        id: row.id,
+        identity_id: IdentityId(row.identity_id),
+        display_name: row.display_name,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+    }
+}
+
+fn profile_with_identity_row_to_user_with_profile(
+    row: ProfileWithIdentityRow,
+) -> Result<UserWithProfile, AuthError> {
+    Ok(UserWithProfile {
+        identity: Identity {
+            id: IdentityId(row.identity_id),
+            username: Username(row.username),
+            password_hash: PasswordHash(row.password_hash),
+            role: IdentityRole::from_str(&row.role)?,
+            status: IdentityStatus::from_str(&row.status)?,
+            created_at: row.identity_created_at,
+            updated_at: row.identity_updated_at,
+            last_login_at: row.last_login_at,
+        },
+        profile: UserProfile {
+            id: row.profile_id,
             identity_id: IdentityId(row.identity_id),
             display_name: row.display_name,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        }
-    }
+            created_at: row.profile_created_at,
+            updated_at: row.profile_updated_at,
+        },
+    })
 }

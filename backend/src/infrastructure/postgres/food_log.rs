@@ -44,34 +44,33 @@ impl PostgresFoodLogRepository {
             })
             .collect())
     }
+}
 
-    fn row_to_food_log(
-        &self,
-        r: FoodLogRow,
-        snapshots: Vec<FoodLogNutrientSnapshot>,
-    ) -> Result<FoodLog, FoodLogError> {
-        let item = if let Some(pid) = r.item_product_id {
-            LoggedItem::Product(ProductId(pid))
-        } else if let Some(mid) = r.item_meal_id {
-            LoggedItem::Meal(MealId(mid))
-        } else {
-            return Err(FoodLogError::Internal(
-                "food log has no item reference".into(),
-            ));
-        };
+fn food_log_row_to_food_log(
+    row: FoodLogRow,
+    snapshots: Vec<FoodLogNutrientSnapshot>,
+) -> Result<FoodLog, FoodLogError> {
+    let item = if let Some(pid) = row.item_product_id {
+        LoggedItem::Product(ProductId(pid))
+    } else if let Some(mid) = row.item_meal_id {
+        LoggedItem::Meal(MealId(mid))
+    } else {
+        return Err(FoodLogError::Internal(
+            "food log has no item reference".into(),
+        ));
+    };
 
-        Ok(FoodLog {
-            id: FoodLogId(r.id),
-            user_id: r.user_id,
-            logged_at: r.logged_at,
-            meal_slot: r.meal_slot.and_then(|s| MealSlot::from_str(&s).ok()),
-            item,
-            quantity_amount: r.quantity,
-            quantity_unit: UnitCode(r.unit),
-            nutrient_snapshots: snapshots,
-            notes: r.notes,
-        })
-    }
+    Ok(FoodLog {
+        id: FoodLogId(row.id),
+        user_id: row.user_id,
+        logged_at: row.logged_at,
+        meal_slot: row.meal_slot.and_then(|s| MealSlot::from_str(&s).ok()),
+        item,
+        quantity_amount: row.quantity,
+        quantity_unit: UnitCode(row.unit),
+        nutrient_snapshots: snapshots,
+        notes: row.notes,
+    })
 }
 
 #[async_trait]
@@ -123,7 +122,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         match row {
             Some(r) => {
                 let snapshots = self.load_snapshots(r.id).await?;
-                Ok(Some(self.row_to_food_log(r, snapshots)?))
+                Ok(Some(food_log_row_to_food_log(r, snapshots)?))
             }
             None => Ok(None),
         }
@@ -183,7 +182,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let mut results = Vec::with_capacity(rows.len());
         for r in rows {
             let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
-            results.push(self.row_to_food_log(r, snapshots)?);
+            results.push(food_log_row_to_food_log(r, snapshots)?);
         }
         Ok(results)
     }
@@ -237,7 +236,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 #[async_trait]
 impl ProductLookup for PostgresFoodLogRepository {
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, FoodLogError> {
-        let row = sqlx::query_as::<_, ProductRow>(
+        let row = sqlx::query_as::<_, ProductLookupRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
                    categories, default_quantity, default_unit, serving_size_g
@@ -252,7 +251,7 @@ impl ProductLookup for PostgresFoodLogRepository {
             Some(r) => {
                 let nutrients = self.load_product_nutrients(r.id).await?;
                 let servings = self.load_product_servings(r.id).await?;
-                Ok(Some(self.row_to_product(r, nutrients, servings)?))
+                Ok(Some(product_lookup_row_to_product(r, nutrients, servings)?))
             }
             None => Ok(None),
         }
@@ -324,7 +323,7 @@ impl PostgresFoodLogRepository {
         &self,
         product_id: Uuid,
     ) -> Result<Vec<ProductNutrient>, FoodLogError> {
-        let rows = sqlx::query_as::<_, ProductNutrientRow>(
+        let rows = sqlx::query_as::<_, ProductNutrientLookupRow>(
             r#"
             SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
             FROM product_nutrients pn
@@ -354,7 +353,7 @@ impl PostgresFoodLogRepository {
         &self,
         product_id: Uuid,
     ) -> Result<Vec<ProductServing>, FoodLogError> {
-        let rows = sqlx::query_as::<_, ProductServingRow>(
+        let rows = sqlx::query_as::<_, ProductServingLookupRow>(
             "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
         )
         .bind(product_id)
@@ -370,31 +369,6 @@ impl PostgresFoodLogRepository {
                 grams: r.grams,
             })
             .collect())
-    }
-
-    fn row_to_product(
-        &self,
-        r: ProductRow,
-        nutrients: Vec<ProductNutrient>,
-        servings: Vec<ProductServing>,
-    ) -> Result<Product, FoodLogError> {
-        Ok(Product {
-            id: ProductId(r.id),
-            source: Source::from_str(&r.source).map_err(FoodLogError::Internal)?,
-            source_id: r.source_id,
-            user_id: r.user_id,
-            visibility: ProductVisibility::from_str(&r.visibility)
-                .map_err(FoodLogError::Internal)?,
-            barcode: r.barcode.map(Barcode),
-            name: ProductName(r.name),
-            brand: r.brand.map(Brand),
-            categories: r.categories.into_iter().map(Category).collect(),
-            default_quantity: r.default_quantity,
-            default_unit: r.default_unit.map(UnitCode),
-            serving_size_g: r.serving_size_g,
-            nutrients,
-            servings,
-        })
     }
 }
 
@@ -498,7 +472,7 @@ struct FoodLogSnapshotJoinRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct ProductRow {
+struct ProductLookupRow {
     id: Uuid,
     source: String,
     source_id: Option<String>,
@@ -514,7 +488,7 @@ struct ProductRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct ProductNutrientRow {
+struct ProductNutrientLookupRow {
     amount_per_100g: Decimal,
     source: Option<String>,
     confidence: Option<String>,
@@ -523,11 +497,34 @@ struct ProductNutrientRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct ProductServingRow {
+struct ProductServingLookupRow {
     label: String,
     quantity: Decimal,
     unit: String,
     grams: Decimal,
+}
+
+fn product_lookup_row_to_product(
+    row: ProductLookupRow,
+    nutrients: Vec<ProductNutrient>,
+    servings: Vec<ProductServing>,
+) -> Result<Product, FoodLogError> {
+    Ok(Product {
+        id: ProductId(row.id),
+        source: Source::from_str(&row.source).map_err(FoodLogError::Internal)?,
+        source_id: row.source_id,
+        user_id: row.user_id,
+        visibility: ProductVisibility::from_str(&row.visibility).map_err(FoodLogError::Internal)?,
+        barcode: row.barcode.map(Barcode),
+        name: ProductName(row.name),
+        brand: row.brand.map(Brand),
+        categories: row.categories.into_iter().map(Category).collect(),
+        default_quantity: row.default_quantity,
+        default_unit: row.default_unit.map(UnitCode),
+        serving_size_g: row.serving_size_g,
+        nutrients,
+        servings,
+    })
 }
 
 #[derive(sqlx::FromRow)]

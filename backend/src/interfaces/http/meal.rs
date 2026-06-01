@@ -69,12 +69,12 @@ pub struct CreateMealRequest {
 
 #[derive(Deserialize)]
 pub struct CreateMealComponentRequest {
-    pub item: ItemRef,
+    pub item: ItemRefDto,
     pub quantity: QuantityDto,
 }
 
 #[derive(Deserialize)]
-pub struct ItemRef {
+pub struct ItemRefDto {
     #[serde(rename = "type")]
     pub item_type: String,
     pub id: Uuid,
@@ -92,18 +92,18 @@ pub struct MealResponse {
     pub name: String,
     pub notes: Option<String>,
     pub total_quantity: Option<QuantityDto>,
-    pub components: Vec<MealComponentResponse>,
+    pub components: Vec<MealComponentDto>,
 }
 
 #[derive(Serialize)]
-pub struct MealComponentResponse {
+pub struct MealComponentDto {
     pub id: Uuid,
-    pub item: ItemResponse,
+    pub item: ItemDto,
     pub quantity: QuantityDto,
 }
 
 #[derive(Serialize)]
-pub struct ItemResponse {
+pub struct ItemDto {
     #[serde(rename = "type")]
     pub item_type: String,
     pub id: Uuid,
@@ -118,11 +118,11 @@ pub struct MealListResponse {
 pub struct MealNutritionResponse {
     pub meal_id: Uuid,
     pub quantity: QuantityDto,
-    pub nutrients: Vec<NutrientEntry>,
+    pub nutrients: Vec<MealNutrientDto>,
 }
 
 #[derive(Serialize)]
-pub struct NutrientEntry {
+pub struct MealNutrientDto {
     pub code: String,
     pub amount: Decimal,
     pub unit: String,
@@ -149,7 +149,7 @@ async fn create_meal_handler(
 ) -> impl IntoResponse {
     let services = &state.meal_services;
 
-    let input = create_meal_request_to_input(req, auth.0.id);
+    let input = meal_create_request_to_input(req, auth.0.id);
 
     match services.create_meal(input).await {
         Ok(meal) => {
@@ -199,7 +199,7 @@ async fn update_meal_handler(
 ) -> impl IntoResponse {
     let services = &state.meal_services;
 
-    let input = update_meal_request_to_input(req);
+    let input = meal_update_request_to_input(req);
 
     match services.update_meal(MealId(id), auth.0.id, input).await {
         Ok(meal) => {
@@ -259,7 +259,7 @@ async fn meal_nutrients_handler(
 
 // ─── Conversions ───────────────────────────────────────────────
 
-fn create_meal_request_to_input(req: CreateMealRequest, user_id: Uuid) -> CreateMealInput {
+fn meal_create_request_to_input(req: CreateMealRequest, user_id: Uuid) -> CreateMealInput {
     CreateMealInput {
         user_id,
         name: req.name,
@@ -270,7 +270,7 @@ fn create_meal_request_to_input(req: CreateMealRequest, user_id: Uuid) -> Create
     }
 }
 
-fn update_meal_request_to_input(req: UpdateMealRequest) -> UpdateMealInput {
+fn meal_update_request_to_input(req: UpdateMealRequest) -> UpdateMealInput {
     let total_quantity = req.total_quantity;
     UpdateMealInput {
         name: req.name,
@@ -315,11 +315,7 @@ fn meal_to_response(meal: &Meal) -> MealResponse {
         name: meal.name.0.clone(),
         notes: meal.notes.as_ref().map(|n| n.0.clone()),
         total_quantity: meal_total_quantity_to_dto(meal),
-        components: meal
-            .components
-            .iter()
-            .map(meal_component_to_response)
-            .collect(),
+        components: meal.components.iter().map(meal_component_to_dto).collect(),
     }
 }
 
@@ -334,11 +330,11 @@ fn meal_total_quantity_to_dto(meal: &Meal) -> Option<QuantityDto> {
     })
 }
 
-fn meal_component_to_response(component: &MealComponent) -> MealComponentResponse {
+fn meal_component_to_dto(component: &MealComponent) -> MealComponentDto {
     let (item_type, item_id) = meal_component_item_to_parts(&component.item);
-    MealComponentResponse {
+    MealComponentDto {
         id: component.id,
-        item: item_parts_to_response(item_type, item_id),
+        item: item_parts_to_dto(item_type, item_id),
         quantity: quantity_to_dto(component.quantity_amount, component.quantity_unit.0.clone()),
     }
 }
@@ -349,8 +345,8 @@ fn meal_component_item_to_parts(item: &MealComponentItem) -> (&'static str, Uuid
     }
 }
 
-fn item_parts_to_response(item_type: &str, id: Uuid) -> ItemResponse {
-    ItemResponse {
+fn item_parts_to_dto(item_type: &str, id: Uuid) -> ItemDto {
+    ItemDto {
         item_type: item_type.to_string(),
         id,
     }
@@ -367,13 +363,13 @@ fn meal_nutrition_to_response(nutrition: MealNutritionOutput) -> MealNutritionRe
         nutrients: nutrition
             .nutrients
             .into_iter()
-            .map(meal_nutrient_to_entry)
+            .map(meal_nutrient_to_dto)
             .collect(),
     }
 }
 
-fn meal_nutrient_to_entry(nutrient: MealNutrientEntry) -> NutrientEntry {
-    NutrientEntry {
+fn meal_nutrient_to_dto(nutrient: MealNutrientEntry) -> MealNutrientDto {
+    MealNutrientDto {
         code: nutrient.code,
         amount: nutrient.amount,
         unit: nutrient.unit,

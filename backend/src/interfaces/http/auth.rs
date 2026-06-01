@@ -153,19 +153,19 @@ impl FromRequestParts<AppState> for AuthAdmin {
 // ─── DTOs ─────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-pub struct ApiError {
+pub struct ErrorBody {
     pub code: String,
     pub message: String,
 }
 
 #[derive(Serialize)]
-pub struct ErrorBody {
-    pub error: ApiError,
+pub struct ErrorResponse {
+    pub error: ErrorBody,
 }
 
 pub struct AuthErrorResponse {
     status: StatusCode,
-    body: ErrorBody,
+    body: ErrorResponse,
 }
 
 impl IntoResponse for AuthErrorResponse {
@@ -192,22 +192,22 @@ pub struct LoginRequest {
 }
 
 #[derive(Serialize)]
-pub struct IdentityResponse {
+pub struct IdentityDto {
     pub id: Uuid,
     pub username: String,
     pub role: String,
 }
 
 #[derive(Serialize)]
-pub struct ProfileResponse {
+pub struct ProfileDto {
     pub id: Uuid,
     pub display_name: String,
 }
 
 #[derive(Serialize)]
 pub struct LoginSessionResponse {
-    pub identity: IdentityResponse,
-    pub profile: Option<ProfileResponse>,
+    pub identity: IdentityDto,
+    pub profile: Option<ProfileDto>,
 }
 
 #[derive(Deserialize)]
@@ -218,7 +218,7 @@ pub struct CreateUserRequest {
 }
 
 #[derive(Serialize)]
-pub struct UserItem {
+pub struct UserItemDto {
     pub id: Uuid,
     pub username: String,
     pub display_name: String,
@@ -227,8 +227,8 @@ pub struct UserItem {
 }
 
 #[derive(Serialize)]
-pub struct ListUsersResponse {
-    pub users: Vec<UserItem>,
+pub struct UserListResponse {
+    pub users: Vec<UserItemDto>,
 }
 
 #[derive(Deserialize)]
@@ -343,7 +343,7 @@ async fn admin_create_user_handler(
 async fn admin_list_users_handler(
     _admin: AuthAdmin,
     State(state): State<AppState>,
-) -> Result<Json<ListUsersResponse>, AuthErrorResponse> {
+) -> Result<Json<UserListResponse>, AuthErrorResponse> {
     let users = admin_list_users(&*state.identity_repo, &*state.profile_repo)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
@@ -405,8 +405,8 @@ fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
     let (status, code) = auth_error_to_status_and_code(err);
     AuthErrorResponse {
         status,
-        body: ErrorBody {
-            error: ApiError {
+        body: ErrorResponse {
+            error: ErrorBody {
                 code: code.to_string(),
                 message: auth_error_to_message(err),
             },
@@ -444,8 +444,8 @@ fn auth_error_to_message(err: &AuthError) -> String {
 fn forbidden_auth_error_response() -> AuthErrorResponse {
     AuthErrorResponse {
         status: StatusCode::FORBIDDEN,
-        body: ErrorBody {
-            error: ApiError {
+        body: ErrorResponse {
+            error: ErrorBody {
                 code: "forbidden".into(),
                 message: "Forbidden".into(),
             },
@@ -468,21 +468,21 @@ fn identity_and_profile_to_response(
     profile: Option<UserProfile>,
 ) -> LoginSessionResponse {
     LoginSessionResponse {
-        identity: identity_to_response(identity),
-        profile: profile.map(profile_to_response),
+        identity: identity_to_dto(identity),
+        profile: profile.map(profile_to_dto),
     }
 }
 
-fn identity_to_response(identity: Identity) -> IdentityResponse {
-    IdentityResponse {
+fn identity_to_dto(identity: Identity) -> IdentityDto {
+    IdentityDto {
         id: identity.id.0,
         username: identity.username.0,
         role: identity.role.as_str().to_string(),
     }
 }
 
-fn profile_to_response(profile: UserProfile) -> ProfileResponse {
-    ProfileResponse {
+fn profile_to_dto(profile: UserProfile) -> ProfileDto {
+    ProfileDto {
         id: profile.id,
         display_name: profile.display_name,
     }
@@ -490,19 +490,22 @@ fn profile_to_response(profile: UserProfile) -> ProfileResponse {
 
 fn created_user_to_login_session_response(user: CreatedUser) -> LoginSessionResponse {
     LoginSessionResponse {
-        identity: identity_to_response(user.identity),
-        profile: Some(profile_to_response(user.profile)),
+        identity: identity_to_dto(user.identity),
+        profile: Some(profile_to_dto(user.profile)),
     }
 }
 
-fn users_to_list_response(users: Vec<UserWithProfile>) -> ListUsersResponse {
-    ListUsersResponse {
-        users: users.into_iter().map(user_with_profile_to_item).collect(),
+fn users_to_list_response(users: Vec<UserWithProfile>) -> UserListResponse {
+    UserListResponse {
+        users: users
+            .into_iter()
+            .map(user_with_profile_to_item_dto)
+            .collect(),
     }
 }
 
-fn user_with_profile_to_item(user: UserWithProfile) -> UserItem {
-    UserItem {
+fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
+    UserItemDto {
         id: user.profile.id,
         username: user.identity.username.0,
         display_name: user.profile.display_name,
