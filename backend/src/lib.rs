@@ -18,9 +18,9 @@ use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::{IdentityRepository, SessionRepository, UserProfileRepository};
 use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::domain::food_log::{FoodLogRepository, MealLookup, ProductLookup};
+use crate::domain::food_log::FoodLogRepository;
 use crate::domain::import::ImportRepository;
-use crate::domain::meal::{MealProductLookup, MealRepository};
+use crate::domain::meal::MealRepository;
 use crate::domain::units::UnitConverter;
 use crate::infrastructure::postgres::auth::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
@@ -70,27 +70,20 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let mass_factors = unit_repo.list_mass_factors().await?;
     let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
 
-    let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
-    let food_log_repo = food_log_repo_impl.clone() as Arc<dyn FoodLogRepository>;
-    let product_lookup = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
-    let meal_product_lookup_for_food_log = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
-    let meal_lookup = food_log_repo_impl as Arc<dyn MealLookup>;
-
-    let meal_repo_impl = Arc::new(PostgresMealRepository::new(pool.clone()));
-    let meal_repo = meal_repo_impl.clone() as Arc<dyn MealRepository>;
-    let meal_product_lookup = meal_repo_impl as Arc<dyn MealProductLookup>;
+    let food_log_repo =
+        Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
+    let meal_repo = Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
 
     let food_log_services = FoodLogServices::new(
         food_log_repo.clone(),
-        product_lookup,
+        product_repo.clone(),
         unit_converter.clone(),
-        meal_lookup,
-        meal_product_lookup_for_food_log,
+        meal_repo.clone(),
     );
 
     let meal_services = MealServices::new(
         meal_repo.clone(),
-        meal_product_lookup,
+        product_repo.clone(),
         unit_converter.clone(),
     );
 

@@ -304,7 +304,7 @@ impl Product {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<Self, CatalogError> {
+    ) -> Result<Self, NutritionError> {
         Self::validate_name(&name)?;
 
         Ok(Self {
@@ -337,7 +337,7 @@ impl Product {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
-    ) -> Result<Self, CatalogError> {
+    ) -> Result<Self, NutritionError> {
         Self::validate_name(&name)?;
 
         Ok(Self {
@@ -353,9 +353,9 @@ impl Product {
         })
     }
 
-    pub fn validate_name(name: &str) -> Result<(), CatalogError> {
+    pub fn validate_name(name: &str) -> Result<(), NutritionError> {
         if name.trim().is_empty() {
-            return Err(CatalogError::Validation("food name is required".into()));
+            return Err(NutritionError::Validation("food name is required".into()));
         }
         Ok(())
     }
@@ -364,11 +364,11 @@ impl Product {
         self.user_id == Some(user_id)
     }
 
-    pub fn assert_owned_by(&self, user_id: Uuid) -> Result<(), CatalogError> {
+    pub fn assert_owned_by(&self, user_id: Uuid) -> Result<(), NutritionError> {
         if self.is_owned_by(user_id) {
             Ok(())
         } else {
-            Err(CatalogError::Forbidden("not your custom food".into()))
+            Err(NutritionError::Forbidden("not your custom food".into()))
         }
     }
 
@@ -475,9 +475,9 @@ pub struct ProductServingInput {
 }
 
 impl ProductServing {
-    pub fn validate_values(quantity: Decimal, grams: Decimal) -> Result<(), CatalogError> {
+    pub fn validate_values(quantity: Decimal, grams: Decimal) -> Result<(), NutritionError> {
         if quantity <= Decimal::ZERO || grams <= Decimal::ZERO {
-            return Err(CatalogError::Validation(
+            return Err(NutritionError::Validation(
                 "serving quantity and grams must be positive".into(),
             ));
         }
@@ -486,9 +486,9 @@ impl ProductServing {
 }
 
 impl AmountPer100g {
-    pub fn validate(amount: Decimal) -> Result<(), CatalogError> {
+    pub fn validate(amount: Decimal) -> Result<(), NutritionError> {
         if amount < Decimal::ZERO {
-            return Err(CatalogError::Validation(
+            return Err(NutritionError::Validation(
                 "nutrient amount must be non-negative".into(),
             ));
         }
@@ -499,13 +499,13 @@ impl AmountPer100g {
 fn build_product_nutrients(
     nutrients: Vec<ProductNutrientInput>,
     catalog: &NutrientCatalog,
-) -> Result<Vec<ProductNutrient>, CatalogError> {
+) -> Result<Vec<ProductNutrient>, NutritionError> {
     nutrients
         .into_iter()
         .map(|nutrient| {
             AmountPer100g::validate(nutrient.amount_per_100g)?;
             let reference = catalog.get(&nutrient.code).ok_or_else(|| {
-                CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
+                NutritionError::Validation(format!("unknown nutrient code: {}", nutrient.code))
             })?;
             Ok(ProductNutrient {
                 nutrient_code: reference.code().clone(),
@@ -522,7 +522,7 @@ fn build_product_nutrients(
 
 fn build_product_servings(
     servings: Vec<ProductServingInput>,
-) -> Result<Vec<ProductServing>, CatalogError> {
+) -> Result<Vec<ProductServing>, NutritionError> {
     servings
         .into_iter()
         .map(|serving| {
@@ -537,19 +537,7 @@ fn build_product_servings(
         .collect()
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum CatalogError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("forbidden: {0}")]
-    Forbidden(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-    #[error("internal: {0}")]
-    Internal(String),
-}
+pub use super::nutrition::NutritionError;
 
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
@@ -557,30 +545,30 @@ pub trait ProductRepository: Send + Sync {
         &self,
         query: ProductSearchQuery,
         user_id: Option<Uuid>,
-    ) -> Result<Vec<Product>, CatalogError>;
+    ) -> Result<Vec<Product>, NutritionError>;
     async fn list_categories(
         &self,
         query: &str,
         user_id: Option<Uuid>,
         limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, CatalogError>;
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError>;
-    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError>;
-    async fn create(&self, product: &Product) -> Result<(), CatalogError>;
-    async fn update(&self, product: &Product) -> Result<(), CatalogError>;
-    async fn delete(&self, id: ProductId) -> Result<(), CatalogError>;
+    ) -> Result<Vec<CategorySuggestion>, NutritionError>;
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
+    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError>;
+    async fn create(&self, product: &Product) -> Result<(), NutritionError>;
+    async fn update(&self, product: &Product) -> Result<(), NutritionError>;
+    async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
 }
 
 #[async_trait]
 pub trait NutrientRepository: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError>;
-    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError>;
+    async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError>;
+    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError>;
 }
 
 #[async_trait]
 pub trait UnitRepository: Send + Sync {
-    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError>;
-    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
+    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError>;
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError>;
 }
 
 #[cfg(test)]
@@ -745,7 +733,7 @@ mod tests {
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
         );
-        assert!(matches!(result, Err(CatalogError::Validation(_))));
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
     }
 
     #[test]

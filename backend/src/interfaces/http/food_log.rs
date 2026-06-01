@@ -117,38 +117,7 @@ pub struct SummaryEntryDto {
     pub unit: String,
 }
 
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorBody,
-}
-
-#[derive(Serialize)]
-pub struct ErrorBody {
-    pub code: String,
-    pub message: String,
-}
-
-fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        match code {
-            "not_found" => StatusCode::NOT_FOUND,
-            "forbidden" => StatusCode::FORBIDDEN,
-            "validation" => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        },
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: code.to_string(),
-                message,
-            },
-        }),
-    )
-}
-
-fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
-    tracing::error!(error = %e, "food log request failed");
-    error_response("internal", "internal server error".into())
-}
+use crate::interfaces::http::{ErrorResponse, error_response, internal_error};
 
 async fn create_log_handler(
     auth: AuthUser,
@@ -170,9 +139,7 @@ async fn create_log_handler(
             let resp = food_log_to_response(&log);
             (StatusCode::CREATED, Json(resp)).into_response()
         }
-        Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(FoodLogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -232,10 +199,7 @@ async fn update_log_handler(
             let resp = food_log_to_response(&log);
             Json(resp).into_response()
         }
-        Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(FoodLogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(FoodLogError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -248,9 +212,7 @@ async fn delete_log_handler(
 
     match services.delete_food_log(FoodLogId(id), auth.0.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(FoodLogError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(FoodLogError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 

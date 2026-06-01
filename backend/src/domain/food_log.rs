@@ -98,10 +98,10 @@ impl FoodLog {
         quantity: Quantity,
         unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Result<Self, FoodLogError> {
+    ) -> Result<Self, NutritionError> {
         let nutrition = product
             .nutrition_for(&quantity, unit_converter)
-            .map_err(FoodLogError::Validation)?;
+            .map_err(NutritionError::Validation)?;
         Ok(Self::new(
             user_id,
             logged_at,
@@ -123,10 +123,10 @@ impl FoodLog {
         products: &[(ProductId, Product)],
         unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Result<Self, FoodLogError> {
+    ) -> Result<Self, NutritionError> {
         let nutrition = meal
             .nutrition_for(&quantity, products, unit_converter)
-            .map_err(FoodLogError::Validation)?;
+            .map_err(NutritionError::Validation)?;
         Ok(Self::new(
             user_id,
             logged_at,
@@ -146,10 +146,10 @@ impl FoodLog {
         quantity: Quantity,
         unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Result<Self, FoodLogError> {
+    ) -> Result<Self, NutritionError> {
         let nutrition = product
             .nutrition_for(&quantity, unit_converter)
-            .map_err(FoodLogError::Validation)?;
+            .map_err(NutritionError::Validation)?;
         Ok(self.update(
             logged_at,
             meal_slot,
@@ -170,10 +170,10 @@ impl FoodLog {
         products: &[(ProductId, Product)],
         unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Result<Self, FoodLogError> {
+    ) -> Result<Self, NutritionError> {
         let nutrition = meal
             .nutrition_for(&quantity, products, unit_converter)
-            .map_err(FoodLogError::Validation)?;
+            .map_err(NutritionError::Validation)?;
         Ok(self.update(
             logged_at,
             meal_slot,
@@ -245,31 +245,7 @@ fn snapshots_from_calculated(nutrition: CalculatedNutrition) -> Vec<FoodLogNutri
         .collect()
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum FoodLogError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("forbidden: {0}")]
-    Forbidden(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-    #[error("internal: {0}")]
-    Internal(String),
-}
-
-impl From<super::catalog::CatalogError> for FoodLogError {
-    fn from(e: super::catalog::CatalogError) -> Self {
-        match e {
-            super::catalog::CatalogError::NotFound(msg) => FoodLogError::NotFound(msg),
-            super::catalog::CatalogError::Forbidden(msg) => FoodLogError::Forbidden(msg),
-            super::catalog::CatalogError::Validation(msg) => FoodLogError::Validation(msg),
-            super::catalog::CatalogError::Database(err) => FoodLogError::Database(err),
-            super::catalog::CatalogError::Internal(msg) => FoodLogError::Internal(msg),
-        }
-    }
-}
+pub use super::nutrition::NutritionError;
 
 #[derive(Debug, Clone)]
 pub struct SummaryEntry {
@@ -280,33 +256,23 @@ pub struct SummaryEntry {
 
 #[async_trait]
 pub trait FoodLogRepository: Send + Sync {
-    async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError>;
-    async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, FoodLogError>;
+    async fn create(&self, log: &FoodLog) -> Result<(), NutritionError>;
+    async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError>;
     async fn list_by_user_and_range(
         &self,
         user_id: Uuid,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<Vec<FoodLog>, FoodLogError>;
+    ) -> Result<Vec<FoodLog>, NutritionError>;
     async fn sum_nutrients_by_user_and_range(
         &self,
         user_id: Uuid,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
         codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, FoodLogError>;
-    async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError>;
-    async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError>;
-}
-
-#[async_trait]
-pub trait ProductLookup: Send + Sync {
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, FoodLogError>;
-}
-
-#[async_trait]
-pub trait MealLookup: Send + Sync {
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, FoodLogError>;
+    ) -> Result<Vec<SummaryEntry>, NutritionError>;
+    async fn update(&self, log: &FoodLog) -> Result<(), NutritionError>;
+    async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError>;
 }
 
 #[cfg(test)]

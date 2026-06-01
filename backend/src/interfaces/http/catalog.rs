@@ -33,38 +33,7 @@ pub fn catalog_routes(state: AppState) -> Router {
 
 // ─── DTOs ──────────────────────────────────────────────────────
 
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorBody,
-}
-
-#[derive(Serialize)]
-pub struct ErrorBody {
-    pub code: String,
-    pub message: String,
-}
-
-fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        match code {
-            "not_found" => StatusCode::NOT_FOUND,
-            "forbidden" => StatusCode::FORBIDDEN,
-            "validation" => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        },
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: code.to_string(),
-                message,
-            },
-        }),
-    )
-}
-
-fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
-    tracing::error!(error = %e, "catalog request failed");
-    error_response("internal", "internal server error".into())
-}
+use crate::interfaces::http::{error_response, internal_error};
 
 #[derive(Serialize)]
 pub struct ProductSearchItemDto {
@@ -323,10 +292,7 @@ async fn create_custom_food_handler(
         &catalog,
     ) {
         Ok(p) => p,
-        Err(CatalogError::Validation(msg)) => {
-            return error_response("validation", msg).into_response();
-        }
-        Err(e) => return internal_error(e).into_response(),
+        Err(e) => return e.into_response(),
     };
 
     match state.product_repo.create(&product).await {
@@ -351,8 +317,8 @@ async fn update_custom_food_handler(
         Err(e) => return internal_error(e).into_response(),
     };
 
-    if let Err(CatalogError::Forbidden(msg)) = existing.assert_owned_by(auth.0.id) {
-        return error_response("forbidden", msg).into_response();
+    if let Err(e) = existing.assert_owned_by(auth.0.id) {
+        return e.into_response();
     }
 
     let catalog = match load_nutrient_catalog(&state).await {
@@ -372,10 +338,7 @@ async fn update_custom_food_handler(
         &catalog,
     ) {
         Ok(p) => p,
-        Err(CatalogError::Validation(msg)) => {
-            return error_response("validation", msg).into_response();
-        }
-        Err(e) => return internal_error(e).into_response(),
+        Err(e) => return e.into_response(),
     };
 
     match state.product_repo.update(&updated).await {
@@ -397,8 +360,8 @@ async fn delete_custom_food_handler(
         Err(e) => return internal_error(e).into_response(),
     };
 
-    if let Err(CatalogError::Forbidden(msg)) = existing.assert_owned_by(auth.0.id) {
-        return error_response("forbidden", msg).into_response();
+    if let Err(e) = existing.assert_owned_by(auth.0.id) {
+        return e.into_response();
     }
 
     match state.product_repo.delete(ProductId(id)).await {
@@ -447,7 +410,7 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-async fn load_nutrient_catalog(state: &AppState) -> Result<NutrientCatalog, CatalogError> {
+async fn load_nutrient_catalog(state: &AppState) -> Result<NutrientCatalog, NutritionError> {
     let nutrients = state.nutrient_repo.list_all().await?;
     Ok(nutrients.into_iter().collect())
 }
@@ -455,7 +418,7 @@ async fn load_nutrient_catalog(state: &AppState) -> Result<NutrientCatalog, Cata
 async fn load_allowed_units(
     state: &AppState,
     product: &Product,
-) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
+) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
     let all_units = state.unit_repo.list_all().await?;
     let allowed = product.allowed_unit_codes(&state.unit_converter);
     Ok(all_units

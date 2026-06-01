@@ -26,38 +26,7 @@ pub fn meal_routes(state: AppState) -> Router {
         .with_state(state)
 }
 
-#[derive(Serialize)]
-pub struct ErrorResponse {
-    pub error: ErrorBody,
-}
-
-#[derive(Serialize)]
-pub struct ErrorBody {
-    pub code: String,
-    pub message: String,
-}
-
-fn error_response(code: &str, message: String) -> (StatusCode, Json<ErrorResponse>) {
-    (
-        match code {
-            "not_found" => StatusCode::NOT_FOUND,
-            "forbidden" => StatusCode::FORBIDDEN,
-            "validation" => StatusCode::BAD_REQUEST,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        },
-        Json(ErrorResponse {
-            error: ErrorBody {
-                code: code.to_string(),
-                message,
-            },
-        }),
-    )
-}
-
-fn internal_error<E: std::fmt::Display>(e: E) -> (StatusCode, Json<ErrorResponse>) {
-    tracing::error!(error = %e, "meal request failed");
-    error_response("internal", "internal server error".into())
-}
+use crate::interfaces::http::{error_response, internal_error};
 
 #[derive(Deserialize)]
 pub struct CreateMealRequest {
@@ -156,9 +125,7 @@ async fn create_meal_handler(
             let resp = meal_to_response(&meal);
             (StatusCode::CREATED, Json(resp)).into_response()
         }
-        Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -202,10 +169,7 @@ async fn update_meal_handler(
             let resp = meal_to_response(&meal);
             Json(resp).into_response()
         }
-        Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(MealError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -218,9 +182,7 @@ async fn delete_meal_handler(
 
     match services.delete_meal(MealId(id), auth.0.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(MealError::Forbidden(msg)) => error_response("forbidden", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -246,9 +208,7 @@ async fn meal_nutrients_handler(
         .await
     {
         Ok(nutrition) => Json(meal_nutrition_to_response(nutrition)).into_response(),
-        Err(MealError::NotFound(msg)) => error_response("not_found", msg).into_response(),
-        Err(MealError::Validation(msg)) => error_response("validation", msg).into_response(),
-        Err(e) => internal_error(e).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 

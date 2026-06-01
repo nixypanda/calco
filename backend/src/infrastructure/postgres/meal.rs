@@ -17,7 +17,7 @@ impl PostgresMealRepository {
         Self { pool }
     }
 
-    async fn load_components(&self, meal_id: Uuid) -> Result<Vec<MealComponent>, MealError> {
+    async fn load_components(&self, meal_id: Uuid) -> Result<Vec<MealComponent>, NutritionError> {
         let rows = sqlx::query_as::<_, MealComponentRow>(
             r#"
             SELECT id, component_product_id, component_meal_id, quantity, unit
@@ -48,15 +48,15 @@ fn meal_row_to_meal(row: MealRow, components: Vec<MealComponent>) -> Meal {
     }
 }
 
-fn meal_component_row_to_component(row: MealComponentRow) -> Result<MealComponent, MealError> {
+fn meal_component_row_to_component(row: MealComponentRow) -> Result<MealComponent, NutritionError> {
     let item = if let Some(pid) = row.component_product_id {
         MealComponentItem::Product(ProductId(pid))
     } else if let Some(_mid) = row.component_meal_id {
-        return Err(MealError::Internal(
+        return Err(NutritionError::Internal(
             "meal components of type meal not yet supported".into(),
         ));
     } else {
-        return Err(MealError::Internal(
+        return Err(NutritionError::Internal(
             "meal component has no item reference".into(),
         ));
     };
@@ -71,7 +71,7 @@ fn meal_component_row_to_component(row: MealComponentRow) -> Result<MealComponen
 
 #[async_trait]
 impl MealRepository for PostgresMealRepository {
-    async fn create(&self, meal: &Meal) -> Result<(), MealError> {
+    async fn create(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -116,7 +116,7 @@ impl MealRepository for PostgresMealRepository {
         Ok(())
     }
 
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError> {
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError> {
         let row = sqlx::query_as::<_, MealRow>(
             r#"
             SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
@@ -137,7 +137,7 @@ impl MealRepository for PostgresMealRepository {
         }
     }
 
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
+    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, NutritionError> {
         let rows = sqlx::query_as::<_, MealRow>(
             r#"
             SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
@@ -158,7 +158,7 @@ impl MealRepository for PostgresMealRepository {
         Ok(results)
     }
 
-    async fn update(&self, meal: &Meal) -> Result<(), MealError> {
+    async fn update(&self, meal: &Meal) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -206,149 +206,13 @@ impl MealRepository for PostgresMealRepository {
         Ok(())
     }
 
-    async fn delete(&self, id: MealId) -> Result<(), MealError> {
+    async fn delete(&self, id: MealId) -> Result<(), NutritionError> {
         sqlx::query("DELETE FROM meals WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
             .await?;
         Ok(())
     }
-}
-
-#[async_trait]
-impl MealProductLookup for PostgresMealRepository {
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError> {
-        let row = sqlx::query_as::<_, ProductLookupRow>(
-            r#"
-            SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g
-            FROM products WHERE id = $1 AND deleted_at IS NULL
-            "#,
-        )
-        .bind(id.0)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        match row {
-            Some(r) => {
-                let nutrients = self.load_product_nutrients(r.id).await?;
-                let servings = self.load_product_servings(r.id).await?;
-                Ok(Some(product_lookup_row_to_product(r, nutrients, servings)?))
-            }
-            None => Ok(None),
-        }
-    }
-}
-
-impl PostgresMealRepository {
-    async fn load_product_nutrients(
-        &self,
-        product_id: Uuid,
-    ) -> Result<Vec<ProductNutrient>, MealError> {
-        let rows = sqlx::query_as::<_, ProductNutrientLookupRow>(
-            r#"
-            SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
-            FROM product_nutrients pn
-            JOIN nutrients n ON n.id = pn.nutrient_id
-            WHERE pn.product_id = $1
-            "#,
-        )
-        .bind(product_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|r| ProductNutrient {
-                nutrient_code: NutrientCode(r.code),
-                amount_per_100g: AmountPer100g(r.amount_per_100g),
-                unit: UnitCode(r.unit),
-                source: r.source,
-                confidence: r.confidence.and_then(|c| c.parse().ok()),
-            })
-            .collect())
-    }
-
-    async fn load_product_servings(
-        &self,
-        product_id: Uuid,
-    ) -> Result<Vec<ProductServing>, MealError> {
-        let rows = sqlx::query_as::<_, ProductServingLookupRow>(
-            "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
-        )
-        .bind(product_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows
-            .into_iter()
-            .map(|r| ProductServing {
-                label: ServingLabel(r.label),
-                quantity: r.quantity,
-                unit: UnitCode(r.unit),
-                grams: r.grams,
-            })
-            .collect())
-    }
-}
-
-#[derive(sqlx::FromRow)]
-struct ProductLookupRow {
-    id: Uuid,
-    source: String,
-    source_id: Option<String>,
-    user_id: Option<Uuid>,
-    visibility: String,
-    barcode: Option<String>,
-    name: String,
-    brand: Option<String>,
-    categories: Vec<String>,
-    default_quantity: Option<Decimal>,
-    default_unit: Option<String>,
-    serving_size_g: Option<Decimal>,
-}
-
-#[derive(sqlx::FromRow)]
-struct ProductNutrientLookupRow {
-    amount_per_100g: Decimal,
-    source: Option<String>,
-    confidence: Option<String>,
-    code: String,
-    unit: String,
-}
-
-#[derive(sqlx::FromRow)]
-struct ProductServingLookupRow {
-    label: String,
-    quantity: Decimal,
-    unit: String,
-    grams: Decimal,
-}
-
-fn product_lookup_row_to_product(
-    row: ProductLookupRow,
-    nutrients: Vec<ProductNutrient>,
-    servings: Vec<ProductServing>,
-) -> Result<Product, MealError> {
-    Ok(Product {
-        id: ProductId(row.id),
-        source: row.source.parse::<Source>().map_err(MealError::Internal)?,
-        source_id: row.source_id,
-        user_id: row.user_id,
-        visibility: row
-            .visibility
-            .parse::<ProductVisibility>()
-            .map_err(MealError::Internal)?,
-        barcode: row.barcode.map(Barcode),
-        name: ProductName(row.name),
-        brand: row.brand.map(Brand),
-        categories: row.categories.into_iter().map(Category).collect(),
-        default_quantity: row.default_quantity,
-        default_unit: row.default_unit.map(UnitCode),
-        serving_size_g: row.serving_size_g,
-        nutrients,
-        servings,
-    })
 }
 
 #[derive(sqlx::FromRow)]

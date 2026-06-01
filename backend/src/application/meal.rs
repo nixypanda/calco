@@ -48,24 +48,24 @@ pub struct MealNutrientEntry {
 #[derive(Clone)]
 pub struct MealServices {
     pub meal_repo: Arc<dyn MealRepository>,
-    pub product_lookup: Arc<dyn MealProductLookup>,
+    pub product_repo: Arc<dyn ProductRepository>,
     pub unit_converter: Arc<UnitConverter>,
 }
 
 impl MealServices {
     pub fn new(
         meal_repo: Arc<dyn MealRepository>,
-        product_lookup: Arc<dyn MealProductLookup>,
+        product_repo: Arc<dyn ProductRepository>,
         unit_converter: Arc<UnitConverter>,
     ) -> Self {
         Self {
             meal_repo,
-            product_lookup,
+            product_repo,
             unit_converter,
         }
     }
 
-    pub async fn create_meal(&self, input: CreateMealInput) -> Result<Meal, MealError> {
+    pub async fn create_meal(&self, input: CreateMealInput) -> Result<Meal, NutritionError> {
         let components = self.build_components(input.components).await?;
 
         let now = Utc::now();
@@ -88,15 +88,15 @@ impl MealServices {
         id: MealId,
         user_id: Uuid,
         input: UpdateMealInput,
-    ) -> Result<Meal, MealError> {
+    ) -> Result<Meal, NutritionError> {
         let existing = self
             .meal_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+            .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
-            return Err(MealError::Forbidden("not your meal".into()));
+            return Err(NutritionError::Forbidden("not your meal".into()));
         }
 
         let components = match input.components {
@@ -117,15 +117,15 @@ impl MealServices {
         Ok(updated)
     }
 
-    pub async fn delete_meal(&self, id: MealId, user_id: Uuid) -> Result<(), MealError> {
+    pub async fn delete_meal(&self, id: MealId, user_id: Uuid) -> Result<(), NutritionError> {
         let existing = self
             .meal_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+            .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
 
         if !existing.is_owned_by(user_id) {
-            return Err(MealError::Forbidden("not your meal".into()));
+            return Err(NutritionError::Forbidden("not your meal".into()));
         }
 
         self.meal_repo.delete(id).await
@@ -136,18 +136,18 @@ impl MealServices {
         id: MealId,
         quantity_amount: Decimal,
         quantity_unit: String,
-    ) -> Result<MealNutritionOutput, MealError> {
+    ) -> Result<MealNutritionOutput, NutritionError> {
         let meal = self
             .meal_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
+            .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
 
         let products = self.load_meal_products(&meal).await?;
         let requested_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit.clone()));
         let calculated = meal
             .nutrition_for(&requested_quantity, &products, &self.unit_converter)
-            .map_err(MealError::Validation)?;
+            .map_err(NutritionError::Validation)?;
         let nutrients: Vec<MealNutrientEntry> = calculated
             .amounts
             .into_iter()
@@ -169,17 +169,17 @@ impl MealServices {
     async fn build_components(
         &self,
         inputs: Vec<CreateMealComponentInput>,
-    ) -> Result<Vec<MealComponent>, MealError> {
+    ) -> Result<Vec<MealComponent>, NutritionError> {
         let mut components = Vec::with_capacity(inputs.len());
         for input in inputs {
             let item = MealComponentItem::parse(&input.item_type, input.item_id)?;
             match &item {
                 MealComponentItem::Product(product_id) => {
-                    self.product_lookup
+                    self.product_repo
                         .find_by_id(*product_id)
                         .await?
                         .ok_or_else(|| {
-                            MealError::NotFound(format!("product {} not found", input.item_id))
+                            NutritionError::NotFound(format!("product {} not found", input.item_id))
                         })?;
                 }
             }
@@ -195,17 +195,17 @@ impl MealServices {
     async fn load_meal_products(
         &self,
         meal: &Meal,
-    ) -> Result<Vec<(ProductId, Product)>, MealError> {
+    ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
         let mut products = Vec::new();
         for component in &meal.components {
             match &component.item {
                 MealComponentItem::Product(product_id) => {
                     let product = self
-                        .product_lookup
+                        .product_repo
                         .find_by_id(*product_id)
                         .await?
                         .ok_or_else(|| {
-                            MealError::NotFound(format!("product {} not found", product_id.0))
+                            NutritionError::NotFound(format!("product {} not found", product_id.0))
                         })?;
                     products.push((*product_id, product));
                 }
@@ -235,17 +235,17 @@ mod tests {
 
     #[async_trait]
     impl MealRepository for MockMealRepo {
-        async fn create(&self, meal: &Meal) -> Result<(), MealError> {
+        async fn create(&self, meal: &Meal) -> Result<(), NutritionError> {
             self.meals.lock().unwrap().push(meal.clone());
             Ok(())
         }
 
-        async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError> {
+        async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError> {
             let meals = self.meals.lock().unwrap();
             Ok(meals.iter().find(|m| m.id == id).cloned())
         }
 
-        async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
+        async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, NutritionError> {
             let meals = self.meals.lock().unwrap();
             Ok(meals
                 .iter()
@@ -254,32 +254,32 @@ mod tests {
                 .collect())
         }
 
-        async fn update(&self, meal: &Meal) -> Result<(), MealError> {
+        async fn update(&self, meal: &Meal) -> Result<(), NutritionError> {
             let mut meals = self.meals.lock().unwrap();
             if let Some(existing) = meals.iter_mut().find(|m| m.id == meal.id) {
                 *existing = meal.clone();
                 Ok(())
             } else {
-                Err(MealError::NotFound("not found".into()))
+                Err(NutritionError::NotFound("not found".into()))
             }
         }
 
-        async fn delete(&self, id: MealId) -> Result<(), MealError> {
+        async fn delete(&self, id: MealId) -> Result<(), NutritionError> {
             let mut meals = self.meals.lock().unwrap();
             let idx = meals
                 .iter()
                 .position(|m| m.id == id)
-                .ok_or_else(|| MealError::NotFound("not found".into()))?;
+                .ok_or_else(|| NutritionError::NotFound("not found".into()))?;
             meals.remove(idx);
             Ok(())
         }
     }
 
-    struct MockMealProductLookup {
+    struct MockProductRepo {
         product: Option<Product>,
     }
 
-    impl MockMealProductLookup {
+    impl MockProductRepo {
         fn with_product(product: Product) -> Self {
             Self {
                 product: Some(product),
@@ -292,9 +292,42 @@ mod tests {
     }
 
     #[async_trait]
-    impl MealProductLookup for MockMealProductLookup {
-        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, MealError> {
+    impl ProductRepository for MockProductRepo {
+        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, NutritionError> {
             Ok(self.product.clone())
+        }
+
+        async fn search(
+            &self,
+            _query: ProductSearchQuery,
+            _user_id: Option<Uuid>,
+        ) -> Result<Vec<Product>, NutritionError> {
+            unimplemented!("not used in test")
+        }
+
+        async fn list_categories(
+            &self,
+            _query: &str,
+            _user_id: Option<Uuid>,
+            _limit: i64,
+        ) -> Result<Vec<CategorySuggestion>, NutritionError> {
+            unimplemented!("not used in test")
+        }
+
+        async fn find_by_barcode(&self, _barcode: &str) -> Result<Option<Product>, NutritionError> {
+            unimplemented!("not used in test")
+        }
+
+        async fn create(&self, _product: &Product) -> Result<(), NutritionError> {
+            unimplemented!("not used in test")
+        }
+
+        async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
+            unimplemented!("not used in test")
+        }
+
+        async fn delete(&self, _id: ProductId) -> Result<(), NutritionError> {
+            unimplemented!("not used in test")
         }
     }
 
@@ -325,17 +358,15 @@ mod tests {
 
     fn make_services(product: Option<Product>) -> MealServices {
         let meal_repo = Arc::new(MockMealRepo::new()) as Arc<dyn MealRepository>;
-        let product_lookup = match product {
-            Some(p) => {
-                Arc::new(MockMealProductLookup::with_product(p)) as Arc<dyn MealProductLookup>
-            }
-            None => Arc::new(MockMealProductLookup::empty()) as Arc<dyn MealProductLookup>,
+        let product_repo = match product {
+            Some(p) => Arc::new(MockProductRepo::with_product(p)) as Arc<dyn ProductRepository>,
+            None => Arc::new(MockProductRepo::empty()) as Arc<dyn ProductRepository>,
         };
         let unit_converter = Arc::new(UnitConverter::from_entries([
             ("g".to_string(), Decimal::new(1, 0)),
             ("kg".to_string(), Decimal::new(1000, 0)),
         ]));
-        MealServices::new(meal_repo, product_lookup, unit_converter)
+        MealServices::new(meal_repo, product_repo, unit_converter)
     }
 
     fn sample_component() -> CreateMealComponentInput {
@@ -387,7 +418,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Validation(_) => {}
+            NutritionError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -409,7 +440,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Validation(_) => {}
+            NutritionError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -431,7 +462,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::NotFound(_) => {}
+            NutritionError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -546,7 +577,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Forbidden(_) => {}
+            NutritionError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -594,7 +625,7 @@ mod tests {
         let result = services.delete_meal(created.id, other).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Forbidden(_) => {}
+            NutritionError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -605,7 +636,7 @@ mod tests {
         let result = services.delete_meal(MealId::new(), Uuid::new_v4()).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::NotFound(_) => {}
+            NutritionError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }

@@ -18,7 +18,10 @@ impl PostgresProductRepository {
         Self { pool }
     }
 
-    async fn load_nutrients(&self, product_id: Uuid) -> Result<Vec<ProductNutrient>, CatalogError> {
+    async fn load_nutrients(
+        &self,
+        product_id: Uuid,
+    ) -> Result<Vec<ProductNutrient>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductNutrientRow>(
             r#"
             SELECT pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
@@ -43,7 +46,7 @@ impl PostgresProductRepository {
             .collect())
     }
 
-    async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, CatalogError> {
+    async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductServingRow>(
             "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
         )
@@ -69,7 +72,7 @@ impl ProductRepository for PostgresProductRepository {
         &self,
         query: ProductSearchQuery,
         user_id: Option<Uuid>,
-    ) -> Result<Vec<Product>, CatalogError> {
+    ) -> Result<Vec<Product>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -161,7 +164,7 @@ impl ProductRepository for PostgresProductRepository {
         query: &str,
         user_id: Option<Uuid>,
         limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, CatalogError> {
+    ) -> Result<Vec<CategorySuggestion>, NutritionError> {
         let rows = sqlx::query_as::<_, CategorySuggestionRow>(
             r#"
             SELECT category AS value, COUNT(*)::BIGINT AS count
@@ -201,7 +204,7 @@ impl ProductRepository for PostgresProductRepository {
             .collect())
     }
 
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, CatalogError> {
+    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError> {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -223,7 +226,7 @@ impl ProductRepository for PostgresProductRepository {
         }
     }
 
-    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError> {
+    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError> {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
@@ -245,7 +248,7 @@ impl ProductRepository for PostgresProductRepository {
         }
     }
 
-    async fn create(&self, product: &Product) -> Result<(), CatalogError> {
+    async fn create(&self, product: &Product) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -283,7 +286,7 @@ impl ProductRepository for PostgresProductRepository {
         Ok(())
     }
 
-    async fn update(&self, product: &Product) -> Result<(), CatalogError> {
+    async fn update(&self, product: &Product) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
         sqlx::query(
@@ -326,7 +329,7 @@ impl ProductRepository for PostgresProductRepository {
         Ok(())
     }
 
-    async fn delete(&self, id: ProductId) -> Result<(), CatalogError> {
+    async fn delete(&self, id: ProductId) -> Result<(), NutritionError> {
         sqlx::query("UPDATE products SET deleted_at = now() WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
@@ -390,19 +393,19 @@ fn product_row_to_product(
     row: ProductRow,
     nutrients: Vec<ProductNutrient>,
     servings: Vec<ProductServing>,
-) -> Result<Product, CatalogError> {
+) -> Result<Product, NutritionError> {
     Ok(Product {
         id: ProductId(row.id),
         source: row
             .source
             .parse::<Source>()
-            .map_err(CatalogError::Internal)?,
+            .map_err(NutritionError::Internal)?,
         source_id: row.source_id,
         user_id: row.user_id,
         visibility: row
             .visibility
             .parse::<ProductVisibility>()
-            .map_err(CatalogError::Internal)?,
+            .map_err(NutritionError::Internal)?,
         barcode: row.barcode.map(Barcode),
         name: ProductName(row.name),
         brand: row.brand.map(Brand),
@@ -430,7 +433,7 @@ impl PostgresNutrientRepository {
 
 #[async_trait]
 impl NutrientRepository for PostgresNutrientRepository {
-    async fn list_all(&self) -> Result<Vec<Nutrient>, CatalogError> {
+    async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
         let rows = sqlx::query_as::<_, NutrientRow>(
             "SELECT code, name, unit, category FROM nutrients ORDER BY code",
         )
@@ -440,7 +443,7 @@ impl NutrientRepository for PostgresNutrientRepository {
         Ok(rows.into_iter().map(nutrient_row_to_nutrient).collect())
     }
 
-    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, CatalogError> {
+    async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
         let row = sqlx::query_as::<_, NutrientRow>(
             "SELECT code, name, unit, category FROM nutrients WHERE code = $1",
         )
@@ -484,7 +487,7 @@ impl PostgresUnitRepository {
 
 #[async_trait]
 impl UnitRepository for PostgresUnitRepository {
-    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
+    async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
         let rows = sqlx::query_as::<_, UnitRow>("SELECT code, name, kind FROM units ORDER BY code")
             .fetch_all(&self.pool)
             .await?;
@@ -495,7 +498,7 @@ impl UnitRepository for PostgresUnitRepository {
             .collect())
     }
 
-    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, NutritionError> {
         let rows = sqlx::query_as::<_, MassFactorRow>(
             "SELECT code, canonical_grams FROM units WHERE canonical_grams IS NOT NULL",
         )
@@ -526,7 +529,7 @@ async fn insert_product_nutrients(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     product_id: Uuid,
     nutrients: &[ProductNutrient],
-) -> Result<(), CatalogError> {
+) -> Result<(), NutritionError> {
     if nutrients.is_empty() {
         return Ok(());
     }
@@ -564,7 +567,7 @@ async fn insert_product_nutrients(
     .await?;
 
     if (inserted as usize) != nutrients.len() {
-        return Err(CatalogError::Validation(format!(
+        return Err(NutritionError::Validation(format!(
             "unknown nutrient code in product (expected {} rows, inserted {})",
             nutrients.len(),
             inserted
@@ -577,7 +580,7 @@ async fn insert_product_servings(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     product_id: Uuid,
     servings: &[ProductServing],
-) -> Result<(), CatalogError> {
+) -> Result<(), NutritionError> {
     if servings.is_empty() {
         return Ok(());
     }

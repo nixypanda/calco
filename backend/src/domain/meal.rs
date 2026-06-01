@@ -40,10 +40,10 @@ pub enum MealComponentItem {
 }
 
 impl MealComponentItem {
-    pub fn parse(item_type: &str, item_id: Uuid) -> Result<Self, MealError> {
+    pub fn parse(item_type: &str, item_id: Uuid) -> Result<Self, NutritionError> {
         match item_type {
             "product" => Ok(MealComponentItem::Product(ProductId(item_id))),
-            other => Err(MealError::Validation(format!(
+            other => Err(NutritionError::Validation(format!(
                 "unsupported component item type: {other}"
             ))),
         }
@@ -63,9 +63,9 @@ impl MealComponent {
         item: MealComponentItem,
         quantity_amount: Decimal,
         quantity_unit: UnitCode,
-    ) -> Result<Self, MealError> {
+    ) -> Result<Self, NutritionError> {
         if quantity_amount <= Decimal::ZERO {
-            return Err(MealError::Validation(
+            return Err(NutritionError::Validation(
                 "component quantity must be positive".into(),
             ));
         }
@@ -100,7 +100,7 @@ impl Meal {
         total_quantity_unit: Option<UnitCode>,
         components: Vec<MealComponent>,
         now: DateTime<Utc>,
-    ) -> Result<Self, MealError> {
+    ) -> Result<Self, NutritionError> {
         validate_meal_name(&name)?;
         validate_meal_components(&components)?;
 
@@ -125,7 +125,7 @@ impl Meal {
         total_quantity_unit: Option<Option<UnitCode>>,
         components: Option<Vec<MealComponent>>,
         now: DateTime<Utc>,
-    ) -> Result<Self, MealError> {
+    ) -> Result<Self, NutritionError> {
         let name = match name {
             Some(name) => {
                 validate_meal_name(&name)?;
@@ -261,46 +261,29 @@ impl Meal {
     }
 }
 
-fn validate_meal_name(name: &str) -> Result<(), MealError> {
+fn validate_meal_name(name: &str) -> Result<(), NutritionError> {
     if name.trim().is_empty() {
-        return Err(MealError::Validation("meal name is required".into()));
+        return Err(NutritionError::Validation("meal name is required".into()));
     }
     Ok(())
 }
 
-fn validate_meal_components(components: &[MealComponent]) -> Result<(), MealError> {
+fn validate_meal_components(components: &[MealComponent]) -> Result<(), NutritionError> {
     if components.is_empty() {
-        return Err(MealError::Validation(
+        return Err(NutritionError::Validation(
             "meal must have at least one component".into(),
         ));
     }
     Ok(())
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum MealError {
-    #[error("not_found: {0}")]
-    NotFound(String),
-    #[error("forbidden: {0}")]
-    Forbidden(String),
-    #[error("validation: {0}")]
-    Validation(String),
-    #[error("database: {0}")]
-    Database(#[from] sqlx::Error),
-    #[error("internal: {0}")]
-    Internal(String),
-}
+pub use super::nutrition::NutritionError;
 
 #[async_trait]
 pub trait MealRepository: Send + Sync {
-    async fn create(&self, meal: &Meal) -> Result<(), MealError>;
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError>;
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
-    async fn update(&self, meal: &Meal) -> Result<(), MealError>;
-    async fn delete(&self, id: MealId) -> Result<(), MealError>;
-}
-
-#[async_trait]
-pub trait MealProductLookup: Send + Sync {
-    async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError>;
+    async fn create(&self, meal: &Meal) -> Result<(), NutritionError>;
+    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError>;
+    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, NutritionError>;
+    async fn update(&self, meal: &Meal) -> Result<(), NutritionError>;
+    async fn delete(&self, id: MealId) -> Result<(), NutritionError>;
 }
