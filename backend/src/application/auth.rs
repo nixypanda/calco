@@ -46,7 +46,7 @@ impl AuthBootstrapServices {
     }
 
     pub async fn admin_exists(&self) -> Result<bool, AuthError> {
-        self.identity_repo.admin_exists().await
+        self.identity_repo.exists_admin().await
     }
 
     pub async fn create_bootstrap_admin(
@@ -54,7 +54,7 @@ impl AuthBootstrapServices {
         username: &str,
         password: &str,
     ) -> Result<LoginResult, AuthError> {
-        if self.identity_repo.admin_exists().await? {
+        if self.identity_repo.exists_admin().await? {
             return Err(AuthError::AdminAlreadyExists);
         }
 
@@ -345,7 +345,7 @@ impl AdminUserServices {
 
     async fn revoke_sessions_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError> {
         let now = Utc::now();
-        let sessions = self.session_repo.find_by_identity_id(identity_id).await?;
+        let sessions = self.session_repo.list_by_identity_id(identity_id).await?;
         let revoked_sessions: Vec<Session> = sessions
             .into_iter()
             .filter(|session| session.revoked_at.is_none())

@@ -326,7 +326,7 @@ impl ProductRepository for PostgresProductRepository {
         Ok(())
     }
 
-    async fn soft_delete(&self, id: ProductId) -> Result<(), CatalogError> {
+    async fn delete(&self, id: ProductId) -> Result<(), CatalogError> {
         sqlx::query("UPDATE products SET deleted_at = now() WHERE id = $1")
             .bind(id.0)
             .execute(&self.pool)
@@ -495,7 +495,7 @@ impl UnitRepository for PostgresUnitRepository {
             .collect())
     }
 
-    async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError> {
         let rows = sqlx::query_as::<_, MassFactorRow>(
             "SELECT code, canonical_grams FROM units WHERE canonical_grams IS NOT NULL",
         )

@@ -568,7 +568,7 @@ pub trait ProductRepository: Send + Sync {
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, CatalogError>;
     async fn create(&self, product: &Product) -> Result<(), CatalogError>;
     async fn update(&self, product: &Product) -> Result<(), CatalogError>;
-    async fn soft_delete(&self, id: ProductId) -> Result<(), CatalogError>;
+    async fn delete(&self, id: ProductId) -> Result<(), CatalogError>;
 }
 
 #[async_trait]
@@ -580,7 +580,7 @@ pub trait NutrientRepository: Send + Sync {
 #[async_trait]
 pub trait UnitRepository: Send + Sync {
     async fn list_all(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError>;
-    async fn mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
+    async fn list_mass_factors(&self) -> Result<Vec<(String, Decimal)>, CatalogError>;
 }
 
 #[cfg(test)]

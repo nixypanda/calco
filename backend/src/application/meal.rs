@@ -245,7 +245,7 @@ mod tests {
             Ok(meals.iter().find(|m| m.id == id).cloned())
         }
 
-        async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
+        async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError> {
             let meals = self.meals.lock().unwrap();
             Ok(meals
                 .iter()

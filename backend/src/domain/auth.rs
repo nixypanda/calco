@@ -228,14 +228,14 @@ pub trait IdentityRepository: Send + Sync {
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError>;
     async fn create(&self, identity: &Identity) -> Result<(), AuthError>;
     async fn update(&self, identity: &Identity) -> Result<(), AuthError>;
-    async fn admin_exists(&self) -> Result<bool, AuthError>;
+    async fn exists_admin(&self) -> Result<bool, AuthError>;
 }
 
 #[async_trait]
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
-    async fn find_by_identity_id(&self, identity_id: IdentityId)
+    async fn list_by_identity_id(&self, identity_id: IdentityId)
     -> Result<Vec<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
     async fn update_many(&self, sessions: &[Session]) -> Result<(), AuthError>;

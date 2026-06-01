@@ -77,7 +77,7 @@ impl IdentityRepository for PostgresIdentityRepository {
         Ok(())
     }
 
-    async fn admin_exists(&self) -> Result<bool, AuthError> {
+    async fn exists_admin(&self) -> Result<bool, AuthError> {
         let row: (bool,) =
             sqlx::query_as("SELECT EXISTS(SELECT 1 FROM identities WHERE role = 'admin')")
                 .fetch_one(&self.pool)
@@ -155,7 +155,7 @@ impl SessionRepository for PostgresSessionRepository {
         Ok(row.map(session_row_to_session))
     }
 
-    async fn find_by_identity_id(
+    async fn list_by_identity_id(
         &self,
         identity_id: IdentityId,
     ) -> Result<Vec<Session>, AuthError> {

@@ -322,7 +322,7 @@ mod tests {
             Ok(logs.iter().find(|l| l.id == id).cloned())
         }
 
-        async fn find_by_user_and_range(
+        async fn list_by_user_and_range(
             &self,
             user_id: Uuid,
             from: DateTime<Utc>,
@@ -344,6 +344,16 @@ mod tests {
             } else {
                 Err(FoodLogError::NotFound("not found".into()))
             }
+        }
+
+        async fn sum_nutrients_by_user_and_range(
+            &self,
+            _user_id: Uuid,
+            _from: DateTime<Utc>,
+            _to: DateTime<Utc>,
+            _codes: Option<Vec<String>>,
+        ) -> Result<Vec<SummaryEntry>, FoodLogError> {
+            Ok(vec![])
         }
 
         async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError> {

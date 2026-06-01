@@ -15,7 +15,7 @@ use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::*;
 use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::domain::food_log::{FoodLogRepository, SummaryRepository};
+use crate::domain::food_log::FoodLogRepository;
 use crate::domain::import::ImportRepository;
 use crate::domain::meal::MealRepository;
 use crate::domain::units::UnitConverter;
@@ -31,7 +31,6 @@ pub struct AppState {
     pub unit_repo: std::sync::Arc<dyn UnitRepository>,
     pub unit_converter: std::sync::Arc<UnitConverter>,
     pub food_log_repo: std::sync::Arc<dyn FoodLogRepository>,
-    pub summary_repo: std::sync::Arc<dyn SummaryRepository>,
     pub meal_repo: std::sync::Arc<dyn MealRepository>,
     pub import_repo: std::sync::Arc<dyn ImportRepository>,
     pub food_log_services: FoodLogServices,

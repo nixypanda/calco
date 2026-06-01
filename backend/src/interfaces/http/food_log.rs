@@ -206,7 +206,7 @@ async fn list_logs_handler(
 
     match state
         .food_log_repo
-        .find_by_user_and_range(auth.0.id, range.from_at, range.to_at)
+        .list_by_user_and_range(auth.0.id, range.from_at, range.to_at)
         .await
     {
         Ok(logs) => Json(food_logs_to_list_response(range, logs)).into_response(),
@@ -265,8 +265,13 @@ async fn summary_handler(
     };
 
     match state
-        .summary_repo
-        .get_summary(auth.0.id, args.range.from_at, args.range.to_at, args.codes)
+        .food_log_repo
+        .sum_nutrients_by_user_and_range(
+            auth.0.id,
+            args.range.from_at,
+            args.range.to_at,
+            args.codes,
+        )
         .await
     {
         Ok(totals) => {

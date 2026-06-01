@@ -18,7 +18,7 @@ use crate::application::meal::MealServices;
 use crate::config::AppConfig;
 use crate::domain::auth::{IdentityRepository, SessionRepository, UserProfileRepository};
 use crate::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::domain::food_log::{FoodLogRepository, MealLookup, ProductLookup, SummaryRepository};
+use crate::domain::food_log::{FoodLogRepository, MealLookup, ProductLookup};
 use crate::domain::import::ImportRepository;
 use crate::domain::meal::{MealProductLookup, MealRepository};
 use crate::domain::units::UnitConverter;
@@ -28,9 +28,7 @@ use crate::infrastructure::postgres::auth::{
 use crate::infrastructure::postgres::catalog::{
     PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
 };
-use crate::infrastructure::postgres::food_log::{
-    PostgresFoodLogRepository, PostgresSummaryRepository,
-};
+use crate::infrastructure::postgres::food_log::PostgresFoodLogRepository;
 use crate::infrastructure::postgres::import::PostgresImportRepository;
 use crate::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::interfaces::http::auth::{AppState, auth_routes};
@@ -69,7 +67,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
     let unit_repo = Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
 
-    let mass_factors = unit_repo.mass_factors().await?;
+    let mass_factors = unit_repo.list_mass_factors().await?;
     let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
 
     let food_log_repo_impl = Arc::new(PostgresFoodLogRepository::new(pool.clone()));
@@ -77,8 +75,6 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let product_lookup = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
     let meal_product_lookup_for_food_log = food_log_repo_impl.clone() as Arc<dyn ProductLookup>;
     let meal_lookup = food_log_repo_impl as Arc<dyn MealLookup>;
-    let summary_repo =
-        Arc::new(PostgresSummaryRepository::new(pool.clone())) as Arc<dyn SummaryRepository>;
 
     let meal_repo_impl = Arc::new(PostgresMealRepository::new(pool.clone()));
     let meal_repo = meal_repo_impl.clone() as Arc<dyn MealRepository>;
@@ -112,7 +108,6 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         unit_repo,
         unit_converter,
         food_log_repo,
-        summary_repo,
         meal_repo,
         import_repo,
         food_log_services,

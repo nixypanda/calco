@@ -282,12 +282,19 @@ pub struct SummaryEntry {
 pub trait FoodLogRepository: Send + Sync {
     async fn create(&self, log: &FoodLog) -> Result<(), FoodLogError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, FoodLogError>;
-    async fn find_by_user_and_range(
+    async fn list_by_user_and_range(
         &self,
         user_id: Uuid,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
     ) -> Result<Vec<FoodLog>, FoodLogError>;
+    async fn sum_nutrients_by_user_and_range(
+        &self,
+        user_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        codes: Option<Vec<String>>,
+    ) -> Result<Vec<SummaryEntry>, FoodLogError>;
     async fn update(&self, log: &FoodLog) -> Result<(), FoodLogError>;
     async fn delete(&self, id: FoodLogId) -> Result<(), FoodLogError>;
 }
@@ -300,17 +307,6 @@ pub trait ProductLookup: Send + Sync {
 #[async_trait]
 pub trait MealLookup: Send + Sync {
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, FoodLogError>;
-}
-
-#[async_trait]
-pub trait SummaryRepository: Send + Sync {
-    async fn get_summary(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-        codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, FoodLogError>;
 }
 
 #[cfg(test)]

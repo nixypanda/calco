@@ -181,7 +181,7 @@ async fn get_meal_handler(
 }
 
 async fn list_meals_handler(auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
-    match state.meal_repo.find_by_user(auth.0.id).await {
+    match state.meal_repo.list_by_user_id(auth.0.id).await {
         Ok(meals) => Json(meals_to_list_response(meals)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }

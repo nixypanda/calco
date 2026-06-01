@@ -127,7 +127,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         }
     }
 
-    async fn find_by_user_and_range(
+    async fn list_by_user_and_range(
         &self,
         user_id: Uuid,
         from: DateTime<Utc>,
@@ -229,6 +229,63 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    async fn sum_nutrients_by_user_and_range(
+        &self,
+        user_id: Uuid,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+        codes: Option<Vec<String>>,
+    ) -> Result<Vec<SummaryEntry>, FoodLogError> {
+        let rows = if let Some(ref code_list) = codes {
+            sqlx::query_as::<_, SummaryRow>(
+                r#"
+                SELECT n.code, SUM(fln.amount) AS amount, n.unit
+                FROM food_log_nutrients fln
+                JOIN nutrients n ON n.id = fln.nutrient_id
+                JOIN food_logs fl ON fl.id = fln.food_log_id
+                WHERE fl.user_id = $1
+                  AND fl.logged_at >= $2
+                  AND fl.logged_at < $3
+                  AND n.code = ANY($4)
+                GROUP BY n.code, n.unit
+                "#,
+            )
+            .bind(user_id)
+            .bind(from)
+            .bind(to)
+            .bind(code_list)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, SummaryRow>(
+                r#"
+                SELECT n.code, SUM(fln.amount) AS amount, n.unit
+                FROM food_log_nutrients fln
+                JOIN nutrients n ON n.id = fln.nutrient_id
+                JOIN food_logs fl ON fl.id = fln.food_log_id
+                WHERE fl.user_id = $1
+                  AND fl.logged_at >= $2
+                  AND fl.logged_at < $3
+                GROUP BY n.code, n.unit
+                "#,
+            )
+            .bind(user_id)
+            .bind(from)
+            .bind(to)
+            .fetch_all(&self.pool)
+            .await?
+        };
+
+        Ok(rows
+            .into_iter()
+            .map(|r| SummaryEntry {
+                code: r.code,
+                amount: r.amount.unwrap_or(Decimal::ZERO),
+                unit: r.unit,
+            })
+            .collect())
     }
 }
 
@@ -364,77 +421,6 @@ impl PostgresFoodLogRepository {
                 quantity: r.quantity,
                 unit: UnitCode(r.unit),
                 grams: r.grams,
-            })
-            .collect())
-    }
-}
-
-#[derive(Clone)]
-pub struct PostgresSummaryRepository {
-    pool: PgPool,
-}
-
-impl PostgresSummaryRepository {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
-    }
-}
-
-#[async_trait]
-impl SummaryRepository for PostgresSummaryRepository {
-    async fn get_summary(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-        codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, FoodLogError> {
-        let rows = if let Some(ref code_list) = codes {
-            sqlx::query_as::<_, SummaryRow>(
-                r#"
-                SELECT n.code, SUM(fln.amount) AS amount, n.unit
-                FROM food_log_nutrients fln
-                JOIN nutrients n ON n.id = fln.nutrient_id
-                JOIN food_logs fl ON fl.id = fln.food_log_id
-                WHERE fl.user_id = $1
-                  AND fl.logged_at >= $2
-                  AND fl.logged_at < $3
-                  AND n.code = ANY($4)
-                GROUP BY n.code, n.unit
-                "#,
-            )
-            .bind(user_id)
-            .bind(from)
-            .bind(to)
-            .bind(code_list)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, SummaryRow>(
-                r#"
-                SELECT n.code, SUM(fln.amount) AS amount, n.unit
-                FROM food_log_nutrients fln
-                JOIN nutrients n ON n.id = fln.nutrient_id
-                JOIN food_logs fl ON fl.id = fln.food_log_id
-                WHERE fl.user_id = $1
-                  AND fl.logged_at >= $2
-                  AND fl.logged_at < $3
-                GROUP BY n.code, n.unit
-                "#,
-            )
-            .bind(user_id)
-            .bind(from)
-            .bind(to)
-            .fetch_all(&self.pool)
-            .await?
-        };
-
-        Ok(rows
-            .into_iter()
-            .map(|r| SummaryEntry {
-                code: r.code,
-                amount: r.amount.unwrap_or(Decimal::ZERO),
-                unit: r.unit,
             })
             .collect())
     }

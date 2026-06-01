@@ -295,7 +295,7 @@ pub enum MealError {
 pub trait MealRepository: Send + Sync {
     async fn create(&self, meal: &Meal) -> Result<(), MealError>;
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, MealError>;
-    async fn find_by_user(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
+    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, MealError>;
     async fn update(&self, meal: &Meal) -> Result<(), MealError>;
     async fn delete(&self, id: MealId) -> Result<(), MealError>;
 }

@@ -401,7 +401,7 @@ async fn delete_custom_food_handler(
         return error_response("forbidden", msg).into_response();
     }
 
-    match state.product_repo.soft_delete(ProductId(id)).await {
+    match state.product_repo.delete(ProductId(id)).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => internal_error(e).into_response(),
     }
