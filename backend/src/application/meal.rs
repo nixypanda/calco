@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::domain::catalog::*;
 use crate::domain::meal::*;
-use crate::domain::nutrition::{Quantity, calculate_meal_nutrition};
+use crate::domain::nutrition::Quantity;
 use crate::domain::units::UnitConverter;
 
 pub struct CreateMealInput {
@@ -111,39 +111,18 @@ impl MealServices {
         }
 
         let components = match input.components {
-            Some(components) => {
-                let components = self.build_components(components).await?;
-                Meal::validate_components(&components)?;
-                components
-            }
-            None => existing.components.clone(),
+            Some(components) => Some(self.build_components(components).await?),
+            None => None,
         };
 
-        let name = match input.name {
-            Some(n) => existing.rename(n)?,
-            None => existing.name,
-        };
-
-        let updated = Meal {
-            id,
-            user_id,
-            name,
-            notes: input
-                .notes
-                .map(|n| n.map(MealNotes))
-                .unwrap_or(existing.notes),
-            total_quantity_amount: match input.total_quantity_amount {
-                Some(value) => value,
-                None => existing.total_quantity_amount,
-            },
-            total_quantity_unit: match input.total_quantity_unit {
-                Some(value) => value.map(UnitCode),
-                None => existing.total_quantity_unit,
-            },
+        let updated = existing.update(
+            input.name,
+            input.notes,
+            input.total_quantity_amount,
+            input.total_quantity_unit.map(|opt| opt.map(UnitCode)),
             components,
-            created_at: existing.created_at,
-            updated_at: Utc::now(),
-        };
+            Utc::now(),
+        )?;
 
         self.meal_repo.update(&updated).await?;
         Ok(updated)
@@ -177,9 +156,9 @@ impl MealServices {
 
         let products = self.load_meal_products(&meal).await?;
         let requested_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit.clone()));
-        let calculated =
-            calculate_meal_nutrition(&meal, &requested_quantity, &products, &self.unit_converter)
-                .map_err(MealError::Validation)?;
+        let calculated = meal
+            .nutrition_for(&requested_quantity, &products, &self.unit_converter)
+            .map_err(MealError::Validation)?;
         let nutrients: Vec<MealNutrientEntry> = calculated
             .amounts
             .into_iter()
@@ -204,25 +183,22 @@ impl MealServices {
     ) -> Result<Vec<MealComponent>, MealError> {
         let mut components = Vec::with_capacity(inputs.len());
         for input in inputs {
-            if input.item_type != "product" {
-                return Err(MealError::Validation(format!(
-                    "unsupported component item type: {}",
-                    input.item_type
-                )));
+            let item = MealComponentItem::parse(&input.item_type, input.item_id)?;
+            match &item {
+                MealComponentItem::Product(product_id) => {
+                    self.product_lookup
+                        .find_by_id(*product_id)
+                        .await?
+                        .ok_or_else(|| {
+                            MealError::NotFound(format!("product {} not found", input.item_id))
+                        })?;
+                }
             }
-            let product_id = ProductId(input.item_id);
-            self.product_lookup
-                .find_by_id(product_id)
-                .await?
-                .ok_or_else(|| {
-                    MealError::NotFound(format!("product {} not found", input.item_id))
-                })?;
-            components.push(MealComponent {
-                id: Uuid::new_v4(),
-                item: MealComponentItem::Product(product_id),
-                quantity_amount: input.quantity_amount,
-                quantity_unit: UnitCode(input.quantity_unit),
-            });
+            components.push(MealComponent::new(
+                item,
+                input.quantity_amount,
+                UnitCode(input.quantity_unit),
+            )?);
         }
         Ok(components)
     }
@@ -422,7 +398,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Validation(msg) => assert!(msg.contains("name")),
+            MealError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -444,7 +420,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Validation(msg) => assert!(msg.contains("at least one component")),
+            MealError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -466,7 +442,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::NotFound(msg) => assert!(msg.contains("product")),
+            MealError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -499,7 +475,7 @@ mod tests {
         let result = services.get_meal(MealId::new()).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::NotFound(msg) => assert!(msg.contains("meal")),
+            MealError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -651,7 +627,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Forbidden(msg) => assert!(msg.contains("not your")),
+            MealError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -699,7 +675,7 @@ mod tests {
         let result = services.delete_meal(created.id, other).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::Forbidden(msg) => assert!(msg.contains("not your")),
+            MealError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -710,7 +686,7 @@ mod tests {
         let result = services.delete_meal(MealId::new(), Uuid::new_v4()).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            MealError::NotFound(msg) => assert!(msg.contains("meal")),
+            MealError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }

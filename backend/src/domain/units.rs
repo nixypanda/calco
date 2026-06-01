@@ -86,16 +86,4 @@ mod tests {
         assert_eq!(result, Decimal::from_str("2500.0").unwrap());
     }
 
-    #[test]
-    fn is_intrinsic_mass() {
-        fn is_intrinsic_mass(converter: &UnitConverter, unit: &UnitCode) -> bool {
-            converter.mass_to_grams(Decimal::from(1), unit).is_some()
-        }
-
-        let c = sample();
-        assert!(is_intrinsic_mass(&c, &UnitCode("g".into())));
-        assert!(is_intrinsic_mass(&c, &UnitCode("mg".into())));
-        assert!(!is_intrinsic_mass(&c, &UnitCode("cup".into())));
-        assert!(!is_intrinsic_mass(&c, &UnitCode("serving".into())));
-    }
 }

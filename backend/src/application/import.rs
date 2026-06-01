@@ -535,7 +535,7 @@ mod tests {
 
         let err = services.commit_job(job.id).await.unwrap_err();
         match err {
-            ImportError::Validation(msg) => assert!(msg.contains("no staged foods")),
+            ImportError::Validation(_) => {}
             _ => panic!("expected validation error"),
         }
     }

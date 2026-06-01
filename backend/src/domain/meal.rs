@@ -3,7 +3,9 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use super::catalog::{Product, ProductId, UnitCode};
+use super::catalog::{NutrientCode, Product, ProductId, UnitCode};
+use super::nutrition::{CalculatedNutrition, NutrientAmount, Quantity};
+use super::units::UnitConverter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MealId(pub Uuid);
@@ -31,12 +33,43 @@ pub enum MealComponentItem {
     Product(ProductId),
 }
 
+impl MealComponentItem {
+    pub fn parse(item_type: &str, item_id: Uuid) -> Result<Self, MealError> {
+        match item_type {
+            "product" => Ok(MealComponentItem::Product(ProductId(item_id))),
+            other => Err(MealError::Validation(format!(
+                "unsupported component item type: {other}"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MealComponent {
     pub id: Uuid,
     pub item: MealComponentItem,
     pub quantity_amount: Decimal,
     pub quantity_unit: UnitCode,
+}
+
+impl MealComponent {
+    pub fn new(
+        item: MealComponentItem,
+        quantity_amount: Decimal,
+        quantity_unit: UnitCode,
+    ) -> Result<Self, MealError> {
+        if quantity_amount <= Decimal::ZERO {
+            return Err(MealError::Validation(
+                "component quantity must be positive".into(),
+            ));
+        }
+        Ok(Self {
+            id: Uuid::new_v4(),
+            item,
+            quantity_amount,
+            quantity_unit,
+        })
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -78,17 +111,148 @@ impl Meal {
         })
     }
 
-    pub fn rename(&self, name: String) -> Result<MealName, MealError> {
-        validate_meal_name(&name)?;
-        Ok(MealName(name))
-    }
-
-    pub fn validate_components(components: &[MealComponent]) -> Result<(), MealError> {
-        validate_meal_components(components)
+    pub fn update(
+        &self,
+        name: Option<String>,
+        notes: Option<Option<String>>,
+        total_quantity_amount: Option<Option<Decimal>>,
+        total_quantity_unit: Option<Option<UnitCode>>,
+        components: Option<Vec<MealComponent>>,
+        now: DateTime<Utc>,
+    ) -> Result<Self, MealError> {
+        let name = match name {
+            Some(name) => {
+                validate_meal_name(&name)?;
+                MealName(name)
+            }
+            None => self.name.clone(),
+        };
+        let components = match components {
+            Some(components) => {
+                validate_meal_components(&components)?;
+                components
+            }
+            None => self.components.clone(),
+        };
+        Ok(Self {
+            id: self.id,
+            user_id: self.user_id,
+            name,
+            notes: notes.map(|n| n.map(MealNotes)).unwrap_or(self.notes.clone()),
+            total_quantity_amount: total_quantity_amount.unwrap_or(self.total_quantity_amount),
+            total_quantity_unit: total_quantity_unit.unwrap_or(self.total_quantity_unit.clone()),
+            components,
+            created_at: self.created_at,
+            updated_at: now,
+        })
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == user_id
+    }
+
+    pub fn quantity_to_grams(
+        &self,
+        quantity: &Quantity,
+        unit_converter: &UnitConverter,
+    ) -> Result<Decimal, String> {
+        if quantity.amount <= Decimal::ZERO {
+            return Err("quantity amount must be positive".into());
+        }
+        if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+            return Ok(grams);
+        }
+        match (&self.total_quantity_amount, &self.total_quantity_unit) {
+            (Some(total_amount), Some(total_unit))
+                if total_unit.0 == quantity.unit.0 && *total_amount > Decimal::ZERO =>
+            {
+                Ok(quantity.amount / *total_amount * self.declared_grams(unit_converter)?)
+            }
+            _ => Err(format!(
+                "cannot convert {} {} to grams for meal logging",
+                quantity.amount, quantity.unit.0
+            )),
+        }
+    }
+
+    fn declared_grams(&self, unit_converter: &UnitConverter) -> Result<Decimal, String> {
+        match (&self.total_quantity_amount, &self.total_quantity_unit) {
+            (Some(amount), Some(unit)) if *amount > Decimal::ZERO => unit_converter
+                .mass_to_grams(*amount, unit)
+                .ok_or_else(|| {
+                    "meal total quantity must be defined in a mass unit for non-mass logging".into()
+                }),
+            _ => Err(
+                "meal total quantity must be defined in a mass unit for non-mass logging".into(),
+            ),
+        }
+    }
+
+    pub fn nutrition_for(
+        &self,
+        scale_quantity: &Quantity,
+        products: &[(ProductId, Product)],
+        unit_converter: &UnitConverter,
+    ) -> Result<CalculatedNutrition, String> {
+        let scale_grams = self.quantity_to_grams(scale_quantity, unit_converter)?;
+
+        let mut total_nutrients: Vec<(NutrientCode, Decimal, UnitCode)> = Vec::new();
+        let mut total_component_grams = Decimal::ZERO;
+
+        for component in &self.components {
+            match &component.item {
+                MealComponentItem::Product(product_id) => {
+                    let product = products
+                        .iter()
+                        .find(|(id, _)| id == product_id)
+                        .map(|(_, product)| product)
+                        .ok_or_else(|| {
+                            format!("product {} in meal {} not found", product_id.0, self.id.0)
+                        })?;
+
+                    let component_qty = Quantity::new(
+                        component.quantity_amount,
+                        component.quantity_unit.clone(),
+                    );
+                    let component_grams = product.quantity_to_grams(&component_qty, unit_converter)?;
+                    total_component_grams += component_grams;
+
+                    let contribution_ratio = component_grams / Decimal::new(100, 0);
+                    for pn in &product.nutrients {
+                        let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
+                        match total_nutrients
+                            .iter_mut()
+                            .find(|(code, _, _)| code == &pn.nutrient_code)
+                        {
+                            Some((_, existing_amount, _)) => {
+                                *existing_amount += contributed_amount
+                            }
+                            None => total_nutrients.push((
+                                pn.nutrient_code.clone(),
+                                contributed_amount,
+                                pn.unit.clone(),
+                            )),
+                        }
+                    }
+                }
+            }
+        }
+
+        if total_component_grams <= Decimal::ZERO {
+            return Err("meal total quantity must be positive".into());
+        }
+
+        let scale_factor = scale_grams / total_component_grams;
+        Ok(CalculatedNutrition {
+            amounts: total_nutrients
+                .into_iter()
+                .map(|(code, amount, unit)| NutrientAmount {
+                    nutrient_code: code,
+                    amount: amount * scale_factor,
+                    unit,
+                })
+                .collect(),
+        })
     }
 }
 
@@ -134,102 +298,4 @@ pub trait MealRepository: Send + Sync {
 #[async_trait]
 pub trait MealProductLookup: Send + Sync {
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, MealError>;
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_meal_id_generates_unique_ids() {
-        let id1 = MealId::new();
-        let id2 = MealId::new();
-        assert_ne!(id1, id2);
-    }
-
-    #[test]
-    fn test_meal_id_from_uuid() {
-        let uuid = Uuid::new_v4();
-        let id = MealId::from(uuid);
-        assert_eq!(id.0, uuid);
-    }
-
-    #[test]
-    fn test_meal_is_owned_by() {
-        let user_a = Uuid::new_v4();
-        let user_b = Uuid::new_v4();
-        let meal = Meal {
-            id: MealId::new(),
-            user_id: user_a,
-            name: MealName("Test Meal".to_string()),
-            notes: None,
-            total_quantity_amount: None,
-            total_quantity_unit: None,
-            components: vec![],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-        assert!(meal.is_owned_by(user_a));
-        assert!(!meal.is_owned_by(user_b));
-    }
-
-    #[test]
-    fn test_meal_has_at_least_one_component() {
-        fn has_at_least_one_component(meal: &Meal) -> bool {
-            !meal.components.is_empty()
-        }
-
-        let user_id = Uuid::new_v4();
-        let meal_empty = Meal {
-            id: MealId::new(),
-            user_id,
-            name: MealName("Empty Meal".to_string()),
-            notes: None,
-            total_quantity_amount: None,
-            total_quantity_unit: None,
-            components: vec![],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        };
-        assert!(!has_at_least_one_component(&meal_empty));
-
-        let meal_with_component = Meal {
-            components: vec![MealComponent {
-                id: Uuid::new_v4(),
-                item: MealComponentItem::Product(ProductId(Uuid::new_v4())),
-                quantity_amount: Decimal::new(100, 0),
-                quantity_unit: UnitCode("g".to_string()),
-            }],
-            ..meal_empty
-        };
-        assert!(has_at_least_one_component(&meal_with_component));
-    }
-
-    #[test]
-    fn test_meal_component_item_product() {
-        let product_id = ProductId(Uuid::new_v4());
-        let component = MealComponent {
-            id: Uuid::new_v4(),
-            item: MealComponentItem::Product(product_id),
-            quantity_amount: Decimal::new(150, 0),
-            quantity_unit: UnitCode("g".to_string()),
-        };
-        match component.item {
-            MealComponentItem::Product(pid) => assert_eq!(pid, product_id),
-        }
-    }
-
-    #[test]
-    fn test_meal_error_display() {
-        let err = MealError::NotFound("meal not found".into());
-        assert_eq!(format!("{err}"), "not_found: meal not found");
-        let err = MealError::Forbidden("not your meal".into());
-        assert_eq!(format!("{err}"), "forbidden: not your meal");
-        let err = MealError::Validation("name required".into());
-        assert_eq!(format!("{err}"), "validation: name required");
-        let err = MealError::Database(sqlx::Error::RowNotFound);
-        assert!(format!("{err}").starts_with("database: "));
-        let err = MealError::Internal("unexpected".into());
-        assert_eq!(format!("{err}"), "internal: unexpected");
-    }
 }

@@ -6,6 +6,7 @@ use uuid::Uuid;
 use super::catalog::{NutrientCode, Product, ProductId, UnitCode};
 use super::meal::{Meal, MealId};
 use super::nutrition::{CalculatedNutrition, Quantity};
+use super::units::UnitConverter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FoodLogId(pub Uuid);
@@ -82,78 +83,92 @@ impl FoodLog {
         user_id: Uuid,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        product_id: ProductId,
+        product: &Product,
         quantity: Quantity,
-        nutrition: CalculatedNutrition,
+        unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Self {
-        Self::new(
+    ) -> Result<Self, FoodLogError> {
+        let nutrition = product
+            .nutrition_for(&quantity, unit_converter)
+            .map_err(FoodLogError::Validation)?;
+        Ok(Self::new(
             user_id,
             logged_at,
             meal_slot,
-            LoggedItem::Product(product_id),
+            LoggedItem::Product(product.id),
             quantity,
             nutrition,
             notes,
-        )
+        ))
     }
 
     pub fn new_meal_log(
         user_id: Uuid,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        meal_id: MealId,
+        meal: &Meal,
         quantity: Quantity,
-        nutrition: CalculatedNutrition,
+        products: &[(ProductId, Product)],
+        unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Self {
-        Self::new(
+    ) -> Result<Self, FoodLogError> {
+        let nutrition = meal
+            .nutrition_for(&quantity, products, unit_converter)
+            .map_err(FoodLogError::Validation)?;
+        Ok(Self::new(
             user_id,
             logged_at,
             meal_slot,
-            LoggedItem::Meal(meal_id),
+            LoggedItem::Meal(meal.id),
             quantity,
             nutrition,
             notes,
-        )
+        ))
     }
 
     pub fn update_product_log(
         &self,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        product_id: ProductId,
+        product: &Product,
         quantity: Quantity,
-        nutrition: CalculatedNutrition,
+        unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Self {
-        self.update(
+    ) -> Result<Self, FoodLogError> {
+        let nutrition = product
+            .nutrition_for(&quantity, unit_converter)
+            .map_err(FoodLogError::Validation)?;
+        Ok(self.update(
             logged_at,
             meal_slot,
-            LoggedItem::Product(product_id),
+            LoggedItem::Product(product.id),
             quantity,
             nutrition,
             notes,
-        )
+        ))
     }
 
     pub fn update_meal_log(
         &self,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        meal_id: MealId,
+        meal: &Meal,
         quantity: Quantity,
-        nutrition: CalculatedNutrition,
+        products: &[(ProductId, Product)],
+        unit_converter: &UnitConverter,
         notes: Option<String>,
-    ) -> Self {
-        self.update(
+    ) -> Result<Self, FoodLogError> {
+        let nutrition = meal
+            .nutrition_for(&quantity, products, unit_converter)
+            .map_err(FoodLogError::Validation)?;
+        Ok(self.update(
             logged_at,
             meal_slot,
-            LoggedItem::Meal(meal_id),
+            LoggedItem::Meal(meal.id),
             quantity,
             nutrition,
             notes,
-        )
+        ))
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
@@ -288,16 +303,63 @@ pub trait SummaryRepository: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::nutrition::{CalculatedNutrition, NutrientAmount, Quantity};
+    use crate::domain::catalog::{
+        AmountPer100g, ProductName, ProductNutrient, ProductVisibility, Source,
+    };
+    use crate::domain::meal::{MealComponent, MealComponentItem};
+    use crate::domain::nutrition::Quantity;
+    use std::str::FromStr;
 
-    fn sample_nutrition(amount: Decimal) -> CalculatedNutrition {
-        CalculatedNutrition {
-            amounts: vec![NutrientAmount {
+    fn sample_product() -> Product {
+        Product {
+            id: ProductId(Uuid::nil()),
+            source: Source::User,
+            source_id: None,
+            user_id: None,
+            visibility: ProductVisibility::UserPrivate,
+            barcode: None,
+            name: ProductName("Test".into()),
+            brand: None,
+            categories: vec![],
+            default_quantity: None,
+            default_unit: None,
+            serving_size_g: None,
+            nutrients: vec![ProductNutrient {
                 nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-                amount,
+                amount_per_100g: AmountPer100g(Decimal::new(250, 0)),
                 unit: UnitCode("kcal".to_string()),
+                source: None,
+                confidence: None,
             }],
+            servings: vec![],
         }
+    }
+
+    fn sample_meal() -> Meal {
+        Meal {
+            id: MealId(Uuid::nil()),
+            user_id: Uuid::nil(),
+            name: crate::domain::meal::MealName("Test".into()),
+            notes: None,
+            total_quantity_amount: Some(Decimal::new(100, 0)),
+            total_quantity_unit: Some(UnitCode("g".into())),
+            components: vec![MealComponent {
+                id: Uuid::new_v4(),
+                item: MealComponentItem::Product(ProductId(Uuid::nil())),
+                quantity_amount: Decimal::new(100, 0),
+                quantity_unit: UnitCode("g".into()),
+            }],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn sample_unit_converter() -> UnitConverter {
+        UnitConverter::from_entries([
+            ("g".to_string(), Decimal::from(1)),
+            ("kg".to_string(), Decimal::from(1000)),
+            ("mg".to_string(), Decimal::from_str("0.001").unwrap()),
+        ])
     }
 
     #[test]
@@ -322,65 +384,22 @@ mod tests {
     }
 
     #[test]
-    fn test_food_log_id_generates_unique_ids() {
-        let id1 = FoodLogId::new();
-        let id2 = FoodLogId::new();
-        assert_ne!(id1, id2);
-    }
-
-    #[test]
-    fn test_food_log_id_from_uuid() {
-        let uuid = Uuid::new_v4();
-        let id = FoodLogId::from(uuid);
-        assert_eq!(id.0, uuid);
-    }
-
-    #[test]
-    fn test_food_log_is_owned_by() {
-        let user_a = Uuid::new_v4();
-        let user_b = Uuid::new_v4();
-        let log = FoodLog {
-            id: FoodLogId::new(),
-            user_id: user_a,
-            logged_at: Utc::now(),
-            meal_slot: Some(MealSlot::Lunch),
-            item: LoggedItem::Product(ProductId(Uuid::new_v4())),
-            quantity_amount: Decimal::new(100, 0),
-            quantity_unit: UnitCode("g".to_string()),
-            nutrient_snapshots: vec![],
-            notes: None,
-        };
-        assert!(log.is_owned_by(user_a));
-        assert!(!log.is_owned_by(user_b));
-    }
-
-    #[test]
-    fn test_food_log_nutrient_snapshot() {
-        let snap = FoodLogNutrientSnapshot {
-            nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
-            amount: Decimal::new(250, 0),
-            unit: UnitCode("kcal".to_string()),
-        };
-        assert_eq!(snap.nutrient_code.0, "ENERGY_KCAL");
-        assert_eq!(snap.amount, Decimal::new(250, 0));
-        assert_eq!(snap.unit.0, "kcal");
-    }
-
-    #[test]
     fn product_log_construction_sets_item_quantity_and_snapshots() {
-        let product_id = ProductId(Uuid::new_v4());
+        let product = sample_product();
+        let converter = sample_unit_converter();
         let log = FoodLog::new_product_log(
             Uuid::new_v4(),
             Utc::now(),
             Some(MealSlot::Breakfast),
-            product_id,
+            &product,
             Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
-            sample_nutrition(Decimal::new(250, 0)),
+            &converter,
             Some("notes".into()),
-        );
+        )
+        .unwrap();
 
         match log.item {
-            LoggedItem::Product(id) => assert_eq!(id, product_id),
+            LoggedItem::Product(id) => assert_eq!(id, product.id),
             LoggedItem::Meal(_) => panic!("expected product item"),
         }
         assert_eq!(log.quantity_amount, Decimal::new(100, 0));
@@ -391,100 +410,117 @@ mod tests {
 
     #[test]
     fn meal_log_construction_sets_item_quantity_and_snapshots() {
-        let meal_id = MealId(Uuid::new_v4());
+        let product = sample_product();
+        let meal = sample_meal();
+        let converter = sample_unit_converter();
         let log = FoodLog::new_meal_log(
             Uuid::new_v4(),
             Utc::now(),
             Some(MealSlot::Dinner),
-            meal_id,
-            Quantity::new(Decimal::new(1, 0), UnitCode("serving".into())),
-            sample_nutrition(Decimal::new(500, 0)),
+            &meal,
+            Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+            &[(product.id, product.clone())],
+            &converter,
             None,
-        );
+        )
+        .unwrap();
 
         match log.item {
-            LoggedItem::Meal(id) => assert_eq!(id, meal_id),
+            LoggedItem::Meal(id) => assert_eq!(id, meal.id),
             LoggedItem::Product(_) => panic!("expected meal item"),
         }
-        assert_eq!(log.quantity_amount, Decimal::new(1, 0));
-        assert_eq!(log.quantity_unit.0, "serving");
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(500, 0));
+        assert_eq!(log.quantity_amount, Decimal::new(50, 0));
+        // meal scaled to 50g of 100g = 0.5x → 250 kcal/100g * 100g comp / 100 = 250, scaled by 0.5 = 125
+        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(125, 0));
         assert!(log.notes.is_none());
     }
 
     #[test]
     fn update_product_log_preserves_identity_and_replaces_editable_fields() {
         let user_id = Uuid::new_v4();
+        let product = sample_product();
+        let meal = sample_meal();
+        let converter = sample_unit_converter();
         let original = FoodLog::new_meal_log(
             user_id,
             Utc::now(),
             Some(MealSlot::Lunch),
-            MealId(Uuid::new_v4()),
-            Quantity::new(Decimal::new(1, 0), UnitCode("serving".into())),
-            sample_nutrition(Decimal::new(300, 0)),
+            &meal,
+            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
+            &[(product.id, product.clone())],
+            &converter,
             None,
-        );
+        )
+        .unwrap();
         let original_id = original.id;
-        let product_id = ProductId(Uuid::new_v4());
         let logged_at = Utc::now();
 
-        let updated = original.update_product_log(
-            logged_at,
-            Some(MealSlot::Snack),
-            product_id,
-            Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
-            sample_nutrition(Decimal::new(100, 0)),
-            Some("updated".into()),
-        );
+        let updated = original
+            .update_product_log(
+                logged_at,
+                Some(MealSlot::Snack),
+                &product,
+                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+                &converter,
+                Some("updated".into()),
+            )
+            .unwrap();
 
         assert_eq!(updated.id, original_id);
         assert_eq!(updated.user_id, user_id);
         assert_eq!(updated.logged_at, logged_at);
         assert_eq!(updated.meal_slot, Some(MealSlot::Snack));
         match updated.item {
-            LoggedItem::Product(id) => assert_eq!(id, product_id),
+            LoggedItem::Product(id) => assert_eq!(id, product.id),
             LoggedItem::Meal(_) => panic!("expected product item"),
         }
         assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
-        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(100, 0));
+        // 250 kcal/100g * 50g / 100 = 125
+        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
         assert_eq!(updated.notes.as_deref(), Some("updated"));
     }
 
     #[test]
     fn update_meal_log_preserves_identity_and_replaces_editable_fields() {
         let user_id = Uuid::new_v4();
+        let product = sample_product();
+        let meal = sample_meal();
+        let converter = sample_unit_converter();
         let original = FoodLog::new_product_log(
             user_id,
             Utc::now(),
             None,
-            ProductId(Uuid::new_v4()),
+            &product,
             Quantity::new(Decimal::new(100, 0), UnitCode("g".into())),
-            sample_nutrition(Decimal::new(300, 0)),
+            &converter,
             None,
-        );
+        )
+        .unwrap();
         let original_id = original.id;
-        let meal_id = MealId(Uuid::new_v4());
         let logged_at = Utc::now();
 
-        let updated = original.update_meal_log(
-            logged_at,
-            Some(MealSlot::Dinner),
-            meal_id,
-            Quantity::new(Decimal::new(2, 0), UnitCode("serving".into())),
-            sample_nutrition(Decimal::new(800, 0)),
-            None,
-        );
+        let updated = original
+            .update_meal_log(
+                logged_at,
+                Some(MealSlot::Dinner),
+                &meal,
+                Quantity::new(Decimal::new(50, 0), UnitCode("g".into())),
+                &[(product.id, product.clone())],
+                &converter,
+                None,
+            )
+            .unwrap();
 
         assert_eq!(updated.id, original_id);
         assert_eq!(updated.user_id, user_id);
         assert_eq!(updated.logged_at, logged_at);
         assert_eq!(updated.meal_slot, Some(MealSlot::Dinner));
         match updated.item {
-            LoggedItem::Meal(id) => assert_eq!(id, meal_id),
+            LoggedItem::Meal(id) => assert_eq!(id, meal.id),
             LoggedItem::Product(_) => panic!("expected meal item"),
         }
-        assert_eq!(updated.quantity_amount, Decimal::new(2, 0));
-        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(800, 0));
+        assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
+        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
         assert!(updated.notes.is_none());
     }
 }

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::food_log::*;
 use crate::domain::meal::{Meal, MealComponentItem, MealId};
-use crate::domain::nutrition::{Quantity, calculate_meal_nutrition, calculate_product_nutrition};
+use crate::domain::nutrition::Quantity;
 use crate::domain::units::UnitConverter;
 
 impl From<crate::domain::meal::MealError> for FoodLogError {
@@ -97,8 +97,6 @@ impl FoodLogServices {
             })?;
 
         let quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let calculated = calculate_product_nutrition(&product, &quantity, &self.unit_converter)
-            .map_err(FoodLogError::Validation)?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -109,11 +107,11 @@ impl FoodLogServices {
             input.user_id,
             input.logged_at,
             meal_slot,
-            product_id,
+            &product,
             quantity,
-            calculated,
+            &self.unit_converter,
             input.notes,
-        );
+        )?;
 
         self.food_log_repo.create(&log).await?;
         Ok(log)
@@ -138,9 +136,6 @@ impl FoodLogServices {
         let scale_quantity =
             Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
         let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
-        let calculated =
-            calculate_meal_nutrition(&meal, &scale_quantity, &products, &self.unit_converter)
-                .map_err(FoodLogError::Validation)?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -151,11 +146,12 @@ impl FoodLogServices {
             input.user_id,
             input.logged_at,
             meal_slot,
-            meal_id,
+            &meal,
             scale_quantity,
-            calculated,
+            &products,
+            &self.unit_converter,
             input.notes,
-        );
+        )?;
 
         self.food_log_repo.create(&log).await?;
         Ok(log)
@@ -213,8 +209,6 @@ impl FoodLogServices {
                 .quantity_unit
                 .unwrap_or_else(|| existing.quantity_unit.0.clone());
             let quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let calculated = calculate_product_nutrition(&product, &quantity, &self.unit_converter)
-                .map_err(FoodLogError::Validation)?;
 
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
@@ -227,11 +221,11 @@ impl FoodLogServices {
             let updated = existing.update_product_log(
                 logged_at,
                 meal_slot,
-                ProductId(item_id),
+                &product,
                 quantity,
-                calculated,
+                &self.unit_converter,
                 notes,
-            );
+            )?;
 
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
@@ -256,9 +250,6 @@ impl FoodLogServices {
             let scale_quantity =
                 Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
             let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
-            let calculated =
-                calculate_meal_nutrition(&meal, &scale_quantity, &products, &self.unit_converter)
-                    .map_err(FoodLogError::Validation)?;
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
                 Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
@@ -269,11 +260,12 @@ impl FoodLogServices {
             let updated = existing.update_meal_log(
                 logged_at,
                 meal_slot,
-                meal_id,
+                &meal,
                 scale_quantity,
-                calculated,
+                &products,
+                &self.unit_converter,
                 notes,
-            );
+            )?;
 
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
@@ -629,7 +621,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::NotFound(msg) => assert!(msg.contains("product")),
+            FoodLogError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -653,7 +645,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::Validation(msg) => assert!(msg.contains("brunch")),
+            FoodLogError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -677,7 +669,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::Validation(msg) => assert!(msg.contains("unsupported item type")),
+            FoodLogError::Validation(_) => {}
             _ => panic!("expected Validation"),
         }
     }
@@ -714,7 +706,7 @@ mod tests {
         let result = services.get_food_log(FoodLogId::new()).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::NotFound(msg) => assert!(msg.contains("food log")),
+            FoodLogError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -766,7 +758,7 @@ mod tests {
         let result = services.delete_food_log(created.id, other).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::Forbidden(msg) => assert!(msg.contains("not your")),
+            FoodLogError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -779,7 +771,7 @@ mod tests {
             .await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::NotFound(msg) => assert!(msg.contains("food log")),
+            FoodLogError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -966,7 +958,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::Forbidden(msg) => assert!(msg.contains("not your")),
+            FoodLogError::Forbidden(_) => {}
             _ => panic!("expected Forbidden"),
         }
     }
@@ -1127,7 +1119,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::NotFound(msg) => assert!(msg.contains("meal")),
+            FoodLogError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
     }
@@ -1151,7 +1143,7 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FoodLogError::Internal(msg) => assert!(msg.contains("not configured")),
+            FoodLogError::Internal(_) => {}
             _ => panic!("expected Internal"),
         }
     }

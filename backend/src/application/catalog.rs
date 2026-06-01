@@ -5,8 +5,6 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::units::UnitConverter;
 
-pub use crate::domain::catalog::normalize_categories;
-
 // ─── Use Cases ─────────────────────────────────────────────────
 
 pub struct SearchCriteria {
@@ -52,48 +50,16 @@ impl CatalogServices {
         product: &Product,
     ) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         let all_units = self.unit_repo.list_all().await?;
-
-        let mut allowed: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for code in self.unit_converter.mass_unit_codes() {
-            allowed.insert(code.to_string());
-        }
-        for serving in &product.servings {
-            allowed.insert(serving.unit.0.clone());
-        }
-        if product.serving_size_g.is_some() {
-            if let Some(default_unit) = product.default_unit.as_ref() {
-                allowed.insert(default_unit.0.clone());
-            }
-        }
-
+        let allowed = product.allowed_unit_codes(&self.unit_converter);
         Ok(all_units
             .into_iter()
             .filter(|(code, _, _)| allowed.contains(&code.0))
             .collect())
     }
 
-    async fn resolve_product_nutrients(
-        &self,
-        nutrients: &[ProductNutrientInput],
-    ) -> Result<Vec<ProductNutrientUpdate>, CatalogError> {
-        let mut resolved = Vec::with_capacity(nutrients.len());
-        for nutrient in nutrients {
-            let reference = self
-                .nutrient_repo
-                .find_by_code(&nutrient.code)
-                .await?
-                .ok_or_else(|| {
-                    CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
-                })?;
-            resolved.push(ProductNutrientUpdate {
-                code: nutrient.code.clone(),
-                amount_per_100g: nutrient.amount_per_100g,
-                unit: reference.unit().clone(),
-                source: nutrient.source.clone(),
-                confidence: nutrient.confidence.clone(),
-            });
-        }
-        Ok(resolved)
+    async fn load_nutrient_catalog(&self) -> Result<NutrientCatalog, CatalogError> {
+        let nutrients = self.nutrient_repo.list_all().await?;
+        Ok(NutrientCatalog::from_iter(nutrients))
     }
 
     pub async fn search_products(
@@ -143,9 +109,7 @@ impl CatalogServices {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
     ) -> Result<Product, CatalogError> {
-        let nutrients = self.resolve_product_nutrients(&nutrients).await?;
-        let servings = product_serving_updates(servings);
-
+        let catalog = self.load_nutrient_catalog().await?;
         let product = Product::new_custom(
             user_id,
             name,
@@ -156,6 +120,7 @@ impl CatalogServices {
             default_unit,
             nutrients,
             servings,
+            &catalog,
         )?;
         self.product_repo.create(&product).await?;
         Ok(product)
@@ -184,9 +149,7 @@ impl CatalogServices {
             return Err(CatalogError::Forbidden("not your custom food".into()));
         }
 
-        let nutrients = self.resolve_product_nutrients(&nutrients).await?;
-        let servings = product_serving_updates(servings);
-
+        let catalog = self.load_nutrient_catalog().await?;
         let updated = existing.update_custom(
             name,
             brand,
@@ -196,6 +159,7 @@ impl CatalogServices {
             default_unit,
             nutrients,
             servings,
+            &catalog,
         )?;
         self.product_repo.update(&updated).await?;
         Ok(updated)
@@ -241,13 +205,13 @@ fn parse_search_query(input: &str) -> ProductSearchQuery {
 
     for token in tokenize_search(input) {
         if let Some(value) = token.strip_prefix("category:") {
-            query
-                .include_categories
-                .extend(normalize_categories(vec![value.to_string()]));
+            if let Some(category) = Category::new(value) {
+                query.include_categories.push(category.0);
+            }
         } else if let Some(value) = token.strip_prefix("-category:") {
-            query
-                .exclude_categories
-                .extend(normalize_categories(vec![value.to_string()]));
+            if let Some(category) = Category::new(value) {
+                query.exclude_categories.push(category.0);
+            }
         } else {
             text_terms.push(token);
         }
@@ -281,61 +245,9 @@ fn tokenize_search(input: &str) -> Vec<String> {
     tokens
 }
 
-// ─── Input Types ───────────────────────────────────────────────
-
-pub struct ProductNutrientInput {
-    pub code: String,
-    pub amount_per_100g: Decimal,
-    pub source: Option<String>,
-    pub confidence: Option<String>,
-}
-
-impl Clone for ProductNutrientInput {
-    fn clone(&self) -> Self {
-        Self {
-            code: self.code.clone(),
-            amount_per_100g: self.amount_per_100g,
-            source: self.source.clone(),
-            confidence: self.confidence.clone(),
-        }
-    }
-}
-
-pub struct ProductServingInput {
-    pub label: String,
-    pub quantity: Decimal,
-    pub unit: String,
-    pub grams: Decimal,
-}
-
-fn product_serving_updates(servings: Vec<ProductServingInput>) -> Vec<ProductServingUpdate> {
-    servings
-        .into_iter()
-        .map(|serving| ProductServingUpdate {
-            label: serving.label,
-            quantity: serving.quantity,
-            unit: serving.unit,
-            grams: serving.grams,
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn normalize_categories_trims_lowercases_and_deduplicates() {
-        assert_eq!(
-            normalize_categories(vec![
-                " Snacks ".into(),
-                "snacks".into(),
-                "".into(),
-                "Beverages".into(),
-            ]),
-            vec!["snacks", "beverages"]
-        );
-    }
 
     #[test]
     fn parse_search_query_extracts_category_filters() {

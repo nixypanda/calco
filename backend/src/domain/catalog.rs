@@ -1,6 +1,10 @@
 use async_trait::async_trait;
 use rust_decimal::Decimal;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
+
+use crate::domain::nutrition::{CalculatedNutrition, NutritionCalculator, Quantity};
+use crate::domain::units::UnitConverter;
 
 #[derive(Debug, Clone, Default)]
 pub struct ProductSearchQuery {
@@ -129,6 +133,26 @@ impl Nutrient {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NutrientCatalog {
+    by_code: HashMap<String, Nutrient>,
+}
+
+impl NutrientCatalog {
+    pub fn from_iter<I: IntoIterator<Item = Nutrient>>(nutrients: I) -> Self {
+        Self {
+            by_code: nutrients
+                .into_iter()
+                .map(|n| (n.code().0.clone(), n))
+                .collect(),
+        }
+    }
+
+    pub fn get(&self, code: &str) -> Option<&Nutrient> {
+        self.by_code.get(code)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NutrientCode(pub String);
 
@@ -146,6 +170,33 @@ pub struct Brand(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Category(pub String);
+
+impl Category {
+    pub fn new(value: &str) -> Option<Self> {
+        let normalized = value.trim().to_lowercase();
+        if normalized.is_empty() {
+            None
+        } else {
+            Some(Category(normalized))
+        }
+    }
+
+    pub fn normalize_list<I, S>(values: I) -> Vec<Category>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut out: Vec<Category> = Vec::new();
+        for value in values {
+            if let Some(category) = Category::new(value.as_ref())
+                && !out.contains(&category)
+            {
+                out.push(category);
+            }
+        }
+        out
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServingLabel(pub String);
@@ -180,8 +231,9 @@ impl Product {
         serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientUpdate>,
-        servings: Vec<ProductServingUpdate>,
+        nutrients: Vec<ProductNutrientInput>,
+        servings: Vec<ProductServingInput>,
+        nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, CatalogError> {
         Self::validate_name(&name)?;
 
@@ -194,14 +246,11 @@ impl Product {
             barcode: None,
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            categories: normalize_categories(categories)
-                .into_iter()
-                .map(Category)
-                .collect(),
+            categories: Category::normalize_list(categories),
             default_quantity,
             default_unit: default_unit.map(UnitCode),
             serving_size_g,
-            nutrients: build_product_nutrients(nutrients)?,
+            nutrients: build_product_nutrients(nutrients, nutrient_catalog)?,
             servings: build_product_servings(servings)?,
         })
     }
@@ -214,22 +263,20 @@ impl Product {
         serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientUpdate>,
-        servings: Vec<ProductServingUpdate>,
+        nutrients: Vec<ProductNutrientInput>,
+        servings: Vec<ProductServingInput>,
+        nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, CatalogError> {
         Self::validate_name(&name)?;
 
         Ok(Self {
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
-            categories: normalize_categories(categories)
-                .into_iter()
-                .map(Category)
-                .collect(),
+            categories: Category::normalize_list(categories),
             serving_size_g,
             default_quantity,
             default_unit: default_unit.map(UnitCode),
-            nutrients: build_product_nutrients(nutrients)?,
+            nutrients: build_product_nutrients(nutrients, nutrient_catalog)?,
             servings: build_product_servings(servings)?,
             ..self.clone()
         })
@@ -245,6 +292,74 @@ impl Product {
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == Some(user_id)
     }
+
+    pub fn quantity_to_grams(
+        &self,
+        quantity: &Quantity,
+        unit_converter: &UnitConverter,
+    ) -> Result<Decimal, String> {
+        if quantity.amount <= Decimal::ZERO {
+            return Err("quantity amount must be positive".into());
+        }
+        if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
+            return Ok(grams);
+        }
+        for serving in &self.servings {
+            if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
+                return Ok(serving.grams * (quantity.amount / serving.quantity));
+            }
+        }
+        if let Some(size_g) = self.serving_size_g {
+            let default_unit = self
+                .default_unit
+                .as_ref()
+                .map(|u| u.0.as_str())
+                .unwrap_or("serving");
+            if quantity.unit.0 == default_unit {
+                return Ok(size_g * quantity.amount);
+            }
+        }
+        Err(format!(
+            "cannot convert {} {} to grams",
+            quantity.amount, quantity.unit.0
+        ))
+    }
+
+    pub fn nutrition_for(
+        &self,
+        quantity: &Quantity,
+        unit_converter: &UnitConverter,
+    ) -> Result<CalculatedNutrition, String> {
+        let grams = self.quantity_to_grams(quantity, unit_converter)?;
+        let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = self
+            .nutrients
+            .iter()
+            .map(|pn| {
+                (
+                    pn.nutrient_code.clone(),
+                    pn.amount_per_100g.clone(),
+                    pn.unit.clone(),
+                )
+            })
+            .collect();
+        Ok(NutritionCalculator::calculate(grams, &nutrients))
+    }
+
+    pub fn allowed_unit_codes(&self, converter: &UnitConverter) -> HashSet<String> {
+        let mut allowed: HashSet<String> = HashSet::new();
+        for code in converter.mass_unit_codes() {
+            allowed.insert(code.to_string());
+        }
+        for serving in &self.servings {
+            allowed.insert(serving.unit.0.clone());
+        }
+        if self.serving_size_g.is_some()
+            && let Some(default_unit) = self.default_unit.as_ref()
+        {
+            allowed.insert(default_unit.0.clone());
+        }
+        allowed
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -257,10 +372,9 @@ pub struct ProductNutrient {
 }
 
 #[derive(Debug, Clone)]
-pub struct ProductNutrientUpdate {
+pub struct ProductNutrientInput {
     pub code: String,
     pub amount_per_100g: Decimal,
-    pub unit: UnitCode,
     pub source: Option<String>,
     pub confidence: Option<String>,
 }
@@ -274,7 +388,7 @@ pub struct ProductServing {
 }
 
 #[derive(Debug, Clone)]
-pub struct ProductServingUpdate {
+pub struct ProductServingInput {
     pub label: String,
     pub quantity: Decimal,
     pub unit: String,
@@ -303,28 +417,21 @@ impl AmountPer100g {
     }
 }
 
-pub fn normalize_categories(categories: Vec<String>) -> Vec<String> {
-    let mut out = Vec::new();
-    for category in categories {
-        let normalized = category.trim().to_lowercase();
-        if !normalized.is_empty() && !out.contains(&normalized) {
-            out.push(normalized);
-        }
-    }
-    out
-}
-
 fn build_product_nutrients(
-    nutrients: Vec<ProductNutrientUpdate>,
+    nutrients: Vec<ProductNutrientInput>,
+    catalog: &NutrientCatalog,
 ) -> Result<Vec<ProductNutrient>, CatalogError> {
     nutrients
         .into_iter()
         .map(|nutrient| {
             AmountPer100g::validate(nutrient.amount_per_100g)?;
+            let reference = catalog.get(&nutrient.code).ok_or_else(|| {
+                CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
+            })?;
             Ok(ProductNutrient {
-                nutrient_code: NutrientCode(nutrient.code),
+                nutrient_code: reference.code().clone(),
                 amount_per_100g: AmountPer100g(nutrient.amount_per_100g),
-                unit: nutrient.unit,
+                unit: reference.unit().clone(),
                 source: nutrient.source,
                 confidence: nutrient
                     .confidence
@@ -335,7 +442,7 @@ fn build_product_nutrients(
 }
 
 fn build_product_servings(
-    servings: Vec<ProductServingUpdate>,
+    servings: Vec<ProductServingInput>,
 ) -> Result<Vec<ProductServing>, CatalogError> {
     servings
         .into_iter()
@@ -401,18 +508,26 @@ pub trait UnitRepository: Send + Sync {
 mod tests {
     use super::*;
 
-    fn nutrient_update(amount_per_100g: Decimal) -> ProductNutrientUpdate {
-        ProductNutrientUpdate {
+    #[test]
+    fn category_normalize_list_trims_lowercases_and_deduplicates() {
+        let categories = Category::normalize_list([" Snacks ", "snacks", "", "Beverages"]);
+        assert_eq!(
+            categories.iter().map(|c| c.0.as_str()).collect::<Vec<_>>(),
+            vec!["snacks", "beverages"]
+        );
+    }
+
+    fn nutrient_input(amount_per_100g: Decimal) -> ProductNutrientInput {
+        ProductNutrientInput {
             code: "ENERGY_KCAL".into(),
             amount_per_100g,
-            unit: UnitCode("kcal".into()),
             source: Some("manual".into()),
             confidence: Some("approved".into()),
         }
     }
 
-    fn serving_update(quantity: Decimal, grams: Decimal) -> ProductServingUpdate {
-        ProductServingUpdate {
+    fn serving_input(quantity: Decimal, grams: Decimal) -> ProductServingInput {
+        ProductServingInput {
             label: "serving".into(),
             quantity,
             unit: "serving".into(),
@@ -420,8 +535,18 @@ mod tests {
         }
     }
 
+    fn test_catalog() -> NutrientCatalog {
+        NutrientCatalog::from_iter([Nutrient(
+            NutrientCode("ENERGY_KCAL".into()),
+            "Energy".into(),
+            UnitCode("kcal".into()),
+            "energy".into(),
+        )])
+    }
+
     #[test]
     fn custom_product_creation_normalizes_and_builds_children() {
+        let catalog = test_catalog();
         let product = Product::new_custom(
             Uuid::new_v4(),
             "  Rice Bowl  ".into(),
@@ -430,8 +555,9 @@ mod tests {
             Some(Decimal::new(250, 0)),
             Some(Decimal::new(1, 0)),
             Some("serving".into()),
-            vec![nutrient_update(Decimal::new(120, 0))],
-            vec![serving_update(Decimal::new(1, 0), Decimal::new(250, 0))],
+            vec![nutrient_input(Decimal::new(120, 0))],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(250, 0))],
+            &catalog,
         )
         .unwrap();
 
@@ -456,6 +582,7 @@ mod tests {
     #[test]
     fn custom_product_creation_rejects_invalid_values() {
         let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
 
         assert!(
             Product::new_custom(
@@ -466,8 +593,9 @@ mod tests {
                 None,
                 None,
                 None,
-                vec![nutrient_update(Decimal::ZERO)],
-                vec![serving_update(Decimal::new(1, 0), Decimal::new(100, 0))],
+                vec![nutrient_input(Decimal::ZERO)],
+                vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+                &catalog,
             )
             .is_err()
         );
@@ -481,8 +609,9 @@ mod tests {
                 None,
                 None,
                 None,
-                vec![nutrient_update(Decimal::new(-1, 0))],
-                vec![serving_update(Decimal::new(1, 0), Decimal::new(100, 0))],
+                vec![nutrient_input(Decimal::new(-1, 0))],
+                vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+                &catalog,
             )
             .is_err()
         );
@@ -496,16 +625,42 @@ mod tests {
                 None,
                 None,
                 None,
-                vec![nutrient_update(Decimal::ZERO)],
-                vec![serving_update(Decimal::ZERO, Decimal::new(100, 0))],
+                vec![nutrient_input(Decimal::ZERO)],
+                vec![serving_input(Decimal::ZERO, Decimal::new(100, 0))],
+                &catalog,
             )
             .is_err()
         );
     }
 
     #[test]
+    fn custom_product_creation_rejects_unknown_nutrient_code() {
+        let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
+        let result = Product::new_custom(
+            user_id,
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            vec![ProductNutrientInput {
+                code: "NOT_A_CODE".into(),
+                amount_per_100g: Decimal::new(10, 0),
+                source: None,
+                confidence: None,
+            }],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+        );
+        assert!(matches!(result, Err(CatalogError::Validation(_))));
+    }
+
+    #[test]
     fn custom_product_update_preserves_identity_and_source_fields() {
         let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
         let mut product = Product::new_custom(
             user_id,
             "Original".into(),
@@ -514,8 +669,9 @@ mod tests {
             None,
             None,
             None,
-            vec![nutrient_update(Decimal::new(10, 0))],
-            vec![serving_update(Decimal::new(1, 0), Decimal::new(100, 0))],
+            vec![nutrient_input(Decimal::new(10, 0))],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
         )
         .unwrap();
         product.source_id = Some("external-id".into());
@@ -529,8 +685,9 @@ mod tests {
                 Some(Decimal::new(50, 0)),
                 Some(Decimal::new(2, 0)),
                 Some("piece".into()),
-                vec![nutrient_update(Decimal::new(20, 0))],
-                vec![serving_update(Decimal::new(2, 0), Decimal::new(50, 0))],
+                vec![nutrient_input(Decimal::new(20, 0))],
+                vec![serving_input(Decimal::new(2, 0), Decimal::new(50, 0))],
+                &catalog,
             )
             .unwrap();
 

@@ -9,8 +9,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::application::catalog::normalize_categories;
 use crate::application::import::StageResult;
+use crate::domain::catalog::Category;
 use crate::domain::import::*;
 use crate::interfaces::http::auth::{AppState, AuthAdmin};
 
@@ -304,7 +304,10 @@ fn import_food_row_dto_to_product(row: ImportFoodRowDto) -> StagedImportProduct 
         barcode: row.barcode,
         name: row.name,
         brand: row.brand,
-        categories: normalize_categories(row.categories),
+        categories: Category::normalize_list(row.categories)
+            .into_iter()
+            .map(|c| c.0)
+            .collect(),
         serving_size_g: row.serving_size_g,
         raw_payload: None,
         row_number: row.row_number,
