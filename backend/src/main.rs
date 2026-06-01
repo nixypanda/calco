@@ -92,7 +92,7 @@ async fn main() {
     )
     .with_meal_support(meal_lookup, meal_product_lookup_for_food_log);
 
-    let meal_services = MealServices::new(meal_repo, meal_product_lookup);
+    let meal_services = MealServices::new(meal_repo, meal_product_lookup, unit_converter.clone());
 
     let import_repo =
         Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;

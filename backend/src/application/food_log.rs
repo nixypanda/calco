@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::food_log::*;
 use crate::domain::meal::{Meal, MealComponentItem, MealId};
-use crate::domain::nutrition::{NutritionCalculator, Quantity};
+use crate::domain::nutrition::{Quantity, calculate_meal_nutrition, calculate_product_nutrition};
 use crate::domain::units::UnitConverter;
 
 impl From<crate::domain::meal::MealError> for FoodLogError {
@@ -97,46 +97,23 @@ impl FoodLogServices {
             })?;
 
         let quantity = Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
-
-        let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product
-            .nutrients
-            .iter()
-            .map(|pn| {
-                (
-                    pn.nutrient_code.clone(),
-                    pn.amount_per_100g.clone(),
-                    pn.unit.clone(),
-                )
-            })
-            .collect();
-
-        let calculated = NutritionCalculator::calculate(grams, &nutrients);
+        let calculated = calculate_product_nutrition(&product, &quantity, &self.unit_converter)
+            .map_err(FoodLogError::Validation)?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
             None => None,
         };
 
-        let log = FoodLog {
-            id: FoodLogId::new(),
-            user_id: input.user_id,
-            logged_at: input.logged_at,
+        let log = FoodLog::new_product_log(
+            input.user_id,
+            input.logged_at,
             meal_slot,
-            item: LoggedItem::Product(product_id),
-            quantity_amount: input.quantity_amount,
-            quantity_unit: UnitCode(input.quantity_unit),
-            nutrient_snapshots: calculated
-                .amounts
-                .into_iter()
-                .map(|na| FoodLogNutrientSnapshot {
-                    nutrient_code: na.nutrient_code,
-                    amount: na.amount,
-                    unit: na.unit,
-                })
-                .collect(),
-            notes: input.notes,
-        };
+            product_id,
+            quantity,
+            calculated,
+            input.notes,
+        );
 
         self.food_log_repo.create(&log).await?;
         Ok(log)
@@ -160,30 +137,25 @@ impl FoodLogServices {
 
         let scale_quantity =
             Quantity::new(input.quantity_amount, UnitCode(input.quantity_unit.clone()));
-        let snapshots = compute_meal_snapshots(
-            &meal,
-            &scale_quantity,
-            meal_product_lookup.as_ref(),
-            &self.unit_converter,
-        )
-        .await?;
+        let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
+        let calculated =
+            calculate_meal_nutrition(&meal, &scale_quantity, &products, &self.unit_converter)
+                .map_err(FoodLogError::Validation)?;
 
         let meal_slot = match input.meal_slot {
             Some(ref s) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
             None => None,
         };
 
-        let log = FoodLog {
-            id: FoodLogId::new(),
-            user_id: input.user_id,
-            logged_at: input.logged_at,
+        let log = FoodLog::new_meal_log(
+            input.user_id,
+            input.logged_at,
             meal_slot,
-            item: LoggedItem::Meal(meal_id),
-            quantity_amount: input.quantity_amount,
-            quantity_unit: UnitCode(input.quantity_unit),
-            nutrient_snapshots: snapshots,
-            notes: input.notes,
-        };
+            meal_id,
+            scale_quantity,
+            calculated,
+            input.notes,
+        );
 
         self.food_log_repo.create(&log).await?;
         Ok(log)
@@ -241,21 +213,8 @@ impl FoodLogServices {
                 .quantity_unit
                 .unwrap_or_else(|| existing.quantity_unit.0.clone());
             let quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let grams = convert_to_grams(&quantity, &product, &self.unit_converter)?;
-
-            let nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = product
-                .nutrients
-                .iter()
-                .map(|pn| {
-                    (
-                        pn.nutrient_code.clone(),
-                        pn.amount_per_100g.clone(),
-                        pn.unit.clone(),
-                    )
-                })
-                .collect();
-
-            let calculated = NutritionCalculator::calculate(grams, &nutrients);
+            let calculated = calculate_product_nutrition(&product, &quantity, &self.unit_converter)
+                .map_err(FoodLogError::Validation)?;
 
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
@@ -263,27 +222,16 @@ impl FoodLogServices {
                 Some(None) => None,
                 None => existing.meal_slot,
             };
-            let notes = input.notes.unwrap_or(existing.notes);
+            let notes = input.notes.unwrap_or_else(|| existing.notes.clone());
 
-            let updated = FoodLog {
-                id,
-                user_id,
+            let updated = existing.update_product_log(
                 logged_at,
                 meal_slot,
-                item: LoggedItem::Product(ProductId(item_id)),
-                quantity_amount,
-                quantity_unit: UnitCode(quantity_unit_str),
-                nutrient_snapshots: calculated
-                    .amounts
-                    .into_iter()
-                    .map(|na| FoodLogNutrientSnapshot {
-                        nutrient_code: na.nutrient_code,
-                        amount: na.amount,
-                        unit: na.unit,
-                    })
-                    .collect(),
+                ProductId(item_id),
+                quantity,
+                calculated,
                 notes,
-            };
+            );
 
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
@@ -307,31 +255,25 @@ impl FoodLogServices {
                 .unwrap_or_else(|| existing.quantity_unit.0.clone());
             let scale_quantity =
                 Quantity::new(quantity_amount, UnitCode(quantity_unit_str.clone()));
-            let snapshots = compute_meal_snapshots(
-                &meal,
-                &scale_quantity,
-                meal_product_lookup.as_ref(),
-                &self.unit_converter,
-            )
-            .await?;
+            let products = load_meal_products(&meal, meal_product_lookup.as_ref()).await?;
+            let calculated =
+                calculate_meal_nutrition(&meal, &scale_quantity, &products, &self.unit_converter)
+                    .map_err(FoodLogError::Validation)?;
             let logged_at = input.logged_at.unwrap_or(existing.logged_at);
             let meal_slot = match input.meal_slot {
                 Some(Some(ref s)) => Some(MealSlot::from_str(s).map_err(FoodLogError::Validation)?),
                 Some(None) => None,
                 None => existing.meal_slot,
             };
-            let notes = input.notes.unwrap_or(existing.notes);
-            let updated = FoodLog {
-                id,
-                user_id,
+            let notes = input.notes.unwrap_or_else(|| existing.notes.clone());
+            let updated = existing.update_meal_log(
                 logged_at,
                 meal_slot,
-                item: LoggedItem::Meal(meal_id),
-                quantity_amount,
-                quantity_unit: UnitCode(quantity_unit_str),
-                nutrient_snapshots: snapshots,
+                meal_id,
+                scale_quantity,
+                calculated,
                 notes,
-            };
+            );
 
             self.food_log_repo.update(&updated).await?;
             Ok(updated)
@@ -370,17 +312,11 @@ impl FoodLogServices {
     }
 }
 
-async fn compute_meal_snapshots(
+async fn load_meal_products(
     meal: &Meal,
-    scale_quantity: &Quantity,
     product_lookup: &dyn ProductLookup,
-    unit_converter: &UnitConverter,
-) -> Result<Vec<FoodLogNutrientSnapshot>, FoodLogError> {
-    let scale_grams = meal_quantity_to_grams(scale_quantity, meal, unit_converter)?;
-
-    let mut total_nutrients: Vec<(NutrientCode, Decimal, UnitCode)> = Vec::new();
-    let mut total_component_grams = Decimal::ZERO;
-
+) -> Result<Vec<(ProductId, Product)>, FoodLogError> {
+    let mut products = Vec::new();
     for component in &meal.components {
         match &component.item {
             MealComponentItem::Product(product_id) => {
@@ -393,124 +329,11 @@ async fn compute_meal_snapshots(
                             product_id.0, meal.id.0
                         ))
                     })?;
-
-                let component_qty =
-                    Quantity::new(component.quantity_amount, component.quantity_unit.clone());
-                let component_grams = convert_to_grams(&component_qty, &product, unit_converter)?;
-                total_component_grams += component_grams;
-
-                let contribution_ratio = component_grams / Decimal::new(100, 0);
-                for pn in &product.nutrients {
-                    let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
-                    match total_nutrients
-                        .iter_mut()
-                        .find(|(code, _, _)| code == &pn.nutrient_code)
-                    {
-                        Some((_, existing_amount, _)) => *existing_amount += contributed_amount,
-                        None => total_nutrients.push((
-                            pn.nutrient_code.clone(),
-                            contributed_amount,
-                            pn.unit.clone(),
-                        )),
-                    }
-                }
+                products.push((*product_id, product));
             }
         }
     }
-
-    if total_component_grams <= Decimal::ZERO {
-        return Err(FoodLogError::Validation(
-            "meal total quantity must be positive".into(),
-        ));
-    }
-    let scale_factor = scale_grams / total_component_grams;
-    Ok(total_nutrients
-        .into_iter()
-        .map(|(code, amount, unit)| FoodLogNutrientSnapshot {
-            nutrient_code: code,
-            amount: amount * scale_factor,
-            unit,
-        })
-        .collect())
-}
-
-fn convert_to_grams(
-    quantity: &Quantity,
-    product: &Product,
-    unit_converter: &UnitConverter,
-) -> Result<Decimal, FoodLogError> {
-    if quantity.amount <= Decimal::ZERO {
-        return Err(FoodLogError::Validation(
-            "quantity amount must be positive".into(),
-        ));
-    }
-    if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
-        return Ok(grams);
-    }
-    for serving in &product.servings {
-        if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
-            return Ok(serving.grams * (quantity.amount / serving.quantity));
-        }
-    }
-    if let Some(size_g) = product.serving_size_g {
-        let default_unit = product
-            .default_unit
-            .as_ref()
-            .map(|u| u.0.as_str())
-            .unwrap_or("serving");
-        if quantity.unit.0 == default_unit {
-            return Ok(size_g * quantity.amount);
-        }
-    }
-    Err(FoodLogError::Validation(format!(
-        "cannot convert {} {} to grams",
-        quantity.amount, quantity.unit.0
-    )))
-}
-
-fn meal_quantity_to_grams(
-    quantity: &Quantity,
-    meal: &Meal,
-    unit_converter: &UnitConverter,
-) -> Result<Decimal, FoodLogError> {
-    if quantity.amount <= Decimal::ZERO {
-        return Err(FoodLogError::Validation(
-            "quantity amount must be positive".into(),
-        ));
-    }
-    if let Some(grams) = unit_converter.mass_to_grams(quantity.amount, &quantity.unit) {
-        return Ok(grams);
-    }
-    match (&meal.total_quantity_amount, &meal.total_quantity_unit) {
-        (Some(total_amount), Some(total_unit))
-            if total_unit.0 == quantity.unit.0 && *total_amount > Decimal::ZERO =>
-        {
-            Ok(quantity.amount / *total_amount * total_meal_declared_grams(meal, unit_converter)?)
-        }
-        _ => Err(FoodLogError::Validation(format!(
-            "cannot convert {} {} to grams for meal logging",
-            quantity.amount, quantity.unit.0
-        ))),
-    }
-}
-
-fn total_meal_declared_grams(
-    meal: &Meal,
-    unit_converter: &UnitConverter,
-) -> Result<Decimal, FoodLogError> {
-    match (&meal.total_quantity_amount, &meal.total_quantity_unit) {
-        (Some(amount), Some(unit)) if *amount > Decimal::ZERO => {
-            unit_converter.mass_to_grams(*amount, unit).ok_or_else(|| {
-                FoodLogError::Validation(
-                    "meal total quantity must be defined in a mass unit for non-mass logging"
-                        .into(),
-                )
-            })
-        }
-        _ => Err(FoodLogError::Validation(
-            "meal total quantity must be defined in a mass unit for non-mass logging".into(),
-        )),
-    }
+    Ok(products)
 }
 
 pub fn log_item_id(item: &LoggedItem) -> Uuid {

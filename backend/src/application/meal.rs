@@ -5,7 +5,8 @@ use uuid::Uuid;
 
 use crate::domain::catalog::*;
 use crate::domain::meal::*;
-use crate::domain::nutrition::Quantity;
+use crate::domain::nutrition::{Quantity, calculate_meal_nutrition};
+use crate::domain::units::UnitConverter;
 
 pub struct CreateMealInput {
     pub user_id: Uuid,
@@ -48,66 +49,35 @@ pub struct MealNutrientEntry {
 pub struct MealServices {
     pub meal_repo: Arc<dyn MealRepository>,
     pub product_lookup: Arc<dyn MealProductLookup>,
+    pub unit_converter: Arc<UnitConverter>,
 }
 
 impl MealServices {
     pub fn new(
         meal_repo: Arc<dyn MealRepository>,
         product_lookup: Arc<dyn MealProductLookup>,
+        unit_converter: Arc<UnitConverter>,
     ) -> Self {
         Self {
             meal_repo,
             product_lookup,
+            unit_converter,
         }
     }
 
     pub async fn create_meal(&self, input: CreateMealInput) -> Result<Meal, MealError> {
-        if input.name.trim().is_empty() {
-            return Err(MealError::Validation("meal name is required".into()));
-        }
-        if input.components.is_empty() {
-            return Err(MealError::Validation(
-                "meal must have at least one component".into(),
-            ));
-        }
-
-        for component in &input.components {
-            if component.item_type != "product" {
-                return Err(MealError::Validation(format!(
-                    "unsupported component item type: {}",
-                    component.item_type
-                )));
-            }
-            let product_id = ProductId(component.item_id);
-            self.product_lookup
-                .find_by_id(product_id)
-                .await?
-                .ok_or_else(|| {
-                    MealError::NotFound(format!("product {} not found", component.item_id))
-                })?;
-        }
+        let components = self.build_components(input.components).await?;
 
         let now = Utc::now();
-        let meal = Meal {
-            id: MealId::new(),
-            user_id: input.user_id,
-            name: MealName(input.name),
-            notes: input.notes.map(MealNotes),
-            total_quantity_amount: input.total_quantity_amount,
-            total_quantity_unit: input.total_quantity_unit.map(UnitCode),
-            components: input
-                .components
-                .into_iter()
-                .map(|c| MealComponent {
-                    id: Uuid::new_v4(),
-                    item: MealComponentItem::Product(ProductId(c.item_id)),
-                    quantity_amount: c.quantity_amount,
-                    quantity_unit: UnitCode(c.quantity_unit),
-                })
-                .collect(),
-            created_at: now,
-            updated_at: now,
-        };
+        let meal = Meal::create(
+            input.user_id,
+            input.name,
+            input.notes,
+            input.total_quantity_amount,
+            input.total_quantity_unit.map(UnitCode),
+            components,
+            now,
+        )?;
 
         self.meal_repo.create(&meal).await?;
         Ok(meal)
@@ -142,44 +112,15 @@ impl MealServices {
 
         let components = match input.components {
             Some(components) => {
-                if components.is_empty() {
-                    return Err(MealError::Validation(
-                        "meal must have at least one component".into(),
-                    ));
-                }
-                for c in &components {
-                    if c.item_type != "product" {
-                        return Err(MealError::Validation(format!(
-                            "unsupported component item type: {}",
-                            c.item_type
-                        )));
-                    }
-                    let product_id = ProductId(c.item_id);
-                    self.product_lookup
-                        .find_by_id(product_id)
-                        .await?
-                        .ok_or_else(|| {
-                            MealError::NotFound(format!("product {} not found", c.item_id))
-                        })?;
-                }
+                let components = self.build_components(components).await?;
+                Meal::validate_components(&components)?;
                 components
-                    .into_iter()
-                    .map(|c| MealComponent {
-                        id: Uuid::new_v4(),
-                        item: MealComponentItem::Product(ProductId(c.item_id)),
-                        quantity_amount: c.quantity_amount,
-                        quantity_unit: UnitCode(c.quantity_unit),
-                    })
-                    .collect()
             }
-            None => existing.components,
+            None => existing.components.clone(),
         };
 
         let name = match input.name {
-            Some(ref n) if n.trim().is_empty() => {
-                return Err(MealError::Validation("meal name is required".into()));
-            }
-            Some(n) => MealName(n),
+            Some(n) => existing.rename(n)?,
             None => existing.name,
         };
 
@@ -234,22 +175,63 @@ impl MealServices {
             .await?
             .ok_or_else(|| MealError::NotFound("meal not found".into()))?;
 
-        if quantity_amount <= Decimal::ZERO {
-            return Err(MealError::Validation(
-                "quantity amount must be positive".into(),
-            ));
-        }
-        let mut total_nutrients: Vec<(NutrientCode, AmountPer100g, UnitCode)> = Vec::new();
-        let requested_grams = if quantity_unit == "g" {
-            quantity_amount
-        } else {
-            return Err(MealError::Validation(format!(
-                "cannot convert {} {} to grams for meal nutrition",
-                quantity_amount, quantity_unit
-            )));
-        };
-        let mut total_component_grams = Decimal::ZERO;
+        let products = self.load_meal_products(&meal).await?;
+        let requested_quantity = Quantity::new(quantity_amount, UnitCode(quantity_unit.clone()));
+        let calculated =
+            calculate_meal_nutrition(&meal, &requested_quantity, &products, &self.unit_converter)
+                .map_err(MealError::Validation)?;
+        let nutrients: Vec<MealNutrientEntry> = calculated
+            .amounts
+            .into_iter()
+            .map(|amount| MealNutrientEntry {
+                code: amount.nutrient_code.0,
+                amount: amount.amount,
+                unit: amount.unit.0,
+            })
+            .collect();
 
+        Ok(MealNutritionOutput {
+            meal_id: id.0,
+            quantity_amount,
+            quantity_unit,
+            nutrients,
+        })
+    }
+
+    async fn build_components(
+        &self,
+        inputs: Vec<CreateMealComponentInput>,
+    ) -> Result<Vec<MealComponent>, MealError> {
+        let mut components = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            if input.item_type != "product" {
+                return Err(MealError::Validation(format!(
+                    "unsupported component item type: {}",
+                    input.item_type
+                )));
+            }
+            let product_id = ProductId(input.item_id);
+            self.product_lookup
+                .find_by_id(product_id)
+                .await?
+                .ok_or_else(|| {
+                    MealError::NotFound(format!("product {} not found", input.item_id))
+                })?;
+            components.push(MealComponent {
+                id: Uuid::new_v4(),
+                item: MealComponentItem::Product(product_id),
+                quantity_amount: input.quantity_amount,
+                quantity_unit: UnitCode(input.quantity_unit),
+            });
+        }
+        Ok(components)
+    }
+
+    async fn load_meal_products(
+        &self,
+        meal: &Meal,
+    ) -> Result<Vec<(ProductId, Product)>, MealError> {
+        let mut products = Vec::new();
         for component in &meal.components {
             match &component.item {
                 MealComponentItem::Product(product_id) => {
@@ -260,90 +242,12 @@ impl MealServices {
                         .ok_or_else(|| {
                             MealError::NotFound(format!("product {} not found", product_id.0))
                         })?;
-
-                    let component_qty =
-                        Quantity::new(component.quantity_amount, component.quantity_unit.clone());
-                    let component_grams = convert_to_grams_meal(&component_qty, &product)?;
-                    total_component_grams += component_grams;
-
-                    let contribution_ratio = component_grams / Decimal::new(100, 0);
-                    for pn in &product.nutrients {
-                        let existing = total_nutrients
-                            .iter_mut()
-                            .find(|(code, _, _)| code == &pn.nutrient_code);
-                        let contributed_amount = pn.amount_per_100g.0 * contribution_ratio;
-                        match existing {
-                            Some((_, existing_amount, _)) => {
-                                existing_amount.0 += contributed_amount;
-                            }
-                            None => {
-                                total_nutrients.push((
-                                    pn.nutrient_code.clone(),
-                                    AmountPer100g(contributed_amount),
-                                    pn.unit.clone(),
-                                ));
-                            }
-                        }
-                    }
+                    products.push((*product_id, product));
                 }
             }
         }
-
-        if total_component_grams <= Decimal::ZERO {
-            return Err(MealError::Validation(
-                "meal total quantity must be positive".into(),
-            ));
-        }
-        let scale_factor = requested_grams / total_component_grams;
-        let scaled_nutrients: Vec<MealNutrientEntry> = total_nutrients
-            .into_iter()
-            .map(|(code, amount, unit)| MealNutrientEntry {
-                code: code.0,
-                amount: amount.0 * scale_factor,
-                unit: unit.0,
-            })
-            .collect();
-
-        Ok(MealNutritionOutput {
-            meal_id: id.0,
-            quantity_amount,
-            quantity_unit,
-            nutrients: scaled_nutrients,
-        })
+        Ok(products)
     }
-}
-
-fn convert_to_grams_meal(quantity: &Quantity, product: &Product) -> Result<Decimal, MealError> {
-    if quantity.amount <= Decimal::ZERO {
-        return Err(MealError::Validation(
-            "quantity amount must be positive".into(),
-        ));
-    }
-    if quantity.unit.0 == "g" {
-        return Ok(quantity.amount);
-    }
-    if quantity.unit.0 == "kg" {
-        return Ok(quantity.amount * Decimal::new(1000, 0));
-    }
-    for serving in &product.servings {
-        if serving.unit.0 == quantity.unit.0 && serving.quantity > Decimal::ZERO {
-            return Ok(serving.grams * (quantity.amount / serving.quantity));
-        }
-    }
-    if let Some(size_g) = product.serving_size_g {
-        let default_unit = product
-            .default_unit
-            .as_ref()
-            .map(|u| u.0.as_str())
-            .unwrap_or("serving");
-        if quantity.unit.0 == default_unit {
-            return Ok(size_g * quantity.amount);
-        }
-    }
-    Err(MealError::Validation(format!(
-        "cannot convert {} {} to grams",
-        quantity.amount, quantity.unit.0
-    )))
 }
 
 #[cfg(test)]
@@ -462,7 +366,11 @@ mod tests {
             }
             None => Arc::new(MockMealProductLookup::empty()) as Arc<dyn MealProductLookup>,
         };
-        MealServices::new(meal_repo, product_lookup)
+        let unit_converter = Arc::new(UnitConverter::from_entries([
+            ("g".to_string(), Decimal::new(1, 0)),
+            ("kg".to_string(), Decimal::new(1000, 0)),
+        ]));
+        MealServices::new(meal_repo, product_lookup, unit_converter)
     }
 
     fn sample_component() -> CreateMealComponentInput {

@@ -53,9 +53,59 @@ pub struct Meal {
 }
 
 impl Meal {
+    pub fn create(
+        user_id: Uuid,
+        name: String,
+        notes: Option<String>,
+        total_quantity_amount: Option<Decimal>,
+        total_quantity_unit: Option<UnitCode>,
+        components: Vec<MealComponent>,
+        now: DateTime<Utc>,
+    ) -> Result<Self, MealError> {
+        validate_meal_name(&name)?;
+        validate_meal_components(&components)?;
+
+        Ok(Self {
+            id: MealId::new(),
+            user_id,
+            name: MealName(name),
+            notes: notes.map(MealNotes),
+            total_quantity_amount,
+            total_quantity_unit,
+            components,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    pub fn rename(&self, name: String) -> Result<MealName, MealError> {
+        validate_meal_name(&name)?;
+        Ok(MealName(name))
+    }
+
+    pub fn validate_components(components: &[MealComponent]) -> Result<(), MealError> {
+        validate_meal_components(components)
+    }
+
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == user_id
     }
+}
+
+fn validate_meal_name(name: &str) -> Result<(), MealError> {
+    if name.trim().is_empty() {
+        return Err(MealError::Validation("meal name is required".into()));
+    }
+    Ok(())
+}
+
+fn validate_meal_components(components: &[MealComponent]) -> Result<(), MealError> {
+    if components.is_empty() {
+        return Err(MealError::Validation(
+            "meal must have at least one component".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]

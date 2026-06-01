@@ -5,6 +5,8 @@ use uuid::Uuid;
 use crate::domain::catalog::*;
 use crate::domain::units::UnitConverter;
 
+pub use crate::domain::catalog::normalize_categories;
+
 // ─── Use Cases ─────────────────────────────────────────────────
 
 pub struct SearchCriteria {
@@ -70,26 +72,12 @@ impl CatalogServices {
             .collect())
     }
 
-    async fn validate_product_inputs(
+    async fn resolve_product_nutrients(
         &self,
         nutrients: &[ProductNutrientInput],
-        servings: &[ProductServingInput],
-    ) -> Result<Vec<(ProductNutrientInput, UnitCode)>, CatalogError> {
-        for serving in servings {
-            if serving.quantity <= Decimal::ZERO || serving.grams <= Decimal::ZERO {
-                return Err(CatalogError::Validation(
-                    "serving quantity and grams must be positive".into(),
-                ));
-            }
-        }
-
-        let mut validated = Vec::with_capacity(nutrients.len());
+    ) -> Result<Vec<ProductNutrientUpdate>, CatalogError> {
+        let mut resolved = Vec::with_capacity(nutrients.len());
         for nutrient in nutrients {
-            if nutrient.amount_per_100g < Decimal::ZERO {
-                return Err(CatalogError::Validation(
-                    "nutrient amount must be non-negative".into(),
-                ));
-            }
             let reference = self
                 .nutrient_repo
                 .find_by_code(&nutrient.code)
@@ -97,9 +85,15 @@ impl CatalogServices {
                 .ok_or_else(|| {
                     CatalogError::Validation(format!("unknown nutrient code: {}", nutrient.code))
                 })?;
-            validated.push((nutrient.clone(), reference.unit().clone()));
+            resolved.push(ProductNutrientUpdate {
+                code: nutrient.code.clone(),
+                amount_per_100g: nutrient.amount_per_100g,
+                unit: reference.unit().clone(),
+                source: nutrient.source.clone(),
+                confidence: nutrient.confidence.clone(),
+            });
         }
-        Ok(validated)
+        Ok(resolved)
     }
 
     pub async fn search_products(
@@ -149,49 +143,20 @@ impl CatalogServices {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
     ) -> Result<Product, CatalogError> {
-        if name.trim().is_empty() {
-            return Err(CatalogError::Validation("food name is required".into()));
-        }
-        let validated_nutrients = self.validate_product_inputs(&nutrients, &servings).await?;
+        let nutrients = self.resolve_product_nutrients(&nutrients).await?;
+        let servings = product_serving_updates(servings);
 
-        let product = Product {
-            id: ProductId::new(),
-            source: Source::User,
-            source_id: None,
-            user_id: Some(user_id),
-            visibility: ProductVisibility::UserPrivate,
-            barcode: None,
-            name: ProductName(name.trim().to_string()),
-            brand: brand.map(Brand),
-            categories: normalize_categories(categories)
-                .into_iter()
-                .map(Category)
-                .collect(),
-            default_quantity,
-            default_unit: default_unit.map(UnitCode),
+        let product = Product::new_custom(
+            user_id,
+            name,
+            brand,
+            categories,
             serving_size_g,
-            nutrients: validated_nutrients
-                .into_iter()
-                .map(|(n, unit)| ProductNutrient {
-                    nutrient_code: NutrientCode(n.code),
-                    amount_per_100g: AmountPer100g(n.amount_per_100g),
-                    unit,
-                    source: n.source,
-                    confidence: n
-                        .confidence
-                        .and_then(|c| NutrientConfidence::from_str(&c).ok()),
-                })
-                .collect(),
-            servings: servings
-                .into_iter()
-                .map(|s| ProductServing {
-                    label: ServingLabel(s.label),
-                    quantity: s.quantity,
-                    unit: UnitCode(s.unit),
-                    grams: s.grams,
-                })
-                .collect(),
-        };
+            default_quantity,
+            default_unit,
+            nutrients,
+            servings,
+        )?;
         self.product_repo.create(&product).await?;
         Ok(product)
     }
@@ -209,9 +174,6 @@ impl CatalogServices {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
     ) -> Result<Product, CatalogError> {
-        if name.trim().is_empty() {
-            return Err(CatalogError::Validation("food name is required".into()));
-        }
         let existing = self
             .product_repo
             .find_by_id(id)
@@ -222,41 +184,19 @@ impl CatalogServices {
             return Err(CatalogError::Forbidden("not your custom food".into()));
         }
 
-        let validated_nutrients = self.validate_product_inputs(&nutrients, &servings).await?;
+        let nutrients = self.resolve_product_nutrients(&nutrients).await?;
+        let servings = product_serving_updates(servings);
 
-        let updated = Product {
-            nutrients: validated_nutrients
-                .into_iter()
-                .map(|(n, unit)| ProductNutrient {
-                    nutrient_code: NutrientCode(n.code),
-                    amount_per_100g: AmountPer100g(n.amount_per_100g),
-                    unit,
-                    source: n.source,
-                    confidence: n
-                        .confidence
-                        .and_then(|c| NutrientConfidence::from_str(&c).ok()),
-                })
-                .collect(),
-            servings: servings
-                .into_iter()
-                .map(|s| ProductServing {
-                    label: ServingLabel(s.label),
-                    quantity: s.quantity,
-                    unit: UnitCode(s.unit),
-                    grams: s.grams,
-                })
-                .collect(),
-            name: ProductName(name.trim().to_string()),
-            brand: brand.map(Brand),
-            categories: normalize_categories(categories)
-                .into_iter()
-                .map(Category)
-                .collect(),
+        let updated = existing.update_custom(
+            name,
+            brand,
+            categories,
             serving_size_g,
             default_quantity,
-            default_unit: default_unit.map(UnitCode),
-            ..existing
-        };
+            default_unit,
+            nutrients,
+            servings,
+        )?;
         self.product_repo.update(&updated).await?;
         Ok(updated)
     }
@@ -293,17 +233,6 @@ impl CatalogServices {
     pub async fn list_units(&self) -> Result<Vec<(UnitCode, String, String)>, CatalogError> {
         self.unit_repo.list_all().await
     }
-}
-
-pub fn normalize_categories(categories: Vec<String>) -> Vec<String> {
-    let mut out = Vec::new();
-    for category in categories {
-        let normalized = category.trim().to_lowercase();
-        if !normalized.is_empty() && !out.contains(&normalized) {
-            out.push(normalized);
-        }
-    }
-    out
 }
 
 fn parse_search_query(input: &str) -> ProductSearchQuery {
@@ -377,6 +306,18 @@ pub struct ProductServingInput {
     pub quantity: Decimal,
     pub unit: String,
     pub grams: Decimal,
+}
+
+fn product_serving_updates(servings: Vec<ProductServingInput>) -> Vec<ProductServingUpdate> {
+    servings
+        .into_iter()
+        .map(|serving| ProductServingUpdate {
+            label: serving.label,
+            quantity: serving.quantity,
+            unit: serving.unit,
+            grams: serving.grams,
+        })
+        .collect()
 }
 
 #[cfg(test)]
