@@ -1,10 +1,12 @@
 import csv
 import json
 import os
-import sys
 import re
+import sys
 
-MAPPING_PATH = os.path.join(os.path.dirname(__file__), "nutrient_mapping", "ifct2017_codes.json")
+MAPPING_PATH = os.path.join(
+    os.path.dirname(__file__), "nutrient_mapping", "ifct2017_codes.json"
+)
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw")
 PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed")
 
@@ -34,14 +36,14 @@ FOOD_GROUP_MAP = {
 RE_VALUE_ERROR = re.compile(r"^([\d.]+)\s*±")
 
 
-def categories_from_value(value):
+def categories_from_value(value: str | None) -> list[str]:
     if not value:
         return []
     normalized = value.strip().lower()
     return [normalized] if normalized else []
 
 
-def parse_ifct_value(raw):
+def parse_ifct_value(raw: str | None) -> float | None:
     if raw is None:
         return None
     raw = raw.strip()
@@ -59,7 +61,7 @@ def parse_ifct_value(raw):
         return None
 
 
-def main():
+def main() -> None:
     csv_path = os.path.join(RAW_DIR, "ifct2017_compositions.csv")
     out_path = os.path.join(PROCESSED_DIR, "ifct2017.jsonl")
 
@@ -75,19 +77,19 @@ def main():
     total_foods = 0
     total_nutrients = 0
 
-    with open(csv_path, encoding="utf-8") as csv_f, \
-         open(out_path, "w") as out:
-
+    with open(csv_path, encoding="utf-8") as csv_f, open(out_path, "w") as out:
         reader = csv.DictReader(csv_f)
 
         for row in reader:
-            code = row.get("code", "").strip()
-            name = row.get("name", "").strip()
+            code = (row.get("code") or "").strip()
+            name = (row.get("name") or "").strip()
             if not code or not name:
                 continue
 
-            grup = row.get("grup", "").strip()
-            category = FOOD_GROUP_MAP.get(grup, grup.lower().replace(" ", "-") if grup else None)
+            grup = (row.get("grup") or "").strip()
+            category = FOOD_GROUP_MAP.get(
+                grup, grup.lower().replace(" ", "-") if grup else None
+            )
 
             food_row = {
                 "type": "food",

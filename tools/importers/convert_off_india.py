@@ -3,15 +3,26 @@ import gzip
 import json
 import os
 import sys
+from collections.abc import Mapping
 
-MAPPING_PATH = os.path.join(os.path.dirname(__file__), "nutrient_mapping", "off_fields.json")
+MAPPING_PATH = os.path.join(
+    os.path.dirname(__file__), "nutrient_mapping", "off_fields.json"
+)
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw")
 PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed")
 
-REQUIRED_FIELDS = ["energy-kcal_100g", "proteins_100g", "carbohydrates_100g", "fat_100g"]
+REQUIRED_FIELDS = [
+    "energy-kcal_100g",
+    "proteins_100g",
+    "carbohydrates_100g",
+    "fat_100g",
+]
 
 
-def categories_from_csv(value):
+SCAN_LOG_INTERVAL = 500_000
+
+
+def categories_from_csv(value: str | None) -> list[str]:
     categories = []
     for raw in (value or "").split(","):
         normalized = raw.strip().lower()
@@ -20,7 +31,7 @@ def categories_from_csv(value):
     return categories
 
 
-def parse_float(value):
+def parse_float(value: str | None) -> float | None:
     if value is None:
         return None
     value = value.strip()
@@ -33,7 +44,7 @@ def parse_float(value):
         return None
 
 
-def scale_for_code(code):
+def scale_for_code(code: str) -> float:
     # OFF reports minerals/vitamins in grams per 100 g; our codes are mg/µg.
     if code.endswith("_MG"):
         return 1000.0
@@ -42,13 +53,13 @@ def scale_for_code(code):
     return 1.0
 
 
-def countries_contain_india(countries_str):
+def countries_contain_india(countries_str: str | None) -> bool:
     if not countries_str:
         return False
     return "india" in countries_str.lower()
 
 
-def passes_filter(row):
+def passes_filter(row: Mapping[str, str | None]) -> bool:
     for field in REQUIRED_FIELDS:
         v = parse_float(row.get(field))
         if v is None or v <= 0:
@@ -56,7 +67,7 @@ def passes_filter(row):
     return True
 
 
-def main():
+def main() -> None:
     csv.field_size_limit(sys.maxsize)
 
     gz_path = os.path.join(RAW_DIR, "off_products.csv.gz")
@@ -76,9 +87,10 @@ def main():
     total_nutrients = 0
     total_servings = 0
 
-    with gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as gz_f, \
-         open(out_path, "w") as out:
-
+    with (
+        gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as gz_f,
+        open(out_path, "w") as out,
+    ):
         reader = csv.DictReader(gz_f, delimiter="\t")
 
         for row in reader:
@@ -111,7 +123,9 @@ def main():
 
             serving_grams = parse_float(row.get("serving_quantity"))
             if serving_grams is not None and serving_grams > 0:
-                serving_label = (row.get("serving_size") or "").strip()[:80] or "serving"
+                serving_label = (row.get("serving_size") or "").strip()[
+                    :80
+                ] or "serving"
                 serving_row = {
                     "type": "serving",
                     "source": "OFF",
@@ -141,10 +155,13 @@ def main():
                 out.write(json.dumps(nutrient_row, ensure_ascii=False) + "\n")
                 total_nutrients += 1
 
-            if total_scanned % 500000 == 0:
+            if total_scanned % SCAN_LOG_INTERVAL == 0:
                 print(f"  scanned {total_scanned} rows, kept {total_kept} products...")
 
-    print(f"OFF India: scanned {total_scanned}, kept {total_kept} products, {total_nutrients} nutrients, {total_servings} servings -> {out_path}")
+    print(
+        f"OFF India: scanned {total_scanned}, kept {total_kept} products, "
+        f"{total_nutrients} nutrients, {total_servings} servings -> {out_path}"
+    )
 
 
 if __name__ == "__main__":

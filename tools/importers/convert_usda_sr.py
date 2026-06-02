@@ -1,28 +1,32 @@
 import json
-import zipfile
 import os
 import sys
+import zipfile
 
-MAPPING_PATH = os.path.join(os.path.dirname(__file__), "nutrient_mapping", "usda_sr_codes.json")
+MAPPING_PATH = os.path.join(
+    os.path.dirname(__file__), "nutrient_mapping", "usda_sr_codes.json"
+)
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "raw")
 PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed")
 
 
-def categories_from_value(value):
+def categories_from_value(value: object) -> list[str]:
     if not value:
         return []
     normalized = str(value).strip().lower()
     return [normalized] if normalized else []
 
 
-def parse_amount(value):
+def parse_amount(value: str | int | float | None) -> float | None:
+    if value is None:
+        return None
     try:
         return round(float(value), 6)
     except (ValueError, TypeError):
         return None
 
 
-def main():
+def main() -> None:  # noqa: PLR0912, PLR0915
     zip_path = os.path.join(RAW_DIR, "usda_sr_legacy.zip")
     out_path = os.path.join(PROCESSED_DIR, "usda_sr_legacy.jsonl")
 
@@ -49,7 +53,9 @@ def main():
             data = json.load(f)
 
     if isinstance(data, dict):
-        foods = data.get("FoundationFoods", data.get("SRLegacyFoods", data.get("Foods", [])))
+        foods = data.get(
+            "FoundationFoods", data.get("SRLegacyFoods", data.get("Foods", []))
+        )
     elif isinstance(data, list):
         foods = data
     else:
@@ -90,11 +96,16 @@ def main():
             out.write(json.dumps(food_row, ensure_ascii=False) + "\n")
             total_foods += 1
 
-            seen_serving_keys = set()
+            seen_serving_keys: set[tuple[str, str]] = set()
             for portion in food.get("foodPortions", []):
                 gram_weight = parse_amount(portion.get("gramWeight"))
                 amount = parse_amount(portion.get("amount"))
-                if gram_weight is None or amount is None or gram_weight <= 0 or amount <= 0:
+                if (
+                    gram_weight is None
+                    or amount is None
+                    or gram_weight <= 0
+                    or amount <= 0
+                ):
                     continue
                 measure_unit = portion.get("measureUnit") or {}
                 raw_unit = (
@@ -107,9 +118,7 @@ def main():
                 if not unit or unit.lower() == "undetermined":
                     unit = "serving"
                 label = (
-                    portion.get("portionDescription")
-                    or portion.get("modifier")
-                    or unit
+                    portion.get("portionDescription") or portion.get("modifier") or unit
                 )
                 label = (label or "serving").strip()[:80] or "serving"
                 key = (label, unit)
@@ -149,7 +158,10 @@ def main():
                 out.write(json.dumps(nutrient_row, ensure_ascii=False) + "\n")
                 total_nutrients += 1
 
-    print(f"USDA SR: {total_foods} foods, {total_nutrients} nutrients, {total_servings} servings -> {out_path}")
+    print(
+        f"USDA SR: {total_foods} foods, {total_nutrients} nutrients, "
+        f"{total_servings} servings -> {out_path}"
+    )
 
 
 if __name__ == "__main__":

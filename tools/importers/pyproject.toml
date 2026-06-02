@@ -4,3 +4,51 @@ version = "0.1.0"
 description = "Data import pipeline for CalCo nutrition database"
 requires-python = ">=3.12"
 dependencies = ["requests>=2.31", "rapidfuzz>=3.0"]
+
+[dependency-groups]
+dev = ["ruff>=0.15.12", "ty>=0.0.35"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "ANN",
+    "B",
+    "C4",
+    "E",
+    "EM",
+    "F",
+    "G",
+    "I",
+    "ICN",
+    "INP",
+    "LOG",
+    "PIE",
+    "PL",
+    "PT",
+    "RET",
+    "RSE",
+    "RUF",
+    "SIM",
+    "T10",
+    "TID",
+    "UP",
+    "W",
+    "YTT",
+    "BLE",
+    "N",
+    "PERF",
+    "SLF",
+    "TCH",
+    "ARG",
+    "ERA",
+    "FURB",
+]
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["."]
+
+[tool.ty.src]
+include = ["*.py"]
