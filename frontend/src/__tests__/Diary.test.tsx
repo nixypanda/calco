@@ -98,7 +98,9 @@ describe("Diary", () => {
       expect(screen.getByText("CalCo")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open profile menu" }),
+    ).toBeInTheDocument();
     expect(screen.queryByText("Search Foods")).not.toBeInTheDocument();
     expect(screen.queryByText("Create Food")).not.toBeInTheDocument();
   });
@@ -147,10 +149,11 @@ describe("Diary", () => {
 
     expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     expect(
-      screen.getByText((content) =>
-        content.includes("carbs 0.0g") &&
-        content.includes("protein 46.5g") &&
-        content.includes("fat 3.5g"),
+      screen.getByText(
+        (content) =>
+          content.includes("carbs 0.0g") &&
+          content.includes("protein 46.5g") &&
+          content.includes("fat 3.5g"),
       ),
     ).toBeInTheDocument();
   });
@@ -180,10 +183,11 @@ describe("Diary", () => {
     );
 
     expect(
-      screen.getByText((content) =>
-        content.includes("carbs 0%") &&
-        content.includes("protein 86%") &&
-        content.includes("fat 14%"),
+      screen.getByText(
+        (content) =>
+          content.includes("carbs 0%") &&
+          content.includes("protein 86%") &&
+          content.includes("fat 14%"),
       ),
     ).toBeInTheDocument();
   });
@@ -192,10 +196,14 @@ describe("Diary", () => {
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: "Add Food" })[0]).toBeInTheDocument();
+      expect(
+        screen.getAllByRole("button", { name: "Add Food" })[0],
+      ).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getAllByRole("button", { name: "Add Food" })[0]);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Add Food" })[0],
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Search Page")).toBeInTheDocument();
@@ -206,10 +214,14 @@ describe("Diary", () => {
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Open profile menu" }),
+      ).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open profile menu" }),
+    );
     await userEvent.click(await screen.findByText("My Meals"));
 
     await waitFor(() => {
@@ -221,10 +233,14 @@ describe("Diary", () => {
     renderAtHome();
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Open profile menu" }),
+      ).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open profile menu" }),
+    );
     await userEvent.click(await screen.findByText("Logout"));
 
     await waitFor(() => {
@@ -256,7 +272,6 @@ describe("Diary", () => {
       expect(screen.getByText("Log Detail Page")).toBeInTheDocument();
     });
   });
-
 
   it("shows error state", async () => {
     mockListLogs.mockRejectedValue(new Error("Network error"));

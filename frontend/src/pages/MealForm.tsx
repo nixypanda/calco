@@ -1,9 +1,20 @@
-import { useState, useEffect, useCallback, useRef, type SubmitEvent } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type SubmitEvent,
+} from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods, getFoodDetail } from "../api/foods";
 import type { SearchResult } from "../api/foods";
-import { UNITS, type ComponentRow, createEmptyRow, nextRowId } from "@/lib/nutrition";
+import {
+  UNITS,
+  type ComponentRow,
+  createEmptyRow,
+  nextRowId,
+} from "@/lib/nutrition";
 import {
   ActionIcon,
   Button,
@@ -50,12 +61,16 @@ export function MealForm() {
   const [notes, setNotes] = useState("");
   const [totalQty, setTotalQty] = useState("");
   const [totalUnit, setTotalUnit] = useState("g");
-  const [components, setComponents] = useState<ComponentRow[]>([createEmptyRow()]);
+  const [components, setComponents] = useState<ComponentRow[]>([
+    createEmptyRow(),
+  ]);
   const [submitting, setSubmitting] = useState(false);
   const [fetching, setFetching] = useState(isEdit);
   const [error, setError] = useState("");
 
-  const searchTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const searchTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   useEffect(() => {
     if (!id) return;
@@ -135,7 +150,9 @@ export function MealForm() {
   const doSearch = useCallback(async (query: string, rowId: string) => {
     if (query.length < 2) {
       setComponents((prev) =>
-        prev.map((r) => (r.rowId === rowId ? { ...r, searchResults: [], searching: false } : r)),
+        prev.map((r) =>
+          r.rowId === rowId ? { ...r, searchResults: [], searching: false } : r,
+        ),
       );
       return;
     }
@@ -151,7 +168,9 @@ export function MealForm() {
       if (controller.signal.aborted) return;
       setComponents((prev) =>
         prev.map((r) =>
-          r.rowId === rowId ? { ...r, searchResults: res.items, searching: false } : r,
+          r.rowId === rowId
+            ? { ...r, searchResults: res.items, searching: false }
+            : r,
         ),
       );
     } catch (err) {
@@ -190,7 +209,8 @@ export function MealForm() {
     );
   };
 
-  const addComponent = () => setComponents((prev) => [...prev, createEmptyRow()]);
+  const addComponent = () =>
+    setComponents((prev) => [...prev, createEmptyRow()]);
 
   const removeComponent = (rowId: string) => {
     const timer = searchTimers.current.get(rowId);
@@ -203,7 +223,9 @@ export function MealForm() {
   };
 
   const updateRow = (rowId: string, patch: Partial<ComponentRow>) =>
-    setComponents((prev) => prev.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
+    setComponents((prev) =>
+      prev.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)),
+    );
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -302,14 +324,23 @@ export function MealForm() {
                 placeholder="Amount"
                 style={{ flex: 1 }}
               />
-              <UnitSelect value={totalUnit} onChange={setTotalUnit} width={128} />
+              <UnitSelect
+                value={totalUnit}
+                onChange={setTotalUnit}
+                width={128}
+              />
             </Group>
           </Stack>
 
           <Stack gap="sm">
             <Group justify="space-between">
               <Title order={2}>Components</Title>
-              <Button type="button" variant="outline" size="sm" onClick={addComponent}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addComponent}
+              >
                 + Add Component
               </Button>
             </Group>
@@ -346,11 +377,16 @@ export function MealForm() {
                 <TextInput
                   type="number"
                   value={comp.quantity}
-                  onChange={(e) => updateRow(comp.rowId, { quantity: e.target.value })}
+                  onChange={(e) =>
+                    updateRow(comp.rowId, { quantity: e.target.value })
+                  }
                   placeholder="Qty"
                   w={80}
                 />
-                <UnitSelect value={comp.unit} onChange={(v) => updateRow(comp.rowId, { unit: v })} />
+                <UnitSelect
+                  value={comp.unit}
+                  onChange={(v) => updateRow(comp.rowId, { unit: v })}
+                />
                 {components.length > 1 && (
                   <ActionIcon
                     variant="subtle"
@@ -364,7 +400,11 @@ export function MealForm() {
             ))}
           </Stack>
 
-          <Button type="submit" disabled={submitting} style={{ alignSelf: "flex-start" }}>
+          <Button
+            type="submit"
+            disabled={submitting}
+            style={{ alignSelf: "flex-start" }}
+          >
             {submitting ? "Saving..." : isEdit ? "Update Meal" : "Create Meal"}
           </Button>
         </Stack>

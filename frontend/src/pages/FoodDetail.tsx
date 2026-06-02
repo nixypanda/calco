@@ -50,7 +50,11 @@ export function FoodDetail() {
   if (loading) {
     return (
       <Container p="md">
-        <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Log Food"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <Stack gap="sm">
           <Skeleton height={16} width="80%" />
           <Skeleton height={16} width="60%" />
@@ -63,7 +67,11 @@ export function FoodDetail() {
   if (error && !food) {
     return (
       <Container p="md">
-        <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Log Food"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <ErrorBanner message={error} />
       </Container>
     );
@@ -72,7 +80,11 @@ export function FoodDetail() {
   if (!food || !id) {
     return (
       <Container p="md">
-        <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Log Food"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <EmptyState>Food not found.</EmptyState>
       </Container>
     );

@@ -84,10 +84,7 @@ describe("BootstrapAdminSetup", () => {
     await userEvent.click(screen.getByText("Create Admin"));
 
     await waitFor(() => {
-      expect(mockCreateAdmin).toHaveBeenCalledWith(
-        "admin",
-        "correct-password",
-      );
+      expect(mockCreateAdmin).toHaveBeenCalledWith("admin", "correct-password");
     });
   });
 

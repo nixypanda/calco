@@ -13,10 +13,7 @@ import {
   createAdmin as apiCreateAdmin,
   checkBootstrapStatus,
 } from "../api/auth";
-import type {
-  IdentityResponse,
-  ProfileResponse,
-} from "../api/auth";
+import type { IdentityResponse, ProfileResponse } from "../api/auth";
 import { UNAUTHORIZED_EVENT } from "../api/client";
 
 export interface AuthState {

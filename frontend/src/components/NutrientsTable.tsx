@@ -18,8 +18,12 @@ export function NutrientsTable({ nutrients }: { nutrients: NutrientRow[] }) {
       <Table.Thead>
         <Table.Tr>
           <Table.Th>Nutrient</Table.Th>
-          <Table.Th ta="right" w={96}>Amount</Table.Th>
-          <Table.Th ta="right" w={96}>Unit</Table.Th>
+          <Table.Th ta="right" w={96}>
+            Amount
+          </Table.Th>
+          <Table.Th ta="right" w={96}>
+            Unit
+          </Table.Th>
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>

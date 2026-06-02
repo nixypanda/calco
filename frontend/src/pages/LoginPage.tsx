@@ -1,14 +1,7 @@
 import { useState, type SubmitEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
-import {
-  Paper,
-  Button,
-  TextInput,
-  Stack,
-  Center,
-  Title,
-} from "@mantine/core";
+import { Paper, Button, TextInput, Stack, Center, Title } from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function LoginPage() {

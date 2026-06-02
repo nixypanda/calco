@@ -70,7 +70,11 @@ export function FoodLogDetail() {
   if (loading) {
     return (
       <Container p="md">
-        <PageHeader title="Edit Log" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Edit Log"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <Stack gap="sm">
           <Skeleton height={16} width="80%" />
           <Skeleton height={16} width="60%" />
@@ -83,7 +87,11 @@ export function FoodLogDetail() {
   if (error && !log) {
     return (
       <Container p="md">
-        <PageHeader title="Edit Log" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Edit Log"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <ErrorBanner message={error} />
       </Container>
     );
@@ -92,7 +100,11 @@ export function FoodLogDetail() {
   if (!log || !id) {
     return (
       <Container p="md">
-        <PageHeader title="Edit Log" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Edit Log"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <EmptyState>Log not found.</EmptyState>
       </Container>
     );
@@ -120,7 +132,9 @@ export function FoodLogDetail() {
       categories={food?.categories ?? []}
       servingSizeG={food?.serving_size_g}
       customFoodEditPath={
-        food && food.source === "USER" ? `/foods/custom/${food.id}/edit` : undefined
+        food && food.source === "USER"
+          ? `/foods/custom/${food.id}/edit`
+          : undefined
       }
       submitLabel="Save"
       submittingLabel="Saving..."

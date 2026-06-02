@@ -47,7 +47,10 @@ describe("getNutrientAmount / getCalories", () => {
 describe("getNutrientVal", () => {
   const entries = [{ code: "PROTEIN_G", amount: "20", unit: "g" }];
   it("returns amount and unit", () => {
-    expect(getNutrientVal(entries, "PROTEIN_G")).toEqual({ amount: 20, unit: "g" });
+    expect(getNutrientVal(entries, "PROTEIN_G")).toEqual({
+      amount: 20,
+      unit: "g",
+    });
   });
   it("returns null when missing", () => {
     expect(getNutrientVal(entries, "FAT_G")).toBeNull();
@@ -110,15 +113,29 @@ describe("computeGrams", () => {
   });
   it("returns null when serving has bad quantity", () => {
     expect(
-      computeGrams(1, "bad", [{ label: "x", quantity: "0", unit: "bad", grams: "10" }]),
+      computeGrams(1, "bad", [
+        { label: "x", quantity: "0", unit: "bad", grams: "10" },
+      ]),
     ).toBeNull();
   });
 });
 
 describe("scaleNutrients", () => {
   const per100g = [
-    { code: "ENERGY_KCAL", amount_per_100g: "100", unit: "kcal", source: null, confidence: null },
-    { code: "PROTEIN_G", amount_per_100g: "5", unit: "g", source: null, confidence: null },
+    {
+      code: "ENERGY_KCAL",
+      amount_per_100g: "100",
+      unit: "kcal",
+      source: null,
+      confidence: null,
+    },
+    {
+      code: "PROTEIN_G",
+      amount_per_100g: "5",
+      unit: "g",
+      source: null,
+      confidence: null,
+    },
   ];
   it("scales by gram amount", () => {
     const result = scaleNutrients(per100g, 200, "g", []);
@@ -135,7 +152,10 @@ describe("scaleNutrients", () => {
 
 describe("parseCategoriesInput", () => {
   it("splits, trims, lowercases, dedupes", () => {
-    expect(parseCategoriesInput("Fruit, Snack ,fruit, ")).toEqual(["fruit", "snack"]);
+    expect(parseCategoriesInput("Fruit, Snack ,fruit, ")).toEqual([
+      "fruit",
+      "snack",
+    ]);
   });
   it("returns empty on empty input", () => {
     expect(parseCategoriesInput("")).toEqual([]);

@@ -13,7 +13,9 @@ describe("apiRequest", () => {
       text: vi.fn(),
     } as unknown as Response);
 
-    await expect(apiRequest<void>("/api/logs/1", { method: "DELETE" })).resolves.toBeUndefined();
+    await expect(
+      apiRequest<void>("/api/logs/1", { method: "DELETE" }),
+    ).resolves.toBeUndefined();
   });
 
   it("returns undefined for empty success bodies", async () => {
@@ -23,7 +25,9 @@ describe("apiRequest", () => {
       text: vi.fn().mockResolvedValue(""),
     } as unknown as Response);
 
-    await expect(apiRequest<void>("/api/auth/logout", { method: "POST" })).resolves.toBeUndefined();
+    await expect(
+      apiRequest<void>("/api/auth/logout", { method: "POST" }),
+    ).resolves.toBeUndefined();
   });
 
   it("parses JSON success bodies", async () => {
@@ -33,7 +37,9 @@ describe("apiRequest", () => {
       text: vi.fn().mockResolvedValue('{"id":"log-1"}'),
     } as unknown as Response);
 
-    await expect(apiRequest<{ id: string }>("/api/logs/log-1")).resolves.toEqual({ id: "log-1" });
+    await expect(
+      apiRequest<{ id: string }>("/api/logs/log-1"),
+    ).resolves.toEqual({ id: "log-1" });
   });
 
   it("throws structured API errors", async () => {

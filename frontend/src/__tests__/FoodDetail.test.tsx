@@ -26,16 +26,16 @@ vi.mock("../api/logs", () => ({
   createLog: (...args: unknown[]) => mockCreateLog(...args),
 }));
 
-function renderAtDetail(
-  foodId = "some-id",
-  state?: { mealSlot?: string },
-) {
+function renderAtDetail(foodId = "some-id", state?: { mealSlot?: string }) {
   return render(
     <MemoryRouter initialEntries={[{ pathname: `/foods/${foodId}`, state }]}>
       <AuthProvider>
         <Routes>
           <Route path="/foods/:id" element={<FoodDetail />} />
-          <Route path="/foods/custom/:id/edit" element={<div>Edit Custom Food</div>} />
+          <Route
+            path="/foods/custom/:id/edit"
+            element={<div>Edit Custom Food</div>}
+          />
           <Route path="/search" element={<div>Search Page</div>} />
           <Route path="/home" element={<div>User Home</div>} />
         </Routes>
@@ -57,12 +57,22 @@ const mockProduct = {
   default_unit: "g",
   serving_size_g: "100",
   nutrients: [
-    { code: "ENERGY_KCAL", amount_per_100g: "165", unit: "kcal", source: null, confidence: null },
-    { code: "PROTEIN_G", amount_per_100g: "31", unit: "g", source: null, confidence: null },
+    {
+      code: "ENERGY_KCAL",
+      amount_per_100g: "165",
+      unit: "kcal",
+      source: null,
+      confidence: null,
+    },
+    {
+      code: "PROTEIN_G",
+      amount_per_100g: "31",
+      unit: "g",
+      source: null,
+      confidence: null,
+    },
   ],
-  servings: [
-    { label: "fillet", quantity: "1", unit: "piece", grams: "150" },
-  ],
+  servings: [{ label: "fillet", quantity: "1", unit: "piece", grams: "150" }],
 };
 
 const mockCustomProduct = {
@@ -72,7 +82,13 @@ const mockCustomProduct = {
   name: "My Protein Shake",
   brand: "Homemade",
   nutrients: [
-    { code: "ENERGY_KCAL", amount_per_100g: "120", unit: "kcal", source: null, confidence: null },
+    {
+      code: "ENERGY_KCAL",
+      amount_per_100g: "120",
+      unit: "kcal",
+      source: null,
+      confidence: null,
+    },
   ],
   servings: [],
 };
@@ -152,7 +168,9 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.queryByRole("link", { name: "Edit food" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Edit food" }),
+    ).not.toBeInTheDocument();
   });
 
   it("preselects meal slot from navigation state", async () => {
@@ -164,7 +182,9 @@ describe("FoodDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
+    expect(
+      screen.getByRole("combobox", { name: "Meal slot" }),
+    ).toHaveTextContent("Lunch");
   });
 
   it("renders exactly the allowed_units returned by the API", async () => {
@@ -194,10 +214,18 @@ describe("FoodDetail", () => {
 
     await userEvent.click(screen.getByRole("combobox", { name: "Unit" }));
 
-    expect(screen.getByRole("option", { name: "Gram (g)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Kilogram (kg)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Piece (piece)" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: /cup/i })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Gram (g)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Kilogram (kg)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Piece (piece)" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /cup/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("submits a log and navigates to diary", async () => {

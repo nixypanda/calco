@@ -54,7 +54,12 @@ function NutrientRing({
   const big = size >= 120;
   return (
     <Stack gap={4} align="center">
-      <MacroRing segments={[{ value, color }]} total={max} size={size} strokeWidth={big ? 10 : 6}>
+      <MacroRing
+        segments={[{ value, color }]}
+        total={max}
+        size={size}
+        strokeWidth={big ? 10 : 6}
+      >
         <Text fw={800} size={big ? "xl" : "md"}>
           {Math.round(value)}
         </Text>
@@ -82,9 +87,13 @@ function SlotMacroSummary({
   const fmt = (g: number, p: number) =>
     mode === "grams" ? `${g.toFixed(1)}g` : `${Math.round(p)}%`;
   return (
-    <UnstyledButton onClick={onToggle} title="Toggle macro grams and percentages">
+    <UnstyledButton
+      onClick={onToggle}
+      title="Toggle macro grams and percentages"
+    >
       <Text c="dimmed" size="sm" fw={500}>
-        carbs {fmt(m.carbs, m.carbsPct)} ⋅ protein {fmt(m.protein, m.proteinPct)} ⋅ fat {fmt(m.fat, m.fatPct)}
+        carbs {fmt(m.carbs, m.carbsPct)} ⋅ protein{" "}
+        {fmt(m.protein, m.proteinPct)} ⋅ fat {fmt(m.fat, m.fatPct)}
       </Text>
     </UnstyledButton>
   );
@@ -152,12 +161,16 @@ export function Diary() {
 
         const productIds = [
           ...new Set(
-            logRes.items.filter((l) => l.item.type === "product").map((l) => l.item.id),
+            logRes.items
+              .filter((l) => l.item.type === "product")
+              .map((l) => l.item.id),
           ),
         ];
         const mealIds = [
           ...new Set(
-            logRes.items.filter((l) => l.item.type === "meal").map((l) => l.item.id),
+            logRes.items
+              .filter((l) => l.item.type === "meal")
+              .map((l) => l.item.id),
           ),
         ];
         if (productIds.length > 0 || mealIds.length > 0) {
@@ -217,7 +230,9 @@ export function Diary() {
   const otherLogs = logs.filter((l) => !l.meal_slot);
 
   const slotCalories = (slot: string) =>
-    logs.filter((l) => l.meal_slot === slot).reduce((s, l) => s + getCalories(l.nutrients), 0);
+    logs
+      .filter((l) => l.meal_slot === slot)
+      .reduce((s, l) => s + getCalories(l.nutrients), 0);
 
   const toggleMacroMode = () =>
     setMacroMode((c) => (c === "grams" ? "percent" : "grams"));
@@ -290,7 +305,11 @@ export function Diary() {
       <Paper p="md" mb="md">
         <Stack gap="md">
           <Group justify="space-between" align="center">
-            <ActionIcon variant="subtle" onClick={goPrev} aria-label="Previous day">
+            <ActionIcon
+              variant="subtle"
+              onClick={goPrev}
+              aria-label="Previous day"
+            >
               ←
             </ActionIcon>
             <Text fw={600} ta="center" truncate>
@@ -359,9 +378,18 @@ export function Diary() {
               <Group p="md" gap="sm" align="center">
                 <Stack gap={2} miw={0} style={{ flex: 1 }}>
                   <Text fw={600}>{label}</Text>
-                  <SlotMacroSummary logs={items} mode={macroMode} onToggle={toggleMacroMode} />
+                  <SlotMacroSummary
+                    logs={items}
+                    mode={macroMode}
+                    onToggle={toggleMacroMode}
+                  />
                 </Stack>
-                <Text c="dimmed" size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
+                <Text
+                  c="dimmed"
+                  size="sm"
+                  fw={600}
+                  style={{ whiteSpace: "nowrap" }}
+                >
                   {Math.round(slotCalories(value))} kcal
                 </Text>
               </Group>
@@ -375,8 +403,12 @@ export function Diary() {
               <Button
                 variant="subtle"
                 fullWidth
-                onClick={() => navigate("/search", { state: { mealSlot: value } })}
-                style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
+                onClick={() =>
+                  navigate("/search", { state: { mealSlot: value } })
+                }
+                style={{
+                  borderTop: "1px solid var(--mantine-color-default-border)",
+                }}
               >
                 Add Food
               </Button>
@@ -388,9 +420,18 @@ export function Diary() {
             <Group p="md" gap="sm" align="center">
               <Stack gap={2} miw={0} style={{ flex: 1 }}>
                 <Text fw={600}>Other</Text>
-                <SlotMacroSummary logs={otherLogs} mode={macroMode} onToggle={toggleMacroMode} />
+                <SlotMacroSummary
+                  logs={otherLogs}
+                  mode={macroMode}
+                  onToggle={toggleMacroMode}
+                />
               </Stack>
-              <Text c="dimmed" size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
+              <Text
+                c="dimmed"
+                size="sm"
+                fw={600}
+                style={{ whiteSpace: "nowrap" }}
+              >
                 {Math.round(slotCalories(""))} kcal
               </Text>
             </Group>

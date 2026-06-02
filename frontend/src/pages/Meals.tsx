@@ -62,7 +62,9 @@ export function Meals() {
       </PageHeader>
 
       {meals.length === 0 && (
-        <EmptyState>No meals yet. Create a meal to log common combinations faster.</EmptyState>
+        <EmptyState>
+          No meals yet. Create a meal to log common combinations faster.
+        </EmptyState>
       )}
 
       <Stack gap="sm">

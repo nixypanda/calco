@@ -8,7 +8,12 @@ interface PageHeaderProps {
   children?: ReactNode;
 }
 
-export function PageHeader({ title, onBack, backLabel = "Back", children }: PageHeaderProps) {
+export function PageHeader({
+  title,
+  onBack,
+  backLabel = "Back",
+  children,
+}: PageHeaderProps) {
   return (
     <Group component="header" justify="space-between" gap="md" mb="md">
       <Group gap="xs" miw={0}>
@@ -22,7 +27,14 @@ export function PageHeader({ title, onBack, backLabel = "Back", children }: Page
             <span aria-hidden="true">←</span>
           </ActionIcon>
         )}
-        <Title order={1} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <Title
+          order={1}
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {title}
         </Title>
       </Group>

@@ -116,7 +116,11 @@ export function AdminDashboard() {
       <Stack gap="md">
         <Group justify="space-between">
           <Title order={2}>Users</Title>
-          <Button variant="outline" size="sm" onClick={() => setShowCreate(!showCreate)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowCreate(!showCreate)}
+          >
             {showCreate ? "Cancel" : "Create User"}
           </Button>
         </Group>
@@ -127,20 +131,26 @@ export function AdminDashboard() {
               <TextInput
                 placeholder="Username"
                 value={newUser.username}
-                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, username: e.target.value })
+                }
                 style={{ flex: 1 }}
               />
               <TextInput
                 placeholder="Display Name"
                 value={newUser.display_name}
-                onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, display_name: e.target.value })
+                }
                 style={{ flex: 1 }}
               />
               <TextInput
                 type="password"
                 placeholder="Initial Password"
                 value={newUser.initial_password}
-                onChange={(e) => setNewUser({ ...newUser, initial_password: e.target.value })}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, initial_password: e.target.value })
+                }
                 style={{ flex: 1 }}
               />
               <Button type="submit">Save</Button>
@@ -184,11 +194,19 @@ export function AdminDashboard() {
                         Reset Password
                       </Button>
                       {user.status === "active" ? (
-                        <Button variant="outline" size="sm" onClick={() => handleDisable(user.id)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDisable(user.id)}
+                        >
                           Disable
                         </Button>
                       ) : (
-                        <Button variant="outline" size="sm" onClick={() => handleEnable(user.id)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEnable(user.id)}
+                        >
                           Enable
                         </Button>
                       )}
@@ -206,7 +224,9 @@ export function AdminDashboard() {
               type="password"
               placeholder="New password"
               value={resetPass.password}
-              onChange={(e) => setResetPass({ ...resetPass, password: e.target.value })}
+              onChange={(e) =>
+                setResetPass({ ...resetPass, password: e.target.value })
+              }
               style={{ flex: 1 }}
             />
             <Button onClick={() => handleResetPassword(resetPass.userId)}>

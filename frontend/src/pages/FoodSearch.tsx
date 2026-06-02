@@ -67,7 +67,11 @@ export function FoodSearch() {
 
   return (
     <Container p="md">
-      <PageHeader title="Search Foods" onBack={() => navigate("/home")} backLabel="Back to Diary" />
+      <PageHeader
+        title="Search Foods"
+        onBack={() => navigate("/home")}
+        backLabel="Back to Diary"
+      />
 
       <Box mb="sm">
         <SearchQueryInput
@@ -87,7 +91,9 @@ export function FoodSearch() {
               key={i}
               px="sm"
               py="xs"
-              style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+              style={{
+                borderBottom: "1px solid var(--mantine-color-default-border)",
+              }}
             >
               <Group justify="space-between" gap="sm">
                 <Stack gap={6} miw={0} style={{ flex: 1 }}>

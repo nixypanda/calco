@@ -18,7 +18,17 @@ export const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 
 export const DEFAULT_CALORIE_GOAL = 2000;
 
-export const UNITS = ["g", "kg", "ml", "cup", "tbsp", "tsp", "piece", "packet", "serving"];
+export const UNITS = [
+  "g",
+  "kg",
+  "ml",
+  "cup",
+  "tbsp",
+  "tsp",
+  "piece",
+  "packet",
+  "serving",
+];
 
 export interface ScaledNutrient {
   code: string;
@@ -63,7 +73,9 @@ export function getNutrientAmount(
   return entry ? parseAmount(entry.amount) : 0;
 }
 
-export function getCalories(nutrients: { code: string; amount: string }[]): number {
+export function getCalories(
+  nutrients: { code: string; amount: string }[],
+): number {
   return getNutrientAmount(nutrients, "ENERGY_KCAL");
 }
 
@@ -78,9 +90,18 @@ export function getNutrientVal(
 export function getMacroTotals(
   logs: { nutrients: { code: string; amount: string }[] }[],
 ) {
-  const protein = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "PROTEIN_G"), 0);
-  const carbs = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "CARBS_G"), 0);
-  const fat = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "FAT_G"), 0);
+  const protein = logs.reduce(
+    (s, l) => s + getNutrientAmount(l.nutrients, "PROTEIN_G"),
+    0,
+  );
+  const carbs = logs.reduce(
+    (s, l) => s + getNutrientAmount(l.nutrients, "CARBS_G"),
+    0,
+  );
+  const fat = logs.reduce(
+    (s, l) => s + getNutrientAmount(l.nutrients, "FAT_G"),
+    0,
+  );
   const total = protein * 4 + carbs * 4 + fat * 9;
   const pct = (kcal: number) => (total > 0 ? (kcal / total) * 100 : 0);
   return {

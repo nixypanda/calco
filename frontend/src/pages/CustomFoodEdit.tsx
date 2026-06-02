@@ -21,7 +21,8 @@ export function CustomFoodEdit() {
   const navigate = useNavigate();
   const [nutrients, setNutrients] = useState<NutrientItem[]>([]);
   const [units, setUnits] = useState<UnitItem[]>([]);
-  const [initialValues, setInitialValues] = useState<CustomFoodFormValues | null>(null);
+  const [initialValues, setInitialValues] =
+    useState<CustomFoodFormValues | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -76,7 +77,11 @@ export function CustomFoodEdit() {
   if (loading) {
     return (
       <Container p="md">
-        <PageHeader title="Edit Custom Food" onBack={goHome} backLabel="Back to Diary" />
+        <PageHeader
+          title="Edit Custom Food"
+          onBack={goHome}
+          backLabel="Back to Diary"
+        />
         <Stack gap="sm">
           <Skeleton height={16} width="80%" />
           <Skeleton height={16} width="60%" />
@@ -87,7 +92,11 @@ export function CustomFoodEdit() {
 
   return (
     <Container p="md">
-      <PageHeader title="Edit Custom Food" onBack={goHome} backLabel="Back to Diary" />
+      <PageHeader
+        title="Edit Custom Food"
+        onBack={goHome}
+        backLabel="Back to Diary"
+      />
 
       {error && <ErrorBanner message={error} />}
 

@@ -59,7 +59,11 @@ function quoteCategory(value: string): string {
   return /\s/.test(value) ? `"${value}"` : value;
 }
 
-function replaceToken(query: string, token: TokenInfo, replacement: string): string {
+function replaceToken(
+  query: string,
+  token: TokenInfo,
+  replacement: string,
+): string {
   const next = `${query.slice(0, token.start)}${replacement}${query.slice(token.end)}`;
   return next;
 }
@@ -163,8 +167,12 @@ export function SearchQueryInput({
           onChange(e.target.value);
           setCursor(e.target.selectionStart ?? e.target.value.length);
         }}
-        onClick={(e) => setCursor(e.currentTarget.selectionStart ?? value.length)}
-        onKeyUp={(e) => setCursor(e.currentTarget.selectionStart ?? value.length)}
+        onClick={(e) =>
+          setCursor(e.currentTarget.selectionStart ?? value.length)
+        }
+        onKeyUp={(e) =>
+          setCursor(e.currentTarget.selectionStart ?? value.length)
+        }
         onKeyDown={(e) => {
           setCursor(e.currentTarget.selectionStart ?? value.length);
           if (e.key === "Tab" && completions[0]) {

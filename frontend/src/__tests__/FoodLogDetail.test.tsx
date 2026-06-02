@@ -76,10 +76,34 @@ const mockFood = {
   default_unit: "g",
   serving_size_g: null,
   nutrients: [
-    { code: "ENERGY_KCAL", amount_per_100g: "165", unit: "kcal", source: null, confidence: null },
-    { code: "PROTEIN_G", amount_per_100g: "31", unit: "g", source: null, confidence: null },
-    { code: "CARBS_G", amount_per_100g: "0", unit: "g", source: null, confidence: null },
-    { code: "FAT_G", amount_per_100g: "3.6", unit: "g", source: null, confidence: null },
+    {
+      code: "ENERGY_KCAL",
+      amount_per_100g: "165",
+      unit: "kcal",
+      source: null,
+      confidence: null,
+    },
+    {
+      code: "PROTEIN_G",
+      amount_per_100g: "31",
+      unit: "g",
+      source: null,
+      confidence: null,
+    },
+    {
+      code: "CARBS_G",
+      amount_per_100g: "0",
+      unit: "g",
+      source: null,
+      confidence: null,
+    },
+    {
+      code: "FAT_G",
+      amount_per_100g: "3.6",
+      unit: "g",
+      source: null,
+      confidence: null,
+    },
   ],
   servings: [],
 };
@@ -118,7 +142,9 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
+    expect(
+      screen.getByRole("combobox", { name: "Meal slot" }),
+    ).toHaveTextContent("Lunch");
     expect(screen.getByDisplayValue("150")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Post-workout meal")).toBeInTheDocument();
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
@@ -132,9 +158,13 @@ describe("FoodLogDetail", () => {
       expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: "Edit Log" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Edit Log" }),
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue("150")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Meal slot" })).toHaveTextContent("Lunch");
+    expect(
+      screen.getByRole("combobox", { name: "Meal slot" }),
+    ).toHaveTextContent("Lunch");
     expect(screen.getByText("Macro Breakdown")).toBeInTheDocument();
     expect(screen.getByText("Nutrients")).toBeInTheDocument();
   });

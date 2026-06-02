@@ -14,11 +14,7 @@ import {
   type NutrientRow,
   type ServingRow,
 } from "@/lib/nutrition";
-import type {
-  CreateFoodRequest,
-  NutrientItem,
-  UnitItem,
-} from "@/api/foods";
+import type { CreateFoodRequest, NutrientItem, UnitItem } from "@/api/foods";
 
 export interface CustomFoodFormValues {
   name: string;
@@ -70,8 +66,12 @@ export function CustomFoodForm({
   const [servingSizeG, setServingSizeG] = useState(seed.servingSizeG);
   const [defaultQty, setDefaultQty] = useState(seed.defaultQty);
   const [defaultUnit, setDefaultUnit] = useState(seed.defaultUnit);
-  const [nutrientRows, setNutrientRows] = useState<NutrientRow[]>(seed.nutrientRows);
-  const [servingRows, setServingRows] = useState<ServingRow[]>(seed.servingRows);
+  const [nutrientRows, setNutrientRows] = useState<NutrientRow[]>(
+    seed.nutrientRows,
+  );
+  const [servingRows, setServingRows] = useState<ServingRow[]>(
+    seed.servingRows,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -83,19 +83,30 @@ export function CustomFoodForm({
     setNutrientRows(nutrientRows.filter((_, idx) => idx !== i));
   };
 
-  const updateNutrientRow = (i: number, field: keyof NutrientRow, value: string) => {
+  const updateNutrientRow = (
+    i: number,
+    field: keyof NutrientRow,
+    value: string,
+  ) => {
     const rows = [...nutrientRows];
     rows[i] = { ...rows[i], [field]: value };
     setNutrientRows(rows);
   };
 
   const addServingRow = () =>
-    setServingRows([...servingRows, { label: "", quantity: "", unit: "g", grams: "" }]);
+    setServingRows([
+      ...servingRows,
+      { label: "", quantity: "", unit: "g", grams: "" },
+    ]);
 
   const removeServingRow = (i: number) =>
     setServingRows(servingRows.filter((_, idx) => idx !== i));
 
-  const updateServingRow = (i: number, field: keyof ServingRow, value: string) => {
+  const updateServingRow = (
+    i: number,
+    field: keyof ServingRow,
+    value: string,
+  ) => {
     const rows = [...servingRows];
     rows[i] = { ...rows[i], [field]: value };
     setServingRows(rows);
@@ -110,8 +121,12 @@ export function CustomFoodForm({
       return;
     }
 
-    const validNutrients = nutrientRows.filter((r) => r.code && r.amount_per_100g);
-    const validServings = servingRows.filter((r) => r.label && r.quantity && r.grams);
+    const validNutrients = nutrientRows.filter(
+      (r) => r.code && r.amount_per_100g,
+    );
+    const validServings = servingRows.filter(
+      (r) => r.label && r.quantity && r.grams,
+    );
 
     const payload: CreateFoodRequest = {
       name: name.trim(),
@@ -202,7 +217,10 @@ export function CustomFoodForm({
               value={defaultUnit}
               onChange={(e) => setDefaultUnit(e.target.value)}
               disabled={submitting}
-              data={units.map((u) => ({ value: u.code, label: `${u.name} (${u.code})` }))}
+              data={units.map((u) => ({
+                value: u.code,
+                label: `${u.name} (${u.code})`,
+              }))}
             />
           </Stack>
 
@@ -235,7 +253,9 @@ export function CustomFoodForm({
                   type="number"
                   placeholder="Amount per 100g"
                   value={row.amount_per_100g}
-                  onChange={(e) => updateNutrientRow(i, "amount_per_100g", e.target.value)}
+                  onChange={(e) =>
+                    updateNutrientRow(i, "amount_per_100g", e.target.value)
+                  }
                   min={0}
                   step="any"
                   disabled={submitting}
@@ -279,7 +299,9 @@ export function CustomFoodForm({
                   type="number"
                   placeholder="Qty"
                   value={row.quantity}
-                  onChange={(e) => updateServingRow(i, "quantity", e.target.value)}
+                  onChange={(e) =>
+                    updateServingRow(i, "quantity", e.target.value)
+                  }
                   min={0}
                   step="any"
                   disabled={submitting}
@@ -314,7 +336,11 @@ export function CustomFoodForm({
             ))}
           </Stack>
 
-          <Button type="submit" disabled={submitting} style={{ alignSelf: "flex-start" }}>
+          <Button
+            type="submit"
+            disabled={submitting}
+            style={{ alignSelf: "flex-start" }}
+          >
             {submitting ? submitPendingLabel : submitLabel}
           </Button>
         </Stack>

@@ -28,7 +28,8 @@ export function MacroRing({
 
   let offset = 0;
   const arcs = segments.map((seg, i) => {
-    const length = denom > 0 ? Math.min(seg.value / denom, 1) * circumference : 0;
+    const length =
+      denom > 0 ? Math.min(seg.value / denom, 1) * circumference : 0;
     const arc = (
       <circle
         key={i}
@@ -49,7 +50,11 @@ export function MacroRing({
   });
 
   return (
-    <Box pos="relative" display="inline-flex" style={{ width: size, height: size }}>
+    <Box
+      pos="relative"
+      display="inline-flex"
+      style={{ width: size, height: size }}
+    >
       <svg width={size} height={size}>
         <circle
           cx={size / 2}

@@ -23,7 +23,8 @@ export function CustomFoodCreate() {
       else failures.push("nutrients");
       if (uRes.status === "fulfilled") setUnits(uRes.value.items);
       else failures.push("units");
-      if (failures.length > 0) setError(`Failed to load ${failures.join(" and ")}`);
+      if (failures.length > 0)
+        setError(`Failed to load ${failures.join(" and ")}`);
     });
     return () => {
       cancelled = true;

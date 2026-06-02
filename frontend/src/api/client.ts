@@ -30,7 +30,10 @@ export async function apiRequest<T>(
     const body = await res.json().catch(() => ({}));
     const errorCode = body?.error?.code ?? "unknown";
     const errorMessage = body?.error?.message ?? res.statusText;
-    if (res.status === 401 && !AUTH_EXEMPT_PATHS.some((p) => path.startsWith(p))) {
+    if (
+      res.status === 401 &&
+      !AUTH_EXEMPT_PATHS.some((p) => path.startsWith(p))
+    ) {
       window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT));
     }
     throw new ApiError(res.status, errorCode, errorMessage);

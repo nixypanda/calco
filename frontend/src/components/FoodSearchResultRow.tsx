@@ -75,7 +75,12 @@ export function FoodSearchResultRow({
           )}
         </Stack>
         {(tags.length > 0 || showCustom) && (
-          <Group gap={4} justify="flex-end" maw={120} style={{ flexWrap: "wrap" }}>
+          <Group
+            gap={4}
+            justify="flex-end"
+            maw={120}
+            style={{ flexWrap: "wrap" }}
+          >
             {tags.map((tag) => (
               <Badge
                 key={tag}

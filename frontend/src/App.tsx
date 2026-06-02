@@ -19,7 +19,9 @@ import { MealForm } from "./pages/MealForm";
 function LoadingScreen() {
   return (
     <Center mih="100dvh" p="md">
-      <Text fw={600} c="dimmed">Loading...</Text>
+      <Text fw={600} c="dimmed">
+        Loading...
+      </Text>
     </Center>
   );
 }

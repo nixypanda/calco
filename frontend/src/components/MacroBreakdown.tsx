@@ -80,9 +80,24 @@ export function MacroBreakdown({ nutrients }: { nutrients: NutrientEntry[] }) {
           </Text>
         </MacroRing>
         <SimpleGrid cols={3} style={{ flex: 1 }}>
-          <MacroStat name="Protein" grams={protein} percent={proteinPct} color={MACRO_COLORS.protein} />
-          <MacroStat name="Carbs" grams={carbs} percent={carbsPct} color={MACRO_COLORS.carbs} />
-          <MacroStat name="Fat" grams={fat} percent={fatPct} color={MACRO_COLORS.fat} />
+          <MacroStat
+            name="Protein"
+            grams={protein}
+            percent={proteinPct}
+            color={MACRO_COLORS.protein}
+          />
+          <MacroStat
+            name="Carbs"
+            grams={carbs}
+            percent={carbsPct}
+            color={MACRO_COLORS.carbs}
+          />
+          <MacroStat
+            name="Fat"
+            grams={fat}
+            percent={fatPct}
+            color={MACRO_COLORS.fat}
+          />
         </SimpleGrid>
       </Group>
     </Paper>

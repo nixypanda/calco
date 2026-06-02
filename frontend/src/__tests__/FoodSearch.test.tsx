@@ -29,7 +29,10 @@ function renderAtSearch() {
         <Routes>
           <Route path="/search" element={<FoodSearch />} />
           <Route path="/foods/:id" element={<div>Food Detail Page</div>} />
-          <Route path="/foods/custom/new" element={<div>Create Food Page</div>} />
+          <Route
+            path="/foods/custom/new"
+            element={<div>Create Food Page</div>}
+          />
           <Route path="/home" element={<div>User Home</div>} />
         </Routes>
       </AuthProvider>
@@ -52,7 +55,10 @@ function renderAtSearchWithMealSlot() {
         <Routes>
           <Route path="/search" element={<FoodSearch />} />
           <Route path="/foods/:id" element={<FoodDetailProbe />} />
-          <Route path="/foods/custom/new" element={<div>Create Food Page</div>} />
+          <Route
+            path="/foods/custom/new"
+            element={<div>Create Food Page</div>}
+          />
           <Route path="/home" element={<div>User Home</div>} />
         </Routes>
       </AuthProvider>
@@ -129,7 +135,10 @@ describe("FoodSearch", () => {
     await userEvent.type(input, "chicken");
 
     await waitFor(() => {
-      expect(mockSearchFoods).toHaveBeenCalledWith("chicken", expect.any(Object));
+      expect(mockSearchFoods).toHaveBeenCalledWith(
+        "chicken",
+        expect.any(Object),
+      );
     });
   });
 
@@ -181,7 +190,9 @@ describe("FoodSearch", () => {
     expect(screen.getByText("meat")).toBeInTheDocument();
     expect(screen.getByText("165 kcal · 1 serving")).toBeInTheDocument();
     expect(screen.getByText("Protein Shake")).toBeInTheDocument();
-    expect(screen.getByText("MyBrand · 120 kcal · per 100 g")).toBeInTheDocument();
+    expect(
+      screen.getByText("MyBrand · 120 kcal · per 100 g"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Custom")).toBeInTheDocument();
   });
 
@@ -262,7 +273,11 @@ describe("FoodSearch", () => {
     await userEvent.type(input, "category:foo");
 
     await waitFor(() => {
-      expect(mockListCategorySuggestions).toHaveBeenCalledWith("foo", 8, expect.any(Object));
+      expect(mockListCategorySuggestions).toHaveBeenCalledWith(
+        "foo",
+        8,
+        expect.any(Object),
+      );
     });
 
     await userEvent.tab();

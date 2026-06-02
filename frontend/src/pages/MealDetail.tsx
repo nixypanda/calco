@@ -36,7 +36,9 @@ export function MealDetail() {
   const [logAmount, setLogAmount] = useState("100");
   const [logUnit, setLogUnit] = useState("g");
   const [units, setUnits] = useState<UnitItem[]>([]);
-  const [nutrients, setNutrients] = useState<MealNutritionResponse | null>(null);
+  const [nutrients, setNutrients] = useState<MealNutritionResponse | null>(
+    null,
+  );
   const [nutrientsLoading, setNutrientsLoading] = useState(false);
   const [nutrientsError, setNutrientsError] = useState("");
 
@@ -62,7 +64,9 @@ export function MealDetail() {
 
       const productIds = [
         ...new Set(
-          mealData.components.filter((c) => c.item.type === "product").map((c) => c.item.id),
+          mealData.components
+            .filter((c) => c.item.type === "product")
+            .map((c) => c.item.id),
         ),
       ];
       if (productIds.length > 0) {
@@ -115,7 +119,9 @@ export function MealDetail() {
         .catch((err: unknown) => {
           if (cancelled) return;
           setNutrientsError(
-            err instanceof Error ? err.message : "Failed to calculate nutrients",
+            err instanceof Error
+              ? err.message
+              : "Failed to calculate nutrients",
           );
           setNutrients(null);
         })
@@ -155,7 +161,9 @@ export function MealDetail() {
       await deleteMeal(id);
       navigate("/meals");
     } catch (err: unknown) {
-      setDeleteError(err instanceof Error ? err.message : "Failed to delete meal");
+      setDeleteError(
+        err instanceof Error ? err.message : "Failed to delete meal",
+      );
     } finally {
       setDeleting(false);
     }
@@ -200,7 +208,9 @@ export function MealDetail() {
         <Button variant="outline" onClick={() => navigate(`/meals/${id}/edit`)}>
           Edit
         </Button>
-        <Button color="red" onClick={() => setShowConfirm(true)}>Delete</Button>
+        <Button color="red" onClick={() => setShowConfirm(true)}>
+          Delete
+        </Button>
         <Modal
           opened={showConfirm}
           onClose={() => {
@@ -243,7 +253,9 @@ export function MealDetail() {
             {meal.components.map((comp) => (
               <Paper key={comp.id} p="sm">
                 <Group justify="space-between" gap="md">
-                  <Text fw={700}>{productNames[comp.item.id] ?? "Loading..."}</Text>
+                  <Text fw={700}>
+                    {productNames[comp.item.id] ?? "Loading..."}
+                  </Text>
                   <Text c="dimmed" size="sm">
                     {comp.quantity.amount} {comp.quantity.unit}
                   </Text>
@@ -271,7 +283,8 @@ export function MealDetail() {
                   units.length > 0
                     ? units.map((u) => ({
                         value: u.code,
-                        label: u.name === u.code ? u.code : `${u.name} (${u.code})`,
+                        label:
+                          u.name === u.code ? u.code : `${u.name} (${u.code})`,
                       }))
                     : [{ value: logUnit, label: logUnit }]
                 }
@@ -284,8 +297,12 @@ export function MealDetail() {
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Nutrient</Table.Th>
-                    <Table.Th ta="right" w={96}>Amount</Table.Th>
-                    <Table.Th ta="right" w={96}>Unit</Table.Th>
+                    <Table.Th ta="right" w={96}>
+                      Amount
+                    </Table.Th>
+                    <Table.Th ta="right" w={96}>
+                      Unit
+                    </Table.Th>
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>

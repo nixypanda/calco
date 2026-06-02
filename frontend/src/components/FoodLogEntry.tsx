@@ -163,7 +163,12 @@ export function FoodLogEntry({
     }
 
     if (food && food.nutrients && food.nutrients.length > 0) {
-      return scaleNutrients(food.nutrients, amount, values.unit, food.servings ?? []);
+      return scaleNutrients(
+        food.nutrients,
+        amount,
+        values.unit,
+        food.servings ?? [],
+      );
     }
 
     return (snapshot?.nutrients ?? []).map((n) => ({
@@ -247,7 +252,9 @@ export function FoodLogEntry({
           <NativeSelect
             aria-label="Meal slot"
             value={values.slot}
-            onChange={(e) => setValues((prev) => ({ ...prev, slot: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, slot: e.target.value }))
+            }
             data={[
               { value: "__none__", label: "None" },
               ...MEAL_SLOTS.map((s) => ({ value: s.value, label: s.label })),
@@ -265,7 +272,9 @@ export function FoodLogEntry({
           <NativeSelect
             aria-label="Unit"
             value={values.unit}
-            onChange={(e) => setValues((prev) => ({ ...prev, unit: e.target.value }))}
+            onChange={(e) =>
+              setValues((prev) => ({ ...prev, unit: e.target.value }))
+            }
             data={unitOptions.map((u) => ({
               value: u.code,
               label: u.name === u.code ? u.code : `${u.name} (${u.code})`,
@@ -277,7 +286,9 @@ export function FoodLogEntry({
             type="text"
             value={values.notes}
             placeholder="Optional notes"
-            onChange={(e) => setValues((v) => ({ ...v, notes: e.target.value }))}
+            onChange={(e) =>
+              setValues((v) => ({ ...v, notes: e.target.value }))
+            }
           />
         </FieldRow>
         <Group
@@ -305,7 +316,10 @@ export function FoodLogEntry({
         <Stack gap="sm">
           <Title order={2}>Macro Breakdown</Title>
           <MacroBreakdown
-            nutrients={computedNutrients.map((n) => ({ code: n.code, amount: n.amount }))}
+            nutrients={computedNutrients.map((n) => ({
+              code: n.code,
+              amount: n.amount,
+            }))}
           />
         </Stack>
 
