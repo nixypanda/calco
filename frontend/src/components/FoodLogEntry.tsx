@@ -24,6 +24,16 @@ import { scaleNutrients } from "@/lib/scaleNutrients";
 import type { ProductDetail, UnitItem } from "@/api/foods";
 import type { NutrientSnapshotDto } from "@/api/logs";
 
+function formatStep(n: number): string {
+  if (Number.isInteger(n)) return String(n);
+  const fixed = n.toFixed(2);
+  if (fixed.includes(".")) {
+    const trimmed = fixed.replace(/0+$/, "").replace(/\.$/, "");
+    if (trimmed && trimmed !== "-") return trimmed;
+  }
+  return fixed;
+}
+
 function NumberStepper({
   value,
   onChange,
@@ -40,7 +50,7 @@ function NumberStepper({
     const current = isFinite(n) ? n : 0;
     let next = current + delta;
     if (min != null && next < min) next = min;
-    onChange(Number.isInteger(next) ? String(next) : next.toFixed(2).replace(/\.?0+$/, ""));
+    onChange(formatStep(next));
   };
   return (
     <Group gap="xs" justify="flex-end" align="center">

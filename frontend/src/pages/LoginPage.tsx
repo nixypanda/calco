@@ -1,5 +1,5 @@
 import { useState, type SubmitEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import {
   Paper,
@@ -20,20 +20,20 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (isAuthenticated) {
-    navigate(isAdmin ? "/admin" : "/", { replace: true });
-    return null;
+    return <Navigate to={isAdmin ? "/admin" : "/"} replace />;
   }
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-    if (!username.trim() || !password) {
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername || !password) {
       setError("Username and password are required");
       return;
     }
     setSubmitting(true);
     try {
-      await login(username, password);
+      await login(trimmedUsername, password);
       navigate("/", { replace: true });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");

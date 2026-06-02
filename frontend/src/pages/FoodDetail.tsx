@@ -8,6 +8,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { FoodLogEntry } from "@/components/FoodLogEntry";
+import { localISOString } from "@/lib/datetime";
 
 export function FoodDetail() {
   const { id } = useParams<{ id: string }>();
@@ -99,7 +100,7 @@ export function FoodDetail() {
       submittingLabel="Logging..."
       onSubmit={async (v) => {
         await createLog({
-          logged_at: new Date().toISOString(),
+          logged_at: localISOString(),
           meal_slot: v.slot === "__none__" ? undefined : v.slot,
           item: { type: "product", id },
           quantity: { amount: v.amount, unit: v.unit },

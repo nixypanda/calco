@@ -1,5 +1,5 @@
 import { useState, type SubmitEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 import {
   Paper,
@@ -21,8 +21,7 @@ export function BootstrapAdminSetup() {
   const [submitting, setSubmitting] = useState(false);
 
   if (isAdmin) {
-    navigate("/admin", { replace: true });
-    return null;
+    return <Navigate to="/admin" replace />;
   }
 
   const handleSubmit = async (e: SubmitEvent<HTMLFormElement>) => {

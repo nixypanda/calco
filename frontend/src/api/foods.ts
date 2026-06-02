@@ -104,15 +104,20 @@ export interface CreateFoodResponse {
   id: string;
 }
 
-export async function searchFoods(query: string): Promise<SearchResponse> {
+export async function searchFoods(
+  query: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<SearchResponse> {
   return apiRequest<SearchResponse>(
     `/api/foods/search?q=${encodeURIComponent(query)}`,
+    { signal: options.signal },
   );
 }
 
 export async function listCategorySuggestions(
   query: string,
   limit = 10,
+  options: { signal?: AbortSignal } = {},
 ): Promise<CategorySuggestionResponse> {
   const params = new URLSearchParams({
     q: query,
@@ -120,6 +125,7 @@ export async function listCategorySuggestions(
   });
   return apiRequest<CategorySuggestionResponse>(
     `/api/foods/categories?${params.toString()}`,
+    { signal: options.signal },
   );
 }
 

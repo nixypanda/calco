@@ -1,4 +1,4 @@
-import { useState, useEffect, type SubmitEvent } from "react";
+import { useState, useEffect, useCallback, type SubmitEvent } from "react";
 import { useAuth } from "../hooks/AuthContext";
 import {
   listUsers,
@@ -38,7 +38,7 @@ export function AdminDashboard() {
     password: string;
   } | null>(null);
 
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       const resp = await listUsers();
       setUsers(resp.users);
@@ -47,11 +47,11 @@ export function AdminDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchUsers();
-  }, []);
+  }, [fetchUsers]);
 
   const handleCreate = async (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();

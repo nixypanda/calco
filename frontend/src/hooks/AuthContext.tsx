@@ -16,6 +16,7 @@ import type {
   IdentityResponse,
   ProfileResponse,
 } from "../api/auth";
+import { UNAUTHORIZED_EVENT } from "../api/client";
 
 export interface AuthState {
   identity: IdentityResponse | null;
@@ -54,6 +55,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
+
+  useEffect(() => {
+    const handler = () => {
+      setIdentity(null);
+      setProfile(null);
+      if (window.location.pathname !== "/login") {
+        window.location.assign("/login");
+      }
+    };
+    window.addEventListener(UNAUTHORIZED_EVENT, handler);
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, handler);
+  }, []);
 
   const login = useCallback(async (username: string, password: string) => {
     const resp = await apiLogin(username, password);

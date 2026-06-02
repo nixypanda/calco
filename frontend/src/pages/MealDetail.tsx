@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { getMeal, deleteMeal, getMealNutrients } from "../api/meals";
-import { getFoodDetail } from "../api/foods";
+import { getFoodDetail, listUnits } from "../api/foods";
+import type { UnitItem } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { MealResponse, MealNutritionResponse } from "../api/meals";
 import {
@@ -21,6 +22,7 @@ import {
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
+import { localISOString } from "@/lib/datetime";
 
 export function MealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -32,7 +34,8 @@ export function MealDetail() {
   const [error, setError] = useState("");
 
   const [logAmount, setLogAmount] = useState("100");
-  const [logUnit] = useState("g");
+  const [logUnit, setLogUnit] = useState("g");
+  const [units, setUnits] = useState<UnitItem[]>([]);
   const [nutrients, setNutrients] = useState<MealNutritionResponse | null>(null);
   const [nutrientsLoading, setNutrientsLoading] = useState(false);
   const [nutrientsError, setNutrientsError] = useState("");
@@ -81,18 +84,49 @@ export function MealDetail() {
     fetchMeal();
   }, [fetchMeal]);
 
-  const handleCalculate = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
+    listUnits()
+      .then((u) => {
+        if (!cancelled) setUnits(u.items);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!id) return;
+    const amount = parseFloat(logAmount);
+    if (!isFinite(amount) || amount <= 0) {
+      setNutrients(null);
+      setNutrientsError("");
+      return;
+    }
+    let cancelled = false;
     setNutrientsLoading(true);
     setNutrientsError("");
-    try {
-      const result = await getMealNutrients(id, logAmount, logUnit);
-      setNutrients(result);
-    } catch (err: unknown) {
-      setNutrientsError(err instanceof Error ? err.message : "Failed to calculate nutrients");
-    } finally {
-      setNutrientsLoading(false);
-    }
+    const timer = setTimeout(() => {
+      getMealNutrients(id, logAmount, logUnit)
+        .then((result) => {
+          if (!cancelled) setNutrients(result);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setNutrientsError(
+            err instanceof Error ? err.message : "Failed to calculate nutrients",
+          );
+          setNutrients(null);
+        })
+        .finally(() => {
+          if (!cancelled) setNutrientsLoading(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [id, logAmount, logUnit]);
 
   const handleLog = useCallback(async () => {
@@ -101,9 +135,7 @@ export function MealDetail() {
     setLogError("");
     try {
       await createLog({
-        logged_at: new Date().toISOString(),
-        meal_slot: undefined,
-        notes: undefined,
+        logged_at: localISOString(),
         item: { type: "meal", id },
         quantity: { amount: logAmount, unit: logUnit },
       });
@@ -234,41 +266,43 @@ export function MealDetail() {
               />
               <NativeSelect
                 value={logUnit}
-                disabled
-                data={[{ value: "g", label: "g" }]}
-                w={128}
+                onChange={(e) => setLogUnit(e.target.value)}
+                data={
+                  units.length > 0
+                    ? units.map((u) => ({
+                        value: u.code,
+                        label: u.name === u.code ? u.code : `${u.name} (${u.code})`,
+                      }))
+                    : [{ value: logUnit, label: logUnit }]
+                }
+                w={160}
               />
-              <Button onClick={handleCalculate} disabled={nutrientsLoading}>
-                {nutrientsLoading ? "..." : "Calculate"}
-              </Button>
             </Group>
             {nutrientsError && <ErrorBanner message={nutrientsError} />}
             {nutrients && (
-              <>
-                <Table>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Nutrient</Table.Th>
-                      <Table.Th ta="right" w={96}>Amount</Table.Th>
-                      <Table.Th ta="right" w={96}>Unit</Table.Th>
+              <Table>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Nutrient</Table.Th>
+                    <Table.Th ta="right" w={96}>Amount</Table.Th>
+                    <Table.Th ta="right" w={96}>Unit</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {nutrients.nutrients.map((n) => (
+                    <Table.Tr key={n.code}>
+                      <Table.Td>{n.code}</Table.Td>
+                      <Table.Td ta="right">{n.amount}</Table.Td>
+                      <Table.Td ta="right">{n.unit}</Table.Td>
                     </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {nutrients.nutrients.map((n) => (
-                      <Table.Tr key={n.code}>
-                        <Table.Td>{n.code}</Table.Td>
-                        <Table.Td ta="right">{n.amount}</Table.Td>
-                        <Table.Td ta="right">{n.unit}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-                <Button onClick={handleLog} disabled={logging}>
-                  {logging ? "Logging..." : "Log Meal"}
-                </Button>
-                {logError && <ErrorBanner message={logError} />}
-              </>
+                  ))}
+                </Table.Tbody>
+              </Table>
             )}
+            <Button onClick={handleLog} disabled={logging || nutrientsLoading}>
+              {logging ? "Logging..." : "Log Meal"}
+            </Button>
+            {logError && <ErrorBanner message={logError} />}
           </Stack>
         </Stack>
       </Stack>

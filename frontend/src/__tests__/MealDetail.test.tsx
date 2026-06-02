@@ -10,6 +10,7 @@ const mockGetMeal = vi.fn();
 const mockDeleteMeal = vi.fn();
 const mockGetMealNutrients = vi.fn();
 const mockGetFoodDetail = vi.fn();
+const mockListUnits = vi.fn();
 const mockCreateLog = vi.fn();
 
 vi.mock("../api/auth", () => ({
@@ -30,6 +31,7 @@ vi.mock("../api/meals", () => ({
 
 vi.mock("../api/foods", () => ({
   getFoodDetail: (...args: unknown[]) => mockGetFoodDetail(...args),
+  listUnits: (...args: unknown[]) => mockListUnits(...args),
 }));
 
 vi.mock("../api/logs", () => ({
@@ -84,6 +86,13 @@ beforeEach(() => {
   });
   mockGetMeal.mockResolvedValue(mockMeal);
   mockGetFoodDetail.mockResolvedValue({ id: "p1", name: "Oats" });
+  mockListUnits.mockResolvedValue({
+    items: [
+      { code: "g", name: "gram", kind: "mass" },
+      { code: "ml", name: "milliliter", kind: "volume" },
+    ],
+  });
+  mockGetMealNutrients.mockResolvedValue(mockNutrients);
 });
 
 describe("MealDetail", () => {
@@ -131,18 +140,11 @@ describe("MealDetail", () => {
     });
 
     expect(screen.getByText("Log this meal")).toBeInTheDocument();
-    expect(screen.getByText("Calculate")).toBeInTheDocument();
+    expect(screen.getByText("Log Meal")).toBeInTheDocument();
   });
 
   it("calculates and shows nutrients", async () => {
-    mockGetMealNutrients.mockResolvedValue(mockNutrients);
     renderAtDetail();
-
-    await waitFor(() => {
-      expect(screen.getByText("Oatmeal Breakfast")).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByText("Calculate"));
 
     await waitFor(() => {
       expect(screen.getByText("ENERGY_KCAL")).toBeInTheDocument();
@@ -153,18 +155,15 @@ describe("MealDetail", () => {
   });
 
   it("logs meal and navigates to diary", async () => {
-    mockGetMealNutrients.mockResolvedValue(mockNutrients);
     mockCreateLog.mockResolvedValue({ id: "log-1" });
     renderAtDetail();
 
     await waitFor(() => {
-      expect(screen.getByText("Oatmeal Breakfast")).toBeInTheDocument();
+      expect(screen.getByText("Log Meal")).toBeInTheDocument();
     });
 
-    await userEvent.click(screen.getByText("Calculate"));
-
     await waitFor(() => {
-      expect(screen.getByText("Log Meal")).toBeInTheDocument();
+      expect(screen.getByText("ENERGY_KCAL")).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByText("Log Meal"));

@@ -87,22 +87,26 @@ export function SearchQueryInput({
     : "";
 
   useEffect(() => {
-    let cancelled = false;
     if (!prefix) {
       setCategories([]);
       return;
     }
-
-    listCategorySuggestions(categoryQuery, 8)
-      .then((res) => {
-        if (!cancelled) setCategories(res.items);
-      })
-      .catch(() => {
-        if (!cancelled) setCategories([]);
-      });
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      listCategorySuggestions(categoryQuery, 8, { signal: controller.signal })
+        .then((res) => {
+          if (!controller.signal.aborted) setCategories(res.items);
+        })
+        .catch((err: unknown) => {
+          if (controller.signal.aborted) return;
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setCategories([]);
+        });
+    }, 250);
 
     return () => {
-      cancelled = true;
+      clearTimeout(timer);
+      controller.abort();
     };
   }, [categoryQuery, prefix]);
 

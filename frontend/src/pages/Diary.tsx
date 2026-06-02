@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
@@ -203,56 +203,61 @@ export function Diary() {
   const dateStr = formatDate(currentDate);
   const displayName = profile?.display_name ?? identity?.username ?? "User";
 
-  const fetchData = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     setError("");
-    try {
-      const [logRes, summaryRes] = await Promise.all([
-        listLogs(dateStr, dateStr),
-        getSummary(dateStr, dateStr, SUMMARY_CODES),
-      ]);
-      setLogs(logRes.items);
-      setSummary(summaryRes.totals);
-
-      const productIds = [
-        ...new Set(
-          logRes.items.filter((l) => l.item.type === "product").map((l) => l.item.id),
-        ),
-      ];
-      const mealIds = [
-        ...new Set(
-          logRes.items.filter((l) => l.item.type === "meal").map((l) => l.item.id),
-        ),
-      ];
-      if (productIds.length > 0 || mealIds.length > 0) {
-        const details = await Promise.all([
-          ...productIds.map((id) =>
-            getFoodDetail(id)
-              .then((d) => ({ id: d.id, name: d.name }))
-              .catch(() => ({ id, name: "Unknown food" })),
-          ),
-          ...mealIds.map((id) =>
-            getMeal(id)
-              .then((m) => ({ id: m.id, name: m.name }))
-              .catch(() => ({ id, name: "Unknown meal" })),
-          ),
+    (async () => {
+      try {
+        const [logRes, summaryRes] = await Promise.all([
+          listLogs(dateStr, dateStr),
+          getSummary(dateStr, dateStr, SUMMARY_CODES),
         ]);
-        const nameMap: Record<string, string> = {};
-        for (const d of details) nameMap[d.id] = d.name;
-        setFoodNames(nameMap);
-      } else {
-        setFoodNames({});
-      }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load diary");
-    } finally {
-      setLoading(false);
-    }
-  }, [dateStr]);
+        if (cancelled) return;
+        setLogs(logRes.items);
+        setSummary(summaryRes.totals);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+        const productIds = [
+          ...new Set(
+            logRes.items.filter((l) => l.item.type === "product").map((l) => l.item.id),
+          ),
+        ];
+        const mealIds = [
+          ...new Set(
+            logRes.items.filter((l) => l.item.type === "meal").map((l) => l.item.id),
+          ),
+        ];
+        if (productIds.length > 0 || mealIds.length > 0) {
+          const details = await Promise.all([
+            ...productIds.map((id) =>
+              getFoodDetail(id)
+                .then((d) => ({ id: d.id, name: d.name }))
+                .catch(() => ({ id, name: "Unknown food" })),
+            ),
+            ...mealIds.map((id) =>
+              getMeal(id)
+                .then((m) => ({ id: m.id, name: m.name }))
+                .catch(() => ({ id, name: "Unknown meal" })),
+            ),
+          ]);
+          if (cancelled) return;
+          const nameMap: Record<string, string> = {};
+          for (const d of details) nameMap[d.id] = d.name;
+          setFoodNames(nameMap);
+        } else {
+          setFoodNames({});
+        }
+      } catch (err: unknown) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Failed to load diary");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dateStr]);
 
   const goPrev = () => {
     const prev = new Date(currentDate);

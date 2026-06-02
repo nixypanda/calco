@@ -43,20 +43,25 @@ export function FoodSearch() {
     setLoading(true);
     setError("");
 
+    const controller = new AbortController();
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await searchFoods(trimmed);
+        const res = await searchFoods(trimmed, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         setResults(res.items);
       } catch (err: unknown) {
+        if (controller.signal.aborted) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Search failed");
         setResults([]);
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }, 300);
 
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      controller.abort();
     };
   }, [query]);
 

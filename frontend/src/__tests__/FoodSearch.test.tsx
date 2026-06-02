@@ -129,7 +129,7 @@ describe("FoodSearch", () => {
     await userEvent.type(input, "chicken");
 
     await waitFor(() => {
-      expect(mockSearchFoods).toHaveBeenCalledWith("chicken");
+      expect(mockSearchFoods).toHaveBeenCalledWith("chicken", expect.any(Object));
     });
   });
 
@@ -262,7 +262,7 @@ describe("FoodSearch", () => {
     await userEvent.type(input, "category:foo");
 
     await waitFor(() => {
-      expect(mockListCategorySuggestions).toHaveBeenCalledWith("foo", 8);
+      expect(mockListCategorySuggestions).toHaveBeenCalledWith("foo", 8, expect.any(Object));
     });
 
     await userEvent.tab();
