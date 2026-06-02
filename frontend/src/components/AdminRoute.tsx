@@ -1,5 +1,5 @@
-import { Navigate } from "react-router-dom";
 import { Center, Text } from "@mantine/core";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
 
 export function AdminRoute({ children }: { children: React.ReactNode }) {

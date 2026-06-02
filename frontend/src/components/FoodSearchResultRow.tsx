@@ -1,5 +1,5 @@
+import { Badge, Group, Stack, Text, UnstyledButton } from "@mantine/core";
 import type { SearchResult } from "@/api/foods";
-import { UnstyledButton, Group, Stack, Text, Badge } from "@mantine/core";
 
 interface FoodSearchResultRowProps {
   item: SearchResult;

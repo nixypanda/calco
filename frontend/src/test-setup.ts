@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
-import React from "react";
 import { MantineProvider } from "@mantine/core";
+import React from "react";
+import { vi } from "vitest";
 
 // Radix Select / DropdownMenu rely on PointerEvent APIs that jsdom doesn't implement.
 if (typeof Element !== "undefined") {

@@ -61,7 +61,7 @@ export interface ComponentRow {
 
 export function parseAmount(val: string): number {
   const n = parseFloat(val);
-  if (!isFinite(n) || n < 0) return 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
   return n;
 }
 
@@ -119,14 +119,14 @@ export function computeGrams(
   unit: string,
   servings: ServingEntry[],
 ): number | null {
-  if (!isFinite(amount) || amount < 0) return null;
+  if (!Number.isFinite(amount) || amount < 0) return null;
   const u = unit.toLowerCase();
   if (u === "g" || u === "gram" || u === "grams") return amount;
   const match = servings.find((s) => s.unit.toLowerCase() === u);
   if (!match) return null;
   const q = parseFloat(match.quantity);
   const g = parseFloat(match.grams);
-  if (!isFinite(q) || q <= 0 || !isFinite(g)) return null;
+  if (!Number.isFinite(q) || q <= 0 || !Number.isFinite(g)) return null;
   return amount * (g / q);
 }
 

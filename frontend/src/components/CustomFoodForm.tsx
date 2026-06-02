@@ -1,20 +1,20 @@
-import { useState, type SubmitEvent } from "react";
 import {
   ActionIcon,
   Button,
-  TextInput,
-  NativeSelect,
   Group,
+  NativeSelect,
   Stack,
+  TextInput,
   Title,
 } from "@mantine/core";
+import { type SubmitEvent, useState } from "react";
+import type { CreateFoodRequest, NutrientItem, UnitItem } from "@/api/foods";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import {
-  parseCategoriesInput,
   type NutrientRow,
+  parseCategoriesInput,
   type ServingRow,
 } from "@/lib/nutrition";
-import type { CreateFoodRequest, NutrientItem, UnitItem } from "@/api/foods";
 
 export interface CustomFoodFormValues {
   name: string;
@@ -238,6 +238,7 @@ export function CustomFoodForm({
               </Button>
             </Group>
             {nutrientRows.map((row, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no stable id; index matches form state
               <Group key={i} gap="xs" align="center">
                 <NativeSelect
                   value={row.code}
@@ -287,6 +288,7 @@ export function CustomFoodForm({
               </Button>
             </Group>
             {servingRows.map((row, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: rows have no stable id; index matches form state
               <Group key={i} gap="xs" align="center" wrap="wrap">
                 <TextInput
                   placeholder="Label (e.g. scoop)"

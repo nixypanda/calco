@@ -1,37 +1,37 @@
 import {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
+  ActionIcon,
+  Box,
+  Button,
+  Container,
+  Group,
+  NativeSelect,
+  Paper,
+  Skeleton,
+  Stack,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import {
   type SubmitEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { createMeal, updateMeal, getMeal } from "../api/meals";
-import { searchFoods, getFoodDetail } from "../api/foods";
-import type { SearchResult } from "../api/foods";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
+import { PageHeader } from "@/components/PageHeader";
+import { SearchQueryInput } from "@/components/SearchQueryInput";
 import {
-  UNITS,
   type ComponentRow,
   createEmptyRow,
   nextRowId,
+  UNITS,
 } from "@/lib/nutrition";
-import {
-  ActionIcon,
-  Button,
-  Skeleton,
-  TextInput,
-  NativeSelect,
-  Container,
-  Group,
-  Stack,
-  Title,
-  Paper,
-  Box,
-} from "@mantine/core";
-import { ErrorBanner } from "@/components/ErrorBanner";
-import { PageHeader } from "@/components/PageHeader";
-import { SearchQueryInput } from "@/components/SearchQueryInput";
-import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
+import type { SearchResult } from "../api/foods";
+import { getFoodDetail, searchFoods } from "../api/foods";
+import { createMeal, getMeal, updateMeal } from "../api/meals";
 
 function UnitSelect({
   value,

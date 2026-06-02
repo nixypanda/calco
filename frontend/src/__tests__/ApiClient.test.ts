@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError, apiRequest } from "../api/client";
+import { type ApiError, apiRequest } from "../api/client";
 
 describe("apiRequest", () => {
   beforeEach(() => {

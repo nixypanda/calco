@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { listCategorySuggestions } from "../api/foods";
-import type { CategorySuggestion } from "../api/foods";
 import {
-  TextInput,
+  Badge,
+  Group,
   Paper,
   Stack,
-  UnstyledButton,
-  Group,
   Text,
-  Badge,
+  TextInput,
+  UnstyledButton,
 } from "@mantine/core";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CategorySuggestion } from "../api/foods";
+import { listCategorySuggestions } from "../api/foods";
 
 interface SearchQueryInputProps {
   value: string;

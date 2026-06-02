@@ -1,19 +1,19 @@
 import {
   createContext,
-  useContext,
-  useState,
-  useCallback,
-  useEffect,
   type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
 } from "react";
+import type { IdentityResponse, ProfileResponse } from "../api/auth";
 import {
+  createAdmin as apiCreateAdmin,
+  getSession as apiGetSession,
   login as apiLogin,
   logout as apiLogout,
-  getSession as apiGetSession,
-  createAdmin as apiCreateAdmin,
   checkBootstrapStatus,
 } from "../api/auth";
-import type { IdentityResponse, ProfileResponse } from "../api/auth";
 import { UNAUTHORIZED_EVENT } from "../api/client";
 
 export interface AuthState {

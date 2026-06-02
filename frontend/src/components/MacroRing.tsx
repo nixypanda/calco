@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Box, Stack } from "@mantine/core";
+import type { ReactNode } from "react";
 
 interface Segment {
   value: number;
@@ -27,12 +27,12 @@ export function MacroRing({
   const denom = total ?? sum;
 
   let offset = 0;
-  const arcs = segments.map((seg, i) => {
+  const arcs = segments.map((seg) => {
     const length =
       denom > 0 ? Math.min(seg.value / denom, 1) * circumference : 0;
     const arc = (
       <circle
-        key={i}
+        key={seg.color}
         cx={size / 2}
         cy={size / 2}
         r={radius}
@@ -55,7 +55,7 @@ export function MacroRing({
       display="inline-flex"
       style={{ width: size, height: size }}
     >
-      <svg width={size} height={size}>
+      <svg width={size} height={size} role="img" aria-label="Macro ring">
         <circle
           cx={size / 2}
           cy={size / 2}

@@ -8,7 +8,7 @@ interface NutrientRow {
 
 function formatAmount(value: number | string): string {
   const n = typeof value === "number" ? value : parseFloat(value);
-  if (!isFinite(n)) return "-";
+  if (!Number.isFinite(n)) return "-";
   return n.toFixed(1);
 }
 

@@ -1,29 +1,29 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Minus, Plus } from "lucide-react";
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Button,
-  TextInput,
-  Paper,
-  NativeSelect,
   Container,
   Group,
+  NativeSelect,
+  Paper,
   Stack,
   Text,
+  TextInput,
   Title,
-  Anchor,
 } from "@mantine/core";
+import { Minus, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import type { ProductDetail, UnitItem } from "@/api/foods";
+import type { NutrientSnapshotDto } from "@/api/logs";
 import { ErrorBanner } from "@/components/ErrorBanner";
-import { PageHeader } from "@/components/PageHeader";
 import { FieldRow } from "@/components/FieldRow";
 import { MacroBreakdown } from "@/components/MacroBreakdown";
 import { NutrientsTable } from "@/components/NutrientsTable";
-import { scaleNutrients, MEAL_SLOTS } from "@/lib/nutrition";
+import { PageHeader } from "@/components/PageHeader";
+import { MEAL_SLOTS, scaleNutrients } from "@/lib/nutrition";
 import { formatTimestamp } from "@/lib/time";
-import type { ProductDetail, UnitItem } from "@/api/foods";
-import type { NutrientSnapshotDto } from "@/api/logs";
 
 function formatStep(n: number): string {
   if (Number.isInteger(n)) return String(n);
@@ -48,7 +48,7 @@ function NumberStepper({
 }) {
   const adjust = (delta: number) => {
     const n = parseFloat(value);
-    const current = isFinite(n) ? n : 0;
+    const current = Number.isFinite(n) ? n : 0;
     let next = current + delta;
     if (min != null && next < min) next = min;
     onChange(formatStep(next));
@@ -148,7 +148,7 @@ export function FoodLogEntry({
 
   const computedNutrients = useMemo(() => {
     const parsed = parseFloat(values.amount);
-    const amount = isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    const amount = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 
     if (snapshot && snapshot.unit === values.unit) {
       const base = parseFloat(snapshot.amount) || 0;
@@ -162,7 +162,7 @@ export function FoodLogEntry({
       }
     }
 
-    if (food && food.nutrients && food.nutrients.length > 0) {
+    if (food?.nutrients && food.nutrients.length > 0) {
       return scaleNutrients(
         food.nutrients,
         amount,

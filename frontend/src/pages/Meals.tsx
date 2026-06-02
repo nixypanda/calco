@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { Button, Container, Paper, Skeleton, Stack, Text } from "@mantine/core";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listMeals } from "../api/meals";
-import type { MealResponse } from "../api/meals";
-import { Button, Skeleton, Paper, Container, Stack, Text } from "@mantine/core";
+import { EmptyState } from "@/components/EmptyState";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
 import { plural } from "@/lib/plural";
+import type { MealResponse } from "../api/meals";
+import { listMeals } from "../api/meals";
 
 export function Meals() {
   const navigate = useNavigate();

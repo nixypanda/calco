@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { Group } from "@mantine/core";
+import type { ReactNode } from "react";
 
 interface FieldRowProps {
   label: ReactNode;

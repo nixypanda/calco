@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseAmount,
-  getNutrientAmount,
-  getCalories,
-  getNutrientVal,
-  getMacroTotals,
   computeGrams,
-  scaleNutrients,
-  parseCategoriesInput,
-  formatCategoriesInput,
   createEmptyRow,
+  formatCategoriesInput,
+  getCalories,
+  getMacroTotals,
+  getNutrientAmount,
+  getNutrientVal,
   nextRowId,
+  parseAmount,
+  parseCategoriesInput,
+  scaleNutrients,
 } from "@/lib/nutrition";
 
 describe("parseAmount", () => {

@@ -1,20 +1,20 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Center, Text } from "@mantine/core";
-import { AuthProvider, useAuth } from "./hooks/AuthContext";
-import { ProtectedRoute } from "./components/ProtectedRoute";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminRoute } from "./components/AdminRoute";
-import { BootstrapAdminSetup } from "./pages/BootstrapAdminSetup";
-import { LoginPage } from "./pages/LoginPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AuthProvider, useAuth } from "./hooks/AuthContext";
 import { AdminDashboard } from "./pages/AdminDashboard";
-import { Diary } from "./pages/Diary";
-import { FoodLogDetail } from "./pages/FoodLogDetail";
-import { FoodSearch } from "./pages/FoodSearch";
-import { FoodDetail } from "./pages/FoodDetail";
+import { BootstrapAdminSetup } from "./pages/BootstrapAdminSetup";
 import { CustomFoodCreate } from "./pages/CustomFoodCreate";
 import { CustomFoodEdit } from "./pages/CustomFoodEdit";
-import { Meals } from "./pages/Meals";
+import { Diary } from "./pages/Diary";
+import { FoodDetail } from "./pages/FoodDetail";
+import { FoodLogDetail } from "./pages/FoodLogDetail";
+import { FoodSearch } from "./pages/FoodSearch";
+import { LoginPage } from "./pages/LoginPage";
 import { MealDetail } from "./pages/MealDetail";
 import { MealForm } from "./pages/MealForm";
+import { Meals } from "./pages/Meals";
 
 function LoadingScreen() {
   return (

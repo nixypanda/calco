@@ -1,5 +1,5 @@
-import { apiRequest } from "./client";
 import type { LoginSessionResponse } from "./auth";
+import { apiRequest } from "./client";
 
 export interface UserItem {
   id: string;

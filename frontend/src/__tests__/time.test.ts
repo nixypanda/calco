@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  localISOString,
-  formatDate,
   displayDate,
-  todayString,
+  formatDate,
   formatTimestamp,
+  localISOString,
+  todayString,
 } from "@/lib/time";
 
 describe("localISOString", () => {

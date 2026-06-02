@@ -1,21 +1,21 @@
-import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { searchFoods } from "../api/foods";
-import type { SearchResult } from "../api/foods";
 import {
-  Paper,
+  Box,
   Button,
-  Skeleton,
   Container,
   Group,
+  Paper,
+  Skeleton,
   Stack,
-  Box,
 } from "@mantine/core";
-import { ErrorBanner } from "@/components/ErrorBanner";
-import { PageHeader } from "@/components/PageHeader";
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
-import { SearchQueryInput } from "@/components/SearchQueryInput";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
+import { PageHeader } from "@/components/PageHeader";
+import { SearchQueryInput } from "@/components/SearchQueryInput";
+import type { SearchResult } from "../api/foods";
+import { searchFoods } from "../api/foods";
 
 export function FoodSearch() {
   const navigate = useNavigate();

@@ -1,40 +1,40 @@
-import { useState, useEffect, useRef } from "react";
-import { Moon, Sun } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../hooks/AuthContext";
-import { listLogs, getSummary } from "../api/logs";
-import { getFoodDetail } from "../api/foods";
-import { getMeal } from "../api/meals";
-import type { LogResponse, SummaryEntry } from "../api/logs";
 import {
   ActionIcon,
-  Button,
-  Skeleton,
-  Paper,
-  Menu,
   Avatar,
+  Box,
+  Button,
   Container,
   Group,
-  Stack,
+  Menu,
+  Paper,
   SimpleGrid,
+  Skeleton,
+  Stack,
   Text,
   Title,
   UnstyledButton,
-  Box,
 } from "@mantine/core";
-import { ErrorBanner } from "@/components/ErrorBanner";
+import { Moon, Sun } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { MacroRing } from "@/components/MacroRing";
 import {
-  MEAL_SLOTS,
-  MACRO_COLORS,
-  SUMMARY_CODES,
   DEFAULT_CALORIE_GOAL,
   getCalories,
   getMacroTotals,
   getNutrientVal,
+  MACRO_COLORS,
+  MEAL_SLOTS,
+  SUMMARY_CODES,
 } from "@/lib/nutrition";
-import { formatDate, displayDate, todayString } from "@/lib/time";
+import { displayDate, formatDate, todayString } from "@/lib/time";
+import { getFoodDetail } from "../api/foods";
+import type { LogResponse, SummaryEntry } from "../api/logs";
+import { getSummary, listLogs } from "../api/logs";
+import { getMeal } from "../api/meals";
+import { useAuth } from "../hooks/AuthContext";
 
 function NutrientRing({
   label,
@@ -114,8 +114,8 @@ export function Diary() {
   const getInitialDate = (): Date => {
     const dateParam = searchParams.get("date");
     if (dateParam) {
-      const d = new Date(dateParam + "T00:00:00");
-      if (!isNaN(d.getTime())) return d;
+      const d = new Date(`${dateParam}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) return d;
     }
     const now = new Date();
     now.setHours(0, 0, 0, 0);

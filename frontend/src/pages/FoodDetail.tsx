@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { Container, Skeleton, Stack } from "@mantine/core";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { FoodLogEntry } from "@/components/FoodLogEntry";
+import { PageHeader } from "@/components/PageHeader";
+import { localISOString } from "@/lib/time";
+import type { ProductDetail, UnitItem } from "../api/foods";
 import { getFoodDetail, listUnits } from "../api/foods";
 import { createLog } from "../api/logs";
-import type { ProductDetail, UnitItem } from "../api/foods";
-import { Skeleton, Container, Stack } from "@mantine/core";
-import { ErrorBanner } from "@/components/ErrorBanner";
-import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
-import { FoodLogEntry } from "@/components/FoodLogEntry";
-import { localISOString } from "@/lib/time";
 
 export function FoodDetail() {
   const { id } = useParams<{ id: string }>();

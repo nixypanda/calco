@@ -1,24 +1,24 @@
-import { useState, useEffect, useCallback, type SubmitEvent } from "react";
-import { useAuth } from "../hooks/AuthContext";
-import {
-  listUsers,
-  createUser,
-  resetPassword,
-  disableUser,
-  enableUser,
-} from "../api/admin";
-import type { UserItem } from "../api/admin";
 import {
   Button,
-  TextInput,
-  Table,
   Container,
   Group,
   Stack,
-  Title,
+  Table,
   Text,
+  TextInput,
+  Title,
 } from "@mantine/core";
+import { type SubmitEvent, useCallback, useEffect, useState } from "react";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import type { UserItem } from "../api/admin";
+import {
+  createUser,
+  disableUser,
+  enableUser,
+  listUsers,
+  resetPassword,
+} from "../api/admin";
+import { useAuth } from "../hooks/AuthContext";
 
 export function AdminDashboard() {
   const { identity, logout } = useAuth();

@@ -1,4 +1,4 @@
-import { Paper, Group, SimpleGrid, Stack, Text } from "@mantine/core";
+import { Group, Paper, SimpleGrid, Stack, Text } from "@mantine/core";
 import { MacroRing } from "@/components/MacroRing";
 
 const MACRO_COLORS = {
@@ -13,9 +13,10 @@ interface NutrientEntry {
 }
 
 function parseAmount(val: number | string): number {
-  if (typeof val === "number") return isFinite(val) && val >= 0 ? val : 0;
+  if (typeof val === "number")
+    return Number.isFinite(val) && val >= 0 ? val : 0;
   const n = parseFloat(val);
-  return isFinite(n) && n >= 0 ? n : 0;
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 function getNutrientAmount(nutrients: NutrientEntry[], code: string): number {

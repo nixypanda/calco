@@ -1,20 +1,20 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import {
-  getFoodDetail,
-  updateCustomFood,
-  listNutrients,
-  listUnits,
-} from "../api/foods";
-import type { NutrientItem, UnitItem } from "../api/foods";
 import { Container, Skeleton, Stack } from "@mantine/core";
-import { ErrorBanner } from "@/components/ErrorBanner";
-import { PageHeader } from "@/components/PageHeader";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   CustomFoodForm,
   type CustomFoodFormValues,
 } from "@/components/CustomFoodForm";
+import { ErrorBanner } from "@/components/ErrorBanner";
+import { PageHeader } from "@/components/PageHeader";
 import { formatCategoriesInput } from "@/lib/nutrition";
+import type { NutrientItem, UnitItem } from "../api/foods";
+import {
+  getFoodDetail,
+  listNutrients,
+  listUnits,
+  updateCustomFood,
+} from "../api/foods";
 
 export function CustomFoodEdit() {
   const { id } = useParams<{ id: string }>();

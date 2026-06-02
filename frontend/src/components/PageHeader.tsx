@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { ActionIcon, Group, Title } from "@mantine/core";
+import type { ReactNode } from "react";
 
 interface PageHeaderProps {
   title: ReactNode;

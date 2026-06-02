@@ -1,28 +1,28 @@
-import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { getMeal, deleteMeal, getMealNutrients } from "../api/meals";
-import { getFoodDetail, listUnits } from "../api/foods";
-import type { UnitItem } from "../api/foods";
-import { createLog } from "../api/logs";
-import type { MealResponse, MealNutritionResponse } from "../api/meals";
 import {
   Button,
-  TextInput,
-  Paper,
-  Skeleton,
-  NativeSelect,
-  Modal,
-  Table,
   Container,
   Group,
+  Modal,
+  NativeSelect,
+  Paper,
+  Skeleton,
   Stack,
+  Table,
   Text,
+  TextInput,
   Title,
 } from "@mantine/core";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { EmptyState } from "@/components/EmptyState";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
-import { EmptyState } from "@/components/EmptyState";
 import { localISOString } from "@/lib/time";
+import type { UnitItem } from "../api/foods";
+import { getFoodDetail, listUnits } from "../api/foods";
+import { createLog } from "../api/logs";
+import type { MealNutritionResponse, MealResponse } from "../api/meals";
+import { deleteMeal, getMeal, getMealNutrients } from "../api/meals";
 
 export function MealDetail() {
   const { id } = useParams<{ id: string }>();
@@ -103,7 +103,7 @@ export function MealDetail() {
   useEffect(() => {
     if (!id) return;
     const amount = parseFloat(logAmount);
-    if (!isFinite(amount) || amount <= 0) {
+    if (!Number.isFinite(amount) || amount <= 0) {
       setNutrients(null);
       setNutrientsError("");
       return;
