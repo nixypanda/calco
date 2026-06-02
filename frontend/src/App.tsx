@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Center, Text } from "@mantine/core";
 import { AuthProvider, useAuth } from "./hooks/AuthContext";
@@ -16,53 +15,29 @@ import { CustomFoodEdit } from "./pages/CustomFoodEdit";
 import { Meals } from "./pages/Meals";
 import { MealDetail } from "./pages/MealDetail";
 import { MealForm } from "./pages/MealForm";
-import { checkBootstrapStatus } from "./api/auth";
+
+function LoadingScreen() {
+  return (
+    <Center mih="100dvh" p="md">
+      <Text fw={600} c="dimmed">Loading...</Text>
+    </Center>
+  );
+}
 
 function RootRedirect() {
-  const { loading, isAuthenticated, isAdmin } = useAuth();
-  const [status, setStatus] = useState<{
-    loading: boolean;
-    adminExists: boolean;
-  }>({ loading: true, adminExists: true });
+  const { loading, isAuthenticated, isAdmin, adminExists } = useAuth();
 
-  useEffect(() => {
-    checkBootstrapStatus()
-      .then((r) => setStatus({ loading: false, adminExists: r.admin_exists }))
-      .catch(() => setStatus({ loading: false, adminExists: true }));
-  }, []);
-
-  if (loading || status.loading) {
-    return (
-      <Center mih="100dvh" p="md">
-        <Text fw={600} c="dimmed">Loading...</Text>
-      </Center>
-    );
-  }
-
-  if (!status.adminExists) return <Navigate to="/setup" replace />;
+  if (loading) return <LoadingScreen />;
+  if (!adminExists) return <Navigate to="/setup" replace />;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (isAdmin) return <Navigate to="/admin" replace />;
   return <Navigate to="/home" replace />;
 }
 
 function BootstrapGate({ children }: { children: React.ReactNode }) {
-  const { loading, isAuthenticated } = useAuth();
-  const [adminExists, setAdminExists] = useState<boolean | null>(null);
+  const { loading, isAuthenticated, adminExists } = useAuth();
 
-  useEffect(() => {
-    checkBootstrapStatus()
-      .then((r) => setAdminExists(r.admin_exists))
-      .catch(() => setAdminExists(true));
-  }, []);
-
-  if (loading || adminExists === null) {
-    return (
-      <Center mih="100dvh" p="md">
-        <Text fw={600} c="dimmed">Loading...</Text>
-      </Center>
-    );
-  }
-
+  if (loading) return <LoadingScreen />;
   if (adminExists && !isAuthenticated) return <Navigate to="/login" replace />;
   if (isAuthenticated) return <Navigate to="/" replace />;
   return <>{children}</>;

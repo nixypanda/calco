@@ -11,6 +11,7 @@ import {
   logout as apiLogout,
   getSession as apiGetSession,
   createAdmin as apiCreateAdmin,
+  checkBootstrapStatus,
 } from "../api/auth";
 import type {
   IdentityResponse,
@@ -24,6 +25,7 @@ export interface AuthState {
   loading: boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  adminExists: boolean;
 }
 
 export interface AuthContextValue extends AuthState {
@@ -37,24 +39,30 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<IdentityResponse | null>(null);
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [adminExists, setAdminExists] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  const restoreSession = useCallback(async () => {
-    try {
-      const resp = await apiGetSession();
-      setIdentity(resp.identity);
-      setProfile(resp.profile);
-    } catch {
+  const bootstrap = useCallback(async () => {
+    const [sessionRes, statusRes] = await Promise.allSettled([
+      apiGetSession(),
+      checkBootstrapStatus(),
+    ]);
+    if (sessionRes.status === "fulfilled") {
+      setIdentity(sessionRes.value.identity);
+      setProfile(sessionRes.value.profile);
+    } else {
       setIdentity(null);
       setProfile(null);
-    } finally {
-      setLoading(false);
     }
+    setAdminExists(
+      statusRes.status === "fulfilled" ? statusRes.value.admin_exists : true,
+    );
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    restoreSession();
-  }, [restoreSession]);
+    bootstrap();
+  }, [bootstrap]);
 
   useEffect(() => {
     const handler = () => {
@@ -88,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const resp = await apiCreateAdmin(username, password);
       setIdentity(resp.identity);
       setProfile(resp.profile);
+      setAdminExists(true);
     },
     [],
   );
@@ -98,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     isAuthenticated: identity !== null,
     isAdmin: identity?.role === "admin",
+    adminExists,
     login,
     logout,
     createAdmin,
