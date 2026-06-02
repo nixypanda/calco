@@ -1,13 +1,11 @@
 import { apiRequest } from "./client";
+import type { ItemRef, QuantityDto } from "./types";
 
-export interface QuantityDto {
-  amount: string;
-  unit: string;
-}
+export type { ItemRef, QuantityDto };
 
 export interface MealComponentResponse {
   id: string;
-  item: { type: string; id: string };
+  item: ItemRef;
   quantity: QuantityDto;
 }
 
@@ -26,7 +24,7 @@ export interface MealListResponse {
 }
 
 export interface CreateMealComponentRequest {
-  item: { type: string; id: string };
+  item: ItemRef;
   quantity: QuantityDto;
 }
 

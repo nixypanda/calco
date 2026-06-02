@@ -230,7 +230,7 @@ export function MealForm() {
         ? { amount: totalQty.trim(), unit: totalUnit }
         : null,
       components: validComponents.map((c) => ({
-        item: { type: "product", id: c.productId },
+        item: { type: "product" as const, id: c.productId },
         quantity: { amount: c.quantity || "100", unit: c.unit || "g" },
       })),
     };

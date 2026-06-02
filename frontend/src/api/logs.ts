@@ -1,14 +1,7 @@
 import { apiRequest } from "./client";
+import type { ItemRef, QuantityDto } from "./types";
 
-export interface QuantityDto {
-  amount: string;
-  unit: string;
-}
-
-export interface ItemRef {
-  type: string;
-  id: string;
-}
+export type { ItemRef, QuantityDto };
 
 export interface NutrientSnapshotDto {
   code: string;
