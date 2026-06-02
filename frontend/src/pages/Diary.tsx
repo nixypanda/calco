@@ -25,79 +25,16 @@ import {
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { MacroRing } from "@/components/MacroRing";
-
-const MEAL_SLOTS = [
-  { value: "breakfast", label: "Breakfast" },
-  { value: "lunch", label: "Lunch" },
-  { value: "dinner", label: "Dinner" },
-  { value: "snack", label: "Snack" },
-] as const;
-const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
-const DEFAULT_CALORIE_GOAL = 2000;
-const MACRO_COLORS = {
-  calories: "var(--mantine-color-red-6)",
-  protein: "var(--mantine-color-blue-6)",
-  carbs: "var(--mantine-color-orange-6)",
-  fat: "var(--mantine-color-yellow-6)",
-} as const;
-
-function formatDate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function displayDate(date: Date): string {
-  return date.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function parseAmount(val: string): number {
-  const n = parseFloat(val);
-  if (!isFinite(n) || n < 0) return 0;
-  return n;
-}
-
-function getCalories(nutrients: { code: string; amount: string }[]): number {
-  const entry = nutrients.find((n) => n.code === "ENERGY_KCAL");
-  return entry ? parseAmount(entry.amount) : 0;
-}
-
-function getNutrientAmount(
-  nutrients: { code: string; amount: string }[],
-  code: string,
-): number {
-  const entry = nutrients.find((n) => n.code === code);
-  return entry ? parseAmount(entry.amount) : 0;
-}
-
-function getMacroTotals(logs: LogResponse[]) {
-  const protein = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "PROTEIN_G"), 0);
-  const carbs = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "CARBS_G"), 0);
-  const fat = logs.reduce((s, l) => s + getNutrientAmount(l.nutrients, "FAT_G"), 0);
-  const total = protein * 4 + carbs * 4 + fat * 9;
-  const pct = (kcal: number) => (total > 0 ? (kcal / total) * 100 : 0);
-  return {
-    protein,
-    carbs,
-    fat,
-    proteinPct: pct(protein * 4),
-    carbsPct: pct(carbs * 4),
-    fatPct: pct(fat * 9),
-  };
-}
-
-function getNutrientVal(
-  entries: SummaryEntry[],
-  code: string,
-): { amount: number; unit: string } | null {
-  const entry = entries.find((n) => n.code === code);
-  return entry ? { amount: parseAmount(entry.amount), unit: entry.unit } : null;
-}
+import {
+  MEAL_SLOTS,
+  MACRO_COLORS,
+  SUMMARY_CODES,
+  DEFAULT_CALORIE_GOAL,
+  getCalories,
+  getMacroTotals,
+  getNutrientVal,
+} from "@/lib/nutrition";
+import { formatDate, displayDate, todayString } from "@/lib/time";
 
 function NutrientRing({
   label,
@@ -151,10 +88,6 @@ function SlotMacroSummary({
       </Text>
     </UnstyledButton>
   );
-}
-
-function todayString(): string {
-  return formatDate(new Date());
 }
 
 function getInitials(name: string): string {

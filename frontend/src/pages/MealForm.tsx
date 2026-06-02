@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods, getFoodDetail } from "../api/foods";
 import type { SearchResult } from "../api/foods";
+import { UNITS, type ComponentRow, createEmptyRow, nextRowId } from "@/lib/nutrition";
 import {
   ActionIcon,
   Button,
@@ -20,38 +21,6 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchQueryInput } from "@/components/SearchQueryInput";
 import { FoodSearchResultRow } from "@/components/FoodSearchResultRow";
-
-interface ComponentRow {
-  rowId: string;
-  productId: string;
-  productName: string;
-  quantity: string;
-  unit: string;
-  searchQuery: string;
-  searchResults: SearchResult[];
-  searching: boolean;
-}
-
-const UNITS = ["g", "kg", "ml", "cup", "tbsp", "tsp", "piece", "packet", "serving"];
-
-let rowIdCounter = 0;
-function nextRowId(): string {
-  rowIdCounter += 1;
-  return `row-${rowIdCounter}`;
-}
-
-function createEmptyRow(): ComponentRow {
-  return {
-    rowId: nextRowId(),
-    productId: "",
-    productName: "",
-    quantity: "100",
-    unit: "g",
-    searchQuery: "",
-    searchResults: [],
-    searching: false,
-  };
-}
 
 function UnitSelect({
   value,

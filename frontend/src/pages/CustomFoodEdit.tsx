@@ -20,19 +20,12 @@ import {
 } from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
-import { formatCategoriesInput, parseCategoriesInput } from "@/lib/categories";
-
-interface NutrientRow {
-  code: string;
-  amount_per_100g: string;
-}
-
-interface ServingRow {
-  label: string;
-  quantity: string;
-  unit: string;
-  grams: string;
-}
+import {
+  formatCategoriesInput,
+  parseCategoriesInput,
+  type NutrientRow,
+  type ServingRow,
+} from "@/lib/nutrition";
 
 export function CustomFoodEdit() {
   const { id } = useParams<{ id: string }>();

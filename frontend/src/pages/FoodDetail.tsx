@@ -8,7 +8,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { FoodLogEntry } from "@/components/FoodLogEntry";
-import { localISOString } from "@/lib/datetime";
+import { localISOString } from "@/lib/time";
 
 export function FoodDetail() {
   const { id } = useParams<{ id: string }>();

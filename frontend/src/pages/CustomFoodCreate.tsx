@@ -14,19 +14,7 @@ import {
 } from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
-import { parseCategoriesInput } from "@/lib/categories";
-
-interface NutrientRow {
-  code: string;
-  amount_per_100g: string;
-}
-
-interface ServingRow {
-  label: string;
-  quantity: string;
-  unit: string;
-  grams: string;
-}
+import { parseCategoriesInput, type NutrientRow, type ServingRow } from "@/lib/nutrition";
 
 export function CustomFoodCreate() {
   const navigate = useNavigate();

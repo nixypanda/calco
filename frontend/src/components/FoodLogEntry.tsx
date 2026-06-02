@@ -20,7 +20,8 @@ import { PageHeader } from "@/components/PageHeader";
 import { FieldRow } from "@/components/FieldRow";
 import { MacroBreakdown } from "@/components/MacroBreakdown";
 import { NutrientsTable } from "@/components/NutrientsTable";
-import { scaleNutrients } from "@/lib/scaleNutrients";
+import { scaleNutrients, MEAL_SLOTS } from "@/lib/nutrition";
+import { formatTimestamp } from "@/lib/time";
 import type { ProductDetail, UnitItem } from "@/api/foods";
 import type { NutrientSnapshotDto } from "@/api/logs";
 
@@ -88,13 +89,6 @@ function NumberStepper({
   );
 }
 
-const MEAL_SLOTS = [
-  { value: "breakfast", label: "Breakfast" },
-  { value: "lunch", label: "Lunch" },
-  { value: "dinner", label: "Dinner" },
-  { value: "snack", label: "Snack" },
-] as const;
-
 export interface LogValues {
   amount: string;
   unit: string;
@@ -126,17 +120,6 @@ interface Props {
   onDelete?: () => Promise<void>;
   onBack: () => void;
   backLabel: string;
-}
-
-function formatTimestamp(ts: string): string {
-  const d = new Date(ts);
-  return d.toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
 
 export function FoodLogEntry({

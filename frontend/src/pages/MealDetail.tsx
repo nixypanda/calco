@@ -22,7 +22,7 @@ import {
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
-import { localISOString } from "@/lib/datetime";
+import { localISOString } from "@/lib/time";
 
 export function MealDetail() {
   const { id } = useParams<{ id: string }>();
