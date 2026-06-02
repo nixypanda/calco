@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { ActionIcon, Group, Title } from "@mantine/core";
 
 interface PageHeaderProps {
   title: ReactNode;
@@ -10,22 +10,23 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, onBack, backLabel = "Back", children }: PageHeaderProps) {
   return (
-    <header className="flex items-center justify-between gap-4 mb-4">
-      <div className="flex items-center gap-2.5 min-w-0">
+    <Group component="header" justify="space-between" gap="md" mb="md">
+      <Group gap="xs" miw={0}>
         {onBack && (
-          <Button
-            variant="ghost"
-            size="icon"
+          <ActionIcon
+            variant="subtle"
+            color="gray"
             onClick={onBack}
             aria-label={backLabel}
-            className="text-muted-foreground"
           >
-            <span aria-hidden="true" className="text-xl font-extrabold leading-none">←</span>
-          </Button>
+            <span aria-hidden="true">←</span>
+          </ActionIcon>
         )}
-        <h1 className="truncate">{title}</h1>
-      </div>
-      {children && <div className="flex flex-wrap gap-2.5">{children}</div>}
-    </header>
+        <Title order={1} style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {title}
+        </Title>
+      </Group>
+      {children && <Group gap="xs">{children}</Group>}
+    </Group>
   );
 }

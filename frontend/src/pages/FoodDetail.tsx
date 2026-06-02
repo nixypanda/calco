@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { getFoodDetail, listUnits } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { ProductDetail, UnitItem } from "../api/foods";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton, Container, Stack } from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -48,32 +48,32 @@ export function FoodDetail() {
 
   if (loading) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-3/5" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Skeleton height={16} width="80%" />
+          <Skeleton height={16} width="60%" />
+          <Skeleton height={16} width="100%" />
+        </Stack>
+      </Container>
     );
   }
 
   if (error && !food) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
         <ErrorBanner message={error} />
-      </div>
+      </Container>
     );
   }
 
   if (!food || !id) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Log Food" onBack={goHome} backLabel="Back to Diary" />
         <EmptyState>Food not found.</EmptyState>
-      </div>
+      </Container>
     );
   }
 

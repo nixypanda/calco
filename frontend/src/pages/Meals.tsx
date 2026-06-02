@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { listMeals } from "../api/meals";
 import type { MealResponse } from "../api/meals";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Card } from "@/components/ui/card";
+import { Button, Skeleton, Paper, Container, Stack, Text } from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -37,28 +35,28 @@ export function Meals() {
 
   if (loading) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Meals" onBack={goHome} backLabel="Back to Diary" />
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-3/5" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Skeleton height={16} width="80%" />
+          <Skeleton height={16} width="60%" />
+          <Skeleton height={16} width="100%" />
+        </Stack>
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Meals" onBack={goHome} backLabel="Back to Diary" />
         <ErrorBanner message={error} />
-      </div>
+      </Container>
     );
   }
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title="Meals" onBack={goHome} backLabel="Back to Diary">
         <Button onClick={() => navigate("/meals/new")}>Create Meal</Button>
       </PageHeader>
@@ -67,23 +65,26 @@ export function Meals() {
         <EmptyState>No meals yet. Create a meal to log common combinations faster.</EmptyState>
       )}
 
-      <div className="flex flex-col gap-3">
+      <Stack gap="sm">
         {meals.map((meal) => (
-          <Card
+          <Paper
             key={meal.id}
-            className="flex p-4 cursor-pointer hover:bg-muted/50"
+            p="md"
+            style={{ cursor: "pointer" }}
             onClick={() => navigate(`/meals/${meal.id}`)}
           >
-            <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-bold truncate">{meal.name}</span>
-              <span className="text-muted-foreground text-sm">
+            <Stack gap={2} miw={0}>
+              <Text fw={700} truncate>
+                {meal.name}
+              </Text>
+              <Text c="dimmed" size="sm">
                 {plural(meal.components.length, "component")}
                 {meal.notes ? ` — ${meal.notes}` : ""}
-              </span>
-            </div>
-          </Card>
+              </Text>
+            </Stack>
+          </Paper>
         ))}
-      </div>
-    </div>
+      </Stack>
+    </Container>
   );
 }

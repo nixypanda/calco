@@ -156,8 +156,10 @@ describe("FoodLogDetail", () => {
     await userEvent.clear(amountInput);
     await userEvent.type(amountInput, "200");
 
-    await userEvent.click(screen.getByRole("combobox", { name: "Meal slot" }));
-    await userEvent.click(await screen.findByRole("option", { name: "Dinner" }));
+    await userEvent.selectOptions(
+      screen.getByRole("combobox", { name: "Meal slot" }),
+      "dinner",
+    );
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
 

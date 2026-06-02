@@ -2,9 +2,15 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Paper,
+  Button,
+  Skeleton,
+  Container,
+  Group,
+  Stack,
+  Box,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -55,45 +61,52 @@ export function FoodSearch() {
   }, [query]);
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title="Search Foods" onBack={() => navigate("/home")} backLabel="Back to Diary" />
 
-      <div className="mb-3">
+      <Box mb="sm">
         <SearchQueryInput
           placeholder="Search for a food..."
           value={query}
           onChange={setQuery}
           autoFocus
         />
-      </div>
+      </Box>
 
       {error && <ErrorBanner message={error} />}
 
       {loading && (
-        <Card className="overflow-hidden p-0">
+        <Paper p={0} style={{ overflow: "hidden" }}>
           {[1, 2, 3].map((i) => (
-            <div key={i} className="border-b border-border px-3 py-2 last:border-b-0">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <Skeleton className="h-4 w-4/5" />
-                  <Skeleton className="h-3 w-3/5" />
-                </div>
-                <Skeleton className="h-9 w-28" />
-              </div>
-            </div>
+            <Box
+              key={i}
+              px="sm"
+              py="xs"
+              style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+            >
+              <Group justify="space-between" gap="sm">
+                <Stack gap={6} miw={0} style={{ flex: 1 }}>
+                  <Skeleton height={16} width="80%" />
+                  <Skeleton height={12} width="60%" />
+                </Stack>
+                <Skeleton height={36} width={112} />
+              </Group>
+            </Box>
           ))}
-        </Card>
+        </Paper>
       )}
 
       {!loading && !error && query.trim() && results.length === 0 && (
         <EmptyState>
-          <p>No foods found. Try a different search.</p>
-          <Button onClick={goCreateCustomFood}>Create Custom Food</Button>
+          <Stack gap="sm" align="center">
+            <p>No foods found. Try a different search.</p>
+            <Button onClick={goCreateCustomFood}>Create Custom Food</Button>
+          </Stack>
         </EmptyState>
       )}
 
       {!loading && !error && results.length > 0 && (
-        <Card className="overflow-hidden p-0">
+        <Paper p={0} style={{ overflow: "hidden" }}>
           {results.map((item) => (
             <FoodSearchResultRow
               key={item.id}
@@ -106,15 +119,17 @@ export function FoodSearch() {
               }
             />
           ))}
-        </Card>
+        </Paper>
       )}
 
       {!query.trim() && (
         <EmptyState>
-          <p>Search for a food to get started.</p>
-          <Button onClick={goCreateCustomFood}>Create Custom Food</Button>
+          <Stack gap="sm" align="center">
+            <p>Search for a food to get started.</p>
+            <Button onClick={goCreateCustomFood}>Create Custom Food</Button>
+          </Stack>
         </EmptyState>
       )}
-    </div>
+    </Container>
   );
 }

@@ -210,7 +210,7 @@ describe("Diary", () => {
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
-    await userEvent.click(screen.getByText("My Meals"));
+    await userEvent.click(await screen.findByText("My Meals"));
 
     await waitFor(() => {
       expect(screen.getByText("Meals Page")).toBeInTheDocument();
@@ -225,7 +225,7 @@ describe("Diary", () => {
     });
 
     await userEvent.click(screen.getByRole("button", { name: "Open profile menu" }));
-    await userEvent.click(screen.getByText("Logout"));
+    await userEvent.click(await screen.findByText("Logout"));
 
     await waitFor(() => {
       expect(mockLogout).toHaveBeenCalled();

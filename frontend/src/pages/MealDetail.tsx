@@ -4,34 +4,20 @@ import { getMeal, deleteMeal, getMealNutrients } from "../api/meals";
 import { getFoodDetail } from "../api/foods";
 import { createLog } from "../api/logs";
 import type { MealResponse, MealNutritionResponse } from "../api/meals";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
+  Button,
+  TextInput,
+  Paper,
+  Skeleton,
+  NativeSelect,
+  Modal,
   Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Container,
+  Group,
+  Stack,
+  Text,
+  Title,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -147,139 +133,145 @@ export function MealDetail() {
 
   if (loading) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Meal" onBack={goMeals} backLabel="Back to Meals" />
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-3/5" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Skeleton height={16} width="80%" />
+          <Skeleton height={16} width="60%" />
+          <Skeleton height={16} width="100%" />
+        </Stack>
+      </Container>
     );
   }
 
   if (error) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Meal" onBack={goMeals} backLabel="Back to Meals" />
         <ErrorBanner message={error} />
-      </div>
+      </Container>
     );
   }
 
   if (!meal) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Meal" onBack={goMeals} backLabel="Back to Meals" />
         <EmptyState>Meal not found.</EmptyState>
-      </div>
+      </Container>
     );
   }
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title={meal.name} onBack={goMeals} backLabel="Back to Meals">
         <Button variant="outline" onClick={() => navigate(`/meals/${id}/edit`)}>
           Edit
         </Button>
-        <Dialog open={showConfirm} onOpenChange={setShowConfirm}>
-          <DialogTrigger asChild>
-            <Button variant="destructive">Delete</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete meal?</DialogTitle>
-              <DialogDescription>This action cannot be undone.</DialogDescription>
-            </DialogHeader>
-            {deleteError && <ErrorBanner message={deleteError} />}
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowConfirm(false);
-                  setDeleteError("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-                {deleting ? "Deleting..." : "Confirm Delete"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button color="red" onClick={() => setShowConfirm(true)}>Delete</Button>
+        <Modal
+          opened={showConfirm}
+          onClose={() => {
+            setShowConfirm(false);
+            setDeleteError("");
+          }}
+          title="Delete meal?"
+        >
+          <Text c="dimmed" size="sm" mb="sm">
+            This action cannot be undone.
+          </Text>
+          {deleteError && <ErrorBanner message={deleteError} />}
+          <Group justify="flex-end" gap="xs" mt="sm">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowConfirm(false);
+                setDeleteError("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button color="red" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Confirm Delete"}
+            </Button>
+          </Group>
+        </Modal>
       </PageHeader>
 
       {meal.notes && (
-        <p className="text-muted-foreground text-sm mb-4">{meal.notes}</p>
+        <Text c="dimmed" size="sm" mb="md">
+          {meal.notes}
+        </Text>
       )}
 
-      <section className="mb-5">
-        <h2>Components</h2>
-        <div className="flex flex-col gap-3">
-          {meal.components.map((comp) => (
-            <Card key={comp.id} className="flex items-center justify-between gap-4 p-3">
-              <span className="font-bold">{productNames[comp.item.id] ?? "Loading..."}</span>
-              <span className="text-muted-foreground text-sm">
-                {comp.quantity.amount} {comp.quantity.unit}
-              </span>
-            </Card>
-          ))}
-        </div>
-      </section>
+      <Stack gap="lg" mb="lg">
+        <Stack gap="sm">
+          <Title order={2}>Components</Title>
+          <Stack gap="sm">
+            {meal.components.map((comp) => (
+              <Paper key={comp.id} p="sm">
+                <Group justify="space-between" gap="md">
+                  <Text fw={700}>{productNames[comp.item.id] ?? "Loading..."}</Text>
+                  <Text c="dimmed" size="sm">
+                    {comp.quantity.amount} {comp.quantity.unit}
+                  </Text>
+                </Group>
+              </Paper>
+            ))}
+          </Stack>
+        </Stack>
 
-      <section className="mb-5">
-        <h2>Log this meal</h2>
-        <div className="flex flex-col gap-3.5">
-          <div className="flex gap-2.5">
-            <Input
-              type="number"
-              value={logAmount}
-              onChange={(e) => setLogAmount(e.target.value)}
-              placeholder="Amount"
-              className="flex-1"
-            />
-            <Select value={logUnit} disabled>
-              <SelectTrigger className="w-32 flex-none">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="g">g</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button onClick={handleCalculate} disabled={nutrientsLoading}>
-              {nutrientsLoading ? "..." : "Calculate"}
-            </Button>
-          </div>
-          {nutrientsError && <ErrorBanner message={nutrientsError} />}
-          {nutrients && (
-            <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nutrient</TableHead>
-                    <TableHead className="text-right w-24">Amount</TableHead>
-                    <TableHead className="text-right w-24">Unit</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {nutrients.nutrients.map((n) => (
-                    <TableRow key={n.code}>
-                      <TableCell>{n.code}</TableCell>
-                      <TableCell className="text-right">{n.amount}</TableCell>
-                      <TableCell className="text-right">{n.unit}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <Button onClick={handleLog} disabled={logging}>
-                {logging ? "Logging..." : "Log Meal"}
+        <Stack gap="sm">
+          <Title order={2}>Log this meal</Title>
+          <Stack gap="sm">
+            <Group gap="xs">
+              <TextInput
+                type="number"
+                value={logAmount}
+                onChange={(e) => setLogAmount(e.target.value)}
+                placeholder="Amount"
+                style={{ flex: 1 }}
+              />
+              <NativeSelect
+                value={logUnit}
+                disabled
+                data={[{ value: "g", label: "g" }]}
+                w={128}
+              />
+              <Button onClick={handleCalculate} disabled={nutrientsLoading}>
+                {nutrientsLoading ? "..." : "Calculate"}
               </Button>
-              {logError && <ErrorBanner message={logError} />}
-            </>
-          )}
-        </div>
-      </section>
-    </div>
+            </Group>
+            {nutrientsError && <ErrorBanner message={nutrientsError} />}
+            {nutrients && (
+              <>
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Nutrient</Table.Th>
+                      <Table.Th ta="right" w={96}>Amount</Table.Th>
+                      <Table.Th ta="right" w={96}>Unit</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {nutrients.nutrients.map((n) => (
+                      <Table.Tr key={n.code}>
+                        <Table.Td>{n.code}</Table.Td>
+                        <Table.Td ta="right">{n.amount}</Table.Td>
+                        <Table.Td ta="right">{n.unit}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+                <Button onClick={handleLog} disabled={logging}>
+                  {logging ? "Logging..." : "Log Meal"}
+                </Button>
+                {logError && <ErrorBanner message={logError} />}
+              </>
+            )}
+          </Stack>
+        </Stack>
+      </Stack>
+    </Container>
   );
 }

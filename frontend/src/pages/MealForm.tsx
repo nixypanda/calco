@@ -3,17 +3,19 @@ import { useNavigate, useParams } from "react-router-dom";
 import { createMeal, updateMeal, getMeal } from "../api/meals";
 import { searchFoods } from "../api/foods";
 import type { SearchResult } from "../api/foods";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ActionIcon,
+  Button,
+  Skeleton,
+  TextInput,
+  NativeSelect,
+  Container,
+  Group,
+  Stack,
+  Title,
+  Paper,
+  Box,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { SearchQueryInput } from "@/components/SearchQueryInput";
@@ -46,23 +48,19 @@ function createEmptyRow(): ComponentRow {
 function UnitSelect({
   value,
   onChange,
-  width = "w-20",
+  width = 80,
 }: {
   value: string;
   onChange: (v: string) => void;
-  width?: string;
+  width?: number;
 }) {
   return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={`${width} flex-none`}>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {UNITS.map((u) => (
-          <SelectItem key={u} value={u}>{u}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <NativeSelect
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      data={UNITS.map((u) => ({ value: u, label: u }))}
+      w={width}
+    />
   );
 }
 
@@ -234,115 +232,120 @@ export function MealForm() {
 
   if (fetching) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title={title} onBack={goMeals} backLabel="Back to Meals" />
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-3/5" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Skeleton height={16} width="80%" />
+          <Skeleton height={16} width="60%" />
+          <Skeleton height={16} width="100%" />
+        </Stack>
+      </Container>
     );
   }
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title={title} onBack={goMeals} backLabel="Back to Meals" />
 
       {error && <ErrorBanner message={error} />}
 
-      <form className="flex flex-col gap-3.5" onSubmit={handleSubmit}>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="mf-name">Name</Label>
-          <Input
+      <form onSubmit={handleSubmit}>
+        <Stack gap="sm">
+          <TextInput
             id="mf-name"
+            label="Name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Meal name"
           />
-        </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="mf-notes">Notes</Label>
-          <Input
+          <TextInput
             id="mf-notes"
+            label="Notes"
             type="text"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Optional notes"
           />
-        </div>
 
-        <section className="mb-5">
-          <h2>Total Quantity (optional)</h2>
-          <div className="flex gap-2.5">
-            <Input
-              type="number"
-              value={totalQty}
-              onChange={(e) => setTotalQty(e.target.value)}
-              placeholder="Amount"
-              className="flex-1"
-            />
-            <UnitSelect value={totalUnit} onChange={setTotalUnit} width="w-32" />
-          </div>
-        </section>
-
-        <section className="mb-5">
-          <div className="flex items-center justify-between gap-3 mb-3.5">
-            <h2 className="mb-0">Components</h2>
-            <Button type="button" variant="outline" size="sm" onClick={addComponent}>
-              + Add Component
-            </Button>
-          </div>
-
-          {components.map((comp, idx) => (
-            <div key={idx} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
-              <div className="flex-[2] min-w-44 relative">
-                <SearchQueryInput
-                  value={comp.searchQuery}
-                  onChange={(value) => handleSearchChange(value, idx)}
-                  placeholder="Search product..."
-                />
-                {comp.searchResults.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-10 max-h-64 overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
-                    {comp.searchResults.map((r) => (
-                      <FoodSearchResultRow
-                        key={r.id}
-                        item={r}
-                        onSelect={() => selectProduct(r, idx)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Input
+          <Stack gap="sm">
+            <Title order={2}>Total Quantity (optional)</Title>
+            <Group gap="xs">
+              <TextInput
                 type="number"
-                value={comp.quantity}
-                onChange={(e) => updateRow(idx, { quantity: e.target.value })}
-                placeholder="Qty"
-                className="w-20 flex-none"
+                value={totalQty}
+                onChange={(e) => setTotalQty(e.target.value)}
+                placeholder="Amount"
+                style={{ flex: 1 }}
               />
-              <UnitSelect value={comp.unit} onChange={(v) => updateRow(idx, { unit: v })} />
-              {components.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive"
-                  onClick={() => removeComponent(idx)}
-                >
-                  ×
-                </Button>
-              )}
-            </div>
-          ))}
-        </section>
+              <UnitSelect value={totalUnit} onChange={setTotalUnit} width={128} />
+            </Group>
+          </Stack>
 
-        <Button type="submit" disabled={submitting} className="self-start">
-          {submitting ? "Saving..." : isEdit ? "Update Meal" : "Create Meal"}
-        </Button>
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Title order={2}>Components</Title>
+              <Button type="button" variant="outline" size="sm" onClick={addComponent}>
+                + Add Component
+              </Button>
+            </Group>
+
+            {components.map((comp, idx) => (
+              <Group key={idx} gap="xs" align="center" wrap="wrap">
+                <Box pos="relative" miw={176} style={{ flex: 2 }}>
+                  <SearchQueryInput
+                    value={comp.searchQuery}
+                    onChange={(value) => handleSearchChange(value, idx)}
+                    placeholder="Search product..."
+                  />
+                  {comp.searchResults.length > 0 && (
+                    <Paper
+                      pos="absolute"
+                      top="100%"
+                      left={0}
+                      right={0}
+                      mah={256}
+                      style={{ zIndex: 10, overflowY: "auto" }}
+                      withBorder
+                      shadow="md"
+                    >
+                      {comp.searchResults.map((r) => (
+                        <FoodSearchResultRow
+                          key={r.id}
+                          item={r}
+                          onSelect={() => selectProduct(r, idx)}
+                        />
+                      ))}
+                    </Paper>
+                  )}
+                </Box>
+                <TextInput
+                  type="number"
+                  value={comp.quantity}
+                  onChange={(e) => updateRow(idx, { quantity: e.target.value })}
+                  placeholder="Qty"
+                  w={80}
+                />
+                <UnitSelect value={comp.unit} onChange={(v) => updateRow(idx, { unit: v })} />
+                {components.length > 1 && (
+                  <ActionIcon
+                    variant="subtle"
+                    color="red"
+                    onClick={() => removeComponent(idx)}
+                  >
+                    ×
+                  </ActionIcon>
+                )}
+              </Group>
+            ))}
+          </Stack>
+
+          <Button type="submit" disabled={submitting} style={{ alignSelf: "flex-start" }}>
+            {submitting ? "Saving..." : isEdit ? "Update Meal" : "Create Meal"}
+          </Button>
+        </Stack>
       </form>
-    </div>
+    </Container>
   );
 }

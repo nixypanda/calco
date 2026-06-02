@@ -1,10 +1,14 @@
 import { useState, type SubmitEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/AuthContext";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import {
+  Paper,
+  Button,
+  TextInput,
+  Stack,
+  Center,
+  Title,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function LoginPage() {
@@ -39,37 +43,37 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-4">
-      <Card className="w-full max-w-sm p-6">
-        <h1>CalCo</h1>
-        <h2 className="font-semibold text-muted-foreground mb-0">Log In</h2>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 mt-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
+    <Center mih="100dvh" p="md">
+      <Paper w="100%" maw={400} p="lg">
+        <Title order={1}>CalCo</Title>
+        <Title order={2} fw={600} c="dimmed">
+          Log In
+        </Title>
+        <form onSubmit={handleSubmit}>
+          <Stack gap="md" mt="md">
+            <TextInput
               id="username"
+              label="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
               disabled={submitting}
             />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
+            <TextInput
               id="password"
+              label="Password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={submitting}
             />
-          </div>
-          {error && <ErrorBanner message={error} />}
-          <Button type="submit" disabled={submitting}>
-            {submitting ? "Logging in..." : "Log In"}
-          </Button>
+            {error && <ErrorBanner message={error} />}
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Logging in..." : "Log In"}
+            </Button>
+          </Stack>
         </form>
-      </Card>
-    </div>
+      </Paper>
+    </Center>
   );
 }

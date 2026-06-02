@@ -1,10 +1,9 @@
 import type { SearchResult } from "@/api/foods";
-import { cn } from "@/lib/utils";
+import { UnstyledButton, Group, Stack, Text, Badge } from "@mantine/core";
 
 interface FoodSearchResultRowProps {
   item: SearchResult;
   onSelect: () => void;
-  className?: string;
   showBarcode?: boolean;
 }
 
@@ -48,56 +47,54 @@ function categoryTags(categories: string[]): string[] {
 export function FoodSearchResultRow({
   item,
   onSelect,
-  className,
   showBarcode = false,
 }: FoodSearchResultRowProps) {
   const meta = buildMeta(item, showBarcode);
   const tags = categoryTags(item.categories);
   const showCustom = item.source === "USER" && tags.length < 4;
-  const hasTagArea = tags.length > 0 || showCustom;
 
   return (
-    <button
-      type="button"
-      className={cn(
-        "grid w-full items-center gap-2 border-b border-border px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
-        hasTagArea
-          ? "grid-cols-[minmax(0,1fr)_7.25rem] min-[380px]:grid-cols-[minmax(0,1fr)_8rem]"
-          : "grid-cols-1",
-        className,
-      )}
+    <UnstyledButton
       onClick={onSelect}
+      p="xs"
+      style={{
+        width: "100%",
+        textAlign: "left",
+        borderBottom: "1px solid var(--mantine-color-default-border)",
+      }}
     >
-      <span className="min-w-0">
-        <span className="line-clamp-2 text-sm font-medium leading-5">{item.name}</span>
-        {meta && (
-          <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground">
-            {meta}
-          </span>
-        )}
-      </span>
-
-      {hasTagArea && (
-        <span className="ml-auto flex max-h-9 max-w-[7.25rem] flex-row-reverse flex-wrap items-start justify-start gap-1 overflow-hidden min-[380px]:max-w-32">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className={cn(
-                "shrink-0 whitespace-nowrap rounded-md border border-transparent bg-secondary px-1.5 text-center text-[10px] font-medium leading-4 text-secondary-foreground",
-                tag.startsWith("+") && "bg-muted text-muted-foreground",
-              )}
-              title={tag.startsWith("+") ? undefined : tag}
-            >
-              {tag}
-            </span>
-          ))}
-          {showCustom && (
-            <span className="shrink-0 whitespace-nowrap rounded-md border border-border px-1.5 text-center text-[10px] font-medium leading-4 text-foreground">
-              Custom
-            </span>
+      <Group justify="space-between" align="flex-start" gap="sm" wrap="nowrap">
+        <Stack gap={2} miw={0} style={{ flex: 1 }}>
+          <Text size="sm" fw={500} lineClamp={2}>
+            {item.name}
+          </Text>
+          {meta && (
+            <Text size="xs" c="dimmed" truncate>
+              {meta}
+            </Text>
           )}
-        </span>
-      )}
-    </button>
+        </Stack>
+        {(tags.length > 0 || showCustom) && (
+          <Group gap={4} justify="flex-end" maw={120} style={{ flexWrap: "wrap" }}>
+            {tags.map((tag) => (
+              <Badge
+                key={tag}
+                size="xs"
+                variant="light"
+                color={tag.startsWith("+") ? "gray" : "blue"}
+                title={tag.startsWith("+") ? undefined : tag}
+              >
+                {tag}
+              </Badge>
+            ))}
+            {showCustom && (
+              <Badge size="xs" variant="outline" color="gray">
+                Custom
+              </Badge>
+            )}
+          </Group>
+        )}
+      </Group>
+    </UnstyledButton>
   );
 }

@@ -6,48 +6,39 @@ import { listLogs, getSummary } from "../api/logs";
 import { getFoodDetail } from "../api/foods";
 import { getMeal } from "../api/meals";
 import type { LogResponse, SummaryEntry } from "../api/logs";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/dropdown-menu";
+  ActionIcon,
+  Button,
+  Skeleton,
+  Paper,
+  Menu,
+  Avatar,
+  Container,
+  Group,
+  Stack,
+  SimpleGrid,
+  Text,
+  Title,
+  UnstyledButton,
+  Box,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { EmptyState } from "@/components/EmptyState";
 import { MacroRing } from "@/components/MacroRing";
 
 const MEAL_SLOTS = [
-  {
-    value: "breakfast",
-    label: "Breakfast",
-    tint: "bg-gradient-to-r from-rose-200/55 via-orange-200/45 to-amber-200/45 dark:from-rose-500/20 dark:via-orange-500/20 dark:to-amber-500/20",
-  },
-  {
-    value: "lunch",
-    label: "Lunch",
-    tint: "bg-gradient-to-r from-amber-200/55 via-yellow-200/45 to-orange-200/40 dark:from-amber-500/22 dark:via-yellow-500/18 dark:to-orange-500/20",
-  },
-  {
-    value: "dinner",
-    label: "Dinner",
-    tint: "bg-gradient-to-r from-violet-200/55 via-purple-200/45 to-fuchsia-200/45 dark:from-violet-500/22 dark:via-purple-500/20 dark:to-fuchsia-500/20",
-  },
-  {
-    value: "snack",
-    label: "Snack",
-    tint: "bg-gradient-to-r from-pink-200/55 via-rose-200/45 to-fuchsia-200/40 dark:from-pink-500/22 dark:via-rose-500/20 dark:to-fuchsia-500/20",
-  },
+  { value: "breakfast", label: "Breakfast" },
+  { value: "lunch", label: "Lunch" },
+  { value: "dinner", label: "Dinner" },
+  { value: "snack", label: "Snack" },
 ] as const;
 const SUMMARY_CODES = "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G";
 const DEFAULT_CALORIE_GOAL = 2000;
 const MACRO_COLORS = {
-  calories: "hsl(var(--chart-1))",
-  protein: "hsl(var(--chart-2))",
-  carbs: "hsl(var(--chart-3))",
-  fat: "hsl(var(--chart-4))",
+  calories: "var(--mantine-color-red-6)",
+  protein: "var(--mantine-color-blue-6)",
+  carbs: "var(--mantine-color-orange-6)",
+  fat: "var(--mantine-color-yellow-6)",
 } as const;
 
 function formatDate(date: Date): string {
@@ -125,17 +116,19 @@ function NutrientRing({
 }) {
   const big = size >= 120;
   return (
-    <div className="flex flex-col items-center">
+    <Stack gap={4} align="center">
       <MacroRing segments={[{ value, color }]} total={max} size={size} strokeWidth={big ? 10 : 6}>
-        <span className={big ? "text-3xl font-extrabold leading-tight" : "text-base font-extrabold leading-tight"}>
+        <Text fw={800} size={big ? "xl" : "md"}>
           {Math.round(value)}
-        </span>
-        <span className={`text-muted-foreground font-semibold uppercase tracking-wider ${big ? "text-xs" : "text-[0.625rem]"}`}>
+        </Text>
+        <Text c="dimmed" fw={600} size="xs" tt="uppercase">
           {unit}
-        </span>
+        </Text>
       </MacroRing>
-      <span className={`mt-1.5 text-muted-foreground font-medium ${big ? "text-sm" : "text-xs"}`}>{label}</span>
-    </div>
+      <Text c="dimmed" fw={500} size={big ? "sm" : "xs"}>
+        {label}
+      </Text>
+    </Stack>
   );
 }
 
@@ -152,19 +145,11 @@ function SlotMacroSummary({
   const fmt = (g: number, p: number) =>
     mode === "grams" ? `${g.toFixed(1)}g` : `${Math.round(p)}%`;
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      title="Toggle macro grams and percentages"
-      className="text-left text-muted-foreground text-sm font-medium"
-    >
-      <span className="hidden sm:inline">
+    <UnstyledButton onClick={onToggle} title="Toggle macro grams and percentages">
+      <Text c="dimmed" size="sm" fw={500}>
         carbs {fmt(m.carbs, m.carbsPct)} ⋅ protein {fmt(m.protein, m.proteinPct)} ⋅ fat {fmt(m.fat, m.fatPct)}
-      </span>
-      <span className="sm:hidden">
-        C {fmt(m.carbs, m.carbsPct)} ⋅ P {fmt(m.protein, m.proteinPct)} ⋅ F {fmt(m.fat, m.fatPct)}
-      </span>
-    </button>
+      </Text>
+    </UnstyledButton>
   );
 }
 
@@ -202,7 +187,6 @@ export function Diary() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
-  const [ringTile, setRingTile] = useState(0);
   const ringScrollRef = useRef<HTMLDivElement>(null);
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem("theme");
@@ -301,181 +285,130 @@ export function Diary() {
     setMacroMode((c) => (c === "grams" ? "percent" : "grams"));
 
   const renderLogRow = (log: LogResponse) => (
-    <button
+    <UnstyledButton
       key={log.id}
-      type="button"
       onClick={() => navigate(`/logs/${log.id}`, { state: { editing: true } })}
-      className="flex items-center w-full min-h-14 gap-2 p-3 text-left border-b border-border last:border-b-0 hover:bg-white/40 dark:hover:bg-white/[0.04]"
+      p="sm"
+      style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
     >
-      <span className="flex-1 min-w-0 truncate font-medium">
-        {foodNames[log.item.id] ?? "Loading..."}
-      </span>
-      <span className="text-muted-foreground text-sm font-medium whitespace-nowrap">
-        {log.quantity.amount} {log.quantity.unit}
-      </span>
-      <span className="min-w-16 text-right text-muted-foreground text-sm font-medium whitespace-nowrap">
-        {Math.round(getCalories(log.nutrients))} kcal
-      </span>
-    </button>
+      <Group gap="xs" align="center" wrap="nowrap">
+        <Text fw={500} truncate style={{ flex: 1 }}>
+          {foodNames[log.item.id] ?? "Loading..."}
+        </Text>
+        <Text c="dimmed" size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
+          {log.quantity.amount} {log.quantity.unit}
+        </Text>
+        <Text
+          c="dimmed"
+          size="sm"
+          fw={500}
+          ta="right"
+          miw={64}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          {Math.round(getCalories(log.nutrients))} kcal
+        </Text>
+      </Group>
+    </UnstyledButton>
   );
 
   return (
-    <div className="page">
-      <header className="flex items-center justify-between gap-4 mb-4">
-        <h1>CalCo</h1>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
+    <Container p="md">
+      <Group component="header" justify="space-between" mb="md">
+        <Title order={1}>CalCo</Title>
+        <Group gap="xs">
+          <ActionIcon
+            variant="subtle"
             onClick={() => setDarkMode((d) => !d)}
             aria-label="Toggle dark mode"
           >
-            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                className="rounded-full gap-2 pl-2 pr-3 h-auto py-1"
-                aria-label="Open profile menu"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center">
-                  {getInitials(displayName)}
-                </div>
-                <span className="text-muted-foreground text-sm font-medium max-w-36 truncate">
-                  {displayName}
-                </span>
+            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+          </ActionIcon>
+          <Menu position="bottom-end">
+            <Menu.Target>
+              <Button variant="outline" aria-label="Open profile menu">
+                <Group gap="xs">
+                  <Avatar size="sm" color="blue">
+                    {getInitials(displayName)}
+                  </Avatar>
+                  <Text c="dimmed" size="sm" fw={500} truncate maw={144}>
+                    {displayName}
+                  </Text>
+                </Group>
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => navigate("/meals")}>My Meals</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onClick={() => logout()}>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item onClick={() => navigate("/meals")}>My Meals</Menu.Item>
+              <Menu.Item color="red" onClick={() => logout()}>
                 Logout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </header>
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+        </Group>
+      </Group>
 
       {error && <ErrorBanner message={error} />}
 
-      <Card className="flex flex-col gap-4 p-4 mb-4">
-        <div className="grid grid-cols-[44px_1fr_44px] items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={goPrev} aria-label="Previous day">
-            <span className="text-xl font-medium">←</span>
-          </Button>
-          <span className="text-center font-semibold truncate">{displayDate(currentDate)}</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={goNext}
-            disabled={isToday}
-            aria-label="Next day"
-          >
-            <span className="text-xl font-medium">→</span>
-          </Button>
-        </div>
+      <Paper p="md" mb="md">
+        <Stack gap="md">
+          <Group justify="space-between" align="center">
+            <ActionIcon variant="subtle" onClick={goPrev} aria-label="Previous day">
+              ←
+            </ActionIcon>
+            <Text fw={600} ta="center" truncate>
+              {displayDate(currentDate)}
+            </Text>
+            <ActionIcon
+              variant="subtle"
+              onClick={goNext}
+              disabled={isToday}
+              aria-label="Next day"
+            >
+              →
+            </ActionIcon>
+          </Group>
 
-        <div className="hidden sm:grid sm:grid-cols-4 gap-1 px-20">
-          <NutrientRing
-            label="Calories"
-            value={kcal?.amount ?? 0}
-            unit={kcal?.unit ?? "kcal"}
-            max={DEFAULT_CALORIE_GOAL}
-            color={MACRO_COLORS.calories}
-          />
-          <NutrientRing
-            label="Protein"
-            value={protein?.amount ?? 0}
-            unit={protein?.unit ?? "g"}
-            max={150}
-            color={MACRO_COLORS.protein}
-          />
-          <NutrientRing
-            label="Carbs"
-            value={carbs?.amount ?? 0}
-            unit={carbs?.unit ?? "g"}
-            max={250}
-            color={MACRO_COLORS.carbs}
-          />
-          <NutrientRing
-            label="Fat"
-            value={fat?.amount ?? 0}
-            unit={fat?.unit ?? "g"}
-            max={65}
-            color={MACRO_COLORS.fat}
-          />
-        </div>
+          <SimpleGrid cols={{ base: 2, sm: 4 }}>
+            <NutrientRing
+              label="Calories"
+              value={kcal?.amount ?? 0}
+              unit={kcal?.unit ?? "kcal"}
+              max={DEFAULT_CALORIE_GOAL}
+              color={MACRO_COLORS.calories}
+            />
+            <NutrientRing
+              label="Protein"
+              value={protein?.amount ?? 0}
+              unit={protein?.unit ?? "g"}
+              max={150}
+              color={MACRO_COLORS.protein}
+            />
+            <NutrientRing
+              label="Carbs"
+              value={carbs?.amount ?? 0}
+              unit={carbs?.unit ?? "g"}
+              max={250}
+              color={MACRO_COLORS.carbs}
+            />
+            <NutrientRing
+              label="Fat"
+              value={fat?.amount ?? 0}
+              unit={fat?.unit ?? "g"}
+              max={65}
+              color={MACRO_COLORS.fat}
+            />
+          </SimpleGrid>
+          <Box ref={ringScrollRef} style={{ display: "none" }} />
+        </Stack>
+      </Paper>
 
-        <div className="sm:hidden flex flex-col gap-3">
-          <div
-            ref={ringScrollRef}
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              setRingTile(Math.round(el.scrollLeft / el.clientWidth));
-            }}
-            className="flex overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-          >
-            <div className="snap-center shrink-0 w-full flex justify-center py-2">
-              <NutrientRing
-                label="Calories"
-                value={kcal?.amount ?? 0}
-                unit={kcal?.unit ?? "kcal"}
-                max={DEFAULT_CALORIE_GOAL}
-                color={MACRO_COLORS.calories}
-                size={140}
-              />
-            </div>
-            <div className="snap-center shrink-0 w-full flex justify-around py-2">
-              <NutrientRing
-                label="Protein"
-                value={protein?.amount ?? 0}
-                unit={protein?.unit ?? "g"}
-                max={150}
-                color={MACRO_COLORS.protein}
-              />
-              <NutrientRing
-                label="Carbs"
-                value={carbs?.amount ?? 0}
-                unit={carbs?.unit ?? "g"}
-                max={250}
-                color={MACRO_COLORS.carbs}
-              />
-              <NutrientRing
-                label="Fat"
-                value={fat?.amount ?? 0}
-                unit={fat?.unit ?? "g"}
-                max={65}
-                color={MACRO_COLORS.fat}
-              />
-            </div>
-          </div>
-          <div className="flex justify-center gap-1.5">
-            {[0, 1].map((i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={i === 0 ? "Show calories" : "Show macros"}
-                onClick={() => {
-                  const el = ringScrollRef.current;
-                  if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
-                }}
-                className={`h-1.5 w-1.5 rounded-full transition-colors ${
-                  ringTile === i ? "bg-foreground" : "bg-border"
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-      </Card>
-
-      <main className="flex flex-col gap-3">
+      <Stack gap="sm">
         {loading && (
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-4 w-4/5" />
-            <Skeleton className="h-4 w-3/5" />
-            <Skeleton className="h-4 w-full" />
-          </div>
+          <Stack gap="sm">
+            <Skeleton height={16} width="80%" />
+            <Skeleton height={16} width="60%" />
+            <Skeleton height={16} width="100%" />
+          </Stack>
         )}
 
         {!loading && logs.length === 0 && !error && (
@@ -483,47 +416,50 @@ export function Diary() {
         )}
 
         {!loading &&
-          mealSlotLogs.map(({ value, label, items, tint }) => (
-            <Card key={value} className="overflow-hidden p-0">
-              <div className={`flex items-center gap-3 p-4 ${tint}`}>
-                <div className="flex flex-1 flex-col gap-1 min-w-0">
-                  <span className="font-semibold">{label}</span>
+          mealSlotLogs.map(({ value, label, items }) => (
+            <Paper key={value} p={0} style={{ overflow: "hidden" }}>
+              <Group p="md" gap="sm" align="center">
+                <Stack gap={2} miw={0} style={{ flex: 1 }}>
+                  <Text fw={600}>{label}</Text>
                   <SlotMacroSummary logs={items} mode={macroMode} onToggle={toggleMacroMode} />
-                </div>
-                <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
+                </Stack>
+                <Text c="dimmed" size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
                   {Math.round(slotCalories(value))} kcal
-                </span>
-              </div>
+                </Text>
+              </Group>
               {items.length === 0 ? (
-                <p className="p-4 text-muted-foreground text-center">No items</p>
+                <Text p="md" c="dimmed" ta="center">
+                  No items
+                </Text>
               ) : (
                 items.map(renderLogRow)
               )}
               <Button
-                variant="ghost"
-                className="w-full justify-start rounded-none h-12 border-t border-border text-primary font-semibold"
+                variant="subtle"
+                fullWidth
                 onClick={() => navigate("/search", { state: { mealSlot: value } })}
+                style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
               >
                 Add Food
               </Button>
-            </Card>
+            </Paper>
           ))}
 
         {!loading && otherLogs.length > 0 && (
-          <Card className="overflow-hidden p-0">
-            <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-slate-200/50 via-slate-200/40 to-slate-200/30 dark:from-slate-500/20 dark:via-slate-500/15 dark:to-slate-500/10">
-              <div className="flex flex-1 flex-col gap-1 min-w-0">
-                <span className="font-semibold">Other</span>
+          <Paper p={0} style={{ overflow: "hidden" }}>
+            <Group p="md" gap="sm" align="center">
+              <Stack gap={2} miw={0} style={{ flex: 1 }}>
+                <Text fw={600}>Other</Text>
                 <SlotMacroSummary logs={otherLogs} mode={macroMode} onToggle={toggleMacroMode} />
-              </div>
-              <span className="text-muted-foreground text-sm font-semibold whitespace-nowrap">
+              </Stack>
+              <Text c="dimmed" size="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
                 {Math.round(slotCalories(""))} kcal
-              </span>
-            </div>
+              </Text>
+            </Group>
             {otherLogs.map(renderLogRow)}
-          </Card>
+          </Paper>
         )}
-      </main>
-    </div>
+      </Stack>
+    </Container>
   );
 }

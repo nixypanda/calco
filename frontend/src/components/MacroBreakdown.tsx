@@ -1,10 +1,10 @@
-import { Card } from "@/components/ui/card";
+import { Paper, Group, SimpleGrid, Stack, Text } from "@mantine/core";
 import { MacroRing } from "@/components/MacroRing";
 
 const MACRO_COLORS = {
-  protein: "hsl(var(--chart-2))",
-  carbs: "hsl(var(--chart-3))",
-  fat: "hsl(var(--chart-4))",
+  protein: "var(--mantine-color-blue-6)",
+  carbs: "var(--mantine-color-orange-6)",
+  fat: "var(--mantine-color-yellow-6)",
 } as const;
 
 interface NutrientEntry {
@@ -35,13 +35,20 @@ function MacroStat({
   color: string;
 }) {
   return (
-    <div className="flex flex-col border-l-[3px] px-2 text-center" style={{ borderColor: color }}>
-      <span className="text-xs font-semibold" style={{ color }}>
+    <Stack
+      gap={0}
+      align="center"
+      px="xs"
+      style={{ borderLeft: `3px solid ${color}` }}
+    >
+      <Text size="xs" fw={600} style={{ color }}>
         {Math.round(percent)}%
-      </span>
-      <span className="font-semibold">{grams.toFixed(1)}g</span>
-      <span className="text-muted-foreground text-xs font-medium">{name}</span>
-    </div>
+      </Text>
+      <Text fw={600}>{grams.toFixed(1)}g</Text>
+      <Text size="xs" fw={500} c="dimmed">
+        {name}
+      </Text>
+    </Stack>
   );
 }
 
@@ -57,23 +64,27 @@ export function MacroBreakdown({ nutrients }: { nutrients: NutrientEntry[] }) {
   const fatPct = pct(fat * 9);
 
   return (
-    <Card className="flex items-center gap-8 p-4">
-      <MacroRing
-        segments={[
-          { value: proteinPct, color: MACRO_COLORS.protein },
-          { value: carbsPct, color: MACRO_COLORS.carbs },
-          { value: fatPct, color: MACRO_COLORS.fat },
-        ]}
-        total={100}
-      >
-        <span className="text-base font-extrabold leading-none">{Math.round(calories)}</span>
-        <span className="text-muted-foreground text-xs font-semibold">kcal</span>
-      </MacroRing>
-      <div className="grid grid-cols-3 flex-1">
-        <MacroStat name="Protein" grams={protein} percent={proteinPct} color={MACRO_COLORS.protein} />
-        <MacroStat name="Carbs" grams={carbs} percent={carbsPct} color={MACRO_COLORS.carbs} />
-        <MacroStat name="Fat" grams={fat} percent={fatPct} color={MACRO_COLORS.fat} />
-      </div>
-    </Card>
+    <Paper p="md">
+      <Group gap="xl" align="center">
+        <MacroRing
+          segments={[
+            { value: proteinPct, color: MACRO_COLORS.protein },
+            { value: carbsPct, color: MACRO_COLORS.carbs },
+            { value: fatPct, color: MACRO_COLORS.fat },
+          ]}
+          total={100}
+        >
+          <Text fw={800}>{Math.round(calories)}</Text>
+          <Text size="xs" fw={600} c="dimmed">
+            kcal
+          </Text>
+        </MacroRing>
+        <SimpleGrid cols={3} style={{ flex: 1 }}>
+          <MacroStat name="Protein" grams={protein} percent={proteinPct} color={MACRO_COLORS.protein} />
+          <MacroStat name="Carbs" grams={carbs} percent={carbsPct} color={MACRO_COLORS.carbs} />
+          <MacroStat name="Fat" grams={fat} percent={fatPct} color={MACRO_COLORS.fat} />
+        </SimpleGrid>
+      </Group>
+    </Paper>
   );
 }

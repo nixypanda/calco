@@ -8,16 +8,16 @@ import {
   enableUser,
 } from "../api/admin";
 import type { UserItem } from "../api/admin";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
+  Button,
+  TextInput,
   Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Container,
+  Group,
+  Stack,
+  Title,
+  Text,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 export function AdminDashboard() {
@@ -98,117 +98,123 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="page">
-      <header className="flex items-center justify-between gap-4 mb-4">
-        <h1>Admin Dashboard</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
+    <Container p="md">
+      <Group component="header" justify="space-between" mb="md">
+        <Title order={1}>Admin Dashboard</Title>
+        <Group gap="sm">
+          <Text size="sm" c="dimmed">
             Logged in as <strong>{identity?.username}</strong>
-          </span>
-          <Button variant="outline" size="sm" onClick={logout}>Logout</Button>
-        </div>
-      </header>
+          </Text>
+          <Button variant="outline" size="sm" onClick={logout}>
+            Logout
+          </Button>
+        </Group>
+      </Group>
 
       {error && <ErrorBanner message={error} />}
 
-      <section>
-        <div className="flex items-center justify-between gap-3 mb-3.5">
-          <h2 className="mb-0">Users</h2>
+      <Stack gap="md">
+        <Group justify="space-between">
+          <Title order={2}>Users</Title>
           <Button variant="outline" size="sm" onClick={() => setShowCreate(!showCreate)}>
             {showCreate ? "Cancel" : "Create User"}
           </Button>
-        </div>
+        </Group>
 
         {showCreate && (
-          <form className="flex gap-2.5 mb-4" onSubmit={handleCreate}>
-            <Input
-              placeholder="Username"
-              value={newUser.username}
-              onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-              className="flex-1"
-            />
-            <Input
-              placeholder="Display Name"
-              value={newUser.display_name}
-              onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
-              className="flex-1"
-            />
-            <Input
-              type="password"
-              placeholder="Initial Password"
-              value={newUser.initial_password}
-              onChange={(e) => setNewUser({ ...newUser, initial_password: e.target.value })}
-              className="flex-1"
-            />
-            <Button type="submit">Save</Button>
+          <form onSubmit={handleCreate}>
+            <Group gap="xs">
+              <TextInput
+                placeholder="Username"
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <TextInput
+                placeholder="Display Name"
+                value={newUser.display_name}
+                onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <TextInput
+                type="password"
+                placeholder="Initial Password"
+                value={newUser.initial_password}
+                onChange={(e) => setNewUser({ ...newUser, initial_password: e.target.value })}
+                style={{ flex: 1 }}
+              />
+              <Button type="submit">Save</Button>
+            </Group>
           </form>
         )}
 
         {loading ? (
-          <p>Loading users...</p>
+          <Text>Loading users...</Text>
         ) : users.length === 0 ? (
-          <p>No users yet.</p>
+          <Text>No users yet.</Text>
         ) : (
           <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Display Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Username</Table.Th>
+                <Table.Th>Display Name</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Actions</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
               {users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{user.username}</TableCell>
-                  <TableCell>{user.display_name}</TableCell>
-                  <TableCell>{user.status}</TableCell>
-                  <TableCell className="flex gap-2.5 flex-wrap">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setResetPass(
-                          resetPass?.userId === user.id
-                            ? null
-                            : { userId: user.id, password: "" },
-                        )
-                      }
-                    >
-                      Reset Password
-                    </Button>
-                    {user.status === "active" ? (
-                      <Button variant="outline" size="sm" onClick={() => handleDisable(user.id)}>
-                        Disable
+                <Table.Tr key={user.id}>
+                  <Table.Td>{user.username}</Table.Td>
+                  <Table.Td>{user.display_name}</Table.Td>
+                  <Table.Td>{user.status}</Table.Td>
+                  <Table.Td>
+                    <Group gap="xs" wrap="wrap">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setResetPass(
+                            resetPass?.userId === user.id
+                              ? null
+                              : { userId: user.id, password: "" },
+                          )
+                        }
+                      >
+                        Reset Password
                       </Button>
-                    ) : (
-                      <Button variant="outline" size="sm" onClick={() => handleEnable(user.id)}>
-                        Enable
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                      {user.status === "active" ? (
+                        <Button variant="outline" size="sm" onClick={() => handleDisable(user.id)}>
+                          Disable
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => handleEnable(user.id)}>
+                          Enable
+                        </Button>
+                      )}
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
               ))}
-            </TableBody>
+            </Table.Tbody>
           </Table>
         )}
 
         {resetPass && (
-          <div className="flex gap-2.5 mt-4">
-            <Input
+          <Group gap="xs" mt="md">
+            <TextInput
               type="password"
               placeholder="New password"
               value={resetPass.password}
               onChange={(e) => setResetPass({ ...resetPass, password: e.target.value })}
-              className="flex-1"
+              style={{ flex: 1 }}
             />
             <Button onClick={() => handleResetPassword(resetPass.userId)}>
               Confirm Reset
             </Button>
-          </div>
+          </Group>
         )}
-      </section>
-    </div>
+      </Stack>
+    </Container>
   );
 }

@@ -1,17 +1,20 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Minus, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ActionIcon,
+  Badge,
+  Button,
+  TextInput,
+  Paper,
+  NativeSelect,
+  Container,
+  Group,
+  Stack,
+  Text,
+  Title,
+  Anchor,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { FieldRow } from "@/components/FieldRow";
@@ -39,34 +42,39 @@ function NumberStepper({
     if (min != null && next < min) next = min;
     onChange(Number.isInteger(next) ? String(next) : next.toFixed(2).replace(/\.?0+$/, ""));
   };
-  const btn =
-    "h-8 w-8 inline-flex items-center justify-center rounded-full border border-white/60 bg-white/55 backdrop-blur-xl text-foreground shadow-[0_2px_8px_rgb(15_12_40_/_0.06)] hover:bg-white/80 dark:border-white/10 dark:bg-white/[0.06] dark:hover:bg-white/[0.14] disabled:opacity-40";
   return (
-    <div className="flex items-center justify-end gap-2">
-      <button
-        type="button"
+    <Group gap="xs" justify="flex-end" align="center">
+      <ActionIcon
+        variant="outline"
+        radius="xl"
         onClick={() => adjust(-step)}
-        className={btn}
         aria-label="Decrement"
       >
-        <Minus className="h-3.5 w-3.5" />
-      </button>
+        <Minus size={14} />
+      </ActionIcon>
       <input
         type="text"
         inputMode="decimal"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-16 text-center text-muted-foreground font-semibold bg-transparent border-0 outline-none focus:ring-2 focus:ring-ring/50 rounded-md"
+        style={{
+          width: 64,
+          textAlign: "center",
+          fontWeight: 600,
+          background: "transparent",
+          border: 0,
+          outline: "none",
+        }}
       />
-      <button
-        type="button"
+      <ActionIcon
+        variant="outline"
+        radius="xl"
         onClick={() => adjust(step)}
-        className={btn}
         aria-label="Increment"
       >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-    </div>
+        <Plus size={14} />
+      </ActionIcon>
+    </Group>
   );
 }
 
@@ -149,8 +157,6 @@ export function FoodLogEntry({
     const parsed = parseFloat(values.amount);
     const amount = isFinite(parsed) && parsed >= 0 ? parsed : 0;
 
-    // Snapshot baseline: same unit as recorded → linear-scale the stored values.
-    // Preserves historical accuracy even if the food's per-100g has drifted.
     if (snapshot && snapshot.unit === values.unit) {
       const base = parseFloat(snapshot.amount) || 0;
       if (base > 0) {
@@ -163,12 +169,10 @@ export function FoodLogEntry({
       }
     }
 
-    // Unit changed (or no snapshot): fall through to live food scaling.
     if (food && food.nutrients && food.nutrients.length > 0) {
       return scaleNutrients(food.nutrients, amount, values.unit, food.servings ?? []);
     }
 
-    // No food data either — show snapshot values unscaled.
     return (snapshot?.nutrients ?? []).map((n) => ({
       code: n.code,
       amount: parseFloat(n.amount) || 0,
@@ -217,52 +221,45 @@ export function FoodLogEntry({
   ].filter(Boolean) as string[];
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title={title} onBack={onBack} backLabel={backLabel} />
 
-      <div className="mb-5 flex flex-col gap-2">
-        <h2 className="text-xl">{itemName}</h2>
+      <Stack gap="xs" mb="lg">
+        <Title order={2}>{itemName}</Title>
         {(subtitleParts.length > 0 || customFoodEditPath) && (
-          <div className="text-muted-foreground text-sm flex items-center flex-wrap gap-1.5">
-            {subtitleParts.length > 0 && <span>{subtitleParts.join(" · ")}</span>}
+          <Group gap="xs" align="center" wrap="wrap">
+            {subtitleParts.length > 0 && (
+              <Text c="dimmed" size="sm">
+                {subtitleParts.join(" · ")}
+              </Text>
+            )}
             {categories.map((category) => (
-              <Badge key={category} variant="secondary">{category}</Badge>
+              <Badge key={category} variant="light" color="gray">
+                {category}
+              </Badge>
             ))}
             {customFoodEditPath && (
-              <Link
-                to={customFoodEditPath}
-                className="text-primary font-medium underline-offset-2 hover:underline"
-              >
+              <Anchor component={Link} to={customFoodEditPath} size="sm">
                 Edit food
-              </Link>
+              </Anchor>
             )}
-          </div>
+          </Group>
         )}
-      </div>
+      </Stack>
 
       {error && <ErrorBanner message={error} />}
 
-      <Card className="mb-5 overflow-hidden p-0">
+      <Paper p={0} mb="lg" style={{ overflow: "hidden" }}>
         <FieldRow label="Meal">
-          <Select
+          <NativeSelect
+            aria-label="Meal slot"
             value={values.slot}
-            onValueChange={(v) => setValues((prev) => ({ ...prev, slot: v }))}
-          >
-            <SelectTrigger
-              aria-label="Meal slot"
-              className="text-muted-foreground font-semibold"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none__">None</SelectItem>
-              {MEAL_SLOTS.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(e) => setValues((prev) => ({ ...prev, slot: e.target.value }))}
+            data={[
+              { value: "__none__", label: "None" },
+              ...MEAL_SLOTS.map((s) => ({ value: s.value, label: s.label })),
+            ]}
+          />
         </FieldRow>
         <FieldRow label="Amount">
           <NumberStepper
@@ -272,61 +269,58 @@ export function FoodLogEntry({
           />
         </FieldRow>
         <FieldRow label="Unit">
-          <Select
+          <NativeSelect
+            aria-label="Unit"
             value={values.unit}
-            onValueChange={(v) => setValues((prev) => ({ ...prev, unit: v }))}
-          >
-            <SelectTrigger
-              aria-label="Unit"
-              className="text-muted-foreground font-semibold"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {unitOptions.map((u) => (
-                <SelectItem key={u.code} value={u.code}>
-                  {u.name === u.code ? u.code : `${u.name} (${u.code})`}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            onChange={(e) => setValues((prev) => ({ ...prev, unit: e.target.value }))}
+            data={unitOptions.map((u) => ({
+              value: u.code,
+              label: u.name === u.code ? u.code : `${u.name} (${u.code})`,
+            }))}
+          />
         </FieldRow>
         <FieldRow label="Notes">
-          <Input
+          <TextInput
             type="text"
             value={values.notes}
             placeholder="Optional notes"
             onChange={(e) => setValues((v) => ({ ...v, notes: e.target.value }))}
-            className="text-right text-muted-foreground font-semibold border-0 bg-transparent px-0 shadow-none"
           />
         </FieldRow>
-        <div className="flex flex-wrap gap-2.5 p-4 border-t border-border">
+        <Group
+          gap="xs"
+          p="md"
+          wrap="wrap"
+          style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
+        >
           <Button onClick={handleSubmit} disabled={submitting || deleting}>
             {submitting ? submittingLabel : submitLabel}
           </Button>
           {onDelete && (
             <Button
-              variant="destructive"
+              color="red"
               onClick={handleDelete}
               disabled={submitting || deleting}
             >
               {deleting ? "Deleting..." : "Delete"}
             </Button>
           )}
-        </div>
-      </Card>
+        </Group>
+      </Paper>
 
-      <section className="mb-5">
-        <h2>Macro Breakdown</h2>
-        <MacroBreakdown
-          nutrients={computedNutrients.map((n) => ({ code: n.code, amount: n.amount }))}
-        />
-      </section>
+      <Stack gap="lg">
+        <Stack gap="sm">
+          <Title order={2}>Macro Breakdown</Title>
+          <MacroBreakdown
+            nutrients={computedNutrients.map((n) => ({ code: n.code, amount: n.amount }))}
+          />
+        </Stack>
 
-      <section className="mb-5">
-        <h2>Nutrients</h2>
-        <NutrientsTable nutrients={computedNutrients} />
-      </section>
-    </div>
+        <Stack gap="sm">
+          <Title order={2}>Nutrients</Title>
+          <NutrientsTable nutrients={computedNutrients} />
+        </Stack>
+      </Stack>
+    </Container>
   );
 }

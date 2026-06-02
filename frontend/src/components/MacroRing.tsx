@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Box, Stack } from "@mantine/core";
 
 interface Segment {
   value: number;
@@ -48,23 +49,33 @@ export function MacroRing({
   });
 
   return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+    <Box pos="relative" display="inline-flex" style={{ width: size, height: size }}>
       <svg width={size} height={size}>
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke="hsl(var(--ring-track))"
+          stroke="var(--mantine-color-gray-2)"
           strokeWidth={strokeWidth}
         />
         {arcs}
       </svg>
       {children && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <Stack
+          gap={0}
+          align="center"
+          justify="center"
+          pos="absolute"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          style={{ pointerEvents: "none" }}
+        >
           {children}
-        </div>
+        </Stack>
       )}
-    </div>
+    </Box>
   );
 }

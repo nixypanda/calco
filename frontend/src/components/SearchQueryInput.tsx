@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listCategorySuggestions } from "../api/foods";
 import type { CategorySuggestion } from "../api/foods";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import {
+  TextInput,
+  Paper,
+  Stack,
+  UnstyledButton,
+  Group,
+  Text,
+  Badge,
+} from "@mantine/core";
 
 interface SearchQueryInputProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   autoFocus?: boolean;
-  className?: string;
 }
 
 interface TokenInfo {
@@ -69,7 +75,6 @@ export function SearchQueryInput({
   onChange,
   placeholder,
   autoFocus,
-  className,
 }: SearchQueryInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [cursor, setCursor] = useState(0);
@@ -144,8 +149,8 @@ export function SearchQueryInput({
   };
 
   return (
-    <div className={cn("flex flex-col gap-1", className)}>
-      <Input
+    <Stack gap={4}>
+      <TextInput
         ref={inputRef}
         type="text"
         placeholder={placeholder}
@@ -167,25 +172,31 @@ export function SearchQueryInput({
       />
 
       {completions.length > 0 && (
-        <div className="glass max-h-56 overflow-y-auto rounded-3xl p-1.5">
-          {completions.map((completion) => (
-            <button
-              key={`${completion.type}:${completion.replacement}`}
-              type="button"
-              className="flex w-full items-center justify-between gap-3 rounded-2xl px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:hover:bg-white/[0.08]"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => applyCompletion(completion)}
-            >
-              <span className="font-medium">{completion.label}</span>
-              {completion.type === "category" && (
-                <span className="rounded-full bg-white/55 px-2 py-0.5 text-xs font-medium text-muted-foreground dark:bg-white/[0.08]">
-                  {completion.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+        <Paper p={4} mah={224} style={{ overflowY: "auto" }} withBorder>
+          <Stack gap={2}>
+            {completions.map((completion) => (
+              <UnstyledButton
+                key={`${completion.type}:${completion.replacement}`}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => applyCompletion(completion)}
+                px="sm"
+                py="xs"
+              >
+                <Group justify="space-between" gap="sm">
+                  <Text size="sm" fw={500}>
+                    {completion.label}
+                  </Text>
+                  {completion.type === "category" && (
+                    <Badge size="xs" variant="light" color="gray">
+                      {completion.count}
+                    </Badge>
+                  )}
+                </Group>
+              </UnstyledButton>
+            ))}
+          </Stack>
+        </Paper>
       )}
-    </div>
+    </Stack>
   );
 }

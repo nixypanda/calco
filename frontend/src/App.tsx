@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Center, Text } from "@mantine/core";
 import { AuthProvider, useAuth } from "./hooks/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AdminRoute } from "./components/AdminRoute";
@@ -31,7 +32,11 @@ function RootRedirect() {
   }, []);
 
   if (loading || status.loading) {
-    return <div className="flex items-center justify-center min-h-dvh p-4 text-muted-foreground text-base font-semibold">Loading...</div>;
+    return (
+      <Center mih="100dvh" p="md">
+        <Text fw={600} c="dimmed">Loading...</Text>
+      </Center>
+    );
   }
 
   if (!status.adminExists) return <Navigate to="/setup" replace />;
@@ -51,7 +56,11 @@ function BootstrapGate({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading || adminExists === null) {
-    return <div className="flex items-center justify-center min-h-dvh p-4 text-muted-foreground text-base font-semibold">Loading...</div>;
+    return (
+      <Center mih="100dvh" p="md">
+        <Text fw={600} c="dimmed">Loading...</Text>
+      </Center>
+    );
   }
 
   if (adminExists && !isAuthenticated) return <Navigate to="/login" replace />;

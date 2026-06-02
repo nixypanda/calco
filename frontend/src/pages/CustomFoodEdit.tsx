@@ -7,17 +7,17 @@ import {
   listUnits,
 } from "../api/foods";
 import type { NutrientItem, UnitItem } from "../api/foods";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ActionIcon,
+  Button,
+  Skeleton,
+  TextInput,
+  NativeSelect,
+  Container,
+  Group,
+  Stack,
+  Title,
+} from "@mantine/core";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { PageHeader } from "@/components/PageHeader";
 import { formatCategoriesInput, parseCategoriesInput } from "@/lib/categories";
@@ -171,230 +171,195 @@ export function CustomFoodEdit() {
 
   if (loading) {
     return (
-      <div className="page">
+      <Container p="md">
         <PageHeader title="Edit Custom Food" onBack={goHome} backLabel="Back to Diary" />
-        <div className="flex flex-col gap-3">
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-3/5" />
-        </div>
-      </div>
+        <Stack gap="sm">
+          <Skeleton height={16} width="80%" />
+          <Skeleton height={16} width="60%" />
+        </Stack>
+      </Container>
     );
   }
 
   return (
-    <div className="page">
+    <Container p="md">
       <PageHeader title="Edit Custom Food" onBack={goHome} backLabel="Back to Diary" />
 
       {error && <ErrorBanner message={error} />}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-        <section className="mb-5">
-          <h2>Basic Info</h2>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cfe-name">Name *</Label>
-              <Input
-                id="cfe-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoFocus
-                disabled={submitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cfe-brand">Brand</Label>
-              <Input
-                id="cfe-brand"
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cfe-category">Category</Label>
-              <Input
-                id="cfe-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                disabled={submitting}
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-5">
-          <h2>Portion Info</h2>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cfe-serving">Serving Size (g)</Label>
-              <Input
-                id="cfe-serving"
-                type="number"
-                value={servingSizeG}
-                onChange={(e) => setServingSizeG(e.target.value)}
-                min={0}
-                step="any"
-                disabled={submitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="cfe-defqty">Default Quantity</Label>
-              <Input
-                id="cfe-defqty"
-                type="number"
-                value={defaultQty}
-                onChange={(e) => setDefaultQty(e.target.value)}
-                min={0}
-                step="any"
-                disabled={submitting}
-              />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <Label>Default Unit</Label>
-              <Select value={defaultUnit} onValueChange={setDefaultUnit} disabled={submitting}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {units.map((u) => (
-                    <SelectItem key={u.code} value={u.code}>
-                      {u.name} ({u.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </section>
-
-        <section className="mb-5">
-          <div className="flex items-center justify-between gap-3 mb-3.5">
-            <h2 className="mb-0">Nutrients (per 100g)</h2>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addNutrientRow}
+      <form onSubmit={handleSubmit}>
+        <Stack gap="lg">
+          <Stack gap="sm">
+            <Title order={2}>Basic Info</Title>
+            <TextInput
+              id="cfe-name"
+              label="Name *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoFocus
               disabled={submitting}
-            >
-              + Add Nutrient
-            </Button>
-          </div>
-          {nutrientRows.map((row, i) => (
-            <div key={i} className="flex gap-2.5 items-center mb-2.5">
-              <Select
-                value={row.code}
-                onValueChange={(v) => updateNutrientRow(i, "code", v)}
-                disabled={submitting}
-              >
-                <SelectTrigger className="flex-1">
-                  <SelectValue placeholder="Select nutrient..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {nutrients.map((n) => (
-                    <SelectItem key={n.code} value={n.code}>{n.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                placeholder="Amount per 100g"
-                value={row.amount_per_100g}
-                onChange={(e) => updateNutrientRow(i, "amount_per_100g", e.target.value)}
-                min={0}
-                step="any"
-                disabled={submitting}
-                className="flex-1"
-              />
+            />
+            <TextInput
+              id="cfe-brand"
+              label="Brand"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              disabled={submitting}
+            />
+            <TextInput
+              id="cfe-category"
+              label="Category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              disabled={submitting}
+            />
+          </Stack>
+
+          <Stack gap="sm">
+            <Title order={2}>Portion Info</Title>
+            <TextInput
+              id="cfe-serving"
+              label="Serving Size (g)"
+              type="number"
+              value={servingSizeG}
+              onChange={(e) => setServingSizeG(e.target.value)}
+              min={0}
+              step="any"
+              disabled={submitting}
+            />
+            <TextInput
+              id="cfe-defqty"
+              label="Default Quantity"
+              type="number"
+              value={defaultQty}
+              onChange={(e) => setDefaultQty(e.target.value)}
+              min={0}
+              step="any"
+              disabled={submitting}
+            />
+            <NativeSelect
+              label="Default Unit"
+              value={defaultUnit}
+              onChange={(e) => setDefaultUnit(e.target.value)}
+              disabled={submitting}
+              data={units.map((u) => ({ value: u.code, label: `${u.name} (${u.code})` }))}
+            />
+          </Stack>
+
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Title order={2}>Nutrients (per 100g)</Title>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="text-destructive"
-                onClick={() => removeNutrientRow(i)}
-                disabled={nutrientRows.length <= 1 || submitting}
+                variant="outline"
+                size="sm"
+                onClick={addNutrientRow}
+                disabled={submitting}
               >
-                ×
+                + Add Nutrient
               </Button>
-            </div>
-          ))}
-        </section>
+            </Group>
+            {nutrientRows.map((row, i) => (
+              <Group key={i} gap="xs" align="center">
+                <NativeSelect
+                  value={row.code}
+                  onChange={(e) => updateNutrientRow(i, "code", e.target.value)}
+                  disabled={submitting}
+                  data={[
+                    { value: "", label: "Select nutrient..." },
+                    ...nutrients.map((n) => ({ value: n.code, label: n.name })),
+                  ]}
+                  style={{ flex: 1 }}
+                />
+                <TextInput
+                  type="number"
+                  placeholder="Amount per 100g"
+                  value={row.amount_per_100g}
+                  onChange={(e) => updateNutrientRow(i, "amount_per_100g", e.target.value)}
+                  min={0}
+                  step="any"
+                  disabled={submitting}
+                  style={{ flex: 1 }}
+                />
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => removeNutrientRow(i)}
+                  disabled={nutrientRows.length <= 1 || submitting}
+                >
+                  ×
+                </ActionIcon>
+              </Group>
+            ))}
+          </Stack>
 
-        <section className="mb-5">
-          <div className="flex items-center justify-between gap-3 mb-3.5">
-            <h2 className="mb-0">Servings</h2>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addServingRow}
-              disabled={submitting}
-            >
-              + Add Serving
-            </Button>
-          </div>
-          {servingRows.map((row, i) => (
-            <div key={i} className="flex gap-2.5 items-center mb-2.5 flex-wrap">
-              <Input
-                placeholder="Label (e.g. scoop)"
-                value={row.label}
-                onChange={(e) => updateServingRow(i, "label", e.target.value)}
-                disabled={submitting}
-                className="flex-1"
-              />
-              <Input
-                type="number"
-                placeholder="Qty"
-                value={row.quantity}
-                onChange={(e) => updateServingRow(i, "quantity", e.target.value)}
-                min={0}
-                step="any"
-                disabled={submitting}
-                className="flex-1"
-              />
-              <Select
-                value={row.unit}
-                onValueChange={(v) => updateServingRow(i, "unit", v)}
-                disabled={submitting}
-              >
-                <SelectTrigger className="w-24 flex-none">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {units.map((u) => (
-                    <SelectItem key={u.code} value={u.code}>{u.code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                type="number"
-                placeholder="Grams"
-                value={row.grams}
-                onChange={(e) => updateServingRow(i, "grams", e.target.value)}
-                min={0}
-                step="any"
-                disabled={submitting}
-                className="flex-1"
-              />
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Title order={2}>Servings</Title>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                className="text-destructive"
-                onClick={() => removeServingRow(i)}
+                variant="outline"
+                size="sm"
+                onClick={addServingRow}
                 disabled={submitting}
               >
-                ×
+                + Add Serving
               </Button>
-            </div>
-          ))}
-        </section>
+            </Group>
+            {servingRows.map((row, i) => (
+              <Group key={i} gap="xs" align="center" wrap="wrap">
+                <TextInput
+                  placeholder="Label (e.g. scoop)"
+                  value={row.label}
+                  onChange={(e) => updateServingRow(i, "label", e.target.value)}
+                  disabled={submitting}
+                  style={{ flex: 1 }}
+                />
+                <TextInput
+                  type="number"
+                  placeholder="Qty"
+                  value={row.quantity}
+                  onChange={(e) => updateServingRow(i, "quantity", e.target.value)}
+                  min={0}
+                  step="any"
+                  disabled={submitting}
+                  style={{ flex: 1 }}
+                />
+                <NativeSelect
+                  value={row.unit}
+                  onChange={(e) => updateServingRow(i, "unit", e.target.value)}
+                  disabled={submitting}
+                  data={units.map((u) => ({ value: u.code, label: u.code }))}
+                  w={96}
+                />
+                <TextInput
+                  type="number"
+                  placeholder="Grams"
+                  value={row.grams}
+                  onChange={(e) => updateServingRow(i, "grams", e.target.value)}
+                  min={0}
+                  step="any"
+                  disabled={submitting}
+                  style={{ flex: 1 }}
+                />
+                <ActionIcon
+                  variant="subtle"
+                  color="red"
+                  onClick={() => removeServingRow(i)}
+                  disabled={submitting}
+                >
+                  ×
+                </ActionIcon>
+              </Group>
+            ))}
+          </Stack>
 
-        <Button type="submit" disabled={submitting} className="self-start">
-          {submitting ? "Saving..." : "Save Changes"}
-        </Button>
+          <Button type="submit" disabled={submitting} style={{ alignSelf: "flex-start" }}>
+            {submitting ? "Saving..." : "Save Changes"}
+          </Button>
+        </Stack>
       </form>
-    </div>
+    </Container>
   );
 }

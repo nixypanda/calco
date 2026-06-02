@@ -1,11 +1,4 @@
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table } from "@mantine/core";
 
 interface NutrientRow {
   code: string;
@@ -22,22 +15,22 @@ function formatAmount(value: number | string): string {
 export function NutrientsTable({ nutrients }: { nutrients: NutrientRow[] }) {
   return (
     <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Nutrient</TableHead>
-          <TableHead className="text-right w-24">Amount</TableHead>
-          <TableHead className="text-right w-24">Unit</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+      <Table.Thead>
+        <Table.Tr>
+          <Table.Th>Nutrient</Table.Th>
+          <Table.Th ta="right" w={96}>Amount</Table.Th>
+          <Table.Th ta="right" w={96}>Unit</Table.Th>
+        </Table.Tr>
+      </Table.Thead>
+      <Table.Tbody>
         {nutrients.map((n) => (
-          <TableRow key={n.code}>
-            <TableCell>{n.code.replace(/_/g, " ").toLowerCase()}</TableCell>
-            <TableCell className="text-right">{formatAmount(n.amount)}</TableCell>
-            <TableCell className="text-right">{n.unit || "-"}</TableCell>
-          </TableRow>
+          <Table.Tr key={n.code}>
+            <Table.Td>{n.code.replace(/_/g, " ").toLowerCase()}</Table.Td>
+            <Table.Td ta="right">{formatAmount(n.amount)}</Table.Td>
+            <Table.Td ta="right">{n.unit || "-"}</Table.Td>
+          </Table.Tr>
         ))}
-      </TableBody>
+      </Table.Tbody>
     </Table>
   );
 }
