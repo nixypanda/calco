@@ -2,14 +2,14 @@
 
 ## Overview
 
-The frontend is a React/Vite/TypeScript app with Tailwind CSS and local shadcn-style UI primitives.
+The frontend is a React/Vite/TypeScript app built on Mantine.
 
 ```text
 frontend/src/
   api/
   components/
-  components/ui/
   hooks/
+  lib/
   pages/
   App.tsx
   index.css
@@ -117,7 +117,7 @@ The UI should stay functional and food-diary oriented:
 
 Search, diary, and logging surfaces should prioritize compact, scannable controls and rows. Avoid oversized cards, large text that truncates early, or layouts that only work comfortably on desktop widths.
 
-The app uses local UI primitives in `components/ui/` for buttons, inputs, selects, cards, dialogs, tables, badges, dropdown menus, labels, and skeleton states.
+UI primitives come from `@mantine/core` (buttons, inputs, selects, cards, modals, tables, badges, menus, skeletons). Shared higher-level components live in `frontend/src/components/`.
 
 ## Tests
 
