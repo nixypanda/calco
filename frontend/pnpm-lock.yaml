@@ -8,6 +8,12 @@ importers:
 
   .:
     dependencies:
+      '@mantine/core':
+        specifier: ^9.2.2
+        version: 9.2.2(@mantine/hooks@9.2.2(react@19.2.6))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@mantine/hooks':
+        specifier: ^9.2.2
+        version: 9.2.2(react@19.2.6)
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -44,7 +50,7 @@ importers:
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.0
-        version: 4.3.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))
+        version: 4.3.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))
       '@testing-library/jest-dom':
         specifier: ^6.9.1
         version: 6.9.1
@@ -62,10 +68,19 @@ importers:
         version: 19.2.3(@types/react@19.2.15)
       '@vitejs/plugin-react':
         specifier: ^4.4.0
-        version: 4.7.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))
+        version: 4.7.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))
       jsdom:
         specifier: ^29.1.1
         version: 29.1.1
+      postcss:
+        specifier: ^8.5.15
+        version: 8.5.15
+      postcss-preset-mantine:
+        specifier: ^1.18.0
+        version: 1.18.0(postcss@8.5.15)
+      postcss-simple-vars:
+        specifier: ^7.0.1
+        version: 7.0.1(postcss@8.5.15)
       tailwindcss:
         specifier: ^4.3.0
         version: 4.3.0
@@ -74,10 +89,10 @@ importers:
         version: 5.7.3
       vite:
         specifier: ^6.0.0
-        version: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)
+        version: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))
       vitest:
         specifier: ^4.1.7
-        version: 4.1.7(jsdom@29.1.1)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))
+        version: 4.1.7(jsdom@29.1.1)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))
 
 packages:
 
@@ -403,6 +418,12 @@ packages:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
 
+  '@floating-ui/react@0.27.19':
+    resolution: {integrity: sha512-31B8h5mm8YxotlE7/AU/PhNAl8eWxAmjL/v2QOxroDNkTFLk3Uu82u63N3b6TXa4EGJeeZLVcd/9AlNlVqzeog==}
+    peerDependencies:
+      react: '>=17.0.0'
+      react-dom: '>=17.0.0'
+
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
 
@@ -421,6 +442,18 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mantine/core@9.2.2':
+    resolution: {integrity: sha512-j4d7dwKkrYPP9Lb7ut1u0OodwmosIaKK4azK4GMoTKq1+7TKRrJPxB1vkDjkbOcd+jbUt0qn6EkJdsSMKVcIIw==}
+    peerDependencies:
+      '@mantine/hooks': 9.2.2
+      react: ^19.2.0
+      react-dom: ^19.2.0
+
+  '@mantine/hooks@9.2.2':
+    resolution: {integrity: sha512-E0eKEMv47Xo+QVKYj2buzLJURcO/Qfb12EvM4mjKlXPuTqYhl+Fvg7Sg+xHmta8iTtBvo/5G+iNeqc4pfs8eaA==}
+    peerDependencies:
+      react: ^19.2.0
 
   '@radix-ui/number@1.1.1':
     resolution: {integrity: sha512-MkKCwxlXTgz6CFoJx3pCwn07GKp36+aZyu/u2Ln2VrA5DcdyCZkASEDBTd8x5whTQQL5CiYf4prXKLcgQdv29g==}
@@ -1144,6 +1177,10 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
+  camelcase-css@2.0.1:
+    resolution: {integrity: sha512-QOSvevhslijgYwRx6Rv7zKdMF8lbRmx+uQGx2+vDc+KI/eBnsy9kit5aj23AgGu3pa4t9AgwbnXWqS+iOY+2aA==}
+    engines: {node: '>= 6'}
+
   caniuse-lite@1.0.30001793:
     resolution: {integrity: sha512-iwSsYWaCOoh26cV8NwNRViHlrfUvYsHDfRVcbtmw0Kg6PJIZZXwMkj1442FYLBGkeUf1juAsU3DTfxW579mrPA==}
 
@@ -1168,6 +1205,11 @@ packages:
 
   css.escape@1.5.1:
     resolution: {integrity: sha512-YUifsXXuknHlUsmlgyY0PKzgPOr7/FjCePfHNt0jxm83wHZi44VDMQ7/fGNkjY3/jV1MC+1CmZbaHzugyeRtpg==}
+
+  cssesc@3.0.0:
+    resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
+    engines: {node: '>=4'}
+    hasBin: true
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
@@ -1425,6 +1467,39 @@ packages:
     resolution: {integrity: sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==}
     engines: {node: '>=12'}
 
+  postcss-js@4.1.0:
+    resolution: {integrity: sha512-oIAOTqgIo7q2EOwbhb8UalYePMvYoIeRY2YKntdpFQXNosSu3vLrniGgmH9OKs/qAkfoj5oB3le/7mINW1LCfw==}
+    engines: {node: ^12 || ^14 || >= 16}
+    peerDependencies:
+      postcss: ^8.4.21
+
+  postcss-mixins@12.1.2:
+    resolution: {integrity: sha512-90pSxmZVfbX9e5xCv7tI5RV1mnjdf16y89CJKbf/hD7GyOz1FCxcYMl8ZYA8Hc56dbApTKKmU9HfvgfWdCxlwg==}
+    engines: {node: ^20.0 || ^22.0 || >=24.0}
+    peerDependencies:
+      postcss: ^8.2.14
+
+  postcss-nested@7.0.2:
+    resolution: {integrity: sha512-5osppouFc0VR9/VYzYxO03VaDa3e8F23Kfd6/9qcZTUI8P58GIYlArOET2Wq0ywSl2o2PjELhYOFI4W7l5QHKw==}
+    engines: {node: '>=18.0'}
+    peerDependencies:
+      postcss: ^8.2.14
+
+  postcss-preset-mantine@1.18.0:
+    resolution: {integrity: sha512-sP6/s1oC7cOtBdl4mw/IRKmKvYTuzpRrH/vT6v9enMU/EQEQ31eQnHcWtFghOXLH87AAthjL/Q75rLmin1oZoA==}
+    peerDependencies:
+      postcss: '>=8.0.0'
+
+  postcss-selector-parser@7.1.1:
+    resolution: {integrity: sha512-orRsuYpJVw8LdAwqqLykBj9ecS5/cRHlI5+nvTo8LcCKmzDmqVORXtOIYEEQuL9D4BxtA1lm5isAqzQZCoQ6Eg==}
+    engines: {node: '>=4'}
+
+  postcss-simple-vars@7.0.1:
+    resolution: {integrity: sha512-5GLLXaS8qmzHMOjVxqkk1TZPf1jMqesiI7qLhnlyERalG0sMbHIbJqrcnrpmZdKCLglHnRHoEBB61RtGTsj++A==}
+    engines: {node: '>=14.0'}
+    peerDependencies:
+      postcss: ^8.2.1
+
   postcss@8.5.15:
     resolution: {integrity: sha512-FfR8sjd4em2T6fb3I2MwAJU7HWVMr9zba+enmQeeWFfCbm+UOC/0X4DS8XtpUTMwWMGbjKYP7xjfNekzyGmB3A==}
     engines: {node: ^10 || ^12 || >=14}
@@ -1444,6 +1519,12 @@ packages:
 
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
+
+  react-number-format@5.4.5:
+    resolution: {integrity: sha512-y8O2yHHj3w0aE9XO8d2BCcUOOdQTRSVq+WIuMlLVucAm5XNjJAy+BoOJiuQMldVYVOKTMyvVNfnbl2Oqp+YxGw==}
+    peerDependencies:
+      react: ^0.14 || ^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^0.14 || ^15.0.0 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
@@ -1544,8 +1625,21 @@ packages:
     resolution: {integrity: sha512-laJTa3Jb+VQpaC6DseHhF7dXVqHTfJPCRDaEbid/drOhgitgYku/letMUqOXFoWV0zIIUbjpdH2t+tYj4bQMRQ==}
     engines: {node: '>=8'}
 
+  sugarss@5.0.1:
+    resolution: {integrity: sha512-ctS5RYCBVvPoZAnzIaX5QSShK8ZiZxD5HUqSxlusvEMC+QZQIPCPOIJg6aceFX+K2rf4+SH89eu++h1Zmsr2nw==}
+    engines: {node: '>=18.0'}
+    peerDependencies:
+      postcss: ^8.3.3
+
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
+
+  tabbable@6.4.0:
+    resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
+
+  tagged-tag@1.0.0:
+    resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
+    engines: {node: '>=20'}
 
   tailwind-merge@3.6.0:
     resolution: {integrity: sha512-uxL7qAVQriqRQPAyK3pj66VqskWqoZ37PW94jwOTwNfq/z9oyu1V+eqrZqtR2+fCiXdYOZe/Modt8GtvqNzu+w==}
@@ -1590,6 +1684,10 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
+  type-fest@5.7.0:
+    resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
+    engines: {node: '>=20'}
+
   typescript@5.7.3:
     resolution: {integrity: sha512-84MVSjMEHP+FQRPy3pX9sTVV/INIex71s9TL2Gm5FG/WG1SqXeKyZ0k7/blY/4FdOzI12CBy1vGc4og/eus0fw==}
     engines: {node: '>=14.17'}
@@ -1624,6 +1722,9 @@ packages:
     peerDependenciesMeta:
       '@types/react':
         optional: true
+
+  util-deprecate@1.0.2:
+    resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
 
   vite@6.4.2:
     resolution: {integrity: sha512-2N/55r4JDJ4gdrCvGgINMy+HH3iRpNIz8K6SFwVsA+JbQScLiC+clmAxBgwiSPgcG9U15QmvqCGWzMbqda5zGQ==}
@@ -1998,6 +2099,14 @@ snapshots:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
 
+  '@floating-ui/react@0.27.19(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+    dependencies:
+      '@floating-ui/react-dom': 2.1.8(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@floating-ui/utils': 0.2.11
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      tabbable: 6.4.0
+
   '@floating-ui/utils@0.2.11': {}
 
   '@jridgewell/gen-mapping@0.3.13':
@@ -2018,6 +2127,23 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@mantine/core@9.2.2(@mantine/hooks@9.2.2(react@19.2.6))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+    dependencies:
+      '@floating-ui/react': 0.27.19(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      '@mantine/hooks': 9.2.2(react@19.2.6)
+      clsx: 2.1.1
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      react-number-format: 5.4.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react-remove-scroll: 2.7.2(@types/react@19.2.15)(react@19.2.6)
+      type-fest: 5.7.0
+    transitivePeerDependencies:
+      - '@types/react'
+
+  '@mantine/hooks@9.2.2(react@19.2.6)':
+    dependencies:
+      react: 19.2.6
 
   '@radix-ui/number@1.1.1': {}
 
@@ -2492,12 +2618,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.3.0
       '@tailwindcss/oxide-win32-x64-msvc': 4.3.0
 
-  '@tailwindcss/vite@4.3.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))':
+  '@tailwindcss/vite@4.3.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))':
     dependencies:
       '@tailwindcss/node': 4.3.0
       '@tailwindcss/oxide': 4.3.0
       tailwindcss: 4.3.0
-      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)
+      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -2573,7 +2699,7 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@vitejs/plugin-react@4.7.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))':
+  '@vitejs/plugin-react@4.7.0(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))':
     dependencies:
       '@babel/core': 7.29.7
       '@babel/plugin-transform-react-jsx-self': 7.29.7(@babel/core@7.29.7)
@@ -2581,7 +2707,7 @@ snapshots:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)
+      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))
     transitivePeerDependencies:
       - supports-color
 
@@ -2594,13 +2720,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.7(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))':
+  '@vitest/mocker@4.1.7(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))':
     dependencies:
       '@vitest/spy': 4.1.7
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)
+      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))
 
   '@vitest/pretty-format@4.1.7':
     dependencies:
@@ -2656,6 +2782,8 @@ snapshots:
       node-releases: 2.0.46
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
 
+  camelcase-css@2.0.1: {}
+
   caniuse-lite@1.0.30001793: {}
 
   chai@6.2.2: {}
@@ -2672,6 +2800,8 @@ snapshots:
       source-map-js: 1.2.1
 
   css.escape@1.5.1: {}
+
+  cssesc@3.0.0: {}
 
   csstype@3.2.3: {}
 
@@ -2890,6 +3020,39 @@ snapshots:
 
   picomatch@4.0.4: {}
 
+  postcss-js@4.1.0(postcss@8.5.15):
+    dependencies:
+      camelcase-css: 2.0.1
+      postcss: 8.5.15
+
+  postcss-mixins@12.1.2(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+      postcss-js: 4.1.0(postcss@8.5.15)
+      postcss-simple-vars: 7.0.1(postcss@8.5.15)
+      sugarss: 5.0.1(postcss@8.5.15)
+      tinyglobby: 0.2.16
+
+  postcss-nested@7.0.2(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+      postcss-selector-parser: 7.1.1
+
+  postcss-preset-mantine@1.18.0(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+      postcss-mixins: 12.1.2(postcss@8.5.15)
+      postcss-nested: 7.0.2(postcss@8.5.15)
+
+  postcss-selector-parser@7.1.1:
+    dependencies:
+      cssesc: 3.0.0
+      util-deprecate: 1.0.2
+
+  postcss-simple-vars@7.0.1(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+
   postcss@8.5.15:
     dependencies:
       nanoid: 3.3.12
@@ -2910,6 +3073,11 @@ snapshots:
       scheduler: 0.27.0
 
   react-is@17.0.2: {}
+
+  react-number-format@5.4.5(react-dom@19.2.6(react@19.2.6))(react@19.2.6):
+    dependencies:
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
 
   react-refresh@0.17.0: {}
 
@@ -3016,7 +3184,15 @@ snapshots:
     dependencies:
       min-indent: 1.0.1
 
+  sugarss@5.0.1(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+
   symbol-tree@3.2.4: {}
+
+  tabbable@6.4.0: {}
+
+  tagged-tag@1.0.0: {}
 
   tailwind-merge@3.6.0: {}
 
@@ -3051,6 +3227,10 @@ snapshots:
 
   tslib@2.8.1: {}
 
+  type-fest@5.7.0:
+    dependencies:
+      tagged-tag: 1.0.0
+
   typescript@5.7.3: {}
 
   undici@7.26.0: {}
@@ -3076,7 +3256,9 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.15
 
-  vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0):
+  util-deprecate@1.0.2: {}
+
+  vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)):
     dependencies:
       esbuild: 0.25.12
       fdir: 6.5.0(picomatch@4.0.4)
@@ -3088,11 +3270,12 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       lightningcss: 1.32.0
+      sugarss: 5.0.1(postcss@8.5.15)
 
-  vitest@4.1.7(jsdom@29.1.1)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)):
+  vitest@4.1.7(jsdom@29.1.1)(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))):
     dependencies:
       '@vitest/expect': 4.1.7
-      '@vitest/mocker': 4.1.7(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0))
+      '@vitest/mocker': 4.1.7(vite@6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15)))
       '@vitest/pretty-format': 4.1.7
       '@vitest/runner': 4.1.7
       '@vitest/snapshot': 4.1.7
@@ -3109,7 +3292,7 @@ snapshots:
       tinyexec: 1.2.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)
+      vite: 6.4.2(jiti@2.7.0)(lightningcss@1.32.0)(sugarss@5.0.1(postcss@8.5.15))
       why-is-node-running: 2.3.0
     optionalDependencies:
       jsdom: 29.1.1
