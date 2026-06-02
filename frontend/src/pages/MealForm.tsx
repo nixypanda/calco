@@ -75,18 +75,28 @@ export function MealForm() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    setFetching(true);
-    setError("");
-    (async () => {
+
+    const fetchProductNames = async (
+      ids: string[],
+    ): Promise<Record<string, string>> => {
+      const entries = await Promise.all(
+        ids.map(async (pid): Promise<[string, string]> => {
+          try {
+            const d = await getFoodDetail(pid);
+            return [pid, d?.name ?? ""];
+          } catch {
+            return [pid, ""];
+          }
+        }),
+      );
+      return Object.fromEntries(entries);
+    };
+
+    const load = async () => {
+      setFetching(true);
+      setError("");
       try {
         const meal = await getMeal(id);
-        if (cancelled) return;
-        setName(meal.name);
-        setNotes(meal.notes ?? "");
-        if (meal.total_quantity) {
-          setTotalQty(meal.total_quantity.amount);
-          setTotalUnit(meal.total_quantity.unit);
-        }
         const productIds = [
           ...new Set(
             meal.components
@@ -94,18 +104,15 @@ export function MealForm() {
               .map((c) => c.item.id),
           ),
         ];
-        const nameMap: Record<string, string> = {};
-        if (productIds.length > 0) {
-          const details = await Promise.all(
-            productIds.map((pid) =>
-              Promise.resolve()
-                .then(() => getFoodDetail(pid))
-                .then((d) => ({ id: d?.id ?? pid, name: d?.name ?? "" }))
-                .catch(() => ({ id: pid, name: "" })),
-            ),
-          );
-          if (cancelled) return;
-          for (const d of details) nameMap[d.id] = d.name;
+        const nameMap =
+          productIds.length > 0 ? await fetchProductNames(productIds) : {};
+        if (cancelled) return;
+
+        setName(meal.name);
+        setNotes(meal.notes ?? "");
+        if (meal.total_quantity) {
+          setTotalQty(meal.total_quantity.amount);
+          setTotalUnit(meal.total_quantity.unit);
         }
         setComponents(
           meal.components.map((c) => {
@@ -128,7 +135,10 @@ export function MealForm() {
       } finally {
         if (!cancelled) setFetching(false);
       }
-    })();
+    };
+
+    load();
+
     return () => {
       cancelled = true;
     };

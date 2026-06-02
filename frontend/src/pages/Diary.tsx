@@ -147,59 +147,61 @@ export function Diary() {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    (async () => {
+
+    const fetchItemNames = async (
+      items: LogResponse[],
+    ): Promise<Record<string, string>> => {
+      const uniqueByType = (type: "product" | "meal") => [
+        ...new Set(
+          items.filter((l) => l.item.type === type).map((l) => l.item.id),
+        ),
+      ];
+      const productIds = uniqueByType("product");
+      const mealIds = uniqueByType("meal");
+      const entries = await Promise.all([
+        ...productIds.map(async (id): Promise<[string, string]> => {
+          try {
+            const d = await getFoodDetail(id);
+            return [d.id, d.name];
+          } catch {
+            return [id, "Unknown food"];
+          }
+        }),
+        ...mealIds.map(async (id): Promise<[string, string]> => {
+          try {
+            const m = await getMeal(id);
+            return [m.id, m.name];
+          } catch {
+            return [id, "Unknown meal"];
+          }
+        }),
+      ]);
+      return Object.fromEntries(entries);
+    };
+
+    const load = async () => {
+      setLoading(true);
+      setError("");
       try {
         const [logRes, summaryRes] = await Promise.all([
           listLogs(dateStr, dateStr),
           getSummary(dateStr, dateStr, SUMMARY_CODES),
         ]);
+        const nameMap = await fetchItemNames(logRes.items);
         if (cancelled) return;
         setLogs(logRes.items);
         setSummary(summaryRes.totals);
-
-        const productIds = [
-          ...new Set(
-            logRes.items
-              .filter((l) => l.item.type === "product")
-              .map((l) => l.item.id),
-          ),
-        ];
-        const mealIds = [
-          ...new Set(
-            logRes.items
-              .filter((l) => l.item.type === "meal")
-              .map((l) => l.item.id),
-          ),
-        ];
-        if (productIds.length > 0 || mealIds.length > 0) {
-          const details = await Promise.all([
-            ...productIds.map((id) =>
-              getFoodDetail(id)
-                .then((d) => ({ id: d.id, name: d.name }))
-                .catch(() => ({ id, name: "Unknown food" })),
-            ),
-            ...mealIds.map((id) =>
-              getMeal(id)
-                .then((m) => ({ id: m.id, name: m.name }))
-                .catch(() => ({ id, name: "Unknown meal" })),
-            ),
-          ]);
-          if (cancelled) return;
-          const nameMap: Record<string, string> = {};
-          for (const d of details) nameMap[d.id] = d.name;
-          setFoodNames(nameMap);
-        } else {
-          setFoodNames({});
-        }
+        setFoodNames(nameMap);
       } catch (err: unknown) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load diary");
       } finally {
         if (!cancelled) setLoading(false);
       }
-    })();
+    };
+
+    load();
+
     return () => {
       cancelled = true;
     };

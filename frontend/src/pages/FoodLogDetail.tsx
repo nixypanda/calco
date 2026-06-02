@@ -24,41 +24,49 @@ export function FoodLogDetail() {
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    Promise.all([getLog(id), listUnits()])
-      .then(async ([logRes, unitData]) => {
+
+    const resolveItemName = async (
+      item: LogResponse["item"],
+    ): Promise<{ name: string; food?: ProductDetail }> => {
+      if (item.type === "product") {
+        try {
+          const foodData = await getFoodDetail(item.id);
+          return { name: foodData.name, food: foodData };
+        } catch {
+          return { name: "Unknown food" };
+        }
+      }
+      if (item.type === "meal") {
+        try {
+          const meal = await getMeal(item.id);
+          return { name: meal.name };
+        } catch {
+          return { name: "Unknown meal" };
+        }
+      }
+      return { name: "Unknown item" };
+    };
+
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const [logRes, unitData] = await Promise.all([getLog(id), listUnits()]);
+        const { name, food: foodData } = await resolveItemName(logRes.item);
         if (cancelled) return;
         setLog(logRes);
         setUnits(unitData.items);
-        if (logRes.item.type === "product") {
-          try {
-            const foodData = await getFoodDetail(logRes.item.id);
-            if (!cancelled) {
-              setFood(foodData);
-              setItemName(foodData.name);
-            }
-          } catch {
-            if (!cancelled) setItemName("Unknown food");
-          }
-        } else if (logRes.item.type === "meal") {
-          try {
-            const meal = await getMeal(logRes.item.id);
-            if (!cancelled) setItemName(meal.name);
-          } catch {
-            if (!cancelled) setItemName("Unknown meal");
-          }
-        } else {
-          setItemName("Unknown item");
-        }
-      })
-      .catch((err: unknown) => {
+        setItemName(name);
+        if (foodData) setFood(foodData);
+      } catch (err: unknown) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : "Failed to load log");
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+
+    load();
 
     return () => {
       cancelled = true;
