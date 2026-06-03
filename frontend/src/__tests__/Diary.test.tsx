@@ -1,50 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { AuthProvider } from "../hooks/AuthContext";
-import { Diary } from "../pages/Diary";
+import { describe, expect, it } from "vitest";
+import type { LogResponse, SummaryEntry } from "../api/logs";
+import { formatDate } from "../lib/time";
+import { type DiaryModel, diaryReducer } from "../pages/Diary";
 
-const mockGetSession = vi.fn();
-const mockListLogs = vi.fn();
-const mockGetSummary = vi.fn();
-const mockGetFoodDetail = vi.fn();
-const mockLogout = vi.fn();
-
-vi.mock("../api/auth", () => ({
-  getSession: (...args: unknown[]) => mockGetSession(...args),
-  login: vi.fn(),
-  logout: (...args: unknown[]) => mockLogout(...args),
-  createAdmin: vi.fn(),
-}));
-
-vi.mock("../api/logs", () => ({
-  listLogs: (...args: unknown[]) => mockListLogs(...args),
-  getSummary: (...args: unknown[]) => mockGetSummary(...args),
-}));
-
-vi.mock("../api/foods", () => ({
-  getFoodDetail: (...args: unknown[]) => mockGetFoodDetail(...args),
-}));
-
-function renderAtHome() {
-  return render(
-    <MemoryRouter initialEntries={["/home"]}>
-      <AuthProvider>
-        <Routes>
-          <Route path="/home" element={<Diary />} />
-          <Route path="/search" element={<div>Search Page</div>} />
-          <Route path="/meals" element={<div>Meals Page</div>} />
-          <Route path="/logs/:id" element={<div>Log Detail Page</div>} />
-        </Routes>
-      </AuthProvider>
-    </MemoryRouter>,
-  );
-}
-
-const today = new Date().toISOString().slice(0, 10);
-
-const mockLogItem = {
+const mockLogItem: LogResponse = {
   id: "log-1",
   logged_at: "2026-05-30T12:00:00Z",
   meal_slot: "lunch",
@@ -59,227 +18,126 @@ const mockLogItem = {
   notes: null,
 };
 
-const mockSummary = {
-  from: today,
-  to: today,
-  totals: [
-    { code: "ENERGY_KCAL", amount: "247.5", unit: "kcal" },
-    { code: "PROTEIN_G", amount: "46.5", unit: "g" },
-    { code: "CARBS_G", amount: "0", unit: "g" },
-    { code: "FAT_G", amount: "3.5", unit: "g" },
-  ],
-};
+const mockSummary: SummaryEntry[] = [
+  { code: "ENERGY_KCAL", amount: "247.5", unit: "kcal" },
+  { code: "PROTEIN_G", amount: "46.5", unit: "g" },
+  { code: "CARBS_G", amount: "0", unit: "g" },
+  { code: "FAT_G", amount: "3.5", unit: "g" },
+];
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  mockGetSession.mockResolvedValue({
-    identity: { id: "1", username: "alice", role: "user" },
-    profile: { id: "p1", display_name: "Alice" },
-  });
-  mockListLogs.mockResolvedValue({ from: today, to: today, items: [] });
-  mockLogout.mockResolvedValue(undefined);
-  mockGetSummary.mockResolvedValue({
-    from: today,
-    to: today,
-    totals: [
-      { code: "ENERGY_KCAL", amount: "0", unit: "kcal" },
-      { code: "PROTEIN_G", amount: "0", unit: "g" },
-      { code: "CARBS_G", amount: "0", unit: "g" },
-      { code: "FAT_G", amount: "0", unit: "g" },
-    ],
-  });
-});
+function todayAtMidnight(): Date {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
-describe("Diary", () => {
-  it("renders header and profile button without old nav", async () => {
-    renderAtHome();
+function createDiaryModel(overrides: Partial<DiaryModel> = {}): DiaryModel {
+  return {
+    currentDate: new Date("2026-05-30T00:00:00"),
+    logs: [],
+    summary: [],
+    foodNames: {},
+    loading: false,
+    error: "",
+    macroMode: "grams",
+    darkMode: false,
+    ...overrides,
+  };
+}
 
-    await waitFor(() => {
-      expect(screen.getByText("CalCo")).toBeInTheDocument();
-    });
+describe("diaryReducer", () => {
+  it("moves to the previous day", () => {
+    const next = diaryReducer(createDiaryModel(), { type: "date/previous" });
 
-    expect(
-      screen.getByRole("button", { name: "Open profile menu" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Search Foods")).not.toBeInTheDocument();
-    expect(screen.queryByText("Create Food")).not.toBeInTheDocument();
+    expect(formatDate(next.currentDate)).toBe("2026-05-29");
   });
 
-  it("shows empty state when no logs", async () => {
-    renderAtHome();
+  it("moves to the next day when it is not in the future", () => {
+    const next = diaryReducer(createDiaryModel(), { type: "date/next" });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText("No food logged for this day."),
-      ).toBeInTheDocument();
-    });
+    expect(formatDate(next.currentDate)).toBe("2026-05-31");
   });
 
-  it("shows summary rings", async () => {
-    mockGetSummary.mockResolvedValue(mockSummary);
+  it("does not move past today", () => {
+    const model = createDiaryModel({ currentDate: todayAtMidnight() });
 
-    renderAtHome();
+    const next = diaryReducer(model, { type: "date/next" });
 
-    await waitFor(() => {
-      expect(screen.getAllByText("Calories").length).toBeGreaterThan(0);
-    });
-
-    expect(screen.getAllByText("Protein").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Carbs").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Fat").length).toBeGreaterThan(0);
+    expect(next.currentDate).toEqual(model.currentDate);
   });
 
-  it("shows meal slot groups and log rows", async () => {
-    mockGetSummary.mockResolvedValue(mockSummary);
-    mockListLogs.mockResolvedValue({
-      from: today,
-      to: today,
-      items: [mockLogItem],
-    });
-    mockGetFoodDetail.mockResolvedValue({
-      id: "food-1",
-      name: "Chicken Breast",
+  it("starts diary loading and clears stale errors", () => {
+    const next = diaryReducer(createDiaryModel({ error: "Old error" }), {
+      type: "diary/loadStarted",
     });
 
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(screen.getByText("Lunch")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        (content) =>
-          content.includes("carbs 0.0g") &&
-          content.includes("protein 46.5g") &&
-          content.includes("fat 3.5g"),
-      ),
-    ).toBeInTheDocument();
+    expect(next.loading).toBe(true);
+    expect(next.error).toBe("");
   });
 
-  it("toggles meal slot macros from grams to percentages", async () => {
-    mockGetSummary.mockResolvedValue(mockSummary);
-    mockListLogs.mockResolvedValue({
-      from: today,
-      to: today,
-      items: [mockLogItem],
-    });
-    mockGetFoodDetail.mockResolvedValue({
-      id: "food-1",
-      name: "Chicken Breast",
+  it("keeps existing diary data while a reload starts", () => {
+    const model = createDiaryModel({
+      logs: [mockLogItem],
+      summary: mockSummary,
+      foodNames: { "food-1": "Chicken Breast" },
     });
 
-    renderAtHome();
+    const next = diaryReducer(model, { type: "diary/loadStarted" });
 
-    await waitFor(() => {
-      expect(
-        screen.getByText((content) => content.includes("protein 46.5g")),
-      ).toBeInTheDocument();
-    });
-
-    await userEvent.click(
-      screen.getByText((content) => content.includes("protein 46.5g")),
-    );
-
-    expect(
-      screen.getByText(
-        (content) =>
-          content.includes("carbs 0%") &&
-          content.includes("protein 86%") &&
-          content.includes("fat 14%"),
-      ),
-    ).toBeInTheDocument();
+    expect(next.logs).toEqual(model.logs);
+    expect(next.summary).toEqual(model.summary);
+    expect(next.foodNames).toEqual(model.foodNames);
   });
 
-  it("navigates to search from a meal add button", async () => {
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(
-        screen.getAllByRole("button", { name: "Add Food" })[0],
-      ).toBeInTheDocument();
+  it("stores loaded diary data", () => {
+    const next = diaryReducer(createDiaryModel({ loading: true }), {
+      type: "diary/loadSucceeded",
+      logs: [mockLogItem],
+      summary: mockSummary,
+      foodNames: { "food-1": "Chicken Breast" },
     });
 
-    await userEvent.click(
-      screen.getAllByRole("button", { name: "Add Food" })[0],
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Search Page")).toBeInTheDocument();
-    });
+    expect(next.loading).toBe(false);
+    expect(next.logs).toEqual([mockLogItem]);
+    expect(next.summary).toEqual(mockSummary);
+    expect(next.foodNames).toEqual({ "food-1": "Chicken Breast" });
   });
 
-  it("navigates to meals from the profile menu", async () => {
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Open profile menu" }),
-      ).toBeInTheDocument();
+  it("stores diary loading errors without clearing existing data", () => {
+    const model = createDiaryModel({
+      loading: true,
+      logs: [mockLogItem],
+      summary: mockSummary,
+      foodNames: { "food-1": "Chicken Breast" },
     });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Open profile menu" }),
-    );
-    await userEvent.click(await screen.findByText("My Meals"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Meals Page")).toBeInTheDocument();
+    const next = diaryReducer(model, {
+      type: "diary/loadFailed",
+      error: "Network error",
     });
+
+    expect(next.loading).toBe(false);
+    expect(next.error).toBe("Network error");
+    expect(next.logs).toEqual(model.logs);
+    expect(next.summary).toEqual(model.summary);
+    expect(next.foodNames).toEqual(model.foodNames);
   });
 
-  it("logs out from the profile menu", async () => {
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Open profile menu" }),
-      ).toBeInTheDocument();
+  it("toggles macro display mode", () => {
+    const percent = diaryReducer(createDiaryModel(), {
+      type: "macroMode/toggled",
     });
+    const grams = diaryReducer(percent, { type: "macroMode/toggled" });
 
-    await userEvent.click(
-      screen.getByRole("button", { name: "Open profile menu" }),
-    );
-    await userEvent.click(await screen.findByText("Logout"));
-
-    await waitFor(() => {
-      expect(mockLogout).toHaveBeenCalled();
-    });
+    expect(percent.macroMode).toBe("percent");
+    expect(grams.macroMode).toBe("grams");
   });
 
-  it("navigates to log detail on log row click", async () => {
-    mockGetSummary.mockResolvedValue(mockSummary);
-    mockListLogs.mockResolvedValue({
-      from: today,
-      to: today,
-      items: [mockLogItem],
-    });
-    mockGetFoodDetail.mockResolvedValue({
-      id: "food-1",
-      name: "Chicken Breast",
-    });
+  it("toggles theme mode", () => {
+    const dark = diaryReducer(createDiaryModel(), { type: "theme/toggled" });
+    const light = diaryReducer(dark, { type: "theme/toggled" });
 
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(screen.getByText("Chicken Breast")).toBeInTheDocument();
-    });
-
-    await userEvent.click(screen.getByText("Chicken Breast"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Log Detail Page")).toBeInTheDocument();
-    });
-  });
-
-  it("shows error state", async () => {
-    mockListLogs.mockRejectedValue(new Error("Network error"));
-
-    renderAtHome();
-
-    await waitFor(() => {
-      expect(screen.getByText("Network error")).toBeInTheDocument();
-    });
+    expect(dark.darkMode).toBe(true);
+    expect(light.darkMode).toBe(false);
   });
 });

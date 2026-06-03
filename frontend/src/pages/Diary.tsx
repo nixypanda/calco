@@ -15,7 +15,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { Moon, Sun } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -106,43 +106,117 @@ function getInitials(name: string): string {
   return `${words[0][0]}${words[1][0]}`.toUpperCase();
 }
 
+type MacroMode = "grams" | "percent";
+
+export type DiaryModel = {
+  currentDate: Date;
+  logs: LogResponse[];
+  summary: SummaryEntry[];
+  foodNames: Record<string, string>;
+  loading: boolean;
+  error: string;
+  macroMode: MacroMode;
+  darkMode: boolean;
+};
+
+export type DiaryMsg =
+  | { type: "date/previous" }
+  | { type: "date/next" }
+  | { type: "diary/loadStarted" }
+  | {
+      type: "diary/loadSucceeded";
+      logs: LogResponse[];
+      summary: SummaryEntry[];
+      foodNames: Record<string, string>;
+    }
+  | { type: "diary/loadFailed"; error: string }
+  | { type: "macroMode/toggled" }
+  | { type: "theme/toggled" };
+
+function getInitialDate(searchParams: URLSearchParams): Date {
+  const dateParam = searchParams.get("date");
+  if (dateParam) {
+    const d = new Date(`${dateParam}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now;
+}
+
+function getInitialDarkMode(): boolean {
+  const stored = localStorage.getItem("theme");
+  if (stored === "dark") return true;
+  if (stored === "light") return false;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
+function createInitialDiaryModel(searchParams: URLSearchParams): DiaryModel {
+  return {
+    currentDate: getInitialDate(searchParams),
+    logs: [],
+    summary: [],
+    foodNames: {},
+    loading: true,
+    error: "",
+    macroMode: "grams",
+    darkMode: getInitialDarkMode(),
+  };
+}
+
+export function diaryReducer(model: DiaryModel, msg: DiaryMsg): DiaryModel {
+  switch (msg.type) {
+    case "date/previous": {
+      const currentDate = new Date(model.currentDate);
+      currentDate.setDate(currentDate.getDate() - 1);
+      return { ...model, currentDate };
+    }
+    case "date/next": {
+      const currentDate = new Date(model.currentDate);
+      currentDate.setDate(currentDate.getDate() + 1);
+      if (formatDate(currentDate) > todayString()) return model;
+      return { ...model, currentDate };
+    }
+    case "diary/loadStarted":
+      return { ...model, loading: true, error: "" };
+    case "diary/loadSucceeded":
+      return {
+        ...model,
+        logs: msg.logs,
+        summary: msg.summary,
+        foodNames: msg.foodNames,
+        loading: false,
+      };
+    case "diary/loadFailed":
+      return { ...model, loading: false, error: msg.error };
+    case "macroMode/toggled":
+      return {
+        ...model,
+        macroMode: model.macroMode === "grams" ? "percent" : "grams",
+      };
+    case "theme/toggled":
+      return { ...model, darkMode: !model.darkMode };
+  }
+}
+
 export function Diary() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { identity, profile, logout } = useAuth();
 
-  const getInitialDate = (): Date => {
-    const dateParam = searchParams.get("date");
-    if (dateParam) {
-      const d = new Date(`${dateParam}T00:00:00`);
-      if (!Number.isNaN(d.getTime())) return d;
-    }
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now;
-  };
-
-  const [currentDate, setCurrentDate] = useState(getInitialDate);
-  const [logs, setLogs] = useState<LogResponse[]>([]);
-  const [summary, setSummary] = useState<SummaryEntry[]>([]);
-  const [foodNames, setFoodNames] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [macroMode, setMacroMode] = useState<"grams" | "percent">("grams");
+  const [model, dispatch] = useReducer(
+    diaryReducer,
+    searchParams,
+    createInitialDiaryModel,
+  );
   const ringScrollRef = useRef<HTMLDivElement>(null);
-  const [darkMode, setDarkMode] = useState(() => {
-    const stored = localStorage.getItem("theme");
-    if (stored === "dark") return true;
-    if (stored === "light") return false;
-    return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
-  });
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    localStorage.setItem("theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
+    document.documentElement.classList.toggle("dark", model.darkMode);
+    localStorage.setItem("theme", model.darkMode ? "dark" : "light");
+  }, [model.darkMode]);
 
-  const dateStr = formatDate(currentDate);
+  const dateStr = formatDate(model.currentDate);
   const displayName = profile?.display_name ?? identity?.username ?? "User";
 
   useEffect(() => {
@@ -180,8 +254,7 @@ export function Diary() {
     };
 
     const load = async () => {
-      setLoading(true);
-      setError("");
+      dispatch({ type: "diary/loadStarted" });
       try {
         const [logRes, summaryRes] = await Promise.all([
           listLogs(dateStr, dateStr),
@@ -189,14 +262,18 @@ export function Diary() {
         ]);
         const nameMap = await fetchItemNames(logRes.items);
         if (cancelled) return;
-        setLogs(logRes.items);
-        setSummary(summaryRes.totals);
-        setFoodNames(nameMap);
+        dispatch({
+          type: "diary/loadSucceeded",
+          logs: logRes.items,
+          summary: summaryRes.totals,
+          foodNames: nameMap,
+        });
       } catch (err: unknown) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : "Failed to load diary");
-      } finally {
-        if (!cancelled) setLoading(false);
+        dispatch({
+          type: "diary/loadFailed",
+          error: err instanceof Error ? err.message : "Failed to load diary",
+        });
       }
     };
 
@@ -207,37 +284,27 @@ export function Diary() {
     };
   }, [dateStr]);
 
-  const goPrev = () => {
-    const prev = new Date(currentDate);
-    prev.setDate(prev.getDate() - 1);
-    setCurrentDate(prev);
-  };
-
-  const goNext = () => {
-    const next = new Date(currentDate);
-    next.setDate(next.getDate() + 1);
-    if (formatDate(next) <= todayString()) setCurrentDate(next);
-  };
+  const goPrev = () => dispatch({ type: "date/previous" });
+  const goNext = () => dispatch({ type: "date/next" });
 
   const isToday = dateStr === todayString();
-  const kcal = getNutrientVal(summary, "ENERGY_KCAL");
-  const protein = getNutrientVal(summary, "PROTEIN_G");
-  const carbs = getNutrientVal(summary, "CARBS_G");
-  const fat = getNutrientVal(summary, "FAT_G");
+  const kcal = getNutrientVal(model.summary, "ENERGY_KCAL");
+  const protein = getNutrientVal(model.summary, "PROTEIN_G");
+  const carbs = getNutrientVal(model.summary, "CARBS_G");
+  const fat = getNutrientVal(model.summary, "FAT_G");
 
   const mealSlotLogs = MEAL_SLOTS.map((slot) => ({
     ...slot,
-    items: logs.filter((l) => l.meal_slot === slot.value),
+    items: model.logs.filter((l) => l.meal_slot === slot.value),
   }));
-  const otherLogs = logs.filter((l) => !l.meal_slot);
+  const otherLogs = model.logs.filter((l) => !l.meal_slot);
 
   const slotCalories = (slot: string) =>
-    logs
+    model.logs
       .filter((l) => l.meal_slot === slot)
       .reduce((s, l) => s + getCalories(l.nutrients), 0);
 
-  const toggleMacroMode = () =>
-    setMacroMode((c) => (c === "grams" ? "percent" : "grams"));
+  const toggleMacroMode = () => dispatch({ type: "macroMode/toggled" });
 
   const renderLogRow = (log: LogResponse) => (
     <UnstyledButton
@@ -248,7 +315,7 @@ export function Diary() {
     >
       <Group gap="xs" align="center" wrap="nowrap">
         <Text fw={500} truncate style={{ flex: 1 }}>
-          {foodNames[log.item.id] ?? "Loading..."}
+          {model.foodNames[log.item.id] ?? "Loading..."}
         </Text>
         <Text c="dimmed" size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
           {log.quantity.amount} {log.quantity.unit}
@@ -274,10 +341,10 @@ export function Diary() {
         <Group gap="xs">
           <ActionIcon
             variant="subtle"
-            onClick={() => setDarkMode((d) => !d)}
+            onClick={() => dispatch({ type: "theme/toggled" })}
             aria-label="Toggle dark mode"
           >
-            {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            {model.darkMode ? <Sun size={20} /> : <Moon size={20} />}
           </ActionIcon>
           <Menu position="bottom-end">
             <Menu.Target>
@@ -302,7 +369,7 @@ export function Diary() {
         </Group>
       </Group>
 
-      {error && <ErrorBanner message={error} />}
+      {model.error && <ErrorBanner message={model.error} />}
 
       <Paper p="md" mb="md">
         <Stack gap="md">
@@ -315,7 +382,7 @@ export function Diary() {
               ←
             </ActionIcon>
             <Text fw={600} ta="center" truncate>
-              {displayDate(currentDate)}
+              {displayDate(model.currentDate)}
             </Text>
             <ActionIcon
               variant="subtle"
@@ -362,7 +429,7 @@ export function Diary() {
       </Paper>
 
       <Stack gap="sm">
-        {loading && (
+        {model.loading && (
           <Stack gap="sm">
             <Skeleton height={16} width="80%" />
             <Skeleton height={16} width="60%" />
@@ -370,11 +437,11 @@ export function Diary() {
           </Stack>
         )}
 
-        {!loading && logs.length === 0 && !error && (
+        {!model.loading && model.logs.length === 0 && !model.error && (
           <EmptyState>No food logged for this day.</EmptyState>
         )}
 
-        {!loading &&
+        {!model.loading &&
           mealSlotLogs.map(({ value, label, items }) => (
             <Paper key={value} p={0} style={{ overflow: "hidden" }}>
               <Group p="md" gap="sm" align="center">
@@ -382,7 +449,7 @@ export function Diary() {
                   <Text fw={600}>{label}</Text>
                   <SlotMacroSummary
                     logs={items}
-                    mode={macroMode}
+                    mode={model.macroMode}
                     onToggle={toggleMacroMode}
                   />
                 </Stack>
@@ -417,14 +484,14 @@ export function Diary() {
             </Paper>
           ))}
 
-        {!loading && otherLogs.length > 0 && (
+        {!model.loading && otherLogs.length > 0 && (
           <Paper p={0} style={{ overflow: "hidden" }}>
             <Group p="md" gap="sm" align="center">
               <Stack gap={2} miw={0} style={{ flex: 1 }}>
                 <Text fw={600}>Other</Text>
                 <SlotMacroSummary
                   logs={otherLogs}
-                  mode={macroMode}
+                  mode={model.macroMode}
                   onToggle={toggleMacroMode}
                 />
               </Stack>
