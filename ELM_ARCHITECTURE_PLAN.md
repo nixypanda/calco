@@ -4,10 +4,19 @@ This is the parallel document to `REDUCER_ARCHITECTURE_PLAN.md`. It describes
 what the same frontend would look like written in Elm, section-by-section.
 
 The short version: most of what the React/TS plan invents — `RemoteData`,
-`useAsync`, `useAsyncChain`, `ApiError`, the URL-is-source-of-truth rule, the
-page → app dispatch boundary, the "no `AppEffect` runtime" decision — either
-exists as stdlib or as a small, well-known community package in Elm. The Elm
-Architecture (TEA) *is* the architecture the React doc was approximating.
+`useAsync`, `useAsyncChain`, the URL-is-source-of-truth rule, the page → app
+dispatch boundary, the "no `AppEffect` runtime" decision — either exists as
+stdlib or as a small, well-known community package in Elm. The Elm Architecture
+(TEA) *is* the architecture the React doc was approximating.
+
+The Elm app coexists in `frontend-web/` while the existing React app remains in
+`frontend/` as the behavioral reference. This is a rewrite, not an in-place
+port. When the Elm app reaches feature parity, the React frontend can be
+removed.
+
+Use `mdgriffith/elm-ui` as the UI system. Do not build the Elm app around
+Tailwind classes, ad hoc class strings, or a second CSS utility layer. Styling
+should live in Elm values and shared `Ui/*` modules.
 
 ## Goal
 
@@ -35,7 +44,7 @@ src/
     Logs.elm
     Users.elm
   Data/
-    Date.elm
+    LocalDate.elm
     Food.elm
     FoodLog.elm
     Meal.elm
@@ -61,12 +70,14 @@ Each page module exports the same five values:
 ```elm
 module Page.Diary exposing (Model, Msg, init, update, view, subscriptions)
 
+import Element exposing (Element)
+
 type alias Model = { ... }
 type Msg = ...
 
 init : { ...route params... } -> Session -> ( Model, Cmd Msg )
 update : Msg -> Model -> ( Model, Cmd Msg )
-view : Model -> Html Msg
+view : Model -> Element Msg
 subscriptions : Model -> Sub Msg
 ```
 
@@ -76,7 +87,7 @@ split, collapsed into Elm's idiom:
 | React/TS | Elm |
 |---|---|
 | `state.ts` (`init`, `update`, `Model`, `Msg`) | the page module's top half |
-| `<Page>View.tsx` | the page module's `view` function |
+| `<Page>View.tsx` | the page module's `view` function returning `Element Msg` |
 | `<Page>.tsx` container | the parent's `update` branching into the page's `update` and rendering its `view` |
 | `effects.ts` | unused — effects are `Cmd`s returned from `update` |
 
@@ -102,24 +113,29 @@ is no other style to evolve from.
 
 ## Async Resources
 
-### `WebData`
+### Loadable State
 
-Use `krisajenkins/remotedata` from packages.elm-lang.org:
+Use either `krisajenkins/remotedata` from packages.elm-lang.org or a local
+equivalent. The important shape is the state machine:
 
 ```elm
-import RemoteData exposing (RemoteData(..), WebData)
+type Loadable error value
+    = NotAsked
+    | Loading
+    | Failure error
+    | Success value
 
 type alias Model =
-    { log : WebData FoodLog
-    , food : WebData Food
-    , units : WebData (List Unit)
+    { log : Loadable ApiError FoodLog
+    , food : Loadable ApiError Food
+    , units : Loadable ApiError (List Unit)
     }
 ```
 
-`WebData a` is `RemoteData Http.Error a` — the same discriminated union as
-the React doc's `RemoteData<T, ApiError>`, with `NotAsked | Loading | Failure
-Http.Error | Success a` constructors. Not invented here; standard for Elm
-HTTP code.
+This is the same discriminated union as the React doc's
+`RemoteData<T, ApiError>`, with `NotAsked | Loading | Failure error | Success
+value` constructors. `krisajenkins/remotedata` is fine if it fits, but a local
+type lets the app use its own `ApiError` directly.
 
 ### Loading data
 
@@ -129,17 +145,14 @@ returning a `Cmd Msg`:
 ```elm
 loadLog : Int -> Cmd Msg
 loadLog id =
-    Http.get
-        { url = "/api/logs/" ++ String.fromInt id
-        , expect = Http.expectJson (RemoteData.fromResult >> GotLog) logDecoder
-        }
+    Api.Logs.get id GotLog
 ```
 
 `update` then handles the result:
 
 ```elm
-GotLog webData ->
-    ( { model | log = webData }, Cmd.none )
+GotLog result ->
+    ( { model | log = Loadable.fromResult result }, Cmd.none )
 ```
 
 No hook to write, no ref dance, no stale-closure trap. The runtime is the
@@ -151,18 +164,18 @@ The React doc's `useAsyncChain` (with reset semantics) is replaced by
 dispatching the dependent request from the parent's success branch:
 
 ```elm
-GotLog (Success log) ->
+GotLog (Ok log) ->
     ( { model | log = Success log, food = Loading }
     , Api.Foods.get log.foodId GotFood
     )
 
-GotLog ((Failure _) as fail) ->
+GotLog (Err err) ->
     -- parent failed; descendants reset
-    ( { model | log = fail, food = NotAsked, units = NotAsked }
+    ( { model | log = Failure err, food = NotAsked, units = NotAsked }
     , Cmd.none
     )
 
-GotFood (Success food) ->
+GotFood (Ok food) ->
     ( { model | food = Success food, units = Loading }
     , Api.Foods.units food.unitIds GotUnits
     )
@@ -172,8 +185,8 @@ Reset semantics are explicit in `update`, not hidden in a hook. When the
 parent transitions, you write exactly what the descendants should do — and
 the compiler enforces that every `Msg` variant is handled.
 
-For consistency-critical workflows, define a single ADT instead of three
-chained `WebData`s:
+For consistency-critical workflows, define a single ADT instead of several
+chained loadable fields:
 
 ```elm
 type LoadState
@@ -181,30 +194,36 @@ type LoadState
     | LoadedLog FoodLog
     | LoadedFood FoodLog Food
     | LoadedAll FoodLog Food (List Unit)
-    | Failed Http.Error Stage
+    | Failed ApiError Stage
 
 type Stage = LogStage | FoodStage | UnitsStage
 ```
 
 Pattern-matching keeps the model consistent across stages.
 
-### Typed errors
+### API errors
 
-`Http.Error` is stdlib:
+The backend returns useful error envelopes. Preserve them instead of collapsing
+all non-2xx responses into plain `Http.Error`:
 
 ```elm
-type Error
+type ApiError
     = BadUrl String
     | Timeout
     | NetworkError
-    | BadStatus Int
+    | BadStatus Int String String
     | BadBody String
 ```
 
-No `ApiError` type to invent. The 401 case is just `BadStatus 401`:
+`BadStatus status code message` matches the current React client's
+`ApiError(status, code, message)`. Implement this in `Api.Client` with
+`Http.expectStringResponse`, decoding success bodies and backend error bodies in
+one place.
+
+The 401 case remains ordinary data:
 
 ```elm
-GotLog (Failure (BadStatus 401)) ->
+GotLog (Err (BadStatus 401 _ _)) ->
     ( { model | session = SignedOut }
     , Browser.Navigation.replaceUrl model.key "/login"
     )
@@ -245,19 +264,29 @@ LinkClicked (Browser.External href) ->
     ( model, Browser.Navigation.load href )
 ```
 
-Diary's prev/next is a pure helper plus a `Link` that navigates to the new
+Route state that must survive refresh/back/forward belongs in the URL. Replace
+React Router `location.state` with query params:
+
+- diary date: `/home?date=2026-06-04`
+- diary-selected meal slot to search: `/search?meal_slot=breakfast`
+- search-selected meal slot to food detail: `/foods/<id>?meal_slot=breakfast`
+
+Diary's prev/next is a pure helper plus an Elm UI link that navigates to the new
 URL:
 
 ```elm
--- in Data.Date
-next : Date -> Date
+-- in Data.LocalDate
+next : LocalDate -> LocalDate
 next d = ...
 
-prev : Date -> Date
+prev : LocalDate -> LocalDate
 prev d = ...
 
 -- in Page.Diary.view
-a [ href (Route.diary (Date.next model.date) |> Route.toString) ] [ text "Next →" ]
+link []
+    { url = Route.diary (LocalDate.next model.date) |> Route.toString
+    , label = text "Next"
+    }
 ```
 
 No `date/next` message in the reducer. No split-brain. Compiler-enforced.
@@ -273,7 +302,7 @@ type alias Model =
     , route : Route
     , session : Session
     , darkMode : Bool
-    , bootstrap : WebData BootstrapStatus
+    , bootstrap : Loadable ApiError BootstrapStatus
     , page : PageModel
     }
 
@@ -289,7 +318,7 @@ type PageModel
 type Msg
     = UrlChanged Url
     | LinkClicked Browser.UrlRequest
-    | SessionLoaded (WebData Session)
+    | SessionLoaded (Result ApiError Session)
     | LogoutClicked
     | ThemeToggled
     | GotPage PageMsg
@@ -368,11 +397,15 @@ upward through return values rather than as a context dispatch.
 
 ### Theme / `localStorage` / DOM
 
-Persisted theme uses ports (or `Browser.Dom` for class application):
+Persisted theme uses flags and ports. The same browser interop module should
+also provide local ISO timestamps with timezone offsets for log creation,
+matching the current React `localISOString()` behavior:
 
 ```elm
-port saveTheme : Bool -> Cmd msg
-port loadedTheme : (Bool -> msg) -> Sub msg
+port saveTheme : String -> Cmd msg
+port applyTheme : String -> Cmd msg
+port requestLocalIsoTimestamp : () -> Cmd msg
+port gotLocalIsoTimestamp : (String -> msg) -> Sub msg
 ```
 
 ```elm
@@ -381,7 +414,8 @@ ThemeToggled ->
     in ( { model | darkMode = darkMode }, saveTheme darkMode )
 ```
 
-The JS shim around `localStorage` is ~10 lines and lives outside the Elm app.
+The JS shim around `localStorage`, system color preference, DOM theme
+application, and timestamp creation lives outside the Elm app.
 
 ## What Should Use Reducers
 
@@ -399,10 +433,16 @@ hardest:
 ### 0. Foundations
 
 - `Api/Client.elm` with `Http.get`/`post`/`put`/`delete` wrappers that
-  handle the base URL, cookies, and JSON decoding errors uniformly.
+  handle the base URL, cookies, `204`, JSON decoding, and backend error
+  envelopes uniformly.
 - `Route.elm` with `fromUrl : Url -> Route` and `toString : Route -> String`.
 - `Session.elm` with `Session = SignedIn Identity Profile | SignedOut`.
 - `Data/*` decoders for every server shape.
+- `Data/LocalDate.elm` as either a validated `YYYY-MM-DD` wrapper or a thin
+  wrapper around a local-date package. Elm core has `Time.Posix`, not a civil
+  `Date` type.
+- `Interop.elm`/ports for theme and local timestamp requests.
+- repo commands for `frontend-web` test/build/review in the `justfile`.
 
 ### 1. Main.elm shell
 
@@ -414,7 +454,7 @@ hardest:
 ### 2. Auth and theme
 
 - `SessionLoaded`, `LogoutClicked`, `ThemeToggled` handled in `Main.update`.
-- Login/Signup pages (simple forms).
+- Login/setup pages (simple forms).
 - Theme persisted via a port.
 
 ### 3. Pages, simplest first
@@ -432,9 +472,11 @@ hardest:
 
 ### 4. UI layer
 
-Replace Mantine with `mdgriffith/elm-ui` (the canonical Elm UI lib) or build
-a small set of view helpers in plain `Html`. This is the largest single
-cost of the rewrite.
+Replace Mantine with `mdgriffith/elm-ui` and a small `Ui/*` vocabulary:
+buttons, inputs, selects, page headers, banners, empty/loading states, tables,
+and modal/confirmation patterns. This is the largest single cost of the
+rewrite, but it keeps styling easy to manage inside Elm. Avoid Tailwind and
+plain class-based layout in the Elm app.
 
 ## Testing Strategy
 
@@ -442,7 +484,7 @@ cost of the rewrite.
   router context. No auth provider.
 - One test per `Msg` variant that changes behavior.
 - One test per important guarded transition.
-- For HTTP-heavy pages, test the `update` response to each `WebData` variant
+- For HTTP-heavy pages, test the `update` response to each loadable-state variant
   separately.
 - For `view`-level assertions (when needed), use `elm-program-test` for
   small integration tests — it drives the whole TEA loop in a test harness
@@ -459,7 +501,7 @@ page yet?" but "is this page coherent?":
 - `update` covers all `Msg` variants (compiler-enforced).
 - `Model` does not have invalid states representable (compiler-enforced via
   custom types).
-- HTTP errors flow through `WebData` to the view.
+- HTTP errors flow through the app's loadable/API-error types to the view.
 - Cross-cutting messages flow upward via `OutMsg`.
 - Tests cover meaningful state transitions.
 
@@ -471,8 +513,8 @@ page yet?" but "is this page coherent?":
 | Effects as data | `useAsync` hook + ref dance | `Cmd Msg` (stdlib) |
 | Effect runner | `useAsync` internals | Elm runtime |
 | Chained loads | `useAsyncChain` + reset semantics | dispatch from `update` (explicit) |
-| `RemoteData<T, E>` | hand-written primitive | `krisajenkins/remotedata` package |
-| Typed errors | `ApiError` ADT + `toApiError` | `Http.Error` (stdlib) |
+| `RemoteData<T, E>` | hand-written primitive | `krisajenkins/remotedata` or a tiny local `Loadable` type |
+| Typed API errors | `ApiError` class + event side effect | `ApiError` ADT decoded centrally in `Api.Client` |
 | URL is source of truth | convention + one `useEffect` mirror | `Browser.application` (enforced) |
 | Page → app boundary | `appDispatch` from context | `OutMsg` return value |
 | App-level reducer | new shape + provider | top-level `update`, pages nested |
@@ -498,8 +540,8 @@ Honest list:
   But the IDE experience is less rich than modern TS + Biome + Vitest.
 - **`async`/`await`.** Elm uses `Cmd` for effects and `Task` for
   composable promises. Different idiom; takes adjustment.
-- **CSS-in-JS / Tailwind.** Possible but awkward. elm-css and elm-ui exist
-  but neither is a 1:1 replacement.
+- **CSS-in-JS / Tailwind.** The Elm app intentionally does not use them.
+  `elm-ui` becomes the styling and layout system.
 
 ## What You Gain
 
@@ -514,9 +556,9 @@ Honest list:
   `init`, `update`, `view`, `subscriptions`.
 - **Smaller bundles.** Elm's tree-shaker is aggressive and the output is
   small.
-- **No `RemoteData<T>` to invent, no `useAsync` to debug, no router rule
-  to enforce, no `AppEffect` debate.** The doc you're reading is shorter
-  than the React doc because most of its content does not need to exist.
+- **No async hook to debug, no router rule to enforce, no `AppEffect`
+  debate.** The doc you're reading is shorter than the React doc because most
+  of its content does not need to exist.
 
 ## Should You Do This?
 
