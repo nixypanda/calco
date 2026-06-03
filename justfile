@@ -73,6 +73,30 @@ frontend-test:
     cd frontend && pnpm test
 
 # ──────────────────────────────────────────────
+# Elm Frontend Web
+# ──────────────────────────────────────────────
+
+# Build Elm frontend-web
+frontend-web-build:
+    cd frontend-web && mkdir -p dist && elm make src/Main.elm --output=dist/main.js
+
+# Run Elm frontend-web locally
+frontend-web-dev: frontend-web-build
+    cd frontend-web && python3 -m http.server 1234
+
+# Format Elm frontend-web sources
+frontend-web-format:
+    cd frontend-web && elm-format --yes src tests
+
+# Run Elm frontend-web review
+frontend-web-lint:
+    cd frontend-web && elm-review
+
+# Run Elm frontend-web tests
+frontend-web-test:
+    cd frontend-web && elm-test
+
+# ──────────────────────────────────────────────
 # Combined
 # ──────────────────────────────────────────────
 

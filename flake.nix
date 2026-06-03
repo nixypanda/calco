@@ -43,6 +43,10 @@
             # Frontend
             nodejs_22
             pnpm
+            elmPackages.elm
+            elmPackages.elm-format
+            elmPackages.elm-review
+            elmPackages.elm-test
 
             # Tools
             just
@@ -54,6 +58,7 @@
             echo "CalCo dev shell"
             echo "  Rust:  $(cargo --version)"
             echo "  Node:  $(node --version)"
+            echo "  Elm:   $(elm --version)"
             echo ""
             echo "  Commands:"
             echo "    just up         — start PostgreSQL"
