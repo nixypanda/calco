@@ -31,6 +31,90 @@ The current React app implements:
 Import administration is intentionally not part of the browser frontend. Import
 tooling remains CLI/API driven.
 
+## Current Status
+
+Last updated after commit `0424ea9` (`Implement Elm admin flow foundation`).
+
+Implemented through **Phase 4: Admin Dashboard** in `frontend-web/`. The Elm app
+now has a real `Browser.application` shell, route parsing, access decisions,
+session bootstrap, login, first-time admin setup, logout, and admin user
+management flows. The React frontend in `frontend/` remains untouched and is
+still the behavioral reference for later phases.
+
+### Completed
+
+- Phase 0 test harness:
+  - Replaced the placeholder Elm test with focused tests for routes, access,
+    session, JSON contracts, local dates, nutrition parsing, auth forms, and
+    admin dashboard state transitions.
+  - Current frontend-web test count: `53`.
+  - Verified with `just frontend-web-test`.
+- Phase 1 routing and access:
+  - Added `src/Route.elm` and `src/Access.elm`.
+  - Supports the planned paths through meals/foods/logs, including
+    `meal_slot` and diary `date` query params.
+  - Implements root redirect behavior, admin route guards, and food-tracking
+    route guards.
+- Phase 2 API contracts:
+  - Added `src/Api/Client.elm`, `src/Api/Auth.elm`, and `src/Api/Admin.elm`.
+  - Added auth/user/quantity/item-ref data modules used by the implemented
+    phases.
+  - `Api.Client` uses `Http.expectStringResponse` so backend error envelopes are
+    preserved as `BadStatus status code message`.
+  - Do not manually add a `Content-Type` header for JSON requests. `Http.jsonBody`
+    sets it; adding another one can produce a combined header that Axum rejects.
+- Phase 3 session and auth pages:
+  - Added `src/Session.elm`, `src/Page/Login.elm`, and
+    `src/Page/BootstrapAdminSetup.elm`.
+  - Session/bootstrap load in `Main.init`.
+  - Login/setup pages use pure validation helpers and return out-messages for
+    HTTP commands and navigation.
+- Phase 4 admin dashboard:
+  - Added `src/Page/AdminDashboard.elm`.
+  - Supports listing users, creating users, resetting passwords, disabling, and
+    enabling users.
+  - Failed admin actions preserve existing loaded user data and show errors.
+  - `401` admin failures clear session and navigate to login through the app
+    shell.
+- UI/dev workflow:
+  - Added a small `src/Ui.elm` vocabulary using `mdgriffith/elm-ui`.
+  - Added `frontend-web/dev-server.mjs` for local static serving plus `/api`
+    proxying to `http://localhost:3001`, matching the React frontend's Vite
+    proxy behavior.
+  - Added/updated Just recipes:
+    - `just frontend-web-test`
+    - `just frontend-web-build`
+    - `just frontend-web-review`
+    - `just frontend-web-dev`
+  - Aggregate `just test` and `just build` now include `frontend-web`.
+
+### Verified
+
+```bash
+just frontend-web-review
+just frontend-web-test
+just frontend-web-build
+```
+
+All three passed at the Phase 4 stop point.
+
+### Notes For The Next Phase
+
+- The app intentionally stops at the admin-flow test point. Non-admin
+  food-tracking routes currently render placeholder text.
+- `Api/Foods.elm`, `Api/Logs.elm`, and `Api/Meals.elm` were not kept as empty
+  placeholders because `elm-review` rejects unused modules. Add them when Phase
+  5+ needs real calls.
+- `Data/Food.elm`, `Data/FoodLog.elm`, `Data/Meal.elm`, `Data/Nutrient.elm`, and
+  `Data/Unit.elm` are still pending. Only the data modules needed for phases
+  0-4 exist today.
+- `frontend-web/dev-server.mjs` is deliberately minimal. A future pass can
+  replace it with Vite or another standard dev server if the Elm app gets an npm
+  toolchain.
+- The current `Data.LocalDate` is only a small `YYYY-MM-DD` shape validator.
+  Phase 5 diary work should decide whether to keep that wrapper or introduce a
+  fuller civil-date package.
+
 ## Testing Philosophy
 
 Most tests should be pure Elm tests. Avoid UI snapshot tests and exact markup
