@@ -26,6 +26,8 @@ result-*
 
 # Import pipeline data
 data/
+!frontend-web/src/Data/
+!frontend-web/src/Data/*.elm
 
 # Python cache
 __pycache__/

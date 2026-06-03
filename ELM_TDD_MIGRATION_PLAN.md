@@ -33,13 +33,15 @@ tooling remains CLI/API driven.
 
 ## Current Status
 
-Last updated after commit `0424ea9` (`Implement Elm admin flow foundation`).
+Last updated after the Phase 5 Elm diary implementation.
 
-Implemented through **Phase 4: Admin Dashboard** in `frontend-web/`. The Elm app
+Implemented through **Phase 5: Diary** in `frontend-web/`. The Elm app
 now has a real `Browser.application` shell, route parsing, access decisions,
 session bootstrap, login, first-time admin setup, logout, and admin user
-management flows. The React frontend in `frontend/` remains untouched and is
-still the behavioral reference for later phases.
+management flows, plus the real diary `/home` page with day navigation, grouped
+logs, daily summary macros/calories, item-name lookup, and diary navigation
+intents. The React frontend in `frontend/` remains untouched and is still the
+behavioral reference for later phases.
 
 ### Completed
 
@@ -76,6 +78,20 @@ still the behavioral reference for later phases.
   - Failed admin actions preserve existing loaded user data and show errors.
   - `401` admin failures clear session and navigate to login through the app
     shell.
+- Phase 5 diary:
+  - Added `src/Page/Diary.elm`.
+  - Added diary data/API support for log lists, summaries, product and meal
+    item-name lookup, local date arithmetic, grouped logs, calories, and macro
+    totals.
+  - Wired `/home` in `Main.elm` to the real diary page instead of placeholder
+    text.
+  - Supports valid/invalid/missing `date` query handling, previous/next day
+    navigation capped at today, grouped breakfast/lunch/dinner/snack/other logs,
+    daily summary calories/macros, macro grams/percent toggle, add-food
+    navigation with meal slot context, log-detail navigation, meals navigation,
+    and failed load display.
+  - Name lookup failures use explicit unknown food/meal fallbacks.
+  - Current frontend-web test count: `73`.
 - UI/dev workflow:
   - Added a small `src/Ui.elm` vocabulary using `mdgriffith/elm-ui`.
   - Added `frontend-web/dev-server.mjs` for local static serving plus `/api`
@@ -96,24 +112,26 @@ just frontend-web-test
 just frontend-web-build
 ```
 
-All three passed at the Phase 4 stop point.
+All three passed at the Phase 5 stop point.
 
 ### Notes For The Next Phase
 
-- The app intentionally stops at the admin-flow test point. Non-admin
-  food-tracking routes currently render placeholder text.
-- `Api/Foods.elm`, `Api/Logs.elm`, and `Api/Meals.elm` were not kept as empty
-  placeholders because `elm-review` rejects unused modules. Add them when Phase
-  5+ needs real calls.
-- `Data/Food.elm`, `Data/FoodLog.elm`, `Data/Meal.elm`, `Data/Nutrient.elm`, and
-  `Data/Unit.elm` are still pending. Only the data modules needed for phases
-  0-4 exist today.
+- The app intentionally stops after the diary feature. Food search and later
+  food/meal/log routes still render placeholder text.
+- `Api.Foods` and `Api.Meals` currently expose only the narrow name lookups
+  needed by the diary page. Phase 6 should extend `Api.Foods` with search DTOs
+  and requests instead of adding placeholder modules.
+- `Api.Logs` currently exposes diary list/summary calls. Later phases should add
+  create/get/update/delete as those pages need them.
+- `Data.FoodLog`, `Data.LocalDate`, and `Data.Nutrition` now contain the helpers
+  needed for diary behavior. Food detail, meal, nutrient catalog, and unit data
+  modules are still pending.
 - `frontend-web/dev-server.mjs` is deliberately minimal. A future pass can
   replace it with Vite or another standard dev server if the Elm app gets an npm
   toolchain.
-- The current `Data.LocalDate` is only a small `YYYY-MM-DD` shape validator.
-  Phase 5 diary work should decide whether to keep that wrapper or introduce a
-  fuller civil-date package.
+- `.gitignore` explicitly unignores `frontend-web/src/Data/*.elm` because the
+  repo-level `data/` import-pipeline ignore rule would otherwise hide Elm
+  modules in a directory named `Data`.
 
 ## Testing Philosophy
 

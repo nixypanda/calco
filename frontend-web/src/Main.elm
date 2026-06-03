@@ -4,17 +4,25 @@ import Access
 import Api.Admin
 import Api.Auth
 import Api.Client as Client
+import Api.Foods
+import Api.Logs
+import Api.Meals
 import Browser
 import Browser.Navigation as Nav
 import Data.Auth as Auth
+import Data.ItemRef exposing (ItemRef)
+import Data.LocalDate as LocalDate exposing (LocalDate)
 import Element
 import Element.Background as Background
 import Element.Font as Font
 import Page.AdminDashboard as AdminDashboard
 import Page.BootstrapAdminSetup as Setup
+import Page.Diary as Diary
 import Page.Login as Login
 import Route exposing (Route(..))
 import Session
+import Task
+import Time
 import Ui
 import Url exposing (Url)
 
@@ -29,6 +37,8 @@ type alias Model =
     , session : Session.Session
     , pendingSession : Maybe (Result Client.ApiError Auth.LoginSession)
     , pendingBootstrap : Maybe (Result Client.ApiError Auth.BootstrapStatus)
+    , timeZone : Maybe Time.Zone
+    , today : Maybe LocalDate
     , page : PageModel
     }
 
@@ -38,6 +48,7 @@ type PageModel
     | LoginPage Login.Model
     | SetupPage Setup.Model
     | AdminPage AdminDashboard.Model
+    | DiaryPage Diary.Model
     | PlaceholderPage String
 
 
@@ -46,11 +57,14 @@ type Msg
     | UrlChanged Url
     | GotSession (Result Client.ApiError Auth.LoginSession)
     | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
+    | GotTimeZone Time.Zone
+    | GotNow Time.Posix
     | LogoutClicked
     | LogoutCompleted (Result Client.ApiError ())
     | GotLoginMsg Login.Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
+    | GotDiaryMsg Diary.Msg
 
 
 main : Program Flags Model Msg
@@ -72,11 +86,14 @@ init _ url key =
       , session = Session.init
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
+      , timeZone = Nothing
+      , today = Nothing
       , page = LoadingPage
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
+        , Task.perform GotTimeZone Time.here
         ]
     )
 
@@ -105,6 +122,17 @@ update msg model =
 
         GotBootstrapStatus result ->
             applyBootstrapProgress { model | pendingBootstrap = Just result }
+
+        GotTimeZone zone ->
+            ( { model | timeZone = Just zone }, Task.perform GotNow Time.now )
+
+        GotNow posix ->
+            case model.timeZone of
+                Just zone ->
+                    changeRouteTo model.route { model | today = Just (LocalDate.fromPosix zone posix) }
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         LogoutClicked ->
             ( model, Api.Auth.logout LogoutCompleted )
@@ -138,6 +166,27 @@ update msg model =
                     in
                     ( finalModel
                     , Cmd.batch [ Cmd.map GotLoginMsg subCmd, outCmd ]
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        GotDiaryMsg subMsg ->
+            case model.page of
+                DiaryPage subModel ->
+                    let
+                        ( newSubModel, subCmd, outMsg ) =
+                            Diary.update subMsg subModel
+
+                        nextModel : Model
+                        nextModel =
+                            { model | page = DiaryPage newSubModel }
+
+                        ( finalModel, outCmd ) =
+                            applyDiaryOutMsg outMsg nextModel
+                    in
+                    ( finalModel
+                    , Cmd.batch [ Cmd.map GotDiaryMsg subCmd, outCmd ]
                     )
 
                 _ ->
@@ -243,8 +292,20 @@ loadPage route model =
             in
             ( nextModel, outCmd )
 
-        Diary _ ->
-            ( { model | page = PlaceholderPage "Diary is not migrated yet." }, Cmd.none )
+        Diary dateParam ->
+            case model.today of
+                Just today ->
+                    let
+                        ( diaryModel, outMsg ) =
+                            Diary.init { dateParam = dateParam, today = today }
+
+                        ( nextModel, outCmd ) =
+                            applyDiaryOutMsg outMsg { model | page = DiaryPage diaryModel }
+                    in
+                    ( nextModel, outCmd )
+
+                Nothing ->
+                    ( { model | page = LoadingPage }, Cmd.none )
 
         _ ->
             ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
@@ -313,6 +374,48 @@ applyAdminOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
+applyDiaryOutMsg : Diary.OutMsg -> Model -> ( Model, Cmd Msg )
+applyDiaryOutMsg outMsg model =
+    case outMsg of
+        Diary.NoOp ->
+            ( model, Cmd.none )
+
+        Diary.RequestDiaryData date ->
+            ( model
+            , Cmd.batch
+                [ Cmd.map GotDiaryMsg (Api.Logs.listLogs date Diary.LogsLoaded)
+                , Cmd.map GotDiaryMsg (Api.Logs.getSummary date Diary.SummaryLoaded)
+                ]
+            )
+
+        Diary.RequestItemNames items ->
+            ( model, Cmd.batch (List.map itemNameCommand items) )
+
+        Diary.Navigate route ->
+            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+
+        Diary.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+itemNameCommand : ItemRef -> Cmd Msg
+itemNameCommand item =
+    case item.itemType of
+        "meal" ->
+            Api.Meals.getMealName item.id
+                (\result ->
+                    Diary.NameLookupCompleted item (Result.map .name result)
+                        |> GotDiaryMsg
+                )
+
+        _ ->
+            Api.Foods.getProductName item.id
+                (\result ->
+                    Diary.NameLookupCompleted item (Result.map .name result)
+                        |> GotDiaryMsg
+                )
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = "CalCo"
@@ -370,6 +473,9 @@ pageView model =
 
         AdminPage adminModel ->
             Element.map GotAdminMsg (AdminDashboard.view adminModel)
+
+        DiaryPage diaryModel ->
+            Element.map GotDiaryMsg (Diary.view diaryModel)
 
         PlaceholderPage message ->
             Element.el [ Element.padding 24 ] (Element.text message)
