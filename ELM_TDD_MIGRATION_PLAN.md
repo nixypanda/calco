@@ -33,15 +33,18 @@ tooling remains CLI/API driven.
 
 ## Current Status
 
-Last updated after the Phase 5 Elm diary implementation.
+Last updated after the Phase 6 Elm food search implementation.
 
-Implemented through **Phase 5: Diary** in `frontend-web/`. The Elm app
+Implemented through **Phase 6: Food Search** in `frontend-web/`. The Elm app
 now has a real `Browser.application` shell, route parsing, access decisions,
 session bootstrap, login, first-time admin setup, logout, and admin user
 management flows, plus the real diary `/home` page with day navigation, grouped
 logs, daily summary macros/calories, item-name lookup, and diary navigation
-intents. The React frontend in `frontend/` remains untouched and is still the
-behavioral reference for later phases.
+intents, and the real `/search` food search page with debounced searches,
+request-token stale response protection, empty/error/no-result states, result
+selection, custom-food create navigation, and `meal_slot` preservation through
+food-detail navigation. The React frontend in `frontend/` remains untouched and
+is still the behavioral reference for later phases.
 
 ### Completed
 
@@ -92,6 +95,19 @@ behavioral reference for later phases.
     and failed load display.
   - Name lookup failures use explicit unknown food/meal fallbacks.
   - Current frontend-web test count: `73`.
+- Phase 6 food search:
+  - Added `src/Page/FoodSearch.elm`.
+  - Extended `src/Api/Foods.elm` with food search DTOs, response decoders,
+    encoded search paths, and the `/api/foods/search?q=...` request.
+  - Wired `/search` in `Main.elm` to the real Elm page instead of placeholder
+    text.
+  - Supports debounced non-empty searches, empty query clearing, loading and
+    error states, stale response/failure ignoring via request tokens, no-result
+    custom-food create navigation, food-detail selection, and barcode display
+    for numeric queries.
+  - Preserves `meal_slot` query context from `/search?meal_slot=...` when
+    navigating to `/foods/:id?meal_slot=...`.
+  - Current frontend-web test count: `86`.
 - UI/dev workflow:
   - Added a small `src/Ui.elm` vocabulary using `mdgriffith/elm-ui`.
   - Added `frontend-web/dev-server.mjs` for local static serving plus `/api`
@@ -112,15 +128,15 @@ just frontend-web-test
 just frontend-web-build
 ```
 
-All three passed at the Phase 5 stop point.
+All three passed at the Phase 6 stop point.
 
 ### Notes For The Next Phase
 
-- The app intentionally stops after the diary feature. Food search and later
-  food/meal/log routes still render placeholder text.
-- `Api.Foods` and `Api.Meals` currently expose only the narrow name lookups
-  needed by the diary page. Phase 6 should extend `Api.Foods` with search DTOs
-  and requests instead of adding placeholder modules.
+- The app intentionally stops after the food search feature. Food detail and
+  later food/meal/log routes still render placeholder text.
+- `Api.Foods` now exposes diary product-name lookup plus food search DTOs and
+  requests. Phase 7 should extend it with food detail, nutrient, unit, and
+  product logging support as needed.
 - `Api.Logs` currently exposes diary list/summary calls. Later phases should add
   create/get/update/delete as those pages need them.
 - `Data.FoodLog`, `Data.LocalDate`, and `Data.Nutrition` now contain the helpers

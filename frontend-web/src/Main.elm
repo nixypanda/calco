@@ -18,6 +18,7 @@ import Element.Font as Font
 import Page.AdminDashboard as AdminDashboard
 import Page.BootstrapAdminSetup as Setup
 import Page.Diary as Diary
+import Page.FoodSearch as FoodSearch
 import Page.Login as Login
 import Route exposing (Route(..))
 import Session
@@ -49,6 +50,7 @@ type PageModel
     | SetupPage Setup.Model
     | AdminPage AdminDashboard.Model
     | DiaryPage Diary.Model
+    | FoodSearchPage FoodSearch.Model
     | PlaceholderPage String
 
 
@@ -65,6 +67,7 @@ type Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
     | GotDiaryMsg Diary.Msg
+    | GotFoodSearchMsg FoodSearch.Msg
 
 
 main : Program Flags Model Msg
@@ -234,6 +237,27 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotFoodSearchMsg subMsg ->
+            case model.page of
+                FoodSearchPage subModel ->
+                    let
+                        ( newSubModel, subCmd, outMsg ) =
+                            FoodSearch.update subMsg subModel
+
+                        nextModel : Model
+                        nextModel =
+                            { model | page = FoodSearchPage newSubModel }
+
+                        ( finalModel, outCmd ) =
+                            applyFoodSearchOutMsg outMsg nextModel
+                    in
+                    ( finalModel
+                    , Cmd.batch [ Cmd.map GotFoodSearchMsg subCmd, outCmd ]
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
 
 applyBootstrapProgress : Model -> ( Model, Cmd Msg )
 applyBootstrapProgress model =
@@ -306,6 +330,9 @@ loadPage route model =
 
                 Nothing ->
                     ( { model | page = LoadingPage }, Cmd.none )
+
+        FoodSearch mealSlot ->
+            ( { model | page = FoodSearchPage (FoodSearch.init mealSlot) }, Cmd.none )
 
         _ ->
             ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
@@ -398,6 +425,22 @@ applyDiaryOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
+applyFoodSearchOutMsg : FoodSearch.OutMsg -> Model -> ( Model, Cmd Msg )
+applyFoodSearchOutMsg outMsg model =
+    case outMsg of
+        FoodSearch.NoOp ->
+            ( model, Cmd.none )
+
+        FoodSearch.RequestSearch token request ->
+            ( model, Api.Foods.searchFoods request (GotFoodSearchMsg << FoodSearch.SearchCompleted token) )
+
+        FoodSearch.Navigate route ->
+            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+
+        FoodSearch.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
 itemNameCommand : ItemRef -> Cmd Msg
 itemNameCommand item =
     case item.itemType of
@@ -476,6 +519,9 @@ pageView model =
 
         DiaryPage diaryModel ->
             Element.map GotDiaryMsg (Diary.view diaryModel)
+
+        FoodSearchPage foodSearchModel ->
+            Element.map GotFoodSearchMsg (FoodSearch.view foodSearchModel)
 
         PlaceholderPage message ->
             Element.el [ Element.padding 24 ] (Element.text message)
