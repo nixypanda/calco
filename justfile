@@ -82,15 +82,18 @@ frontend-web-build:
 
 # Run Elm frontend-web locally
 frontend-web-dev: frontend-web-build
-    cd frontend-web && python3 -m http.server 1234
+    cd frontend-web && node dev-server.mjs
 
 # Format Elm frontend-web sources
 frontend-web-format:
     cd frontend-web && elm-format --yes src tests
 
 # Run Elm frontend-web review
-frontend-web-lint:
+frontend-web-review:
     cd frontend-web && elm-review
+
+# Backward-compatible alias
+frontend-web-lint: frontend-web-review
 
 # Run Elm frontend-web tests
 frontend-web-test:
@@ -108,10 +111,10 @@ dev: db-wait
     wait
 
 # Build everything
-build: backend-build frontend-build
+build: backend-build frontend-build frontend-web-build
 
 # Run all tests
-test: backend-test frontend-test
+test: backend-test frontend-test frontend-web-test
 
 # ──────────────────────────────────────────────
 # Misc

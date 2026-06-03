@@ -1,0 +1,148 @@
+module Page.Login exposing
+    ( Form
+    , Model
+    , Msg(..)
+    , OutMsg(..)
+    , init
+    , update
+    , validateLogin
+    , view
+    )
+
+import Api.Client as Client
+import Data.Auth as Auth
+import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Font as Font
+import Ui
+
+
+type alias Form =
+    { username : String
+    , password : String
+    }
+
+
+type alias Model =
+    { form : Form
+    , submitting : Bool
+    , error : Maybe String
+    }
+
+
+type Msg
+    = UsernameChanged String
+    | PasswordChanged String
+    | Submitted
+    | LoginCompleted (Result Client.ApiError Auth.LoginSession)
+
+
+type OutMsg
+    = NoOp
+    | RequestLogin Auth.LoginRequest
+    | LoginSucceeded Auth.LoginSession
+
+
+init : Model
+init =
+    { form = { username = "", password = "" }
+    , submitting = False
+    , error = Nothing
+    }
+
+
+validateLogin : Form -> Result String Auth.LoginRequest
+validateLogin form =
+    let
+        username : String
+        username =
+            String.trim form.username
+    in
+    if String.isEmpty username || String.isEmpty form.password then
+        Err "Username and password are required"
+
+    else
+        Ok { username = username, password = form.password }
+
+
+update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
+update msg model =
+    case msg of
+        UsernameChanged username ->
+            ( { model | form = updateUsername username model.form }, Cmd.none, NoOp )
+
+        PasswordChanged password ->
+            ( { model | form = updatePassword password model.form }, Cmd.none, NoOp )
+
+        Submitted ->
+            case validateLogin model.form of
+                Ok request ->
+                    ( { model | submitting = True, error = Nothing }, Cmd.none, RequestLogin request )
+
+                Err message ->
+                    ( { model | error = Just message }, Cmd.none, NoOp )
+
+        LoginCompleted result ->
+            case result of
+                Ok loginSession ->
+                    ( { model | submitting = False, error = Nothing }, Cmd.none, LoginSucceeded loginSession )
+
+                Err error ->
+                    ( { model | submitting = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+
+
+updateUsername : String -> Form -> Form
+updateUsername username form =
+    { form | username = username }
+
+
+updatePassword : String -> Form -> Form
+updatePassword password form =
+    { form | password = password }
+
+
+view : Model -> Element Msg
+view model =
+    Element.el
+        [ Element.centerX
+        , Element.centerY
+        , Element.width (Element.fill |> Element.maximum 420)
+        , Element.padding 20
+        ]
+        (Element.column
+            [ Element.spacing 16
+            , Element.width Element.fill
+            , Background.color (Element.rgb255 255 255 255)
+            , Border.rounded 8
+            , Border.width 1
+            , Border.color (Element.rgb255 229 231 235)
+            , Element.padding 24
+            ]
+            ([ Element.el [ Font.size 32, Font.bold ] (Element.text "CalCo")
+             , Element.el [ Font.size 20, Font.medium, Font.color (Element.rgb255 75 85 99) ] (Element.text "Log In")
+             , Ui.input "Username" model.form.username UsernameChanged
+             , Ui.passwordInput "Password" model.form.password PasswordChanged
+             ]
+                ++ errorView model.error
+                ++ [ Ui.button
+                        (if model.submitting then
+                            "Logging in..."
+
+                         else
+                            "Log In"
+                        )
+                        Submitted
+                   ]
+            )
+        )
+
+
+errorView : Maybe String -> List (Element msg)
+errorView maybeError =
+    case maybeError of
+        Just message ->
+            [ Ui.errorBanner message ]
+
+        Nothing ->
+            []
