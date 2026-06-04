@@ -240,11 +240,7 @@ logsForSlot =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 16
-        , Element.padding 24
-        ]
+    Ui.pageContainer
         [ topActions
         , dateCard model
         , case model.error of
@@ -254,12 +250,10 @@ view model =
             Nothing ->
                 Element.none
         , if model.loading then
-            Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Loading diary...")
+            Ui.loading "Loading diary..."
 
           else if List.isEmpty model.logs then
-            Element.el
-                [ Font.color (Element.rgb255 107 114 128) ]
-                (Element.text "No food logged for this day.")
+            Ui.emptyState "No food logged for this day."
 
           else
             logGroupsView model
@@ -275,20 +269,12 @@ topActions =
 
 dateCard : Model -> Element Msg
 dateCard model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 16
-        , Element.padding 16
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         [ Element.row
             [ Element.width Element.fill
             , Element.spacing 12
             ]
-            [ smallButton "Previous" PreviousDayClicked
+            [ Ui.smallButton "Previous" PreviousDayClicked
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
@@ -298,14 +284,14 @@ dateCard model =
             , Input.button
                 [ Background.color
                     (if LocalDate.compare model.currentDate model.today == EQ then
-                        Element.rgb255 229 231 235
+                        Ui.borderGray
 
                      else
-                        Element.rgb255 17 100 102
+                        Ui.primaryTeal
                     )
                 , Font.color
                     (if LocalDate.compare model.currentDate model.today == EQ then
-                        Element.rgb255 107 114 128
+                        Ui.mutedColor
 
                      else
                         Element.rgb255 255 255 255
@@ -350,10 +336,10 @@ nutrientPill label unit amount =
         , Element.padding 10
         , Border.rounded 6
         , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
+        , Border.color Ui.borderGray
         ]
         [ Element.el [ Font.bold ] (Element.text (String.fromInt (round amount) ++ " " ++ unit))
-        , Element.el [ Font.size 12, Font.color (Element.rgb255 107 114 128) ] (Element.text label)
+        , Element.el [ Font.size 12, Font.color Ui.mutedColor ] (Element.text label)
         ]
 
 
@@ -388,31 +374,25 @@ slotView model slot label =
         totals =
             macroTotals logs
     in
-    Element.column
-        [ Element.width Element.fill
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]
             [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
                 [ Element.el [ Font.bold ] (Element.text label)
-                , Input.button [ Font.color (Element.rgb255 107 114 128), Font.size 13 ]
+                , Input.button [ Font.color Ui.mutedColor, Font.size 13 ]
                     { onPress = Just MacroModeToggled
                     , label = Element.text (macroSummary model.macroMode totals)
                     }
                 ]
             , Element.el
                 [ Font.size 13
-                , Font.color (Element.rgb255 107 114 128)
+                , Font.color Ui.mutedColor
                 ]
                 (Element.text (String.fromInt (round (slotCalories slot model.logs)) ++ " kcal"))
             ]
-            :: (if List.isEmpty logs then
+            :: ((if List.isEmpty logs then
                     [ Element.el
                         [ Element.padding 14
-                        , Font.color (Element.rgb255 107 114 128)
+                        , Font.color Ui.mutedColor
                         , Element.centerX
                         ]
                         (Element.text "No items")
@@ -420,25 +400,26 @@ slotView model slot label =
 
                 else
                     List.map (logRow model.itemNames) logs
-               )
-            ++ (case slot of
-                    Other ->
-                        []
+                )
+                    ++ (case slot of
+                            Other ->
+                                []
 
-                    _ ->
-                        [ Input.button
-                            [ Element.width Element.fill
-                            , Element.padding 12
-                            , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
-                            , Border.color (Element.rgb255 229 231 235)
-                            , Font.color (Element.rgb255 17 100 102)
-                            , Font.medium
-                            ]
-                            { onPress = Just (AddFoodClicked slot)
-                            , label = Element.text "Add Food"
-                            }
-                        ]
-               )
+                            _ ->
+                                [ Input.button
+                                    [ Element.width Element.fill
+                                    , Element.padding 12
+                                    , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
+                                    , Border.color Ui.borderGray
+                                    , Font.color Ui.primaryTeal
+                                    , Font.medium
+                                    ]
+                                    { onPress = Just (AddFoodClicked slot)
+                                    , label = Element.text "Add Food"
+                                    }
+                                ]
+                       )
+            )
         )
 
 
@@ -470,7 +451,7 @@ logRow itemNames log =
         [ Element.width Element.fill
         , Element.padding 12
         , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
-        , Border.color (Element.rgb255 229 231 235)
+        , Border.color Ui.borderGray
         ]
         { onPress = Just (LogClicked log.id)
         , label =
@@ -486,12 +467,12 @@ logRow itemNames log =
                     )
                 , Element.el
                     [ Font.size 13
-                    , Font.color (Element.rgb255 107 114 128)
+                    , Font.color Ui.mutedColor
                     ]
                     (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
                 , Element.el
                     [ Font.size 13
-                    , Font.color (Element.rgb255 107 114 128)
+                    , Font.color Ui.mutedColor
                     ]
                     (Element.text
                         (String.fromInt
@@ -500,17 +481,4 @@ logRow itemNames log =
                         )
                     )
                 ]
-        }
-
-
-smallButton : String -> Msg -> Element Msg
-smallButton label msg =
-    Input.button
-        [ Background.color (Element.rgb255 17 100 102)
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 6
-        , Element.paddingXY 12 8
-        ]
-        { onPress = Just msg
-        , label = Element.text label
         }

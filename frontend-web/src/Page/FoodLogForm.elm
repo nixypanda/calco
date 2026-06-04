@@ -18,8 +18,6 @@ import Data.Quantity exposing (Quantity)
 import Data.Text as Text
 import Data.Units as Units
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Ui
@@ -124,15 +122,7 @@ view food units model =
 
             Nothing ->
                 Element.none
-        , Element.column
-            [ Element.width Element.fill
-            , Element.spacing 14
-            , Element.padding 16
-            , Background.color (Element.rgb255 255 255 255)
-            , Border.rounded 8
-            , Border.width 1
-            , Border.color (Element.rgb255 229 231 235)
-            ]
+        , Ui.card
             [ mealSlotInput model
             , Ui.input "Amount" model.amount AmountChanged
             , unitInput food units model

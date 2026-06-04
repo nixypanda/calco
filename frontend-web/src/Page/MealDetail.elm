@@ -483,7 +483,7 @@ failure error model =
 
 view : Model -> Element Msg
 view model =
-    Element.column [ Element.width Element.fill, Element.spacing 16, Element.padding 24 ]
+    Ui.pageContainer
         [ Element.row [ Element.spacing 12 ]
             [ Ui.button "Back" BackClicked
             , Element.el
@@ -503,7 +503,7 @@ view model =
                 loadedView model meal
 
             Nothing ->
-                Element.text "Loading meal..."
+                Ui.loading "Loading meal..."
         ]
 
 
@@ -512,11 +512,11 @@ loadedView model meal =
     Element.column [ Element.width Element.fill, Element.spacing 16 ]
         [ case meal.notes of
             Just notes ->
-                Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text notes)
+                Ui.mutedText notes
 
             Nothing ->
                 Element.none
-        , Element.el [ Font.size 18, Font.bold ] (Element.text "Components")
+        , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 8 ]
             (List.map (componentView model) meal.components)
@@ -531,14 +531,14 @@ componentView model component =
         [ Element.width Element.fill
         , Element.spacing 12
         , Element.padding 12
-        , Background.color (Element.rgb255 255 255 255)
+        , Background.color Ui.cardBg
         , Border.rounded 8
         , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
+        , Border.color Ui.borderGray
         ]
         [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id model))
         , Element.el
-            [ Font.color (Element.rgb255 107 114 128) ]
+            [ Font.color Ui.mutedColor ]
             (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
         ]
 
@@ -546,7 +546,7 @@ componentView model component =
 logFormView : Model -> Element Msg
 logFormView model =
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
-        [ Element.el [ Font.size 18, Font.bold ] (Element.text "Log this meal")
+        [ Ui.sectionHeader "Log this meal"
         , Element.row [ Element.spacing 8 ]
             [ Ui.input "Amount" model.logForm.amount AmountChanged
             , Ui.input "Unit" model.logForm.unit UnitChanged
@@ -563,14 +563,7 @@ logFormView model =
 
             Nothing ->
                 Element.none
-        , Ui.button
-            (if model.logForm.logging then
-                "Logging..."
-
-             else
-                "Log Meal"
-            )
-            LogClicked
+        , Ui.submitButton model.logForm.logging "Log Meal" "Logging..." LogClicked
         ]
 
 
@@ -588,7 +581,7 @@ confirmDeleteView model =
         Element.column
             [ Element.spacing 8
             , Element.padding 12
-            , Background.color (Element.rgb255 254 242 242)
+            , Background.color Ui.dangerBg
             , Border.rounded 8
             ]
             [ Element.el [ Font.bold ] (Element.text "Delete meal?")
@@ -600,7 +593,7 @@ confirmDeleteView model =
                     Element.none
             , Element.row [ Element.spacing 8 ]
                 [ Ui.button "Cancel" CancelDeleteClicked
-                , Ui.button
+                , Ui.dangerButton
                     (if model.deleting then
                         "Deleting..."
 

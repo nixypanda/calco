@@ -12,7 +12,6 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (SearchRequest, SearchResult)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
-import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
@@ -142,15 +141,8 @@ isNumeric value =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 16
-        , Element.padding 24
-        ]
-        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text "Search Foods")
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader "Search Foods" (Just BackClicked)
         , Ui.input "Search for a food" model.query QueryChanged
         , bodyView model
         ]
@@ -160,49 +152,26 @@ bodyView : Model -> Element Msg
 bodyView model =
     case model.results of
         NotAsked ->
-            emptyState "Search for a food to get started."
+            Ui.emptyState "Search for a food to get started."
 
         Loading ->
-            Element.el
-                [ Font.color (Element.rgb255 107 114 128) ]
-                (Element.text "Searching foods...")
+            Ui.loading "Searching foods..."
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing 12 ]
                 [ Ui.errorBanner (Client.displayError error)
-                , emptyState "No foods found. Try a different search."
+                , Ui.emptyState "No foods found. Try a different search."
                 ]
 
         Success items ->
             if List.isEmpty items then
-                emptyState "No foods found. Try a different search."
+                Element.column [ Element.width Element.fill, Element.spacing 12 ]
+                    [ Ui.emptyState "No foods found. Try a different search."
+                    , Ui.button "Create Custom Food" CreateCustomFoodClicked
+                    ]
 
             else
-                Element.column
-                    [ Element.width Element.fill
-                    , Background.color (Element.rgb255 255 255 255)
-                    , Border.rounded 8
-                    , Border.width 1
-                    , Border.color (Element.rgb255 229 231 235)
-                    ]
-                    (List.map (resultRow model.query) items)
-
-
-emptyState : String -> Element Msg
-emptyState message =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 12
-        , Element.padding 18
-        , Font.color (Element.rgb255 107 114 128)
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
-        [ Element.el [] (Element.text message)
-        , Ui.button "Create Custom Food" CreateCustomFoodClicked
-        ]
+                Ui.card (List.map (resultRow model.query) items)
 
 
 resultRow : String -> SearchResult -> Element Msg
@@ -211,7 +180,7 @@ resultRow query item =
         [ Element.width Element.fill
         , Element.padding 12
         , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color (Element.rgb255 229 231 235)
+        , Border.color Ui.borderGray
         ]
         { onPress = Just (ResultClicked item.id)
         , label =
@@ -219,7 +188,7 @@ resultRow query item =
                 [ Element.el [ Font.medium ] (Element.text item.name)
                 , Element.el
                     [ Font.size 13
-                    , Font.color (Element.rgb255 107 114 128)
+                    , Font.color Ui.mutedColor
                     ]
                     (Element.text (metaText query item))
                 ]

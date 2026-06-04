@@ -3,8 +3,6 @@ module Page.Meals exposing (Model, Msg(..), OutMsg(..), emptyList, init, update,
 import Api.Client as Client
 import Api.Meals as Meals exposing (Meal)
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Route exposing (Route(..))
 import Ui
@@ -70,12 +68,9 @@ emptyList model =
 
 view : Model -> Element Msg
 view model =
-    Element.column [ Element.width Element.fill, Element.spacing 16, Element.padding 24 ]
-        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text "Meals")
-            , Ui.button "Create Meal" CreateMealClicked
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader "Meals" (Just BackClicked)
+        , Ui.button "Create Meal" CreateMealClicked
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -90,7 +85,7 @@ bodyView : Model -> Element Msg
 bodyView model =
     case model.meals of
         Just [] ->
-            Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "No meals yet.")
+            Ui.emptyState "No meals yet."
 
         Just meals ->
             Element.column
@@ -102,27 +97,13 @@ bodyView model =
                 Element.none
 
             else
-                Element.el
-                    [ Font.color (Element.rgb255 107 114 128) ]
-                    (Element.text "Loading meals...")
+                Ui.loading "Loading meals..."
 
 
 mealRow : Meal -> Element Msg
 mealRow meal =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 6
-        , Element.padding 14
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         [ Element.el [ Font.bold ] (Element.text meal.name)
-        , Element.el
-            [ Font.size 14
-            , Font.color (Element.rgb255 107 114 128)
-            ]
-            (Element.text (String.fromInt (List.length meal.components) ++ " components"))
+        , Ui.mutedText (String.fromInt (List.length meal.components) ++ " components")
         , Ui.button "Open" (OpenMealClicked meal.id)
         ]

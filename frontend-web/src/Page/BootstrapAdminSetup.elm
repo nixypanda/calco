@@ -12,8 +12,6 @@ module Page.BootstrapAdminSetup exposing
 import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Ui
 
@@ -131,40 +129,24 @@ view model =
         , Element.width (Element.fill |> Element.maximum 420)
         , Element.padding 20
         ]
-        (Element.column
-            [ Element.spacing 16
-            , Element.width Element.fill
-            , Background.color (Element.rgb255 255 255 255)
-            , Border.rounded 8
-            , Border.width 1
-            , Border.color (Element.rgb255 229 231 235)
-            , Element.padding 24
-            ]
+        (Ui.card
             ([ Element.el [ Font.size 32, Font.bold ] (Element.text "CalCo")
              , Element.el
                 [ Font.size 20
                 , Font.medium
-                , Font.color (Element.rgb255 75 85 99)
+                , Font.color Ui.mediumColor
                 ]
                 (Element.text "First-Time Setup")
              , Element.paragraph
                 [ Font.size 14
-                , Font.color (Element.rgb255 75 85 99)
+                , Font.color Ui.mediumColor
                 ]
                 [ Element.text "Create the admin account to get started." ]
              , Ui.input "Username" model.form.username UsernameChanged
              , Ui.passwordInput "Password" model.form.password PasswordChanged
              ]
                 ++ errorView model.error
-                ++ [ Ui.button
-                        (if model.submitting then
-                            "Creating..."
-
-                         else
-                            "Create Admin"
-                        )
-                        Submitted
-                   ]
+                ++ [ Ui.submitButton model.submitting "Create Admin" "Creating..." Submitted ]
             )
         )
 

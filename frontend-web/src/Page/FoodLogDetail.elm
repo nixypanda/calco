@@ -13,8 +13,6 @@ import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
 import Data.FoodLog exposing (FoodLog)
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Page.FoodDetail
 import Page.FoodLogForm as FoodLogForm
@@ -248,15 +246,8 @@ setFormSubmitting submitting model =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 16
-        , Element.padding 24
-        ]
-        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text "Edit Log")
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader "Edit Log" (Just BackClicked)
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -278,9 +269,7 @@ bodyView model =
                 Element.none
 
             else
-                Element.el
-                    [ Font.color (Element.rgb255 107 114 128) ]
-                    (Element.text "Loading log...")
+                Ui.loading "Loading log..."
 
 
 loadedView : Model -> FoodLog -> List UnitItem -> FoodLogForm.Model -> Element Msg
@@ -292,14 +281,7 @@ loadedView model log units form =
         [ itemHeader model log
         , Element.map FormMsg (FoodLogForm.view model.food units form)
         , Element.row [ Element.spacing 12 ]
-            [ Ui.button
-                (if form.submitting then
-                    "Saving..."
-
-                 else
-                    "Save"
-                )
-                SubmitClicked
+            [ Ui.submitButton form.submitting "Save" "Saving..." SubmitClicked
             , Ui.button
                 (if model.deleting then
                     "Deleting..."
@@ -314,21 +296,9 @@ loadedView model log units form =
 
 itemHeader : Model -> FoodLog -> Element Msg
 itemHeader model log =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 8
-        , Element.padding 16
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         [ Element.el [ Font.size 20, Font.bold ] (Element.text (itemTitle model log))
-        , Element.el
-            [ Font.size 14
-            , Font.color (Element.rgb255 107 114 128)
-            ]
-            (Element.text (metaText model.food log))
+        , Ui.mutedText (metaText model.food log)
         , case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked

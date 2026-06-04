@@ -14,8 +14,6 @@ import Api.Logs exposing (CreateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Page.FoodLogForm as FoodLogForm
 import Route exposing (Route(..))
@@ -208,15 +206,8 @@ customFoodEditRoute food =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 16
-        , Element.padding 24
-        ]
-        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text "Log Food")
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader "Log Food" (Just BackClicked)
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -238,9 +229,7 @@ bodyView model =
                 Element.none
 
             else
-                Element.el
-                    [ Font.color (Element.rgb255 107 114 128) ]
-                    (Element.text "Loading food...")
+                Ui.loading "Loading food..."
 
 
 loadedView : ProductDetail -> List UnitItem -> FoodLogForm.Model -> Element Msg
@@ -251,36 +240,15 @@ loadedView food units form =
         ]
         [ foodHeader food
         , Element.map FormMsg (FoodLogForm.view (Just food) units form)
-        , Element.row [ Element.spacing 12 ]
-            [ Ui.button
-                (if form.submitting then
-                    "Logging..."
-
-                 else
-                    "Log Food"
-                )
-                SubmitClicked
-            ]
+        , Ui.submitButton form.submitting "Log Food" "Logging..." SubmitClicked
         ]
 
 
 foodHeader : ProductDetail -> Element Msg
 foodHeader food =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 8
-        , Element.padding 16
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         [ Element.el [ Font.size 20, Font.bold ] (Element.text food.name)
-        , Element.el
-            [ Font.size 14
-            , Font.color (Element.rgb255 107 114 128)
-            ]
-            (Element.text (metaText food))
+        , Ui.mutedText (metaText food)
         , case customFoodEditRoute food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked

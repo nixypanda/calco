@@ -9,7 +9,6 @@ import Api.Foods as Foods
         , UnitItem
         )
 import Element exposing (Element)
-import Element.Font as Font
 import Page.CustomFood.Form as Form
 import Route exposing (Route(..))
 import Ui
@@ -141,11 +140,8 @@ failure error model =
 
 view : Model -> Element Msg
 view model =
-    Element.column [ Element.width Element.fill, Element.spacing 16, Element.padding 24 ]
-        [ Element.row [ Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text "Create Custom Food")
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader "Create Custom Food" (Just BackClicked)
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -153,12 +149,5 @@ view model =
             Nothing ->
                 Element.none
         , Element.map FormMsg (Form.view model.nutrients model.units model.form)
-        , Ui.button
-            (if model.form.submitting then
-                "Creating..."
-
-             else
-                "Create Food"
-            )
-            SubmitClicked
+        , Ui.submitButton model.form.submitting "Create Food" "Creating..." SubmitClicked
         ]

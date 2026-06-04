@@ -1018,8 +1018,8 @@ headerView model =
         [ Element.width Element.fill
         , Element.paddingXY 24 14
         , Element.spacing 16
-        , Background.color (Element.rgb255 255 255 255)
-        , Font.color (Element.rgb255 31 41 55)
+        , Background.color Ui.cardBg
+        , Font.color Ui.darkColor
         ]
         (Element.el [ Font.size 20, Font.bold, Element.width Element.fill ] (Element.text "CalCo")
             :: identityView model
@@ -1032,7 +1032,7 @@ identityView model =
         Just identity ->
             [ Element.el
                 [ Font.size 14
-                , Font.color (Element.rgb255 75 85 99)
+                , Font.color Ui.mediumColor
                 ]
                 (Element.text ("Logged in as " ++ identity.username))
             , Ui.button "Logout" LogoutClicked
@@ -1046,7 +1046,7 @@ pageView : Model -> Element.Element Msg
 pageView model =
     case model.page of
         LoadingPage ->
-            Element.el [ Element.centerX, Element.centerY, Font.medium ] (Element.text "Loading...")
+            Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
 
         LoginPage loginModel ->
             Element.map GotLoginMsg (Login.view loginModel)

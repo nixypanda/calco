@@ -19,7 +19,6 @@ import Data.Text as Text
 import Data.Units as Units
 import Element exposing (Element)
 import Element.Font as Font
-import Element.Input as Input
 import Ui
 
 
@@ -301,7 +300,7 @@ view nutrients units form =
         , section "Portion Info"
             [ Ui.input "Serving Size (g)" form.servingSizeG ServingSizeChanged
             , Ui.input "Default Quantity" form.defaultQuantity DefaultQuantityChanged
-            , simpleSelect "Default Unit" form.defaultUnit DefaultUnitChanged (unitOptions units)
+            , Ui.select "Default Unit" form.defaultUnit (unitOptions units) DefaultUnitChanged
             ]
         , section "Nutrients (per 100g)"
             (List.indexedMap (nutrientRowView nutrients) form.nutrients
@@ -323,13 +322,13 @@ section title children =
 nutrientRowView : List NutrientItem -> Int -> NutrientRow -> Element Msg
 nutrientRowView nutrients index row =
     Element.row [ Element.width Element.fill, Element.spacing 8 ]
-        [ simpleSelect
+        [ Ui.select
             "Nutrient"
             row.code
-            (NutrientCodeChanged index)
             (( "", "Select nutrient..." )
                 :: List.map (\n -> ( n.code, n.name )) nutrients
             )
+            (NutrientCodeChanged index)
         , Ui.input "Amount" row.amountPer100g (NutrientAmountChanged index)
         , Ui.button "Remove" (RemoveNutrientRow index)
         ]
@@ -340,21 +339,10 @@ servingRowView units index row =
     Element.row [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input "Label" row.label (ServingLabelChanged index)
         , Ui.input "Qty" row.quantity (ServingQuantityChanged index)
-        , simpleSelect "Unit" row.unit (ServingUnitChanged index) (unitOptions units)
+        , Ui.select "Unit" row.unit (unitOptions units) (ServingUnitChanged index)
         , Ui.input "Grams" row.grams (ServingGramsChanged index)
         , Ui.button "Remove" (RemoveServingRow index)
         ]
-
-
-simpleSelect : String -> String -> (String -> msg) -> List ( String, String ) -> Element msg
-simpleSelect label value onChange options =
-    Input.radio
-        [ Element.spacing 4 ]
-        { onChange = onChange
-        , selected = Just value
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text label)
-        , options = List.map (\( code, name ) -> Input.option code (Element.text name)) options
-        }
 
 
 unitOptions : List UnitItem -> List ( String, String )

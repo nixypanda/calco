@@ -20,9 +20,6 @@ import Api.Foods as Foods exposing (ProductDetail, SearchResponse, SearchResult)
 import Api.Meals exposing (CreateMealComponentRequest, CreateMealRequest, Meal)
 import Data.Text as Text
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
 import Route exposing (Route(..))
 import Ui
 
@@ -490,11 +487,8 @@ failure error model =
 
 view : Model -> Element Msg
 view model =
-    Element.column [ Element.width Element.fill, Element.spacing 16, Element.padding 24 ]
-        [ Element.row [ Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text (pageTitle model))
-            ]
+    Ui.pageContainer
+        [ Ui.pageHeader (pageTitle model) (Just BackClicked)
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -502,7 +496,7 @@ view model =
             Nothing ->
                 Element.none
         , if model.fetching then
-            Element.text "Loading meal..."
+            Ui.loading "Loading meal..."
 
           else
             formView model
@@ -528,36 +522,21 @@ formView model =
             [ Ui.input "Total Quantity" model.totalQuantity TotalQuantityChanged
             , Ui.input "Total Unit" model.totalUnit TotalUnitChanged
             ]
-        , Element.el [ Font.size 18, Font.bold ] (Element.text "Components")
+        , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 10 ]
             (List.map componentRowView model.components)
         , Ui.button "+ Add Component" AddComponentClicked
-        , Ui.button
-            (if model.submitting then
-                "Saving..."
-
-             else if model.mealId == Nothing then
-                "Create Meal"
-
-             else
-                "Update Meal"
-            )
+        , Ui.submitButton model.submitting
+            (if model.mealId == Nothing then "Create Meal" else "Update Meal")
+            "Saving..."
             SubmitClicked
         ]
 
 
 componentRowView : ComponentRow -> Element Msg
 componentRowView row =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 8
-        , Element.padding 12
-        , Background.color (Element.rgb255 255 255 255)
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        ]
+    Ui.card
         [ Ui.input "Search Product" row.searchQuery (ComponentSearchChanged row.rowId)
         , if List.isEmpty row.searchResults then
             Element.none

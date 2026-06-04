@@ -323,11 +323,7 @@ updateCreatePassword password form =
 
 view : Model -> Element Msg
 view model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing 18
-        , Element.padding 24
-        ]
+    Ui.pageContainer
         (Element.row
             [ Element.width Element.fill
             , Element.spaceEvenly
@@ -342,25 +338,18 @@ view model =
                 )
                 ToggleCreate
             ]
-            :: errorView model.actionError
-            ++ createFormView model
-            ++ usersView model
-            ++ resetFormView model
+            :: (errorView model.actionError
+                ++ createFormView model
+                ++ usersView model
+                ++ resetFormView model
+            )
         )
 
 
 createFormView : Model -> List (Element Msg)
 createFormView model =
     if model.showCreate then
-        [ Element.column
-            [ Element.spacing 12
-            , Element.width Element.fill
-            , Background.color (Element.rgb255 255 255 255)
-            , Border.rounded 8
-            , Border.width 1
-            , Border.color (Element.rgb255 229 231 235)
-            , Element.padding 16
-            ]
+        [ Ui.card
             [ Ui.input "Username" model.createForm.username CreateUsernameChanged
             , Ui.input "Display Name" model.createForm.displayName CreateDisplayNameChanged
             , Ui.passwordInput
@@ -382,14 +371,14 @@ usersView model =
             [ Element.text "Users have not loaded yet." ]
 
         Loading ->
-            [ Element.text "Loading users..." ]
+            [ Ui.loading "Loading users..." ]
 
         Failure error ->
-            [ Element.text ("Unable to load users: " ++ Client.displayError error) ]
+            [ Ui.errorBanner ("Unable to load users: " ++ Client.displayError error) ]
 
         Success users ->
             if List.isEmpty users then
-                [ Element.text "No users yet." ]
+                [ Ui.emptyState "No users yet." ]
 
             else
                 [ Element.column
@@ -403,17 +392,17 @@ userRow user =
     Element.row
         [ Element.width Element.fill
         , Element.spacing 12
+        , Element.padding 12
         , Background.color (Element.rgb255 255 255 255)
         , Border.rounded 8
         , Border.width 1
-        , Border.color (Element.rgb255 229 231 235)
-        , Element.padding 12
+        , Border.color Ui.borderGray
         ]
         [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
             [ Element.el [ Font.medium ] (Element.text user.username)
             , Element.text user.displayName
             , Element.el
-                [ Font.color (Element.rgb255 75 85 99)
+                [ Font.color Ui.mediumColor
                 , Font.size 13
                 ]
                 (Element.text user.status)
