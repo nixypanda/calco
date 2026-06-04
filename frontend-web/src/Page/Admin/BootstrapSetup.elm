@@ -1,4 +1,4 @@
-module Page.BootstrapAdminSetup exposing
+module Page.Admin.BootstrapSetup exposing
     ( Form
     , Model
     , Msg(..)

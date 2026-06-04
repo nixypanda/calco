@@ -1,15 +1,15 @@
 module RouteTest exposing (tests)
 
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Route exposing (Route(..))
 import Expect
-import Route exposing (Route(..))
 import Test exposing (Test, describe, test)
 import Url
 
 
 tests : Test
 tests =
-    describe "Route.fromUrl"
+    describe "Data.Route.fromUrl"
         [ parses "/setup" Setup
         , parses "/login" Login
         , parses "/admin" AdminDashboard
@@ -30,10 +30,10 @@ tests =
         ]
 
 
-parses : String -> Route.Route -> Test
+parses : String -> Data.Route.Route -> Test
 parses path expected =
     test path <|
         \_ ->
             Url.fromString ("http://localhost" ++ path)
-                |> Maybe.map Route.fromUrl
+                |> Maybe.map Data.Route.fromUrl
                 |> Expect.equal (Just expected)

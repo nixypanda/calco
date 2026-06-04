@@ -1,4 +1,4 @@
-module Page.FoodLogForm exposing
+module View.FoodLogForm exposing
     ( Model
     , Msg(..)
     , ValidationError(..)
@@ -15,9 +15,9 @@ import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Quantity exposing (Quantity)
-import Data.Text as Text
 import Data.Units as Units
 import Element exposing (Element)
+import Lib.Text as Text
 import Ui
 
 
@@ -48,8 +48,8 @@ type ValidationError
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
 initLogFormFromFood mealSlot food =
-    { amount = food.defaultQuantity |> Maybe.withDefault "1"
-    , unit = food.defaultUnit |> Maybe.withDefault "g"
+    { amount = food.defaultQuantity |> Maybe.withDefault Units.defaultQuantity
+    , unit = food.defaultUnit |> Maybe.withDefault Units.defaultCode
     , mealSlot = mealSlot
     , notes = ""
     , mealSlotOpen = False

@@ -1,4 +1,4 @@
-module Loadable exposing (Loadable(..))
+module Lib.Loadable exposing (Loadable(..))
 
 
 type Loadable error value

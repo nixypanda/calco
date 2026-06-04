@@ -4,14 +4,14 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Data.User as User
 import Expect
-import Loadable exposing (Loadable(..))
-import Page.AdminDashboard as Admin
+import Lib.Loadable exposing (Loadable(..))
+import Page.Admin.Dashboard as Admin
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.AdminDashboard"
+    describe "Page.Admin.Dashboard"
         [ test "init starts with users loading" <|
             \_ ->
                 Admin.init

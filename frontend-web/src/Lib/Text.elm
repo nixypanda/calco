@@ -1,4 +1,4 @@
-module Data.Text exposing (blankToMaybe, isBlank, trimOrDefault)
+module Lib.Text exposing (blankToMaybe, isBlank, trimOrDefault)
 
 
 isBlank : String -> Bool

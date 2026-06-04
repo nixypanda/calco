@@ -4,16 +4,16 @@ import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Route exposing (Route(..))
 import Expect
-import Page.FoodDetail as FoodDetail
-import Page.FoodLogForm as FoodLogForm
-import Route exposing (Route(..))
+import Page.Food.Detail as FoodDetail
 import Test exposing (Test, describe, test)
+import View.FoodLogForm as FoodLogForm
 
 
 tests : Test
 tests =
-    describe "Page.FoodDetail"
+    describe "Page.Food.Detail"
         [ test "init requests food detail and units" <|
             \_ ->
                 FoodDetail.init "food-1" (Just Lunch)

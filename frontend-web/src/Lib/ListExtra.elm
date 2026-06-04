@@ -1,4 +1,4 @@
-module Data.ListExtra exposing (removeAt, updateAt)
+module Lib.ListExtra exposing (removeAt, updateAt)
 
 
 updateAt : Int -> (a -> a) -> List a -> List a

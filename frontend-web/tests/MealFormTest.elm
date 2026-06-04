@@ -4,13 +4,13 @@ import Api.Foods exposing (SearchResult)
 import Api.Meals exposing (Meal)
 import Data.Nutrition exposing (NutrientAmount)
 import Expect
-import Page.MealForm as MealForm
+import Page.Meal.Form as MealForm
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.MealForm"
+    describe "Page.Meal.Form"
         [ test "new meal form starts with one empty component" <|
             \_ ->
                 MealForm.initCreate

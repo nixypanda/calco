@@ -1,13 +1,13 @@
 module TextTest exposing (tests)
 
-import Data.Text as Text
 import Expect
+import Lib.Text as Text
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Data.Text"
+    describe "Lib.Text"
         [ test "blank strings become Nothing" <|
             \_ ->
                 Text.blankToMaybe "   "

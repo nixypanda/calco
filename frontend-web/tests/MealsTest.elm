@@ -1,15 +1,15 @@
 module MealsTest exposing (tests)
 
 import Api.Client as Client
+import Data.Route exposing (Route(..))
 import Expect
-import Page.Meals as Meals
-import Route exposing (Route(..))
+import Page.Meal.Index as Meals
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Meals"
+    describe "Page.Meal.Index"
         [ test "init requests meals" <|
             \_ ->
                 Meals.init

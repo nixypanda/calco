@@ -1,4 +1,4 @@
-module Page.AdminDashboard exposing
+module Page.Admin.Dashboard exposing
     ( CreateForm
     , Model
     , Msg(..)
@@ -18,7 +18,7 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Loadable exposing (Loadable(..))
+import Lib.Loadable exposing (Loadable(..))
 import Ui
 
 

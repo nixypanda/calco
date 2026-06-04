@@ -1,8 +1,8 @@
 module ApiResultTest exposing (tests)
 
 import Api.Client as Client
+import Api.Result as ApiResult
 import Expect
-import Page.ApiResult as ApiResult
 import Test exposing (Test, describe, test)
 
 
@@ -18,7 +18,7 @@ type alias Model =
 
 tests : Test
 tests =
-    describe "Page.ApiResult"
+    describe "Api.Result"
         [ test "non-unauthorized failures apply display error and return NoOp" <|
             \_ ->
                 ApiResult.failure config Client.NetworkError emptyModel

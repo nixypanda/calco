@@ -1,4 +1,4 @@
-module Page.CustomFood.Form exposing
+module View.CustomFoodForm exposing
     ( FormModel
     , Msg(..)
     , NutrientRow
@@ -14,11 +14,11 @@ module Page.CustomFood.Form exposing
 
 import Api.Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
 import Data.Category as Category
-import Data.ListExtra as ListExtra
-import Data.Text as Text
 import Data.Units as Units
 import Element exposing (Element)
 import Element.Font as Font
+import Lib.ListExtra as ListExtra
+import Lib.Text as Text
 import Ui
 
 
@@ -80,7 +80,7 @@ emptyForm =
     , categories = ""
     , servingSizeG = ""
     , defaultQuantity = ""
-    , defaultUnit = "g"
+    , defaultUnit = Units.defaultCode
     , nutrients = [ emptyNutrientRow ]
     , servings = []
     , submitting = False
@@ -95,7 +95,7 @@ emptyNutrientRow =
 
 emptyServingRow : ServingRow
 emptyServingRow =
-    { label = "", quantity = "", unit = "g", grams = "" }
+    { label = "", quantity = "", unit = Units.defaultCode, grams = "" }
 
 
 fromProductDetail : ProductDetail -> FormModel
@@ -106,7 +106,7 @@ fromProductDetail food =
         , categories = Category.formatInput food.categories
         , servingSizeG = Maybe.withDefault "" food.servingSizeG
         , defaultQuantity = Maybe.withDefault "" food.defaultQuantity
-        , defaultUnit = Maybe.withDefault "g" food.defaultUnit
+        , defaultUnit = Maybe.withDefault Units.defaultCode food.defaultUnit
         , nutrients =
             case
                 List.map
@@ -176,7 +176,7 @@ toCreateFoodRequest form =
                             , quantity = String.trim row.quantity
                             , unit =
                                 if String.isEmpty (String.trim row.unit) then
-                                    "g"
+                                    Units.defaultCode
 
                                 else
                                     String.trim row.unit

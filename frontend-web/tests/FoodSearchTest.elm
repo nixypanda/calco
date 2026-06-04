@@ -3,16 +3,16 @@ module FoodSearchTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (SearchResult)
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Route exposing (Route(..))
 import Expect
-import Loadable exposing (Loadable(..))
-import Page.FoodSearch as FoodSearch
-import Route exposing (Route(..))
+import Lib.Loadable exposing (Loadable(..))
+import Page.Food.Search as FoodSearch
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.FoodSearch"
+    describe "Page.Food.Search"
         [ test "empty query clears results, loading, and error" <|
             \_ ->
                 FoodSearch.update

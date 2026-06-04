@@ -13,24 +13,25 @@ import Data.Auth as Auth
 import Data.ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot
+import Data.Route exposing (Route(..))
+import Data.Units as Units
 import Element
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Page.AdminDashboard as AdminDashboard
-import Page.BootstrapAdminSetup as Setup
+import Page.Admin.BootstrapSetup as Setup
+import Page.Admin.Dashboard as AdminDashboard
+import Page.Auth.Login as Login
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
-import Page.Diary as Diary
-import Page.FoodDetail as FoodDetail
-import Page.FoodLogDetail as FoodLogDetail
-import Page.FoodSearch as FoodSearch
-import Page.Login as Login
-import Page.MealDetail as MealDetail
-import Page.MealForm as MealForm
-import Page.Meals as Meals
-import Route exposing (Route(..))
+import Page.Diary.Index as Diary
+import Page.Food.Detail as FoodDetail
+import Page.Food.Search as FoodSearch
+import Page.FoodLog.Detail as FoodLogDetail
+import Page.Meal.Detail as MealDetail
+import Page.Meal.Form as MealForm
+import Page.Meal.Index as Meals
 import Session
 import Task
 import Time
@@ -128,7 +129,7 @@ subscriptions _ =
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init _ url key =
     ( { key = key
-      , route = Route.fromUrl url
+      , route = Data.Route.fromUrl url
       , session = Session.init
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
@@ -161,7 +162,7 @@ update msg model =
             let
                 route : Route
                 route =
-                    Route.fromUrl url
+                    Data.Route.fromUrl url
             in
             changeRouteTo route { model | route = route, drawerOpen = False, profileOpen = False }
 
@@ -210,10 +211,10 @@ update msg model =
             ( { model | profileOpen = not model.profileOpen, drawerOpen = False }, Cmd.none )
 
         AppBackClicked route ->
-            ( closeChrome model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         AppNavigationClicked route ->
-            ( closeChrome model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         GotLoginMsg subMsg ->
             case model.page of
@@ -385,7 +386,7 @@ changeRouteTo route model =
             loadPage renderRoute model
 
         Access.Navigate target ->
-            ( model, Nav.replaceUrl model.key (Route.routeToPath target) )
+            ( model, Nav.replaceUrl model.key (Data.Route.routeToPath target) )
 
 
 loadPage : Route -> Model -> ( Model, Cmd Msg )
@@ -599,7 +600,7 @@ applyDiaryOutMsg outMsg model =
             ( model, Cmd.batch (List.map itemNameCommand items) )
 
         Diary.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         Diary.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -626,7 +627,7 @@ applyFoodSearchOutMsg outMsg model =
             )
 
         FoodSearch.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodSearch.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -676,7 +677,7 @@ applyFoodDetailOutMsg outMsg model =
             ( model, Api.Logs.createLog request (GotFoodDetailMsg << FoodDetail.LogCompleted) )
 
         FoodDetail.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodDetail.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -749,7 +750,7 @@ applyFoodLogDetailOutMsg outMsg model =
             )
 
         FoodLogDetail.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodLogDetail.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -797,7 +798,7 @@ applyCustomFoodCreateOutMsg outMsg model =
             )
 
         CustomFoodCreate.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodCreate.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -848,7 +849,7 @@ applyCustomFoodEditOutMsg outMsg model =
             )
 
         CustomFoodEdit.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodEdit.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -884,7 +885,7 @@ applyMealsOutMsg outMsg model =
             ( model, Api.Meals.deleteMeal mealId (GotMealsMsg << Meals.DeleteCompleted mealId) )
 
         Meals.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         Meals.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -920,7 +921,7 @@ applyMealFormOutMsg outMsg model =
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
-                    "g"
+                    Units.defaultCode
                     (GotMealFormMsg << MealForm.NutrientPreviewLoaded)
                 ]
             )
@@ -978,7 +979,7 @@ applyMealFormOutMsg outMsg model =
             )
 
         MealForm.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealForm.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
@@ -1015,7 +1016,7 @@ applyMealDetailOutMsg outMsg model =
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
-                    "g"
+                    Units.defaultCode
                     (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded)
                 ]
             )
@@ -1040,7 +1041,7 @@ applyMealDetailOutMsg outMsg model =
             ( model, Api.Meals.deleteMeal mealId (GotMealDetailMsg << MealDetail.DeleteCompleted) )
 
         MealDetail.Navigate route ->
-            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealDetail.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )

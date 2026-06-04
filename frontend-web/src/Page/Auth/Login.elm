@@ -1,4 +1,4 @@
-module Page.Login exposing
+module Page.Auth.Login exposing
     ( Form
     , Model
     , Msg(..)

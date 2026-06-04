@@ -1,4 +1,4 @@
-module Page.Diary exposing
+module Page.Diary.Index exposing
     ( MacroMode(..)
     , Model
     , Msg(..)
@@ -13,19 +13,19 @@ module Page.Diary exposing
     )
 
 import Api.Client as Client
+import Api.Result as ApiResult
 import Data.FoodLog as FoodLog exposing (FoodLog, GroupedLogs, SummaryResponse)
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
+import Data.Route exposing (Route(..))
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Page.ApiResult as ApiResult
-import Route exposing (Route(..))
 import Ui
 
 

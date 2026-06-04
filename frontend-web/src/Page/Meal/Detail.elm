@@ -1,4 +1,4 @@
-module Page.MealDetail exposing
+module Page.Meal.Detail exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -11,14 +11,14 @@ module Page.MealDetail exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
+import Api.Result as ApiResult
 import Data.Nutrition exposing (NutrientAmount)
+import Data.Route exposing (Route(..))
 import Data.Units as Units
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Page.ApiResult as ApiResult
-import Route exposing (Route(..))
 import Ui
 import View.Nutrients
 
@@ -72,7 +72,7 @@ init mealId =
       , meal = Nothing
       , productNames = []
       , amount = "100"
-      , unit = "g"
+      , unit = Units.defaultCode
       , units = fallbackUnits
       , unitOpen = False
       , nutrients = Nothing
@@ -335,7 +335,7 @@ clearNutritionPreview model =
 
 fallbackUnits : List UnitItem
 fallbackUnits =
-    [ { code = "g", name = "g", kind = "mass" } ]
+    [ { code = Units.defaultCode, name = Units.defaultCode, kind = "mass" } ]
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )

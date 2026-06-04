@@ -2,15 +2,15 @@ module MealDetailTest exposing (tests)
 
 import Api.Meals exposing (Meal)
 import Data.Nutrition exposing (NutrientAmount)
+import Data.Route exposing (Route(..))
 import Expect
-import Page.MealDetail as MealDetail
-import Route exposing (Route(..))
+import Page.Meal.Detail as MealDetail
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.MealDetail"
+    describe "Page.Meal.Detail"
         [ test "meal load success stores meal" <|
             \_ ->
                 MealDetail.update

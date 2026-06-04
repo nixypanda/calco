@@ -1,4 +1,4 @@
-module Page.FoodDetail exposing
+module Page.Food.Detail exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -12,15 +12,15 @@ module Page.FoodDetail exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest)
+import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
+import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Font as Font
-import Page.ApiResult as ApiResult
-import Page.FoodLogForm as FoodLogForm
-import Route exposing (Route(..))
 import Ui
+import View.FoodLogForm as FoodLogForm
 import View.Nutrients
 
 

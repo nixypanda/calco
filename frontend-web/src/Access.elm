@@ -1,6 +1,6 @@
 module Access exposing (RouteDecision(..), resolveRoute)
 
-import Route exposing (Route(..))
+import Data.Route exposing (Route(..))
 import Session
 
 

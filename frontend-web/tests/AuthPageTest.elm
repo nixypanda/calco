@@ -1,8 +1,8 @@
 module AuthPageTest exposing (tests)
 
 import Expect
-import Page.BootstrapAdminSetup as Setup
-import Page.Login as Login
+import Page.Admin.BootstrapSetup as Setup
+import Page.Auth.Login as Login
 import Test exposing (Test, describe, test)
 
 

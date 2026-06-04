@@ -9,11 +9,11 @@ import Api.Foods as Foods
         , ProductDetail
         , UnitItem
         )
+import Api.Result as ApiResult
+import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Page.ApiResult as ApiResult
-import Page.CustomFood.Form as Form
-import Route exposing (Route(..))
 import Ui
+import View.CustomFoodForm as Form
 
 
 type alias Model =

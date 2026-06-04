@@ -1,4 +1,4 @@
-module Page.Meals exposing
+module Page.Meal.Index exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -11,12 +11,12 @@ module Page.Meals exposing
 
 import Api.Client as Client
 import Api.Meals as Meals exposing (Meal)
+import Api.Result as ApiResult
+import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Page.ApiResult as ApiResult
-import Route exposing (Route(..))
 import Ui
 
 

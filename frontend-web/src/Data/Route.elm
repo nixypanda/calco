@@ -1,4 +1,4 @@
-module Route exposing
+module Data.Route exposing
     ( Route(..)
     , fromUrl
     , routeToPath

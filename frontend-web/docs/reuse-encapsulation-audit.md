@@ -11,7 +11,7 @@ Status: completed. Search query completions now live in shared modules:
 - `Data.Search` owns `Completion`, completion generation, category query parsing, quoted category handling, and current-token replacement.
 - `View.Search` owns completion dropdown rendering and Tab-key completion handling.
 
-Before this refactor, `Page.FoodSearch` and `Page.MealForm` both implemented nearly identical search completion behavior:
+Before this refactor, `Page.Food.Search` and `Page.Meal.Form` both implemented nearly identical search completion behavior:
 
 - `Completion` variants for operators and category suggestions.
 - `completions`, `completionLabel`, `applyCompletion`, and `categoryQuery`.
@@ -30,9 +30,9 @@ Several pages repeat the same pattern:
 - Return `SessionExpired` for 401 responses.
 - Return `NoOp` for other failures.
 
-This appears in pages such as `Page.Diary`, `Page.FoodDetail`, `Page.FoodLogDetail`, `Page.MealForm`, `Page.MealDetail`, `Page.Meals`, `Page.CustomFood.Create`, and `Page.CustomFood.Edit`.
+This appears in pages such as `Page.Diary.Index`, `Page.Food.Detail`, `Page.FoodLog.Detail`, `Page.Meal.Form`, `Page.Meal.Detail`, `Page.Meal.Index`, `Page.CustomFood.Create`, and `Page.CustomFood.Edit`.
 
-Introduce a small helper module, for example `Page.ApiResult` or `Page.Error`, that standardizes unauthorized handling while still letting each page decide how to update its model.
+Introduce a small helper module, for example `Api.Result` or `Page.Error`, that standardizes unauthorized handling while still letting each page decide how to update its model.
 
 ### Page Loading/Error/Empty Shells
 
@@ -44,7 +44,7 @@ Many pages render the same page structure:
 - empty state with `Ui.emptyState`
 - content view when data is available
 
-Candidates include `Page.Diary`, `Page.Meals`, `Page.FoodDetail`, `Page.FoodLogDetail`, `Page.MealDetail`, and custom food pages.
+Candidates include `Page.Diary.Index`, `Page.Meal.Index`, `Page.Food.Detail`, `Page.FoodLog.Detail`, `Page.Meal.Detail`, and custom food pages.
 
 Add reusable UI helpers such as `Ui.pageError`, `Ui.pageBodyState`, or `Ui.loadablePage` to keep the page modules focused on domain-specific content.
 
@@ -52,20 +52,20 @@ Add reusable UI helpers such as `Ui.pageError`, `Ui.pageBodyState`, or `Ui.loada
 
 The app repeats add/update/remove list-row logic in multiple form areas:
 
-- Meal components in `Page.MealForm`.
-- Nutrient rows in `Page.CustomFood.Form`.
-- Serving rows in `Page.CustomFood.Form`.
+- Meal components in `Page.Meal.Form`.
+- Nutrient rows in `View.CustomFoodForm`.
+- Serving rows in `View.CustomFoodForm`.
 
-`Data.ListExtra` already has useful primitives like indexed updates and removals. Build a slightly higher-level helper around these patterns for "add row", "remove row with minimum count", and "update row field".
+`Lib.ListExtra` already has useful primitives like indexed updates and removals. Build a slightly higher-level helper around these patterns for "add row", "remove row with minimum count", and "update row field".
 
 ### Quantity and Unit Controls
 
 Amount/unit inputs and defaults appear in several places:
 
-- Food log amount and unit in `Page.FoodLogForm`.
-- Meal total quantity and unit in `Page.MealForm`.
-- Meal detail nutrient preview quantity and unit in `Page.MealDetail`.
-- Custom food default quantity/unit and serving quantity/unit in `Page.CustomFood.Form`.
+- Food log amount and unit in `View.FoodLogForm`.
+- Meal total quantity and unit in `Page.Meal.Form`.
+- Meal detail nutrient preview quantity and unit in `Page.Meal.Detail`.
+- Custom food default quantity/unit and serving quantity/unit in `View.CustomFoodForm`.
 
 Create a reusable `View.QuantityInput` or `View.UnitInput` for common labels, unit options, dropdown behavior, and default handling.
 
@@ -81,7 +81,7 @@ This keeps unit behavior consistent when defaults change or new unit rules are a
 
 ### Delete Confirmation State and View
 
-Delete confirmation behavior is currently local to detail/list pages, especially `Page.MealDetail` and meal deletion flows. Encapsulate the common behavior:
+Delete confirmation behavior is currently local to detail/list pages, especially `Page.Meal.Detail` and meal deletion flows. Encapsulate the common behavior:
 
 - confirmation open/closed state
 - deleting state
@@ -94,9 +94,9 @@ A reusable `Ui.confirmDelete` view plus a small state helper would make future d
 
 Several places load item/product names after loading references:
 
-- `Page.Diary` resolves item names for logs.
-- `Page.MealDetail` resolves product names for meal components.
-- `Page.MealForm` resolves product names while loading an existing meal.
+- `Page.Diary.Index` resolves item names for logs.
+- `Page.Meal.Detail` resolves product names for meal components.
+- `Page.Meal.Form` resolves product names while loading an existing meal.
 
 Consider a shared lookup helper that deduplicates item references, tracks loaded names, and provides fallback names.
 
@@ -104,7 +104,7 @@ Consider a shared lookup helper that deduplicates item references, tracks loaded
 
 ### Form Sections
 
-`Page.CustomFood.Form` has a local `section` helper, while other forms manually combine headings, cards, and inputs. A shared `Ui.formSection` could standardize spacing and headings across form-heavy pages.
+`View.CustomFoodForm` has a local `section` helper, while other forms manually combine headings, cards, and inputs. A shared `Ui.formSection` could standardize spacing and headings across form-heavy pages.
 
 ### Search Result Panel
 
@@ -119,7 +119,7 @@ Create `View.FoodSearchPanel` if more pages need product search.
 
 ### Nutrient Preview Panel
 
-`Page.MealForm` and `Page.MealDetail` both show nutrient preview state:
+`Page.Meal.Form` and `Page.Meal.Detail` both show nutrient preview state:
 
 - loading nutrition
 - nutrition error

@@ -1,4 +1,4 @@
-module Page.MealForm exposing
+module Page.Meal.Form exposing
     ( ComponentPatch(..)
     , ComponentRow
     , Model
@@ -31,15 +31,16 @@ import Api.Meals
         , Meal
         , MealNutritionResponse
         )
+import Api.Result as ApiResult
 import Data.Nutrition exposing (NutrientAmount)
+import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
-import Data.Text as Text
+import Data.Units as Units
 import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Page.ApiResult as ApiResult
-import Route exposing (Route(..))
+import Lib.Text as Text
 import Ui
 import View.Nutrients
 import View.Search as SearchView
@@ -154,7 +155,7 @@ initCreate =
       , name = ""
       , notes = ""
       , totalQuantity = ""
-      , totalUnit = "g"
+      , totalUnit = Units.defaultCode
       , components = [ emptyComponentRow 1 ]
       , nextRowId = 2
       , nextSearchToken = 1
@@ -186,7 +187,7 @@ emptyComponentRow rowId =
     , productId = ""
     , productName = ""
     , quantity = "100"
-    , unit = "g"
+    , unit = Units.defaultCode
     , searchQuery = ""
     , searchResults = []
     , searching = False
@@ -234,7 +235,7 @@ update msg model =
                         , totalQuantity =
                             Maybe.map .amount meal.totalQuantity
                                 |> Maybe.withDefault ""
-                        , totalUnit = Maybe.map .unit meal.totalQuantity |> Maybe.withDefault "g"
+                        , totalUnit = Maybe.map .unit meal.totalQuantity |> Maybe.withDefault Units.defaultCode
                         , components = loadedRows
                         , nextRowId = List.length loadedRows + 1
                         , fetching = False
@@ -571,7 +572,7 @@ toMealRequest model =
                             |> Maybe.map
                                 (\amount ->
                                     { amount = amount
-                                    , unit = Text.trimOrDefault "g" model.totalUnit
+                                    , unit = Text.trimOrDefault Units.defaultCode model.totalUnit
                                     }
                                 )
                     , components = components
@@ -587,7 +588,7 @@ selectedComponents rows =
                 { item = { itemType = "product", id = String.trim row.productId }
                 , quantity =
                     { amount = Text.trimOrDefault "100" row.quantity
-                    , unit = Text.trimOrDefault "g" row.unit
+                    , unit = Text.trimOrDefault Units.defaultCode row.unit
                     }
                 }
             )

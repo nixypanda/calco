@@ -7,16 +7,16 @@ import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
+import Data.Route exposing (Route(..))
 import Dict
 import Expect
-import Page.Diary as Diary
-import Route exposing (Route(..))
+import Page.Diary.Index as Diary
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Diary"
+    describe "Page.Diary.Index"
         [ describe "initialization"
             [ test "valid date query param becomes current date" <|
                 \_ ->

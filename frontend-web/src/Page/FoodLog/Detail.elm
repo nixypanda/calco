@@ -1,4 +1,4 @@
-module Page.FoodLogDetail exposing
+module Page.FoodLog.Detail exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -12,15 +12,15 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
+import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
+import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Font as Font
-import Page.ApiResult as ApiResult
-import Page.FoodDetail
-import Page.FoodLogForm as FoodLogForm
-import Route exposing (Route(..))
+import Page.Food.Detail
 import Ui
+import View.FoodLogForm as FoodLogForm
 import View.Nutrients
 
 
@@ -190,7 +190,7 @@ update msg model =
                         model
 
         EditCustomFoodClicked ->
-            case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
+            case Maybe.andThen Page.Food.Detail.customFoodEditRoute model.food of
                 Just route ->
                     ( model, Cmd.none, Navigate route )
 
@@ -334,7 +334,7 @@ itemHeader model log =
 
             Nothing ->
                 Element.none
-        , case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
+        , case Maybe.andThen Page.Food.Detail.customFoodEditRoute model.food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked
 

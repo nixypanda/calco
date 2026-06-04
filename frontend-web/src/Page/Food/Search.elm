@@ -1,4 +1,4 @@
-module Page.FoodSearch exposing
+module Page.Food.Search exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -17,14 +17,14 @@ import Api.Foods as Foods
         , SearchResult
         )
 import Data.MealSlot exposing (MealSlot)
+import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
 import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Loadable exposing (Loadable(..))
+import Lib.Loadable exposing (Loadable(..))
 import Process
-import Route exposing (Route(..))
 import Task
 import Ui
 import View.Search as SearchView

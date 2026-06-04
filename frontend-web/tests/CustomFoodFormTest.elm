@@ -2,13 +2,13 @@ module CustomFoodFormTest exposing (tests)
 
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Expect
-import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
+import View.CustomFoodForm as Form
 
 
 tests : Test
 tests =
-    describe "Page.CustomFood.Form"
+    describe "View.CustomFoodForm"
         [ test "empty form has one nutrient row" <|
             \_ ->
                 Form.emptyForm.nutrients

@@ -1,4 +1,4 @@
-module Page.ApiResult exposing (failure)
+module Api.Result exposing (failure)
 
 import Api.Client as Client
 

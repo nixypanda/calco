@@ -1,13 +1,13 @@
 module ListExtraTest exposing (tests)
 
-import Data.ListExtra as ListExtra
 import Expect
+import Lib.ListExtra as ListExtra
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Data.ListExtra"
+    describe "Lib.ListExtra"
         [ test "updates item at index" <|
             \_ ->
                 ListExtra.updateAt 1 ((+) 10) [ 1, 2, 3 ]

@@ -1,6 +1,23 @@
-module Data.Units exposing (ensureSelected, label, options, sourceForFood)
+module Data.Units exposing
+    ( defaultCode
+    , defaultQuantity
+    , ensureSelected
+    , label
+    , options
+    , sourceForFood
+    )
 
 import Api.Foods exposing (ProductDetail, UnitItem)
+
+
+defaultCode : String
+defaultCode =
+    "g"
+
+
+defaultQuantity : String
+defaultQuantity =
+    "1"
 
 
 label : UnitItem -> String
@@ -16,7 +33,7 @@ options : List UnitItem -> List ( String, String )
 options units =
     case units of
         [] ->
-            [ ( "g", "g" ) ]
+            [ ( defaultCode, defaultCode ) ]
 
         _ ->
             List.map (\unit -> ( unit.code, label unit )) units
