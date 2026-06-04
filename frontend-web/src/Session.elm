@@ -1,74 +1,57 @@
 module Session exposing
-    ( Session
-    , SessionState(..)
+    ( Session(..)
     , applyAuthResult
     , clear
     , init
     , isAdmin
     , isAuthenticated
-    , setAdminExists
     )
 
 import Api.Client exposing (ApiError)
 import Data.Auth as Auth
 
 
-type SessionState
+type Session
     = Loading
-    | Loaded
-
-
-type alias Session =
-    { state : SessionState
-    , identity : Maybe Auth.Identity
-    , profile : Maybe Auth.Profile
-    , adminExists : Bool
-    }
+    | Authenticated Auth.Identity (Maybe Auth.Profile)
+    | Unauthenticated
 
 
 init : Session
 init =
-    { state = Loading
-    , identity = Nothing
-    , profile = Nothing
-    , adminExists = True
-    }
+    Loading
 
 
 applyAuthResult : Result ApiError Auth.LoginSession -> Session -> Session
-applyAuthResult result session =
+applyAuthResult result _ =
     case result of
         Ok loginSession ->
-            { session
-                | state = Loaded
-                , identity = Just loginSession.identity
-                , profile = loginSession.profile
-            }
+            Authenticated loginSession.identity loginSession.profile
 
         Err _ ->
-            clear { session | state = Loaded }
-
-
-setAdminExists : Bool -> Session -> Session
-setAdminExists adminExists session =
-    { session | adminExists = adminExists }
+            Unauthenticated
 
 
 clear : Session -> Session
-clear session =
-    { session | identity = Nothing, profile = Nothing }
+clear _ =
+    Unauthenticated
 
 
 isAuthenticated : Session -> Bool
 isAuthenticated session =
-    session.identity /= Nothing
+    case session of
+        Authenticated _ _ ->
+            True
+
+        _ ->
+            False
 
 
 isAdmin : Session -> Bool
 isAdmin session =
-    case session.identity of
-        Just identity ->
+    case session of
+        Authenticated identity _ ->
             identity.role == Auth.Admin
 
-        Nothing ->
+        _ ->
             False

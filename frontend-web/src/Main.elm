@@ -47,6 +47,7 @@ type alias Model =
     { key : Nav.Key
     , route : Route
     , session : Session.Session
+    , adminExists : Bool
     , pendingSession : Maybe (Result Client.ApiError Auth.LoginSession)
     , pendingBootstrap : Maybe (Result Client.ApiError Auth.BootstrapStatus)
     , timeZone : Maybe Time.Zone
@@ -131,6 +132,7 @@ init _ url key =
     ( { key = key
       , route = Data.Route.fromUrl url
       , session = Session.init
+      , adminExists = True
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
       , timeZone = Nothing
@@ -356,24 +358,21 @@ applyBootstrapProgress model =
     case ( model.pendingSession, model.pendingBootstrap ) of
         ( Just sessionResult, Just bootstrapResult ) ->
             let
-                sessionWithAuth : Session.Session
-                sessionWithAuth =
-                    Session.applyAuthResult sessionResult model.session
-
                 nextSession : Session.Session
                 nextSession =
+                    Session.applyAuthResult sessionResult model.session
+
+                adminExists : Bool
+                adminExists =
                     case bootstrapResult of
                         Ok status ->
-                            Session.setAdminExists status.adminExists sessionWithAuth
+                            status.adminExists
 
                         Err _ ->
-                            Session.setAdminExists True sessionWithAuth
-
-                nextModel : Model
-                nextModel =
-                    { model | session = nextSession }
+                            True
             in
-            changeRouteTo nextModel.route nextModel
+            changeRouteTo model.route
+                { model | session = nextSession, adminExists = adminExists }
 
         _ ->
             ( model, Cmd.none )
@@ -381,7 +380,7 @@ applyBootstrapProgress model =
 
 changeRouteTo : Route -> Model -> ( Model, Cmd Msg )
 changeRouteTo route model =
-    case Access.resolveRoute model.session route of
+    case Access.resolveRoute model.session model.adminExists route of
         Access.Render renderRoute ->
             loadPage renderRoute model
 
@@ -545,11 +544,9 @@ applySetupOutMsg outMsg model =
             let
                 nextSession : Session.Session
                 nextSession =
-                    model.session
-                        |> Session.applyAuthResult (Ok loginSession)
-                        |> Session.setAdminExists True
+                    Session.applyAuthResult (Ok loginSession) model.session
             in
-            ( { model | session = nextSession }, Nav.replaceUrl model.key "/admin" )
+            ( { model | session = nextSession, adminExists = True }, Nav.replaceUrl model.key "/admin" )
 
 
 applyAdminOutMsg : AdminDashboard.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1197,9 +1194,12 @@ profileButton model =
     let
         label : String
         label =
-            model.session.identity
-                |> Maybe.map .username
-                |> Maybe.withDefault "Profile"
+            case model.session of
+                Session.Authenticated identity _ ->
+                    identity.username
+
+                _ ->
+                    "Profile"
     in
     Input.button
         [ Element.height (Element.px 40)
@@ -1423,9 +1423,12 @@ profileMenuContent model =
         , Font.color Ui.mutedColor
         ]
         (Element.text
-            (model.session.identity
-                |> Maybe.map (\identity -> "Signed in as " ++ identity.username)
-                |> Maybe.withDefault "Signed in"
+            (case model.session of
+                Session.Authenticated identity _ ->
+                    "Signed in as " ++ identity.username
+
+                _ ->
+                    "Signed in"
             )
         )
     , Ui.button "Logout" LogoutClicked

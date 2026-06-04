@@ -9,11 +9,11 @@ type RouteDecision
     | Navigate Route
 
 
-resolveRoute : Session.Session -> Route -> RouteDecision
-resolveRoute session route =
+resolveRoute : Session.Session -> Bool -> Route -> RouteDecision
+resolveRoute session adminExists route =
     case route of
         Root ->
-            if not session.adminExists then
+            if not adminExists then
                 Navigate Setup
 
             else if not (Session.isAuthenticated session) then
@@ -29,7 +29,7 @@ resolveRoute session route =
             Navigate Root
 
         Setup ->
-            if session.adminExists && not (Session.isAuthenticated session) then
+            if adminExists && not (Session.isAuthenticated session) then
                 Navigate Login
 
             else if Session.isAuthenticated session then
