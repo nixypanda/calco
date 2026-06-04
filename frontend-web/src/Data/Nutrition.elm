@@ -10,7 +10,6 @@ module Data.Nutrition exposing
     , nutrientsForQuantity
     , oneDecimal
     , safeAmount
-    , scaleNutrients
     , scalePer100g
     , scaledSnapshotForQuantity
     , servingGrams

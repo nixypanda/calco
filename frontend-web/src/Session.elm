@@ -13,7 +13,7 @@ import Data.Auth as Auth
 
 type Session
     = Loading
-    | Authenticated Auth.Identity (Maybe Auth.Profile)
+    | Authenticated Auth.Identity
     | Unauthenticated
 
 
@@ -26,7 +26,7 @@ applyAuthResult : Result ApiError Auth.LoginSession -> Session -> Session
 applyAuthResult result _ =
     case result of
         Ok loginSession ->
-            Authenticated loginSession.identity loginSession.profile
+            Authenticated loginSession.identity
 
         Err _ ->
             Unauthenticated
@@ -40,7 +40,7 @@ clear _ =
 isAuthenticated : Session -> Bool
 isAuthenticated session =
     case session of
-        Authenticated _ _ ->
+        Authenticated _ ->
             True
 
         _ ->
@@ -50,7 +50,7 @@ isAuthenticated session =
 isAdmin : Session -> Bool
 isAdmin session =
     case session of
-        Authenticated identity _ ->
+        Authenticated identity ->
             identity.role == Auth.Admin
 
         _ ->

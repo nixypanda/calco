@@ -2,13 +2,10 @@ module Lib.Text exposing
     ( blankToMaybe
     , commaSeparatedUniqueLower
     , isBlank
-    , isWhitespace
     , quoteIfWhitespace
     , splitQuotedWhitespace
     , stripBoundingQuotes
-    , trimLeadingQuote
     , trimOrDefault
-    , trimTrailingQuote
     )
 
 

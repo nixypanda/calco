@@ -1195,7 +1195,7 @@ profileButton model =
         label : String
         label =
             case model.session of
-                Session.Authenticated identity _ ->
+                Session.Authenticated identity ->
                     identity.username
 
                 _ ->
@@ -1424,7 +1424,7 @@ profileMenuContent model =
         ]
         (Element.text
             (case model.session of
-                Session.Authenticated identity _ ->
+                Session.Authenticated identity ->
                     "Signed in as " ++ identity.username
 
                 _ ->

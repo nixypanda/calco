@@ -1,9 +1,11 @@
 module Page.Meal.Form exposing
-    ( ComponentPatch(..)
+    ( CategorySuggestionResult
+    , ComponentPatch(..)
     , ComponentRow
     , Model
     , Msg(..)
     , OutMsg(..)
+    , ProductAndCategoryRequests
     , RowId
     , ValidationError(..)
     , emptyComponentRow
@@ -201,6 +203,82 @@ emptyComponentRow rowId =
     }
 
 
+onComponentSearchChanged : RowId -> String -> Model -> ( Model, Cmd Msg, OutMsg )
+onComponentSearchChanged rowId query model =
+    let
+        token : Int
+        token =
+            model.nextSearchToken
+
+        categoryToken : Int
+        categoryToken =
+            token + 1
+
+        nextModel : Model
+        nextModel =
+            model
+                |> updateComponent rowId (SetSearchQuery query)
+                |> updateComponent rowId (SetSearchStarted token)
+                |> updateComponent rowId
+                    (case Search.categoryQuery query of
+                        Just _ ->
+                            SetCategorySuggestionsStarted categoryToken
+
+                        Nothing ->
+                            ClearCategorySuggestions
+                    )
+
+        searchRequest : Maybe Foods.SearchRequest
+        searchRequest =
+            if String.length (String.trim query) < 2 then
+                Nothing
+
+            else
+                Just { query = query }
+
+        categoryRequest : Maybe CategorySuggestionRequest
+        categoryRequest =
+            Search.categoryQuery query
+                |> Maybe.map
+                    (\value ->
+                        { query = value, limit = 8 }
+                    )
+    in
+    case ( searchRequest, categoryRequest ) of
+        ( Just productRequest, Just categorySuggestionRequest ) ->
+            ( { nextModel | nextSearchToken = token + 2 }
+            , Cmd.none
+            , RequestProductAndCats
+                { rowId = rowId
+                , searchToken = token
+                , searchRequest = productRequest
+                , categoryToken = categoryToken
+                , categoryRequest = categorySuggestionRequest
+                }
+            )
+
+        ( Just productRequest, Nothing ) ->
+            ( { nextModel | nextSearchToken = token + 1 }
+            , Cmd.none
+            , RequestProductSearch rowId token productRequest
+            )
+
+        ( Nothing, Just categorySuggestionRequest ) ->
+            ( { nextModel
+                | nextSearchToken = token + 2
+              }
+                |> updateComponent rowId (SetSearchResults token [])
+            , Cmd.none
+            , RequestCategorySuggestions rowId categoryToken categorySuggestionRequest
+            )
+
+        _ ->
+            ( nextModel |> updateComponent rowId (SetSearchResults token [])
+            , Cmd.none
+            , NoOp
+            )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
@@ -333,6 +411,7 @@ update msg model =
             ( { model | totalUnit = value }, Cmd.none, NoOp )
 
         ComponentSearchChanged rowId query ->
+            onComponentSearchChanged rowId query model
             let
                 token : Int
                 token =
@@ -445,11 +524,8 @@ update msg model =
                 Just row ->
                     case List.head (Search.completions row.searchQuery row.categorySuggestions) of
                         Just completion ->
-                            update
-                                (ComponentSearchChanged
-                                    rowId
-                                    (Search.applyCompletion completion row.searchQuery)
-                                )
+                            onComponentSearchChanged rowId
+                                (Search.applyCompletion completion row.searchQuery)
                                 model
 
                         Nothing ->
@@ -461,11 +537,8 @@ update msg model =
         ComponentCompletionClicked rowId completion ->
             case findRow rowId model.components of
                 Just row ->
-                    update
-                        (ComponentSearchChanged
-                            rowId
-                            (Search.applyCompletion completion row.searchQuery)
-                        )
+                    onComponentSearchChanged rowId
+                        (Search.applyCompletion completion row.searchQuery)
                         model
 
                 Nothing ->

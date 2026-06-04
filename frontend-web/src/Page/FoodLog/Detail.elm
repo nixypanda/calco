@@ -329,9 +329,11 @@ nutrientsForDisplay :
     -> List Nutrition.NutrientAmount
 nutrientsForDisplay maybeFood log form =
     let
+        currentQuantity : { amount : String, unit : String }
         currentQuantity =
             { amount = form.amount, unit = form.unit }
 
+        savedSnapshot : List Nutrition.NutrientAmount
         savedSnapshot =
             Nutrition.scaledSnapshotForQuantity
                 log.quantity

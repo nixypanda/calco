@@ -69,10 +69,71 @@ init mealSlot =
     }
 
 
+onQueryChanged : String -> Model -> ( Model, Cmd Msg, OutMsg )
+onQueryChanged rawQuery model =
+    let
+        query : String
+        query =
+            rawQuery
+
+        trimmed : String
+        trimmed =
+            String.trim query
+
+        nextCategoryToken : Int
+        nextCategoryToken =
+            model.categoryToken + 1
+
+        categoryOutMsg : OutMsg
+        categoryOutMsg =
+            case Search.categoryQuery query of
+                Just value ->
+                    RequestCategorySuggestions nextCategoryToken
+                        { query = value, limit = 8 }
+
+                Nothing ->
+                    NoOp
+    in
+    if String.isEmpty trimmed then
+        ( { model
+            | query = query
+            , results = NotAsked
+            , searchToken = model.searchToken + 1
+            , categoryToken = nextCategoryToken
+            , categorySuggestions = []
+          }
+        , Cmd.none
+        , NoOp
+        )
+
+    else
+        let
+            nextToken : Int
+            nextToken =
+                model.searchToken + 1
+        in
+        ( { model
+            | query = query
+            , searchToken = nextToken
+            , categoryToken = nextCategoryToken
+            , categorySuggestions =
+                if categoryOutMsg == NoOp then
+                    []
+
+                else
+                    model.categorySuggestions
+            , results = Loading
+          }
+        , debounce nextToken trimmed
+        , categoryOutMsg
+        )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         QueryChanged rawQuery ->
+            onQueryChanged rawQuery model
             let
                 query : String
                 query =
@@ -149,13 +210,13 @@ update msg model =
         CompleteFirstSuggestion ->
             case List.head (Search.completions model.query model.categorySuggestions) of
                 Just completion ->
-                    update (QueryChanged (Search.applyCompletion completion model.query)) model
+                    onQueryChanged (Search.applyCompletion completion model.query) model
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
 
         CompletionClicked completion ->
-            update (QueryChanged (Search.applyCompletion completion model.query)) model
+            onQueryChanged (Search.applyCompletion completion model.query) model
 
         DebounceElapsed token query ->
             if token == model.searchToken then

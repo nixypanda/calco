@@ -4,9 +4,7 @@ module Data.ItemNameLookup exposing
     , insert
     , insertProduct
     , insertResult
-    , isLoaded
     , nameFor
-    , nextMissing
     , nextMissingProductId
     , productRef
     , uniqueProductIds
@@ -63,14 +61,6 @@ nameFor fallback item names =
 isLoaded : ItemRef -> Names -> Bool
 isLoaded item names =
     Dict.member (ItemRef.key item) names
-
-
-nextMissing : List ItemRef -> Names -> Maybe ItemRef
-nextMissing items names =
-    items
-        |> ListExtra.uniqueBy ItemRef.key
-        |> List.filter (\item -> not (isLoaded item names))
-        |> List.head
 
 
 uniqueProductIds : List String -> List String

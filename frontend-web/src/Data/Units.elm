@@ -2,7 +2,6 @@ module Data.Units exposing
     ( defaultCode
     , defaultQuantity
     , ensureSelected
-    , label
     , options
     , sourceForFood
     )

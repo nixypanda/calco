@@ -1,6 +1,7 @@
 module MealsTest exposing (tests)
 
 import Api.Client as Client
+import Api.Meals exposing (Meal)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Index as Meals
@@ -69,6 +70,7 @@ third ( _, _, value ) =
     value
 
 
+mealWithNotes : Meal
 mealWithNotes =
     { id = "meal-1"
     , name = "Lunch"
