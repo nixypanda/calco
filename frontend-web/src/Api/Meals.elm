@@ -147,7 +147,7 @@ createMealRequestEncoder request =
     Encode.object
         [ ( "name", Encode.string request.name )
         , ( "notes", Json.maybe Encode.string request.notes )
-        , ( "total_quantity", Json.maybe quantityEncoder request.totalQuantity )
+        , ( "total_quantity", Json.maybe Quantity.encoder request.totalQuantity )
         , ( "components", Encode.list componentRequestEncoder request.components )
         ]
 
@@ -155,24 +155,8 @@ createMealRequestEncoder request =
 componentRequestEncoder : CreateMealComponentRequest -> Encode.Value
 componentRequestEncoder component =
     Encode.object
-        [ ( "item", itemRefEncoder component.item )
-        , ( "quantity", quantityEncoder component.quantity )
-        ]
-
-
-itemRefEncoder : ItemRef -> Encode.Value
-itemRefEncoder item =
-    Encode.object
-        [ ( "type", Encode.string item.itemType )
-        , ( "id", Encode.string item.id )
-        ]
-
-
-quantityEncoder : Quantity -> Encode.Value
-quantityEncoder quantity =
-    Encode.object
-        [ ( "amount", Encode.string quantity.amount )
-        , ( "unit", Encode.string quantity.unit )
+        [ ( "item", ItemRef.encoder component.item )
+        , ( "quantity", Quantity.encoder component.quantity )
         ]
 
 

@@ -13,8 +13,8 @@ module Api.Logs exposing
 
 import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
-import Data.ItemRef exposing (ItemRef)
-import Data.Quantity exposing (Quantity)
+import Data.ItemRef as ItemRef exposing (ItemRef)
+import Data.Quantity as Quantity exposing (Quantity)
 import Json.Encode as Encode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Json as Json
@@ -106,7 +106,7 @@ createLogRequestEncoder request =
 updateLogRequestEncoder : UpdateLogRequest -> Encode.Value
 updateLogRequestEncoder request =
     Encode.object
-        [ ( "quantity", quantityEncoder request.quantity )
+        [ ( "quantity", Quantity.encoder request.quantity )
         , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
         , ( "notes", Json.maybe Encode.string request.notes )
         ]
@@ -115,8 +115,8 @@ updateLogRequestEncoder request =
 baseLogFields : CreateLogRequest -> List ( String, Encode.Value )
 baseLogFields request =
     [ ( "logged_at", Encode.string request.loggedAt )
-    , ( "item", itemRefEncoder request.item )
-    , ( "quantity", quantityEncoder request.quantity )
+    , ( "item", ItemRef.encoder request.item )
+    , ( "quantity", Quantity.encoder request.quantity )
     , ( "notes", Json.maybe Encode.string request.notes )
     ]
 
@@ -129,19 +129,3 @@ mealSlotField maybeSlot =
 
         Nothing ->
             []
-
-
-itemRefEncoder : ItemRef -> Encode.Value
-itemRefEncoder item =
-    Encode.object
-        [ ( "type", Encode.string item.itemType )
-        , ( "id", Encode.string item.id )
-        ]
-
-
-quantityEncoder : Quantity -> Encode.Value
-quantityEncoder quantity =
-    Encode.object
-        [ ( "amount", Encode.string quantity.amount )
-        , ( "unit", Encode.string quantity.unit )
-        ]

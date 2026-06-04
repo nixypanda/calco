@@ -1,6 +1,7 @@
-module Data.ItemRef exposing (ItemRef, decoder, fallbackName, key, unique)
+module Data.ItemRef exposing (ItemRef, decoder, encoder, fallbackName, key, unique)
 
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Lib.ListExtra as ListExtra
 
 
@@ -15,6 +16,14 @@ decoder =
     Decode.map2 ItemRef
         (Decode.field "type" Decode.string)
         (Decode.field "id" Decode.string)
+
+
+encoder : ItemRef -> Encode.Value
+encoder item =
+    Encode.object
+        [ ( "type", Encode.string item.itemType )
+        , ( "id", Encode.string item.id )
+        ]
 
 
 key : ItemRef -> String
