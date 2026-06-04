@@ -22,10 +22,15 @@ type alias Form =
     }
 
 
+type SubmitStatus
+    = Idle
+    | Submitting
+    | Failed String
+
+
 type alias Model =
     { form : Form
-    , submitting : Bool
-    , error : Maybe String
+    , submitStatus : SubmitStatus
     }
 
 
@@ -45,8 +50,7 @@ type OutMsg
 init : Model
 init =
     { form = { username = "", password = "" }
-    , submitting = False
-    , error = Nothing
+    , submitStatus = Idle
     }
 
 
@@ -72,10 +76,8 @@ update msg model =
     case msg of
         UsernameChanged username ->
             ( { model
-                | form =
-                    { username = username
-                    , password = model.form.password
-                    }
+                | form = { username = username, password = model.form.password }
+                , submitStatus = Idle
               }
             , Cmd.none
             , NoOp
@@ -87,6 +89,7 @@ update msg model =
                     { username = model.form.username
                     , password = password
                     }
+                , submitStatus = Idle
               }
             , Cmd.none
             , NoOp
@@ -95,27 +98,24 @@ update msg model =
         Submitted ->
             case validateBootstrapAdmin model.form of
                 Ok request ->
-                    ( { model | submitting = True, error = Nothing }
+                    ( { model | submitStatus = Submitting }
                     , Cmd.none
                     , RequestCreateAdmin request
                     )
 
                 Err message ->
-                    ( { model | error = Just message }, Cmd.none, NoOp )
+                    ( { model | submitStatus = Failed message }, Cmd.none, NoOp )
 
         CreateAdminCompleted result ->
             case result of
                 Ok loginSession ->
-                    ( { model | submitting = False, error = Nothing }
+                    ( { model | submitStatus = Idle }
                     , Cmd.none
                     , CreateAdminSucceeded loginSession
                     )
 
                 Err error ->
-                    ( { model
-                        | submitting = False
-                        , error = Just (Client.displayError error)
-                      }
+                    ( { model | submitStatus = Failed (Client.displayError error) }
                     , Cmd.none
                     , NoOp
                     )
@@ -145,17 +145,21 @@ view model =
              , Ui.input "Username" model.form.username UsernameChanged
              , Ui.passwordInput "Password" model.form.password PasswordChanged
              ]
-                ++ errorView model.error
-                ++ [ Ui.submitButton model.submitting "Create Admin" "Creating..." Submitted ]
+                ++ errorView model.submitStatus
+                ++ [ Ui.submitButton (model.submitStatus == Submitting)
+                        "Create Admin"
+                        "Creating..."
+                        Submitted
+                   ]
             )
         )
 
 
-errorView : Maybe String -> List (Element msg)
-errorView maybeError =
-    case maybeError of
-        Just message ->
+errorView : SubmitStatus -> List (Element msg)
+errorView status =
+    case status of
+        Failed message ->
             [ Ui.errorBanner message ]
 
-        Nothing ->
+        _ ->
             []
