@@ -236,9 +236,6 @@ view model =
         , if model.loading then
             Ui.skeletonLoading
 
-          else if List.isEmpty model.logs then
-            Ui.emptyState "No food logged for this day."
-
           else
             logGroupsView model
         ]
