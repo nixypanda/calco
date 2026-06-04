@@ -22,6 +22,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Route exposing (Route(..))
 import Ui
+import View.Nutrients
 
 
 type alias LogMealForm =
@@ -559,19 +560,11 @@ logFormView model =
                 Element.none
         , case model.logForm.nutrients of
             Just nutrients ->
-                Element.column [ Element.spacing 4 ] (List.map nutrientView nutrients)
+                View.Nutrients.nutrientsTable nutrients
 
             Nothing ->
                 Element.none
         , Ui.submitButton model.logForm.logging "Log Meal" "Logging..." LogClicked
-        ]
-
-
-nutrientView : NutrientAmount -> Element Msg
-nutrientView nutrient =
-    Element.row [ Element.spacing 8 ]
-        [ Element.el [ Font.bold ] (Element.text nutrient.code)
-        , Element.text (nutrient.amount ++ " " ++ nutrient.unit)
         ]
 
 

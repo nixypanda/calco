@@ -1,20 +1,43 @@
 module Ui exposing
-    ( -- Colors
-      primaryTeal, borderGray, mutedColor, mediumColor, darkColor
-    , dangerBg, cardBg
+    ( body
+    , bold
+    , borderGray
+    , button
+    , caption
+    , card
+    , cardBg
       -- Typography
-    , display, heading1, heading2, heading3, body, caption, small
-    , bold, medium
-      -- Layout
-    , layout, pageContainer, pageHeader, card, sectionHeader
-      -- States
-    , loading, emptyState, errorBanner
+    , dangerBg
+    , dangerButton
+    , darkColor
+    , display
+    , emptyState
+    , errorBanner
       -- Buttons
-    , button, submitButton, dangerButton, smallButton
-      -- Inputs
-    , input, passwordInput, select
-      -- Display
+    , heading1
+    , heading2
+    , heading3
+    , input
+    , layout
+    , loading
+    , medium
+      -- Layout
+    , mediumColor
+    , mutedColor
     , mutedText
+    , pageContainer
+    , pageHeader
+    , passwordInput
+    , -- Colors
+      primaryTeal
+    , sectionHeader
+      -- States
+    , select
+      -- Display
+    , small
+    , smallButton
+      -- Inputs
+    , submitButton
     )
 
 import Element exposing (Element)
@@ -24,7 +47,9 @@ import Element.Font as Font
 import Element.Input as Input
 
 
+
 -- Colors
+
 
 primaryTeal : Element.Color
 primaryTeal =
@@ -71,7 +96,9 @@ inputBorder =
     Element.rgb255 209 213 219
 
 
+
 -- Typography
+
 
 display : Element.Attribute msg
 display =
@@ -118,7 +145,9 @@ medium =
     Font.medium
 
 
+
 -- Layout
+
 
 layout : Element msg -> Element msg
 layout content =
@@ -130,7 +159,12 @@ layout content =
         , Font.color darkColor
         , body
         ]
-        content
+        (Element.column
+            [ Element.centerX
+            , Element.width (Element.fill |> Element.maximum 960)
+            ]
+            [ content ]
+        )
 
 
 pageContainer : List (Element msg) -> Element msg
@@ -182,6 +216,7 @@ sectionHeader title =
 
 -- States
 
+
 loading : String -> Element msg
 loading message =
     Element.el
@@ -209,6 +244,7 @@ errorBanner message =
 
 -- Buttons
 
+
 button : String -> msg -> Element msg
 button label msg =
     Input.button
@@ -226,7 +262,12 @@ button label msg =
 submitButton : Bool -> String -> String -> msg -> Element msg
 submitButton isSubmitting idleLabel submittingLabel msg =
     button
-        (if isSubmitting then submittingLabel else idleLabel)
+        (if isSubmitting then
+            submittingLabel
+
+         else
+            idleLabel
+        )
         msg
 
 
@@ -261,6 +302,7 @@ smallButton label msg =
 
 
 -- Inputs
+
 
 input : String -> String -> (String -> msg) -> Element msg
 input label value onChange =
@@ -299,12 +341,13 @@ select label_ selected options onChange =
         { onChange = onChange
         , selected = Just selected
         , label = Input.labelAbove [ body, medium ] (Element.text label_)
-        , options = List.map (\(val, lbl) -> Input.option val (Element.text lbl)) options
+        , options = List.map (\( val, lbl ) -> Input.option val (Element.text lbl)) options
         }
 
 
 
 -- Display
+
 
 mutedText : String -> Element msg
 mutedText text =
@@ -313,4 +356,3 @@ mutedText text =
         , body
         ]
         (Element.text text)
-

@@ -528,7 +528,12 @@ formView model =
             (List.map componentRowView model.components)
         , Ui.button "+ Add Component" AddComponentClicked
         , Ui.submitButton model.submitting
-            (if model.mealId == Nothing then "Create Meal" else "Update Meal")
+            (if model.mealId == Nothing then
+                "Create Meal"
+
+             else
+                "Update Meal"
+            )
             "Saving..."
             SubmitClicked
         ]

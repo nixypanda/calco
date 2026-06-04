@@ -339,10 +339,10 @@ view model =
                 ToggleCreate
             ]
             :: (errorView model.actionError
-                ++ createFormView model
-                ++ usersView model
-                ++ resetFormView model
-            )
+                    ++ createFormView model
+                    ++ usersView model
+                    ++ resetFormView model
+               )
         )
 
 

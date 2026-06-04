@@ -396,7 +396,7 @@ slotView model slot label =
                         (Element.text "No items")
                     ]
 
-                else
+                 else
                     List.map (logRow model.itemNames) logs
                 )
                     ++ (case slot of
@@ -417,7 +417,7 @@ slotView model slot label =
                                     }
                                 ]
                        )
-            )
+               )
         )
 
 

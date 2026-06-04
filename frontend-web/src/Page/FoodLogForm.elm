@@ -14,6 +14,7 @@ import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
 import Data.Text as Text
 import Data.Units as Units
@@ -21,6 +22,7 @@ import Element exposing (Element)
 import Element.Font as Font
 import Element.Input as Input
 import Ui
+import View.Nutrients
 
 
 type alias Model =
@@ -128,7 +130,25 @@ view food units model =
             , unitInput food units model
             , Ui.input "Notes" model.notes NotesChanged
             ]
+        , case food of
+            Just productDetail ->
+                View.Nutrients.nutrientsTable (foodNutrients productDetail)
+
+            Nothing ->
+                Element.none
         ]
+
+
+foodNutrients : ProductDetail -> List NutrientAmount
+foodNutrients food =
+    List.map
+        (\n ->
+            { code = n.code
+            , amount = n.amountPer100g
+            , unit = n.unit
+            }
+        )
+        food.nutrients
 
 
 mealSlotInput : Model -> Element Msg
