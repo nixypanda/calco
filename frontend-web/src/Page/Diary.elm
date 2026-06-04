@@ -250,7 +250,10 @@ view model =
             Nothing ->
                 Element.none
         , if model.loading then
-            Ui.loading "Loading diary..."
+            Ui.skeletonLoading
+
+          else if List.isEmpty model.logs then
+            Ui.emptyState "No food logged for this day."
 
           else
             logGroupsView model
@@ -259,8 +262,9 @@ view model =
 
 topActions : Element Msg
 topActions =
-    Element.row [ Element.width Element.fill, Element.spacing 12 ]
-        [ Ui.button "My Meals" MealsClicked
+    Element.row [ Element.width Element.fill ]
+        [ Element.el [ Element.alignRight ]
+            (Ui.smallButton "My Meals" MealsClicked)
         ]
 
 
@@ -312,11 +316,35 @@ dateCard model =
 
 totalsView : List NutrientAmount -> Element Msg
 totalsView summary =
-    Element.wrappedRow [ Element.spacing 12 ]
-        [ nutrientPill "Calories" "kcal" (dailyCalories summary)
-        , nutrientPill "Protein" "g" (summaryAmount "PROTEIN_G" summary)
-        , nutrientPill "Carbs" "g" (summaryAmount "CARBS_G" summary)
-        , nutrientPill "Fat" "g" (summaryAmount "FAT_G" summary)
+    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        [ Ui.macroBar
+            { label = "Calories"
+            , value = dailyCalories summary
+            , unit = "kcal"
+            , color = Ui.primaryTeal
+            , max = diaryDefaults.calorieGoal
+            }
+        , Ui.macroBar
+            { label = "Protein"
+            , value = summaryAmount "PROTEIN_G" summary
+            , unit = "g"
+            , color = Ui.proteinColor
+            , max = diaryDefaults.proteinGoal
+            }
+        , Ui.macroBar
+            { label = "Carbs"
+            , value = summaryAmount "CARBS_G" summary
+            , unit = "g"
+            , color = Ui.carbsColor
+            , max = diaryDefaults.carbsGoal
+            }
+        , Ui.macroBar
+            { label = "Fat"
+            , value = summaryAmount "FAT_G" summary
+            , unit = "g"
+            , color = Ui.fatColor
+            , max = diaryDefaults.fatGoal
+            }
         ]
 
 
@@ -327,18 +355,18 @@ summaryAmount code summary =
         |> Maybe.withDefault 0
 
 
-nutrientPill : String -> String -> Float -> Element Msg
-nutrientPill label unit amount =
-    Element.column
-        [ Element.spacing 4
-        , Element.padding 10
-        , Border.rounded 6
-        , Border.width 1
-        , Border.color Ui.borderGray
-        ]
-        [ Element.el [ Font.bold ] (Element.text (String.fromInt (round amount) ++ " " ++ unit))
-        , Element.el [ Ui.small, Font.color Ui.mutedColor ] (Element.text label)
-        ]
+diaryDefaults :
+    { calorieGoal : Float
+    , proteinGoal : Float
+    , carbsGoal : Float
+    , fatGoal : Float
+    }
+diaryDefaults =
+    { calorieGoal = 2000
+    , proteinGoal = 150
+    , carbsGoal = 250
+    , fatGoal = 65
+    }
 
 
 logGroupsView : Model -> Element Msg

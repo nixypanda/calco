@@ -12,12 +12,14 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
 import Data.FoodLog exposing (FoodLog)
+import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Element.Font as Font
 import Page.FoodDetail
 import Page.FoodLogForm as FoodLogForm
 import Route exposing (Route(..))
 import Ui
+import View.Nutrients
 
 
 type alias Model =
@@ -280,9 +282,9 @@ loadedView model log units form =
         ]
         [ itemHeader model log
         , Element.map FormMsg (FoodLogForm.view model.food units form)
-        , Element.row [ Element.spacing 12 ]
+        , Ui.cardActions
             [ Ui.submitButton form.submitting "Save" "Saving..." SubmitClicked
-            , Ui.button
+            , Ui.dangerButton
                 (if model.deleting then
                     "Deleting..."
 
@@ -291,7 +293,71 @@ loadedView model log units form =
                 )
                 DeleteClicked
             ]
+        , Ui.sectionHeader "Macro Breakdown"
+        , macroBreakdownView log
+        , case model.food of
+            Just food ->
+                View.Nutrients.nutrientsTable (foodNutrientsForDisplay food)
+
+            Nothing ->
+                Element.none
         ]
+
+
+macroBreakdownView : FoodLog -> Element Msg
+macroBreakdownView log =
+    let
+        protein : Float
+        protein =
+            Nutrition.nutrientAmount "PROTEIN_G" log.nutrients
+
+        carbs : Float
+        carbs =
+            Nutrition.nutrientAmount "CARBS_G" log.nutrients
+
+        fat : Float
+        fat =
+            Nutrition.nutrientAmount "FAT_G" log.nutrients
+
+        total : Float
+        total =
+            protein + carbs + fat
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        [ Ui.macroBar
+            { label = "Protein"
+            , value = protein
+            , unit = "g"
+            , color = Ui.proteinColor
+            , max = total
+            }
+        , Ui.macroBar
+            { label = "Carbs"
+            , value = carbs
+            , unit = "g"
+            , color = Ui.carbsColor
+            , max = total
+            }
+        , Ui.macroBar
+            { label = "Fat"
+            , value = fat
+            , unit = "g"
+            , color = Ui.fatColor
+            , max = total
+            }
+        ]
+
+
+foodNutrientsForDisplay : ProductDetail -> List Nutrition.NutrientAmount
+foodNutrientsForDisplay food =
+    List.map
+        (\n ->
+            { code = n.code
+            , amount = n.amountPer100g
+            , unit = n.unit
+            }
+        )
+        food.nutrients
 
 
 itemHeader : Model -> FoodLog -> Element Msg
@@ -299,6 +365,17 @@ itemHeader model log =
     Ui.card
         [ Element.el [ Ui.heading2, Font.bold ] (Element.text (itemTitle model log))
         , Ui.mutedText (metaText model.food log)
+        , case model.food of
+            Just food ->
+                if List.isEmpty food.categories then
+                    Element.none
+
+                else
+                    Element.row [ Element.spacing 4 ]
+                        (List.map Ui.badge food.categories)
+
+            Nothing ->
+                Element.none
         , case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked

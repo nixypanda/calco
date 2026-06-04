@@ -99,6 +99,8 @@ form =
     , unit = "g"
     , mealSlot = Nothing
     , notes = ""
+    , mealSlotOpen = False
+    , unitOpen = False
     , error = Nothing
     , submitting = False
     }

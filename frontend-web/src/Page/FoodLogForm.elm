@@ -19,10 +19,7 @@ import Data.Quantity exposing (Quantity)
 import Data.Text as Text
 import Data.Units as Units
 import Element exposing (Element)
-import Element.Font as Font
-import Element.Input as Input
 import Ui
-import View.Nutrients
 
 
 type alias Model =
@@ -30,6 +27,8 @@ type alias Model =
     , unit : String
     , mealSlot : Maybe MealSlot
     , notes : String
+    , mealSlotOpen : Bool
+    , unitOpen : Bool
     , error : Maybe String
     , submitting : Bool
     }
@@ -40,6 +39,8 @@ type Msg
     | UnitChanged String
     | MealSlotChanged (Maybe MealSlot)
     | NotesChanged String
+    | ToggleMealSlotDropdown
+    | ToggleUnitDropdown
 
 
 type ValidationError
@@ -52,6 +53,8 @@ initLogFormFromFood mealSlot food =
     , unit = food.defaultUnit |> Maybe.withDefault "g"
     , mealSlot = mealSlot
     , notes = ""
+    , mealSlotOpen = False
+    , unitOpen = False
     , error = Nothing
     , submitting = False
     }
@@ -63,6 +66,8 @@ initLogFormFromLog log =
     , unit = log.quantity.unit
     , mealSlot = Maybe.andThen MealSlot.fromString log.mealSlot
     , notes = log.notes |> Maybe.withDefault ""
+    , mealSlotOpen = False
+    , unitOpen = False
     , error = Nothing
     , submitting = False
     }
@@ -72,16 +77,22 @@ update : Msg -> Model -> Model
 update msg model =
     case msg of
         AmountChanged value ->
-            { model | amount = value, error = Nothing }
+            { model | amount = value, mealSlotOpen = False, unitOpen = False, error = Nothing }
 
         UnitChanged value ->
-            { model | unit = value, error = Nothing }
+            { model | unit = value, unitOpen = False, error = Nothing }
 
         MealSlotChanged value ->
-            { model | mealSlot = value, error = Nothing }
+            { model | mealSlot = value, mealSlotOpen = False, error = Nothing }
 
         NotesChanged value ->
-            { model | notes = value, error = Nothing }
+            { model | notes = value, mealSlotOpen = False, unitOpen = False, error = Nothing }
+
+        ToggleMealSlotDropdown ->
+            { model | mealSlotOpen = not model.mealSlotOpen, unitOpen = False }
+
+        ToggleUnitDropdown ->
+            { model | unitOpen = not model.unitOpen, mealSlotOpen = False }
 
 
 createProductLogRequest : String -> String -> Model -> Result ValidationError CreateLogRequest
@@ -125,17 +136,11 @@ view food units model =
             Nothing ->
                 Element.none
         , Ui.card
-            [ mealSlotInput model
+            [ mealSlotDropdown model
             , Ui.input "Amount" model.amount AmountChanged
-            , unitInput food units model
+            , unitDropdown food units model
             , Ui.input "Notes" model.notes NotesChanged
             ]
-        , case food of
-            Just productDetail ->
-                View.Nutrients.nutrientsTable (foodNutrients productDetail)
-
-            Nothing ->
-                Element.none
         ]
 
 
@@ -151,37 +156,37 @@ foodNutrients food =
         food.nutrients
 
 
-mealSlotInput : Model -> Element Msg
-mealSlotInput model =
-    Input.radio
-        [ Element.spacing 8 ]
-        { onChange = MealSlotChanged
-        , selected = Just model.mealSlot
-        , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Meal")
+mealSlotDropdown : Model -> Element Msg
+mealSlotDropdown model =
+    Ui.selectDropdown
+        { label = "Meal"
+        , selected = model.mealSlot
         , options =
-            [ Input.option Nothing (Element.text "None")
-            , Input.option (Just Breakfast) (Element.text (MealSlot.label Breakfast))
-            , Input.option (Just Lunch) (Element.text (MealSlot.label Lunch))
-            , Input.option (Just Dinner) (Element.text (MealSlot.label Dinner))
-            , Input.option (Just Snack) (Element.text (MealSlot.label Snack))
+            [ ( Nothing, "None" )
+            , ( Just Breakfast, MealSlot.label Breakfast )
+            , ( Just Lunch, MealSlot.label Lunch )
+            , ( Just Dinner, MealSlot.label Dinner )
+            , ( Just Snack, MealSlot.label Snack )
             ]
+        , onChange = MealSlotChanged
+        , isOpen = model.mealSlotOpen
+        , onToggle = ToggleMealSlotDropdown
         }
 
 
-unitInput : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
-unitInput food units model =
-    Input.radio
-        [ Element.spacing 8 ]
-        { onChange = UnitChanged
-        , selected = Just model.unit
-        , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Unit")
-        , options =
-            unitOptions food units model.unit
-                |> List.map (\unit -> Input.option unit.code (Element.text (Units.label unit)))
+unitDropdown : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
+unitDropdown food units model =
+    let
+        source : List UnitItem
+        source =
+            Units.sourceForFood food units
+                |> Units.ensureSelected model.unit
+    in
+    Ui.selectDropdown
+        { label = "Unit"
+        , selected = model.unit
+        , options = List.map (\u -> ( u.code, Units.label u )) source
+        , onChange = UnitChanged
+        , isOpen = model.unitOpen
+        , onToggle = ToggleUnitDropdown
         }
-
-
-unitOptions : Maybe ProductDetail -> List UnitItem -> String -> List UnitItem
-unitOptions food units selectedUnit =
-    Units.sourceForFood food units
-        |> Units.ensureSelected selectedUnit

@@ -1,43 +1,51 @@
 module Ui exposing
-    ( body
-    , bold
+    ( -- Colors
+      primaryTeal
+    , proteinColor
+    , carbsColor
+    , fatColor
     , borderGray
-    , button
-    , caption
-    , card
     , cardBg
-      -- Typography
     , dangerBg
-    , dangerButton
     , darkColor
+    , mediumColor
+    , mutedColor
+      -- Typography
     , display
-    , emptyState
-    , errorBanner
-      -- Buttons
     , heading1
     , heading2
     , heading3
-    , input
-    , layout
-    , loading
+    , body
+    , caption
+    , small
+    , bold
     , medium
       -- Layout
-    , mediumColor
-    , mutedColor
-    , mutedText
+    , layout
     , pageContainer
     , pageHeader
-    , passwordInput
-    , -- Colors
-      primaryTeal
+    , card
     , sectionHeader
       -- States
-    , select
-      -- Display
-    , small
+    , loading
+    , emptyState
+    , errorBanner
+    , skeletonLoading
+      -- Buttons
+    , button
+    , submitButton
+    , dangerButton
     , smallButton
       -- Inputs
-    , submitButton
+    , input
+    , passwordInput
+    , select
+    , selectDropdown
+      -- Display
+    , mutedText
+    , badge
+    , macroBar
+    , cardActions
     )
 
 import Element exposing (Element)
@@ -54,6 +62,21 @@ import Element.Input as Input
 primaryTeal : Element.Color
 primaryTeal =
     Element.rgb255 17 100 102
+
+
+proteinColor : Element.Color
+proteinColor =
+    Element.rgb255 212 80 107
+
+
+carbsColor : Element.Color
+carbsColor =
+    Element.rgb255 76 175 80
+
+
+fatColor : Element.Color
+fatColor =
+    Element.rgb255 255 193 7
 
 
 borderGray : Element.Color
@@ -356,3 +379,209 @@ mutedText text =
         , body
         ]
         (Element.text text)
+
+
+
+-- New UI components
+
+
+badge : String -> Element msg
+badge label_ =
+    Element.el
+        [ Background.color borderGray
+        , Font.color mutedColor
+        , Border.rounded 12
+        , Element.paddingXY 8 4
+        , small
+        , Font.medium
+        ]
+        (Element.text label_)
+
+
+selectDropdown :
+    { label : String
+    , selected : a
+    , options : List ( a, String )
+    , onChange : a -> msg
+    , isOpen : Bool
+    , onToggle : msg
+    }
+    -> Element msg
+selectDropdown config =
+    let
+        selectedLabel : String
+        selectedLabel =
+            case List.filter (\( val, _ ) -> val == config.selected) config.options of
+                ( _, lbl ) :: _ ->
+                    lbl
+
+                [] ->
+                    ""
+    in
+    let
+        optionsElement : Element msg
+        optionsElement =
+            if config.isOpen then
+                Element.column
+                    [ Element.width Element.fill
+                    , Element.spacing 0
+                    , Border.rounded 6
+                    , Border.width 1
+                    , Border.color inputBorder
+                    , Background.color cardBg
+                    ]
+                    (List.map
+                        (\( val, lbl ) ->
+                            Input.button
+                                [ Element.width Element.fill
+                                , Element.paddingEach
+                                    { top = 10, bottom = 10, left = 14, right = 14 }
+                                , body
+                                , Background.color
+                                    (if val == config.selected then
+                                        primaryTeal
+
+                                     else
+                                        cardBg
+                                    )
+                                , Font.color
+                                    (if val == config.selected then
+                                        Element.rgb255 255 255 255
+
+                                     else
+                                        darkColor
+                                    )
+                                ]
+                                { onPress = Just (config.onChange val)
+                                , label = Element.text lbl
+                                }
+                        )
+                        config.options
+                    )
+
+            else
+                Element.none
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+        [ Element.el [ body, Font.medium ] (Element.text config.label)
+        , Input.button
+            (List.concat
+                [ [ Element.width Element.fill
+                  , Border.rounded 6
+                  , Border.width 1
+                  , Border.color inputBorder
+                  , Element.padding 10
+                  , Background.color cardBg
+                  ]
+                , if config.isOpen then
+                    [ Element.below optionsElement ]
+
+                  else
+                    []
+                ]
+            )
+            { onPress = Just config.onToggle
+            , label =
+                Element.row [ Element.width Element.fill, Element.spacing 8 ]
+                    [ Element.el [ Element.width Element.fill, body ] (Element.text selectedLabel)
+                    , Element.text (if config.isOpen then "▲" else "▼")
+                    ]
+            }
+        ]
+
+
+macroBar :
+    { label : String
+    , value : Float
+    , unit : String
+    , color : Element.Color
+    , max : Float
+    }
+    -> Element msg
+macroBar config =
+    let
+        pct : Float
+        pct =
+            if config.max > 0 then
+                min 1.0 (config.value / config.max)
+
+            else
+                0
+
+        filled : Int
+        filled =
+            max 0 (round (pct * 100))
+
+        remaining : Int
+        remaining =
+            max 0 (100 - filled)
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+        [ Element.row [ Element.width Element.fill ]
+            [ Element.el [ bold, body ] (Element.text config.label)
+            , Element.el
+                [ body
+                , Font.color mutedColor
+                , Element.alignRight
+                ]
+                (Element.text (String.fromInt (round config.value) ++ " " ++ config.unit))
+            ]
+        , if pct > 0 then
+            Element.row
+                [ Element.width Element.fill
+                , Element.height (Element.px 12)
+                , Background.color borderGray
+                , Border.rounded 6
+                , Element.clip
+                ]
+                [ Element.el
+                    [ Element.width (Element.fillPortion filled)
+                    , Element.height Element.fill
+                    , Background.color config.color
+                    , Border.rounded 6
+                    ]
+                    Element.none
+                , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
+                ]
+
+          else
+            Element.row
+                [ Element.width Element.fill
+                , Element.height (Element.px 12)
+                , Background.color borderGray
+                , Border.rounded 6
+                ]
+                []
+        ]
+
+
+skeletonLoading : Element msg
+skeletonLoading =
+    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+        [ skeletonBar
+        , skeletonBar
+        , skeletonBar
+        ]
+
+
+skeletonBar : Element msg
+skeletonBar =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height (Element.px 16)
+        , Background.color borderGray
+        , Border.rounded 4
+        ]
+        Element.none
+
+
+cardActions : List (Element msg) -> Element msg
+cardActions buttons =
+    Element.row
+        [ Element.width Element.fill
+        , Element.paddingEach { top = 12, right = 0, bottom = 0, left = 0 }
+        , Element.spacing 12
+        , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
+        , Border.color borderGray
+        ]
+        buttons

@@ -13,11 +13,13 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
+import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Element.Font as Font
 import Page.FoodLogForm as FoodLogForm
 import Route exposing (Route(..))
 import Ui
+import View.Nutrients
 
 
 type alias Model =
@@ -240,8 +242,23 @@ loadedView food units form =
         ]
         [ foodHeader food
         , Element.map FormMsg (FoodLogForm.view (Just food) units form)
-        , Ui.submitButton form.submitting "Log Food" "Logging..." SubmitClicked
+        , Ui.cardActions
+            [ Ui.submitButton form.submitting "Log Food" "Logging..." SubmitClicked
+            ]
+        , View.Nutrients.nutrientsTable (foodNutrientsForDisplay food)
         ]
+
+
+foodNutrientsForDisplay : ProductDetail -> List Nutrition.NutrientAmount
+foodNutrientsForDisplay food =
+    List.map
+        (\n ->
+            { code = n.code
+            , amount = n.amountPer100g
+            , unit = n.unit
+            }
+        )
+        food.nutrients
 
 
 foodHeader : ProductDetail -> Element Msg
@@ -249,6 +266,12 @@ foodHeader food =
     Ui.card
         [ Element.el [ Ui.heading2, Font.bold ] (Element.text food.name)
         , Ui.mutedText (metaText food)
+        , if List.isEmpty food.categories then
+            Element.none
+
+          else
+            Element.row [ Element.spacing 4 ]
+                (List.map Ui.badge food.categories)
         , case customFoodEditRoute food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked
