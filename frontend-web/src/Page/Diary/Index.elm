@@ -15,11 +15,11 @@ module Page.Diary.Index exposing
 import Api.Client as Client
 import Api.Result as ApiResult
 import Data.FoodLog as FoodLog exposing (FoodLog, GroupedLogs, SummaryResponse)
+import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
-import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -39,7 +39,7 @@ type alias Model =
     , today : LocalDate
     , logs : List FoodLog
     , summary : List NutrientAmount
-    , itemNames : Dict String String
+    , itemNames : ItemNameLookup.Names
     , loading : Bool
     , error : Maybe String
     , macroMode : MacroMode
@@ -80,7 +80,7 @@ init args =
       , today = args.today
       , logs = []
       , summary = []
-      , itemNames = Dict.empty
+      , itemNames = ItemNameLookup.empty
       , loading = True
       , error = Nothing
       , macroMode = Grams
@@ -118,22 +118,9 @@ update msg model =
                     failure error model
 
         NameLookupCompleted item result ->
-            let
-                name : String
-                name =
-                    case result of
-                        Ok value ->
-                            value
-
-                        Err _ ->
-                            ItemRef.fallbackName item
-            in
             ( { model
                 | itemNames =
-                    Dict.insert
-                        (ItemRef.key item)
-                        name
-                        model.itemNames
+                    ItemNameLookup.insertResult item result model.itemNames
               }
             , Cmd.none
             , NoOp
@@ -460,7 +447,7 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : Dict String String -> FoodLog -> Element Msg
+logRow : ItemNameLookup.Names -> FoodLog -> Element Msg
 logRow itemNames log =
     Input.button
         [ Element.width Element.fill
@@ -476,9 +463,7 @@ logRow itemNames log =
                     , Font.medium
                     ]
                     (Element.text
-                        (Dict.get (ItemRef.key log.item) itemNames
-                            |> Maybe.withDefault "Loading..."
-                        )
+                        (ItemNameLookup.nameFor "Loading..." log.item itemNames)
                     )
                 , Element.el
                     [ Ui.caption

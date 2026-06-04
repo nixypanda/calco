@@ -20,6 +20,7 @@ import Element.Font as Font
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
 import Ui
+import View.QuantityInput
 
 
 type alias FormModel =
@@ -299,8 +300,15 @@ view nutrients units form =
             ]
         , section "Portion Info"
             [ Ui.input "Serving Size (g)" form.servingSizeG ServingSizeChanged
-            , Ui.input "Default Quantity" form.defaultQuantity DefaultQuantityChanged
-            , Ui.select "Default Unit" form.defaultUnit (unitOptions units) DefaultUnitChanged
+            , View.QuantityInput.select
+                { amountLabel = "Default Quantity"
+                , amount = form.defaultQuantity
+                , onAmountChange = DefaultQuantityChanged
+                , unitLabel = "Default Unit"
+                , unit = form.defaultUnit
+                , units = units
+                , onUnitChange = DefaultUnitChanged
+                }
             ]
         , section "Nutrients (per 100g)"
             (List.indexedMap (nutrientRowView nutrients) form.nutrients
@@ -338,13 +346,15 @@ servingRowView : List UnitItem -> Int -> ServingRow -> Element Msg
 servingRowView units index row =
     Element.row [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input "Label" row.label (ServingLabelChanged index)
-        , Ui.input "Qty" row.quantity (ServingQuantityChanged index)
-        , Ui.select "Unit" row.unit (unitOptions units) (ServingUnitChanged index)
+        , View.QuantityInput.select
+            { amountLabel = "Qty"
+            , amount = row.quantity
+            , onAmountChange = ServingQuantityChanged index
+            , unitLabel = "Unit"
+            , unit = row.unit
+            , units = units
+            , onUnitChange = ServingUnitChanged index
+            }
         , Ui.input "Grams" row.grams (ServingGramsChanged index)
         , Ui.button "Remove" (RemoveServingRow index)
         ]
-
-
-unitOptions : List UnitItem -> List ( String, String )
-unitOptions units =
-    Units.options units

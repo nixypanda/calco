@@ -12,6 +12,7 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Api.Result as ApiResult
+import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Data.Units as Units
@@ -20,13 +21,14 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Ui
-import View.Nutrients
+import View.NutritionPreview
+import View.QuantityInput
 
 
 type alias Model =
     { mealId : String
     , meal : Maybe Meal
-    , productNames : List ( String, String )
+    , productNames : ItemNameLookup.Names
     , amount : String
     , unit : String
     , units : List UnitItem
@@ -70,7 +72,7 @@ init : String -> ( Model, OutMsg )
 init mealId =
     ( { mealId = mealId
       , meal = Nothing
-      , productNames = []
+      , productNames = ItemNameLookup.empty
       , amount = "100"
       , unit = Units.defaultCode
       , units = fallbackUnits
@@ -106,14 +108,25 @@ update msg model =
                 Ok product ->
                     ( { model
                         | productNames =
-                            upsertName productId product.name model.productNames
+                            ItemNameLookup.insertProduct productId product.name model.productNames
                       }
                     , Cmd.none
                     , nextProductNameRequest productId model
                     )
 
                 Err _ ->
-                    ( model, Cmd.none, nextProductNameRequest productId model )
+                    let
+                        nextModel : Model
+                        nextModel =
+                            { model
+                                | productNames =
+                                    ItemNameLookup.insertProduct
+                                        productId
+                                        "Unknown food"
+                                        model.productNames
+                            }
+                    in
+                    ( nextModel, Cmd.none, nextProductNameRequest productId nextModel )
 
         UnitsLoaded result ->
             case result of
@@ -236,21 +249,12 @@ uniqueProductIds meal =
                 else
                     Nothing
             )
-        |> List.foldl
-            (\id ids ->
-                if List.member id ids then
-                    ids
-
-                else
-                    ids ++ [ id ]
-            )
-            []
+        |> ItemNameLookup.uniqueProductIds
 
 
 requestProductNames : List String -> OutMsg
 requestProductNames ids =
-    ids
-        |> List.head
+    ItemNameLookup.nextMissingProductId Nothing ids ItemNameLookup.empty
         |> Maybe.map RequestProductDetail
         |> Maybe.withDefault NoOp
 
@@ -260,17 +264,12 @@ nextProductNameRequest completedId model =
     case model.meal of
         Just meal ->
             uniqueProductIds meal
-                |> List.filter
-                    (\id ->
-                        id
-                            /= completedId
-                            && not
-                                (List.any
-                                    (\( existing, _ ) -> existing == id)
-                                    model.productNames
-                                )
-                    )
-                |> List.head
+                |> (\ids ->
+                        ItemNameLookup.nextMissingProductId
+                            (Just completedId)
+                            ids
+                            model.productNames
+                   )
                 |> Maybe.map RequestProductDetail
                 |> Maybe.withDefault NoOp
 
@@ -278,30 +277,9 @@ nextProductNameRequest completedId model =
             NoOp
 
 
-upsertName : String -> String -> List ( String, String ) -> List ( String, String )
-upsertName id name names =
-    if List.any (\( existing, _ ) -> existing == id) names then
-        List.map
-            (\( existing, value ) ->
-                if existing == id then
-                    ( id, name )
-
-                else
-                    ( existing, value )
-            )
-            names
-
-    else
-        names ++ [ ( id, name ) ]
-
-
 nameFor : String -> Model -> String
 nameFor id model =
-    model.productNames
-        |> List.filter (\( productId, _ ) -> productId == id)
-        |> List.head
-        |> Maybe.map Tuple.second
-        |> Maybe.withDefault "Loading..."
+    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) model.productNames
 
 
 requestNutritionFor : Model -> ( Model, Cmd Msg, OutMsg )
@@ -413,39 +391,23 @@ nutritionView model =
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
         [ Ui.sectionHeader "Nutrition"
         , Ui.card
-            [ Ui.input "Amount" model.amount AmountChanged
-            , Ui.selectDropdown
-                { label = "Unit"
-                , selected = model.unit
-                , options = model.units |> Units.ensureSelected model.unit |> Units.options
-                , onChange = UnitChanged
-                , isOpen = model.unitOpen
-                , onToggle = ToggleUnitDropdown
+            [ View.QuantityInput.dropdown
+                { amountLabel = "Amount"
+                , amount = model.amount
+                , onAmountChange = AmountChanged
+                , unitLabel = "Unit"
+                , unit = model.unit
+                , units = model.units
+                , onUnitChange = UnitChanged
+                , unitOpen = model.unitOpen
+                , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , if model.nutritionLoading then
-            Ui.loading "Loading nutrition..."
-
-          else
-            Element.none
-        , case model.nutritionError of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
-        , case model.nutrients of
-            Just nutrients ->
-                Element.column [ Element.width Element.fill, Element.spacing 8 ]
-                    [ View.Nutrients.nutrientsTable nutrients
-                    , Ui.card
-                        [ Ui.sectionHeader "Macro Breakdown"
-                        , View.Nutrients.macroBreakdownView nutrients
-                        ]
-                    ]
-
-            Nothing ->
-                Element.none
+        , View.NutritionPreview.view
+            { loading = model.nutritionLoading
+            , error = model.nutritionError
+            , nutrients = model.nutrients
+            }
         ]
 
 

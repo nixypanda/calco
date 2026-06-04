@@ -32,6 +32,7 @@ import Api.Meals
         , MealNutritionResponse
         )
 import Api.Result as ApiResult
+import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
@@ -42,7 +43,8 @@ import Element.Font as Font
 import Element.Input as Input
 import Lib.Text as Text
 import Ui
-import View.Nutrients
+import View.NutritionPreview
+import View.QuantityInput
 import View.Search as SearchView
 
 
@@ -85,6 +87,7 @@ type alias Model =
     , totalQuantity : String
     , totalUnit : String
     , components : List ComponentRow
+    , productNames : ItemNameLookup.Names
     , nextRowId : RowId
     , nextSearchToken : Int
     , fetching : Bool
@@ -157,6 +160,7 @@ initCreate =
       , totalQuantity = ""
       , totalUnit = Units.defaultCode
       , components = [ emptyComponentRow 1 ]
+      , productNames = ItemNameLookup.empty
       , nextRowId = 2
       , nextSearchToken = 1
       , fetching = False
@@ -237,12 +241,13 @@ update msg model =
                                 |> Maybe.withDefault ""
                         , totalUnit = Maybe.map .unit meal.totalQuantity |> Maybe.withDefault Units.defaultCode
                         , components = loadedRows
+                        , productNames = ItemNameLookup.empty
                         , nextRowId = List.length loadedRows + 1
                         , fetching = False
                         , error = Nothing
                       }
                     , Cmd.none
-                    , requestNextProductName loadedRows
+                    , requestNextMissingProductName Nothing loadedRows ItemNameLookup.empty
                     )
 
                 Err error ->
@@ -251,18 +256,42 @@ update msg model =
         ProductNameLoaded productId result ->
             case result of
                 Ok product ->
+                    let
+                        nextNames : ItemNameLookup.Names
+                        nextNames =
+                            ItemNameLookup.insertProduct productId product.name model.productNames
+                    in
                     ( { model
                         | components =
                             List.map
                                 (mergeProductName productId product.name)
                                 model.components
+                        , productNames = nextNames
                       }
                     , Cmd.none
-                    , requestNextMissingProductName productId model.components
+                    , requestNextMissingProductName (Just productId) model.components nextNames
                     )
 
                 Err _ ->
-                    ( model, Cmd.none, requestNextMissingProductName productId model.components )
+                    let
+                        fallbackName : String
+                        fallbackName =
+                            "Unknown food"
+
+                        nextNames : ItemNameLookup.Names
+                        nextNames =
+                            ItemNameLookup.insertProduct productId fallbackName model.productNames
+                    in
+                    ( { model
+                        | components =
+                            List.map
+                                (mergeProductName productId fallbackName)
+                                model.components
+                        , productNames = nextNames
+                      }
+                    , Cmd.none
+                    , requestNextMissingProductName (Just productId) model.components nextNames
+                    )
 
         NutrientPreviewLoaded result ->
             case result of
@@ -511,31 +540,18 @@ update msg model =
                         model
 
 
-requestNextProductName : List ComponentRow -> OutMsg
-requestNextProductName rows =
+requestNextMissingProductName : Maybe String -> List ComponentRow -> ItemNameLookup.Names -> OutMsg
+requestNextMissingProductName completedProductId rows productNames =
     rows
-        |> List.filter
-            (\row ->
-                not (String.isEmpty row.productId)
-                    && String.isEmpty row.productName
-            )
-        |> List.head
-        |> Maybe.map (.productId >> RequestProductName)
-        |> Maybe.withDefault NoOp
-
-
-requestNextMissingProductName : String -> List ComponentRow -> OutMsg
-requestNextMissingProductName completedProductId rows =
-    rows
-        |> List.filter
-            (\row ->
-                row.productId
-                    /= completedProductId
-                    && not (String.isEmpty row.productId)
-                    && String.isEmpty row.productName
-            )
-        |> List.head
-        |> Maybe.map (.productId >> RequestProductName)
+        |> List.map .productId
+        |> List.filter (String.trim >> String.isEmpty >> not)
+        |> (\ids ->
+                ItemNameLookup.nextMissingProductId
+                    completedProductId
+                    ids
+                    productNames
+           )
+        |> Maybe.map RequestProductName
         |> Maybe.withDefault NoOp
 
 
@@ -699,10 +715,14 @@ formView model =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
         [ Ui.input "Name" model.name NameChanged
         , Ui.input "Notes" model.notes NotesChanged
-        , Element.row [ Element.spacing 8 ]
-            [ Ui.input "Total Quantity" model.totalQuantity TotalQuantityChanged
-            , Ui.input "Total Unit" model.totalUnit TotalUnitChanged
-            ]
+        , View.QuantityInput.text
+            { amountLabel = "Total Quantity"
+            , amount = model.totalQuantity
+            , onAmountChange = TotalQuantityChanged
+            , unitLabel = "Total Unit"
+            , unit = model.totalUnit
+            , onUnitChange = TotalUnitChanged
+            }
         , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 10 ]
@@ -737,9 +757,15 @@ componentRowView row =
                 , Element.spacing 0
                 ]
                 (List.map (searchResultView row.searchQuery row.rowId) row.searchResults)
-        , Element.row [ Element.spacing 8 ]
-            [ Ui.input "Qty" row.quantity (ComponentQuantityChanged row.rowId)
-            , Ui.input "Unit" row.unit (ComponentUnitChanged row.rowId)
+        , Element.row [ Element.width Element.fill, Element.spacing 8 ]
+            [ View.QuantityInput.text
+                { amountLabel = "Qty"
+                , amount = row.quantity
+                , onAmountChange = ComponentQuantityChanged row.rowId
+                , unitLabel = "Unit"
+                , unit = row.unit
+                , onUnitChange = ComponentUnitChanged row.rowId
+                }
             , Ui.button "Remove" (RemoveComponentClicked row.rowId)
             ]
         ]
@@ -790,29 +816,11 @@ nutritionView model =
         Just _ ->
             Element.column [ Element.width Element.fill, Element.spacing 10 ]
                 [ Ui.sectionHeader "Nutrition"
-                , if model.nutritionLoading then
-                    Ui.loading "Loading nutrition..."
-
-                  else
-                    Element.none
-                , case model.nutritionError of
-                    Just message ->
-                        Ui.errorBanner message
-
-                    Nothing ->
-                        Element.none
-                , case model.nutrients of
-                    Just nutrients ->
-                        Element.column [ Element.width Element.fill, Element.spacing 8 ]
-                            [ View.Nutrients.nutrientsTable nutrients
-                            , Ui.card
-                                [ Ui.sectionHeader "Macro Breakdown"
-                                , View.Nutrients.macroBreakdownView nutrients
-                                ]
-                            ]
-
-                    Nothing ->
-                        Element.none
+                , View.NutritionPreview.view
+                    { loading = model.nutritionLoading
+                    , error = model.nutritionError
+                    , nutrients = model.nutrients
+                    }
                 ]
 
         Nothing ->

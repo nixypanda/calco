@@ -3,6 +3,7 @@ module FoodLogDetailTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Data.FoodLog exposing (FoodLog)
+import Data.ItemNameLookup as ItemNameLookup
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
@@ -54,7 +55,14 @@ tests =
             \_ ->
                 FoodLogDetail.update (FoodLogDetail.ProductDetailLoaded (Ok food)) loadedModel
                     |> first
-                    |> (\model -> ( Maybe.map .id model.food, model.itemName ))
+                    |> (\model ->
+                            ( Maybe.map .id model.food
+                            , ItemNameLookup.nameFor
+                                "Loading..."
+                                productLog.item
+                                model.itemNames
+                            )
+                       )
                     |> Expect.equal ( Just "food-1", "Apple" )
         , test "product display nutrients follow the edit form quantity" <|
             \_ ->
@@ -82,7 +90,12 @@ tests =
                     )
                     loadedModel
                     |> first
-                    |> .itemName
+                    |> (\model ->
+                            ItemNameLookup.nameFor
+                                "Loading..."
+                                mealLog.item
+                                model.itemNames
+                       )
                     |> Expect.equal "Lunch bowl"
         , test "submit emits update payload" <|
             \_ ->
@@ -141,7 +154,7 @@ emptyModel =
     { logId = "log-1"
     , log = Nothing
     , food = Nothing
-    , itemName = ""
+    , itemNames = ItemNameLookup.empty
     , units = Nothing
     , form = Nothing
     , error = Nothing

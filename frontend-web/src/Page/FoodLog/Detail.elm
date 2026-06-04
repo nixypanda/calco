@@ -14,6 +14,7 @@ import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
 import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
+import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
@@ -28,7 +29,7 @@ type alias Model =
     { logId : String
     , log : Maybe FoodLog
     , food : Maybe ProductDetail
-    , itemName : String
+    , itemNames : ItemNameLookup.Names
     , units : Maybe (List UnitItem)
     , form : Maybe FoodLogForm.Model
     , error : Maybe String
@@ -65,7 +66,7 @@ init logId =
     ( { logId = logId
       , log = Nothing
       , food = Nothing
-      , itemName = ""
+      , itemNames = ItemNameLookup.empty
       , units = Nothing
       , form = Nothing
       , error = Nothing
@@ -104,18 +105,40 @@ update msg model =
         ProductDetailLoaded result ->
             case result of
                 Ok food ->
-                    ( { model | food = Just food, itemName = food.name }, Cmd.none, NoOp )
+                    ( { model
+                        | food = Just food
+                        , itemNames =
+                            ItemNameLookup.insertProduct food.id food.name model.itemNames
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err _ ->
-                    ( { model | itemName = "Unknown food" }, Cmd.none, NoOp )
+                    ( { model | itemNames = insertCurrentItemFallback model }
+                    , Cmd.none
+                    , NoOp
+                    )
 
         MealNameLoaded result ->
             case result of
                 Ok meal ->
-                    ( { model | itemName = meal.name }, Cmd.none, NoOp )
+                    ( { model
+                        | itemNames =
+                            ItemNameLookup.insert
+                                { itemType = "meal", id = meal.id }
+                                meal.name
+                                model.itemNames
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err _ ->
-                    ( { model | itemName = "Unknown meal" }, Cmd.none, NoOp )
+                    ( { model | itemNames = insertCurrentItemFallback model }
+                    , Cmd.none
+                    , NoOp
+                    )
 
         FormMsg subMsg ->
             case model.form of
@@ -209,6 +232,16 @@ itemResolutionOutMsg log =
 
         _ ->
             NoOp
+
+
+insertCurrentItemFallback : Model -> ItemNameLookup.Names
+insertCurrentItemFallback model =
+    case model.log of
+        Just log ->
+            ItemNameLookup.insertResult log.item (Err ()) model.itemNames
+
+        Nothing ->
+            model.itemNames
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -345,19 +378,20 @@ itemHeader model log =
 
 itemTitle : Model -> FoodLog -> String
 itemTitle model log =
-    if String.isEmpty model.itemName then
-        case log.item.itemType of
-            "meal" ->
-                "Loading meal..."
+    ItemNameLookup.nameFor (loadingName log.item.itemType) log.item model.itemNames
 
-            "product" ->
-                "Loading food..."
 
-            _ ->
-                "Unknown item"
+loadingName : String -> String
+loadingName itemType =
+    case itemType of
+        "meal" ->
+            "Loading meal..."
 
-    else
-        model.itemName
+        "product" ->
+            "Loading food..."
+
+        _ ->
+            "Unknown item"
 
 
 metaText : Maybe ProductDetail -> FoodLog -> String

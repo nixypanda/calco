@@ -19,6 +19,7 @@ import Data.Units as Units
 import Element exposing (Element)
 import Lib.Text as Text
 import Ui
+import View.QuantityInput
 
 
 type alias Model =
@@ -136,8 +137,17 @@ view food units model =
                 Element.none
         , Ui.card
             [ mealSlotDropdown model
-            , Ui.input "Amount" model.amount AmountChanged
-            , unitDropdown food units model
+            , View.QuantityInput.dropdown
+                { amountLabel = "Amount"
+                , amount = model.amount
+                , onAmountChange = AmountChanged
+                , unitLabel = "Unit"
+                , unit = model.unit
+                , units = Units.sourceForFood food units
+                , onUnitChange = UnitChanged
+                , unitOpen = model.unitOpen
+                , onUnitToggle = ToggleUnitDropdown
+                }
             , Ui.input "Notes" model.notes NotesChanged
             ]
         ]
@@ -158,22 +168,4 @@ mealSlotDropdown model =
         , onChange = MealSlotChanged
         , isOpen = model.mealSlotOpen
         , onToggle = ToggleMealSlotDropdown
-        }
-
-
-unitDropdown : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
-unitDropdown food units model =
-    let
-        source : List UnitItem
-        source =
-            Units.sourceForFood food units
-                |> Units.ensureSelected model.unit
-    in
-    Ui.selectDropdown
-        { label = "Unit"
-        , selected = model.unit
-        , options = List.map (\u -> ( u.code, Units.label u )) source
-        , onChange = UnitChanged
-        , isOpen = model.unitOpen
-        , onToggle = ToggleUnitDropdown
         }
