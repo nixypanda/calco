@@ -204,12 +204,16 @@ pub struct IdentityDto {
     pub id: Uuid,
     pub username: String,
     pub role: IdentityRoleDto,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
 pub struct ProfileDto {
     pub id: Uuid,
     pub display_name: String,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Serialize)]
@@ -467,6 +471,8 @@ fn identity_to_dto(identity: Identity) -> IdentityDto {
         id: identity.id.0,
         username: identity.username.0,
         role: identity.role.into(),
+        created_at: identity.created_at,
+        updated_at: identity.updated_at,
     }
 }
 
@@ -474,6 +480,8 @@ fn profile_to_dto(profile: UserProfile) -> ProfileDto {
     ProfileDto {
         id: profile.id,
         display_name: profile.display_name,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
     }
 }
 

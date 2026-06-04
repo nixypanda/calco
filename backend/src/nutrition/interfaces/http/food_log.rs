@@ -85,6 +85,8 @@ pub struct LogResponse {
     pub quantity: QuantityDto,
     pub nutrients: Vec<NutrientSnapshotDto>,
     pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -408,6 +410,8 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
             .map(nutrient_snapshot_to_dto)
             .collect(),
         notes: log.notes.clone(),
+        created_at: log.created_at,
+        updated_at: log.updated_at,
     }
 }
 

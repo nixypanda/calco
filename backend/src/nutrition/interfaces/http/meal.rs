@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{get, post},
 };
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -66,6 +67,8 @@ pub struct MealResponse {
     pub notes: Option<String>,
     pub total_quantity: Option<QuantityDto>,
     pub components: Vec<MealComponentDto>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -305,6 +308,8 @@ fn meal_to_response(meal: &Meal) -> MealResponse {
         notes: meal.notes.as_ref().map(|n| n.0.clone()),
         total_quantity: meal_total_quantity_to_dto(meal),
         components: meal.components.iter().map(meal_component_to_dto).collect(),
+        created_at: meal.created_at,
+        updated_at: meal.updated_at,
     }
 }
 

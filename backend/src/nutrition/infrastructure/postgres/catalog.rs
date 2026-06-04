@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use std::collections::{HashMap, HashSet};
@@ -87,7 +88,8 @@ impl ProductRepository for PostgresProductRepository {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g,
+                   created_at, updated_at
             FROM products
             WHERE deleted_at IS NULL
               AND (visibility = 'global' OR user_id = $2)
@@ -219,7 +221,8 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g,
+                   created_at, updated_at
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
         )
@@ -254,7 +257,8 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g
+                   categories, default_quantity, default_unit, serving_size_g,
+                   created_at, updated_at
             FROM products WHERE barcode = $1 AND deleted_at IS NULL
             "#,
         )
@@ -378,6 +382,8 @@ struct ProductRow {
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     serving_size_g: Option<Decimal>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -439,6 +445,8 @@ fn product_row_to_product(
         serving_size_g: row.serving_size_g,
         nutrients,
         servings,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 

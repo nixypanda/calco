@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -304,6 +305,8 @@ pub struct Product {
     pub serving_size_g: Option<Decimal>,
     pub nutrients: Vec<ProductNutrient>,
     pub servings: Vec<ProductServing>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl Product {
@@ -322,6 +325,7 @@ impl Product {
     ) -> Result<Self, NutritionError> {
         Self::validate_name(&name)?;
 
+        let now = Utc::now();
         Ok(Self {
             id: ProductId::new(),
             source: Source::User,
@@ -337,6 +341,8 @@ impl Product {
             serving_size_g,
             nutrients: build_product_nutrients(nutrients, nutrient_catalog)?,
             servings: build_product_servings(servings)?,
+            created_at: now,
+            updated_at: now,
         })
     }
 

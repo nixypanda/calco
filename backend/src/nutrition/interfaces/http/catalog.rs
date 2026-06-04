@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{get, post, put},
 };
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -102,6 +103,8 @@ pub struct ProductSearchItemDto {
     pub serving_size_g: Option<Decimal>,
     pub energy_kcal_per_100g: Option<Decimal>,
     pub energy_kcal_per_serving: Option<Decimal>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -130,6 +133,8 @@ pub struct ProductDetailResponse {
     pub nutrients: Vec<ProductNutrientDto>,
     pub servings: Vec<ProductServingDto>,
     pub allowed_units: Vec<UnitItemDto>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Serialize)]
@@ -558,6 +563,8 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
         serving_size_g: product.serving_size_g,
         energy_kcal_per_100g,
         energy_kcal_per_serving,
+        created_at: product.created_at,
+        updated_at: product.updated_at,
     }
 }
 
@@ -637,6 +644,8 @@ fn product_to_detail_response(
             .into_iter()
             .map(unit_tuple_to_item_dto)
             .collect(),
+        created_at: product.created_at,
+        updated_at: product.updated_at,
     }
 }
 

@@ -69,6 +69,8 @@ fn food_log_row_to_food_log(
         quantity_unit: UnitCode(row.unit),
         nutrient_snapshots: snapshots,
         notes: row.notes,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     })
 }
 
@@ -84,8 +86,8 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, quantity, unit, notes)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, quantity, unit, notes, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
         )
         .bind(log.id.0)
@@ -97,6 +99,8 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(log.quantity_amount)
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
+        .bind(log.created_at)
+        .bind(log.updated_at)
         .execute(&mut *tx)
         .await?;
 
@@ -110,7 +114,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let row = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes
+                   quantity, unit, notes, created_at, updated_at
             FROM food_logs WHERE id = $1
             "#,
         )
@@ -136,7 +140,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let rows = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes
+                   quantity, unit, notes, created_at, updated_at
             FROM food_logs
             WHERE user_id = $1 AND logged_at >= $2 AND logged_at < $3
             ORDER BY logged_at DESC
@@ -300,6 +304,8 @@ struct FoodLogRow {
     quantity: Decimal,
     unit: String,
     notes: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
 }
 
 #[derive(sqlx::FromRow)]

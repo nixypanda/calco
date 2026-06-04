@@ -87,6 +87,8 @@ pub struct FoodLog {
     pub quantity_unit: UnitCode,
     pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
     pub notes: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 impl FoodLog {
@@ -197,6 +199,7 @@ impl FoodLog {
         nutrition: CalculatedNutrition,
         notes: Option<String>,
     ) -> Self {
+        let now = Utc::now();
         let (quantity_amount, quantity_unit) = quantity.into_parts();
         Self {
             id: FoodLogId::new(),
@@ -208,6 +211,8 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
+            created_at: now,
+            updated_at: now,
         }
     }
 
@@ -231,6 +236,8 @@ impl FoodLog {
             quantity_unit,
             nutrient_snapshots: snapshots_from_calculated(nutrition),
             notes,
+            created_at: self.created_at,
+            updated_at: Utc::now(),
         }
     }
 }
@@ -309,6 +316,8 @@ mod tests {
                 confidence: None,
             }],
             servings: vec![],
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
         }
     }
 
