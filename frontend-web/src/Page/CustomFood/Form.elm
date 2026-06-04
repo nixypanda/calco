@@ -5,7 +5,6 @@ module Page.CustomFood.Form exposing
     , ServingRow
     , ValidationError(..)
     , emptyForm
-    , formatCategoriesInput
     , fromProductDetail
     , parseCategoriesInput
     , toCreateFoodRequest
@@ -13,7 +12,7 @@ module Page.CustomFood.Form exposing
     , view
     )
 
-import Api.Foods as Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
+import Api.Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
 import Data.Category as Category
 import Data.ListExtra as ListExtra
 import Data.Text as Text
@@ -191,11 +190,6 @@ toCreateFoodRequest form =
 parseCategoriesInput : String -> List String
 parseCategoriesInput raw =
     Category.parseInput raw
-
-
-formatCategoriesInput : List String -> String
-formatCategoriesInput categories =
-    Category.formatInput categories
 
 
 update : Msg -> FormModel -> FormModel

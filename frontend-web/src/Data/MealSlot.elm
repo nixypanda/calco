@@ -3,7 +3,6 @@ module Data.MealSlot exposing
     , fromString
     , label
     , matches
-    , regularSlots
     , toString
     )
 
@@ -14,11 +13,6 @@ type MealSlot
     | Dinner
     | Snack
     | Other
-
-
-regularSlots : List MealSlot
-regularSlots =
-    [ Breakfast, Lunch, Dinner, Snack ]
 
 
 fromString : String -> Maybe MealSlot

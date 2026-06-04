@@ -7,13 +7,11 @@ module Api.Meals exposing
     , MealName
     , MealNutritionResponse
     , createMeal
-    , createMealRequestEncoder
     , deleteMeal
     , getMeal
     , getMealName
     , getMealNutrients
     , listMeals
-    , mealDecoder
     , updateMeal
     )
 

@@ -7,7 +7,6 @@ module Page.MealDetail exposing
     , init
     , uniqueProductIds
     , update
-    , validPreviewAmount
     , view
     )
 
@@ -16,7 +15,6 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Data.FoodLog exposing (FoodLog)
-import Data.ItemRef exposing (ItemRef)
 import Data.Nutrition exposing (NutrientAmount)
 import Element exposing (Element)
 import Element.Background as Background
@@ -363,20 +361,6 @@ previewAfterChange model =
 mapLogForm : (LogMealForm -> LogMealForm) -> Model -> Model
 mapLogForm change model =
     { model | logForm = change model.logForm }
-
-
-startPreview : Model -> OutMsg
-startPreview model =
-    case validPreviewAmount model.logForm.amount of
-        Just _ ->
-            RequestNutrientPreview
-                model.mealId
-                model.logForm.amount
-                model.logForm.unit
-                model.logForm.previewToken
-
-        Nothing ->
-            NoOp
 
 
 uniqueProductIds : Meal -> List String

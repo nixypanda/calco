@@ -1,4 +1,4 @@
-module Data.Category exposing (formatInput, normalize, parseInput)
+module Data.Category exposing (formatInput, parseInput)
 
 
 normalize : String -> Maybe String

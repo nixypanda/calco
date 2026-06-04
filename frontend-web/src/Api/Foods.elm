@@ -1,6 +1,8 @@
 module Api.Foods exposing
-    ( CreateFoodRequest
+    ( CreateFoodNutrientRequest
+    , CreateFoodRequest
     , CreateFoodResponse
+    , CreateFoodServingRequest
     , NutrientEntry
     , NutrientItem
     , NutrientListResponse
@@ -13,7 +15,6 @@ module Api.Foods exposing
     , UnitItem
     , UnitListResponse
     , createCustomFood
-    , createFoodRequestEncoder
     , getFoodDetail
     , getProductName
     , listNutrients

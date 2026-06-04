@@ -12,13 +12,12 @@ module Page.MealForm exposing
     , selectedComponents
     , toMealRequest
     , update
-    , updateComponent
     , view
     )
 
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, SearchResponse, SearchResult)
-import Api.Meals as Meals exposing (CreateMealComponentRequest, CreateMealRequest, Meal)
+import Api.Meals exposing (CreateMealComponentRequest, CreateMealRequest, Meal)
 import Data.Text as Text
 import Element exposing (Element)
 import Element.Background as Background
