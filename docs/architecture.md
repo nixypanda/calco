@@ -2,10 +2,10 @@
 
 ## System Overview
 
-CalCo is a monorepo with a Rust API, React frontend, PostgreSQL database, and Python import tooling.
+CalCo is a monorepo with a Rust API, Elm web frontend, PostgreSQL database, and Python import tooling.
 
 ```text
-React/Vite frontend
+Elm frontend-web
   -> HTTP JSON under /api
 Rust axum backend
   -> sqlx

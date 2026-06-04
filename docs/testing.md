@@ -8,6 +8,7 @@ Two kinds of backend tests:
 backend/src/**/*.rs       inline #[cfg(test)] unit tests (domain + application, mocked repos)
 backend/tests/*.rs        integration tests (real HTTP router, real Postgres)
 backend/tests/common/     shared harness (see below)
+frontend-web/tests/*.elm  Elm frontend unit tests
 ```
 
 Integration tests cover the HTTP lifecycle of each entity end-to-end:
@@ -62,6 +63,18 @@ Surface handler logs from a failing test:
 
 ```bash
 RUST_LOG=info cargo test --test diary_lifecycle -- --nocapture
+```
+
+Elm frontend tests:
+
+```bash
+just frontend-web-test
+```
+
+Or directly:
+
+```bash
+cd frontend-web && elm-test
 ```
 
 ## Running With Nextest

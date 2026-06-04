@@ -2,33 +2,62 @@
 
 ## Overview
 
-The frontend is a React/Vite/TypeScript app built on Mantine.
+The active frontend is the Elm app in `frontend-web/`.
 
 ```text
-frontend/src/
-  api/
-  components/
-  hooks/
-  lib/
-  pages/
-  App.tsx
-  index.css
+frontend-web/
+  src/
+    Api/
+    Data/
+    Lib/
+    Page/
+    View/
+    Main.elm
+    Ui.elm
+  tests/
+  index.html
+  dev-server.mjs
 ```
 
-The target is a responsive web UI that works well on mobile browsers and can be pinned to the home screen by the browser. Service-worker/offline behavior is out of current scope.
+It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
+
+The older `frontend/` React/Vite app is not the documented frontend target here. Keep new product UI work pointed at `frontend-web/` unless the project explicitly reactivates the React app.
+
+## Runtime Shape
+
+`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js` and owns the small JavaScript bridge for local timestamps:
+
+- Elm calls the `requestLocalTimestamp` port.
+- JavaScript replies through `localTimestampReceived` with a local ISO timestamp including the timezone offset.
+
+`frontend-web/dev-server.mjs` serves static frontend files and proxies `/api/*` to the backend. Defaults:
+
+```text
+frontend-web dev server: http://localhost:1234
+API target: http://localhost:3001
+```
+
+Override with:
+
+```bash
+PORT=1235 API_TARGET=http://localhost:3001 node dev-server.mjs
+```
 
 ## Routes
 
-Current routes in `frontend/src/App.tsx`:
+Current routes are defined in `frontend-web/src/Data/Route.elm`:
 
 ```text
 /setup
 /login
 /admin
 /home
+/home?date=YYYY-MM-DD
 /logs/:id
 /search
+/search?meal_slot=:slot
 /foods/:id
+/foods/:id?meal_slot=:slot
 /foods/custom/new
 /foods/custom/:id/edit
 /meals
@@ -39,71 +68,74 @@ Current routes in `frontend/src/App.tsx`:
 *
 ```
 
-Route guards:
+Route access is enforced in `frontend-web/src/Access.elm` and coordinated from `frontend-web/src/Main.elm`:
 
-- `ProtectedRoute`: normal authenticated users only.
-- `AdminRoute`: admin users only.
-- Admin identities cannot access food-tracking routes.
+- Bootstrap setup is available only while admin bootstrap is incomplete.
+- Login is for unauthenticated sessions.
+- Admin dashboard is for admin sessions.
+- Diary, food, log, and meal routes are for normal authenticated user sessions.
+- Admin identities do not own diary data, foods, logs, or meals.
 
 ## Pages
 
 ### Auth
 
-- `BootstrapAdminSetup`
-- `LoginPage`
-- `AdminDashboard`
+- `Page.Admin.BootstrapSetup`
+- `Page.Auth.Login`
+- `Page.Admin.Dashboard`
 
 The first-run flow creates a bootstrap admin. Admins create and manage normal user accounts.
 
 ### Diary
 
-`Diary` is the main authenticated user screen.
+`Page.Diary.Index` is the main authenticated user screen.
 
 It provides:
 
-- Selected-day date navigation.
+- Selected-day navigation.
 - Calorie and macro summary.
 - Meal-slot grouped logs.
 - Add-food actions per meal slot.
-- Profile menu with meals, theme toggle, and logout.
+- App navigation drawer and profile/logout menu.
 
 Users can inspect previous days with the diary date selector. A separate history/trends screen is out of scope.
 
 ### Foods
 
-- `FoodSearch`
-- `FoodDetail`
-- `CustomFoodCreate`
-- `CustomFoodEdit`
+- `Page.Food.Search`
+- `Page.Food.Detail`
+- `Page.CustomFood.Create`
+- `Page.CustomFood.Edit`
 
 Custom foods use the same catalog model as imported/global foods, scoped by user ownership.
 
 ### Logs
 
-`FoodLogDetail` supports viewing, editing quantity/unit/meal slot/notes, and deleting a log.
+`Page.FoodLog.Detail` supports viewing, editing quantity/unit/meal slot/notes, and deleting a log.
 
 Editing logged timestamp or swapping the selected item is intentionally not required for current scope.
 
 ### Meals
 
-- `Meals`
-- `MealDetail`
-- `MealForm`
+- `Page.Meal.Index`
+- `Page.Meal.Detail`
+- `Page.Meal.Form`
 
 Meal forms edit components inside the aggregate. There are no independent component screens.
 
 ## API Client
 
-API modules live in `frontend/src/api/`:
+API modules live in `frontend-web/src/Api/`:
 
-- `auth.ts`
-- `admin.ts`
-- `foods.ts`
-- `logs.ts`
-- `meals.ts`
-- `client.ts`
+- `Auth.elm`
+- `Admin.elm`
+- `Foods.elm`
+- `Logs.elm`
+- `Meals.elm`
+- `Client.elm`
+- `Result.elm`
 
-`apiRequest` sends credentials with requests so the server-managed session cookie is included.
+`Api.Client` centralizes request construction and API error handling. The frontend uses server-managed browser sessions, so requests rely on the browser session cookie.
 
 ## Design Direction
 
@@ -117,26 +149,86 @@ The UI should stay functional and food-diary oriented:
 
 Search, diary, and logging surfaces should prioritize compact, scannable controls and rows. Avoid oversized cards, large text that truncates early, or layouts that only work comfortably on desktop widths.
 
-UI primitives come from `@mantine/core` (buttons, inputs, selects, cards, modals, tables, badges, menus, skeletons). Shared higher-level components live in `frontend/src/components/`.
+## Design System
+
+Shared primitives live in `frontend-web/src/Ui.elm`. Prefer extending these helpers before styling one-off page elements.
+
+Current visual language:
+
+- `elm-ui` layout primitives, not CSS utility classes.
+- Inter/system sans typography.
+- Warm off-white page background `#f7f7f4`.
+- White cards with 8px radius, 1px gray border, 16px padding, and 12px internal spacing.
+- Teal primary action color `#116466`.
+- Red danger action color `#dc2626`.
+- Muted gray text for captions and secondary content.
+- Macro colors: protein pink/red, carbs green, fat amber.
+
+Typography tokens in `Ui.elm` are intentionally restrained:
+
+```text
+display  32px
+heading1 22px
+heading2 20px
+heading3 18px
+body     14px
+caption  13px
+small    12px
+```
+
+Control conventions:
+
+- Use `Ui.button`, `Ui.submitButton`, `Ui.dangerButton`, and `Ui.smallButton` for actions.
+- Use `Ui.input`, `Ui.passwordInput`, `Ui.select`, or `Ui.selectDropdown` for form fields.
+- Use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and `Ui.skeletonLoading` for common states.
+- Use `Ui.badge` for compact metadata.
+- Use `Ui.macroBar` for macro summaries.
+
+Keep page-specific layout inside the owning page module, but shared look and feel should stay in `Ui.elm`.
 
 ## Tests
 
-Frontend unit tests live in:
+Elm frontend tests live in:
 
 ```text
-frontend/src/__tests__
+frontend-web/tests
 ```
 
 Run:
 
 ```bash
-cd frontend && pnpm test
+just frontend-web-test
+```
+
+Or directly:
+
+```bash
+cd frontend-web
+elm-test
 ```
 
 Build:
 
 ```bash
-cd frontend && pnpm run build
+just frontend-web-build
 ```
 
-No e2e suite is configured at the moment.
+Or directly:
+
+```bash
+cd frontend-web
+mkdir -p dist
+elm make src/Main.elm --output=dist/main.js
+```
+
+Useful frontend-web checks:
+
+```bash
+just frontend-web-format
+just frontend-web-review
+just frontend-web-line-length
+just frontend-web-test
+just frontend-web-build
+```
+
+No browser e2e suite is configured at the moment.

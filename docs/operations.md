@@ -43,7 +43,7 @@ APP_PORT=3001
 SESSION_COOKIE_NAME=calco_session
 SESSION_COOKIE_SECURE=false
 SESSION_TTL_SECONDS=604800
-CORS_ALLOWED_ORIGINS=http://localhost:5173
+CORS_ALLOWED_ORIGINS=http://localhost:1234
 ```
 
 Run:
@@ -69,28 +69,34 @@ See [testing.md](testing.md) for integration tests, nextest, and coverage.
 
 ## Frontend
 
-Install:
-
-```bash
-cd frontend && pnpm install
-```
+The active frontend is the Elm app in `frontend-web/`.
 
 Run:
 
 ```bash
-cd frontend && pnpm dev
+just frontend-web-dev
 ```
+
+By default this serves `http://localhost:1234` and proxies `/api/*` to `http://localhost:3001`.
 
 Build:
 
 ```bash
-cd frontend && pnpm run build
+just frontend-web-build
 ```
 
 Test:
 
 ```bash
-cd frontend && pnpm test
+just frontend-web-test
+```
+
+Format and review:
+
+```bash
+just frontend-web-format
+just frontend-web-review
+just frontend-web-line-length
 ```
 
 Use these checks:
@@ -98,9 +104,8 @@ Use these checks:
 ```bash
 just test
 just backend-test
-cd frontend
-pnpm test
-pnpm run build
+just frontend-web-test
+just frontend-web-build
 ```
 
 ## Database Migrations
