@@ -29,10 +29,10 @@ tests =
                     |> firstOfThree
                     |> .users
                     |> Expect.equal (Success [ user ])
-        , test "EditClicked navigates to AdminEditUser" <|
+        , test "NavigateEditUser navigates to AdminEditUser" <|
             \_ ->
                 initialModel
-                    |> Admin.update (Admin.EditClicked "u1")
+                    |> Admin.update (Admin.NavigateEditUser "u1")
                     |> thirdOfThree
                     |> Expect.equal (Admin.Navigate (AdminEditUser "u1"))
         , test "NavigateCreateUser navigates to AdminCreateUser" <|

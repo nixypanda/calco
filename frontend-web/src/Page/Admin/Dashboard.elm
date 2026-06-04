@@ -21,14 +21,13 @@ import Ui
 
 type alias Model =
     { users : Loadable Client.ApiError (List User.User)
-    , actionError : Maybe String
     }
 
 
 type Msg
     = UsersLoaded (Result Client.ApiError (List User.User))
     | NavigateCreateUser
-    | EditClicked String
+    | NavigateEditUser String
 
 
 type OutMsg
@@ -40,9 +39,7 @@ type OutMsg
 
 init : ( Model, OutMsg )
 init =
-    ( { users = Loading
-      , actionError = Nothing
-      }
+    ( { users = Loading }
     , RequestUsers
     )
 
@@ -53,44 +50,26 @@ update msg model =
         UsersLoaded result ->
             case result of
                 Ok users ->
-                    ( { model | users = Success users, actionError = Nothing }, Cmd.none, NoOp )
+                    ( { model | users = Success users }, Cmd.none, NoOp )
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model
-                            | users = Failure error
-                            , actionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
+                        ( { model | users = Failure error }, Cmd.none, SessionExpired )
 
                     else
-                        ( { model
-                            | users = Failure error
-                            , actionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( { model | users = Failure error }, Cmd.none, NoOp )
 
         NavigateCreateUser ->
             ( model, Cmd.none, Navigate AdminCreateUser )
 
-        EditClicked userId ->
+        NavigateEditUser userId ->
             ( model, Cmd.none, Navigate (AdminEditUser userId) )
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ case model.actionError of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
-        , bodyView model
+        [ bodyView model
         ]
 
 
@@ -106,8 +85,11 @@ bodyView model =
         Loading ->
             Ui.loading "Loading users..."
 
-        _ ->
+        NotAsked ->
             Element.none
+
+        Failure error ->
+            Ui.errorBanner (Client.displayError error)
 
 
 userRow : User.User -> Element Msg
@@ -118,7 +100,7 @@ userRow user =
         , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
         , Border.color Ui.borderGray
         ]
-        { onPress = Just (EditClicked user.id)
+        { onPress = Just (NavigateEditUser user.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing 2 ]
