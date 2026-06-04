@@ -1,4 +1,4 @@
-module Main exposing (Flags, Model, Msg, PageModel, main)
+port module Main exposing (Flags, Model, Msg, PageModel, main)
 
 import Access
 import Api.Admin
@@ -18,6 +18,8 @@ import Element.Font as Font
 import Page.AdminDashboard as AdminDashboard
 import Page.BootstrapAdminSetup as Setup
 import Page.Diary as Diary
+import Page.FoodDetail as FoodDetail
+import Page.FoodLogDetail as FoodLogDetail
 import Page.FoodSearch as FoodSearch
 import Page.Login as Login
 import Route exposing (Route(..))
@@ -51,6 +53,8 @@ type PageModel
     | AdminPage AdminDashboard.Model
     | DiaryPage Diary.Model
     | FoodSearchPage FoodSearch.Model
+    | FoodDetailPage FoodDetail.Model
+    | FoodLogDetailPage FoodLogDetail.Model
     | PlaceholderPage String
 
 
@@ -68,6 +72,15 @@ type Msg
     | GotAdminMsg AdminDashboard.Msg
     | GotDiaryMsg Diary.Msg
     | GotFoodSearchMsg FoodSearch.Msg
+    | GotFoodDetailMsg FoodDetail.Msg
+    | GotFoodLogDetailMsg FoodLogDetail.Msg
+    | GotLocalTimestamp String
+
+
+port requestLocalTimestamp : () -> Cmd msg
+
+
+port localTimestampReceived : (String -> msg) -> Sub msg
 
 
 main : Program Flags Model Msg
@@ -76,10 +89,15 @@ main =
         { init = init
         , view = view
         , update = update
-        , subscriptions = \_ -> Sub.none
+        , subscriptions = subscriptions
         , onUrlRequest = LinkClicked
         , onUrlChange = UrlChanged
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    localTimestampReceived GotLocalTimestamp
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -258,6 +276,15 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotFoodDetailMsg subMsg ->
+            updateFoodDetail subMsg model
+
+        GotFoodLogDetailMsg subMsg ->
+            updateFoodLogDetail subMsg model
+
+        GotLocalTimestamp loggedAt ->
+            updateFoodDetail (FoodDetail.LocalTimestampReceived loggedAt) model
+
 
 applyBootstrapProgress : Model -> ( Model, Cmd Msg )
 applyBootstrapProgress model =
@@ -333,6 +360,26 @@ loadPage route model =
 
         FoodSearch mealSlot ->
             ( { model | page = FoodSearchPage (FoodSearch.init mealSlot) }, Cmd.none )
+
+        FoodDetail productId mealSlot ->
+            let
+                ( foodDetailModel, outMsg ) =
+                    FoodDetail.init productId mealSlot
+
+                ( nextModel, outCmd ) =
+                    applyFoodDetailOutMsg outMsg { model | page = FoodDetailPage foodDetailModel }
+            in
+            ( nextModel, outCmd )
+
+        FoodLogDetail logId ->
+            let
+                ( foodLogDetailModel, outMsg ) =
+                    FoodLogDetail.init logId
+
+                ( nextModel, outCmd ) =
+                    applyFoodLogDetailOutMsg outMsg { model | page = FoodLogDetailPage foodLogDetailModel }
+            in
+            ( nextModel, outCmd )
 
         _ ->
             ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
@@ -441,6 +488,112 @@ applyFoodSearchOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
+updateFoodDetail : FoodDetail.Msg -> Model -> ( Model, Cmd Msg )
+updateFoodDetail subMsg model =
+    case model.page of
+        FoodDetailPage subModel ->
+            let
+                ( newSubModel, subCmd, outMsg ) =
+                    FoodDetail.update subMsg subModel
+
+                nextModel : Model
+                nextModel =
+                    { model | page = FoodDetailPage newSubModel }
+
+                ( finalModel, outCmd ) =
+                    applyFoodDetailOutMsg outMsg nextModel
+            in
+            ( finalModel
+            , Cmd.batch [ Cmd.map GotFoodDetailMsg subCmd, outCmd ]
+            )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+applyFoodDetailOutMsg : FoodDetail.OutMsg -> Model -> ( Model, Cmd Msg )
+applyFoodDetailOutMsg outMsg model =
+    case outMsg of
+        FoodDetail.NoOp ->
+            ( model, Cmd.none )
+
+        FoodDetail.RequestInitialData productId ->
+            ( model
+            , Cmd.batch
+                [ Api.Foods.getFoodDetail productId (GotFoodDetailMsg << FoodDetail.FoodLoaded)
+                , Api.Foods.listUnits (GotFoodDetailMsg << FoodDetail.UnitsLoaded)
+                ]
+            )
+
+        FoodDetail.RequestLocalTimestamp ->
+            ( model, requestLocalTimestamp () )
+
+        FoodDetail.RequestCreateLog request ->
+            ( model, Api.Logs.createLog request (GotFoodDetailMsg << FoodDetail.LogCompleted) )
+
+        FoodDetail.Navigate route ->
+            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+
+        FoodDetail.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+updateFoodLogDetail : FoodLogDetail.Msg -> Model -> ( Model, Cmd Msg )
+updateFoodLogDetail subMsg model =
+    case model.page of
+        FoodLogDetailPage subModel ->
+            let
+                ( newSubModel, subCmd, outMsg ) =
+                    FoodLogDetail.update subMsg subModel
+
+                nextModel : Model
+                nextModel =
+                    { model | page = FoodLogDetailPage newSubModel }
+
+                ( finalModel, outCmd ) =
+                    applyFoodLogDetailOutMsg outMsg nextModel
+            in
+            ( finalModel
+            , Cmd.batch [ Cmd.map GotFoodLogDetailMsg subCmd, outCmd ]
+            )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+applyFoodLogDetailOutMsg : FoodLogDetail.OutMsg -> Model -> ( Model, Cmd Msg )
+applyFoodLogDetailOutMsg outMsg model =
+    case outMsg of
+        FoodLogDetail.NoOp ->
+            ( model, Cmd.none )
+
+        FoodLogDetail.RequestInitialData logId ->
+            ( model
+            , Cmd.batch
+                [ Api.Logs.getLog logId (GotFoodLogDetailMsg << FoodLogDetail.LogLoaded)
+                , Api.Foods.listUnits (GotFoodLogDetailMsg << FoodLogDetail.UnitsLoaded)
+                ]
+            )
+
+        FoodLogDetail.RequestProductDetail productId ->
+            ( model, Api.Foods.getFoodDetail productId (GotFoodLogDetailMsg << FoodLogDetail.ProductDetailLoaded) )
+
+        FoodLogDetail.RequestMealName mealId ->
+            ( model, Api.Meals.getMealName mealId (GotFoodLogDetailMsg << FoodLogDetail.MealNameLoaded) )
+
+        FoodLogDetail.RequestUpdateLog logId request ->
+            ( model, Api.Logs.updateLog logId request (GotFoodLogDetailMsg << FoodLogDetail.UpdateCompleted) )
+
+        FoodLogDetail.RequestDeleteLog logId ->
+            ( model, Api.Logs.deleteLog logId (GotFoodLogDetailMsg << FoodLogDetail.DeleteCompleted) )
+
+        FoodLogDetail.Navigate route ->
+            ( model, Nav.pushUrl model.key (Route.routeToPath route) )
+
+        FoodLogDetail.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
 itemNameCommand : ItemRef -> Cmd Msg
 itemNameCommand item =
     case item.itemType of
@@ -522,6 +675,12 @@ pageView model =
 
         FoodSearchPage foodSearchModel ->
             Element.map GotFoodSearchMsg (FoodSearch.view foodSearchModel)
+
+        FoodDetailPage foodDetailModel ->
+            Element.map GotFoodDetailMsg (FoodDetail.view foodDetailModel)
+
+        FoodLogDetailPage foodLogDetailModel ->
+            Element.map GotFoodLogDetailMsg (FoodLogDetail.view foodLogDetailModel)
 
         PlaceholderPage message ->
             Element.el [ Element.padding 24 ] (Element.text message)

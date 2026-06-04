@@ -1,11 +1,13 @@
 module Api.Client exposing
     ( ApiError(..)
+    , delete
     , displayError
     , get
     , isUnauthorized
     , post
     , postEmpty
     , postNoBody
+    , put
     )
 
 import Http
@@ -39,6 +41,16 @@ postEmpty path body toMsg =
 postNoBody : String -> (Result ApiError () -> msg) -> Cmd msg
 postNoBody path toMsg =
     request "POST" path Http.emptyBody (Decode.succeed ()) toMsg
+
+
+put : String -> Encode.Value -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
+put path body decoder toMsg =
+    request "PUT" path (Http.jsonBody body) decoder toMsg
+
+
+delete : String -> (Result ApiError () -> msg) -> Cmd msg
+delete path toMsg =
+    request "DELETE" path Http.emptyBody (Decode.succeed ()) toMsg
 
 
 request : String -> String -> Http.Body -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg

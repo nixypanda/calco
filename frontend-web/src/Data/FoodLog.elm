@@ -2,6 +2,7 @@ module Data.FoodLog exposing
     ( FoodLog
     , GroupedLogs
     , SummaryResponse
+    , decoder
     , groupLogs
     , listDecoder
     , summaryDecoder
