@@ -4,9 +4,7 @@ module Page.Diary.Index exposing
     , Msg(..)
     , OutMsg(..)
     , dailyCalories
-    , groupLogs
     , init
-    , macroTotals
     , slotCalories
     , update
     , view
@@ -14,7 +12,7 @@ module Page.Diary.Index exposing
 
 import Api.Client as Client
 import Api.Result as ApiResult
-import Data.FoodLog as FoodLog exposing (FoodLog, GroupedLogs, SummaryResponse)
+import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
 import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
@@ -100,7 +98,7 @@ update msg model =
                 Ok logs ->
                     ( { model | logs = logs, loading = False, error = Nothing }
                     , Cmd.none
-                    , RequestItemNames (uniqueItems logs)
+                    , RequestItemNames (ItemRef.unique logs)
                     )
 
                 Err error ->
@@ -152,7 +150,7 @@ update msg model =
             ( { model | macroMode = toggleMacroMode model.macroMode }, Cmd.none, NoOp )
 
         AddFoodClicked slot ->
-            ( model, Cmd.none, Navigate (addFoodRoute slot) )
+            ( model, Cmd.none, Navigate (FoodSearch (Just slot)) )
 
         LogClicked id ->
             ( model, Cmd.none, Navigate (FoodLogDetail id) )
@@ -180,15 +178,10 @@ toggleMacroMode mode =
             Grams
 
 
-groupLogs : List FoodLog -> GroupedLogs
-groupLogs =
-    FoodLog.groupLogs
-
-
 slotCalories : MealSlot -> List FoodLog -> Float
 slotCalories slot logs =
     logs
-        |> logsForSlot slot
+        |> FoodLog.logsForSlot slot
         |> List.map (.nutrients >> Nutrition.caloriesFrom)
         |> List.sum
 
@@ -196,31 +189,6 @@ slotCalories slot logs =
 dailyCalories : List NutrientAmount -> Float
 dailyCalories summary =
     Nutrition.nutrientAmount "ENERGY_KCAL" summary
-
-
-summaryValue : String -> List NutrientAmount -> Maybe NutrientAmount
-summaryValue =
-    Nutrition.summaryValue
-
-
-macroTotals : List FoodLog -> MacroTotals
-macroTotals =
-    Nutrition.macroTotals
-
-
-addFoodRoute : MealSlot -> Route
-addFoodRoute slot =
-    FoodSearch (Just slot)
-
-
-uniqueItems : List FoodLog -> List ItemRef
-uniqueItems =
-    ItemRef.unique
-
-
-logsForSlot : MealSlot -> List FoodLog -> List FoodLog
-logsForSlot =
-    FoodLog.logsForSlot
 
 
 view : Model -> Element Msg
@@ -323,7 +291,7 @@ totalsView summary =
 
 summaryAmount : String -> List NutrientAmount -> Float
 summaryAmount code summary =
-    summaryValue code summary
+    Nutrition.summaryValue code summary
         |> Maybe.map (.amount >> Nutrition.safeAmount)
         |> Maybe.withDefault 0
 
@@ -352,7 +320,7 @@ logGroupsView model =
         , let
             otherLogs : List FoodLog
             otherLogs =
-                logsForSlot Other model.logs
+                FoodLog.logsForSlot Other model.logs
           in
           if List.isEmpty otherLogs then
             Element.none
@@ -367,11 +335,11 @@ slotView model slot label =
     let
         logs : List FoodLog
         logs =
-            logsForSlot slot model.logs
+            FoodLog.logsForSlot slot model.logs
 
         totals : MacroTotals
         totals =
-            macroTotals logs
+            Nutrition.macroTotals logs
     in
     Ui.card
         (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]

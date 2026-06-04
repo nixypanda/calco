@@ -2,7 +2,6 @@ module Page.Meal.Index exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
-    , emptyList
     , init
     , mealSummaryText
     , update
@@ -101,11 +100,6 @@ update msg model =
 
         BackClicked ->
             ( model, Cmd.none, Navigate (Diary Nothing) )
-
-
-emptyList : { record | meals : Maybe (List Meal) } -> Bool
-emptyList model =
-    model.meals == Just []
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )

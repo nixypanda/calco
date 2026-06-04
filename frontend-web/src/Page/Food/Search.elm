@@ -3,7 +3,6 @@ module Page.Food.Search exposing
     , Msg(..)
     , OutMsg(..)
     , init
-    , isBarcodeVisible
     , update
     , view
     )
@@ -192,11 +191,6 @@ debounce : Int -> String -> Cmd Msg
 debounce token query =
     Process.sleep 300
         |> Task.perform (\_ -> DebounceElapsed token query)
-
-
-isBarcodeVisible : String -> SearchResult -> Bool
-isBarcodeVisible query item =
-    SearchView.isBarcodeVisible query item
 
 
 view : Model -> Element Msg

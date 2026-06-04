@@ -8,6 +8,7 @@ import Expect
 import Lib.Loadable exposing (Loadable(..))
 import Page.Food.Search as FoodSearch
 import Test exposing (Test, describe, test)
+import View.Search as SearchView
 
 
 tests : Test
@@ -147,9 +148,9 @@ tests =
                     |> Expect.equal (FoodSearch.Navigate CustomFoodCreate)
         , test "numeric query marks barcode visibility for matching rows" <|
             \_ ->
-                ( FoodSearch.isBarcodeVisible "12345" apple
-                , FoodSearch.isBarcodeVisible "apple" apple
-                , FoodSearch.isBarcodeVisible "12345" { apple | barcode = Nothing }
+                ( SearchView.isBarcodeVisible "12345" apple
+                , SearchView.isBarcodeVisible "apple" apple
+                , SearchView.isBarcodeVisible "12345" { apple | barcode = Nothing }
                 )
                     |> Expect.equal ( True, False, False )
         ]

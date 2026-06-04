@@ -1,7 +1,7 @@
 module DiaryTest exposing (tests)
 
 import Api.Client as Client
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemRef)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
@@ -120,7 +120,7 @@ tests =
         , describe "derived behavior"
             [ test "logs are grouped into meal slots and other" <|
                 \_ ->
-                    Diary.groupLogs [ breakfastLog, lunchLog, dinnerLog, snackLog, otherLog ]
+                    FoodLog.groupLogs [ breakfastLog, lunchLog, dinnerLog, snackLog, otherLog ]
                         |> (\groups ->
                                 List.map List.length
                                     [ groups.breakfast
@@ -144,7 +144,7 @@ tests =
                     let
                         totals : Nutrition.MacroTotals
                         totals =
-                            Diary.macroTotals [ lunchLog ]
+                            Nutrition.macroTotals [ lunchLog ]
                     in
                     { protein = totals.protein
                     , carbs = totals.carbs

@@ -29,8 +29,10 @@ tests =
                     |> Expect.equal (Just "Network error")
         , test "empty list derives empty state" <|
             \_ ->
-                Meals.emptyList { meals = Just [], error = Nothing }
-                    |> Expect.equal True
+                Meals.update (Meals.MealsLoaded (Ok { items = [] })) (Tuple.first Meals.init)
+                    |> first
+                    |> .meals
+                    |> Expect.equal (Just [])
         , test "meal summary includes notes when present" <|
             \_ ->
                 Meals.mealSummaryText mealWithNotes
