@@ -1,10 +1,16 @@
 module Data.Nutrition exposing
     ( MacroTotals
     , NutrientAmount
+    , Per100gNutrient
+    , Serving
     , caloriesFrom
     , decoder
     , macroTotals
+    , nutrientAmount
+    , oneDecimal
     , safeAmount
+    , scalePer100g
+    , servingGrams
     , summaryValue
     )
 
@@ -15,6 +21,21 @@ type alias NutrientAmount =
     { code : String
     , amount : String
     , unit : String
+    }
+
+
+type alias Per100gNutrient =
+    { code : String
+    , amountPer100g : String
+    , unit : String
+    }
+
+
+type alias Serving =
+    { label : String
+    , quantity : String
+    , unit : String
+    , grams : String
     }
 
 
@@ -109,3 +130,73 @@ nutrientAmount code nutrients =
     summaryValue code nutrients
         |> Maybe.map (.amount >> safeAmount)
         |> Maybe.withDefault 0
+
+
+servingGrams : { quantity | amount : String, unit : String } -> List Serving -> Maybe Float
+servingGrams quantity servings =
+    let
+        amount : Float
+        amount =
+            safeAmount quantity.amount
+    in
+    if quantity.unit == "g" then
+        Just amount
+
+    else
+        servings
+            |> List.filter (\serving -> serving.unit == quantity.unit)
+            |> List.head
+            |> Maybe.andThen (gramsFromServing amount)
+
+
+scalePer100g : Float -> List Per100gNutrient -> List NutrientAmount
+scalePer100g grams nutrients =
+    let
+        factor : Float
+        factor =
+            grams / 100
+    in
+    List.map
+        (\nutrient ->
+            { code = nutrient.code
+            , amount = String.fromFloat (safeAmount nutrient.amountPer100g * factor)
+            , unit = nutrient.unit
+            }
+        )
+        nutrients
+
+
+oneDecimal : Float -> String
+oneDecimal value =
+    let
+        scaled : Int
+        scaled =
+            round (value * 10)
+
+        whole : Int
+        whole =
+            scaled // 10
+
+        decimal : Int
+        decimal =
+            abs (modBy 10 scaled)
+    in
+    String.fromInt whole ++ "." ++ String.fromInt decimal
+
+
+gramsFromServing : Float -> Serving -> Maybe Float
+gramsFromServing amount serving =
+    let
+        servingQuantity : Float
+        servingQuantity =
+            safeAmount serving.quantity
+
+        grams : Float
+        grams =
+            safeAmount serving.grams
+    in
+    if servingQuantity > 0 then
+        Just (amount * grams / servingQuantity)
+
+    else
+        Nothing

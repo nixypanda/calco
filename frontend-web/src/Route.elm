@@ -1,10 +1,10 @@
 module Route exposing
-    ( MealSlot(..)
-    , Route(..)
+    ( Route(..)
     , fromUrl
     , routeToPath
     )
 
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), (<?>), Parser, oneOf, s, string, top)
 import Url.Parser.Query as Query
@@ -26,14 +26,6 @@ type Route
     | MealDetail String
     | MealEdit String
     | NotFound
-
-
-type MealSlot
-    = Breakfast
-    | Lunch
-    | Dinner
-    | Snack
-    | Other
 
 
 fromUrl : Url -> Route
@@ -65,48 +57,7 @@ routeParser =
 mealSlotQuery : Query.Parser (Maybe MealSlot)
 mealSlotQuery =
     Query.string "meal_slot"
-        |> Query.map (Maybe.andThen mealSlotFromString)
-
-
-mealSlotFromString : String -> Maybe MealSlot
-mealSlotFromString raw =
-    case raw of
-        "breakfast" ->
-            Just Breakfast
-
-        "lunch" ->
-            Just Lunch
-
-        "dinner" ->
-            Just Dinner
-
-        "snack" ->
-            Just Snack
-
-        "other" ->
-            Just Other
-
-        _ ->
-            Nothing
-
-
-mealSlotToString : MealSlot -> String
-mealSlotToString slot =
-    case slot of
-        Breakfast ->
-            "breakfast"
-
-        Lunch ->
-            "lunch"
-
-        Dinner ->
-            "dinner"
-
-        Snack ->
-            "snack"
-
-        Other ->
-            "other"
+        |> Query.map (Maybe.andThen MealSlot.fromString)
 
 
 routeToPath : Route -> String
@@ -167,7 +118,7 @@ withMealSlot : String -> Maybe MealSlot -> String
 withMealSlot path maybeSlot =
     case maybeSlot of
         Just slot ->
-            path ++ "?meal_slot=" ++ mealSlotToString slot
+            path ++ "?meal_slot=" ++ MealSlot.toString slot
 
         Nothing ->
             path

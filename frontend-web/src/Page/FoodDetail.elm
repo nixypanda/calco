@@ -12,12 +12,13 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest)
 import Data.FoodLog exposing (FoodLog)
+import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Page.FoodLogForm as FoodLogForm
-import Route exposing (MealSlot, Route(..))
+import Route exposing (Route(..))
 import Ui
 
 

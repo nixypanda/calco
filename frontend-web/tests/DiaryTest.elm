@@ -4,12 +4,13 @@ import Api.Client as Client
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
+import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
 import Dict
 import Expect
 import Page.Diary as Diary
-import Route exposing (MealSlot(..), Route(..))
+import Route exposing (Route(..))
 import Test exposing (Test, describe, test)
 
 

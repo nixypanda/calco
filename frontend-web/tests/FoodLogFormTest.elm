@@ -2,9 +2,9 @@ module FoodLogFormTest exposing (tests)
 
 import Api.Foods exposing (ProductDetail)
 import Data.FoodLog exposing (FoodLog)
+import Data.MealSlot exposing (MealSlot(..))
 import Expect
 import Page.FoodLogForm as FoodLogForm
-import Route exposing (MealSlot(..))
 import Test exposing (Test, describe, test)
 
 

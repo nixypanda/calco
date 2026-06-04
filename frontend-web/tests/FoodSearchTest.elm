@@ -2,10 +2,11 @@ module FoodSearchTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (SearchResult)
+import Data.MealSlot exposing (MealSlot(..))
 import Expect
 import Loadable exposing (Loadable(..))
 import Page.FoodSearch as FoodSearch
-import Route exposing (MealSlot(..), Route(..))
+import Route exposing (Route(..))
 import Test exposing (Test, describe, test)
 
 

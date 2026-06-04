@@ -14,6 +14,10 @@ module Page.CustomFood.Form exposing
     )
 
 import Api.Foods as Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
+import Data.Category as Category
+import Data.ListExtra as ListExtra
+import Data.Text as Text
+import Data.Units as Units
 import Element exposing (Element)
 import Element.Font as Font
 import Element.Input as Input
@@ -101,7 +105,7 @@ fromProductDetail food =
     { emptyForm
         | name = food.name
         , brand = Maybe.withDefault "" food.brand
-        , categories = formatCategoriesInput food.categories
+        , categories = Category.formatInput food.categories
         , servingSizeG = Maybe.withDefault "" food.servingSizeG
         , defaultQuantity = Maybe.withDefault "" food.defaultQuantity
         , defaultUnit = Maybe.withDefault "g" food.defaultUnit
@@ -129,11 +133,11 @@ toCreateFoodRequest form =
     else
         Ok
             { name = name
-            , brand = blankToMaybe form.brand
-            , categories = parseCategoriesInput form.categories
-            , servingSizeG = blankToMaybe form.servingSizeG
-            , defaultQuantity = blankToMaybe form.defaultQuantity
-            , defaultUnit = blankToMaybe form.defaultUnit
+            , brand = Text.blankToMaybe form.brand
+            , categories = Category.parseInput form.categories
+            , servingSizeG = Text.blankToMaybe form.servingSizeG
+            , defaultQuantity = Text.blankToMaybe form.defaultQuantity
+            , defaultUnit = Text.blankToMaybe form.defaultUnit
             , nutrients =
                 form.nutrients
                     |> List.filter (\row -> not (String.isEmpty (String.trim row.code)) && not (String.isEmpty (String.trim row.amountPer100g)))
@@ -159,43 +163,12 @@ toCreateFoodRequest form =
 
 parseCategoriesInput : String -> List String
 parseCategoriesInput raw =
-    raw
-        |> String.split ","
-        |> List.foldl addCategory []
-        |> List.reverse
-
-
-addCategory : String -> List String -> List String
-addCategory raw categories =
-    let
-        normalized : String
-        normalized =
-            raw |> String.trim |> String.toLower
-    in
-    if String.isEmpty normalized || List.member normalized categories then
-        categories
-
-    else
-        normalized :: categories
+    Category.parseInput raw
 
 
 formatCategoriesInput : List String -> String
 formatCategoriesInput categories =
-    String.join ", " categories
-
-
-blankToMaybe : String -> Maybe String
-blankToMaybe raw =
-    let
-        trimmed : String
-        trimmed =
-            String.trim raw
-    in
-    if String.isEmpty trimmed then
-        Nothing
-
-    else
-        Just trimmed
+    Category.formatInput categories
 
 
 update : Msg -> FormModel -> FormModel
@@ -220,10 +193,10 @@ update msg form =
             { form | defaultUnit = value }
 
         NutrientCodeChanged index value ->
-            { form | nutrients = updateAt index (\row -> { row | code = value }) form.nutrients }
+            { form | nutrients = ListExtra.updateAt index (\row -> { row | code = value }) form.nutrients }
 
         NutrientAmountChanged index value ->
-            { form | nutrients = updateAt index (\row -> { row | amountPer100g = value }) form.nutrients }
+            { form | nutrients = ListExtra.updateAt index (\row -> { row | amountPer100g = value }) form.nutrients }
 
         AddNutrientRow ->
             { form | nutrients = form.nutrients ++ [ emptyNutrientRow ] }
@@ -233,46 +206,25 @@ update msg form =
                 form
 
             else
-                { form | nutrients = removeAt index form.nutrients }
+                { form | nutrients = ListExtra.removeAt index form.nutrients }
 
         ServingLabelChanged index value ->
-            { form | servings = updateAt index (\row -> { row | label = value }) form.servings }
+            { form | servings = ListExtra.updateAt index (\row -> { row | label = value }) form.servings }
 
         ServingQuantityChanged index value ->
-            { form | servings = updateAt index (\row -> { row | quantity = value }) form.servings }
+            { form | servings = ListExtra.updateAt index (\row -> { row | quantity = value }) form.servings }
 
         ServingUnitChanged index value ->
-            { form | servings = updateAt index (\row -> { row | unit = value }) form.servings }
+            { form | servings = ListExtra.updateAt index (\row -> { row | unit = value }) form.servings }
 
         ServingGramsChanged index value ->
-            { form | servings = updateAt index (\row -> { row | grams = value }) form.servings }
+            { form | servings = ListExtra.updateAt index (\row -> { row | grams = value }) form.servings }
 
         AddServingRow ->
             { form | servings = form.servings ++ [ emptyServingRow ] }
 
         RemoveServingRow index ->
-            { form | servings = removeAt index form.servings }
-
-
-updateAt : Int -> (a -> a) -> List a -> List a
-updateAt target change items =
-    items
-        |> List.indexedMap
-            (\index item ->
-                if index == target then
-                    change item
-
-                else
-                    item
-            )
-
-
-removeAt : Int -> List a -> List a
-removeAt target items =
-    items
-        |> List.indexedMap Tuple.pair
-        |> List.filter (\( index, _ ) -> index /= target)
-        |> List.map Tuple.second
+            { form | servings = ListExtra.removeAt index form.servings }
 
 
 view : List NutrientItem -> List UnitItem -> FormModel -> Element Msg
@@ -340,9 +292,4 @@ simpleSelect label value onChange options =
 
 unitOptions : List UnitItem -> List ( String, String )
 unitOptions units =
-    case units of
-        [] ->
-            [ ( "g", "g" ) ]
-
-        _ ->
-            List.map (\unit -> ( unit.code, unit.name ++ " (" ++ unit.code ++ ")" )) units
+    Units.options units

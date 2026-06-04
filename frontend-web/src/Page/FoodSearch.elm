@@ -10,6 +10,7 @@ module Page.FoodSearch exposing
 
 import Api.Client as Client
 import Api.Foods as Foods exposing (SearchRequest, SearchResult)
+import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -17,7 +18,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Loadable exposing (Loadable(..))
 import Process
-import Route exposing (MealSlot, Route(..))
+import Route exposing (Route(..))
 import Task
 import Ui
 

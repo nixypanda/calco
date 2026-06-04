@@ -5,11 +5,13 @@ module Data.FoodLog exposing
     , decoder
     , groupLogs
     , listDecoder
+    , logsForSlot
     , summaryDecoder
     )
 
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
@@ -69,17 +71,17 @@ summaryDecoder =
 
 groupLogs : List FoodLog -> GroupedLogs
 groupLogs logs =
-    { breakfast = logsFor "breakfast" logs
-    , lunch = logsFor "lunch" logs
-    , dinner = logsFor "dinner" logs
-    , snack = logsFor "snack" logs
-    , other = List.filter (\log -> not (List.member log.mealSlot [ Just "breakfast", Just "lunch", Just "dinner", Just "snack" ])) logs
+    { breakfast = logsForSlot MealSlot.Breakfast logs
+    , lunch = logsForSlot MealSlot.Lunch logs
+    , dinner = logsForSlot MealSlot.Dinner logs
+    , snack = logsForSlot MealSlot.Snack logs
+    , other = logsForSlot MealSlot.Other logs
     }
 
 
-logsFor : String -> List FoodLog -> List FoodLog
-logsFor slot logs =
-    List.filter (\log -> log.mealSlot == Just slot) logs
+logsForSlot : MealSlot -> List FoodLog -> List FoodLog
+logsForSlot slot logs =
+    List.filter (\log -> MealSlot.matches slot log.mealSlot) logs
 
 
 localDateDecoder : Decoder LocalDate

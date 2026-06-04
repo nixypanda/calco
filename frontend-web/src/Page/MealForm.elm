@@ -19,6 +19,7 @@ module Page.MealForm exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, SearchResponse, SearchResult)
 import Api.Meals as Meals exposing (CreateMealComponentRequest, CreateMealRequest, Meal)
+import Data.Text as Text
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -336,10 +337,10 @@ toMealRequest model =
             components ->
                 Ok
                     { name = trimmedName
-                    , notes = blankToMaybe model.notes
+                    , notes = Text.blankToMaybe model.notes
                     , totalQuantity =
-                        blankToMaybe model.totalQuantity
-                            |> Maybe.map (\amount -> { amount = amount, unit = defaultString "g" model.totalUnit })
+                        Text.blankToMaybe model.totalQuantity
+                            |> Maybe.map (\amount -> { amount = amount, unit = Text.trimOrDefault "g" model.totalUnit })
                     , components = components
                     }
 
@@ -351,7 +352,7 @@ selectedComponents rows =
         |> List.map
             (\row ->
                 { item = { itemType = "product", id = String.trim row.productId }
-                , quantity = { amount = defaultString "100" row.quantity, unit = defaultString "g" row.unit }
+                , quantity = { amount = Text.trimOrDefault "100" row.quantity, unit = Text.trimOrDefault "g" row.unit }
                 }
             )
 
@@ -401,30 +402,6 @@ removeRow rowId rows =
 
     else
         List.filter (\row -> row.rowId /= rowId) rows
-
-
-blankToMaybe : String -> Maybe String
-blankToMaybe raw =
-    let
-        trimmed : String
-        trimmed =
-            String.trim raw
-    in
-    if String.isEmpty trimmed then
-        Nothing
-
-    else
-        Just trimmed
-
-
-defaultString : String -> String -> String
-defaultString fallback raw =
-    case blankToMaybe raw of
-        Just value ->
-            value
-
-        Nothing ->
-            fallback
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )

@@ -1073,6 +1073,10 @@ These helpers should be tested before pages depend on them.
 - As the app, I can parse and display nutrient amounts consistently.
 - As the app, I can scale food nutrients by serving quantity.
 - As the app, I can normalize category input.
+- As the app, I can share meal-slot parsing, display, and log filtering.
+- As the app, I can share blank-string normalization for form payloads.
+- As the app, I can share row-list editing helpers for dynamic forms.
+- As the app, I can share unit labels and options.
 
 ### Tests
 
@@ -1105,13 +1109,31 @@ Category helpers:
 - Duplicate categories are removed.
 - Empty categories are ignored.
 
+Additional shared helpers:
+
+- Meal slots parse from backend/query values.
+- Meal slots format for backend/query values.
+- Meal slots expose display labels.
+- `Other` meal slot matches missing or unknown backend slots.
+- Blank strings normalize to `Nothing`.
+- Non-blank strings trim before payload use.
+- Row-list helpers update and remove by index.
+- Unit labels consistently render `Name (code)`.
+
 ### Code
 
-Create:
+Create or expand:
 
 ```txt
+src/Data/Category.elm
+src/Data/FoodLog.elm
+src/Data/ItemRef.elm
+src/Data/ListExtra.elm
 src/Data/LocalDate.elm
+src/Data/MealSlot.elm
 src/Data/Nutrition.elm
+src/Data/Text.elm
+src/Data/Units.elm
 ```
 
 Port behavior from:
@@ -1155,8 +1177,9 @@ port requestLocalIsoTimestamp : () -> Cmd msg
 port gotLocalIsoTimestamp : (String -> msg) -> Sub msg
 ```
 
-Theme is lower priority than feature workflows. Local timestamp ports are not:
-they are needed before implementing product logging or meal logging.
+Theme is lower priority than feature workflows and the Elm UI cleanup. Local
+timestamp ports are not: they are needed before implementing product logging or
+meal logging.
 
 ## Phase 15: Elm UI Layer
 
@@ -1165,21 +1188,25 @@ coherent `elm-ui` design system from the start. Build only enough UI structure
 to exercise the workflows, but keep all layout, spacing, color, and typography
 inside Elm UI helpers rather than Tailwind/CSS classes.
 
-Create:
+Keep this as a single `src/Ui.elm` module as long as it remains under 400 lines.
+The following names describe the UI vocabulary that should exist, not required
+file boundaries:
 
 ```txt
-src/Ui/Button.elm
-src/Ui/Input.elm
-src/Ui/Select.elm
-src/Ui/PageHeader.elm
-src/Ui/ErrorBanner.elm
-src/Ui/EmptyState.elm
-src/Ui/Loading.elm
-src/Ui/Table.elm
+Button
+Input
+Select
+PageHeader
+ErrorBanner
+EmptyState
+Loading
+Table
 ```
 
-These modules should expose `Element msg` building blocks. `Main.view` is
-responsible for wrapping page `Element Msg` values with `Element.layout`.
+These helpers should expose `Element msg` building blocks. `Main.view` is
+responsible for wrapping page `Element Msg` values with `Element.layout`. If
+`src/Ui.elm` approaches 400 lines, split out only the highest-value sections,
+such as table or input helpers.
 
 Tests should remain focused on pure behavior. Only add view tests when a view
 contains non-trivial branching that is not already covered by pure helpers.
@@ -1202,8 +1229,8 @@ usable route.
 11. Meals list.
 12. Meal create/edit.
 13. Meal detail, nutrient preview, log, and delete.
-14. Theme persistence.
-15. Elm UI cleanup.
+14. Elm UI cleanup.
+15. Theme persistence.
 
 ## Definition Of Feature Parity
 

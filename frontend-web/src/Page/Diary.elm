@@ -14,8 +14,9 @@ module Page.Diary exposing
 
 import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog, GroupedLogs, SummaryResponse)
-import Data.ItemRef exposing (ItemRef)
+import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
+import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Dict exposing (Dict)
 import Element exposing (Element)
@@ -23,7 +24,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Route exposing (MealSlot(..), Route(..))
+import Route exposing (Route(..))
 import Ui
 
 
@@ -121,9 +122,9 @@ update msg model =
                             value
 
                         Err _ ->
-                            unknownName item
+                            ItemRef.fallbackName item
             in
-            ( { model | itemNames = Dict.insert (itemKey item) name model.itemNames }, Cmd.none, NoOp )
+            ( { model | itemNames = Dict.insert (ItemRef.key item) name model.itemNames }, Cmd.none, NoOp )
 
         PreviousDayClicked ->
             let
@@ -134,17 +135,12 @@ update msg model =
             ( { model | currentDate = previous, loading = True, error = Nothing }, Cmd.none, Navigate (Diary (Just (LocalDate.format previous))) )
 
         NextDayClicked ->
-            let
-                next : LocalDate
-                next =
-                    LocalDate.addDays 1 model.currentDate
-            in
-            case LocalDate.compare next model.today of
-                GT ->
-                    ( model, Cmd.none, NoOp )
-
-                _ ->
+            case LocalDate.nextOnOrBefore model.today model.currentDate of
+                Just next ->
                     ( { model | currentDate = next, loading = True, error = Nothing }, Cmd.none, Navigate (Diary (Just (LocalDate.format next))) )
+
+                Nothing ->
+                    ( model, Cmd.none, NoOp )
 
         MacroModeToggled ->
             ( { model | macroMode = toggleMacroMode model.macroMode }, Cmd.none, NoOp )
@@ -193,9 +189,7 @@ slotCalories slot logs =
 
 dailyCalories : List NutrientAmount -> Float
 dailyCalories summary =
-    summaryValue "ENERGY_KCAL" summary
-        |> Maybe.map (.amount >> Nutrition.safeAmount)
-        |> Maybe.withDefault 0
+    Nutrition.nutrientAmount "ENERGY_KCAL" summary
 
 
 summaryValue : String -> List NutrientAmount -> Maybe NutrientAmount
@@ -214,64 +208,13 @@ addFoodRoute slot =
 
 
 uniqueItems : List FoodLog -> List ItemRef
-uniqueItems logs =
-    let
-        step : FoodLog -> ( Dict String ItemRef, List ItemRef ) -> ( Dict String ItemRef, List ItemRef )
-        step log ( seen, items ) =
-            let
-                key : String
-                key =
-                    itemKey log.item
-            in
-            if Dict.member key seen then
-                ( seen, items )
-
-            else
-                ( Dict.insert key log.item seen, log.item :: items )
-    in
-    logs
-        |> List.foldl step ( Dict.empty, [] )
-        |> Tuple.second
-        |> List.reverse
-
-
-itemKey : ItemRef -> String
-itemKey item =
-    item.itemType ++ ":" ++ item.id
-
-
-unknownName : ItemRef -> String
-unknownName item =
-    case item.itemType of
-        "meal" ->
-            "Unknown meal"
-
-        _ ->
-            "Unknown food"
+uniqueItems =
+    ItemRef.unique
 
 
 logsForSlot : MealSlot -> List FoodLog -> List FoodLog
-logsForSlot slot logs =
-    let
-        matches : FoodLog -> Bool
-        matches log =
-            case slot of
-                Breakfast ->
-                    log.mealSlot == Just "breakfast"
-
-                Lunch ->
-                    log.mealSlot == Just "lunch"
-
-                Dinner ->
-                    log.mealSlot == Just "dinner"
-
-                Snack ->
-                    log.mealSlot == Just "snack"
-
-                Other ->
-                    not (List.member log.mealSlot [ Just "breakfast", Just "lunch", Just "dinner", Just "snack" ])
-    in
-    List.filter matches logs
+logsForSlot =
+    FoodLog.logsForSlot
 
 
 view : Model -> Element Msg
@@ -389,10 +332,10 @@ nutrientPill label unit amount =
 logGroupsView : Model -> Element Msg
 logGroupsView model =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
-        [ slotView model Breakfast "Breakfast"
-        , slotView model Lunch "Lunch"
-        , slotView model Dinner "Dinner"
-        , slotView model Snack "Snack"
+        [ slotView model Breakfast (MealSlot.label Breakfast)
+        , slotView model Lunch (MealSlot.label Lunch)
+        , slotView model Dinner (MealSlot.label Dinner)
+        , slotView model Snack (MealSlot.label Snack)
         , let
             otherLogs : List FoodLog
             otherLogs =
@@ -402,7 +345,7 @@ logGroupsView model =
             Element.none
 
           else
-            slotView model Other "Other"
+            slotView model Other (MealSlot.label Other)
         ]
 
 
@@ -463,7 +406,7 @@ macroSummary : MacroMode -> MacroTotals -> String
 macroSummary mode totals =
     case mode of
         Grams ->
-            "carbs " ++ oneDecimal totals.carbs ++ "g, protein " ++ oneDecimal totals.protein ++ "g, fat " ++ oneDecimal totals.fat ++ "g"
+            "carbs " ++ Nutrition.oneDecimal totals.carbs ++ "g, protein " ++ Nutrition.oneDecimal totals.protein ++ "g, fat " ++ Nutrition.oneDecimal totals.fat ++ "g"
 
         Percent ->
             "carbs " ++ String.fromInt (round totals.carbsPct) ++ "%, protein " ++ String.fromInt (round totals.proteinPct) ++ "%, fat " ++ String.fromInt (round totals.fatPct) ++ "%"
@@ -480,7 +423,7 @@ logRow itemNames log =
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.el [ Element.width Element.fill, Font.medium ] (Element.text (Dict.get (itemKey log.item) itemNames |> Maybe.withDefault "Loading..."))
+                [ Element.el [ Element.width Element.fill, Font.medium ] (Element.text (Dict.get (ItemRef.key log.item) itemNames |> Maybe.withDefault "Loading..."))
                 , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
                 , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal"))
                 ]
@@ -498,21 +441,3 @@ smallButton label msg =
         { onPress = Just msg
         , label = Element.text label
         }
-
-
-oneDecimal : Float -> String
-oneDecimal value =
-    let
-        scaled : Int
-        scaled =
-            round (value * 10)
-
-        whole : Int
-        whole =
-            scaled // 10
-
-        decimal : Int
-        decimal =
-            abs (modBy 10 scaled)
-    in
-    String.fromInt whole ++ "." ++ String.fromInt decimal

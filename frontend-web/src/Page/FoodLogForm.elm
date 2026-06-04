@@ -13,13 +13,15 @@ module Page.FoodLogForm exposing
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
+import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Quantity exposing (Quantity)
+import Data.Text as Text
+import Data.Units as Units
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Route exposing (MealSlot(..))
 import Ui
 
 
@@ -59,7 +61,7 @@ initLogFormFromLog : FoodLog -> Model
 initLogFormFromLog log =
     { amount = log.quantity.amount
     , unit = log.quantity.unit
-    , mealSlot = Maybe.andThen mealSlotFromString log.mealSlot
+    , mealSlot = Maybe.andThen MealSlot.fromString log.mealSlot
     , notes = log.notes |> Maybe.withDefault ""
     , error = Nothing
     , submitting = False
@@ -84,85 +86,30 @@ update msg model =
 
 createProductLogRequest : String -> String -> Model -> Result ValidationError CreateLogRequest
 createProductLogRequest loggedAt productId model =
-    if String.isEmpty (String.trim model.amount) then
+    if Text.isBlank model.amount then
         Err AmountRequired
 
     else
         Ok
             { loggedAt = loggedAt
-            , mealSlot = Maybe.map mealSlotToString model.mealSlot
+            , mealSlot = Maybe.map MealSlot.toString model.mealSlot
             , item = { itemType = "product", id = productId }
             , quantity = Quantity model.amount model.unit
-            , notes = blankToNothing model.notes
+            , notes = Text.blankToMaybe model.notes
             }
 
 
 createUpdateLogRequest : Model -> Result ValidationError UpdateLogRequest
 createUpdateLogRequest model =
-    if String.isEmpty (String.trim model.amount) then
+    if Text.isBlank model.amount then
         Err AmountRequired
 
     else
         Ok
-            { mealSlot = Maybe.map mealSlotToString model.mealSlot
+            { mealSlot = Maybe.map MealSlot.toString model.mealSlot
             , quantity = Quantity model.amount model.unit
-            , notes = blankToNothing model.notes
+            , notes = Text.blankToMaybe model.notes
             }
-
-
-blankToNothing : String -> Maybe String
-blankToNothing value =
-    let
-        trimmed : String
-        trimmed =
-            String.trim value
-    in
-    if String.isEmpty trimmed then
-        Nothing
-
-    else
-        Just trimmed
-
-
-mealSlotToString : MealSlot -> String
-mealSlotToString slot =
-    case slot of
-        Breakfast ->
-            "breakfast"
-
-        Lunch ->
-            "lunch"
-
-        Dinner ->
-            "dinner"
-
-        Snack ->
-            "snack"
-
-        Other ->
-            "other"
-
-
-mealSlotFromString : String -> Maybe MealSlot
-mealSlotFromString raw =
-    case raw of
-        "breakfast" ->
-            Just Breakfast
-
-        "lunch" ->
-            Just Lunch
-
-        "dinner" ->
-            Just Dinner
-
-        "snack" ->
-            Just Snack
-
-        "other" ->
-            Just Other
-
-        _ ->
-            Nothing
 
 
 view : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
@@ -203,10 +150,10 @@ mealSlotInput model =
         , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text "Meal")
         , options =
             [ Input.option Nothing (Element.text "None")
-            , Input.option (Just Breakfast) (Element.text "Breakfast")
-            , Input.option (Just Lunch) (Element.text "Lunch")
-            , Input.option (Just Dinner) (Element.text "Dinner")
-            , Input.option (Just Snack) (Element.text "Snack")
+            , Input.option (Just Breakfast) (Element.text (MealSlot.label Breakfast))
+            , Input.option (Just Lunch) (Element.text (MealSlot.label Lunch))
+            , Input.option (Just Dinner) (Element.text (MealSlot.label Dinner))
+            , Input.option (Just Snack) (Element.text (MealSlot.label Snack))
             ]
         }
 
@@ -220,37 +167,11 @@ unitInput food units model =
         , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text "Unit")
         , options =
             unitOptions food units model.unit
-                |> List.map (\unit -> Input.option unit.code (Element.text (unitLabel unit)))
+                |> List.map (\unit -> Input.option unit.code (Element.text (Units.label unit)))
         }
 
 
 unitOptions : Maybe ProductDetail -> List UnitItem -> String -> List UnitItem
 unitOptions food units selectedUnit =
-    let
-        source : List UnitItem
-        source =
-            case Maybe.map .allowedUnits food of
-                Just allowed ->
-                    if List.isEmpty allowed then
-                        units
-
-                    else
-                        allowed
-
-                _ ->
-                    units
-    in
-    if String.isEmpty selectedUnit || List.any (\unit -> unit.code == selectedUnit) source then
-        source
-
-    else
-        { code = selectedUnit, name = selectedUnit, kind = "" } :: source
-
-
-unitLabel : UnitItem -> String
-unitLabel unit =
-    if unit.name == unit.code then
-        unit.code
-
-    else
-        unit.name ++ " (" ++ unit.code ++ ")"
+    Units.sourceForFood food units
+        |> Units.ensureSelected selectedUnit

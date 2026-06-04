@@ -7,6 +7,8 @@ module Data.LocalDate exposing
     , fromParts
     , fromPosix
     , fromString
+    , nextOnOrBefore
+    , routeQuery
     )
 
 import Char
@@ -79,6 +81,26 @@ addDays offset date =
 compare : LocalDate -> LocalDate -> Order
 compare (LocalDate left) (LocalDate right) =
     Basics.compare ( left.year, left.month, left.day ) ( right.year, right.month, right.day )
+
+
+nextOnOrBefore : LocalDate -> LocalDate -> Maybe LocalDate
+nextOnOrBefore today current =
+    let
+        next : LocalDate
+        next =
+            addDays 1 current
+    in
+    case compare next today of
+        GT ->
+            Nothing
+
+        _ ->
+            Just next
+
+
+routeQuery : LocalDate -> String
+routeQuery date =
+    "date=" ++ format date
 
 
 nextDay : LocalDate -> LocalDate
