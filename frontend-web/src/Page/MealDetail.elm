@@ -487,7 +487,7 @@ view model =
         [ Element.row [ Element.spacing 12 ]
             [ Ui.button "Back" BackClicked
             , Element.el
-                [ Font.size 22, Font.bold ]
+                [ Ui.heading1, Font.bold ]
                 (Element.text (Maybe.map .name model.meal |> Maybe.withDefault "Meal"))
             , Ui.button "Edit" EditClicked
             , Ui.button "Delete" DeleteClicked

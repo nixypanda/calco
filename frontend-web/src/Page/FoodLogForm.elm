@@ -137,7 +137,7 @@ mealSlotInput model =
         [ Element.spacing 8 ]
         { onChange = MealSlotChanged
         , selected = Just model.mealSlot
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text "Meal")
+        , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Meal")
         , options =
             [ Input.option Nothing (Element.text "None")
             , Input.option (Just Breakfast) (Element.text (MealSlot.label Breakfast))
@@ -154,7 +154,7 @@ unitInput food units model =
         [ Element.spacing 8 ]
         { onChange = UnitChanged
         , selected = Just model.unit
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text "Unit")
+        , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Unit")
         , options =
             unitOptions food units model.unit
                 |> List.map (\unit -> Input.option unit.code (Element.text (Units.label unit)))

@@ -187,7 +187,7 @@ resultRow query item =
             Element.column [ Element.width Element.fill, Element.spacing 4 ]
                 [ Element.el [ Font.medium ] (Element.text item.name)
                 , Element.el
-                    [ Font.size 13
+                    [ Ui.caption
                     , Font.color Ui.mutedColor
                     ]
                     (Element.text (metaText query item))

@@ -297,7 +297,7 @@ loadedView model log units form =
 itemHeader : Model -> FoodLog -> Element Msg
 itemHeader model log =
     Ui.card
-        [ Element.el [ Font.size 20, Font.bold ] (Element.text (itemTitle model log))
+        [ Element.el [ Ui.heading2, Font.bold ] (Element.text (itemTitle model log))
         , Ui.mutedText (metaText model.food log)
         , case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
             Just _ ->

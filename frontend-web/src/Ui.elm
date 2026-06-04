@@ -2,6 +2,9 @@ module Ui exposing
     ( -- Colors
       primaryTeal, borderGray, mutedColor, mediumColor, darkColor
     , dangerBg, cardBg
+      -- Typography
+    , display, heading1, heading2, heading3, body, caption, small
+    , bold, medium
       -- Layout
     , layout, pageContainer, pageHeader, card, sectionHeader
       -- States
@@ -68,6 +71,53 @@ inputBorder =
     Element.rgb255 209 213 219
 
 
+-- Typography
+
+display : Element.Attribute msg
+display =
+    Font.size 32
+
+
+heading1 : Element.Attribute msg
+heading1 =
+    Font.size 22
+
+
+heading2 : Element.Attribute msg
+heading2 =
+    Font.size 20
+
+
+heading3 : Element.Attribute msg
+heading3 =
+    Font.size 18
+
+
+body : Element.Attribute msg
+body =
+    Font.size 14
+
+
+caption : Element.Attribute msg
+caption =
+    Font.size 13
+
+
+small : Element.Attribute msg
+small =
+    Font.size 12
+
+
+bold : Element.Attribute msg
+bold =
+    Font.bold
+
+
+medium : Element.Attribute msg
+medium =
+    Font.medium
+
+
 -- Layout
 
 layout : Element msg -> Element msg
@@ -78,6 +128,7 @@ layout content =
         , Background.color pageBg
         , Font.family [ Font.typeface "Inter", Font.sansSerif ]
         , Font.color darkColor
+        , body
         ]
         content
 
@@ -101,11 +152,11 @@ pageHeader title back =
         (case back of
             Just backMsg ->
                 [ button "Back" backMsg
-                , Element.el [ Font.size 22, Font.bold ] (Element.text title)
+                , Element.el [ heading1, bold ] (Element.text title)
                 ]
 
             Nothing ->
-                [ Element.el [ Font.size 22, Font.bold ] (Element.text title) ]
+                [ Element.el [ heading1, bold ] (Element.text title) ]
         )
 
 
@@ -125,7 +176,7 @@ card children =
 
 sectionHeader : String -> Element msg
 sectionHeader title =
-    Element.el [ Font.size 18, Font.bold ] (Element.text title)
+    Element.el [ heading3, bold ] (Element.text title)
 
 
 
@@ -200,8 +251,8 @@ smallButton label msg =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 6
         , Element.paddingXY 12 8
-        , Font.size 13
-        , Font.medium
+        , caption
+        , medium
         ]
         { onPress = Just msg
         , label = Element.text label
@@ -222,7 +273,7 @@ input label value onChange =
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text label)
+        , label = Input.labelAbove [ body, medium ] (Element.text label)
         }
 
 
@@ -237,7 +288,7 @@ passwordInput label value onChange =
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text label)
+        , label = Input.labelAbove [ body, medium ] (Element.text label)
         , show = False
         }
 
@@ -247,8 +298,8 @@ select label_ selected options onChange =
     Input.radio [ Element.spacing 8 ]
         { onChange = onChange
         , selected = Just selected
-        , label = Input.labelAbove [ Font.size 14, Font.medium ] (Element.text label_)
-        , options = List.map (\(val, display) -> Input.option val (Element.text display)) options
+        , label = Input.labelAbove [ body, medium ] (Element.text label_)
+        , options = List.map (\(val, lbl) -> Input.option val (Element.text lbl)) options
         }
 
 
@@ -259,7 +310,7 @@ mutedText : String -> Element msg
 mutedText text =
     Element.el
         [ Font.color mutedColor
-        , Font.size 14
+        , body
         ]
         (Element.text text)
 

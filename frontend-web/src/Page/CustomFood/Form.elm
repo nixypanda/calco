@@ -316,7 +316,7 @@ view nutrients units form =
 section : String -> List (Element msg) -> Element msg
 section title children =
     Element.column [ Element.width Element.fill, Element.spacing 8 ]
-        (Element.el [ Font.size 18, Font.bold ] (Element.text title) :: children)
+        (Element.el [ Ui.heading3, Font.bold ] (Element.text title) :: children)
 
 
 nutrientRowView : List NutrientItem -> Int -> NutrientRow -> Element Msg

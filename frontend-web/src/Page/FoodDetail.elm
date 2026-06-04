@@ -247,7 +247,7 @@ loadedView food units form =
 foodHeader : ProductDetail -> Element Msg
 foodHeader food =
     Ui.card
-        [ Element.el [ Font.size 20, Font.bold ] (Element.text food.name)
+        [ Element.el [ Ui.heading2, Font.bold ] (Element.text food.name)
         , Ui.mutedText (metaText food)
         , case customFoodEditRoute food of
             Just _ ->

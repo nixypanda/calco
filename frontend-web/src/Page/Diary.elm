@@ -295,6 +295,7 @@ dateCard model =
                     )
                 , Border.rounded 6
                 , Element.paddingXY 12 8
+                , Ui.caption
                 ]
                 { onPress =
                     if LocalDate.compare model.currentDate model.today == EQ then
@@ -336,7 +337,7 @@ nutrientPill label unit amount =
         , Border.color Ui.borderGray
         ]
         [ Element.el [ Font.bold ] (Element.text (String.fromInt (round amount) ++ " " ++ unit))
-        , Element.el [ Font.size 12, Font.color Ui.mutedColor ] (Element.text label)
+        , Element.el [ Ui.small, Font.color Ui.mutedColor ] (Element.text label)
         ]
 
 
@@ -375,13 +376,13 @@ slotView model slot label =
         (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]
             [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
                 [ Element.el [ Font.bold ] (Element.text label)
-                , Input.button [ Font.color Ui.mutedColor, Font.size 13 ]
+                , Input.button [ Font.color Ui.mutedColor, Ui.caption ]
                     { onPress = Just MacroModeToggled
                     , label = Element.text (macroSummary model.macroMode totals)
                     }
                 ]
             , Element.el
-                [ Font.size 13
+                [ Ui.caption
                 , Font.color Ui.mutedColor
                 ]
                 (Element.text (String.fromInt (round (slotCalories slot model.logs)) ++ " kcal"))
@@ -463,12 +464,12 @@ logRow itemNames log =
                         )
                     )
                 , Element.el
-                    [ Font.size 13
+                    [ Ui.caption
                     , Font.color Ui.mutedColor
                     ]
                     (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
                 , Element.el
-                    [ Font.size 13
+                    [ Ui.caption
                     , Font.color Ui.mutedColor
                     ]
                     (Element.text

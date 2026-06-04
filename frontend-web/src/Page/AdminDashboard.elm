@@ -328,7 +328,7 @@ view model =
             [ Element.width Element.fill
             , Element.spaceEvenly
             ]
-            [ Element.el [ Font.size 30, Font.bold ] (Element.text "Admin Dashboard")
+            [ Element.el [ Ui.heading1, Font.bold ] (Element.text "Admin Dashboard")
             , Ui.button
                 (if model.showCreate then
                     "Cancel"
@@ -403,7 +403,7 @@ userRow user =
             , Element.text user.displayName
             , Element.el
                 [ Font.color Ui.mediumColor
-                , Font.size 13
+                , Ui.caption
                 ]
                 (Element.text user.status)
             ]

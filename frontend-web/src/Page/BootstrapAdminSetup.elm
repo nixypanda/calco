@@ -130,15 +130,15 @@ view model =
         , Element.padding 20
         ]
         (Ui.card
-            ([ Element.el [ Font.size 32, Font.bold ] (Element.text "CalCo")
+            ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
              , Element.el
-                [ Font.size 20
+                [ Ui.heading2
                 , Font.medium
                 , Font.color Ui.mediumColor
                 ]
                 (Element.text "First-Time Setup")
              , Element.paragraph
-                [ Font.size 14
+                [ Ui.body
                 , Font.color Ui.mediumColor
                 ]
                 [ Element.text "Create the admin account to get started." ]

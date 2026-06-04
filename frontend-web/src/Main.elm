@@ -1021,7 +1021,7 @@ headerView model =
         , Background.color Ui.cardBg
         , Font.color Ui.darkColor
         ]
-        (Element.el [ Font.size 20, Font.bold, Element.width Element.fill ] (Element.text "CalCo")
+        (Element.el [ Ui.heading2, Font.bold, Element.width Element.fill ] (Element.text "CalCo")
             :: identityView model
         )
 
@@ -1031,7 +1031,7 @@ identityView model =
     case model.session.identity of
         Just identity ->
             [ Element.el
-                [ Font.size 14
+                [ Ui.body
                 , Font.color Ui.mediumColor
                 ]
                 (Element.text ("Logged in as " ++ identity.username))
