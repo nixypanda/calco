@@ -40,6 +40,16 @@ tests =
             \_ ->
                 FoodDetail.customFoodEditRoute { food | source = "USDA" }
                     |> Expect.equal Nothing
+        , test "display nutrients follow the current form quantity" <|
+            \_ ->
+                FoodDetail.foodNutrientsForDisplay foodWithNutrition form
+                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
+        , test "display nutrients fall back when serving conversion is unknown" <|
+            \_ ->
+                FoodDetail.foodNutrientsForDisplay
+                    foodWithNutrition
+                    { form | unit = "cup" }
+                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
         , test "submit requests local timestamp after validation" <|
             \_ ->
                 FoodDetail.update FoodDetail.SubmitClicked loadedModel
@@ -123,6 +133,27 @@ food =
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]
+    }
+
+
+foodWithNutrition : ProductDetail
+foodWithNutrition =
+    { food
+        | nutrients =
+            [ { code = "ENERGY_KCAL"
+              , amountPer100g = "120"
+              , unit = "kcal"
+              , source = Nothing
+              , confidence = Nothing
+              }
+            ]
+        , servings =
+            [ { label = "Serving"
+              , quantity = "1"
+              , unit = "serving"
+              , grams = "50"
+              }
+            ]
     }
 
 

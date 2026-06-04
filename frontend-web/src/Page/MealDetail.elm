@@ -9,9 +9,10 @@ module Page.MealDetail exposing
     )
 
 import Api.Client as Client
-import Api.Foods exposing (ProductDetail)
+import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Data.Nutrition exposing (NutrientAmount)
+import Data.Units as Units
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -25,6 +26,10 @@ type alias Model =
     { mealId : String
     , meal : Maybe Meal
     , productNames : List ( String, String )
+    , amount : String
+    , unit : String
+    , units : List UnitItem
+    , unitOpen : Bool
     , nutrients : Maybe (List NutrientAmount)
     , nutritionLoading : Bool
     , nutritionError : Maybe String
@@ -38,6 +43,10 @@ type alias Model =
 type Msg
     = MealLoaded (Result Client.ApiError Meal)
     | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | AmountChanged String
+    | UnitChanged String
+    | ToggleUnitDropdown
     | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
     | DeleteClicked
     | CancelDeleteClicked
@@ -50,6 +59,7 @@ type OutMsg
     = NoOp
     | RequestInitialData String
     | RequestProductDetail String
+    | RequestNutrientPreview String String String
     | RequestDeleteMeal String
     | Navigate Route
     | SessionExpired
@@ -60,6 +70,10 @@ init mealId =
     ( { mealId = mealId
       , meal = Nothing
       , productNames = []
+      , amount = "100"
+      , unit = "g"
+      , units = fallbackUnits
+      , unitOpen = False
       , nutrients = Nothing
       , nutritionLoading = True
       , nutritionError = Nothing
@@ -100,17 +114,64 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none, nextProductNameRequest productId model )
 
-        NutrientPreviewLoaded result ->
+        UnitsLoaded result ->
             case result of
                 Ok response ->
                     ( { model
-                        | nutrients = Just response.nutrients
-                        , nutritionLoading = False
-                        , nutritionError = Nothing
+                        | units =
+                            if List.isEmpty response.items then
+                                fallbackUnits
+
+                            else
+                                response.items
+                        , error = Nothing
                       }
                     , Cmd.none
                     , NoOp
                     )
+
+                Err _ ->
+                    ( { model | units = fallbackUnits }, Cmd.none, NoOp )
+
+        AmountChanged value ->
+            requestNutritionFor
+                { model
+                    | amount = value
+                    , unitOpen = False
+                    , nutritionError = Nothing
+                }
+
+        UnitChanged value ->
+            requestNutritionFor
+                { model
+                    | unit = value
+                    , unitOpen = False
+                    , nutritionError = Nothing
+                }
+
+        ToggleUnitDropdown ->
+            ( { model | unitOpen = not model.unitOpen }, Cmd.none, NoOp )
+
+        NutrientPreviewLoaded result ->
+            case result of
+                Ok response ->
+                    if
+                        response.quantity.amount
+                            == model.amount
+                            && response.quantity.unit
+                            == model.unit
+                    then
+                        ( { model
+                            | nutrients = Just response.nutrients
+                            , nutritionLoading = False
+                            , nutritionError = Nothing
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
+
+                    else
+                        ( model, Cmd.none, NoOp )
 
                 Err error ->
                     if Client.isUnauthorized error then
@@ -254,6 +315,40 @@ nameFor id model =
         |> Maybe.withDefault "Loading..."
 
 
+requestNutritionFor : Model -> ( Model, Cmd Msg, OutMsg )
+requestNutritionFor model =
+    case String.toFloat model.amount of
+        Just amount ->
+            if amount > 0 then
+                ( { model | nutritionLoading = True }
+                , Cmd.none
+                , RequestNutrientPreview model.mealId model.amount model.unit
+                )
+
+            else
+                clearNutritionPreview model
+
+        Nothing ->
+            clearNutritionPreview model
+
+
+clearNutritionPreview : Model -> ( Model, Cmd Msg, OutMsg )
+clearNutritionPreview model =
+    ( { model
+        | nutrients = Nothing
+        , nutritionLoading = False
+        , nutritionError = Nothing
+      }
+    , Cmd.none
+    , NoOp
+    )
+
+
+fallbackUnits : List UnitItem
+fallbackUnits =
+    [ { code = "g", name = "g", kind = "mass" } ]
+
+
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure error model =
     if Client.isUnauthorized error then
@@ -328,6 +423,17 @@ nutritionView : Model -> Element Msg
 nutritionView model =
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
         [ Ui.sectionHeader "Nutrition"
+        , Ui.card
+            [ Ui.input "Amount" model.amount AmountChanged
+            , Ui.selectDropdown
+                { label = "Unit"
+                , selected = model.unit
+                , options = model.units |> Units.ensureSelected model.unit |> Units.options
+                , onChange = UnitChanged
+                , isOpen = model.unitOpen
+                , onToggle = ToggleUnitDropdown
+                }
+            ]
         , if model.nutritionLoading then
             Ui.loading "Loading nutrition..."
 

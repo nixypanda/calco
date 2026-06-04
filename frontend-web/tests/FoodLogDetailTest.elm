@@ -56,6 +56,24 @@ tests =
                     |> first
                     |> (\model -> ( Maybe.map .id model.food, model.itemName ))
                     |> Expect.equal ( Just "food-1", "Apple" )
+        , test "product display nutrients follow the edit form quantity" <|
+            \_ ->
+                FoodLogDetail.nutrientsForDisplay (Just foodWithNutrition) productLog form
+                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
+        , test "meal display nutrients scale saved snapshot when units still match" <|
+            \_ ->
+                FoodLogDetail.nutrientsForDisplay
+                    Nothing
+                    logWithNutrients
+                    { form | amount = "3" }
+                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "180", unit = "kcal" } ]
+        , test "meal display nutrients fall back to saved snapshot when units change" <|
+            \_ ->
+                FoodLogDetail.nutrientsForDisplay
+                    Nothing
+                    logWithNutrients
+                    { form | amount = "3", unit = "g" }
+                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
         , test "meal name success stores item name" <|
             \_ ->
                 FoodLogDetail.update
@@ -183,6 +201,34 @@ food =
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]
+    }
+
+
+foodWithNutrition : ProductDetail
+foodWithNutrition =
+    { food
+        | nutrients =
+            [ { code = "ENERGY_KCAL"
+              , amountPer100g = "120"
+              , unit = "kcal"
+              , source = Nothing
+              , confidence = Nothing
+              }
+            ]
+        , servings =
+            [ { label = "Serving"
+              , quantity = "1"
+              , unit = "serving"
+              , grams = "50"
+              }
+            ]
+    }
+
+
+logWithNutrients : FoodLog
+logWithNutrients =
+    { productLog
+        | nutrients = [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
     }
 
 

@@ -3,6 +3,7 @@ module Page.FoodDetail exposing
     , Msg(..)
     , OutMsg(..)
     , customFoodEditRoute
+    , foodNutrientsForDisplay
     , init
     , update
     , view
@@ -231,6 +232,11 @@ bodyView model =
 
 loadedView : ProductDetail -> List UnitItem -> FoodLogForm.Model -> Element Msg
 loadedView food units form =
+    let
+        nutrients : List Nutrition.NutrientAmount
+        nutrients =
+            foodNutrientsForDisplay food form
+    in
     Element.column
         [ Element.width Element.fill
         , Element.spacing 16
@@ -240,17 +246,30 @@ loadedView food units form =
         , Ui.cardActions
             [ Ui.submitButton form.submitting "Log Food" "Logging..." SubmitClicked
             ]
-        , View.Nutrients.nutrientsTable (foodNutrientsForDisplay food)
+        , Ui.card
+            [ Ui.sectionHeader "Macro Breakdown"
+            , View.Nutrients.macroBreakdownView nutrients
+            ]
+        , View.Nutrients.nutrientsTable nutrients
         ]
 
 
-foodNutrientsForDisplay : ProductDetail -> List Nutrition.NutrientAmount
-foodNutrientsForDisplay food =
+foodNutrientsForDisplay : ProductDetail -> FoodLogForm.Model -> List Nutrition.NutrientAmount
+foodNutrientsForDisplay food form =
+    Nutrition.nutrientsForQuantity
+        { amount = form.amount, unit = form.unit }
+        food.servings
+        food.nutrients
+        |> Maybe.withDefault (foodNutrientsPer100g food)
+
+
+foodNutrientsPer100g : ProductDetail -> List Nutrition.NutrientAmount
+foodNutrientsPer100g food =
     List.map
-        (\n ->
-            { code = n.code
-            , amount = n.amountPer100g
-            , unit = n.unit
+        (\nutrient ->
+            { code = nutrient.code
+            , amount = nutrient.amountPer100g
+            , unit = nutrient.unit
             }
         )
         food.nutrients

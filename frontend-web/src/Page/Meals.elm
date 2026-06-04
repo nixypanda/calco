@@ -1,4 +1,13 @@
-module Page.Meals exposing (Model, Msg(..), OutMsg(..), emptyList, init, update, view)
+module Page.Meals exposing
+    ( Model
+    , Msg(..)
+    , OutMsg(..)
+    , emptyList
+    , init
+    , mealSummaryText
+    , update
+    , view
+    )
 
 import Api.Client as Client
 import Api.Meals as Meals exposing (Meal)
@@ -158,7 +167,7 @@ mealRow deletingMealId meal =
             , label =
                 Element.column [ Element.width Element.fill, Element.spacing 4 ]
                     [ Element.el [ Font.bold ] (Element.text meal.name)
-                    , Ui.mutedText (String.fromInt (List.length meal.components) ++ " components")
+                    , Ui.mutedText (mealSummaryText meal)
                     ]
             }
         , Ui.smallButton "Edit" (EditMealClicked meal.id)
@@ -186,3 +195,12 @@ createMealRow =
         { onPress = Just CreateMealClicked
         , label = Element.text "Create Meal"
         }
+
+
+mealSummaryText : Meal -> String
+mealSummaryText meal =
+    [ Just (String.fromInt (List.length meal.components) ++ " components")
+    , meal.notes
+    ]
+        |> List.filterMap identity
+        |> String.join " - "

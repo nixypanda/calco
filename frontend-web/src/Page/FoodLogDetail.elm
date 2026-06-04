@@ -3,6 +3,7 @@ module Page.FoodLogDetail exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , nutrientsForDisplay
     , update
     , view
     )
@@ -271,6 +272,11 @@ bodyView model =
 
 loadedView : Model -> FoodLog -> List UnitItem -> FoodLogForm.Model -> Element Msg
 loadedView model log units form =
+    let
+        nutrients : List Nutrition.NutrientAmount
+        nutrients =
+            nutrientsForDisplay model.food log form
+    in
     Element.column
         [ Element.width Element.fill
         , Element.spacing 16
@@ -290,27 +296,39 @@ loadedView model log units form =
             ]
         , Ui.card
             [ Ui.sectionHeader "Macro Breakdown"
-            , View.Nutrients.macroBreakdownView log.nutrients
+            , View.Nutrients.macroBreakdownView nutrients
             ]
-        , case model.food of
-            Just food ->
-                View.Nutrients.nutrientsTable (foodNutrientsForDisplay food)
-
-            Nothing ->
-                Element.none
+        , View.Nutrients.nutrientsTable nutrients
         ]
 
 
-foodNutrientsForDisplay : ProductDetail -> List Nutrition.NutrientAmount
-foodNutrientsForDisplay food =
-    List.map
-        (\n ->
-            { code = n.code
-            , amount = n.amountPer100g
-            , unit = n.unit
-            }
-        )
-        food.nutrients
+nutrientsForDisplay :
+    Maybe ProductDetail
+    -> FoodLog
+    -> FoodLogForm.Model
+    -> List Nutrition.NutrientAmount
+nutrientsForDisplay maybeFood log form =
+    let
+        currentQuantity =
+            { amount = form.amount, unit = form.unit }
+
+        savedSnapshot =
+            Nutrition.scaledSnapshotForQuantity
+                log.quantity
+                currentQuantity
+                log.nutrients
+                |> Maybe.withDefault log.nutrients
+    in
+    case maybeFood of
+        Just food ->
+            Nutrition.nutrientsForQuantity
+                currentQuantity
+                food.servings
+                food.nutrients
+                |> Maybe.withDefault savedSnapshot
+
+        Nothing ->
+            savedSnapshot
 
 
 itemHeader : Model -> FoodLog -> Element Msg

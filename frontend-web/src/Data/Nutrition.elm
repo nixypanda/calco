@@ -7,9 +7,12 @@ module Data.Nutrition exposing
     , decoder
     , macroTotals
     , nutrientAmount
+    , nutrientsForQuantity
     , oneDecimal
     , safeAmount
+    , scaleNutrients
     , scalePer100g
+    , scaledSnapshotForQuantity
     , servingGrams
     , summaryValue
     )
@@ -132,24 +135,35 @@ nutrientAmount code nutrients =
         |> Maybe.withDefault 0
 
 
-servingGrams : { quantity | amount : String, unit : String } -> List Serving -> Maybe Float
+servingGrams :
+    { quantity | amount : String, unit : String }
+    -> List { serving | quantity : String, unit : String, grams : String }
+    -> Maybe Float
 servingGrams quantity servings =
     let
-        amount : Float
-        amount =
-            safeAmount quantity.amount
+        maybeAmount : Maybe Float
+        maybeAmount =
+            positiveAmount quantity.amount
     in
-    if quantity.unit == "g" then
-        Just amount
+    case maybeAmount of
+        Just amount ->
+            if quantity.unit == "g" then
+                Just amount
 
-    else
-        servings
-            |> List.filter (\serving -> serving.unit == quantity.unit)
-            |> List.head
-            |> Maybe.andThen (gramsFromServing amount)
+            else
+                servings
+                    |> List.filter (\serving -> serving.unit == quantity.unit)
+                    |> List.head
+                    |> Maybe.andThen (gramsFromServing amount)
+
+        Nothing ->
+            Nothing
 
 
-scalePer100g : Float -> List Per100gNutrient -> List NutrientAmount
+scalePer100g :
+    Float
+    -> List { nutrient | code : String, amountPer100g : String, unit : String }
+    -> List NutrientAmount
 scalePer100g grams nutrients =
     let
         factor : Float
@@ -161,6 +175,45 @@ scalePer100g grams nutrients =
             { code = nutrient.code
             , amount = String.fromFloat (safeAmount nutrient.amountPer100g * factor)
             , unit = nutrient.unit
+            }
+        )
+        nutrients
+
+
+nutrientsForQuantity :
+    { quantity | amount : String, unit : String }
+    -> List { serving | quantity : String, unit : String, grams : String }
+    -> List { nutrient | code : String, amountPer100g : String, unit : String }
+    -> Maybe (List NutrientAmount)
+nutrientsForQuantity quantity servings nutrients =
+    servingGrams quantity servings
+        |> Maybe.map (\grams -> scalePer100g grams nutrients)
+
+
+scaledSnapshotForQuantity :
+    { savedQuantity | amount : String, unit : String }
+    -> { currentQuantity | amount : String, unit : String }
+    -> List NutrientAmount
+    -> Maybe (List NutrientAmount)
+scaledSnapshotForQuantity saved current nutrients =
+    if saved.unit == current.unit then
+        case ( positiveAmount saved.amount, positiveAmount current.amount ) of
+            ( Just savedAmount, Just currentAmount ) ->
+                Just (scaleNutrients (currentAmount / savedAmount) nutrients)
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+scaleNutrients : Float -> List NutrientAmount -> List NutrientAmount
+scaleNutrients factor nutrients =
+    List.map
+        (\nutrient ->
+            { nutrient
+                | amount = String.fromFloat (safeAmount nutrient.amount * factor)
             }
         )
         nutrients
@@ -184,7 +237,21 @@ oneDecimal value =
     String.fromInt whole ++ "." ++ String.fromInt decimal
 
 
-gramsFromServing : Float -> Serving -> Maybe Float
+positiveAmount : String -> Maybe Float
+positiveAmount raw =
+    case String.toFloat raw of
+        Just amount ->
+            if amount > 0 then
+                Just amount
+
+            else
+                Nothing
+
+        Nothing ->
+            Nothing
+
+
+gramsFromServing : Float -> { serving | quantity : String, grams : String } -> Maybe Float
 gramsFromServing amount serving =
     let
         servingQuantity : Float

@@ -31,6 +31,14 @@ tests =
             \_ ->
                 Meals.emptyList { meals = Just [], error = Nothing }
                     |> Expect.equal True
+        , test "meal summary includes notes when present" <|
+            \_ ->
+                Meals.mealSummaryText mealWithNotes
+                    |> Expect.equal "0 components - Prep on Sunday"
+        , test "meal summary omits separator when notes are absent" <|
+            \_ ->
+                Meals.mealSummaryText { mealWithNotes | notes = Nothing }
+                    |> Expect.equal "0 components"
         , test "open meal navigates to meal detail" <|
             \_ ->
                 Meals.update (Meals.OpenMealClicked "meal-1") (Tuple.first Meals.init)
@@ -57,3 +65,14 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+mealWithNotes =
+    { id = "meal-1"
+    , name = "Lunch"
+    , notes = Just "Prep on Sunday"
+    , totalQuantity = Nothing
+    , components = []
+    , createdAt = "now"
+    , updatedAt = "now"
+    }

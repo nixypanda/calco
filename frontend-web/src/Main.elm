@@ -1011,12 +1011,22 @@ applyMealDetailOutMsg outMsg model =
             ( model
             , Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealDetail.MealLoaded)
+                , Api.Foods.listUnits (GotMealDetailMsg << MealDetail.UnitsLoaded)
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
                     "g"
                     (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded)
                 ]
+            )
+
+        MealDetail.RequestNutrientPreview mealId amount unit ->
+            ( model
+            , Api.Meals.getMealNutrients
+                mealId
+                amount
+                unit
+                (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded)
             )
 
         MealDetail.RequestProductDetail productId ->

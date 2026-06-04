@@ -38,6 +38,25 @@ tests =
                     |> first
                     |> .nutrients
                     |> Expect.equal (Just [ nutrient ])
+        , test "amount changes request nutrient preview" <|
+            \_ ->
+                MealDetail.update
+                    (MealDetail.AmountChanged "150")
+                    baseModel
+                    |> third
+                    |> Expect.equal (MealDetail.RequestNutrientPreview "meal-1" "150" "g")
+        , test "invalid amount clears nutrient preview" <|
+            \_ ->
+                MealDetail.update
+                    (MealDetail.AmountChanged "nope")
+                    { baseModel
+                        | nutrients = Just [ nutrient ]
+                        , nutritionError = Just "old error"
+                        , nutritionLoading = True
+                    }
+                    |> first
+                    |> (\model -> ( model.nutrients, model.nutritionError, model.nutritionLoading ))
+                    |> Expect.equal ( Nothing, Nothing, False )
         , test "delete confirmation opens and closes" <|
             \_ ->
                 MealDetail.update MealDetail.DeleteClicked baseModel

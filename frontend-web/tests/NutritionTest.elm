@@ -64,6 +64,26 @@ tests =
             \_ ->
                 Nutrition.scalePer100g 50 per100g
                     |> Expect.equal [ { code = "ENERGY_KCAL", amount = "60", unit = "kcal" } ]
+        , test "quantity nutrient scaling uses serving definitions" <|
+            \_ ->
+                Nutrition.nutrientsForQuantity { amount = "2", unit = "piece" } servings per100g
+                    |> Expect.equal
+                        (Just [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ])
+        , test "saved snapshot scaling requires matching units" <|
+            \_ ->
+                Nutrition.scaledSnapshotForQuantity
+                    { amount = "2", unit = "serving" }
+                    { amount = "3", unit = "serving" }
+                    nutrients
+                    |> Expect.equal
+                        (Just [ { code = "ENERGY_KCAL", amount = "180", unit = "kcal" } ])
+        , test "saved snapshot scaling rejects changed units" <|
+            \_ ->
+                Nutrition.scaledSnapshotForQuantity
+                    { amount = "2", unit = "serving" }
+                    { amount = "3", unit = "g" }
+                    nutrients
+                    |> Expect.equal Nothing
         ]
 
 
