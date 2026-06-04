@@ -1,13 +1,78 @@
-module Api.Meals exposing (MealName, getMealName)
+module Api.Meals exposing
+    ( CreateMealComponentRequest
+    , CreateMealRequest
+    , Meal
+    , MealComponent
+    , MealListResponse
+    , MealName
+    , MealNutritionResponse
+    , createMeal
+    , createMealRequestEncoder
+    , deleteMeal
+    , getMeal
+    , getMealName
+    , getMealNutrients
+    , listMeals
+    , mealDecoder
+    , updateMeal
+    )
 
 import Api.Client as Client
+import Data.ItemRef as ItemRef exposing (ItemRef)
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
+import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Url.Builder as Builder
 
 
 type alias MealName =
     { id : String
     , name : String
+    }
+
+
+type alias Meal =
+    { id : String
+    , name : String
+    , notes : Maybe String
+    , totalQuantity : Maybe Quantity
+    , components : List MealComponent
+    , createdAt : String
+    , updatedAt : String
+    }
+
+
+type alias MealComponent =
+    { id : String
+    , item : ItemRef
+    , quantity : Quantity
+    }
+
+
+type alias MealListResponse =
+    { items : List Meal
+    }
+
+
+type alias CreateMealRequest =
+    { name : String
+    , notes : Maybe String
+    , totalQuantity : Maybe Quantity
+    , components : List CreateMealComponentRequest
+    }
+
+
+type alias CreateMealComponentRequest =
+    { item : ItemRef
+    , quantity : Quantity
+    }
+
+
+type alias MealNutritionResponse =
+    { mealId : String
+    , quantity : Quantity
+    , nutrients : List NutrientAmount
     }
 
 
@@ -19,8 +84,150 @@ getMealName id toMsg =
         toMsg
 
 
+listMeals : (Result Client.ApiError MealListResponse -> msg) -> Cmd msg
+listMeals toMsg =
+    Client.get
+        (Builder.absolute [ "api", "meals" ] [])
+        mealListDecoder
+        toMsg
+
+
+getMeal : String -> (Result Client.ApiError Meal -> msg) -> Cmd msg
+getMeal id toMsg =
+    Client.get
+        (Builder.absolute [ "api", "meals", id ] [])
+        mealDecoder
+        toMsg
+
+
+createMeal : CreateMealRequest -> (Result Client.ApiError Meal -> msg) -> Cmd msg
+createMeal request toMsg =
+    Client.post
+        (Builder.absolute [ "api", "meals" ] [])
+        (createMealRequestEncoder request)
+        mealDecoder
+        toMsg
+
+
+updateMeal : String -> CreateMealRequest -> (Result Client.ApiError Meal -> msg) -> Cmd msg
+updateMeal id request toMsg =
+    Client.put
+        (Builder.absolute [ "api", "meals", id ] [])
+        (createMealRequestEncoder request)
+        mealDecoder
+        toMsg
+
+
+deleteMeal : String -> (Result Client.ApiError () -> msg) -> Cmd msg
+deleteMeal id toMsg =
+    Client.delete
+        (Builder.absolute [ "api", "meals", id ] [])
+        toMsg
+
+
+getMealNutrients : String -> String -> String -> (Result Client.ApiError MealNutritionResponse -> msg) -> Cmd msg
+getMealNutrients id amount unit toMsg =
+    Client.get
+        (Builder.absolute
+            [ "api", "meals", id, "nutrients" ]
+            [ Builder.string "amount" amount
+            , Builder.string "unit" unit
+            ]
+        )
+        mealNutritionDecoder
+        toMsg
+
+
+createMealRequestEncoder : CreateMealRequest -> Encode.Value
+createMealRequestEncoder request =
+    Encode.object
+        [ ( "name", Encode.string request.name )
+        , ( "notes", maybeStringEncoder request.notes )
+        , ( "total_quantity", maybeQuantityEncoder request.totalQuantity )
+        , ( "components", Encode.list componentRequestEncoder request.components )
+        ]
+
+
+componentRequestEncoder : CreateMealComponentRequest -> Encode.Value
+componentRequestEncoder component =
+    Encode.object
+        [ ( "item", itemRefEncoder component.item )
+        , ( "quantity", quantityEncoder component.quantity )
+        ]
+
+
+itemRefEncoder : ItemRef -> Encode.Value
+itemRefEncoder item =
+    Encode.object
+        [ ( "type", Encode.string item.itemType )
+        , ( "id", Encode.string item.id )
+        ]
+
+
+quantityEncoder : Quantity -> Encode.Value
+quantityEncoder quantity =
+    Encode.object
+        [ ( "amount", Encode.string quantity.amount )
+        , ( "unit", Encode.string quantity.unit )
+        ]
+
+
+maybeQuantityEncoder : Maybe Quantity -> Encode.Value
+maybeQuantityEncoder maybeQuantity =
+    case maybeQuantity of
+        Just quantity ->
+            quantityEncoder quantity
+
+        Nothing ->
+            Encode.null
+
+
+maybeStringEncoder : Maybe String -> Encode.Value
+maybeStringEncoder maybeValue =
+    case maybeValue of
+        Just value ->
+            Encode.string value
+
+        Nothing ->
+            Encode.null
+
+
 decoder : Decoder MealName
 decoder =
     Decode.map2 MealName
         (Decode.field "id" Decode.string)
         (Decode.field "name" Decode.string)
+
+
+mealListDecoder : Decoder MealListResponse
+mealListDecoder =
+    Decode.map MealListResponse
+        (Decode.field "items" (Decode.list mealDecoder))
+
+
+mealDecoder : Decoder Meal
+mealDecoder =
+    Decode.map7 Meal
+        (Decode.field "id" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "notes" (Decode.nullable Decode.string))
+        (Decode.field "total_quantity" (Decode.nullable Quantity.decoder))
+        (Decode.field "components" (Decode.list mealComponentDecoder))
+        (Decode.field "created_at" Decode.string)
+        (Decode.field "updated_at" Decode.string)
+
+
+mealComponentDecoder : Decoder MealComponent
+mealComponentDecoder =
+    Decode.map3 MealComponent
+        (Decode.field "id" Decode.string)
+        (Decode.field "item" ItemRef.decoder)
+        (Decode.field "quantity" Quantity.decoder)
+
+
+mealNutritionDecoder : Decoder MealNutritionResponse
+mealNutritionDecoder =
+    Decode.map3 MealNutritionResponse
+        (Decode.field "meal_id" Decode.string)
+        (Decode.field "quantity" Quantity.decoder)
+        (Decode.field "nutrients" (Decode.list Nutrition.decoder))

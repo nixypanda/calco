@@ -33,24 +33,18 @@ tooling remains CLI/API driven.
 
 ## Current Status
 
-Last updated after the Phase 8 Elm food log detail/edit/delete implementation.
+Last updated after the Phase 12 Elm meal detail/logging implementation.
 
-Implemented through **Phase 8: Food Log Detail/Edit/Delete** in `frontend-web/`. The Elm app
-now has a real `Browser.application` shell, route parsing, access decisions,
-session bootstrap, login, first-time admin setup, logout, and admin user
-management flows, plus the real diary `/home` page with day navigation, grouped
-logs, daily summary macros/calories, item-name lookup, and diary navigation
-intents, and the real `/search` food search page with debounced searches,
-request-token stale response protection, empty/error/no-result states, result
-selection, custom-food create navigation, and `meal_slot` preservation through
-food-detail navigation. The real `/foods/:id` page now loads food details and
-units, initializes a product log form from product defaults, logs products with
-a browser-provided local timestamp, preserves optional meal slot/notes payload
-behavior, and exposes custom-food edit navigation for user-owned foods. The
-real `/logs/:id` page now loads existing logs, resolves product details or meal
-names, edits quantity/unit/meal slot/notes without timestamp or item swapping,
-and deletes logs. The React frontend in `frontend/` remains untouched and is
-still the behavioral reference for later phases.
+Implemented through **Phase 12: Meal Detail And Meal Logging** in
+`frontend-web/`. The Elm app now has a real `Browser.application` shell, route
+parsing, access decisions, session bootstrap, login, first-time admin setup,
+logout, and admin user management flows, plus the real diary `/home` page with
+day navigation, grouped logs, daily summary macros/calories, item-name lookup,
+and diary navigation intents. Food tracking routes now cover `/search`,
+`/foods/:id`, `/logs/:id`, custom food create/edit, meals list, meal create/edit,
+meal detail, meal nutrient preview, meal logging, and meal deletion. The React
+frontend in `frontend/` remains untouched and is still the behavioral reference
+for later phases.
 
 ### Completed
 
@@ -143,6 +137,50 @@ still the behavioral reference for later phases.
     `null`, update success replacement, update/delete failure preservation, and
     delete success navigation home.
   - Current frontend-web test count: `122`.
+- Phase 9 custom food create/edit:
+  - Added `src/Page/CustomFood/Form.elm`, `src/Page/CustomFood/Create.elm`, and
+    `src/Page/CustomFood/Edit.elm`.
+  - Extended `src/Api/Foods.elm` with nutrient catalog, custom-food create, and
+    custom-food update requests/encoders.
+  - Wired `/foods/custom/new` and `/foods/custom/:id/edit` in `Main.elm` to real
+    Elm pages instead of placeholder text.
+  - Supports one-row empty nutrient defaults, name validation, category
+    normalization/deduplication, incomplete nutrient/serving row filtering,
+    blank optional values as `null`, product-detail-to-form mapping for edits,
+    save success navigation to food detail, and save failure state preservation.
+- Phase 10 meals list:
+  - Added `src/Page/Meals.elm`.
+  - Extended `src/Api/Meals.elm` with meal list/detail DTOs and list requests.
+  - Wired `/meals` in `Main.elm` to the real Elm page instead of placeholder
+    text.
+  - Supports loading, empty state detection, load errors, open-meal navigation,
+    create-meal navigation, and back navigation home.
+- Phase 11 meal form:
+  - Added `src/Page/MealForm.elm`.
+  - Extended `src/Api/Meals.elm` with create/update meal request encoding and
+    create/update requests.
+  - Wired `/meals/new` and `/meals/:id/edit` in `Main.elm` to the real Elm form
+    page instead of placeholder text.
+  - Supports create and edit modes, product-only component rows, product-name
+    hydration for edit rows, per-row product search with request-token stale
+    response protection, component add/remove, name and selected-product
+    validation, optional total quantity encoding, default component quantity
+    `100 g`, save success navigation to meal detail, and save failure state
+    preservation.
+- Phase 12 meal detail and meal logging:
+  - Added `src/Page/MealDetail.elm`.
+  - Extended `src/Api/Meals.elm` with delete and nutrient-preview requests.
+  - Wired `/meals/:id` in `Main.elm` to the real Elm page instead of placeholder
+    text.
+  - Reused `Api.Logs.createLog` and the browser local timestamp port for meal
+    logging.
+  - Supports meal/component loading, unique product-name resolution, unit
+    loading, amount/unit nutrient preview with request-token stale response
+    protection, invalid amount clearing, meal log payloads using
+    `item.type = "meal"`, log success navigation home, log failure state
+    preservation, delete confirmation open/close, delete success navigation to
+    meals, delete failure preservation, and edit navigation.
+  - Current frontend-web test count: `152`.
 - UI/dev workflow:
   - Added a small `src/Ui.elm` vocabulary using `mdgriffith/elm-ui`.
   - Added `frontend-web/dev-server.mjs` for local static serving plus `/api`
@@ -158,25 +196,29 @@ still the behavioral reference for later phases.
 ### Verified
 
 ```bash
-just frontend-web-review
-just frontend-web-test
-just frontend-web-build
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-build
 ```
 
-All three passed at the Phase 8 stop point.
+Both passed at the Phase 12 stop point. `just frontend-web-build` and
+`just frontend-web-test` require the Nix dev shell on machines where `elm` and
+`elm-test` are not installed directly.
 
 ### Notes For The Next Phase
 
-- The app intentionally stops after food log detail/edit/delete. Custom
-  food/meal routes still render placeholder text.
+- The app intentionally stops after meal detail/logging. Shared helper
+  extraction, browser theme/local-storage ports, and the broader Elm UI layer
+  remain for later phases.
 - `Api.Foods` now exposes diary product-name lookup, food search, food detail,
-  and units. Later phases should add nutrient catalog and custom-food create/edit
-  calls as those pages need them.
+  units, nutrients, and custom-food create/update support.
+- `Api.Meals` now exposes meal name lookup, list/detail, create/update/delete,
+  and nutrient preview support.
 - `Api.Logs` now exposes diary list/summary, create-log, and log
-  get/update/delete. Later meal logging should reuse the same create-log support.
-- `Data.FoodLog`, `Data.LocalDate`, and `Data.Nutrition` now contain the helpers
-  needed for diary behavior. Meal, nutrient catalog, and custom-food form data
-  helpers are still pending.
+  get/update/delete. Product and meal logging both reuse the same create-log
+  support.
+- `Data.FoodLog`, `Data.LocalDate`, and `Data.Nutrition` contain the shared data
+  helpers currently needed by the migrated pages. Phase 13 should decide which
+  page-local helpers are worth promoting to shared pure modules.
 - `frontend-web/dev-server.mjs` is deliberately minimal. A future pass can
   replace it with Vite or another standard dev server if the Elm app gets an npm
   toolchain.

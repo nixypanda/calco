@@ -1,5 +1,9 @@
 module Api.Foods exposing
-    ( NutrientEntry
+    ( CreateFoodRequest
+    , CreateFoodResponse
+    , NutrientEntry
+    , NutrientItem
+    , NutrientListResponse
     , ProductDetail
     , ProductName
     , SearchRequest
@@ -8,18 +12,23 @@ module Api.Foods exposing
     , ServingEntry
     , UnitItem
     , UnitListResponse
+    , createCustomFood
+    , createFoodRequestEncoder
     , getFoodDetail
     , getProductName
+    , listNutrients
     , listUnits
     , productDetailDecoder
     , searchFoods
     , searchPath
     , searchResponseDecoder
     , unitListResponseDecoder
+    , updateCustomFood
     )
 
 import Api.Client as Client
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 import Url.Builder as Builder
 
 
@@ -76,6 +85,50 @@ type alias UnitListResponse =
     }
 
 
+type alias NutrientItem =
+    { code : String
+    , name : String
+    , unit : String
+    , category : String
+    }
+
+
+type alias NutrientListResponse =
+    { items : List NutrientItem
+    }
+
+
+type alias CreateFoodRequest =
+    { name : String
+    , brand : Maybe String
+    , categories : List String
+    , servingSizeG : Maybe String
+    , defaultQuantity : Maybe String
+    , defaultUnit : Maybe String
+    , nutrients : List CreateFoodNutrientRequest
+    , servings : List CreateFoodServingRequest
+    }
+
+
+type alias CreateFoodNutrientRequest =
+    { code : String
+    , amountPer100g : String
+    }
+
+
+type alias CreateFoodServingRequest =
+    { label : String
+    , quantity : String
+    , unit : String
+    , grams : String
+    }
+
+
+type alias CreateFoodResponse =
+    { id : String
+    }
+
+
 type alias SearchRequest =
     { query : String
     }
@@ -124,6 +177,14 @@ listUnits toMsg =
         toMsg
 
 
+listNutrients : (Result Client.ApiError NutrientListResponse -> msg) -> Cmd msg
+listNutrients toMsg =
+    Client.get
+        (Builder.absolute [ "api", "nutrients" ] [])
+        nutrientListResponseDecoder
+        toMsg
+
+
 searchFoods : SearchRequest -> (Result Client.ApiError SearchResponse -> msg) -> Cmd msg
 searchFoods request toMsg =
     Client.get
@@ -132,10 +193,70 @@ searchFoods request toMsg =
         toMsg
 
 
+createCustomFood : CreateFoodRequest -> (Result Client.ApiError CreateFoodResponse -> msg) -> Cmd msg
+createCustomFood request toMsg =
+    Client.post
+        (Builder.absolute [ "api", "foods", "custom" ] [])
+        (createFoodRequestEncoder request)
+        createFoodResponseDecoder
+        toMsg
+
+
+updateCustomFood : String -> CreateFoodRequest -> (Result Client.ApiError CreateFoodResponse -> msg) -> Cmd msg
+updateCustomFood id request toMsg =
+    Client.put
+        (Builder.absolute [ "api", "foods", "custom", id ] [])
+        (createFoodRequestEncoder request)
+        createFoodResponseDecoder
+        toMsg
+
+
 searchPath : SearchRequest -> String
 searchPath request =
     Builder.absolute [ "api", "foods", "search" ]
         [ Builder.string "q" request.query ]
+
+
+createFoodRequestEncoder : CreateFoodRequest -> Encode.Value
+createFoodRequestEncoder request =
+    Encode.object
+        [ ( "name", Encode.string request.name )
+        , ( "brand", maybeStringEncoder request.brand )
+        , ( "categories", Encode.list Encode.string request.categories )
+        , ( "serving_size_g", maybeStringEncoder request.servingSizeG )
+        , ( "default_quantity", maybeStringEncoder request.defaultQuantity )
+        , ( "default_unit", maybeStringEncoder request.defaultUnit )
+        , ( "nutrients", Encode.list nutrientRequestEncoder request.nutrients )
+        , ( "servings", Encode.list servingRequestEncoder request.servings )
+        ]
+
+
+nutrientRequestEncoder : CreateFoodNutrientRequest -> Encode.Value
+nutrientRequestEncoder nutrient =
+    Encode.object
+        [ ( "code", Encode.string nutrient.code )
+        , ( "amount_per_100g", Encode.string nutrient.amountPer100g )
+        ]
+
+
+servingRequestEncoder : CreateFoodServingRequest -> Encode.Value
+servingRequestEncoder serving =
+    Encode.object
+        [ ( "label", Encode.string serving.label )
+        , ( "quantity", Encode.string serving.quantity )
+        , ( "unit", Encode.string serving.unit )
+        , ( "grams", Encode.string serving.grams )
+        ]
+
+
+maybeStringEncoder : Maybe String -> Encode.Value
+maybeStringEncoder maybeValue =
+    case maybeValue of
+        Just value ->
+            Encode.string value
+
+        Nothing ->
+            Encode.null
 
 
 decoder : Decoder ProductName
@@ -193,6 +314,27 @@ unitListResponseDecoder : Decoder UnitListResponse
 unitListResponseDecoder =
     Decode.map UnitListResponse
         (Decode.field "items" (Decode.list unitItemDecoder))
+
+
+nutrientListResponseDecoder : Decoder NutrientListResponse
+nutrientListResponseDecoder =
+    Decode.map NutrientListResponse
+        (Decode.field "items" (Decode.list nutrientItemDecoder))
+
+
+nutrientItemDecoder : Decoder NutrientItem
+nutrientItemDecoder =
+    Decode.map4 NutrientItem
+        (Decode.field "code" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.field "unit" Decode.string)
+        (Decode.field "category" Decode.string)
+
+
+createFoodResponseDecoder : Decoder CreateFoodResponse
+createFoodResponseDecoder =
+    Decode.map CreateFoodResponse
+        (Decode.field "id" Decode.string)
 
 
 unitItemDecoder : Decoder UnitItem
