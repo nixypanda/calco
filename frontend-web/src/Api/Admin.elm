@@ -1,4 +1,4 @@
-module Api.Admin exposing (createUser, disableUser, enableUser, listUsers, resetPassword)
+module Api.Admin exposing (createUser, disableUser, enableUser, getUser, listUsers, resetPassword)
 
 import Api.Client as Client
 import Data.Auth as Auth
@@ -8,6 +8,11 @@ import Data.User as User
 listUsers : (Result Client.ApiError (List User.User) -> msg) -> Cmd msg
 listUsers toMsg =
     Client.get "/api/admin/users" User.listUsersDecoder toMsg
+
+
+getUser : String -> (Result Client.ApiError User.User -> msg) -> Cmd msg
+getUser userId toMsg =
+    Client.get ("/api/admin/users/" ++ userId) User.userDecoder toMsg
 
 
 createUser : User.CreateUserRequest -> (Result Client.ApiError Auth.LoginSession -> msg) -> Cmd msg

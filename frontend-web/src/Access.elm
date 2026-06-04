@@ -27,6 +27,9 @@ resolveRoute session adminExists route =
             AdminCreateUser ->
                 Render AdminCreateUser
 
+            AdminEditUser _ ->
+                Render route
+
             _ ->
                 Navigate AdminDashboard
 
@@ -56,6 +59,9 @@ resolveRoute session adminExists route =
                 Navigate (Diary Nothing)
 
             AdminCreateUser ->
+                Navigate (Diary Nothing)
+
+            AdminEditUser _ ->
                 Navigate (Diary Nothing)
 
             Diary _ ->

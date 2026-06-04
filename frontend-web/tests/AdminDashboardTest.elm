@@ -1,6 +1,6 @@
 module AdminDashboardTest exposing (tests)
 
-import Api.Client as Client
+import Data.Route exposing (Route(..))
 import Data.User as User
 import Expect
 import Lib.Loadable exposing (Loadable(..))
@@ -29,34 +29,18 @@ tests =
                     |> firstOfThree
                     |> .users
                     |> Expect.equal (Success [ user ])
-        , test "reset password payload uses selected user" <|
-            \_ ->
-                { initialModel | resetForm = Just { userId = "u1", password = "new-password" } }
-                    |> Admin.resetPasswordPayload
-                    |> Expect.equal (Ok ( "u1", { newPassword = "new-password" } ))
-        , test "reset success clears reset form" <|
-            \_ ->
-                { initialModel | resetForm = Just { userId = "u1", password = "new-password" } }
-                    |> Admin.update (Admin.ResetCompleted (Ok ()))
-                    |> firstOfThree
-                    |> .resetForm
-                    |> Expect.equal Nothing
-        , test "disable success requests reload" <|
+        , test "EditClicked navigates to AdminEditUser" <|
             \_ ->
                 initialModel
-                    |> Admin.update (Admin.DisableCompleted (Ok ()))
+                    |> Admin.update (Admin.EditClicked "u1")
                     |> thirdOfThree
-                    |> Expect.equal Admin.RequestUsers
-        , test "enable failure preserves users and stores error" <|
+                    |> Expect.equal (Admin.Navigate (AdminEditUser "u1"))
+        , test "NavigateCreateUser navigates to AdminCreateUser" <|
             \_ ->
-                { initialModel | users = Success [ user ] }
-                    |> Admin.update
-                        (Admin.EnableCompleted
-                            (Err (Client.BadStatus 500 "boom" "Failed"))
-                        )
-                    |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal (Just "boom: Failed")
+                initialModel
+                    |> Admin.update Admin.NavigateCreateUser
+                    |> thirdOfThree
+                    |> Expect.equal (Admin.Navigate AdminCreateUser)
         ]
 
 

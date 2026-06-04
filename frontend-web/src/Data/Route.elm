@@ -16,6 +16,7 @@ type Route
     | Login
     | AdminDashboard
     | AdminCreateUser
+    | AdminEditUser String
     | Diary (Maybe String)
     | FoodLogDetail String
     | FoodSearch (Maybe MealSlot)
@@ -43,6 +44,7 @@ routeParser =
         , Parser.map Login (s "login")
         , Parser.map AdminDashboard (s "admin")
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
+        , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
         , Parser.map Diary (s "home" <?> Query.string "date")
         , Parser.map FoodLogDetail (s "logs" </> string)
         , Parser.map FoodSearch (s "search" <?> mealSlotQuery)
@@ -79,6 +81,9 @@ routeToPath route =
 
         AdminCreateUser ->
             "/admin/users/new"
+
+        AdminEditUser id ->
+            "/admin/users/" ++ id ++ "/edit"
 
         Diary maybeDate ->
             case maybeDate of

@@ -5,6 +5,7 @@ module Data.User exposing
     , createUserEncoder
     , listUsersDecoder
     , resetPasswordEncoder
+    , userDecoder
     )
 
 import Json.Decode as Decode exposing (Decoder)

@@ -23,6 +23,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Admin.BootstrapSetup as Setup
 import Page.Admin.CreateUser as AdminCreateUser
 import Page.Admin.Dashboard as AdminDashboard
+import Page.Admin.EditUser as AdminEditUser
 import Page.Auth.Login as Login
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -65,6 +66,7 @@ type PageModel
     | SetupPage Setup.Model
     | AdminPage AdminDashboard.Model
     | AdminCreateUserPage AdminCreateUser.Model
+    | AdminEditUserPage AdminEditUser.Model
     | DiaryPage Diary.Model
     | FoodSearchPage FoodSearch.Model
     | FoodDetailPage FoodDetail.Model
@@ -95,6 +97,7 @@ type Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
     | GotAdminCreateUserMsg AdminCreateUser.Msg
+    | GotAdminEditUserMsg AdminEditUser.Msg
     | GotDiaryMsg Diary.Msg
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodDetail.Msg
@@ -326,6 +329,27 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotAdminEditUserMsg subMsg ->
+            case model.page of
+                AdminEditUserPage subModel ->
+                    let
+                        ( newSubModel, subCmd, outMsg ) =
+                            AdminEditUser.update subMsg subModel
+
+                        nextModel : Model
+                        nextModel =
+                            { model | page = AdminEditUserPage newSubModel }
+
+                        ( finalModel, outCmd ) =
+                            applyAdminEditUserOutMsg outMsg nextModel
+                    in
+                    ( finalModel
+                    , Cmd.batch [ Cmd.map GotAdminEditUserMsg subCmd, outCmd ]
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         GotFoodSearchMsg subMsg ->
             case model.page of
                 FoodSearchPage subModel ->
@@ -440,6 +464,17 @@ loadPage route model =
                     applyAdminCreateUserOutMsg
                         outMsg
                         { model | page = AdminCreateUserPage createUserModel }
+            in
+            ( nextModel, outCmd )
+
+        AdminEditUser userId ->
+            let
+                ( editUserModel, outMsg ) =
+                    AdminEditUser.init userId
+
+                ( nextModel, outCmd ) =
+                    applyAdminEditUserOutMsg outMsg
+                        { model | page = AdminEditUserPage editUserModel }
             in
             ( nextModel, outCmd )
 
@@ -599,20 +634,6 @@ applyAdminOutMsg outMsg model =
         AdminDashboard.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
-        AdminDashboard.RequestResetPassword userId request ->
-            ( model
-            , Api.Admin.resetPassword
-                userId
-                request
-                (GotAdminMsg << AdminDashboard.ResetCompleted)
-            )
-
-        AdminDashboard.RequestDisableUser userId ->
-            ( model, Api.Admin.disableUser userId (GotAdminMsg << AdminDashboard.DisableCompleted) )
-
-        AdminDashboard.RequestEnableUser userId ->
-            ( model, Api.Admin.enableUser userId (GotAdminMsg << AdminDashboard.EnableCompleted) )
-
         AdminDashboard.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
@@ -632,6 +653,40 @@ applyAdminCreateUserOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
 
         AdminCreateUser.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+applyAdminEditUserOutMsg : AdminEditUser.OutMsg -> Model -> ( Model, Cmd Msg )
+applyAdminEditUserOutMsg outMsg model =
+    case outMsg of
+        AdminEditUser.NoOp ->
+            ( model, Cmd.none )
+
+        AdminEditUser.RequestUser userId ->
+            ( model, Api.Admin.getUser userId (GotAdminEditUserMsg << AdminEditUser.UserLoaded) )
+
+        AdminEditUser.RequestResetPassword userId request ->
+            ( model
+            , Api.Admin.resetPassword
+                userId
+                request
+                (GotAdminEditUserMsg << AdminEditUser.ResetCompleted)
+            )
+
+        AdminEditUser.RequestDisableUser userId ->
+            ( model
+            , Api.Admin.disableUser userId (GotAdminEditUserMsg << AdminEditUser.DisableCompleted)
+            )
+
+        AdminEditUser.RequestEnableUser userId ->
+            ( model
+            , Api.Admin.enableUser userId (GotAdminEditUserMsg << AdminEditUser.EnableCompleted)
+            )
+
+        AdminEditUser.UpdateSucceeded ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
+
+        AdminEditUser.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -1287,6 +1342,9 @@ screenMeta route =
         AdminCreateUser ->
             { title = "Create User", leading = GoBack AdminDashboard }
 
+        AdminEditUser _ ->
+            { title = "Edit User", leading = GoBack AdminDashboard }
+
         FoodSearch maybeSlot ->
             { title =
                 case maybeSlot of
@@ -1432,6 +1490,9 @@ primaryRoute route =
         AdminCreateUser ->
             AdminDashboard
 
+        AdminEditUser _ ->
+            AdminDashboard
+
         MealCreate ->
             Meals
 
@@ -1519,6 +1580,9 @@ pageView model =
 
         AdminCreateUserPage createUserModel ->
             Element.map GotAdminCreateUserMsg (AdminCreateUser.view createUserModel)
+
+        AdminEditUserPage editUserModel ->
+            Element.map GotAdminEditUserMsg (AdminEditUser.view editUserModel)
 
         DiaryPage diaryModel ->
             Element.map GotDiaryMsg (Diary.view diaryModel)
