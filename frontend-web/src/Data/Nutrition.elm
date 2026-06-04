@@ -18,6 +18,7 @@ module Data.Nutrition exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Lib.Number as Number
 
 
 type alias NutrientAmount =
@@ -221,20 +222,7 @@ scaleNutrients factor nutrients =
 
 oneDecimal : Float -> String
 oneDecimal value =
-    let
-        scaled : Int
-        scaled =
-            round (value * 10)
-
-        whole : Int
-        whole =
-            scaled // 10
-
-        decimal : Int
-        decimal =
-            abs (modBy 10 scaled)
-    in
-    String.fromInt whole ++ "." ++ String.fromInt decimal
+    Number.toFixed 1 value
 
 
 positiveAmount : String -> Maybe Float

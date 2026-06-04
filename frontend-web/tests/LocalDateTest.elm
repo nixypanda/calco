@@ -1,7 +1,7 @@
 module LocalDateTest exposing (tests)
 
-import Data.LocalDate as LocalDate
 import Expect
+import Lib.Date as LocalDate
 import Test exposing (Test, describe, test)
 
 
@@ -33,9 +33,4 @@ tests =
                     (LocalDate.fromString "2026-06-04")
                     |> Maybe.andThen identity
                     |> Expect.equal Nothing
-        , test "produces stable diary route query strings" <|
-            \_ ->
-                LocalDate.fromString "2026-06-04"
-                    |> Maybe.map LocalDate.routeQuery
-                    |> Expect.equal (Just "date=2026-06-04")
         ]

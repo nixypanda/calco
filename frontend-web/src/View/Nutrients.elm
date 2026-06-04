@@ -5,6 +5,7 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import Lib.Number as Number
 import Ui
 
 
@@ -212,47 +213,7 @@ formatAmount : String -> String
 formatAmount raw =
     case String.toFloat raw of
         Just value ->
-            toFixed3 value
+            Number.toFixedTrimmed 3 value
 
         Nothing ->
             raw
-
-
-toFixed3 : Float -> String
-toFixed3 value =
-    let
-        scaled : Int
-        scaled =
-            round (value * 1000)
-
-        whole : Int
-        whole =
-            scaled // 1000
-
-        fractional : Int
-        fractional =
-            abs (modBy 1000 scaled)
-    in
-    if fractional == 0 then
-        String.fromInt whole
-
-    else
-        let
-            padded : String
-            padded =
-                String.padLeft 3 '0' (String.fromInt fractional)
-
-            trimmed : String
-            trimmed =
-                stripTrailing '0' padded
-        in
-        String.fromInt whole ++ "." ++ trimmed
-
-
-stripTrailing : Char -> String -> String
-stripTrailing c s =
-    if String.endsWith (String.fromChar c) s then
-        stripTrailing c (String.dropRight 1 s)
-
-    else
-        s

@@ -10,7 +10,7 @@ module Data.FoodLog exposing
     )
 
 import Data.ItemRef as ItemRef exposing (ItemRef)
-import Data.LocalDate as LocalDate exposing (LocalDate)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)

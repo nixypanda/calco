@@ -14,9 +14,10 @@ module Api.Logs exposing
 import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
 import Data.ItemRef exposing (ItemRef)
-import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.Quantity exposing (Quantity)
 import Json.Encode as Encode
+import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Json as Json
 import Url.Builder as Builder
 
 
@@ -106,8 +107,8 @@ updateLogRequestEncoder : UpdateLogRequest -> Encode.Value
 updateLogRequestEncoder request =
     Encode.object
         [ ( "quantity", quantityEncoder request.quantity )
-        , ( "meal_slot", maybeStringEncoder request.mealSlot )
-        , ( "notes", maybeStringEncoder request.notes )
+        , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
+        , ( "notes", Json.maybe Encode.string request.notes )
         ]
 
 
@@ -116,7 +117,7 @@ baseLogFields request =
     [ ( "logged_at", Encode.string request.loggedAt )
     , ( "item", itemRefEncoder request.item )
     , ( "quantity", quantityEncoder request.quantity )
-    , ( "notes", maybeStringEncoder request.notes )
+    , ( "notes", Json.maybe Encode.string request.notes )
     ]
 
 
@@ -144,13 +145,3 @@ quantityEncoder quantity =
         [ ( "amount", Encode.string quantity.amount )
         , ( "unit", Encode.string quantity.unit )
         ]
-
-
-maybeStringEncoder : Maybe String -> Encode.Value
-maybeStringEncoder maybeValue =
-    case maybeValue of
-        Just value ->
-            Encode.string value
-
-        Nothing ->
-            Encode.null

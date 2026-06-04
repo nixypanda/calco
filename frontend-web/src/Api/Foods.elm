@@ -36,6 +36,7 @@ module Api.Foods exposing
 import Api.Client as Client
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Lib.Json as Json
 import Url.Builder as Builder
 
 
@@ -271,11 +272,11 @@ createFoodRequestEncoder : CreateFoodRequest -> Encode.Value
 createFoodRequestEncoder request =
     Encode.object
         [ ( "name", Encode.string request.name )
-        , ( "brand", maybeStringEncoder request.brand )
+        , ( "brand", Json.maybe Encode.string request.brand )
         , ( "categories", Encode.list Encode.string request.categories )
-        , ( "serving_size_g", maybeStringEncoder request.servingSizeG )
-        , ( "default_quantity", maybeStringEncoder request.defaultQuantity )
-        , ( "default_unit", maybeStringEncoder request.defaultUnit )
+        , ( "serving_size_g", Json.maybe Encode.string request.servingSizeG )
+        , ( "default_quantity", Json.maybe Encode.string request.defaultQuantity )
+        , ( "default_unit", Json.maybe Encode.string request.defaultUnit )
         , ( "nutrients", Encode.list nutrientRequestEncoder request.nutrients )
         , ( "servings", Encode.list servingRequestEncoder request.servings )
         ]
@@ -297,16 +298,6 @@ servingRequestEncoder serving =
         , ( "unit", Encode.string serving.unit )
         , ( "grams", Encode.string serving.grams )
         ]
-
-
-maybeStringEncoder : Maybe String -> Encode.Value
-maybeStringEncoder maybeValue =
-    case maybeValue of
-        Just value ->
-            Encode.string value
-
-        Nothing ->
-            Encode.null
 
 
 decoder : Decoder ProductName
@@ -339,12 +330,12 @@ productDetailDecoder =
         (Decode.field "name" Decode.string)
         (Decode.field "brand" (Decode.nullable Decode.string))
         (Decode.field "categories" (Decode.list Decode.string))
-        |> andMap (Decode.field "default_quantity" (Decode.nullable Decode.string))
-        |> andMap (Decode.field "default_unit" (Decode.nullable Decode.string))
-        |> andMap (Decode.field "serving_size_g" (Decode.nullable Decode.string))
-        |> andMap (Decode.field "nutrients" (Decode.list nutrientEntryDecoder))
-        |> andMap (Decode.field "servings" (Decode.list servingEntryDecoder))
-        |> andMap (Decode.field "allowed_units" (Decode.list unitItemDecoder))
+        |> Json.andMap (Decode.field "default_quantity" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "default_unit" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "serving_size_g" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "nutrients" (Decode.list nutrientEntryDecoder))
+        |> Json.andMap (Decode.field "servings" (Decode.list servingEntryDecoder))
+        |> Json.andMap (Decode.field "allowed_units" (Decode.list unitItemDecoder))
 
 
 nutrientEntryDecoder : Decoder NutrientEntry
@@ -412,8 +403,8 @@ searchResultDecoder =
         (Decode.field "brand" (Decode.nullable Decode.string))
         (Decode.field "categories" (Decode.list Decode.string))
         (Decode.field "serving_size_g" (Decode.nullable Decode.string))
-        |> andMap (Decode.field "energy_kcal_per_100g" (Decode.nullable Decode.string))
-        |> andMap (Decode.field "energy_kcal_per_serving" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "energy_kcal_per_100g" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "energy_kcal_per_serving" (Decode.nullable Decode.string))
 
 
 categorySuggestionDecoder : Decoder CategorySuggestion
@@ -421,8 +412,3 @@ categorySuggestionDecoder =
     Decode.map2 CategorySuggestion
         (Decode.field "value" Decode.string)
         (Decode.field "count" Decode.int)
-
-
-andMap : Decoder value -> Decoder (value -> result) -> Decoder result
-andMap valueDecoder functionDecoder =
-    Decode.map2 (<|) functionDecoder valueDecoder

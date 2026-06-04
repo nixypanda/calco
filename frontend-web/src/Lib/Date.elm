@@ -1,4 +1,4 @@
-module Data.LocalDate exposing
+module Lib.Date exposing
     ( LocalDate
     , addDays
     , compare
@@ -8,7 +8,6 @@ module Data.LocalDate exposing
     , fromPosix
     , fromString
     , nextOnOrBefore
-    , routeQuery
     )
 
 import Char
@@ -96,11 +95,6 @@ nextOnOrBefore today current =
 
         _ ->
             Just next
-
-
-routeQuery : LocalDate -> String
-routeQuery date =
-    "date=" ++ format date
 
 
 nextDay : LocalDate -> LocalDate

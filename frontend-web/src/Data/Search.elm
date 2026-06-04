@@ -6,6 +6,8 @@ module Data.Search exposing
     , completions
     )
 
+import Lib.Text as Text
+
 
 type Completion
     = OperatorCompletion String
@@ -125,74 +127,14 @@ tokens query =
 
 tokensWithSeparators : String -> List String
 tokensWithSeparators query =
-    query
-        |> String.toList
-        |> List.foldl tokenStep { current = "", parts = [], inQuotes = False }
-        |> finishTokens
-
-
-type alias TokenState =
-    { current : String
-    , parts : List String
-    , inQuotes : Bool
-    }
-
-
-tokenStep : Char -> TokenState -> TokenState
-tokenStep char state =
-    if char == '"' then
-        { state | current = state.current ++ String.fromChar char, inQuotes = not state.inQuotes }
-
-    else if isWhitespace char && not state.inQuotes then
-        { state
-            | current = ""
-            , parts = String.fromChar char :: state.current :: state.parts
-        }
-
-    else
-        { state | current = state.current ++ String.fromChar char }
-
-
-finishTokens : TokenState -> List String
-finishTokens state =
-    List.reverse (state.current :: state.parts)
+    Text.splitQuotedWhitespace query
 
 
 stripCategoryValue : String -> String
 stripCategoryValue value =
-    value
-        |> String.trim
-        |> trimLeadingQuote
-        |> trimTrailingQuote
-
-
-trimLeadingQuote : String -> String
-trimLeadingQuote value =
-    if String.startsWith "\"" value then
-        String.dropLeft 1 value
-
-    else
-        value
-
-
-trimTrailingQuote : String -> String
-trimTrailingQuote value =
-    if String.endsWith "\"" value then
-        String.dropRight 1 value
-
-    else
-        value
+    Text.stripBoundingQuotes value
 
 
 quoteCategory : String -> String
 quoteCategory value =
-    if String.any isWhitespace value then
-        "\"" ++ value ++ "\""
-
-    else
-        value
-
-
-isWhitespace : Char -> Bool
-isWhitespace char =
-    List.member char [ ' ', '\n', '\t', '\u{000D}' ]
+    Text.quoteIfWhitespace value

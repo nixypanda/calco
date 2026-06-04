@@ -20,4 +20,16 @@ tests =
             \_ ->
                 Text.trimOrDefault "g" " "
                     |> Expect.equal "g"
+        , test "commaSeparatedUniqueLower trims lowercases and deduplicates" <|
+            \_ ->
+                Text.commaSeparatedUniqueLower " Fruit, snack, fruit , SNACK "
+                    |> Expect.equal [ "fruit", "snack" ]
+        , test "splitQuotedWhitespace preserves spaces inside quotes" <|
+            \_ ->
+                Text.splitQuotedWhitespace "apple  category:\"food and"
+                    |> Expect.equal [ "apple", " ", "", " ", "category:\"food and" ]
+        , test "quoteIfWhitespace wraps values containing whitespace" <|
+            \_ ->
+                Text.quoteIfWhitespace "food and beverages"
+                    |> Expect.equal "\"food and beverages\""
         ]

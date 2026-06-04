@@ -16,7 +16,6 @@ import Api.Client as Client
 import Api.Result as ApiResult
 import Data.FoodLog as FoodLog exposing (FoodLog, GroupedLogs, SummaryResponse)
 import Data.ItemRef as ItemRef exposing (ItemRef)
-import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -26,6 +25,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Lib.Date as LocalDate exposing (LocalDate)
 import Ui
 
 

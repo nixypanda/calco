@@ -11,7 +11,7 @@ import Browser
 import Browser.Navigation as Nav
 import Data.Auth as Auth
 import Data.ItemRef exposing (ItemRef)
-import Data.LocalDate as LocalDate exposing (LocalDate)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..))
 import Data.Units as Units

@@ -21,6 +21,7 @@ import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Lib.Json as Json
 import Url.Builder as Builder
 
 
@@ -145,8 +146,8 @@ createMealRequestEncoder : CreateMealRequest -> Encode.Value
 createMealRequestEncoder request =
     Encode.object
         [ ( "name", Encode.string request.name )
-        , ( "notes", maybeStringEncoder request.notes )
-        , ( "total_quantity", maybeQuantityEncoder request.totalQuantity )
+        , ( "notes", Json.maybe Encode.string request.notes )
+        , ( "total_quantity", Json.maybe quantityEncoder request.totalQuantity )
         , ( "components", Encode.list componentRequestEncoder request.components )
         ]
 
@@ -173,26 +174,6 @@ quantityEncoder quantity =
         [ ( "amount", Encode.string quantity.amount )
         , ( "unit", Encode.string quantity.unit )
         ]
-
-
-maybeQuantityEncoder : Maybe Quantity -> Encode.Value
-maybeQuantityEncoder maybeQuantity =
-    case maybeQuantity of
-        Just quantity ->
-            quantityEncoder quantity
-
-        Nothing ->
-            Encode.null
-
-
-maybeStringEncoder : Maybe String -> Encode.Value
-maybeStringEncoder maybeValue =
-    case maybeValue of
-        Just value ->
-            Encode.string value
-
-        Nothing ->
-            Encode.null
 
 
 decoder : Decoder MealName

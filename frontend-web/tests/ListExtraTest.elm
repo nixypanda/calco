@@ -16,4 +16,15 @@ tests =
             \_ ->
                 ListExtra.removeAt 1 [ "a", "b", "c" ]
                     |> Expect.equal [ "a", "c" ]
+        , test "uniqueBy keeps first item for each key in input order" <|
+            \_ ->
+                [ { id = "a", value = 1 }
+                , { id = "b", value = 2 }
+                , { id = "a", value = 3 }
+                ]
+                    |> ListExtra.uniqueBy .id
+                    |> Expect.equal
+                        [ { id = "a", value = 1 }
+                        , { id = "b", value = 2 }
+                        ]
         ]

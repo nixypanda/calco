@@ -3,13 +3,13 @@ module DiaryTest exposing (tests)
 import Api.Client as Client
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemRef)
-import Data.LocalDate as LocalDate exposing (LocalDate)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
 import Data.Route exposing (Route(..))
 import Dict
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Diary.Index as Diary
 import Test exposing (Test, describe, test)
 

@@ -1,6 +1,7 @@
 module Data.ItemRef exposing (ItemRef, decoder, fallbackName, key, unique)
 
 import Json.Decode as Decode exposing (Decoder)
+import Lib.ListExtra as ListExtra
 
 
 type alias ItemRef =
@@ -33,19 +34,6 @@ fallbackName item =
 
 unique : List { a | item : ItemRef } -> List ItemRef
 unique items =
-    uniqueHelp [] items
-        |> List.reverse
-
-
-uniqueHelp : List ItemRef -> List { a | item : ItemRef } -> List ItemRef
-uniqueHelp seen items =
-    case items of
-        [] ->
-            seen
-
-        current :: rest ->
-            if List.any (\item -> key item == key current.item) seen then
-                uniqueHelp seen rest
-
-            else
-                uniqueHelp (current.item :: seen) rest
+    items
+        |> List.map .item
+        |> ListExtra.uniqueBy key
