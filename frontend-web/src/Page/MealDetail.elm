@@ -560,7 +560,13 @@ logFormView model =
                 Element.none
         , case model.logForm.nutrients of
             Just nutrients ->
-                View.Nutrients.nutrientsTable nutrients
+                Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                    [ View.Nutrients.nutrientsTable nutrients
+                    , Ui.card
+                        [ Ui.sectionHeader "Macro Breakdown"
+                        , View.Nutrients.macroBreakdownView nutrients
+                        ]
+                    ]
 
             Nothing ->
                 Element.none

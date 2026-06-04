@@ -293,58 +293,16 @@ loadedView model log units form =
                 )
                 DeleteClicked
             ]
-        , Ui.sectionHeader "Macro Breakdown"
-        , macroBreakdownView log
+        , Ui.card
+            [ Ui.sectionHeader "Macro Breakdown"
+            , View.Nutrients.macroBreakdownView log.nutrients
+            ]
         , case model.food of
             Just food ->
                 View.Nutrients.nutrientsTable (foodNutrientsForDisplay food)
 
             Nothing ->
                 Element.none
-        ]
-
-
-macroBreakdownView : FoodLog -> Element Msg
-macroBreakdownView log =
-    let
-        protein : Float
-        protein =
-            Nutrition.nutrientAmount "PROTEIN_G" log.nutrients
-
-        carbs : Float
-        carbs =
-            Nutrition.nutrientAmount "CARBS_G" log.nutrients
-
-        fat : Float
-        fat =
-            Nutrition.nutrientAmount "FAT_G" log.nutrients
-
-        total : Float
-        total =
-            protein + carbs + fat
-    in
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
-        [ Ui.macroBar
-            { label = "Protein"
-            , value = protein
-            , unit = "g"
-            , color = Ui.proteinColor
-            , max = total
-            }
-        , Ui.macroBar
-            { label = "Carbs"
-            , value = carbs
-            , unit = "g"
-            , color = Ui.carbsColor
-            , max = total
-            }
-        , Ui.macroBar
-            { label = "Fat"
-            , value = fat
-            , unit = "g"
-            , color = Ui.fatColor
-            , max = total
-            }
         ]
 
 

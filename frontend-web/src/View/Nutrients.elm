@@ -1,7 +1,9 @@
-module View.Nutrients exposing (nutrientLabel, nutrientsTable)
+module View.Nutrients exposing (nutrientLabel, nutrientsTable, macroBreakdownView)
 
-import Data.Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Ui
 
@@ -68,6 +70,105 @@ nutrientLabel code =
 
         _ ->
             code
+
+
+macroBreakdownView : List NutrientAmount -> Element msg
+macroBreakdownView nutrients =
+    let
+        protein : Float
+        protein =
+            Nutrition.nutrientAmount "PROTEIN_G" nutrients
+
+        carbs : Float
+        carbs =
+            Nutrition.nutrientAmount "CARBS_G" nutrients
+
+        fat : Float
+        fat =
+            Nutrition.nutrientAmount "FAT_G" nutrients
+
+        total : Float
+        total =
+            protein + carbs + fat
+
+        pProtein : Int
+        pProtein =
+            if total > 0 then
+                round (protein / total * 100)
+
+            else
+                0
+
+        pCarbs : Int
+        pCarbs =
+            if total > 0 then
+                round (carbs / total * 100)
+
+            else
+                0
+
+        pFat : Int
+        pFat =
+            if total > 0 then
+                max 0 (100 - pProtein - pCarbs)
+
+            else
+                0
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.height (Element.px 24)
+            , Background.color Ui.borderGray
+            , Border.rounded 12
+            , Element.clip
+            ]
+            [ Element.el
+                [ Element.width (Element.fillPortion pProtein)
+                , Element.height Element.fill
+                , Background.color Ui.proteinColor
+                ]
+                Element.none
+            , Element.el
+                [ Element.width (Element.fillPortion pCarbs)
+                , Element.height Element.fill
+                , Background.color Ui.carbsColor
+                ]
+                Element.none
+            , Element.el
+                [ Element.width (Element.fillPortion pFat)
+                , Element.height Element.fill
+                , Background.color Ui.fatColor
+                ]
+                Element.none
+            ]
+        , Element.row
+            [ Element.width Element.fill, Element.spacing 16 ]
+            [ Element.row [ Element.spacing 4 ]
+                [ legendDot Ui.proteinColor
+                , Element.el [ Ui.body ] (Element.text ("Protein " ++ String.fromInt (round protein) ++ "g"))
+                ]
+            , Element.row [ Element.spacing 4 ]
+                [ legendDot Ui.carbsColor
+                , Element.el [ Ui.body ] (Element.text ("Carbs " ++ String.fromInt (round carbs) ++ "g"))
+                ]
+            , Element.row [ Element.spacing 4 ]
+                [ legendDot Ui.fatColor
+                , Element.el [ Ui.body ] (Element.text ("Fat " ++ String.fromInt (round fat) ++ "g"))
+                ]
+            ]
+        ]
+
+
+legendDot : Element.Color -> Element msg
+legendDot color =
+    Element.el
+        [ Element.width (Element.px 10)
+        , Element.height (Element.px 10)
+        , Background.color color
+        , Border.rounded 3
+        ]
+        Element.none
 
 
 nutrientsTable : List NutrientAmount -> Element msg
