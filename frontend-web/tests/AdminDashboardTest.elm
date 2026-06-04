@@ -32,9 +32,21 @@ tests =
                     |> Expect.equal (Success [ user ])
         , test "create payload trims username and display name" <|
             \_ ->
-                { initialModel | createForm = { username = " alice ", displayName = " Alice ", initialPassword = "secret" } }
+                { initialModel
+                    | createForm =
+                        { username = " alice "
+                        , displayName = " Alice "
+                        , initialPassword = "secret"
+                        }
+                }
                     |> Admin.createUserPayload
-                    |> Expect.equal (Ok { username = "alice", displayName = "Alice", initialPassword = "secret" })
+                    |> Expect.equal
+                        (Ok
+                            { username = "alice"
+                            , displayName = "Alice"
+                            , initialPassword = "secret"
+                            }
+                        )
         , test "reset password payload uses selected user" <|
             \_ ->
                 { initialModel | resetForm = Just { userId = "u1", password = "new-password" } }
@@ -42,14 +54,24 @@ tests =
                     |> Expect.equal (Ok ( "u1", { newPassword = "new-password" } ))
         , test "create success clears form and requests reload" <|
             \_ ->
-                { initialModel | showCreate = True, createForm = { username = "alice", displayName = "Alice", initialPassword = "secret" } }
+                { initialModel
+                    | showCreate = True
+                    , createForm =
+                        { username = "alice"
+                        , displayName = "Alice"
+                        , initialPassword = "secret"
+                        }
+                }
                     |> Admin.update (Admin.CreateCompleted (Ok loginSession))
                     |> thirdOfThree
                     |> Expect.equal Admin.RequestUsers
         , test "create failure preserves existing users" <|
             \_ ->
                 { initialModel | users = Success [ user ] }
-                    |> Admin.update (Admin.CreateCompleted (Err (Client.BadStatus 400 "bad" "Bad request")))
+                    |> Admin.update
+                        (Admin.CreateCompleted
+                            (Err (Client.BadStatus 400 "bad" "Bad request"))
+                        )
                     |> firstOfThree
                     |> .users
                     |> Expect.equal (Success [ user ])
@@ -69,7 +91,10 @@ tests =
         , test "enable failure preserves users and stores error" <|
             \_ ->
                 { initialModel | users = Success [ user ] }
-                    |> Admin.update (Admin.EnableCompleted (Err (Client.BadStatus 500 "boom" "Failed")))
+                    |> Admin.update
+                        (Admin.EnableCompleted
+                            (Err (Client.BadStatus 500 "boom" "Failed"))
+                        )
                     |> firstOfThree
                     |> .actionError
                     |> Expect.equal (Just "boom: Failed")

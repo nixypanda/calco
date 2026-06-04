@@ -47,7 +47,9 @@ tests =
                     |> Expect.equal FoodDetail.RequestLocalTimestamp
         , test "local timestamp creates log request" <|
             \_ ->
-                FoodDetail.update (FoodDetail.LocalTimestampReceived "2026-06-04T10:00:00+05:30") loadedModel
+                FoodDetail.update
+                    (FoodDetail.LocalTimestampReceived "2026-06-04T10:00:00+05:30")
+                    loadedModel
                     |> third
                     |> Expect.equal
                         (FoodDetail.RequestCreateLog
@@ -67,9 +69,15 @@ tests =
             \_ ->
                 let
                     ( model, _, _ ) =
-                        FoodDetail.update (FoodDetail.LogCompleted (Err Client.NetworkError)) { loadedModel | form = Just { form | submitting = True } }
+                        FoodDetail.update
+                            (FoodDetail.LogCompleted (Err Client.NetworkError))
+                            { loadedModel | form = Just { form | submitting = True } }
                 in
-                ( Maybe.map (\current -> ( current.amount, current.submitting )) model.form, model.error )
+                ( Maybe.map
+                    (\current -> ( current.amount, current.submitting ))
+                    model.form
+                , model.error
+                )
                     |> Expect.equal ( Just ( "2", False ), Just "Network error" )
         ]
 

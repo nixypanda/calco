@@ -22,7 +22,7 @@ tests =
                     |> Expect.equal (Ok False)
         , test "decodes login session with null profile" <|
             \_ ->
-                Decode.decodeString Auth.loginSessionDecoder "{ \"identity\": { \"id\": \"1\", \"username\": \"admin\", \"role\": \"admin\" }, \"profile\": null }"
+                Decode.decodeString Auth.loginSessionDecoder loginSessionJson
                     |> Result.map .profile
                     |> Expect.equal (Ok Nothing)
         , test "encodes login request" <|
@@ -40,17 +40,23 @@ tests =
                     |> Expect.equal (Ok { itemType = "product", id = "p1" })
         , test "decodes food search response" <|
             \_ ->
-                Decode.decodeString Foods.searchResponseDecoder "{ \"items\": [{ \"id\": \"f1\", \"source\": \"USER\", \"source_id\": null, \"barcode\": \"123\", \"name\": \"Apple\", \"brand\": null, \"categories\": [\"fruit\"], \"serving_size_g\": \"100\", \"energy_kcal_per_100g\": \"52\", \"energy_kcal_per_serving\": null }] }"
+                Decode.decodeString Foods.searchResponseDecoder searchResponseJson
                     |> Result.map (.items >> List.map .name)
                     |> Expect.equal (Ok [ "Apple" ])
         , test "decodes product detail" <|
             \_ ->
-                Decode.decodeString Foods.productDetailDecoder "{ \"id\": \"f1\", \"source\": \"USER\", \"source_id\": null, \"visibility\": \"private\", \"barcode\": null, \"name\": \"Apple\", \"brand\": \"Local\", \"categories\": [\"fruit\"], \"default_quantity\": \"1\", \"default_unit\": \"g\", \"serving_size_g\": \"100\", \"nutrients\": [{ \"code\": \"ENERGY_KCAL\", \"amount_per_100g\": \"52\", \"unit\": \"kcal\", \"source\": null, \"confidence\": null }], \"servings\": [{ \"label\": \"Small\", \"quantity\": \"1\", \"unit\": \"piece\", \"grams\": \"100\" }], \"allowed_units\": [{ \"code\": \"g\", \"name\": \"Gram\", \"kind\": \"mass\" }] }"
-                    |> Result.map (\food -> ( food.name, List.length food.nutrients, List.length food.allowedUnits ))
+                Decode.decodeString Foods.productDetailDecoder productDetailJson
+                    |> Result.map
+                        (\food ->
+                            ( food.name
+                            , List.length food.nutrients
+                            , List.length food.allowedUnits
+                            )
+                        )
                     |> Expect.equal (Ok ( "Apple", 1, 1 ))
         , test "decodes unit list" <|
             \_ ->
-                Decode.decodeString Foods.unitListResponseDecoder "{ \"items\": [{ \"code\": \"g\", \"name\": \"Gram\", \"kind\": \"mass\" }] }"
+                Decode.decodeString Foods.unitListResponseDecoder unitListJson
                     |> Result.map (.items >> List.map .code)
                     |> Expect.equal (Ok [ "g" ])
         , test "builds food search path with encoded query" <|
@@ -67,7 +73,8 @@ tests =
                     , notes = Nothing
                     }
                     |> Encode.encode 0
-                    |> Expect.equal "{\"logged_at\":\"2026-06-04T10:00:00+05:30\",\"item\":{\"type\":\"product\",\"id\":\"food-1\"},\"quantity\":{\"amount\":\"1\",\"unit\":\"g\"},\"notes\":null}"
+                    |> Decode.decodeString Decode.value
+                    |> Expect.equal (Decode.decodeString Decode.value createLogWithoutMealSlotJson)
         , test "encodes create product log request with meal slot and notes" <|
             \_ ->
                 Logs.createLogRequestEncoder
@@ -78,7 +85,8 @@ tests =
                     , notes = Just "Ate after run"
                     }
                     |> Encode.encode 0
-                    |> Expect.equal "{\"logged_at\":\"2026-06-04T10:00:00+05:30\",\"item\":{\"type\":\"product\",\"id\":\"food-1\"},\"quantity\":{\"amount\":\"1\",\"unit\":\"g\"},\"notes\":\"Ate after run\",\"meal_slot\":\"lunch\"}"
+                    |> Decode.decodeString Decode.value
+                    |> Expect.equal (Decode.decodeString Decode.value createLogWithMealSlotJson)
         , test "encodes update log request with null meal slot and notes" <|
             \_ ->
                 Logs.updateLogRequestEncoder
@@ -87,10 +95,129 @@ tests =
                     , notes = Nothing
                     }
                     |> Encode.encode 0
-                    |> Expect.equal "{\"quantity\":{\"amount\":\"2\",\"unit\":\"g\"},\"meal_slot\":null,\"notes\":null}"
+                    |> Decode.decodeString Decode.value
+                    |> Expect.equal (Decode.decodeString Decode.value updateLogJson)
         , test "decodes admin user list" <|
             \_ ->
-                Decode.decodeString User.listUsersDecoder "{ \"users\": [{ \"id\": \"u1\", \"username\": \"alice\", \"display_name\": \"Alice\", \"status\": \"active\", \"created_at\": \"now\" }] }"
+                Decode.decodeString User.listUsersDecoder userListJson
                     |> Result.map List.length
                     |> Expect.equal (Ok 1)
         ]
+
+
+loginSessionJson : String
+loginSessionJson =
+    """
+    { "identity": { "id": "1", "username": "admin", "role": "admin" }
+    , "profile": null
+    }
+    """
+
+
+searchResponseJson : String
+searchResponseJson =
+    """
+    { "items":
+        [{ "id": "f1"
+         , "source": "USER"
+         , "source_id": null
+         , "barcode": "123"
+         , "name": "Apple"
+         , "brand": null
+         , "categories": ["fruit"]
+         , "serving_size_g": "100"
+         , "energy_kcal_per_100g": "52"
+         , "energy_kcal_per_serving": null
+         }]
+    }
+    """
+
+
+productDetailJson : String
+productDetailJson =
+    """
+    { "id": "f1"
+    , "source": "USER"
+    , "source_id": null
+    , "visibility": "private"
+    , "barcode": null
+    , "name": "Apple"
+    , "brand": "Local"
+    , "categories": ["fruit"]
+    , "default_quantity": "1"
+    , "default_unit": "g"
+    , "serving_size_g": "100"
+    , "nutrients":
+        [{ "code": "ENERGY_KCAL"
+         , "amount_per_100g": "52"
+         , "unit": "kcal"
+         , "source": null
+         , "confidence": null
+         }]
+    , "servings":
+        [{ "label": "Small"
+         , "quantity": "1"
+         , "unit": "piece"
+         , "grams": "100"
+         }]
+    , "allowed_units":
+        [{ "code": "g"
+         , "name": "Gram"
+         , "kind": "mass"
+         }]
+    }
+    """
+
+
+unitListJson : String
+unitListJson =
+    """
+    { "items": [{ "code": "g", "name": "Gram", "kind": "mass" }] }
+    """
+
+
+createLogWithoutMealSlotJson : String
+createLogWithoutMealSlotJson =
+    """
+    { "logged_at": "2026-06-04T10:00:00+05:30"
+    , "item": { "type": "product", "id": "food-1" }
+    , "quantity": { "amount": "1", "unit": "g" }
+    , "notes": null
+    }
+    """
+
+
+createLogWithMealSlotJson : String
+createLogWithMealSlotJson =
+    """
+    { "logged_at": "2026-06-04T10:00:00+05:30"
+    , "item": { "type": "product", "id": "food-1" }
+    , "quantity": { "amount": "1", "unit": "g" }
+    , "notes": "Ate after run"
+    , "meal_slot": "lunch"
+    }
+    """
+
+
+updateLogJson : String
+updateLogJson =
+    """
+    { "quantity": { "amount": "2", "unit": "g" }
+    , "meal_slot": null
+    , "notes": null
+    }
+    """
+
+
+userListJson : String
+userListJson =
+    """
+    { "users":
+        [{ "id": "u1"
+         , "username": "alice"
+         , "display_name": "Alice"
+         , "status": "active"
+         , "created_at": "now"
+         }]
+    }
+    """

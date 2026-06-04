@@ -23,31 +23,40 @@ tests =
                     |> Expect.equal "serving"
         , test "missing defaults initialize 1 g" <|
             \_ ->
-                FoodLogForm.initLogFormFromFood Nothing { food | defaultQuantity = Nothing, defaultUnit = Nothing }
+                FoodLogForm.initLogFormFromFood Nothing
+                    { food | defaultQuantity = Nothing, defaultUnit = Nothing }
                     |> (\current -> ( current.amount, current.unit ))
                     |> Expect.equal ( "1", "g" )
         , test "amount is required" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "2026-06-04T10:00:00+05:30" "food-1" { form | amount = " " }
+                FoodLogForm.createProductLogRequest loggedAt
+                    "food-1"
+                    { form | amount = " " }
                     |> Expect.equal (Err FoodLogForm.AmountRequired)
         , test "create-log payload uses product item" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "2026-06-04T10:00:00+05:30" "food-1" form
+                FoodLogForm.createProductLogRequest loggedAt "food-1" form
                     |> Result.map .item
                     |> Expect.equal (Ok { itemType = "product", id = "food-1" })
         , test "selected meal slot is included" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "2026-06-04T10:00:00+05:30" "food-1" { form | mealSlot = Just Lunch }
+                FoodLogForm.createProductLogRequest loggedAt
+                    "food-1"
+                    { form | mealSlot = Just Lunch }
                     |> Result.map .mealSlot
                     |> Expect.equal (Ok (Just "lunch"))
         , test "no meal slot is omitted from request model" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "2026-06-04T10:00:00+05:30" "food-1" { form | mealSlot = Nothing }
+                FoodLogForm.createProductLogRequest loggedAt
+                    "food-1"
+                    { form | mealSlot = Nothing }
                     |> Result.map .mealSlot
                     |> Expect.equal (Ok Nothing)
         , test "blank notes become null request value" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "2026-06-04T10:00:00+05:30" "food-1" { form | notes = "   " }
+                FoodLogForm.createProductLogRequest loggedAt
+                    "food-1"
+                    { form | notes = "   " }
                     |> Result.map .notes
                     |> Expect.equal (Ok Nothing)
         , test "load-log success form uses existing quantity, unit, meal slot, and notes" <|
@@ -93,6 +102,11 @@ form =
     , error = Nothing
     , submitting = False
     }
+
+
+loggedAt : String
+loggedAt =
+    "2026-06-04T10:00:00+05:30"
 
 
 food : ProductDetail

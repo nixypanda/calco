@@ -15,7 +15,9 @@ tests =
     describe "Page.FoodSearch"
         [ test "empty query clears results, loading, and error" <|
             \_ ->
-                FoodSearch.update (FoodSearch.QueryChanged "   ") { loadedModel | results = Failure Client.NetworkError }
+                FoodSearch.update
+                    (FoodSearch.QueryChanged "   ")
+                    { loadedModel | results = Failure Client.NetworkError }
                     |> first
                     |> (\model -> ( model.query, model.results ))
                     |> Expect.equal ( "   ", NotAsked )
@@ -33,36 +35,48 @@ tests =
                     |> Expect.equal Loading
         , test "debounce for current token requests search" <|
             \_ ->
-                FoodSearch.update (FoodSearch.DebounceElapsed 2 "apple") { emptyModel | searchToken = 2 }
+                FoodSearch.update
+                    (FoodSearch.DebounceElapsed 2 "apple")
+                    { emptyModel | searchToken = 2 }
                     |> third
                     |> Expect.equal (FoodSearch.RequestSearch 2 { query = "apple" })
         , test "matching search result stores items and clears loading" <|
             \_ ->
-                FoodSearch.update (FoodSearch.SearchCompleted 2 (Ok { items = [ apple ] })) { emptyModel | searchToken = 2, results = Loading }
+                FoodSearch.update
+                    (FoodSearch.SearchCompleted 2 (Ok { items = [ apple ] }))
+                    { emptyModel | searchToken = 2, results = Loading }
                     |> first
                     |> .results
                     |> Expect.equal (Success [ apple ])
         , test "stale search result is ignored" <|
             \_ ->
-                FoodSearch.update (FoodSearch.SearchCompleted 1 (Ok { items = [ apple ] })) { emptyModel | searchToken = 2, results = Loading }
+                FoodSearch.update
+                    (FoodSearch.SearchCompleted 1 (Ok { items = [ apple ] }))
+                    { emptyModel | searchToken = 2, results = Loading }
                     |> first
                     |> .results
                     |> Expect.equal Loading
         , test "search failure stores error and clears results" <|
             \_ ->
-                FoodSearch.update (FoodSearch.SearchCompleted 2 (Err Client.NetworkError)) { loadedModel | searchToken = 2, results = Loading }
+                FoodSearch.update
+                    (FoodSearch.SearchCompleted 2 (Err Client.NetworkError))
+                    { loadedModel | searchToken = 2, results = Loading }
                     |> first
                     |> .results
                     |> Expect.equal (Failure Client.NetworkError)
         , test "search failure from stale token is ignored" <|
             \_ ->
-                FoodSearch.update (FoodSearch.SearchCompleted 1 (Err Client.NetworkError)) { loadedModel | searchToken = 2 }
+                FoodSearch.update
+                    (FoodSearch.SearchCompleted 1 (Err Client.NetworkError))
+                    { loadedModel | searchToken = 2 }
                     |> first
                     |> .results
                     |> Expect.equal (Success [ apple ])
         , test "select result navigates to food detail with meal slot query context" <|
             \_ ->
-                FoodSearch.update (FoodSearch.ResultClicked "food-1") { emptyModel | mealSlot = Just Lunch }
+                FoodSearch.update
+                    (FoodSearch.ResultClicked "food-1")
+                    { emptyModel | mealSlot = Just Lunch }
                     |> third
                     |> Expect.equal (FoodSearch.Navigate (FoodDetail "food-1" (Just Lunch)))
         , test "create custom food navigates to custom food create" <|

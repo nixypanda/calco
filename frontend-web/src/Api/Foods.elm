@@ -193,7 +193,10 @@ searchFoods request toMsg =
         toMsg
 
 
-createCustomFood : CreateFoodRequest -> (Result Client.ApiError CreateFoodResponse -> msg) -> Cmd msg
+createCustomFood :
+    CreateFoodRequest
+    -> (Result Client.ApiError CreateFoodResponse -> msg)
+    -> Cmd msg
 createCustomFood request toMsg =
     Client.post
         (Builder.absolute [ "api", "foods", "custom" ] [])
@@ -202,7 +205,11 @@ createCustomFood request toMsg =
         toMsg
 
 
-updateCustomFood : String -> CreateFoodRequest -> (Result Client.ApiError CreateFoodResponse -> msg) -> Cmd msg
+updateCustomFood :
+    String
+    -> CreateFoodRequest
+    -> (Result Client.ApiError CreateFoodResponse -> msg)
+    -> Cmd msg
 updateCustomFood id request toMsg =
     Client.put
         (Builder.absolute [ "api", "foods", "custom", id ] [])

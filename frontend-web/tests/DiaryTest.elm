@@ -79,16 +79,26 @@ tests =
                             Diary.update (Diary.LogsLoaded (Ok [ lunchLog ])) emptyModel
                     in
                     ( model.logs, model.loading, outMsg )
-                        |> Expect.equal ( [ lunchLog ], False, Diary.RequestItemNames [ productRef ] )
+                        |> Expect.equal
+                            ( [ lunchLog ]
+                            , False
+                            , Diary.RequestItemNames [ productRef ]
+                            )
             , test "summary success stores summary" <|
                 \_ ->
-                    Diary.update (Diary.SummaryLoaded (Ok { from = today, to = today, totals = summary })) emptyModel
+                    Diary.update
+                        (Diary.SummaryLoaded
+                            (Ok { from = today, to = today, totals = summary })
+                        )
+                        emptyModel
                         |> first
                         |> .summary
                         |> Expect.equal summary
             , test "load failure stores an error" <|
                 \_ ->
-                    Diary.update (Diary.LogsLoaded (Err Client.NetworkError)) { emptyModel | loading = True, logs = [ lunchLog ] }
+                    Diary.update
+                        (Diary.LogsLoaded (Err Client.NetworkError))
+                        { emptyModel | loading = True, logs = [ lunchLog ] }
                         |> first
                         |> (\model -> ( model.loading, model.error, model.logs ))
                         |> Expect.equal ( False, Just "Network error", [ lunchLog ] )
@@ -100,7 +110,9 @@ tests =
                         |> Expect.equal (Dict.fromList [ ( "product:food-1", "Chicken" ) ])
             , test "name lookup failure uses unknown item fallback" <|
                 \_ ->
-                    Diary.update (Diary.NameLookupCompleted mealRef (Err Client.NetworkError)) emptyModel
+                    Diary.update
+                        (Diary.NameLookupCompleted mealRef (Err Client.NetworkError))
+                        emptyModel
                         |> first
                         |> .itemNames
                         |> Expect.equal (Dict.fromList [ ( "meal:meal-1", "Unknown meal" ) ])
@@ -109,7 +121,15 @@ tests =
             [ test "logs are grouped into meal slots and other" <|
                 \_ ->
                     Diary.groupLogs [ breakfastLog, lunchLog, dinnerLog, snackLog, otherLog ]
-                        |> (\groups -> List.map List.length [ groups.breakfast, groups.lunch, groups.dinner, groups.snack, groups.other ])
+                        |> (\groups ->
+                                List.map List.length
+                                    [ groups.breakfast
+                                    , groups.lunch
+                                    , groups.dinner
+                                    , groups.snack
+                                    , groups.other
+                                    ]
+                           )
                         |> Expect.equal [ 1, 1, 1, 1, 1 ]
             , test "slot calories are summed from snapshots" <|
                 \_ ->
@@ -225,7 +245,14 @@ mealRef =
 
 lunchLog : FoodLog
 lunchLog =
-    log "log-1" (Just "lunch") productRef [ nutrient "ENERGY_KCAL" "247.5" "kcal", nutrient "PROTEIN_G" "46.5" "g", nutrient "CARBS_G" "0" "g", nutrient "FAT_G" "3.5" "g" ]
+    log "log-1"
+        (Just "lunch")
+        productRef
+        [ nutrient "ENERGY_KCAL" "247.5" "kcal"
+        , nutrient "PROTEIN_G" "46.5" "g"
+        , nutrient "CARBS_G" "0" "g"
+        , nutrient "FAT_G" "3.5" "g"
+        ]
 
 
 secondLunchLog : FoodLog

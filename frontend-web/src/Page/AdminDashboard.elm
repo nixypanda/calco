@@ -141,22 +141,45 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | users = Failure error, actionError = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | users = Failure error
+                            , actionError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | users = Failure error, actionError = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | users = Failure error
+                            , actionError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         ToggleCreate ->
             ( { model | showCreate = not model.showCreate }, Cmd.none, NoOp )
 
         CreateUsernameChanged username ->
-            ( { model | createForm = updateCreateUsername username model.createForm }, Cmd.none, NoOp )
+            ( { model | createForm = updateCreateUsername username model.createForm }
+            , Cmd.none
+            , NoOp
+            )
 
         CreateDisplayNameChanged displayName ->
-            ( { model | createForm = updateCreateDisplayName displayName model.createForm }, Cmd.none, NoOp )
+            ( { model
+                | createForm = updateCreateDisplayName displayName model.createForm
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         CreatePasswordChanged password ->
-            ( { model | createForm = updateCreatePassword password model.createForm }, Cmd.none, NoOp )
+            ( { model | createForm = updateCreatePassword password model.createForm }
+            , Cmd.none
+            , NoOp
+            )
 
         CreateSubmitted ->
             case createUserPayload model of
@@ -169,14 +192,27 @@ update msg model =
         CreateCompleted result ->
             case result of
                 Ok _ ->
-                    ( { model | showCreate = False, createForm = emptyCreateForm, actionError = Nothing }, Cmd.none, RequestUsers )
+                    ( { model
+                        | showCreate = False
+                        , createForm = emptyCreateForm
+                        , actionError = Nothing
+                      }
+                    , Cmd.none
+                    , RequestUsers
+                    )
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model | actionError = Just (Client.displayError error) }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | actionError = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model | actionError = Just (Client.displayError error) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         OpenReset userId ->
             case model.resetForm of
@@ -185,10 +221,16 @@ update msg model =
                         ( { model | resetForm = Nothing }, Cmd.none, NoOp )
 
                     else
-                        ( { model | resetForm = Just { userId = userId, password = "" } }, Cmd.none, NoOp )
+                        ( { model | resetForm = Just { userId = userId, password = "" } }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                 Nothing ->
-                    ( { model | resetForm = Just { userId = userId, password = "" } }, Cmd.none, NoOp )
+                    ( { model | resetForm = Just { userId = userId, password = "" } }
+                    , Cmd.none
+                    , NoOp
+                    )
 
         ResetPasswordChanged password ->
             case model.resetForm of
@@ -202,7 +244,10 @@ update msg model =
             case resetPasswordPayload model of
                 Ok ( selectedUserId, request ) ->
                     if selectedUserId == userId then
-                        ( { model | actionError = Nothing }, Cmd.none, RequestResetPassword userId request )
+                        ( { model | actionError = Nothing }
+                        , Cmd.none
+                        , RequestResetPassword userId request
+                        )
 
                     else
                         ( model, Cmd.none, NoOp )
@@ -217,10 +262,16 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model | actionError = Just (Client.displayError error) }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | actionError = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model | actionError = Just (Client.displayError error) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         DisableClicked userId ->
             ( { model | actionError = Nothing }, Cmd.none, RequestDisableUser userId )
@@ -243,10 +294,16 @@ actionReloadResult result model =
 
         Err error ->
             if Client.isUnauthorized error then
-                ( { model | actionError = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                ( { model | actionError = Just (Client.displayError error) }
+                , Cmd.none
+                , SessionExpired
+                )
 
             else
-                ( { model | actionError = Just (Client.displayError error) }, Cmd.none, NoOp )
+                ( { model | actionError = Just (Client.displayError error) }
+                , Cmd.none
+                , NoOp
+                )
 
 
 updateCreateUsername : String -> CreateForm -> CreateForm
@@ -306,7 +363,10 @@ createFormView model =
             ]
             [ Ui.input "Username" model.createForm.username CreateUsernameChanged
             , Ui.input "Display Name" model.createForm.displayName CreateDisplayNameChanged
-            , Ui.passwordInput "Initial Password" model.createForm.initialPassword CreatePasswordChanged
+            , Ui.passwordInput
+                "Initial Password"
+                model.createForm.initialPassword
+                CreatePasswordChanged
             , Ui.button "Save" CreateSubmitted
             ]
         ]
@@ -332,7 +392,10 @@ usersView model =
                 [ Element.text "No users yet." ]
 
             else
-                [ Element.column [ Element.width Element.fill, Element.spacing 8 ] (List.map userRow users) ]
+                [ Element.column
+                    [ Element.width Element.fill, Element.spacing 8 ]
+                    (List.map userRow users)
+                ]
 
 
 userRow : User.User -> Element Msg
@@ -349,7 +412,11 @@ userRow user =
         [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
             [ Element.el [ Font.medium ] (Element.text user.username)
             , Element.text user.displayName
-            , Element.el [ Font.color (Element.rgb255 75 85 99), Font.size 13 ] (Element.text user.status)
+            , Element.el
+                [ Font.color (Element.rgb255 75 85 99)
+                , Font.size 13
+                ]
+                (Element.text user.status)
             ]
         , Ui.button "Reset Password" (OpenReset user.id)
         , if user.status == "active" then
@@ -365,7 +432,9 @@ resetFormView model =
     case model.resetForm of
         Just form ->
             [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.el [ Element.width Element.fill ] (Ui.passwordInput "New password" form.password ResetPasswordChanged)
+                [ Element.el
+                    [ Element.width Element.fill ]
+                    (Ui.passwordInput "New password" form.password ResetPasswordChanged)
                 , Ui.button "Confirm Reset" (ResetSubmitted form.userId)
                 ]
             ]

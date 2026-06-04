@@ -108,7 +108,10 @@ update msg model =
         SummaryLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | summary = response.totals, loading = False, error = Nothing }, Cmd.none, NoOp )
+                    ( { model | summary = response.totals, loading = False, error = Nothing }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err error ->
                     failure error model
@@ -124,7 +127,16 @@ update msg model =
                         Err _ ->
                             ItemRef.fallbackName item
             in
-            ( { model | itemNames = Dict.insert (ItemRef.key item) name model.itemNames }, Cmd.none, NoOp )
+            ( { model
+                | itemNames =
+                    Dict.insert
+                        (ItemRef.key item)
+                        name
+                        model.itemNames
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         PreviousDayClicked ->
             let
@@ -132,12 +144,18 @@ update msg model =
                 previous =
                     LocalDate.addDays -1 model.currentDate
             in
-            ( { model | currentDate = previous, loading = True, error = Nothing }, Cmd.none, Navigate (Diary (Just (LocalDate.format previous))) )
+            ( { model | currentDate = previous, loading = True, error = Nothing }
+            , Cmd.none
+            , Navigate (Diary (Just (LocalDate.format previous)))
+            )
 
         NextDayClicked ->
             case LocalDate.nextOnOrBefore model.today model.currentDate of
                 Just next ->
-                    ( { model | currentDate = next, loading = True, error = Nothing }, Cmd.none, Navigate (Diary (Just (LocalDate.format next))) )
+                    ( { model | currentDate = next, loading = True, error = Nothing }
+                    , Cmd.none
+                    , Navigate (Diary (Just (LocalDate.format next)))
+                    )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -158,7 +176,10 @@ update msg model =
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure error model =
     if Client.isUnauthorized error then
-        ( { model | loading = False, error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+        ( { model | loading = False, error = Just (Client.displayError error) }
+        , Cmd.none
+        , SessionExpired
+        )
 
     else
         ( { model | loading = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
@@ -236,7 +257,9 @@ view model =
             Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Loading diary...")
 
           else if List.isEmpty model.logs then
-            Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "No food logged for this day.")
+            Element.el
+                [ Font.color (Element.rgb255 107 114 128) ]
+                (Element.text "No food logged for this day.")
 
           else
             logGroupsView model
@@ -266,7 +289,12 @@ dateCard model =
             , Element.spacing 12
             ]
             [ smallButton "Previous" PreviousDayClicked
-            , Element.el [ Element.width Element.fill, Font.center, Font.bold ] (Element.text (LocalDate.display model.currentDate))
+            , Element.el
+                [ Element.width Element.fill
+                , Font.center
+                , Font.bold
+                ]
+                (Element.text (LocalDate.display model.currentDate))
             , Input.button
                 [ Background.color
                     (if LocalDate.compare model.currentDate model.today == EQ then
@@ -375,10 +403,20 @@ slotView model slot label =
                     , label = Element.text (macroSummary model.macroMode totals)
                     }
                 ]
-            , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (String.fromInt (round (slotCalories slot model.logs)) ++ " kcal"))
+            , Element.el
+                [ Font.size 13
+                , Font.color (Element.rgb255 107 114 128)
+                ]
+                (Element.text (String.fromInt (round (slotCalories slot model.logs)) ++ " kcal"))
             ]
             :: (if List.isEmpty logs then
-                    [ Element.el [ Element.padding 14, Font.color (Element.rgb255 107 114 128), Element.centerX ] (Element.text "No items") ]
+                    [ Element.el
+                        [ Element.padding 14
+                        , Font.color (Element.rgb255 107 114 128)
+                        , Element.centerX
+                        ]
+                        (Element.text "No items")
+                    ]
 
                 else
                     List.map (logRow model.itemNames) logs
@@ -396,7 +434,9 @@ slotView model slot label =
                             , Font.color (Element.rgb255 17 100 102)
                             , Font.medium
                             ]
-                            { onPress = Just (AddFoodClicked slot), label = Element.text "Add Food" }
+                            { onPress = Just (AddFoodClicked slot)
+                            , label = Element.text "Add Food"
+                            }
                         ]
                )
         )
@@ -406,10 +446,22 @@ macroSummary : MacroMode -> MacroTotals -> String
 macroSummary mode totals =
     case mode of
         Grams ->
-            "carbs " ++ Nutrition.oneDecimal totals.carbs ++ "g, protein " ++ Nutrition.oneDecimal totals.protein ++ "g, fat " ++ Nutrition.oneDecimal totals.fat ++ "g"
+            "carbs "
+                ++ Nutrition.oneDecimal totals.carbs
+                ++ "g, protein "
+                ++ Nutrition.oneDecimal totals.protein
+                ++ "g, fat "
+                ++ Nutrition.oneDecimal totals.fat
+                ++ "g"
 
         Percent ->
-            "carbs " ++ String.fromInt (round totals.carbsPct) ++ "%, protein " ++ String.fromInt (round totals.proteinPct) ++ "%, fat " ++ String.fromInt (round totals.fatPct) ++ "%"
+            "carbs "
+                ++ String.fromInt (round totals.carbsPct)
+                ++ "%, protein "
+                ++ String.fromInt (round totals.proteinPct)
+                ++ "%, fat "
+                ++ String.fromInt (round totals.fatPct)
+                ++ "%"
 
 
 logRow : Dict String String -> FoodLog -> Element Msg
@@ -423,9 +475,30 @@ logRow itemNames log =
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.el [ Element.width Element.fill, Font.medium ] (Element.text (Dict.get (ItemRef.key log.item) itemNames |> Maybe.withDefault "Loading..."))
-                , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
-                , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal"))
+                [ Element.el
+                    [ Element.width Element.fill
+                    , Font.medium
+                    ]
+                    (Element.text
+                        (Dict.get (ItemRef.key log.item) itemNames
+                            |> Maybe.withDefault "Loading..."
+                        )
+                    )
+                , Element.el
+                    [ Font.size 13
+                    , Font.color (Element.rgb255 107 114 128)
+                    ]
+                    (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
+                , Element.el
+                    [ Font.size 13
+                    , Font.color (Element.rgb255 107 114 128)
+                    ]
+                    (Element.text
+                        (String.fromInt
+                            (round (Nutrition.caloriesFrom log.nutrients))
+                            ++ " kcal"
+                        )
+                    )
                 ]
         }
 

@@ -73,15 +73,34 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         UsernameChanged username ->
-            ( { model | form = { username = username, password = model.form.password } }, Cmd.none, NoOp )
+            ( { model
+                | form =
+                    { username = username
+                    , password = model.form.password
+                    }
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         PasswordChanged password ->
-            ( { model | form = { username = model.form.username, password = password } }, Cmd.none, NoOp )
+            ( { model
+                | form =
+                    { username = model.form.username
+                    , password = password
+                    }
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         Submitted ->
             case validateBootstrapAdmin model.form of
                 Ok request ->
-                    ( { model | submitting = True, error = Nothing }, Cmd.none, RequestCreateAdmin request )
+                    ( { model | submitting = True, error = Nothing }
+                    , Cmd.none
+                    , RequestCreateAdmin request
+                    )
 
                 Err message ->
                     ( { model | error = Just message }, Cmd.none, NoOp )
@@ -89,10 +108,19 @@ update msg model =
         CreateAdminCompleted result ->
             case result of
                 Ok loginSession ->
-                    ( { model | submitting = False, error = Nothing }, Cmd.none, CreateAdminSucceeded loginSession )
+                    ( { model | submitting = False, error = Nothing }
+                    , Cmd.none
+                    , CreateAdminSucceeded loginSession
+                    )
 
                 Err error ->
-                    ( { model | submitting = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                    ( { model
+                        | submitting = False
+                        , error = Just (Client.displayError error)
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
 
 view : Model -> Element Msg
@@ -113,8 +141,17 @@ view model =
             , Element.padding 24
             ]
             ([ Element.el [ Font.size 32, Font.bold ] (Element.text "CalCo")
-             , Element.el [ Font.size 20, Font.medium, Font.color (Element.rgb255 75 85 99) ] (Element.text "First-Time Setup")
-             , Element.paragraph [ Font.size 14, Font.color (Element.rgb255 75 85 99) ] [ Element.text "Create the admin account to get started." ]
+             , Element.el
+                [ Font.size 20
+                , Font.medium
+                , Font.color (Element.rgb255 75 85 99)
+                ]
+                (Element.text "First-Time Setup")
+             , Element.paragraph
+                [ Font.size 14
+                , Font.color (Element.rgb255 75 85 99)
+                ]
+                [ Element.text "Create the admin account to get started." ]
              , Ui.input "Username" model.form.username UsernameChanged
              , Ui.passwordInput "Password" model.form.password PasswordChanged
              ]

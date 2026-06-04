@@ -11,7 +11,11 @@ bootstrapStatus toMsg =
 
 createAdmin : Auth.LoginRequest -> (Result Client.ApiError Auth.LoginSession -> msg) -> Cmd msg
 createAdmin request toMsg =
-    Client.post "/api/auth/bootstrap/admin" (Auth.bootstrapAdminEncoder request) Auth.loginSessionDecoder toMsg
+    Client.post
+        "/api/auth/bootstrap/admin"
+        (Auth.bootstrapAdminEncoder request)
+        Auth.loginSessionDecoder
+        toMsg
 
 
 login : Auth.LoginRequest -> (Result Client.ApiError Auth.LoginSession -> msg) -> Cmd msg

@@ -53,7 +53,13 @@ delete path toMsg =
     request "DELETE" path Http.emptyBody (Decode.succeed ()) toMsg
 
 
-request : String -> String -> Http.Body -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
+request :
+    String
+    -> String
+    -> Http.Body
+    -> Decoder value
+    -> (Result ApiError value -> msg)
+    -> Cmd msg
 request method path body decoder toMsg =
     Http.request
         { method = method

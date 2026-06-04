@@ -37,8 +37,13 @@ tests =
                     row =
                         MealForm.emptyComponentRow 1
                 in
-                MealForm.selectedComponents [ { row | productId = "food-1", quantity = "", unit = "" } ]
-                    |> Expect.equal [ { item = { itemType = "product", id = "food-1" }, quantity = { amount = "100", unit = "g" } } ]
+                MealForm.selectedComponents
+                    [ { row | productId = "food-1", quantity = "", unit = "" } ]
+                    |> Expect.equal
+                        [ { item = { itemType = "product", id = "food-1" }
+                          , quantity = { amount = "100", unit = "g" }
+                          }
+                        ]
         , test "total quantity is included only when present" <|
             \_ ->
                 let
@@ -74,7 +79,9 @@ tests =
                     model =
                         { base | components = [ { row | searchToken = 2 } ] }
                 in
-                MealForm.update (MealForm.ComponentSearchCompleted 1 1 (Ok { items = [ result ] })) model
+                MealForm.update
+                    (MealForm.ComponentSearchCompleted 1 1 (Ok { items = [ result ] }))
+                    model
                     |> first
                     |> .components
                     |> List.head
@@ -95,7 +102,9 @@ tests =
                     model =
                         { base | components = [ { row | searchToken = 2 } ] }
                 in
-                MealForm.update (MealForm.ComponentSearchCompleted 1 2 (Ok { items = [ result ] })) model
+                MealForm.update
+                    (MealForm.ComponentSearchCompleted 1 2 (Ok { items = [ result ] }))
+                    model
                     |> first
                     |> .components
                     |> List.head
@@ -103,7 +112,9 @@ tests =
                     |> Expect.equal (Just [ result ])
         , test "edit meal maps components into rows" <|
             \_ ->
-                MealForm.update (MealForm.MealLoaded (Ok meal)) (Tuple.first (MealForm.initEdit "meal-1"))
+                MealForm.update
+                    (MealForm.MealLoaded (Ok meal))
+                    (Tuple.first (MealForm.initEdit "meal-1"))
                     |> first
                     |> .components
                     |> List.map (\row -> ( row.productId, row.quantity, row.unit ))

@@ -88,6 +88,15 @@ frontend-web-dev: frontend-web-build
 frontend-web-format:
     cd frontend-web && elm-format --yes src tests
 
+# Report Elm source lines over 100 columns
+frontend-web-line-length:
+    @if rg -n ".{101,}" frontend-web/src frontend-web/tests; then \
+        echo "Elm lines above 100 columns found."; \
+        exit 1; \
+    else \
+        echo "Elm line length check passed."; \
+    fi
+
 # Run Elm frontend-web review
 frontend-web-review:
     cd frontend-web && elm-review

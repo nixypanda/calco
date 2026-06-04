@@ -13,18 +13,25 @@ tests =
     describe "Page.MealDetail"
         [ test "meal load success stores meal" <|
             \_ ->
-                MealDetail.update (MealDetail.MealLoaded (Ok meal)) (Tuple.first (MealDetail.init "meal-1"))
+                MealDetail.update
+                    (MealDetail.MealLoaded (Ok meal))
+                    (Tuple.first (MealDetail.init "meal-1"))
                     |> first
                     |> .meal
                     |> Maybe.map .id
                     |> Expect.equal (Just "meal-1")
         , test "component product ids are extracted uniquely" <|
             \_ ->
-                MealDetail.uniqueProductIds { meal | components = meal.components ++ meal.components }
+                MealDetail.uniqueProductIds
+                    { meal | components = meal.components ++ meal.components }
                     |> Expect.equal [ "food-1" ]
         , test "invalid log amount clears nutrient preview" <|
             \_ ->
-                MealDetail.update (MealDetail.AmountChanged "bad") { baseModel | logForm = { logForm | nutrients = Just [ nutrient ] } }
+                MealDetail.update
+                    (MealDetail.AmountChanged "bad")
+                    { baseModel
+                        | logForm = { logForm | nutrients = Just [ nutrient ] }
+                    }
                     |> first
                     |> .logForm
                     |> .nutrients
@@ -36,14 +43,18 @@ tests =
                     |> Expect.equal (MealDetail.RequestNutrientPreview "meal-1" "200" "g" 1)
         , test "matching nutrient preview response stores nutrients" <|
             \_ ->
-                MealDetail.update (MealDetail.NutrientPreviewLoaded 1 (Ok { mealId = "meal-1", quantity = { amount = "100", unit = "g" }, nutrients = [ nutrient ] })) { baseModel | logForm = { logForm | previewToken = 1 } }
+                MealDetail.update
+                    (MealDetail.NutrientPreviewLoaded 1 (Ok nutrientPreview))
+                    { baseModel | logForm = { logForm | previewToken = 1 } }
                     |> first
                     |> .logForm
                     |> .nutrients
                     |> Expect.equal (Just [ nutrient ])
         , test "stale nutrient preview response is ignored" <|
             \_ ->
-                MealDetail.update (MealDetail.NutrientPreviewLoaded 1 (Ok { mealId = "meal-1", quantity = { amount = "100", unit = "g" }, nutrients = [ nutrient ] })) { baseModel | logForm = { logForm | previewToken = 2 } }
+                MealDetail.update
+                    (MealDetail.NutrientPreviewLoaded 1 (Ok nutrientPreview))
+                    { baseModel | logForm = { logForm | previewToken = 2 } }
                     |> first
                     |> .logForm
                     |> .nutrients
@@ -89,6 +100,18 @@ logForm =
 nutrient : NutrientAmount
 nutrient =
     { code = "ENERGY_KCAL", amount = "120", unit = "kcal" }
+
+
+nutrientPreview :
+    { mealId : String
+    , nutrients : List NutrientAmount
+    , quantity : { amount : String, unit : String }
+    }
+nutrientPreview =
+    { mealId = "meal-1"
+    , quantity = { amount = "100", unit = "g" }
+    , nutrients = [ nutrient ]
+    }
 
 
 meal : Meal

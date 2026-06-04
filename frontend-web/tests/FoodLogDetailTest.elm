@@ -58,7 +58,11 @@ tests =
                     |> Expect.equal ( Just "food-1", "Apple" )
         , test "meal name success stores item name" <|
             \_ ->
-                FoodLogDetail.update (FoodLogDetail.MealNameLoaded (Ok { id = "meal-1", name = "Lunch bowl" })) loadedModel
+                FoodLogDetail.update
+                    (FoodLogDetail.MealNameLoaded
+                        (Ok { id = "meal-1", name = "Lunch bowl" })
+                    )
+                    loadedModel
                     |> first
                     |> .itemName
                     |> Expect.equal "Lunch bowl"
@@ -84,9 +88,19 @@ tests =
             \_ ->
                 let
                     ( model, _, _ ) =
-                        FoodLogDetail.update (FoodLogDetail.UpdateCompleted (Err Client.NetworkError)) { loadedModel | form = Just { form | amount = "4", submitting = True } }
+                        FoodLogDetail.update
+                            (FoodLogDetail.UpdateCompleted (Err Client.NetworkError))
+                            { loadedModel
+                                | form =
+                                    Just { form | amount = "4", submitting = True }
+                            }
                 in
-                ( Maybe.map .id model.log, Maybe.map (\current -> ( current.amount, current.submitting )) model.form, model.error )
+                ( Maybe.map .id model.log
+                , Maybe.map
+                    (\current -> ( current.amount, current.submitting ))
+                    model.form
+                , model.error
+                )
                     |> Expect.equal ( Just "log-1", Just ( "4", False ), Just "Network error" )
         , test "delete success navigates home" <|
             \_ ->
@@ -95,7 +109,9 @@ tests =
                     |> Expect.equal (FoodLogDetail.Navigate (Diary Nothing))
         , test "delete failure keeps page open and stores error" <|
             \_ ->
-                FoodLogDetail.update (FoodLogDetail.DeleteCompleted (Err Client.NetworkError)) { loadedModel | deleting = True }
+                FoodLogDetail.update
+                    (FoodLogDetail.DeleteCompleted (Err Client.NetworkError))
+                    { loadedModel | deleting = True }
                     |> first
                     |> (\model -> ( Maybe.map .id model.log, model.deleting, model.error ))
                     |> Expect.equal ( Just "log-1", False, Just "Network error" )

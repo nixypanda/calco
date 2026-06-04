@@ -33,18 +33,19 @@ tooling remains CLI/API driven.
 
 ## Current Status
 
-Last updated after the Phase 12 Elm meal detail/logging implementation.
+Last updated after the Phase 13 shared pure helpers extraction.
 
-Implemented through **Phase 12: Meal Detail And Meal Logging** in
+Implemented through **Phase 13: Shared Pure Helpers** in
 `frontend-web/`. The Elm app now has a real `Browser.application` shell, route
 parsing, access decisions, session bootstrap, login, first-time admin setup,
 logout, and admin user management flows, plus the real diary `/home` page with
 day navigation, grouped logs, daily summary macros/calories, item-name lookup,
 and diary navigation intents. Food tracking routes now cover `/search`,
 `/foods/:id`, `/logs/:id`, custom food create/edit, meals list, meal create/edit,
-meal detail, meal nutrient preview, meal logging, and meal deletion. The React
-frontend in `frontend/` remains untouched and is still the behavioral reference
-for later phases.
+meal detail, meal nutrient preview, meal logging, and meal deletion. Shared pure
+helpers for dates, nutrition, categories, meal slots, text, lists, and units
+have been extracted into `Data/`. The React frontend in `frontend/` remains
+untouched and is still the behavioral reference for later phases.
 
 ### Completed
 
@@ -181,6 +182,17 @@ for later phases.
     preservation, delete confirmation open/close, delete success navigation to
     meals, delete failure preservation, and edit navigation.
   - Current frontend-web test count: `152`.
+- Phase 13 shared pure helpers:
+  - Extracted or expanded `src/Data/Category.elm`, `src/Data/FoodLog.elm`,
+    `src/Data/ItemRef.elm`, `src/Data/ListExtra.elm`, `src/Data/LocalDate.elm`,
+    `src/Data/MealSlot.elm`, `src/Data/Nutrition.elm`, `src/Data/Text.elm`, and
+    `src/Data/Units.elm` with shared helpers.
+  - Ported behavior from `frontend/src/lib/time.ts` and
+    `frontend/src/lib/nutrition.ts`.
+  - Added `tests/CategoryTest.elm`, `tests/ListExtraTest.elm`,
+    `tests/MealSlotTest.elm`, and `tests/TextTest.elm`; expanded existing
+    `tests/LocalDateTest.elm` and `tests/NutritionTest.elm`.
+  - Current frontend-web test count: `158`.
 - UI/dev workflow:
   - Added a small `src/Ui.elm` vocabulary using `mdgriffith/elm-ui`.
   - Added `frontend-web/dev-server.mjs` for local static serving plus `/api`
@@ -200,15 +212,14 @@ nix develop -c just frontend-web-test
 nix develop -c just frontend-web-build
 ```
 
-Both passed at the Phase 12 stop point. `just frontend-web-build` and
+Both passed at the Phase 13 stop point. `just frontend-web-build` and
 `just frontend-web-test` require the Nix dev shell on machines where `elm` and
 `elm-test` are not installed directly.
 
 ### Notes For The Next Phase
 
-- The app intentionally stops after meal detail/logging. Shared helper
-  extraction, browser theme/local-storage ports, and the broader Elm UI layer
-  remain for later phases.
+- The app intentionally stops after shared pure helpers. Browser theme and
+  local-storage ports, and the broader Elm UI layer remain for later phases.
 - `Api.Foods` now exposes diary product-name lookup, food search, food detail,
   units, nutrients, and custom-food create/update support.
 - `Api.Meals` now exposes meal name lookup, list/detail, create/update/delete,
@@ -216,9 +227,9 @@ Both passed at the Phase 12 stop point. `just frontend-web-build` and
 - `Api.Logs` now exposes diary list/summary, create-log, and log
   get/update/delete. Product and meal logging both reuse the same create-log
   support.
-- `Data.FoodLog`, `Data.LocalDate`, and `Data.Nutrition` contain the shared data
-  helpers currently needed by the migrated pages. Phase 13 should decide which
-  page-local helpers are worth promoting to shared pure modules.
+- `Data/` now contains extracted shared pure helpers for dates, nutrition,
+  categories, meal slots, text/list operations, and units. Phase 14 should
+  wire theme persistence and local-ISO-timestamp browser ports.
 - `frontend-web/dev-server.mjs` is deliberately minimal. A future pass can
   replace it with Vite or another standard dev server if the Elm app gets an npm
   toolchain.
@@ -1228,9 +1239,10 @@ usable route.
 10. Custom food create/edit.
 11. Meals list.
 12. Meal create/edit.
-13. Meal detail, nutrient preview, log, and delete.
-14. Elm UI cleanup.
-15. Theme persistence.
+13. Meal detail, nutrient preview, log, and delete. (Phase 12)
+14. Shared pure helpers extraction. (Phase 13)
+15. Elm UI cleanup. (Phase 15)
+16. Theme persistence. (Phase 14)
 
 ## Definition Of Feature Parity
 

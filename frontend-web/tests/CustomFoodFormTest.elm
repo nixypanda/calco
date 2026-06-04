@@ -40,7 +40,11 @@ tests =
                             , { code = "", amountPer100g = "4" }
                             ]
                         , servings =
-                            [ { label = "cube", quantity = "2", unit = "piece", grams = "50" }
+                            [ { label = "cube"
+                              , quantity = "2"
+                              , unit = "piece"
+                              , grams = "50"
+                              }
                             , { label = "bad", quantity = "", unit = "g", grams = "5" }
                             ]
                     }
@@ -61,7 +65,13 @@ tests =
                             , servingSizeG = Nothing
                             , defaultQuantity = Nothing
                             , nutrients = [ { code = "PROTEIN_G", amountPer100g = "18" } ]
-                            , servings = [ { label = "cube", quantity = "2", unit = "piece", grams = "50" } ]
+                            , servings =
+                                [ { label = "cube"
+                                  , quantity = "2"
+                                  , unit = "piece"
+                                  , grams = "50"
+                                  }
+                                ]
                             }
                         )
         , test "edit init maps product detail into form rows" <|
@@ -80,7 +90,13 @@ tests =
                         , brand = "Local"
                         , categories = "dairy"
                         , nutrients = [ { code = "PROTEIN_G", amountPer100g = "3.5" } ]
-                        , servings = [ { label = "cup", quantity = "1", unit = "cup", grams = "245" } ]
+                        , servings =
+                            [ { label = "cup"
+                              , quantity = "1"
+                              , unit = "cup"
+                              , grams = "245"
+                              }
+                            ]
                         }
         , test "remove nutrient keeps at least one row" <|
             \_ ->
@@ -104,7 +120,14 @@ product =
     , defaultQuantity = Just "1"
     , defaultUnit = Just "cup"
     , servingSizeG = Just "245"
-    , nutrients = [ { code = "PROTEIN_G", amountPer100g = "3.5", unit = "g", source = Nothing, confidence = Nothing } ]
+    , nutrients =
+        [ { code = "PROTEIN_G"
+          , amountPer100g = "3.5"
+          , unit = "g"
+          , source = Nothing
+          , confidence = Nothing
+          }
+        ]
     , servings = [ { label = "cup", quantity = "1", unit = "cup", grams = "245" } ]
     , allowedUnits = [ gram ]
     }

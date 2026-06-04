@@ -125,7 +125,12 @@ deleteMeal id toMsg =
         toMsg
 
 
-getMealNutrients : String -> String -> String -> (Result Client.ApiError MealNutritionResponse -> msg) -> Cmd msg
+getMealNutrients :
+    String
+    -> String
+    -> String
+    -> (Result Client.ApiError MealNutritionResponse -> msg)
+    -> Cmd msg
 getMealNutrients id amount unit toMsg =
     Client.get
         (Builder.absolute

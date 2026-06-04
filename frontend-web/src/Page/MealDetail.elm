@@ -112,7 +112,10 @@ update msg model =
         MealLoaded result ->
             case result of
                 Ok meal ->
-                    ( { model | meal = Just meal, error = Nothing }, Cmd.none, requestProductNames (uniqueProductIds meal) )
+                    ( { model | meal = Just meal, error = Nothing }
+                    , Cmd.none
+                    , requestProductNames (uniqueProductIds meal)
+                    )
 
                 Err error ->
                     failure error model
@@ -120,7 +123,13 @@ update msg model =
         ProductDetailLoaded productId result ->
             case result of
                 Ok product ->
-                    ( { model | productNames = upsertName productId product.name model.productNames }, Cmd.none, nextProductNameRequest productId model )
+                    ( { model
+                        | productNames =
+                            upsertName productId product.name model.productNames
+                      }
+                    , Cmd.none
+                    , nextProductNameRequest productId model
+                    )
 
                 Err _ ->
                     ( model, Cmd.none, nextProductNameRequest productId model )
@@ -146,22 +155,69 @@ update msg model =
             else
                 case result of
                     Ok response ->
-                        ( mapLogForm (\form -> { form | nutrients = Just response.nutrients, previewLoading = False, error = Nothing }) model, Cmd.none, NoOp )
+                        ( mapLogForm
+                            (\form ->
+                                { form
+                                    | nutrients = Just response.nutrients
+                                    , previewLoading = False
+                                    , error = Nothing
+                                }
+                            )
+                            model
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     Err error ->
                         if Client.isUnauthorized error then
-                            ( mapLogForm (\form -> { form | previewLoading = False, error = Just (Client.displayError error) }) model, Cmd.none, SessionExpired )
+                            ( mapLogForm
+                                (\form ->
+                                    { form
+                                        | previewLoading = False
+                                        , error = Just (Client.displayError error)
+                                    }
+                                )
+                                model
+                            , Cmd.none
+                            , SessionExpired
+                            )
 
                         else
-                            ( mapLogForm (\form -> { form | nutrients = Nothing, previewLoading = False, error = Just (Client.displayError error) }) model, Cmd.none, NoOp )
+                            ( mapLogForm
+                                (\form ->
+                                    { form
+                                        | nutrients = Nothing
+                                        , previewLoading = False
+                                        , error = Just (Client.displayError error)
+                                    }
+                                )
+                                model
+                            , Cmd.none
+                            , NoOp
+                            )
 
         LogClicked ->
             case validPreviewAmount model.logForm.amount of
                 Just _ ->
-                    ( mapLogForm (\form -> { form | logging = True, error = Nothing }) model, Cmd.none, RequestLocalTimestamp )
+                    ( mapLogForm
+                        (\form -> { form | logging = True, error = Nothing })
+                        model
+                    , Cmd.none
+                    , RequestLocalTimestamp
+                    )
 
                 Nothing ->
-                    ( mapLogForm (\form -> { form | nutrients = Nothing, error = Just "Amount is required." }) model, Cmd.none, NoOp )
+                    ( mapLogForm
+                        (\form ->
+                            { form
+                                | nutrients = Nothing
+                                , error = Just "Amount is required."
+                            }
+                        )
+                        model
+                    , Cmd.none
+                    , NoOp
+                    )
 
         LocalTimestampReceived loggedAt ->
             case createMealLogRequest loggedAt model.mealId model.logForm of
@@ -169,7 +225,17 @@ update msg model =
                     ( model, Cmd.none, RequestCreateLog request )
 
                 Err _ ->
-                    ( mapLogForm (\form -> { form | logging = False, error = Just "Amount is required." }) model, Cmd.none, NoOp )
+                    ( mapLogForm
+                        (\form ->
+                            { form
+                                | logging = False
+                                , error = Just "Amount is required."
+                            }
+                        )
+                        model
+                    , Cmd.none
+                    , NoOp
+                    )
 
         LogCompleted result ->
             case result of
@@ -178,10 +244,30 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( mapLogForm (\form -> { form | logging = False, error = Just (Client.displayError error) }) model, Cmd.none, SessionExpired )
+                        ( mapLogForm
+                            (\form ->
+                                { form
+                                    | logging = False
+                                    , error = Just (Client.displayError error)
+                                }
+                            )
+                            model
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( mapLogForm (\form -> { form | logging = False, error = Just (Client.displayError error) }) model, Cmd.none, NoOp )
+                        ( mapLogForm
+                            (\form ->
+                                { form
+                                    | logging = False
+                                    , error = Just (Client.displayError error)
+                                }
+                            )
+                            model
+                        , Cmd.none
+                        , NoOp
+                        )
 
         DeleteClicked ->
             ( { model | confirmDeleteOpen = True, deleteError = Nothing }, Cmd.none, NoOp )
@@ -190,7 +276,10 @@ update msg model =
             ( { model | confirmDeleteOpen = False, deleteError = Nothing }, Cmd.none, NoOp )
 
         ConfirmDeleteClicked ->
-            ( { model | deleting = True, deleteError = Nothing }, Cmd.none, RequestDeleteMeal model.mealId )
+            ( { model | deleting = True, deleteError = Nothing }
+            , Cmd.none
+            , RequestDeleteMeal model.mealId
+            )
 
         DeleteCompleted result ->
             case result of
@@ -199,10 +288,24 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | deleting = False, confirmDeleteOpen = True, deleteError = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | deleting = False
+                            , confirmDeleteOpen = True
+                            , deleteError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | deleting = False, confirmDeleteOpen = True, deleteError = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | deleting = False
+                            , confirmDeleteOpen = True
+                            , deleteError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         EditClicked ->
             ( model, Cmd.none, Navigate (MealEdit model.mealId) )
@@ -226,14 +329,35 @@ previewAfterChange model =
             in
             ( { model
                 | nextPreviewToken = token + 1
-                , logForm = { form | previewToken = token, previewLoading = True, nutrients = Nothing, error = Nothing }
+                , logForm =
+                    { form
+                        | previewToken = token
+                        , previewLoading = True
+                        , nutrients = Nothing
+                        , error = Nothing
+                    }
               }
             , Cmd.none
-            , RequestNutrientPreview model.mealId model.logForm.amount model.logForm.unit token
+            , RequestNutrientPreview
+                model.mealId
+                model.logForm.amount
+                model.logForm.unit
+                token
             )
 
         Nothing ->
-            ( mapLogForm (\form -> { form | nutrients = Nothing, previewLoading = False, error = Nothing }) model, Cmd.none, NoOp )
+            ( mapLogForm
+                (\form ->
+                    { form
+                        | nutrients = Nothing
+                        , previewLoading = False
+                        , error = Nothing
+                    }
+                )
+                model
+            , Cmd.none
+            , NoOp
+            )
 
 
 mapLogForm : (LogMealForm -> LogMealForm) -> Model -> Model
@@ -245,7 +369,11 @@ startPreview : Model -> OutMsg
 startPreview model =
     case validPreviewAmount model.logForm.amount of
         Just _ ->
-            RequestNutrientPreview model.mealId model.logForm.amount model.logForm.unit model.logForm.previewToken
+            RequestNutrientPreview
+                model.mealId
+                model.logForm.amount
+                model.logForm.unit
+                model.logForm.previewToken
 
         Nothing ->
             NoOp
@@ -316,7 +444,16 @@ nextProductNameRequest completedId model =
     case model.meal of
         Just meal ->
             uniqueProductIds meal
-                |> List.filter (\id -> id /= completedId && not (List.any (\( existing, _ ) -> existing == id) model.productNames))
+                |> List.filter
+                    (\id ->
+                        id
+                            /= completedId
+                            && not
+                                (List.any
+                                    (\( existing, _ ) -> existing == id)
+                                    model.productNames
+                                )
+                    )
                 |> List.head
                 |> Maybe.map RequestProductDetail
                 |> Maybe.withDefault NoOp
@@ -365,7 +502,9 @@ view model =
     Element.column [ Element.width Element.fill, Element.spacing 16, Element.padding 24 ]
         [ Element.row [ Element.spacing 12 ]
             [ Ui.button "Back" BackClicked
-            , Element.el [ Font.size 22, Font.bold ] (Element.text (Maybe.map .name model.meal |> Maybe.withDefault "Meal"))
+            , Element.el
+                [ Font.size 22, Font.bold ]
+                (Element.text (Maybe.map .name model.meal |> Maybe.withDefault "Meal"))
             , Ui.button "Edit" EditClicked
             , Ui.button "Delete" DeleteClicked
             ]
@@ -394,7 +533,9 @@ loadedView model meal =
             Nothing ->
                 Element.none
         , Element.el [ Font.size 18, Font.bold ] (Element.text "Components")
-        , Element.column [ Element.width Element.fill, Element.spacing 8 ] (List.map (componentView model) meal.components)
+        , Element.column
+            [ Element.width Element.fill, Element.spacing 8 ]
+            (List.map (componentView model) meal.components)
         , logFormView model
         , confirmDeleteView model
         ]
@@ -412,7 +553,9 @@ componentView model component =
         , Border.color (Element.rgb255 229 231 235)
         ]
         [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id model))
-        , Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
+        , Element.el
+            [ Font.color (Element.rgb255 107 114 128) ]
+            (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
         ]
 
 
@@ -458,7 +601,12 @@ nutrientView nutrient =
 confirmDeleteView : Model -> Element Msg
 confirmDeleteView model =
     if model.confirmDeleteOpen then
-        Element.column [ Element.spacing 8, Element.padding 12, Background.color (Element.rgb255 254 242 242), Border.rounded 8 ]
+        Element.column
+            [ Element.spacing 8
+            , Element.padding 12
+            , Background.color (Element.rgb255 254 242 242)
+            , Border.rounded 8
+            ]
             [ Element.el [ Font.bold ] (Element.text "Delete meal?")
             , case model.deleteError of
                 Just message ->

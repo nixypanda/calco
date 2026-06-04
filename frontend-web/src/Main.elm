@@ -165,7 +165,9 @@ update msg model =
         GotNow posix ->
             case model.timeZone of
                 Just zone ->
-                    changeRouteTo model.route { model | today = Just (LocalDate.fromPosix zone posix) }
+                    changeRouteTo
+                        model.route
+                        { model | today = Just (LocalDate.fromPosix zone posix) }
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -415,7 +417,9 @@ loadPage route model =
                     FoodLogDetail.init logId
 
                 ( nextModel, outCmd ) =
-                    applyFoodLogDetailOutMsg outMsg { model | page = FoodLogDetailPage foodLogDetailModel }
+                    applyFoodLogDetailOutMsg
+                        outMsg
+                        { model | page = FoodLogDetailPage foodLogDetailModel }
             in
             ( nextModel, outCmd )
 
@@ -425,7 +429,9 @@ loadPage route model =
                     CustomFoodCreate.init
 
                 ( nextModel, outCmd ) =
-                    applyCustomFoodCreateOutMsg outMsg { model | page = CustomFoodCreatePage pageModel }
+                    applyCustomFoodCreateOutMsg
+                        outMsg
+                        { model | page = CustomFoodCreatePage pageModel }
             in
             ( nextModel, outCmd )
 
@@ -534,7 +540,12 @@ applyAdminOutMsg outMsg model =
             ( model, Api.Admin.createUser request (GotAdminMsg << AdminDashboard.CreateCompleted) )
 
         AdminDashboard.RequestResetPassword userId request ->
-            ( model, Api.Admin.resetPassword userId request (GotAdminMsg << AdminDashboard.ResetCompleted) )
+            ( model
+            , Api.Admin.resetPassword
+                userId
+                request
+                (GotAdminMsg << AdminDashboard.ResetCompleted)
+            )
 
         AdminDashboard.RequestDisableUser userId ->
             ( model, Api.Admin.disableUser userId (GotAdminMsg << AdminDashboard.DisableCompleted) )
@@ -577,7 +588,11 @@ applyFoodSearchOutMsg outMsg model =
             ( model, Cmd.none )
 
         FoodSearch.RequestSearch token request ->
-            ( model, Api.Foods.searchFoods request (GotFoodSearchMsg << FoodSearch.SearchCompleted token) )
+            ( model
+            , Api.Foods.searchFoods
+                request
+                (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
+            )
 
         FoodSearch.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
@@ -674,16 +689,33 @@ applyFoodLogDetailOutMsg outMsg model =
             )
 
         FoodLogDetail.RequestProductDetail productId ->
-            ( model, Api.Foods.getFoodDetail productId (GotFoodLogDetailMsg << FoodLogDetail.ProductDetailLoaded) )
+            ( model
+            , Api.Foods.getFoodDetail
+                productId
+                (GotFoodLogDetailMsg << FoodLogDetail.ProductDetailLoaded)
+            )
 
         FoodLogDetail.RequestMealName mealId ->
-            ( model, Api.Meals.getMealName mealId (GotFoodLogDetailMsg << FoodLogDetail.MealNameLoaded) )
+            ( model
+            , Api.Meals.getMealName
+                mealId
+                (GotFoodLogDetailMsg << FoodLogDetail.MealNameLoaded)
+            )
 
         FoodLogDetail.RequestUpdateLog logId request ->
-            ( model, Api.Logs.updateLog logId request (GotFoodLogDetailMsg << FoodLogDetail.UpdateCompleted) )
+            ( model
+            , Api.Logs.updateLog
+                logId
+                request
+                (GotFoodLogDetailMsg << FoodLogDetail.UpdateCompleted)
+            )
 
         FoodLogDetail.RequestDeleteLog logId ->
-            ( model, Api.Logs.deleteLog logId (GotFoodLogDetailMsg << FoodLogDetail.DeleteCompleted) )
+            ( model
+            , Api.Logs.deleteLog
+                logId
+                (GotFoodLogDetailMsg << FoodLogDetail.DeleteCompleted)
+            )
 
         FoodLogDetail.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
@@ -701,7 +733,9 @@ updateCustomFoodCreate subMsg model =
                     CustomFoodCreate.update subMsg subModel
 
                 ( finalModel, outCmd ) =
-                    applyCustomFoodCreateOutMsg outMsg { model | page = CustomFoodCreatePage newSubModel }
+                    applyCustomFoodCreateOutMsg
+                        outMsg
+                        { model | page = CustomFoodCreatePage newSubModel }
             in
             ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodCreateMsg subCmd, outCmd ] )
 
@@ -718,13 +752,18 @@ applyCustomFoodCreateOutMsg outMsg model =
         CustomFoodCreate.RequestInitialData ->
             ( model
             , Cmd.batch
-                [ Api.Foods.listNutrients (GotCustomFoodCreateMsg << CustomFoodCreate.NutrientsLoaded)
+                [ Api.Foods.listNutrients
+                    (GotCustomFoodCreateMsg << CustomFoodCreate.NutrientsLoaded)
                 , Api.Foods.listUnits (GotCustomFoodCreateMsg << CustomFoodCreate.UnitsLoaded)
                 ]
             )
 
         CustomFoodCreate.RequestCreateFood request ->
-            ( model, Api.Foods.createCustomFood request (GotCustomFoodCreateMsg << CustomFoodCreate.SaveCompleted) )
+            ( model
+            , Api.Foods.createCustomFood
+                request
+                (GotCustomFoodCreateMsg << CustomFoodCreate.SaveCompleted)
+            )
 
         CustomFoodCreate.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
@@ -742,7 +781,9 @@ updateCustomFoodEdit subMsg model =
                     CustomFoodEdit.update subMsg subModel
 
                 ( finalModel, outCmd ) =
-                    applyCustomFoodEditOutMsg outMsg { model | page = CustomFoodEditPage newSubModel }
+                    applyCustomFoodEditOutMsg
+                        outMsg
+                        { model | page = CustomFoodEditPage newSubModel }
             in
             ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodEditMsg subCmd, outCmd ] )
 
@@ -759,14 +800,21 @@ applyCustomFoodEditOutMsg outMsg model =
         CustomFoodEdit.RequestInitialData productId ->
             ( model
             , Cmd.batch
-                [ Api.Foods.getFoodDetail productId (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
+                [ Api.Foods.getFoodDetail
+                    productId
+                    (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
                 , Api.Foods.listNutrients (GotCustomFoodEditMsg << CustomFoodEdit.NutrientsLoaded)
                 , Api.Foods.listUnits (GotCustomFoodEditMsg << CustomFoodEdit.UnitsLoaded)
                 ]
             )
 
         CustomFoodEdit.RequestUpdateFood productId request ->
-            ( model, Api.Foods.updateCustomFood productId request (GotCustomFoodEditMsg << CustomFoodEdit.SaveCompleted) )
+            ( model
+            , Api.Foods.updateCustomFood
+                productId
+                request
+                (GotCustomFoodEditMsg << CustomFoodEdit.SaveCompleted)
+            )
 
         CustomFoodEdit.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
@@ -835,16 +883,29 @@ applyMealFormOutMsg outMsg model =
             ( model, Api.Meals.getMeal mealId (GotMealFormMsg << MealForm.MealLoaded) )
 
         MealForm.RequestProductName productId ->
-            ( model, Api.Foods.getFoodDetail productId (GotMealFormMsg << MealForm.ProductNameLoaded productId) )
+            ( model
+            , Api.Foods.getFoodDetail
+                productId
+                (GotMealFormMsg << MealForm.ProductNameLoaded productId)
+            )
 
         MealForm.RequestProductSearch rowId token request ->
-            ( model, Api.Foods.searchFoods request (GotMealFormMsg << MealForm.ComponentSearchCompleted rowId token) )
+            ( model
+            , Api.Foods.searchFoods
+                request
+                (GotMealFormMsg << MealForm.ComponentSearchCompleted rowId token)
+            )
 
         MealForm.RequestCreateMeal request ->
             ( model, Api.Meals.createMeal request (GotMealFormMsg << MealForm.SaveCompleted) )
 
         MealForm.RequestUpdateMeal mealId request ->
-            ( model, Api.Meals.updateMeal mealId request (GotMealFormMsg << MealForm.SaveCompleted) )
+            ( model
+            , Api.Meals.updateMeal
+                mealId
+                request
+                (GotMealFormMsg << MealForm.SaveCompleted)
+            )
 
         MealForm.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
@@ -885,10 +946,20 @@ applyMealDetailOutMsg outMsg model =
             )
 
         MealDetail.RequestProductDetail productId ->
-            ( model, Api.Foods.getFoodDetail productId (GotMealDetailMsg << MealDetail.ProductDetailLoaded productId) )
+            ( model
+            , Api.Foods.getFoodDetail
+                productId
+                (GotMealDetailMsg << MealDetail.ProductDetailLoaded productId)
+            )
 
         MealDetail.RequestNutrientPreview mealId amount unit token ->
-            ( model, Api.Meals.getMealNutrients mealId amount unit (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded token) )
+            ( model
+            , Api.Meals.getMealNutrients
+                mealId
+                amount
+                unit
+                (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded token)
+            )
 
         MealDetail.RequestLocalTimestamp ->
             ( model, requestLocalTimestamp () )
@@ -959,7 +1030,11 @@ identityView : Model -> List (Element.Element Msg)
 identityView model =
     case model.session.identity of
         Just identity ->
-            [ Element.el [ Font.size 14, Font.color (Element.rgb255 75 85 99) ] (Element.text ("Logged in as " ++ identity.username))
+            [ Element.el
+                [ Font.size 14
+                , Font.color (Element.rgb255 75 85 99)
+                ]
+                (Element.text ("Logged in as " ++ identity.username))
             , Ui.button "Logout" LogoutClicked
             ]
 

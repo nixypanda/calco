@@ -45,7 +45,10 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model | error = Just (Client.displayError error) }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
                         ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
@@ -90,14 +93,18 @@ bodyView model =
             Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "No meals yet.")
 
         Just meals ->
-            Element.column [ Element.width Element.fill, Element.spacing 10 ] (List.map mealRow meals)
+            Element.column
+                [ Element.width Element.fill, Element.spacing 10 ]
+                (List.map mealRow meals)
 
         Nothing ->
             if model.error /= Nothing then
                 Element.none
 
             else
-                Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Loading meals...")
+                Element.el
+                    [ Font.color (Element.rgb255 107 114 128) ]
+                    (Element.text "Loading meals...")
 
 
 mealRow : Meal -> Element Msg
@@ -112,6 +119,10 @@ mealRow meal =
         , Border.color (Element.rgb255 229 231 235)
         ]
         [ Element.el [ Font.bold ] (Element.text meal.name)
-        , Element.el [ Font.size 14, Font.color (Element.rgb255 107 114 128) ] (Element.text (String.fromInt (List.length meal.components) ++ " components"))
+        , Element.el
+            [ Font.size 14
+            , Font.color (Element.rgb255 107 114 128)
+            ]
+            (Element.text (String.fromInt (List.length meal.components) ++ " components"))
         , Ui.button "Open" (OpenMealClicked meal.id)
         ]

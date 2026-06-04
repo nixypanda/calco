@@ -163,7 +163,9 @@ bodyView model =
             emptyState "Search for a food to get started."
 
         Loading ->
-            Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Searching foods...")
+            Element.el
+                [ Font.color (Element.rgb255 107 114 128) ]
+                (Element.text "Searching foods...")
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing 12 ]
@@ -215,7 +217,11 @@ resultRow query item =
         , label =
             Element.column [ Element.width Element.fill, Element.spacing 4 ]
                 [ Element.el [ Font.medium ] (Element.text item.name)
-                , Element.el [ Font.size 13, Font.color (Element.rgb255 107 114 128) ] (Element.text (metaText query item))
+                , Element.el
+                    [ Font.size 13
+                    , Font.color (Element.rgb255 107 114 128)
+                    ]
+                    (Element.text (metaText query item))
                 ]
         }
 

@@ -104,13 +104,19 @@ update msg model =
                 Just form ->
                     case FoodLogForm.createProductLogRequest "pending" model.productId form of
                         Ok _ ->
-                            ( { model | form = Just { form | submitting = True, error = Nothing }, error = Nothing }
+                            ( { model
+                                | form = Just { form | submitting = True, error = Nothing }
+                                , error = Nothing
+                              }
                             , Cmd.none
                             , RequestLocalTimestamp
                             )
 
                         Err FoodLogForm.AmountRequired ->
-                            ( { model | form = Just { form | error = Just "Amount is required." } }, Cmd.none, NoOp )
+                            ( { model | form = Just { form | error = Just "Amount is required." } }
+                            , Cmd.none
+                            , NoOp
+                            )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -123,7 +129,17 @@ update msg model =
                             ( model, Cmd.none, RequestCreateLog request )
 
                         Err FoodLogForm.AmountRequired ->
-                            ( { model | form = Just { form | submitting = False, error = Just "Amount is required." } }, Cmd.none, NoOp )
+                            ( { model
+                                | form =
+                                    Just
+                                        { form
+                                            | submitting = False
+                                            , error = Just "Amount is required."
+                                        }
+                              }
+                            , Cmd.none
+                            , NoOp
+                            )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -135,10 +151,20 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( setFormSubmitting False { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( setFormSubmitting
+                            False
+                            { model | error = Just (Client.displayError error) }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( setFormSubmitting False { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( setFormSubmitting
+                            False
+                            { model | error = Just (Client.displayError error) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         BackClicked ->
             ( model, Cmd.none, Navigate (Diary Nothing) )
@@ -212,7 +238,9 @@ bodyView model =
                 Element.none
 
             else
-                Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Loading food...")
+                Element.el
+                    [ Font.color (Element.rgb255 107 114 128) ]
+                    (Element.text "Loading food...")
 
 
 loadedView : ProductDetail -> List UnitItem -> FoodLogForm.Model -> Element Msg
@@ -248,7 +276,11 @@ foodHeader food =
         , Border.color (Element.rgb255 229 231 235)
         ]
         [ Element.el [ Font.size 20, Font.bold ] (Element.text food.name)
-        , Element.el [ Font.size 14, Font.color (Element.rgb255 107 114 128) ] (Element.text (metaText food))
+        , Element.el
+            [ Font.size 14
+            , Font.color (Element.rgb255 107 114 128)
+            ]
+            (Element.text (metaText food))
         , case customFoodEditRoute food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked

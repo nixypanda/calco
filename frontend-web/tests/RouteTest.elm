@@ -1,7 +1,7 @@
 module RouteTest exposing (tests)
 
-import Expect
 import Data.MealSlot exposing (MealSlot(..))
+import Expect
 import Route exposing (Route(..))
 import Test exposing (Test, describe, test)
 import Url

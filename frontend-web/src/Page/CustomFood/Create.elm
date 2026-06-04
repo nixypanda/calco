@@ -1,7 +1,13 @@
 module Page.CustomFood.Create exposing (Model, Msg(..), OutMsg(..), init, update, view)
 
 import Api.Client as Client
-import Api.Foods as Foods exposing (CreateFoodRequest, CreateFoodResponse, NutrientItem, UnitItem)
+import Api.Foods as Foods
+    exposing
+        ( CreateFoodRequest
+        , CreateFoodResponse
+        , NutrientItem
+        , UnitItem
+        )
 import Element exposing (Element)
 import Element.Font as Font
 import Page.CustomFood.Form as Form
@@ -70,8 +76,15 @@ update msg model =
                         form : Form.FormModel
                         form =
                             model.form
+
+                        nextForm : Form.FormModel
+                        nextForm =
+                            setSubmitting True { form | error = Nothing }
                     in
-                    ( { model | form = setSubmitting True { form | error = Nothing }, error = Nothing }, Cmd.none, RequestCreateFood request )
+                    ( { model | form = nextForm, error = Nothing }
+                    , Cmd.none
+                    , RequestCreateFood request
+                    )
 
                 Err Form.NameRequired ->
                     let
@@ -79,7 +92,10 @@ update msg model =
                         form =
                             model.form
                     in
-                    ( { model | form = { form | error = Just "Name is required" } }, Cmd.none, NoOp )
+                    ( { model | form = { form | error = Just "Name is required" } }
+                    , Cmd.none
+                    , NoOp
+                    )
 
         SaveCompleted result ->
             case result of
@@ -88,10 +104,22 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | form = setSubmitting False model.form, error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | form = setSubmitting False model.form
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | form = setSubmitting False model.form, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | form = setSubmitting False model.form
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         BackClicked ->
             ( model, Cmd.none, Navigate (Diary Nothing) )

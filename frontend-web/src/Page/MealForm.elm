@@ -181,7 +181,9 @@ update msg model =
                     ( { model
                         | name = meal.name
                         , notes = Maybe.withDefault "" meal.notes
-                        , totalQuantity = Maybe.map .amount meal.totalQuantity |> Maybe.withDefault ""
+                        , totalQuantity =
+                            Maybe.map .amount meal.totalQuantity
+                                |> Maybe.withDefault ""
                         , totalUnit = Maybe.map .unit meal.totalQuantity |> Maybe.withDefault "g"
                         , components = loadedRows
                         , nextRowId = List.length loadedRows + 1
@@ -198,7 +200,15 @@ update msg model =
         ProductNameLoaded productId result ->
             case result of
                 Ok product ->
-                    ( { model | components = List.map (mergeProductName productId product.name) model.components }, Cmd.none, requestNextMissingProductName productId model.components )
+                    ( { model
+                        | components =
+                            List.map
+                                (mergeProductName productId product.name)
+                                model.components
+                      }
+                    , Cmd.none
+                    , requestNextMissingProductName productId model.components
+                    )
 
                 Err _ ->
                     ( model, Cmd.none, requestNextMissingProductName productId model.components )
@@ -231,16 +241,25 @@ update msg model =
                 ( nextModel |> updateComponent rowId (SetSearchResults token []), Cmd.none, NoOp )
 
             else
-                ( { nextModel | nextSearchToken = token + 1 }, Cmd.none, RequestProductSearch rowId token { query = query } )
+                ( { nextModel | nextSearchToken = token + 1 }
+                , Cmd.none
+                , RequestProductSearch rowId token { query = query }
+                )
 
         ComponentSearchCompleted rowId token result ->
             case result of
                 Ok response ->
-                    ( updateComponent rowId (SetSearchResults token response.items) model, Cmd.none, NoOp )
+                    ( updateComponent rowId (SetSearchResults token response.items) model
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( updateComponent rowId (SetSearching False) model, Cmd.none, SessionExpired )
+                        ( updateComponent rowId (SetSearching False) model
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
                         ( updateComponent rowId (SetSearching False) model, Cmd.none, NoOp )
@@ -255,7 +274,13 @@ update msg model =
             ( updateComponent rowId (SetUnit value) model, Cmd.none, NoOp )
 
         AddComponentClicked ->
-            ( { model | components = model.components ++ [ emptyComponentRow model.nextRowId ], nextRowId = model.nextRowId + 1 }, Cmd.none, NoOp )
+            ( { model
+                | components = model.components ++ [ emptyComponentRow model.nextRowId ]
+                , nextRowId = model.nextRowId + 1
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         RemoveComponentClicked rowId ->
             ( { model | components = removeRow rowId model.components }, Cmd.none, NoOp )
@@ -265,16 +290,31 @@ update msg model =
                 Ok request ->
                     case model.mealId of
                         Just mealId ->
-                            ( { model | submitting = True, error = Nothing }, Cmd.none, RequestUpdateMeal mealId request )
+                            ( { model | submitting = True, error = Nothing }
+                            , Cmd.none
+                            , RequestUpdateMeal mealId request
+                            )
 
                         Nothing ->
-                            ( { model | submitting = True, error = Nothing }, Cmd.none, RequestCreateMeal request )
+                            ( { model | submitting = True, error = Nothing }
+                            , Cmd.none
+                            , RequestCreateMeal request
+                            )
 
                 Err MealNameRequired ->
-                    ( { model | error = Just "Name is required", submitting = False }, Cmd.none, NoOp )
+                    ( { model | error = Just "Name is required", submitting = False }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err ComponentRequired ->
-                    ( { model | error = Just "At least one component with a selected product is required", submitting = False }, Cmd.none, NoOp )
+                    ( { model
+                        | error = Just "At least one component with a selected product is required"
+                        , submitting = False
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
         SaveCompleted result ->
             case result of
@@ -283,10 +323,22 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | submitting = False, error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | submitting = False
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | submitting = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | submitting = False
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         BackClicked ->
             ( model, Cmd.none, Navigate Meals )
@@ -295,7 +347,11 @@ update msg model =
 requestNextProductName : List ComponentRow -> OutMsg
 requestNextProductName rows =
     rows
-        |> List.filter (\row -> not (String.isEmpty row.productId) && String.isEmpty row.productName)
+        |> List.filter
+            (\row ->
+                not (String.isEmpty row.productId)
+                    && String.isEmpty row.productName
+            )
         |> List.head
         |> Maybe.map (.productId >> RequestProductName)
         |> Maybe.withDefault NoOp
@@ -304,7 +360,13 @@ requestNextProductName rows =
 requestNextMissingProductName : String -> List ComponentRow -> OutMsg
 requestNextMissingProductName completedProductId rows =
     rows
-        |> List.filter (\row -> row.productId /= completedProductId && not (String.isEmpty row.productId) && String.isEmpty row.productName)
+        |> List.filter
+            (\row ->
+                row.productId
+                    /= completedProductId
+                    && not (String.isEmpty row.productId)
+                    && String.isEmpty row.productName
+            )
         |> List.head
         |> Maybe.map (.productId >> RequestProductName)
         |> Maybe.withDefault NoOp
@@ -340,7 +402,12 @@ toMealRequest model =
                     , notes = Text.blankToMaybe model.notes
                     , totalQuantity =
                         Text.blankToMaybe model.totalQuantity
-                            |> Maybe.map (\amount -> { amount = amount, unit = Text.trimOrDefault "g" model.totalUnit })
+                            |> Maybe.map
+                                (\amount ->
+                                    { amount = amount
+                                    , unit = Text.trimOrDefault "g" model.totalUnit
+                                    }
+                                )
                     , components = components
                     }
 
@@ -352,7 +419,10 @@ selectedComponents rows =
         |> List.map
             (\row ->
                 { item = { itemType = "product", id = String.trim row.productId }
-                , quantity = { amount = Text.trimOrDefault "100" row.quantity, unit = Text.trimOrDefault "g" row.unit }
+                , quantity =
+                    { amount = Text.trimOrDefault "100" row.quantity
+                    , unit = Text.trimOrDefault "g" row.unit
+                    }
                 }
             )
 
@@ -370,7 +440,13 @@ patchRow rowId patch row =
     else
         case patch of
             SetProduct id name ->
-                { row | productId = id, productName = name, searchQuery = name, searchResults = [], searching = False }
+                { row
+                    | productId = id
+                    , productName = name
+                    , searchQuery = name
+                    , searchResults = []
+                    , searching = False
+                }
 
             SetQuantity value ->
                 { row | quantity = value }
@@ -454,7 +530,9 @@ formView model =
             , Ui.input "Total Unit" model.totalUnit TotalUnitChanged
             ]
         , Element.el [ Font.size 18, Font.bold ] (Element.text "Components")
-        , Element.column [ Element.width Element.fill, Element.spacing 10 ] (List.map componentRowView model.components)
+        , Element.column
+            [ Element.width Element.fill, Element.spacing 10 ]
+            (List.map componentRowView model.components)
         , Ui.button "+ Add Component" AddComponentClicked
         , Ui.button
             (if model.submitting then
@@ -486,7 +564,9 @@ componentRowView row =
             Element.none
 
           else
-            Element.column [ Element.spacing 4 ] (List.map (searchResultView row.rowId) row.searchResults)
+            Element.column
+                [ Element.spacing 4 ]
+                (List.map (searchResultView row.rowId) row.searchResults)
         , Element.row [ Element.spacing 8 ]
             [ Ui.input "Qty" row.quantity (ComponentQuantityChanged row.rowId)
             , Ui.input "Unit" row.unit (ComponentUnitChanged row.rowId)

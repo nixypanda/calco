@@ -1,7 +1,14 @@
 module Page.CustomFood.Edit exposing (Model, Msg(..), OutMsg(..), init, update, view)
 
 import Api.Client as Client
-import Api.Foods as Foods exposing (CreateFoodRequest, CreateFoodResponse, NutrientItem, ProductDetail, UnitItem)
+import Api.Foods as Foods
+    exposing
+        ( CreateFoodRequest
+        , CreateFoodResponse
+        , NutrientItem
+        , ProductDetail
+        , UnitItem
+        )
 import Element exposing (Element)
 import Element.Font as Font
 import Page.CustomFood.Form as Form
@@ -49,7 +56,13 @@ update msg model =
         FoodLoaded result ->
             case result of
                 Ok food ->
-                    ( { model | form = Just (Form.fromProductDetail food), error = Nothing }, Cmd.none, NoOp )
+                    ( { model
+                        | form = Just (Form.fromProductDetail food)
+                        , error = Nothing
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err error ->
                     failure error model
@@ -83,13 +96,19 @@ update msg model =
                 Just form ->
                     case Form.toCreateFoodRequest form of
                         Ok request ->
-                            ( { model | form = Just { form | submitting = True, error = Nothing }, error = Nothing }
+                            ( { model
+                                | form = Just { form | submitting = True, error = Nothing }
+                                , error = Nothing
+                              }
                             , Cmd.none
                             , RequestUpdateFood model.productId request
                             )
 
                         Err Form.NameRequired ->
-                            ( { model | form = Just { form | error = Just "Name is required" } }, Cmd.none, NoOp )
+                            ( { model | form = Just { form | error = Just "Name is required" } }
+                            , Cmd.none
+                            , NoOp
+                            )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -101,10 +120,22 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | form = Maybe.map (\form -> { form | submitting = False }) model.form, error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | form = Maybe.map (\form -> { form | submitting = False }) model.form
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | form = Maybe.map (\form -> { form | submitting = False }) model.form, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | form = Maybe.map (\form -> { form | submitting = False }) model.form
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         BackClicked ->
             ( model, Cmd.none, Navigate (FoodDetail model.productId Nothing) )

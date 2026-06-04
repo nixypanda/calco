@@ -110,13 +110,26 @@ fromProductDetail food =
         , defaultQuantity = Maybe.withDefault "" food.defaultQuantity
         , defaultUnit = Maybe.withDefault "g" food.defaultUnit
         , nutrients =
-            case List.map (\n -> { code = n.code, amountPer100g = n.amountPer100g }) food.nutrients of
+            case
+                List.map
+                    (\n -> { code = n.code, amountPer100g = n.amountPer100g })
+                    food.nutrients
+            of
                 [] ->
                     [ emptyNutrientRow ]
 
                 rows ->
                     rows
-        , servings = List.map (\s -> { label = s.label, quantity = s.quantity, unit = s.unit, grams = s.grams }) food.servings
+        , servings =
+            List.map
+                (\s ->
+                    { label = s.label
+                    , quantity = s.quantity
+                    , unit = s.unit
+                    , grams = s.grams
+                    }
+                )
+                food.servings
     }
 
 
@@ -140,11 +153,25 @@ toCreateFoodRequest form =
             , defaultUnit = Text.blankToMaybe form.defaultUnit
             , nutrients =
                 form.nutrients
-                    |> List.filter (\row -> not (String.isEmpty (String.trim row.code)) && not (String.isEmpty (String.trim row.amountPer100g)))
-                    |> List.map (\row -> { code = String.trim row.code, amountPer100g = String.trim row.amountPer100g })
+                    |> List.filter
+                        (\row ->
+                            not (String.isEmpty (String.trim row.code))
+                                && not (String.isEmpty (String.trim row.amountPer100g))
+                        )
+                    |> List.map
+                        (\row ->
+                            { code = String.trim row.code
+                            , amountPer100g = String.trim row.amountPer100g
+                            }
+                        )
             , servings =
                 form.servings
-                    |> List.filter (\row -> not (String.isEmpty (String.trim row.label)) && not (String.isEmpty (String.trim row.quantity)) && not (String.isEmpty (String.trim row.grams)))
+                    |> List.filter
+                        (\row ->
+                            not (String.isEmpty (String.trim row.label))
+                                && not (String.isEmpty (String.trim row.quantity))
+                                && not (String.isEmpty (String.trim row.grams))
+                        )
                     |> List.map
                         (\row ->
                             { label = String.trim row.label
@@ -193,10 +220,22 @@ update msg form =
             { form | defaultUnit = value }
 
         NutrientCodeChanged index value ->
-            { form | nutrients = ListExtra.updateAt index (\row -> { row | code = value }) form.nutrients }
+            { form
+                | nutrients =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | code = value })
+                        form.nutrients
+            }
 
         NutrientAmountChanged index value ->
-            { form | nutrients = ListExtra.updateAt index (\row -> { row | amountPer100g = value }) form.nutrients }
+            { form
+                | nutrients =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | amountPer100g = value })
+                        form.nutrients
+            }
 
         AddNutrientRow ->
             { form | nutrients = form.nutrients ++ [ emptyNutrientRow ] }
@@ -209,16 +248,40 @@ update msg form =
                 { form | nutrients = ListExtra.removeAt index form.nutrients }
 
         ServingLabelChanged index value ->
-            { form | servings = ListExtra.updateAt index (\row -> { row | label = value }) form.servings }
+            { form
+                | servings =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | label = value })
+                        form.servings
+            }
 
         ServingQuantityChanged index value ->
-            { form | servings = ListExtra.updateAt index (\row -> { row | quantity = value }) form.servings }
+            { form
+                | servings =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | quantity = value })
+                        form.servings
+            }
 
         ServingUnitChanged index value ->
-            { form | servings = ListExtra.updateAt index (\row -> { row | unit = value }) form.servings }
+            { form
+                | servings =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | unit = value })
+                        form.servings
+            }
 
         ServingGramsChanged index value ->
-            { form | servings = ListExtra.updateAt index (\row -> { row | grams = value }) form.servings }
+            { form
+                | servings =
+                    ListExtra.updateAt
+                        index
+                        (\row -> { row | grams = value })
+                        form.servings
+            }
 
         AddServingRow ->
             { form | servings = form.servings ++ [ emptyServingRow ] }
@@ -247,9 +310,13 @@ view nutrients units form =
             , simpleSelect "Default Unit" form.defaultUnit DefaultUnitChanged (unitOptions units)
             ]
         , section "Nutrients (per 100g)"
-            (List.indexedMap (nutrientRowView nutrients) form.nutrients ++ [ Ui.button "+ Add Nutrient" AddNutrientRow ])
+            (List.indexedMap (nutrientRowView nutrients) form.nutrients
+                ++ [ Ui.button "+ Add Nutrient" AddNutrientRow ]
+            )
         , section "Servings"
-            (List.indexedMap (servingRowView units) form.servings ++ [ Ui.button "+ Add Serving" AddServingRow ])
+            (List.indexedMap (servingRowView units) form.servings
+                ++ [ Ui.button "+ Add Serving" AddServingRow ]
+            )
         ]
 
 
@@ -262,7 +329,13 @@ section title children =
 nutrientRowView : List NutrientItem -> Int -> NutrientRow -> Element Msg
 nutrientRowView nutrients index row =
     Element.row [ Element.width Element.fill, Element.spacing 8 ]
-        [ simpleSelect "Nutrient" row.code (NutrientCodeChanged index) (( "", "Select nutrient..." ) :: List.map (\n -> ( n.code, n.name )) nutrients)
+        [ simpleSelect
+            "Nutrient"
+            row.code
+            (NutrientCodeChanged index)
+            (( "", "Select nutrient..." )
+                :: List.map (\n -> ( n.code, n.name )) nutrients
+            )
         , Ui.input "Amount" row.amountPer100g (NutrientAmountChanged index)
         , Ui.button "Remove" (RemoveNutrientRow index)
         ]

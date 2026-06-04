@@ -78,7 +78,10 @@ update msg model =
         Submitted ->
             case validateLogin model.form of
                 Ok request ->
-                    ( { model | submitting = True, error = Nothing }, Cmd.none, RequestLogin request )
+                    ( { model | submitting = True, error = Nothing }
+                    , Cmd.none
+                    , RequestLogin request
+                    )
 
                 Err message ->
                     ( { model | error = Just message }, Cmd.none, NoOp )
@@ -86,10 +89,19 @@ update msg model =
         LoginCompleted result ->
             case result of
                 Ok loginSession ->
-                    ( { model | submitting = False, error = Nothing }, Cmd.none, LoginSucceeded loginSession )
+                    ( { model | submitting = False, error = Nothing }
+                    , Cmd.none
+                    , LoginSucceeded loginSession
+                    )
 
                 Err error ->
-                    ( { model | submitting = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                    ( { model
+                        | submitting = False
+                        , error = Just (Client.displayError error)
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
 
 
 updateUsername : String -> Form -> Form
@@ -120,7 +132,12 @@ view model =
             , Element.padding 24
             ]
             ([ Element.el [ Font.size 32, Font.bold ] (Element.text "CalCo")
-             , Element.el [ Font.size 20, Font.medium, Font.color (Element.rgb255 75 85 99) ] (Element.text "Log In")
+             , Element.el
+                [ Font.size 20
+                , Font.medium
+                , Font.color (Element.rgb255 75 85 99)
+                ]
+                (Element.text "Log In")
              , Ui.input "Username" model.form.username UsernameChanged
              , Ui.passwordInput "Password" model.form.password PasswordChanged
              ]

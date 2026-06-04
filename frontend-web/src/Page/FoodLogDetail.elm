@@ -129,13 +129,19 @@ update msg model =
                 Just form ->
                     case FoodLogForm.createUpdateLogRequest form of
                         Ok request ->
-                            ( { model | form = Just { form | submitting = True, error = Nothing }, error = Nothing }
+                            ( { model
+                                | form = Just { form | submitting = True, error = Nothing }
+                                , error = Nothing
+                              }
                             , Cmd.none
                             , RequestUpdateLog model.logId request
                             )
 
                         Err FoodLogForm.AmountRequired ->
-                            ( { model | form = Just { form | error = Just "Amount is required." } }, Cmd.none, NoOp )
+                            ( { model | form = Just { form | error = Just "Amount is required." } }
+                            , Cmd.none
+                            , NoOp
+                            )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -154,10 +160,20 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( setFormSubmitting False { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( setFormSubmitting
+                            False
+                            { model | error = Just (Client.displayError error) }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( setFormSubmitting False { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( setFormSubmitting
+                            False
+                            { model | error = Just (Client.displayError error) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         DeleteClicked ->
             ( { model | deleting = True, error = Nothing }, Cmd.none, RequestDeleteLog model.logId )
@@ -169,10 +185,22 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model | deleting = False, error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
+                        ( { model
+                            | deleting = False
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
 
                     else
-                        ( { model | deleting = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                        ( { model
+                            | deleting = False
+                            , error = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
         BackClicked ->
             ( model, Cmd.none, Navigate (Diary Nothing) )
@@ -250,7 +278,9 @@ bodyView model =
                 Element.none
 
             else
-                Element.el [ Font.color (Element.rgb255 107 114 128) ] (Element.text "Loading log...")
+                Element.el
+                    [ Font.color (Element.rgb255 107 114 128) ]
+                    (Element.text "Loading log...")
 
 
 loadedView : Model -> FoodLog -> List UnitItem -> FoodLogForm.Model -> Element Msg
@@ -294,7 +324,11 @@ itemHeader model log =
         , Border.color (Element.rgb255 229 231 235)
         ]
         [ Element.el [ Font.size 20, Font.bold ] (Element.text (itemTitle model log))
-        , Element.el [ Font.size 14, Font.color (Element.rgb255 107 114 128) ] (Element.text (metaText model.food log))
+        , Element.el
+            [ Font.size 14
+            , Font.color (Element.rgb255 107 114 128)
+            ]
+            (Element.text (metaText model.food log))
         , case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked
