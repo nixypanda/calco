@@ -1,12 +1,56 @@
-module View.FoodSearchResults exposing (resultRow)
+module View.Search exposing
+    ( completionDropdown
+    , isBarcodeVisible
+    , resultRow
+    , tabCompletionHandler
+    )
 
 import Api.Foods exposing (SearchResult)
+import Data.Search as Search exposing (Completion(..))
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html
+import Html.Events
+import Json.Decode as Decode
 import Ui
+
+
+completionDropdown : { onSelect : Completion -> msg } -> List Completion -> Element msg
+completionDropdown config options =
+    if List.isEmpty options then
+        Element.none
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.height (Element.px (completionDropdownHeight options))
+            , Element.scrollbarY
+            , Element.spacing 2
+            , Element.padding 4
+            , Border.rounded 6
+            , Border.width 1
+            , Border.color Ui.borderGray
+            , Background.color Ui.cardBg
+            ]
+            (List.map (completionRow config.onSelect) options)
+
+
+tabCompletionHandler : msg -> List Completion -> Html.Attribute msg
+tabCompletionHandler completeMsg options =
+    Html.Events.preventDefaultOn "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen
+                (\key ->
+                    if key == "Tab" && not (List.isEmpty options) then
+                        Decode.succeed ( completeMsg, True )
+
+                    else
+                        Decode.fail "not handled"
+                )
+        )
 
 
 resultRow : { query : String, item : SearchResult, onSelect : String -> msg } -> Element msg
@@ -36,6 +80,34 @@ resultRow config =
                         (Element.text (metaText config.query config.item))
                     ]
                 , categoryPills config.item.categories
+                ]
+        }
+
+
+completionDropdownHeight : List Completion -> Int
+completionDropdownHeight options =
+    min 224 (8 + List.length options * 38)
+
+
+completionRow : (Completion -> msg) -> Completion -> Element msg
+completionRow onSelect completion =
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingXY 10 8
+        , Border.rounded 4
+        ]
+        { onPress = Just (onSelect completion)
+        , label =
+            Element.row [ Element.width Element.fill, Element.spacing 8 ]
+                [ Element.el
+                    [ Element.width Element.fill, Font.medium ]
+                    (Element.text (Search.completionLabel completion))
+                , case completion of
+                    CategoryCompletion _ count ->
+                        Ui.badge (String.fromInt count)
+
+                    OperatorCompletion _ ->
+                        Element.none
                 ]
         }
 
