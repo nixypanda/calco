@@ -35,6 +35,7 @@ pub fn auth_routes(state: AppState) -> Router {
             "/admin/users/{id}/disable",
             post(admin_disable_user_handler),
         )
+        .route("/admin/users/{id}", get(admin_get_user_handler))
         .route("/admin/users/{id}/enable", post(admin_enable_user_handler))
         .with_state(state)
 }
@@ -243,6 +244,8 @@ pub struct UserListResponse {
     pub users: Vec<UserItemDto>,
 }
 
+
+
 #[derive(Deserialize)]
 pub struct ResetPasswordRequest {
     pub new_password: String,
@@ -340,6 +343,20 @@ async fn admin_create_user_handler(
         StatusCode::CREATED,
         Json(created_user_to_login_session_response(result)),
     ))
+}
+
+async fn admin_get_user_handler(
+    _admin: AuthAdmin,
+    State(state): State<AppState>,
+    Path(user_id): Path<Uuid>,
+) -> Result<Json<UserItemDto>, AuthErrorResponse> {
+    let user = state
+        .admin_users
+        .get_user(user_id)
+        .await
+        .map_err(|e| auth_error_to_response(&e))?;
+
+    Ok(Json(user_with_profile_to_item_dto(user)))
 }
 
 async fn admin_list_users_handler(

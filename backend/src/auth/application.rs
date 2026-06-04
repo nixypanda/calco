@@ -227,6 +227,20 @@ impl AdminUserServices {
         }
     }
 
+    pub async fn get_user(&self, user_id: Uuid) -> Result<UserWithProfile, AuthError> {
+        let profile = self
+            .profile_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+        let identity = self
+            .identity_repo
+            .find_by_id(profile.identity_id)
+            .await?
+            .ok_or(AuthError::IdentityNotFound)?;
+        Ok(UserWithProfile { identity, profile })
+    }
+
     pub async fn list_users(&self) -> Result<Vec<UserWithProfile>, AuthError> {
         self.profile_repo.list_all_with_identities().await
     }
