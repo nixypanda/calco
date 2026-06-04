@@ -38,6 +38,7 @@ import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Page.ApiResult as ApiResult
 import Route exposing (Route(..))
 import Ui
 import View.Nutrients
@@ -275,25 +276,19 @@ update msg model =
                     )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | nutrients = Nothing
-                            , nutritionLoading = False
-                            , nutritionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | nutrients = Nothing
-                            , nutritionLoading = False
-                            , nutritionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current
+                                    | nutrients = Nothing
+                                    , nutritionLoading = False
+                                    , nutritionError = Just message
+                                }
+                        }
+                        error
+                        model
 
         NameChanged value ->
             ( { model | name = value }, Cmd.none, NoOp )
@@ -390,14 +385,13 @@ update msg model =
                     )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( updateComponent rowId (SetSearching False) model
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( updateComponent rowId (SetSearching False) model, Cmd.none, NoOp )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \_ current -> updateComponent rowId (SetSearching False) current
+                        }
+                        error
+                        model
 
         ComponentCategoriesCompleted rowId token result ->
             case result of
@@ -408,17 +402,13 @@ update msg model =
                     )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( updateComponent rowId ClearCategorySuggestions model
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( updateComponent rowId ClearCategorySuggestions model
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \_ current -> updateComponent rowId ClearCategorySuggestions current
+                        }
+                        error
+                        model
 
         CompleteFirstComponentSuggestion rowId ->
             case findRow rowId model.components of
@@ -509,23 +499,15 @@ update msg model =
                     ( { model | submitting = False }, Cmd.none, Navigate (MealDetail meal.id) )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | submitting = False
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | submitting = False
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current | submitting = False, error = Just message }
+                        }
+                        error
+                        model
 
 
 requestNextProductName : List ComponentRow -> OutMsg
@@ -686,12 +668,12 @@ removeRow rowId rows =
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
-
-    else
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 view : Model -> Element Msg

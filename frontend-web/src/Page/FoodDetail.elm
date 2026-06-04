@@ -17,6 +17,7 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Element.Font as Font
+import Page.ApiResult as ApiResult
 import Page.FoodLogForm as FoodLogForm
 import Route exposing (Route(..))
 import Ui
@@ -150,21 +151,15 @@ update msg model =
                     ( model, Cmd.none, Navigate (Diary Nothing) )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( setFormSubmitting
-                            False
-                            { model | error = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( setFormSubmitting
-                            False
-                            { model | error = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                setFormSubmitting False { current | error = Just message }
+                        }
+                        error
+                        model
 
         EditCustomFoodClicked ->
             case Maybe.andThen customFoodEditRoute model.food of
@@ -176,12 +171,12 @@ update msg model =
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
-
-    else
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 setFormSubmitting : Bool -> Model -> Model

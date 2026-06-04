@@ -24,6 +24,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Page.ApiResult as ApiResult
 import Route exposing (Route(..))
 import Ui
 
@@ -174,15 +175,12 @@ update msg model =
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | loading = False, error = Just (Client.displayError error) }
-        , Cmd.none
-        , SessionExpired
-        )
-
-    else
-        ( { model | loading = False, error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | loading = False, error = Just message }
+        }
 
 
 toggleMacroMode : MacroMode -> MacroMode

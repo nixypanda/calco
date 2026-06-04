@@ -16,6 +16,7 @@ import Data.FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Element.Font as Font
+import Page.ApiResult as ApiResult
 import Page.FoodDetail
 import Page.FoodLogForm as FoodLogForm
 import Route exposing (Route(..))
@@ -159,21 +160,15 @@ update msg model =
                     )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( setFormSubmitting
-                            False
-                            { model | error = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( setFormSubmitting
-                            False
-                            { model | error = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                setFormSubmitting False { current | error = Just message }
+                        }
+                        error
+                        model
 
         DeleteClicked ->
             ( { model | deleting = True, error = Nothing }, Cmd.none, RequestDeleteLog model.logId )
@@ -184,23 +179,15 @@ update msg model =
                     ( model, Cmd.none, Navigate (Diary Nothing) )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | deleting = False
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | deleting = False
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current | deleting = False, error = Just message }
+                        }
+                        error
+                        model
 
         EditCustomFoodClicked ->
             case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
@@ -225,12 +212,12 @@ itemResolutionOutMsg log =
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
-
-    else
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 setFormSubmitting : Bool -> Model -> Model

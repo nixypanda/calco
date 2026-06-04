@@ -10,6 +10,7 @@ import Api.Foods as Foods
         , UnitItem
         )
 import Element exposing (Element)
+import Page.ApiResult as ApiResult
 import Page.CustomFood.Form as Form
 import Route exposing (Route(..))
 import Ui
@@ -117,32 +118,27 @@ update msg model =
                     ( model, Cmd.none, Navigate (FoodDetail response.id Nothing) )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | form = Maybe.map (\form -> { form | submitting = False }) model.form
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | form = Maybe.map (\form -> { form | submitting = False }) model.form
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current
+                                    | form = Maybe.map (\form -> { form | submitting = False }) current.form
+                                    , error = Just message
+                                }
+                        }
+                        error
+                        model
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
-
-    else
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 view : Model -> Element Msg

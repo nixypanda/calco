@@ -17,6 +17,7 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import Page.ApiResult as ApiResult
 import Route exposing (Route(..))
 import Ui
 import View.Nutrients
@@ -174,25 +175,19 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | nutrients = Nothing
-                            , nutritionLoading = False
-                            , nutritionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | nutrients = Nothing
-                            , nutritionLoading = False
-                            , nutritionError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current
+                                    | nutrients = Nothing
+                                    , nutritionLoading = False
+                                    , nutritionError = Just message
+                                }
+                        }
+                        error
+                        model
 
         DeleteClicked ->
             ( { model | confirmDeleteOpen = True, deleteError = Nothing }, Cmd.none, NoOp )
@@ -212,25 +207,19 @@ update msg model =
                     ( model, Cmd.none, Navigate Meals )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | deleting = False
-                            , confirmDeleteOpen = True
-                            , deleteError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | deleting = False
-                            , confirmDeleteOpen = True
-                            , deleteError = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current
+                                    | deleting = False
+                                    , confirmDeleteOpen = True
+                                    , deleteError = Just message
+                                }
+                        }
+                        error
+                        model
 
         EditClicked ->
             ( model, Cmd.none, Navigate (MealEdit model.mealId) )
@@ -350,12 +339,12 @@ fallbackUnits =
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure error model =
-    if Client.isUnauthorized error then
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, SessionExpired )
-
-    else
-        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 view : Model -> Element Msg

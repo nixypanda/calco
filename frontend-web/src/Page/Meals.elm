@@ -15,6 +15,7 @@ import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Page.ApiResult as ApiResult
 import Route exposing (Route(..))
 import Ui
 
@@ -58,14 +59,7 @@ update msg model =
                     ( { model | meals = Just response.items, error = Nothing }, Cmd.none, NoOp )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | error = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | error = Just (Client.displayError error) }, Cmd.none, NoOp )
+                    failure error model
 
         OpenMealClicked id ->
             ( model, Cmd.none, Navigate (MealDetail id) )
@@ -92,23 +86,15 @@ update msg model =
                     )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model
-                            | deletingMealId = Nothing
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model
-                            | deletingMealId = Nothing
-                            , error = Just (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError =
+                            \message current ->
+                                { current | deletingMealId = Nothing, error = Just message }
+                        }
+                        error
+                        model
 
         CreateMealClicked ->
             ( model, Cmd.none, Navigate MealCreate )
@@ -120,6 +106,15 @@ update msg model =
 emptyList : { record | meals : Maybe (List Meal) } -> Bool
 emptyList model =
     model.meals == Just []
+
+
+failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
+failure =
+    ApiResult.failure
+        { noOp = NoOp
+        , sessionExpired = SessionExpired
+        , applyError = \message model -> { model | error = Just message }
+        }
 
 
 view : Model -> Element Msg
