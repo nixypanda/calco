@@ -28,7 +28,6 @@ type Msg
     | FormMsg Form.Msg
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
-    | BackClicked
 
 
 type OutMsg
@@ -120,9 +119,6 @@ update msg model =
                         , NoOp
                         )
 
-        BackClicked ->
-            ( model, Cmd.none, Navigate (Diary Nothing) )
-
 
 setSubmitting : Bool -> Form.FormModel -> Form.FormModel
 setSubmitting submitting form =
@@ -141,8 +137,7 @@ failure error model =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ Ui.pageHeader "Create Custom Food" (Just BackClicked)
-        , case model.error of
+        [ case model.error of
             Just message ->
                 Ui.errorBanner message
 

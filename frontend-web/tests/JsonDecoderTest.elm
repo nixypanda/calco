@@ -43,6 +43,11 @@ tests =
                 Decode.decodeString Foods.searchResponseDecoder searchResponseJson
                     |> Result.map (.items >> List.map .name)
                     |> Expect.equal (Ok [ "Apple" ])
+        , test "decodes category suggestions" <|
+            \_ ->
+                Decode.decodeString Foods.categorySuggestionResponseDecoder categorySuggestionJson
+                    |> Result.map (.items >> List.map .value)
+                    |> Expect.equal (Ok [ "food and beverages" ])
         , test "decodes product detail" <|
             \_ ->
                 Decode.decodeString Foods.productDetailDecoder productDetailJson
@@ -63,6 +68,10 @@ tests =
             \_ ->
                 Foods.searchPath { query = "peanut butter" }
                     |> Expect.equal "/api/foods/search?q=peanut%20butter"
+        , test "builds category suggestion path with encoded query and limit" <|
+            \_ ->
+                Foods.categorySuggestionPath { query = "food and", limit = 8 }
+                    |> Expect.equal "/api/foods/categories?q=food%20and&limit=8"
         , test "encodes create product log request without meal slot" <|
             \_ ->
                 Logs.createLogRequestEncoder
@@ -129,6 +138,15 @@ searchResponseJson =
          , "energy_kcal_per_100g": "52"
          , "energy_kcal_per_serving": null
          }]
+    }
+    """
+
+
+categorySuggestionJson : String
+categorySuggestionJson =
+    """
+    { "items":
+        [ { "value": "food and beverages", "count": 4 } ]
     }
     """
 

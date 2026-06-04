@@ -44,7 +44,6 @@ type Msg
     | UpdateCompleted (Result Client.ApiError FoodLog)
     | DeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
-    | BackClicked
     | EditCustomFoodClicked
 
 
@@ -202,9 +201,6 @@ update msg model =
                         , NoOp
                         )
 
-        BackClicked ->
-            ( model, Cmd.none, Navigate (Diary Nothing) )
-
         EditCustomFoodClicked ->
             case Maybe.andThen Page.FoodDetail.customFoodEditRoute model.food of
                 Just route ->
@@ -249,8 +245,7 @@ setFormSubmitting submitting model =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ Ui.pageHeader "Edit Log" (Just BackClicked)
-        , case model.error of
+        [ case model.error of
             Just message ->
                 Ui.errorBanner message
 

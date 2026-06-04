@@ -324,12 +324,9 @@ updateCreatePassword password form =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        (Element.row
-            [ Element.width Element.fill
-            , Element.spaceEvenly
-            ]
-            [ Element.el [ Ui.heading1, Font.bold ] (Element.text "Admin Dashboard")
-            , Ui.button
+        (Element.el
+            [ Element.alignRight ]
+            (Ui.button
                 (if model.showCreate then
                     "Cancel"
 
@@ -337,7 +334,7 @@ view model =
                     "Create User"
                 )
                 ToggleCreate
-            ]
+            )
             :: (errorView model.actionError
                     ++ createFormView model
                     ++ usersView model

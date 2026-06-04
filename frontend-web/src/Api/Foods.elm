@@ -1,5 +1,8 @@
 module Api.Foods exposing
-    ( CreateFoodNutrientRequest
+    ( CategorySuggestion
+    , CategorySuggestionRequest
+    , CategorySuggestionResponse
+    , CreateFoodNutrientRequest
     , CreateFoodRequest
     , CreateFoodResponse
     , CreateFoodServingRequest
@@ -14,9 +17,12 @@ module Api.Foods exposing
     , ServingEntry
     , UnitItem
     , UnitListResponse
+    , categorySuggestionPath
+    , categorySuggestionResponseDecoder
     , createCustomFood
     , getFoodDetail
     , getProductName
+    , listCategorySuggestions
     , listNutrients
     , listUnits
     , productDetailDecoder
@@ -140,6 +146,23 @@ type alias SearchResponse =
     }
 
 
+type alias CategorySuggestionRequest =
+    { query : String
+    , limit : Int
+    }
+
+
+type alias CategorySuggestionResponse =
+    { items : List CategorySuggestion
+    }
+
+
+type alias CategorySuggestion =
+    { value : String
+    , count : Int
+    }
+
+
 type alias SearchResult =
     { id : String
     , source : String
@@ -194,6 +217,17 @@ searchFoods request toMsg =
         toMsg
 
 
+listCategorySuggestions :
+    CategorySuggestionRequest
+    -> (Result Client.ApiError CategorySuggestionResponse -> msg)
+    -> Cmd msg
+listCategorySuggestions request toMsg =
+    Client.get
+        (categorySuggestionPath request)
+        categorySuggestionResponseDecoder
+        toMsg
+
+
 createCustomFood :
     CreateFoodRequest
     -> (Result Client.ApiError CreateFoodResponse -> msg)
@@ -223,6 +257,14 @@ searchPath : SearchRequest -> String
 searchPath request =
     Builder.absolute [ "api", "foods", "search" ]
         [ Builder.string "q" request.query ]
+
+
+categorySuggestionPath : CategorySuggestionRequest -> String
+categorySuggestionPath request =
+    Builder.absolute [ "api", "foods", "categories" ]
+        [ Builder.string "q" request.query
+        , Builder.int "limit" request.limit
+        ]
 
 
 createFoodRequestEncoder : CreateFoodRequest -> Encode.Value
@@ -278,6 +320,12 @@ searchResponseDecoder : Decoder SearchResponse
 searchResponseDecoder =
     Decode.map SearchResponse
         (Decode.field "items" (Decode.list searchResultDecoder))
+
+
+categorySuggestionResponseDecoder : Decoder CategorySuggestionResponse
+categorySuggestionResponseDecoder =
+    Decode.map CategorySuggestionResponse
+        (Decode.field "items" (Decode.list categorySuggestionDecoder))
 
 
 productDetailDecoder : Decoder ProductDetail
@@ -366,6 +414,13 @@ searchResultDecoder =
         (Decode.field "serving_size_g" (Decode.nullable Decode.string))
         |> andMap (Decode.field "energy_kcal_per_100g" (Decode.nullable Decode.string))
         |> andMap (Decode.field "energy_kcal_per_serving" (Decode.nullable Decode.string))
+
+
+categorySuggestionDecoder : Decoder CategorySuggestion
+categorySuggestionDecoder =
+    Decode.map2 CategorySuggestion
+        (Decode.field "value" Decode.string)
+        (Decode.field "count" Decode.int)
 
 
 andMap : Decoder value -> Decoder (value -> result) -> Decoder result

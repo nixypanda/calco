@@ -14,7 +14,6 @@ import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
 import Data.Text as Text
 import Data.Units as Units
@@ -142,18 +141,6 @@ view food units model =
             , Ui.input "Notes" model.notes NotesChanged
             ]
         ]
-
-
-foodNutrients : ProductDetail -> List NutrientAmount
-foodNutrients food =
-    List.map
-        (\n ->
-            { code = n.code
-            , amount = n.amountPer100g
-            , unit = n.unit
-            }
-        )
-        food.nutrients
 
 
 mealSlotDropdown : Model -> Element Msg

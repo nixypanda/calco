@@ -16,12 +16,35 @@ module Page.MealForm exposing
     )
 
 import Api.Client as Client
-import Api.Foods as Foods exposing (ProductDetail, SearchResponse, SearchResult)
-import Api.Meals exposing (CreateMealComponentRequest, CreateMealRequest, Meal)
+import Api.Foods as Foods
+    exposing
+        ( CategorySuggestion
+        , CategorySuggestionRequest
+        , ProductDetail
+        , SearchResponse
+        , SearchResult
+        )
+import Api.Meals
+    exposing
+        ( CreateMealComponentRequest
+        , CreateMealRequest
+        , Meal
+        , MealNutritionResponse
+        )
+import Data.Nutrition exposing (NutrientAmount)
 import Data.Text as Text
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Font as Font
+import Element.Input as Input
+import Html
+import Html.Events
+import Json.Decode as Decode
 import Route exposing (Route(..))
 import Ui
+import View.FoodSearchResults as FoodSearchResults
+import View.Nutrients
 
 
 type alias RowId =
@@ -38,6 +61,21 @@ type alias ComponentRow =
     , searchResults : List SearchResult
     , searching : Bool
     , searchToken : Int
+    , categoryToken : Int
+    , categorySuggestions : List CategorySuggestion
+    }
+
+
+type alias CategorySuggestionResult =
+    Result Client.ApiError Foods.CategorySuggestionResponse
+
+
+type alias ProductAndCategoryRequests =
+    { rowId : RowId
+    , searchToken : Int
+    , searchRequest : Foods.SearchRequest
+    , categoryToken : Int
+    , categoryRequest : CategorySuggestionRequest
     }
 
 
@@ -52,6 +90,9 @@ type alias Model =
     , nextSearchToken : Int
     , fetching : Bool
     , submitting : Bool
+    , nutrients : Maybe (List NutrientAmount)
+    , nutritionLoading : Bool
+    , nutritionError : Maybe String
     , error : Maybe String
     }
 
@@ -69,17 +110,24 @@ type ComponentPatch
     | SetSearchStarted Int
     | SetSearchResults Int (List SearchResult)
     | SetSearching Bool
+    | SetCategorySuggestionsStarted Int
+    | SetCategorySuggestions Int (List CategorySuggestion)
+    | ClearCategorySuggestions
 
 
 type Msg
     = MealLoaded (Result Client.ApiError Meal)
     | ProductNameLoaded String (Result Client.ApiError ProductDetail)
+    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
     | NameChanged String
     | NotesChanged String
     | TotalQuantityChanged String
     | TotalUnitChanged String
     | ComponentSearchChanged RowId String
     | ComponentSearchCompleted RowId Int (Result Client.ApiError SearchResponse)
+    | ComponentCategoriesCompleted RowId Int CategorySuggestionResult
+    | CompleteFirstComponentSuggestion RowId
+    | ComponentCompletionClicked RowId Completion
     | SelectProduct RowId SearchResult
     | ComponentQuantityChanged RowId String
     | ComponentUnitChanged RowId String
@@ -87,7 +135,6 @@ type Msg
     | RemoveComponentClicked RowId
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
-    | BackClicked
 
 
 type OutMsg
@@ -95,6 +142,8 @@ type OutMsg
     | RequestMeal String
     | RequestProductName String
     | RequestProductSearch RowId Int Foods.SearchRequest
+    | RequestCategorySuggestions RowId Int CategorySuggestionRequest
+    | RequestProductAndCats ProductAndCategoryRequests
     | RequestCreateMeal CreateMealRequest
     | RequestUpdateMeal String CreateMealRequest
     | Navigate Route
@@ -113,6 +162,9 @@ initCreate =
       , nextSearchToken = 1
       , fetching = False
       , submitting = False
+      , nutrients = Nothing
+      , nutritionLoading = False
+      , nutritionError = Nothing
       , error = Nothing
       }
     , NoOp
@@ -125,7 +177,9 @@ initEdit mealId =
         ( model, _ ) =
             initCreate
     in
-    ( { model | mealId = Just mealId, fetching = True }, RequestMeal mealId )
+    ( { model | mealId = Just mealId, fetching = True, nutritionLoading = True }
+    , RequestMeal mealId
+    )
 
 
 emptyComponentRow : RowId -> ComponentRow
@@ -139,7 +193,14 @@ emptyComponentRow rowId =
     , searchResults = []
     , searching = False
     , searchToken = 0
+    , categoryToken = 0
+    , categorySuggestions = []
     }
+
+
+type Completion
+    = OperatorCompletion String
+    | CategoryCompletion String Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -209,6 +270,39 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none, requestNextMissingProductName productId model.components )
 
+        NutrientPreviewLoaded result ->
+            case result of
+                Ok response ->
+                    ( { model
+                        | nutrients = Just response.nutrients
+                        , nutritionLoading = False
+                        , nutritionError = Nothing
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                Err error ->
+                    if Client.isUnauthorized error then
+                        ( { model
+                            | nutrients = Nothing
+                            , nutritionLoading = False
+                            , nutritionError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , SessionExpired
+                        )
+
+                    else
+                        ( { model
+                            | nutrients = Nothing
+                            , nutritionLoading = False
+                            , nutritionError = Just (Client.displayError error)
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
+
         NameChanged value ->
             ( { model | name = value }, Cmd.none, NoOp )
 
@@ -227,20 +321,73 @@ update msg model =
                 token =
                     model.nextSearchToken
 
+                categoryToken : Int
+                categoryToken =
+                    token + 1
+
                 nextModel : Model
                 nextModel =
                     model
                         |> updateComponent rowId (SetSearchQuery query)
                         |> updateComponent rowId (SetSearchStarted token)
-            in
-            if String.length (String.trim query) < 2 then
-                ( nextModel |> updateComponent rowId (SetSearchResults token []), Cmd.none, NoOp )
+                        |> updateComponent rowId
+                            (case categoryQuery query of
+                                Just _ ->
+                                    SetCategorySuggestionsStarted categoryToken
 
-            else
-                ( { nextModel | nextSearchToken = token + 1 }
-                , Cmd.none
-                , RequestProductSearch rowId token { query = query }
-                )
+                                Nothing ->
+                                    ClearCategorySuggestions
+                            )
+
+                searchRequest : Maybe Foods.SearchRequest
+                searchRequest =
+                    if String.length (String.trim query) < 2 then
+                        Nothing
+
+                    else
+                        Just { query = query }
+
+                categoryRequest : Maybe CategorySuggestionRequest
+                categoryRequest =
+                    categoryQuery query
+                        |> Maybe.map
+                            (\value ->
+                                { query = value, limit = 8 }
+                            )
+            in
+            case ( searchRequest, categoryRequest ) of
+                ( Just productRequest, Just categorySuggestionRequest ) ->
+                    ( { nextModel | nextSearchToken = token + 2 }
+                    , Cmd.none
+                    , RequestProductAndCats
+                        { rowId = rowId
+                        , searchToken = token
+                        , searchRequest = productRequest
+                        , categoryToken = categoryToken
+                        , categoryRequest = categorySuggestionRequest
+                        }
+                    )
+
+                ( Just productRequest, Nothing ) ->
+                    ( { nextModel | nextSearchToken = token + 1 }
+                    , Cmd.none
+                    , RequestProductSearch rowId token productRequest
+                    )
+
+                ( Nothing, Just categorySuggestionRequest ) ->
+                    ( { nextModel
+                        | nextSearchToken = token + 2
+                      }
+                        |> updateComponent rowId (SetSearchResults token [])
+                    , Cmd.none
+                    , RequestCategorySuggestions rowId categoryToken categorySuggestionRequest
+                    )
+
+                _ ->
+                    ( nextModel |> updateComponent rowId (SetSearchResults token [])
+                    , Cmd.none
+                    , NoOp
+                    )
 
         ComponentSearchCompleted rowId token result ->
             case result of
@@ -259,6 +406,58 @@ update msg model =
 
                     else
                         ( updateComponent rowId (SetSearching False) model, Cmd.none, NoOp )
+
+        ComponentCategoriesCompleted rowId token result ->
+            case result of
+                Ok response ->
+                    ( updateComponent rowId (SetCategorySuggestions token response.items) model
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                Err error ->
+                    if Client.isUnauthorized error then
+                        ( updateComponent rowId ClearCategorySuggestions model
+                        , Cmd.none
+                        , SessionExpired
+                        )
+
+                    else
+                        ( updateComponent rowId ClearCategorySuggestions model
+                        , Cmd.none
+                        , NoOp
+                        )
+
+        CompleteFirstComponentSuggestion rowId ->
+            case findRow rowId model.components of
+                Just row ->
+                    case List.head (completions row.searchQuery row.categorySuggestions) of
+                        Just completion ->
+                            update
+                                (ComponentSearchChanged
+                                    rowId
+                                    (applyCompletion completion row.searchQuery)
+                                )
+                                model
+
+                        Nothing ->
+                            ( model, Cmd.none, NoOp )
+
+                Nothing ->
+                    ( model, Cmd.none, NoOp )
+
+        ComponentCompletionClicked rowId completion ->
+            case findRow rowId model.components of
+                Just row ->
+                    update
+                        (ComponentSearchChanged
+                            rowId
+                            (applyCompletion completion row.searchQuery)
+                        )
+                        model
+
+                Nothing ->
+                    ( model, Cmd.none, NoOp )
 
         SelectProduct rowId result ->
             ( updateComponent rowId (SetProduct result.id result.name) model, Cmd.none, NoOp )
@@ -335,9 +534,6 @@ update msg model =
                         , Cmd.none
                         , NoOp
                         )
-
-        BackClicked ->
-            ( model, Cmd.none, Navigate Meals )
 
 
 requestNextProductName : List ComponentRow -> OutMsg
@@ -442,6 +638,7 @@ patchRow rowId patch row =
                     , searchQuery = name
                     , searchResults = []
                     , searching = False
+                    , categorySuggestions = []
                 }
 
             SetQuantity value ->
@@ -466,6 +663,26 @@ patchRow rowId patch row =
             SetSearching value ->
                 { row | searching = value }
 
+            SetCategorySuggestionsStarted token ->
+                { row | categoryToken = token }
+
+            SetCategorySuggestions token suggestions ->
+                if row.categoryToken == token then
+                    { row | categorySuggestions = suggestions }
+
+                else
+                    row
+
+            ClearCategorySuggestions ->
+                { row | categorySuggestions = [] }
+
+
+findRow : RowId -> List ComponentRow -> Maybe ComponentRow
+findRow rowId rows =
+    rows
+        |> List.filter (\row -> row.rowId == rowId)
+        |> List.head
+
 
 removeRow : RowId -> List ComponentRow -> List ComponentRow
 removeRow rowId rows =
@@ -488,8 +705,7 @@ failure error model =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ Ui.pageHeader (pageTitle model) (Just BackClicked)
-        , case model.error of
+        [ case model.error of
             Just message ->
                 Ui.errorBanner message
 
@@ -501,16 +717,6 @@ view model =
           else
             formView model
         ]
-
-
-pageTitle : Model -> String
-pageTitle model =
-    case model.mealId of
-        Just _ ->
-            "Edit Meal"
-
-        Nothing ->
-            "Create Meal"
 
 
 formView : Model -> Element Msg
@@ -527,6 +733,7 @@ formView model =
             [ Element.width Element.fill, Element.spacing 10 ]
             (List.map componentRowView model.components)
         , Ui.button "+ Add Component" AddComponentClicked
+        , nutritionView model
         , Ui.submitButton model.submitting
             (if model.mealId == Nothing then
                 "Create Meal"
@@ -542,14 +749,19 @@ formView model =
 componentRowView : ComponentRow -> Element Msg
 componentRowView row =
     Ui.card
-        [ Ui.input "Search Product" row.searchQuery (ComponentSearchChanged row.rowId)
-        , if List.isEmpty row.searchResults then
+        [ componentSearchInput row
+        , if row.searching then
+            Ui.loading "Searching foods..."
+
+          else if List.isEmpty row.searchResults then
             Element.none
 
           else
             Element.column
-                [ Element.spacing 4 ]
-                (List.map (searchResultView row.rowId) row.searchResults)
+                [ Element.width Element.fill
+                , Element.spacing 0
+                ]
+                (List.map (searchResultView row.searchQuery row.rowId) row.searchResults)
         , Element.row [ Element.spacing 8 ]
             [ Ui.input "Qty" row.quantity (ComponentQuantityChanged row.rowId)
             , Ui.input "Unit" row.unit (ComponentUnitChanged row.rowId)
@@ -558,6 +770,319 @@ componentRowView row =
         ]
 
 
-searchResultView : RowId -> SearchResult -> Element Msg
-searchResultView rowId result =
-    Ui.button result.name (SelectProduct rowId result)
+componentSearchInput : ComponentRow -> Element Msg
+componentSearchInput row =
+    let
+        options : List Completion
+        options =
+            completions row.searchQuery row.categorySuggestions
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+        [ Input.text
+            [ Border.rounded 6
+            , Border.width 1
+            , Border.color (Element.rgb255 209 213 219)
+            , Element.padding 10
+            , Element.htmlAttribute
+                (tabCompletionHandler row.rowId options)
+            ]
+            { onChange = ComponentSearchChanged row.rowId
+            , text = row.searchQuery
+            , placeholder = Nothing
+            , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Search Product")
+            }
+        , completionDropdown row.rowId options
+        ]
+
+
+tabCompletionHandler : RowId -> List Completion -> Html.Attribute Msg
+tabCompletionHandler rowId options =
+    Html.Events.preventDefaultOn "keydown"
+        (Decode.field "key" Decode.string
+            |> Decode.andThen
+                (\key ->
+                    if key == "Tab" && not (List.isEmpty options) then
+                        Decode.succeed ( CompleteFirstComponentSuggestion rowId, True )
+
+                    else
+                        Decode.fail "not handled"
+                )
+        )
+
+
+completionDropdown : RowId -> List Completion -> Element Msg
+completionDropdown rowId options =
+    if List.isEmpty options then
+        Element.none
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.height (Element.px (completionDropdownHeight options))
+            , Element.scrollbarY
+            , Element.spacing 2
+            , Element.padding 4
+            , Border.rounded 6
+            , Border.width 1
+            , Border.color Ui.borderGray
+            , Background.color Ui.cardBg
+            ]
+            (List.map (completionRow rowId) options)
+
+
+completionDropdownHeight : List Completion -> Int
+completionDropdownHeight options =
+    min 224 (8 + List.length options * 38)
+
+
+completionRow : RowId -> Completion -> Element Msg
+completionRow rowId completion =
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingXY 10 8
+        , Border.rounded 4
+        ]
+        { onPress = Just (ComponentCompletionClicked rowId completion)
+        , label =
+            Element.row [ Element.width Element.fill, Element.spacing 8 ]
+                [ Element.el
+                    [ Element.width Element.fill, Font.medium ]
+                    (Element.text (completionLabel completion))
+                , case completion of
+                    CategoryCompletion _ count ->
+                        Ui.badge (String.fromInt count)
+
+                    OperatorCompletion _ ->
+                        Element.none
+                ]
+        }
+
+
+searchResultView : String -> RowId -> SearchResult -> Element Msg
+searchResultView query rowId result =
+    FoodSearchResults.resultRow
+        { query = query
+        , item = result
+        , onSelect = \_ -> SelectProduct rowId result
+        }
+
+
+completions : String -> List CategorySuggestion -> List Completion
+completions query suggestions =
+    let
+        token : String
+        token =
+            currentToken query
+
+        current : String
+        current =
+            String.toLower token
+    in
+    if String.isEmpty current then
+        []
+
+    else if not (String.contains ":" current) then
+        [ if String.startsWith current "category:" then
+            Just (OperatorCompletion "category:")
+
+          else
+            Nothing
+        , if String.startsWith current "-category:" then
+            Just (OperatorCompletion "-category:")
+
+          else
+            Nothing
+        ]
+            |> List.filterMap identity
+
+    else
+        case categoryPrefix token of
+            Just prefix ->
+                suggestions
+                    |> List.map
+                        (\category ->
+                            CategoryCompletion
+                                (prefix ++ quoteCategory category.value)
+                                category.count
+                        )
+
+            Nothing ->
+                []
+
+
+completionLabel : Completion -> String
+completionLabel completion =
+    case completion of
+        OperatorCompletion replacement ->
+            replacement
+
+        CategoryCompletion replacement _ ->
+            replacement
+
+
+applyCompletion : Completion -> String -> String
+applyCompletion completion query =
+    replaceCurrentToken query (completionLabel completion)
+
+
+categoryQuery : String -> Maybe String
+categoryQuery query =
+    let
+        token : String
+        token =
+            currentToken query
+    in
+    categoryPrefix token
+        |> Maybe.map (\prefix -> stripCategoryValue (String.dropLeft (String.length prefix) token))
+
+
+categoryPrefix : String -> Maybe String
+categoryPrefix token =
+    if String.startsWith "category:" token then
+        Just "category:"
+
+    else if String.startsWith "-category:" token then
+        Just "-category:"
+
+    else
+        Nothing
+
+
+currentToken : String -> String
+currentToken query =
+    query
+        |> tokens
+        |> List.reverse
+        |> List.head
+        |> Maybe.withDefault ""
+
+
+replaceCurrentToken : String -> String -> String
+replaceCurrentToken query replacement =
+    queryBeforeCurrentToken query ++ replacement
+
+
+queryBeforeCurrentToken : String -> String
+queryBeforeCurrentToken query =
+    query
+        |> tokensWithSeparators
+        |> List.reverse
+        |> List.drop 1
+        |> List.reverse
+        |> String.concat
+
+
+tokens : String -> List String
+tokens query =
+    tokensWithSeparators query
+        |> List.filter (String.trim >> String.isEmpty >> not)
+
+
+tokensWithSeparators : String -> List String
+tokensWithSeparators query =
+    query
+        |> String.toList
+        |> List.foldl tokenStep { current = "", parts = [], inQuotes = False }
+        |> finishTokens
+
+
+type alias TokenState =
+    { current : String
+    , parts : List String
+    , inQuotes : Bool
+    }
+
+
+tokenStep : Char -> TokenState -> TokenState
+tokenStep char state =
+    if char == '"' then
+        { state | current = state.current ++ String.fromChar char, inQuotes = not state.inQuotes }
+
+    else if isWhitespace char && not state.inQuotes then
+        { state
+            | current = ""
+            , parts = String.fromChar char :: state.current :: state.parts
+        }
+
+    else
+        { state | current = state.current ++ String.fromChar char }
+
+
+finishTokens : TokenState -> List String
+finishTokens state =
+    List.reverse (state.current :: state.parts)
+
+
+stripCategoryValue : String -> String
+stripCategoryValue value =
+    value
+        |> String.trim
+        |> trimLeadingQuote
+        |> trimTrailingQuote
+
+
+trimLeadingQuote : String -> String
+trimLeadingQuote value =
+    if String.startsWith "\"" value then
+        String.dropLeft 1 value
+
+    else
+        value
+
+
+trimTrailingQuote : String -> String
+trimTrailingQuote value =
+    if String.endsWith "\"" value then
+        String.dropRight 1 value
+
+    else
+        value
+
+
+quoteCategory : String -> String
+quoteCategory value =
+    if String.any isWhitespace value then
+        "\"" ++ value ++ "\""
+
+    else
+        value
+
+
+isWhitespace : Char -> Bool
+isWhitespace char =
+    List.member char [ ' ', '\n', '\t', '\u{000D}' ]
+
+
+nutritionView : Model -> Element Msg
+nutritionView model =
+    case model.mealId of
+        Just _ ->
+            Element.column [ Element.width Element.fill, Element.spacing 10 ]
+                [ Ui.sectionHeader "Nutrition"
+                , if model.nutritionLoading then
+                    Ui.loading "Loading nutrition..."
+
+                  else
+                    Element.none
+                , case model.nutritionError of
+                    Just message ->
+                        Ui.errorBanner message
+
+                    Nothing ->
+                        Element.none
+                , case model.nutrients of
+                    Just nutrients ->
+                        Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                            [ View.Nutrients.nutrientsTable nutrients
+                            , Ui.card
+                                [ Ui.sectionHeader "Macro Breakdown"
+                                , View.Nutrients.macroBreakdownView nutrients
+                                ]
+                            ]
+
+                    Nothing ->
+                        Element.none
+                ]
+
+        Nothing ->
+            Element.none

@@ -27,6 +27,67 @@ tests =
                     |> first
                     |> .searchToken
                     |> Expect.equal 1
+        , test "tab completion expands include category operator" <|
+            \_ ->
+                FoodSearch.update FoodSearch.CompleteFirstSuggestion { emptyModel | query = "c" }
+                    |> first
+                    |> .query
+                    |> Expect.equal "category:"
+        , test "tab completion preserves the gap before the current token" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.CompleteFirstSuggestion
+                    { emptyModel | query = "apple c" }
+                    |> first
+                    |> .query
+                    |> Expect.equal "apple category:"
+        , test "tab completion preserves repeated gaps before the current token" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.CompleteFirstSuggestion
+                    { emptyModel | query = "apple  c" }
+                    |> first
+                    |> .query
+                    |> Expect.equal "apple  category:"
+        , test "tab completion expands exclude category operator" <|
+            \_ ->
+                FoodSearch.update FoodSearch.CompleteFirstSuggestion { emptyModel | query = "-c" }
+                    |> first
+                    |> .query
+                    |> Expect.equal "-category:"
+        , test "typing a category value requests suggestions" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.RequestCategorySuggestions 1
+                            { query = "foo", limit = 8 }
+                        )
+        , test "matching category suggestions are stored" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.CategorySuggestionsCompleted 1
+                        (Ok
+                            { items =
+                                [ { value = "food and beverages", count = 4 } ]
+                            }
+                        )
+                    )
+                    { emptyModel | categoryToken = 1 }
+                    |> first
+                    |> .categorySuggestions
+                    |> Expect.equal [ { value = "food and beverages", count = 4 } ]
+        , test "tab completion applies first category suggestion with quotes when needed" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.CompleteFirstSuggestion
+                    { emptyModel
+                        | query = "category:foo"
+                        , categorySuggestions = [ { value = "food and beverages", count = 4 } ]
+                    }
+                    |> first
+                    |> .query
+                    |> Expect.equal "category:\"food and beverages\""
         , test "search started sets loading" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "apple") emptyModel

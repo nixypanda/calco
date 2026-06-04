@@ -12,9 +12,12 @@ import Browser.Navigation as Nav
 import Data.Auth as Auth
 import Data.ItemRef exposing (ItemRef)
 import Data.LocalDate as LocalDate exposing (LocalDate)
+import Data.MealSlot as MealSlot
 import Element
 import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
+import Element.Input as Input
 import Page.AdminDashboard as AdminDashboard
 import Page.BootstrapAdminSetup as Setup
 import Page.CustomFood.Create as CustomFoodCreate
@@ -48,6 +51,8 @@ type alias Model =
     , timeZone : Maybe Time.Zone
     , today : Maybe LocalDate
     , page : PageModel
+    , drawerOpen : Bool
+    , profileOpen : Bool
     }
 
 
@@ -77,6 +82,11 @@ type Msg
     | GotNow Time.Posix
     | LogoutClicked
     | LogoutCompleted (Result Client.ApiError ())
+    | MenuClicked
+    | DrawerClosed
+    | ProfileClicked
+    | AppBackClicked Route
+    | AppNavigationClicked Route
     | GotLoginMsg Login.Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
@@ -125,6 +135,8 @@ init _ url key =
       , timeZone = Nothing
       , today = Nothing
       , page = LoadingPage
+      , drawerOpen = False
+      , profileOpen = False
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
@@ -140,7 +152,7 @@ update msg model =
         LinkClicked request ->
             case request of
                 Browser.Internal url ->
-                    ( model, Nav.pushUrl model.key (Url.toString url) )
+                    ( closeChrome model, Nav.pushUrl model.key (Url.toString url) )
 
                 Browser.External href ->
                     ( model, Nav.load href )
@@ -151,7 +163,7 @@ update msg model =
                 route =
                     Route.fromUrl url
             in
-            changeRouteTo route { model | route = route }
+            changeRouteTo route { model | route = route, drawerOpen = False, profileOpen = False }
 
         GotSession result ->
             applyBootstrapProgress { model | pendingSession = Just result }
@@ -173,7 +185,7 @@ update msg model =
                     ( model, Cmd.none )
 
         LogoutClicked ->
-            ( model, Api.Auth.logout LogoutCompleted )
+            ( closeChrome model, Api.Auth.logout LogoutCompleted )
 
         LogoutCompleted result ->
             let
@@ -187,6 +199,21 @@ update msg model =
 
                 Err _ ->
                     ( nextModel, Nav.replaceUrl model.key "/login" )
+
+        MenuClicked ->
+            ( { model | drawerOpen = not model.drawerOpen, profileOpen = False }, Cmd.none )
+
+        DrawerClosed ->
+            ( { model | drawerOpen = False }, Cmd.none )
+
+        ProfileClicked ->
+            ( { model | profileOpen = not model.profileOpen, drawerOpen = False }, Cmd.none )
+
+        AppBackClicked route ->
+            ( closeChrome model, Nav.pushUrl model.key (Route.routeToPath route) )
+
+        AppNavigationClicked route ->
+            ( closeChrome model, Nav.pushUrl model.key (Route.routeToPath route) )
 
         GotLoginMsg subMsg ->
             case model.page of
@@ -303,9 +330,6 @@ update msg model =
             case model.page of
                 FoodDetailPage _ ->
                     updateFoodDetail (FoodDetail.LocalTimestampReceived loggedAt) model
-
-                MealDetailPage _ ->
-                    updateMealDetail (MealDetail.LocalTimestampReceived loggedAt) model
 
                 _ ->
                     ( model, Cmd.none )
@@ -594,6 +618,13 @@ applyFoodSearchOutMsg outMsg model =
                 (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
             )
 
+        FoodSearch.RequestCategorySuggestions token request ->
+            ( model
+            , Api.Foods.listCategorySuggestions
+                request
+                (GotFoodSearchMsg << FoodSearch.CategorySuggestionsCompleted token)
+            )
+
         FoodSearch.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
 
@@ -849,6 +880,9 @@ applyMealsOutMsg outMsg model =
         Meals.RequestMeals ->
             ( model, Api.Meals.listMeals (GotMealsMsg << Meals.MealsLoaded) )
 
+        Meals.RequestDeleteMeal mealId ->
+            ( model, Api.Meals.deleteMeal mealId (GotMealsMsg << Meals.DeleteCompleted mealId) )
+
         Meals.Navigate route ->
             ( model, Nav.pushUrl model.key (Route.routeToPath route) )
 
@@ -880,7 +914,16 @@ applyMealFormOutMsg outMsg model =
             ( model, Cmd.none )
 
         MealForm.RequestMeal mealId ->
-            ( model, Api.Meals.getMeal mealId (GotMealFormMsg << MealForm.MealLoaded) )
+            ( model
+            , Cmd.batch
+                [ Api.Meals.getMeal mealId (GotMealFormMsg << MealForm.MealLoaded)
+                , Api.Meals.getMealNutrients
+                    mealId
+                    "100"
+                    "g"
+                    (GotMealFormMsg << MealForm.NutrientPreviewLoaded)
+                ]
+            )
 
         MealForm.RequestProductName productId ->
             ( model
@@ -894,6 +937,33 @@ applyMealFormOutMsg outMsg model =
             , Api.Foods.searchFoods
                 request
                 (GotMealFormMsg << MealForm.ComponentSearchCompleted rowId token)
+            )
+
+        MealForm.RequestCategorySuggestions rowId token request ->
+            ( model
+            , Api.Foods.listCategorySuggestions
+                request
+                (GotMealFormMsg << MealForm.ComponentCategoriesCompleted rowId token)
+            )
+
+        MealForm.RequestProductAndCats requests ->
+            ( model
+            , Cmd.batch
+                [ Api.Foods.searchFoods
+                    requests.searchRequest
+                    (GotMealFormMsg
+                        << MealForm.ComponentSearchCompleted
+                            requests.rowId
+                            requests.searchToken
+                    )
+                , Api.Foods.listCategorySuggestions
+                    requests.categoryRequest
+                    (GotMealFormMsg
+                        << MealForm.ComponentCategoriesCompleted
+                            requests.rowId
+                            requests.categoryToken
+                    )
+                ]
             )
 
         MealForm.RequestCreateMeal request ->
@@ -941,7 +1011,11 @@ applyMealDetailOutMsg outMsg model =
             ( model
             , Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealDetail.MealLoaded)
-                , Api.Foods.listUnits (GotMealDetailMsg << MealDetail.UnitsLoaded)
+                , Api.Meals.getMealNutrients
+                    mealId
+                    "100"
+                    "g"
+                    (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded)
                 ]
             )
 
@@ -951,21 +1025,6 @@ applyMealDetailOutMsg outMsg model =
                 productId
                 (GotMealDetailMsg << MealDetail.ProductDetailLoaded productId)
             )
-
-        MealDetail.RequestNutrientPreview mealId amount unit token ->
-            ( model
-            , Api.Meals.getMealNutrients
-                mealId
-                amount
-                unit
-                (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded token)
-            )
-
-        MealDetail.RequestLocalTimestamp ->
-            ( model, requestLocalTimestamp () )
-
-        MealDetail.RequestCreateLog request ->
-            ( model, Api.Logs.createLog request (GotMealDetailMsg << MealDetail.LogCompleted) )
 
         MealDetail.RequestDeleteMeal mealId ->
             ( model, Api.Meals.deleteMeal mealId (GotMealDetailMsg << MealDetail.DeleteCompleted) )
@@ -995,51 +1054,376 @@ itemNameCommand item =
                 )
 
 
+type LeadingAction
+    = OpenMenu
+    | GoBack Route
+    | NoLeadingAction
+
+
+type alias ScreenMeta =
+    { title : String
+    , leading : LeadingAction
+    }
+
+
 view : Model -> Browser.Document Msg
 view model =
     { title = "CalCo"
     , body =
         [ Element.layout [] <|
             Ui.layout <|
-                Element.column
-                    [ Element.width Element.fill
-                    , Element.height Element.fill
-                    ]
-                    [ headerView model
-                    , pageView model
-                    ]
+                appFrame model
         ]
     }
 
 
-headerView : Model -> Element.Element Msg
-headerView model =
-    Element.row
-        [ Element.width Element.fill
-        , Element.paddingXY 24 14
-        , Element.spacing 16
-        , Background.color Ui.cardBg
-        , Font.color Ui.darkColor
-        ]
-        (Element.el [ Ui.heading2, Font.bold, Element.width Element.fill ] (Element.text "CalCo")
-            :: identityView model
+appFrame : Model -> Element.Element Msg
+appFrame model =
+    let
+        overlays : List (Element.Attribute Msg)
+        overlays =
+            drawerOverlay model ++ profileOverlay model
+    in
+    Element.column
+        ([ Element.width Element.fill
+         , Element.height Element.fill
+         ]
+            ++ overlays
+        )
+        (if showsAppChrome model then
+            [ topBarView model
+            , Element.el
+                [ Element.width Element.fill, Element.height Element.fill ]
+                (pageView model)
+            ]
+
+         else
+            [ Element.el
+                [ Element.width Element.fill, Element.height Element.fill ]
+                (pageView model)
+            ]
         )
 
 
-identityView : Model -> List (Element.Element Msg)
-identityView model =
-    case model.session.identity of
-        Just identity ->
-            [ Element.el
-                [ Ui.body
-                , Font.color Ui.mediumColor
-                ]
-                (Element.text ("Logged in as " ++ identity.username))
-            , Ui.button "Logout" LogoutClicked
-            ]
+showsAppChrome : Model -> Bool
+showsAppChrome model =
+    Session.isAuthenticated model.session
+        && model.page
+        /= LoadingPage
+        && (case model.route of
+                Login ->
+                    False
 
-        Nothing ->
-            []
+                Setup ->
+                    False
+
+                _ ->
+                    True
+           )
+
+
+topBarView : Model -> Element.Element Msg
+topBarView model =
+    let
+        meta : ScreenMeta
+        meta =
+            screenMeta model.route
+    in
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px 58)
+        , Element.paddingXY 16 0
+        , Element.spacing 12
+        , Background.color Ui.cardBg
+        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
+        , Border.color Ui.borderGray
+        , Font.color Ui.darkColor
+        ]
+        [ leadingButton meta.leading
+        , Element.el
+            [ Element.width Element.fill
+            , Element.clip
+            , Ui.heading3
+            , Font.bold
+            ]
+            (Element.text ("CalCo | " ++ meta.title))
+        , profileButton model
+        ]
+
+
+leadingButton : LeadingAction -> Element.Element Msg
+leadingButton leading =
+    case leading of
+        OpenMenu ->
+            iconButton "Menu" MenuClicked
+
+        GoBack route ->
+            iconButton "Back" (AppBackClicked route)
+
+        NoLeadingAction ->
+            Element.el [ Element.width (Element.px 56) ] Element.none
+
+
+iconButton : String -> Msg -> Element.Element Msg
+iconButton label msg =
+    Input.button
+        [ Element.width (Element.px 56)
+        , Element.height (Element.px 40)
+        , Border.rounded 6
+        , Border.width 1
+        , Border.color Ui.borderGray
+        , Font.color Ui.darkColor
+        , Ui.caption
+        , Font.medium
+        ]
+        { onPress = Just msg
+        , label = Element.el [ Element.centerX, Element.centerY ] (Element.text label)
+        }
+
+
+profileButton : Model -> Element.Element Msg
+profileButton model =
+    let
+        label : String
+        label =
+            model.session.identity
+                |> Maybe.map .username
+                |> Maybe.withDefault "Profile"
+    in
+    Input.button
+        [ Element.height (Element.px 40)
+        , Element.paddingXY 12 0
+        , Border.rounded 6
+        , Border.width 1
+        , Border.color Ui.borderGray
+        , Font.color Ui.darkColor
+        , Ui.caption
+        , Font.medium
+        ]
+        { onPress = Just ProfileClicked
+        , label = Element.text label
+        }
+
+
+screenMeta : Route -> ScreenMeta
+screenMeta route =
+    case route of
+        Root ->
+            { title = "Diary", leading = OpenMenu }
+
+        Diary _ ->
+            { title = "Diary", leading = OpenMenu }
+
+        AdminDashboard ->
+            { title = "Admin", leading = OpenMenu }
+
+        FoodSearch maybeSlot ->
+            { title =
+                case maybeSlot of
+                    Just slot ->
+                        "Add to " ++ MealSlot.label slot
+
+                    Nothing ->
+                        "Search Foods"
+            , leading = GoBack (Diary Nothing)
+            }
+
+        FoodDetail _ maybeSlot ->
+            { title = "Log Food", leading = GoBack (FoodSearch maybeSlot) }
+
+        FoodLogDetail _ ->
+            { title = "Edit Log", leading = GoBack (Diary Nothing) }
+
+        CustomFoodCreate ->
+            { title = "Create Food", leading = GoBack (FoodSearch Nothing) }
+
+        CustomFoodEdit _ ->
+            { title = "Edit Food", leading = GoBack (FoodSearch Nothing) }
+
+        Meals ->
+            { title = "My Meals", leading = GoBack (Diary Nothing) }
+
+        MealCreate ->
+            { title = "Create Meal", leading = GoBack Meals }
+
+        MealDetail _ ->
+            { title = "Meal", leading = GoBack Meals }
+
+        MealEdit _ ->
+            { title = "Edit Meal", leading = GoBack Meals }
+
+        Login ->
+            { title = "Login", leading = NoLeadingAction }
+
+        Setup ->
+            { title = "Setup", leading = NoLeadingAction }
+
+        NotFound ->
+            { title = "Diary", leading = OpenMenu }
+
+
+drawerOverlay : Model -> List (Element.Attribute Msg)
+drawerOverlay model =
+    if model.drawerOpen && showsAppChrome model then
+        [ Element.inFront
+            (Element.row
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                ]
+                [ drawerView model
+                , Input.button
+                    [ Element.width Element.fill
+                    , Element.height Element.fill
+                    , Background.color (Element.rgba255 0 0 0 0.28)
+                    ]
+                    { onPress = Just DrawerClosed
+                    , label = Element.none
+                    }
+                ]
+            )
+        ]
+
+    else
+        []
+
+
+drawerView : Model -> Element.Element Msg
+drawerView model =
+    Element.column
+        [ Element.width (Element.fill |> Element.maximum 320)
+        , Element.height Element.fill
+        , Element.padding 20
+        , Element.spacing 12
+        , Background.color Ui.cardBg
+        , Border.widthEach { top = 0, right = 1, bottom = 0, left = 0 }
+        , Border.color Ui.borderGray
+        ]
+        (Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
+            :: drawerItems model
+        )
+
+
+drawerItems : Model -> List (Element.Element Msg)
+drawerItems model =
+    if Session.isAdmin model.session then
+        [ drawerItem model.route "Admin" AdminDashboard ]
+
+    else
+        [ drawerItem model.route "Diary" (Diary Nothing)
+        , drawerItem model.route "Search Foods" (FoodSearch Nothing)
+        , drawerItem model.route "My Meals" Meals
+        ]
+
+
+drawerItem : Route -> String -> Route -> Element.Element Msg
+drawerItem current label target =
+    let
+        selected : Bool
+        selected =
+            primaryRoute current == primaryRoute target
+    in
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingXY 12 12
+        , Border.rounded 6
+        , Background.color
+            (if selected then
+                Element.rgb255 230 247 247
+
+             else
+                Ui.cardBg
+            )
+        , Font.color
+            (if selected then
+                Ui.primaryTeal
+
+             else
+                Ui.darkColor
+            )
+        , Font.medium
+        ]
+        { onPress = Just (AppNavigationClicked target)
+        , label = Element.text label
+        }
+
+
+primaryRoute : Route -> Route
+primaryRoute route =
+    case route of
+        FoodDetail _ _ ->
+            FoodSearch Nothing
+
+        CustomFoodCreate ->
+            FoodSearch Nothing
+
+        CustomFoodEdit _ ->
+            FoodSearch Nothing
+
+        MealCreate ->
+            Meals
+
+        MealDetail _ ->
+            Meals
+
+        MealEdit _ ->
+            Meals
+
+        FoodLogDetail _ ->
+            Diary Nothing
+
+        Diary _ ->
+            Diary Nothing
+
+        FoodSearch _ ->
+            FoodSearch Nothing
+
+        other ->
+            other
+
+
+profileOverlay : Model -> List (Element.Attribute Msg)
+profileOverlay model =
+    if model.profileOpen && showsAppChrome model then
+        [ Element.inFront
+            (Element.column
+                [ Element.alignRight
+                , Element.moveDown 62
+                , Element.moveLeft 16
+                , Element.width (Element.px 240)
+                , Element.padding 12
+                , Element.spacing 10
+                , Background.color Ui.cardBg
+                , Border.rounded 8
+                , Border.width 1
+                , Border.color Ui.borderGray
+                ]
+                (profileMenuContent model)
+            )
+        ]
+
+    else
+        []
+
+
+profileMenuContent : Model -> List (Element.Element Msg)
+profileMenuContent model =
+    [ Element.el
+        [ Ui.caption
+        , Font.color Ui.mutedColor
+        ]
+        (Element.text
+            (model.session.identity
+                |> Maybe.map (\identity -> "Signed in as " ++ identity.username)
+                |> Maybe.withDefault "Signed in"
+            )
+        )
+    , Ui.button "Logout" LogoutClicked
+    ]
+
+
+closeChrome : Model -> Model
+closeChrome model =
+    { model | drawerOpen = False, profileOpen = False }
 
 
 pageView : Model -> Element.Element Msg

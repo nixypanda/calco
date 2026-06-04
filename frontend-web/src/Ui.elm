@@ -1,51 +1,46 @@
 module Ui exposing
-    ( -- Colors
-      primaryTeal
-    , proteinColor
-    , carbsColor
-    , fatColor
+    ( badge
+    , body
     , borderGray
+    , button
+    , caption
+    , carbsColor
+    , card
+    , cardActions
     , cardBg
     , dangerBg
+    , dangerButton
     , darkColor
-    , mediumColor
-    , mutedColor
-      -- Typography
     , display
+    , emptyState
+    , errorBanner
+    , fatColor
     , heading1
     , heading2
     , heading3
-    , body
-    , caption
-    , small
-    , bold
-    , medium
-      -- Layout
+    , input
     , layout
+    , loading
+    , macroBar
+      -- Layout
+    , mediumColor
+    , mutedColor
+      -- Typography
+    , mutedText
     , pageContainer
-    , pageHeader
-    , card
+    , passwordInput
+    , -- Colors
+      primaryTeal
+    , proteinColor
     , sectionHeader
       -- States
-    , loading
-    , emptyState
-    , errorBanner
-    , skeletonLoading
-      -- Buttons
-    , button
-    , submitButton
-    , dangerButton
-    , smallButton
-      -- Inputs
-    , input
-    , passwordInput
     , select
     , selectDropdown
       -- Display
-    , mutedText
-    , badge
-    , macroBar
-    , cardActions
+    , skeletonLoading
+    , smallButton
+      -- Inputs
+    , submitButton
     )
 
 import Element exposing (Element)
@@ -182,39 +177,18 @@ layout content =
         , Font.color darkColor
         , body
         ]
-        (Element.column
-            [ Element.centerX
-            , Element.width (Element.fill |> Element.maximum 960)
-            ]
-            [ content ]
-        )
+        content
 
 
 pageContainer : List (Element msg) -> Element msg
 pageContainer children =
     Element.column
-        [ Element.width Element.fill
+        [ Element.centerX
+        , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing 16
         , Element.padding 24
         ]
         children
-
-
-pageHeader : String -> Maybe msg -> Element msg
-pageHeader title back =
-    Element.row
-        [ Element.width Element.fill
-        , Element.spacing 12
-        ]
-        (case back of
-            Just backMsg ->
-                [ button "Back" backMsg
-                , Element.el [ heading1, bold ] (Element.text title)
-                ]
-
-            Nothing ->
-                [ Element.el [ heading1, bold ] (Element.text title) ]
-        )
 
 
 card : List (Element msg) -> Element msg
@@ -417,8 +391,7 @@ selectDropdown config =
 
                 [] ->
                     ""
-    in
-    let
+
         optionsElement : Element msg
         optionsElement =
             if config.isOpen then
@@ -484,7 +457,13 @@ selectDropdown config =
             , label =
                 Element.row [ Element.width Element.fill, Element.spacing 8 ]
                     [ Element.el [ Element.width Element.fill, body ] (Element.text selectedLabel)
-                    , Element.text (if config.isOpen then "▲" else "▼")
+                    , Element.text
+                        (if config.isOpen then
+                            "▲"
+
+                         else
+                            "▼"
+                        )
                     ]
             }
         ]

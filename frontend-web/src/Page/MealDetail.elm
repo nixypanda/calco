@@ -1,9 +1,7 @@
 module Page.MealDetail exposing
-    ( LogMealForm
-    , Model
+    ( Model
     , Msg(..)
     , OutMsg(..)
-    , createMealLogRequest
     , init
     , uniqueProductIds
     , update
@@ -11,10 +9,8 @@ module Page.MealDetail exposing
     )
 
 import Api.Client as Client
-import Api.Foods as Foods exposing (ProductDetail, UnitItem)
-import Api.Logs exposing (CreateLogRequest)
+import Api.Foods exposing (ProductDetail)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
-import Data.FoodLog exposing (FoodLog)
 import Data.Nutrition exposing (NutrientAmount)
 import Element exposing (Element)
 import Element.Background as Background
@@ -25,24 +21,13 @@ import Ui
 import View.Nutrients
 
 
-type alias LogMealForm =
-    { amount : String
-    , unit : String
-    , nutrients : Maybe (List NutrientAmount)
-    , previewToken : Int
-    , previewLoading : Bool
-    , logging : Bool
-    , error : Maybe String
-    }
-
-
 type alias Model =
     { mealId : String
     , meal : Maybe Meal
     , productNames : List ( String, String )
-    , units : List UnitItem
-    , logForm : LogMealForm
-    , nextPreviewToken : Int
+    , nutrients : Maybe (List NutrientAmount)
+    , nutritionLoading : Bool
+    , nutritionError : Maybe String
     , error : Maybe String
     , confirmDeleteOpen : Bool
     , deleting : Bool
@@ -53,28 +38,18 @@ type alias Model =
 type Msg
     = MealLoaded (Result Client.ApiError Meal)
     | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
-    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | AmountChanged String
-    | UnitChanged String
-    | NutrientPreviewLoaded Int (Result Client.ApiError MealNutritionResponse)
-    | LogClicked
-    | LocalTimestampReceived String
-    | LogCompleted (Result Client.ApiError FoodLog)
+    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
     | DeleteClicked
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
     | EditClicked
-    | BackClicked
 
 
 type OutMsg
     = NoOp
     | RequestInitialData String
     | RequestProductDetail String
-    | RequestNutrientPreview String String String Int
-    | RequestLocalTimestamp
-    | RequestCreateLog CreateLogRequest
     | RequestDeleteMeal String
     | Navigate Route
     | SessionExpired
@@ -85,17 +60,9 @@ init mealId =
     ( { mealId = mealId
       , meal = Nothing
       , productNames = []
-      , units = []
-      , logForm =
-            { amount = "100"
-            , unit = "g"
-            , nutrients = Nothing
-            , previewToken = 0
-            , previewLoading = False
-            , logging = False
-            , error = Nothing
-            }
-      , nextPreviewToken = 1
+      , nutrients = Nothing
+      , nutritionLoading = True
+      , nutritionError = Nothing
       , error = Nothing
       , confirmDeleteOpen = False
       , deleting = False
@@ -133,137 +100,35 @@ update msg model =
                 Err _ ->
                     ( model, Cmd.none, nextProductNameRequest productId model )
 
-        UnitsLoaded result ->
+        NutrientPreviewLoaded result ->
             case result of
                 Ok response ->
-                    previewAfterChange { model | units = response.items, error = Nothing }
-
-                Err _ ->
-                    previewAfterChange model
-
-        AmountChanged amount ->
-            previewAfterChange (mapLogForm (\form -> { form | amount = amount }) model)
-
-        UnitChanged unit ->
-            previewAfterChange (mapLogForm (\form -> { form | unit = unit }) model)
-
-        NutrientPreviewLoaded token result ->
-            if token /= model.logForm.previewToken then
-                ( model, Cmd.none, NoOp )
-
-            else
-                case result of
-                    Ok response ->
-                        ( mapLogForm
-                            (\form ->
-                                { form
-                                    | nutrients = Just response.nutrients
-                                    , previewLoading = False
-                                    , error = Nothing
-                                }
-                            )
-                            model
-                        , Cmd.none
-                        , NoOp
-                        )
-
-                    Err error ->
-                        if Client.isUnauthorized error then
-                            ( mapLogForm
-                                (\form ->
-                                    { form
-                                        | previewLoading = False
-                                        , error = Just (Client.displayError error)
-                                    }
-                                )
-                                model
-                            , Cmd.none
-                            , SessionExpired
-                            )
-
-                        else
-                            ( mapLogForm
-                                (\form ->
-                                    { form
-                                        | nutrients = Nothing
-                                        , previewLoading = False
-                                        , error = Just (Client.displayError error)
-                                    }
-                                )
-                                model
-                            , Cmd.none
-                            , NoOp
-                            )
-
-        LogClicked ->
-            case validPreviewAmount model.logForm.amount of
-                Just _ ->
-                    ( mapLogForm
-                        (\form -> { form | logging = True, error = Nothing })
-                        model
-                    , Cmd.none
-                    , RequestLocalTimestamp
-                    )
-
-                Nothing ->
-                    ( mapLogForm
-                        (\form ->
-                            { form
-                                | nutrients = Nothing
-                                , error = Just "Amount is required."
-                            }
-                        )
-                        model
+                    ( { model
+                        | nutrients = Just response.nutrients
+                        , nutritionLoading = False
+                        , nutritionError = Nothing
+                      }
                     , Cmd.none
                     , NoOp
                     )
-
-        LocalTimestampReceived loggedAt ->
-            case createMealLogRequest loggedAt model.mealId model.logForm of
-                Ok request ->
-                    ( model, Cmd.none, RequestCreateLog request )
-
-                Err _ ->
-                    ( mapLogForm
-                        (\form ->
-                            { form
-                                | logging = False
-                                , error = Just "Amount is required."
-                            }
-                        )
-                        model
-                    , Cmd.none
-                    , NoOp
-                    )
-
-        LogCompleted result ->
-            case result of
-                Ok _ ->
-                    ( model, Cmd.none, Navigate (Diary Nothing) )
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( mapLogForm
-                            (\form ->
-                                { form
-                                    | logging = False
-                                    , error = Just (Client.displayError error)
-                                }
-                            )
-                            model
+                        ( { model
+                            | nutrients = Nothing
+                            , nutritionLoading = False
+                            , nutritionError = Just (Client.displayError error)
+                          }
                         , Cmd.none
                         , SessionExpired
                         )
 
                     else
-                        ( mapLogForm
-                            (\form ->
-                                { form
-                                    | logging = False
-                                    , error = Just (Client.displayError error)
-                                }
-                            )
-                            model
+                        ( { model
+                            | nutrients = Nothing
+                            , nutritionLoading = False
+                            , nutritionError = Just (Client.displayError error)
+                          }
                         , Cmd.none
                         , NoOp
                         )
@@ -309,60 +174,6 @@ update msg model =
         EditClicked ->
             ( model, Cmd.none, Navigate (MealEdit model.mealId) )
 
-        BackClicked ->
-            ( model, Cmd.none, Navigate Meals )
-
-
-previewAfterChange : Model -> ( Model, Cmd Msg, OutMsg )
-previewAfterChange model =
-    case validPreviewAmount model.logForm.amount of
-        Just _ ->
-            let
-                token : Int
-                token =
-                    model.nextPreviewToken
-
-                form : LogMealForm
-                form =
-                    model.logForm
-            in
-            ( { model
-                | nextPreviewToken = token + 1
-                , logForm =
-                    { form
-                        | previewToken = token
-                        , previewLoading = True
-                        , nutrients = Nothing
-                        , error = Nothing
-                    }
-              }
-            , Cmd.none
-            , RequestNutrientPreview
-                model.mealId
-                model.logForm.amount
-                model.logForm.unit
-                token
-            )
-
-        Nothing ->
-            ( mapLogForm
-                (\form ->
-                    { form
-                        | nutrients = Nothing
-                        , previewLoading = False
-                        , error = Nothing
-                    }
-                )
-                model
-            , Cmd.none
-            , NoOp
-            )
-
-
-mapLogForm : (LogMealForm -> LogMealForm) -> Model -> Model
-mapLogForm change model =
-    { model | logForm = change model.logForm }
-
 
 uniqueProductIds : Meal -> List String
 uniqueProductIds meal =
@@ -384,36 +195,6 @@ uniqueProductIds meal =
                     ids ++ [ id ]
             )
             []
-
-
-validPreviewAmount : String -> Maybe Float
-validPreviewAmount raw =
-    case String.toFloat (String.trim raw) of
-        Just amount ->
-            if amount > 0 then
-                Just amount
-
-            else
-                Nothing
-
-        Nothing ->
-            Nothing
-
-
-createMealLogRequest : String -> String -> LogMealForm -> Result String CreateLogRequest
-createMealLogRequest loggedAt mealId form =
-    case validPreviewAmount form.amount of
-        Just _ ->
-            Ok
-                { loggedAt = loggedAt
-                , mealSlot = Nothing
-                , item = { itemType = "meal", id = mealId }
-                , quantity = { amount = String.trim form.amount, unit = String.trim form.unit }
-                , notes = Nothing
-                }
-
-        Nothing ->
-            Err "invalid amount"
 
 
 requestProductNames : List String -> OutMsg
@@ -485,9 +266,8 @@ failure error model =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ Element.row [ Element.spacing 12 ]
-            [ Ui.button "Back" BackClicked
-            , Element.el
+        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
+            [ Element.el
                 [ Ui.heading1, Font.bold ]
                 (Element.text (Maybe.map .name model.meal |> Maybe.withDefault "Meal"))
             , Ui.button "Edit" EditClicked
@@ -521,7 +301,7 @@ loadedView model meal =
         , Element.column
             [ Element.width Element.fill, Element.spacing 8 ]
             (List.map (componentView model) meal.components)
-        , logFormView model
+        , nutritionView model
         , confirmDeleteView model
         ]
 
@@ -544,21 +324,22 @@ componentView model component =
         ]
 
 
-logFormView : Model -> Element Msg
-logFormView model =
+nutritionView : Model -> Element Msg
+nutritionView model =
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
-        [ Ui.sectionHeader "Log this meal"
-        , Element.row [ Element.spacing 8 ]
-            [ Ui.input "Amount" model.logForm.amount AmountChanged
-            , Ui.input "Unit" model.logForm.unit UnitChanged
-            ]
-        , case model.logForm.error of
+        [ Ui.sectionHeader "Nutrition"
+        , if model.nutritionLoading then
+            Ui.loading "Loading nutrition..."
+
+          else
+            Element.none
+        , case model.nutritionError of
             Just message ->
                 Ui.errorBanner message
 
             Nothing ->
                 Element.none
-        , case model.logForm.nutrients of
+        , case model.nutrients of
             Just nutrients ->
                 Element.column [ Element.width Element.fill, Element.spacing 8 ]
                     [ View.Nutrients.nutrientsTable nutrients
@@ -570,7 +351,6 @@ logFormView model =
 
             Nothing ->
                 Element.none
-        , Ui.submitButton model.logForm.logging "Log Meal" "Logging..." LogClicked
         ]
 
 

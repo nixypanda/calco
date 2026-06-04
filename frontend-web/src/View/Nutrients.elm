@@ -1,4 +1,4 @@
-module View.Nutrients exposing (nutrientLabel, nutrientsTable, macroBreakdownView)
+module View.Nutrients exposing (macroBreakdownView, nutrientsTable)
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Element exposing (Element)
@@ -75,45 +75,25 @@ nutrientLabel code =
 macroBreakdownView : List NutrientAmount -> Element msg
 macroBreakdownView nutrients =
     let
-        protein : Float
-        protein =
-            Nutrition.nutrientAmount "PROTEIN_G" nutrients
-
-        carbs : Float
-        carbs =
-            Nutrition.nutrientAmount "CARBS_G" nutrients
-
-        fat : Float
-        fat =
-            Nutrition.nutrientAmount "FAT_G" nutrients
-
-        total : Float
-        total =
-            protein + carbs + fat
+        totals : Nutrition.MacroTotals
+        totals =
+            Nutrition.macroTotals [ { nutrients = nutrients } ]
 
         pProtein : Int
         pProtein =
-            if total > 0 then
-                round (protein / total * 100)
-
-            else
-                0
+            round totals.proteinPct
 
         pCarbs : Int
         pCarbs =
-            if total > 0 then
-                round (carbs / total * 100)
-
-            else
-                0
+            round totals.carbsPct
 
         pFat : Int
         pFat =
-            if total > 0 then
+            if pProtein + pCarbs > 0 then
                 max 0 (100 - pProtein - pCarbs)
 
             else
-                0
+                round totals.fatPct
     in
     Element.column [ Element.width Element.fill, Element.spacing 8 ]
         [ Element.row
@@ -146,15 +126,18 @@ macroBreakdownView nutrients =
             [ Element.width Element.fill, Element.spacing 16 ]
             [ Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.proteinColor
-                , Element.el [ Ui.body ] (Element.text ("Protein " ++ String.fromInt (round protein) ++ "g"))
+                , Element.el [ Ui.body ]
+                    (Element.text ("Protein " ++ Nutrition.oneDecimal totals.protein ++ "g"))
                 ]
             , Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.carbsColor
-                , Element.el [ Ui.body ] (Element.text ("Carbs " ++ String.fromInt (round carbs) ++ "g"))
+                , Element.el [ Ui.body ]
+                    (Element.text ("Carbs " ++ Nutrition.oneDecimal totals.carbs ++ "g"))
                 ]
             , Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.fatColor
-                , Element.el [ Ui.body ] (Element.text ("Fat " ++ String.fromInt (round fat) ++ "g"))
+                , Element.el [ Ui.body ]
+                    (Element.text ("Fat " ++ Nutrition.oneDecimal totals.fat ++ "g"))
                 ]
             ]
         ]

@@ -241,8 +241,7 @@ logsForSlot =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ topActions
-        , dateCard model
+        [ dateCard model
         , case model.error of
             Just message ->
                 Ui.errorBanner message
@@ -257,14 +256,6 @@ view model =
 
           else
             logGroupsView model
-        ]
-
-
-topActions : Element Msg
-topActions =
-    Element.row [ Element.width Element.fill ]
-        [ Element.el [ Element.alignRight ]
-            (Ui.smallButton "My Meals" MealsClicked)
         ]
 
 
