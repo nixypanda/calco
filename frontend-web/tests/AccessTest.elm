@@ -44,9 +44,9 @@ tests =
 
 admin : Session
 admin =
-    Authenticated { id = "1", username = "admin", role = Auth.Admin } Nothing
+    Authenticated { id = "1", username = "admin", role = Auth.Admin }
 
 
 normalUser : Session
 normalUser =
-    Authenticated { id = "2", username = "user", role = Auth.User } Nothing
+    Authenticated { id = "2", username = "user", role = Auth.User }

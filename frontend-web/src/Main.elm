@@ -11,7 +11,6 @@ import Browser
 import Browser.Navigation as Nav
 import Data.Auth as Auth
 import Data.ItemRef exposing (ItemRef)
-import Lib.Date as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..))
 import Data.Units as Units
@@ -20,6 +19,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Admin.BootstrapSetup as Setup
 import Page.Admin.Dashboard as AdminDashboard
 import Page.Auth.Login as Login
@@ -546,7 +546,9 @@ applySetupOutMsg outMsg model =
                 nextSession =
                     Session.applyAuthResult (Ok loginSession) model.session
             in
-            ( { model | session = nextSession, adminExists = True }, Nav.replaceUrl model.key "/admin" )
+            ( { model | session = nextSession, adminExists = True }
+            , Nav.replaceUrl model.key "/admin"
+            )
 
 
 applyAdminOutMsg : AdminDashboard.OutMsg -> Model -> ( Model, Cmd Msg )

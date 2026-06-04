@@ -317,7 +317,9 @@ update msg model =
                         , totalQuantity =
                             Maybe.map .amount meal.totalQuantity
                                 |> Maybe.withDefault ""
-                        , totalUnit = Maybe.map .unit meal.totalQuantity |> Maybe.withDefault Units.defaultCode
+                        , totalUnit =
+                            Maybe.map .unit meal.totalQuantity
+                                |> Maybe.withDefault Units.defaultCode
                         , components = loadedRows
                         , productNames = ItemNameLookup.empty
                         , nextRowId = List.length loadedRows + 1
@@ -412,78 +414,6 @@ update msg model =
 
         ComponentSearchChanged rowId query ->
             onComponentSearchChanged rowId query model
-            let
-                token : Int
-                token =
-                    model.nextSearchToken
-
-                categoryToken : Int
-                categoryToken =
-                    token + 1
-
-                nextModel : Model
-                nextModel =
-                    model
-                        |> updateComponent rowId (SetSearchQuery query)
-                        |> updateComponent rowId (SetSearchStarted token)
-                        |> updateComponent rowId
-                            (case Search.categoryQuery query of
-                                Just _ ->
-                                    SetCategorySuggestionsStarted categoryToken
-
-                                Nothing ->
-                                    ClearCategorySuggestions
-                            )
-
-                searchRequest : Maybe Foods.SearchRequest
-                searchRequest =
-                    if String.length (String.trim query) < 2 then
-                        Nothing
-
-                    else
-                        Just { query = query }
-
-                categoryRequest : Maybe CategorySuggestionRequest
-                categoryRequest =
-                    Search.categoryQuery query
-                        |> Maybe.map
-                            (\value ->
-                                { query = value, limit = 8 }
-                            )
-            in
-            case ( searchRequest, categoryRequest ) of
-                ( Just productRequest, Just categorySuggestionRequest ) ->
-                    ( { nextModel | nextSearchToken = token + 2 }
-                    , Cmd.none
-                    , RequestProductAndCats
-                        { rowId = rowId
-                        , searchToken = token
-                        , searchRequest = productRequest
-                        , categoryToken = categoryToken
-                        , categoryRequest = categorySuggestionRequest
-                        }
-                    )
-
-                ( Just productRequest, Nothing ) ->
-                    ( { nextModel | nextSearchToken = token + 1 }
-                    , Cmd.none
-                    , RequestProductSearch rowId token productRequest
-                    )
-
-                ( Nothing, Just categorySuggestionRequest ) ->
-                    ( { nextModel
-                        | nextSearchToken = token + 2
-                      }
-                        |> updateComponent rowId (SetSearchResults token [])
-                    , Cmd.none
-                    , RequestCategorySuggestions rowId categoryToken categorySuggestionRequest
-                    )
-
-                _ ->
-                    ( nextModel |> updateComponent rowId (SetSearchResults token [])
-                    , Cmd.none
-                    , NoOp
-                    )
 
         ComponentSearchCompleted rowId token result ->
             case result of
@@ -497,7 +427,8 @@ update msg model =
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \_ current -> updateComponent rowId (SetSearching False) current
+                        , applyError =
+                            \_ current -> updateComponent rowId (SetSearching False) current
                         }
                         error
                         model
@@ -514,7 +445,8 @@ update msg model =
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \_ current -> updateComponent rowId ClearCategorySuggestions current
+                        , applyError =
+                            \_ current -> updateComponent rowId ClearCategorySuggestions current
                         }
                         error
                         model

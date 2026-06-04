@@ -124,7 +124,8 @@ update msg model =
                         , applyError =
                             \message current ->
                                 { current
-                                    | form = Maybe.map (\form -> { form | submitting = False }) current.form
+                                    | form =
+                                        Maybe.map (\f -> { f | submitting = False }) current.form
                                     , error = Just message
                                 }
                         }

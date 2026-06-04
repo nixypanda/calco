@@ -10,11 +10,11 @@ module Data.FoodLog exposing
     )
 
 import Data.ItemRef as ItemRef exposing (ItemRef)
-import Lib.Date as LocalDate exposing (LocalDate)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
+import Lib.Date as LocalDate exposing (LocalDate)
 
 
 type alias FoodLog =

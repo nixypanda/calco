@@ -26,7 +26,9 @@ tests =
                     |> Expect.equal ( Just "Network error", NoOp )
         , test "unauthorized failures apply display error and return SessionExpired" <|
             \_ ->
-                ApiResult.failure config (Client.BadStatus 401 "unauthorized" "Sign in again") emptyModel
+                ApiResult.failure config
+                    (Client.BadStatus 401 "unauthorized" "Sign in again")
+                    emptyModel
                     |> resultSummary
                     |> Expect.equal ( Just "unauthorized: Sign in again", SessionExpired )
         ]

@@ -11,88 +11,73 @@ type RouteDecision
 
 resolveRoute : Session.Session -> Bool -> Route -> RouteDecision
 resolveRoute session adminExists route =
-    case route of
-        Root ->
-            if not adminExists then
-                Navigate Setup
-
-            else if not (Session.isAuthenticated session) then
-                Navigate Login
-
-            else if Session.isAdmin session then
-                Navigate AdminDashboard
-
-            else
-                Navigate (Diary Nothing)
-
-        NotFound ->
-            Navigate Root
-
-        Setup ->
-            if adminExists && not (Session.isAuthenticated session) then
-                Navigate Login
-
-            else if Session.isAuthenticated session then
-                Navigate Root
-
-            else
+    if not adminExists then
+        case route of
+            Setup ->
                 Render Setup
 
-        Login ->
-            if Session.isAuthenticated session then
-                Navigate Root
-
-            else
-                Render Login
-
-        AdminDashboard ->
-            if not (Session.isAuthenticated session) then
-                Navigate Login
-
-            else if not (Session.isAdmin session) then
-                Navigate (Diary Nothing)
-
-            else
-                Render AdminDashboard
-
-        Diary _ ->
-            foodRoute session route
-
-        FoodLogDetail _ ->
-            foodRoute session route
-
-        FoodSearch _ ->
-            foodRoute session route
-
-        FoodDetail _ _ ->
-            foodRoute session route
-
-        CustomFoodCreate ->
-            foodRoute session route
-
-        CustomFoodEdit _ ->
-            foodRoute session route
-
-        Meals ->
-            foodRoute session route
-
-        MealCreate ->
-            foodRoute session route
-
-        MealDetail _ ->
-            foodRoute session route
-
-        MealEdit _ ->
-            foodRoute session route
-
-
-foodRoute : Session.Session -> Route -> RouteDecision
-foodRoute session route =
-    if not (Session.isAuthenticated session) then
-        Navigate Login
+            _ ->
+                Navigate Setup
 
     else if Session.isAdmin session then
-        Navigate AdminDashboard
+        case route of
+            AdminDashboard ->
+                Render AdminDashboard
+
+            _ ->
+                Navigate AdminDashboard
+
+    else if not (Session.isAuthenticated session) then
+        case route of
+            Login ->
+                Render Login
+
+            _ ->
+                Navigate Login
 
     else
-        Render route
+        case route of
+            Root ->
+                Navigate (Diary Nothing)
+
+            NotFound ->
+                Navigate Root
+
+            Setup ->
+                Navigate Root
+
+            Login ->
+                Navigate Root
+
+            AdminDashboard ->
+                Navigate (Diary Nothing)
+
+            Diary _ ->
+                Render route
+
+            FoodLogDetail _ ->
+                Render route
+
+            FoodSearch _ ->
+                Render route
+
+            FoodDetail _ _ ->
+                Render route
+
+            CustomFoodCreate ->
+                Render route
+
+            CustomFoodEdit _ ->
+                Render route
+
+            Meals ->
+                Render route
+
+            MealCreate ->
+                Render route
+
+            MealDetail _ ->
+                Render route
+
+            MealEdit _ ->
+                Render route

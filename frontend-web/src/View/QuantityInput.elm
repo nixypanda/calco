@@ -45,7 +45,10 @@ select :
 select config =
     Element.row [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input config.amountLabel config.amount config.onAmountChange
-        , Ui.select config.unitLabel config.unit (unitOptions config.unit config.units) config.onUnitChange
+        , Ui.select config.unitLabel
+            config.unit
+            (unitOptions config.unit config.units)
+            config.onUnitChange
         ]
 
 

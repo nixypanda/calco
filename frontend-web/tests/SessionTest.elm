@@ -17,7 +17,7 @@ tests =
         , test "auth success stores identity and profile" <|
             \_ ->
                 case Session.applyAuthResult (Ok loginSession) Session.init of
-                    Session.Authenticated identity _ ->
+                    Session.Authenticated identity ->
                         Expect.equal loginSession.identity identity
 
                     _ ->
