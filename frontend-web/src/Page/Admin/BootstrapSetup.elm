@@ -3,6 +3,7 @@ module Page.Admin.BootstrapSetup exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , SubmitStatus
     , init
     , update
     , validateBootstrapAdmin

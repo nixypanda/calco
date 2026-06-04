@@ -1,10 +1,8 @@
 module Page.Admin.Dashboard exposing
-    ( CreateForm
-    , Model
+    ( Model
     , Msg(..)
     , OutMsg(..)
     , ResetForm
-    , createUserPayload
     , init
     , resetPasswordPayload
     , update
@@ -12,7 +10,7 @@ module Page.Admin.Dashboard exposing
     )
 
 import Api.Client as Client
-import Data.Auth as Auth
+import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Element)
 import Element.Background as Background
@@ -20,13 +18,6 @@ import Element.Border as Border
 import Element.Font as Font
 import Lib.Loadable exposing (Loadable(..))
 import Ui
-
-
-type alias CreateForm =
-    { username : String
-    , displayName : String
-    , initialPassword : String
-    }
 
 
 type alias ResetForm =
@@ -37,8 +28,6 @@ type alias ResetForm =
 
 type alias Model =
     { users : Loadable Client.ApiError (List User.User)
-    , showCreate : Bool
-    , createForm : CreateForm
     , resetForm : Maybe ResetForm
     , actionError : Maybe String
     }
@@ -46,12 +35,7 @@ type alias Model =
 
 type Msg
     = UsersLoaded (Result Client.ApiError (List User.User))
-    | ToggleCreate
-    | CreateUsernameChanged String
-    | CreateDisplayNameChanged String
-    | CreatePasswordChanged String
-    | CreateSubmitted
-    | CreateCompleted (Result Client.ApiError Auth.LoginSession)
+    | NavigateCreateUser
     | OpenReset String
     | ResetPasswordChanged String
     | ResetSubmitted String
@@ -65,7 +49,7 @@ type Msg
 type OutMsg
     = NoOp
     | RequestUsers
-    | RequestCreateUser User.CreateUserRequest
+    | Navigate Route
     | RequestResetPassword String User.ResetPasswordRequest
     | RequestDisableUser String
     | RequestEnableUser String
@@ -75,46 +59,11 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( { users = Loading
-      , showCreate = False
-      , createForm = emptyCreateForm
       , resetForm = Nothing
       , actionError = Nothing
       }
     , RequestUsers
     )
-
-
-emptyCreateForm : CreateForm
-emptyCreateForm =
-    { username = "", displayName = "", initialPassword = "" }
-
-
-createUserPayload : Model -> Result String User.CreateUserRequest
-createUserPayload model =
-    let
-        username : String
-        username =
-            String.trim model.createForm.username
-
-        displayName : String
-        displayName =
-            String.trim model.createForm.displayName
-    in
-    if String.isEmpty username then
-        Err "Username is required"
-
-    else if String.isEmpty displayName then
-        Err "Display name is required"
-
-    else if String.isEmpty model.createForm.initialPassword then
-        Err "Initial password is required"
-
-    else
-        Ok
-            { username = username
-            , displayName = displayName
-            , initialPassword = model.createForm.initialPassword
-            }
 
 
 resetPasswordPayload : Model -> Result String ( String, User.ResetPasswordRequest )
@@ -158,61 +107,8 @@ update msg model =
                         , NoOp
                         )
 
-        ToggleCreate ->
-            ( { model | showCreate = not model.showCreate }, Cmd.none, NoOp )
-
-        CreateUsernameChanged username ->
-            ( { model | createForm = updateCreateUsername username model.createForm }
-            , Cmd.none
-            , NoOp
-            )
-
-        CreateDisplayNameChanged displayName ->
-            ( { model
-                | createForm = updateCreateDisplayName displayName model.createForm
-              }
-            , Cmd.none
-            , NoOp
-            )
-
-        CreatePasswordChanged password ->
-            ( { model | createForm = updateCreatePassword password model.createForm }
-            , Cmd.none
-            , NoOp
-            )
-
-        CreateSubmitted ->
-            case createUserPayload model of
-                Ok request ->
-                    ( { model | actionError = Nothing }, Cmd.none, RequestCreateUser request )
-
-                Err message ->
-                    ( { model | actionError = Just message }, Cmd.none, NoOp )
-
-        CreateCompleted result ->
-            case result of
-                Ok _ ->
-                    ( { model
-                        | showCreate = False
-                        , createForm = emptyCreateForm
-                        , actionError = Nothing
-                      }
-                    , Cmd.none
-                    , RequestUsers
-                    )
-
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+        NavigateCreateUser ->
+            ( model, Cmd.none, Navigate AdminCreateUser )
 
         OpenReset userId ->
             case model.resetForm of
@@ -306,59 +202,17 @@ actionReloadResult result model =
                 )
 
 
-updateCreateUsername : String -> CreateForm -> CreateForm
-updateCreateUsername username form =
-    { form | username = username }
-
-
-updateCreateDisplayName : String -> CreateForm -> CreateForm
-updateCreateDisplayName displayName form =
-    { form | displayName = displayName }
-
-
-updateCreatePassword : String -> CreateForm -> CreateForm
-updateCreatePassword password form =
-    { form | initialPassword = password }
-
-
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
         (Element.el
             [ Element.alignRight ]
-            (Ui.button
-                (if model.showCreate then
-                    "Cancel"
-
-                 else
-                    "Create User"
-                )
-                ToggleCreate
-            )
+            (Ui.button "Create User" NavigateCreateUser)
             :: (errorView model.actionError
-                    ++ createFormView model
                     ++ usersView model
                     ++ resetFormView model
                )
         )
-
-
-createFormView : Model -> List (Element Msg)
-createFormView model =
-    if model.showCreate then
-        [ Ui.card
-            [ Ui.input "Username" model.createForm.username CreateUsernameChanged
-            , Ui.input "Display Name" model.createForm.displayName CreateDisplayNameChanged
-            , Ui.passwordInput
-                "Initial Password"
-                model.createForm.initialPassword
-                CreatePasswordChanged
-            , Ui.button "Save" CreateSubmitted
-            ]
-        ]
-
-    else
-        []
 
 
 usersView : Model -> List (Element Msg)

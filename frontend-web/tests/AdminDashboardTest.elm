@@ -1,7 +1,6 @@
 module AdminDashboardTest exposing (tests)
 
 import Api.Client as Client
-import Data.Auth as Auth
 import Data.User as User
 import Expect
 import Lib.Loadable exposing (Loadable(..))
@@ -30,51 +29,11 @@ tests =
                     |> firstOfThree
                     |> .users
                     |> Expect.equal (Success [ user ])
-        , test "create payload trims username and display name" <|
-            \_ ->
-                { initialModel
-                    | createForm =
-                        { username = " alice "
-                        , displayName = " Alice "
-                        , initialPassword = "secret"
-                        }
-                }
-                    |> Admin.createUserPayload
-                    |> Expect.equal
-                        (Ok
-                            { username = "alice"
-                            , displayName = "Alice"
-                            , initialPassword = "secret"
-                            }
-                        )
         , test "reset password payload uses selected user" <|
             \_ ->
                 { initialModel | resetForm = Just { userId = "u1", password = "new-password" } }
                     |> Admin.resetPasswordPayload
                     |> Expect.equal (Ok ( "u1", { newPassword = "new-password" } ))
-        , test "create success clears form and requests reload" <|
-            \_ ->
-                { initialModel
-                    | showCreate = True
-                    , createForm =
-                        { username = "alice"
-                        , displayName = "Alice"
-                        , initialPassword = "secret"
-                        }
-                }
-                    |> Admin.update (Admin.CreateCompleted (Ok loginSession))
-                    |> thirdOfThree
-                    |> Expect.equal Admin.RequestUsers
-        , test "create failure preserves existing users" <|
-            \_ ->
-                { initialModel | users = Success [ user ] }
-                    |> Admin.update
-                        (Admin.CreateCompleted
-                            (Err (Client.BadStatus 400 "bad" "Bad request"))
-                        )
-                    |> firstOfThree
-                    |> .users
-                    |> Expect.equal (Success [ user ])
         , test "reset success clears reset form" <|
             \_ ->
                 { initialModel | resetForm = Just { userId = "u1", password = "new-password" } }
@@ -98,15 +57,6 @@ tests =
                     |> firstOfThree
                     |> .actionError
                     |> Expect.equal (Just "boom: Failed")
-        , test "loadable not-asked state exists" <|
-            \_ ->
-                let
-                    expected : Loadable Client.ApiError (List User.User)
-                    expected =
-                        NotAsked
-                in
-                NotAsked
-                    |> Expect.equal expected
         ]
 
 
@@ -122,13 +72,6 @@ user =
     , displayName = "Alice"
     , status = "active"
     , createdAt = "2026-06-04"
-    }
-
-
-loginSession : Auth.LoginSession
-loginSession =
-    { identity = { id = "admin", username = "admin", role = Auth.Admin }
-    , profile = Nothing
     }
 
 

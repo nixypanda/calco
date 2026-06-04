@@ -21,6 +21,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Admin.BootstrapSetup as Setup
+import Page.Admin.CreateUser as AdminCreateUser
 import Page.Admin.Dashboard as AdminDashboard
 import Page.Auth.Login as Login
 import Page.CustomFood.Create as CustomFoodCreate
@@ -63,6 +64,7 @@ type PageModel
     | LoginPage Login.Model
     | SetupPage Setup.Model
     | AdminPage AdminDashboard.Model
+    | AdminCreateUserPage AdminCreateUser.Model
     | DiaryPage Diary.Model
     | FoodSearchPage FoodSearch.Model
     | FoodDetailPage FoodDetail.Model
@@ -92,6 +94,7 @@ type Msg
     | GotLoginMsg Login.Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
+    | GotAdminCreateUserMsg AdminCreateUser.Msg
     | GotDiaryMsg Diary.Msg
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodDetail.Msg
@@ -302,6 +305,27 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotAdminCreateUserMsg subMsg ->
+            case model.page of
+                AdminCreateUserPage subModel ->
+                    let
+                        ( newSubModel, subCmd, outMsg ) =
+                            AdminCreateUser.update subMsg subModel
+
+                        nextModel : Model
+                        nextModel =
+                            { model | page = AdminCreateUserPage newSubModel }
+
+                        ( finalModel, outCmd ) =
+                            applyAdminCreateUserOutMsg outMsg nextModel
+                    in
+                    ( finalModel
+                    , Cmd.batch [ Cmd.map GotAdminCreateUserMsg subCmd, outCmd ]
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
+
         GotFoodSearchMsg subMsg ->
             case model.page of
                 FoodSearchPage subModel ->
@@ -404,6 +428,18 @@ loadPage route model =
 
                 ( nextModel, outCmd ) =
                     applyAdminOutMsg outMsg { model | page = AdminPage adminModel }
+            in
+            ( nextModel, outCmd )
+
+        AdminCreateUser ->
+            let
+                ( createUserModel, outMsg ) =
+                    AdminCreateUser.init
+
+                ( nextModel, outCmd ) =
+                    applyAdminCreateUserOutMsg
+                        outMsg
+                        { model | page = AdminCreateUserPage createUserModel }
             in
             ( nextModel, outCmd )
 
@@ -560,8 +596,8 @@ applyAdminOutMsg outMsg model =
         AdminDashboard.RequestUsers ->
             ( model, Api.Admin.listUsers (GotAdminMsg << AdminDashboard.UsersLoaded) )
 
-        AdminDashboard.RequestCreateUser request ->
-            ( model, Api.Admin.createUser request (GotAdminMsg << AdminDashboard.CreateCompleted) )
+        AdminDashboard.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         AdminDashboard.RequestResetPassword userId request ->
             ( model
@@ -578,6 +614,24 @@ applyAdminOutMsg outMsg model =
             ( model, Api.Admin.enableUser userId (GotAdminMsg << AdminDashboard.EnableCompleted) )
 
         AdminDashboard.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+applyAdminCreateUserOutMsg : AdminCreateUser.OutMsg -> Model -> ( Model, Cmd Msg )
+applyAdminCreateUserOutMsg outMsg model =
+    case outMsg of
+        AdminCreateUser.NoOp ->
+            ( model, Cmd.none )
+
+        AdminCreateUser.RequestCreateUser request ->
+            ( model
+            , Api.Admin.createUser request (GotAdminCreateUserMsg << AdminCreateUser.Completed)
+            )
+
+        AdminCreateUser.CreateSucceeded ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
+
+        AdminCreateUser.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -1230,6 +1284,9 @@ screenMeta route =
         AdminDashboard ->
             { title = "Admin", leading = OpenMenu }
 
+        AdminCreateUser ->
+            { title = "Create User", leading = GoBack AdminDashboard }
+
         FoodSearch maybeSlot ->
             { title =
                 case maybeSlot of
@@ -1372,6 +1429,9 @@ primaryRoute route =
         CustomFoodEdit _ ->
             FoodSearch Nothing
 
+        AdminCreateUser ->
+            AdminDashboard
+
         MealCreate ->
             Meals
 
@@ -1456,6 +1516,9 @@ pageView model =
 
         AdminPage adminModel ->
             Element.map GotAdminMsg (AdminDashboard.view adminModel)
+
+        AdminCreateUserPage createUserModel ->
+            Element.map GotAdminCreateUserMsg (AdminCreateUser.view createUserModel)
 
         DiaryPage diaryModel ->
             Element.map GotDiaryMsg (Diary.view diaryModel)
