@@ -4,6 +4,7 @@ import Api.Foods exposing (ProductDetail)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, test)
 import View.FoodLogForm as FoodLogForm
 
@@ -29,36 +30,55 @@ tests =
                     |> Expect.equal ( "1", "g" )
         , test "amount is required" <|
             \_ ->
-                FoodLogForm.createProductLogRequest loggedAt
+                FoodLogForm.createProductLogRequest rawDate
+                    deviceTimezone
                     "food-1"
                     { form | amount = " " }
                     |> Expect.equal (Err FoodLogForm.AmountRequired)
         , test "create-log payload uses product item" <|
             \_ ->
-                FoodLogForm.createProductLogRequest loggedAt "food-1" form
+                FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" form
                     |> Result.map .item
                     |> Expect.equal (Ok { itemType = "product", id = "food-1" })
         , test "selected meal slot is included" <|
             \_ ->
-                FoodLogForm.createProductLogRequest loggedAt
+                FoodLogForm.createProductLogRequest rawDate
+                    deviceTimezone
                     "food-1"
                     { form | mealSlot = Just Lunch }
                     |> Result.map .mealSlot
                     |> Expect.equal (Ok (Just "lunch"))
         , test "no meal slot is omitted from request model" <|
             \_ ->
-                FoodLogForm.createProductLogRequest loggedAt
+                FoodLogForm.createProductLogRequest rawDate
+                    deviceTimezone
                     "food-1"
                     { form | mealSlot = Nothing }
                     |> Result.map .mealSlot
                     |> Expect.equal (Ok Nothing)
         , test "blank notes become null request value" <|
             \_ ->
-                FoodLogForm.createProductLogRequest loggedAt
+                FoodLogForm.createProductLogRequest rawDate
+                    deviceTimezone
                     "food-1"
                     { form | notes = "   " }
                     |> Result.map .notes
                     |> Expect.equal (Ok Nothing)
+        , test "create-log payload passes through log date and timezone" <|
+            \_ ->
+                FoodLogForm.createProductLogRequest rawDate
+                    deviceTimezone
+                    "food-1"
+                    form
+                    |> Result.map (\request -> ( request.logDate, request.deviceTimezone ))
+                    |> Expect.equal (Ok ( sampleDate, deviceTimezone ))
+        , test "create-log payload rejects malformed date strings" <|
+            \_ ->
+                FoodLogForm.createProductLogRequest "not-a-date"
+                    deviceTimezone
+                    "food-1"
+                    form
+                    |> Expect.equal (Err FoodLogForm.InvalidDate)
         , test "load-log success form uses existing quantity, unit, meal slot, and notes" <|
             \_ ->
                 FoodLogForm.initLogFormFromLog log
@@ -106,9 +126,40 @@ form =
     }
 
 
-loggedAt : String
-loggedAt =
-    "2026-06-04T10:00:00+05:30"
+rawDate : String
+rawDate =
+    "2026-06-04"
+
+
+sampleDate : LocalDate
+sampleDate =
+    sampleDateFromString rawDate
+
+
+sampleDateFromString : String -> LocalDate
+sampleDateFromString raw =
+    case LocalDate.fromString raw of
+        Just d ->
+            d
+
+        Nothing ->
+            todayFallback
+
+
+todayFallback : LocalDate
+todayFallback =
+    case LocalDate.fromParts 1970 1 1 of
+        Just d ->
+            d
+
+        Nothing ->
+            -- Unreachable: 1970-01-01 is always valid.
+            sampleDate
+
+
+deviceTimezone : Maybe String
+deviceTimezone =
+    Just "Asia/Kolkata"
 
 
 food : ProductDetail
@@ -133,7 +184,8 @@ food =
 log : FoodLog
 log =
     { id = "log-1"
-    , loggedAt = "2026-06-04T10:00:00+05:30"
+    , logDate = sampleDate
+    , deviceTimezone = deviceTimezone
     , mealSlot = Just "lunch"
     , item = { itemType = "product", id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }

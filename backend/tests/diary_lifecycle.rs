@@ -41,8 +41,9 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
 
     // ── Create log ──────────────────────────────────────────────────────
     let create_payload = json!({
-        "logged_at": "2026-06-01T08:30:00Z",
+        "log_date": "2026-06-01",
         "meal_slot": "breakfast",
+        "device_timezone": "Asia/Kolkata",
         "item": { "type": "product", "id": product_id },
         "quantity": { "amount": 150, "unit": "g" },
         "notes": "with yogurt"
@@ -61,7 +62,10 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     assert_eq!(created["item"]["name"], "Diary Test Apple");
     assert_eq!(created["item"]["brand"], "Orchard Lab");
     assert!(created.get("item_snapshot").is_none());
+    assert!(created.get("logged_at").is_none());
+    assert_eq!(created["log_date"], "2026-06-01");
     assert_eq!(created["meal_slot"], "breakfast");
+    assert_eq!(created["device_timezone"], "Asia/Kolkata");
 
     // Nutrient snapshot should include kcal scaled to 150g
     let kcal = created["nutrients"]
@@ -110,15 +114,19 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     );
     assert_eq!(fetched_after_product_rename["item"]["brand"], "Orchard Lab");
 
-    // ── List by date range ──────────────────────────────────────────────
-    let list: Value = get_json(&router, "/api/logs?from=2026-06-01&to=2026-06-01", &user).await;
+    // ── List by log date ────────────────────────────────────────────────
+    let list: Value = get_json(&router, "/api/logs?log_date=2026-06-01", &user).await;
     let items = list["items"].as_array().unwrap();
     assert!(items.iter().any(|l| l["id"] == log_id));
+
+    let other_day_list: Value = get_json(&router, "/api/logs?log_date=2026-06-02", &user).await;
+    assert!(other_day_list["items"].as_array().unwrap().is_empty());
 
     // ── Update ──────────────────────────────────────────────────────────
     let update_payload = json!({
         "quantity": { "amount": 200, "unit": "g" },
-        "notes": "post-workout"
+        "notes": "post-workout",
+        "device_timezone": null
     });
     let updated: Value = put_json(
         &router,
@@ -130,21 +138,7 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     .await;
     assert_eq!(updated["quantity"]["amount"], "200");
     assert_eq!(updated["notes"], "post-workout");
-
-    // ── Summary ─────────────────────────────────────────────────────────
-    let summary: Value = get_json(
-        &router,
-        "/api/summary?from=2026-06-01&to=2026-06-01&codes=ENERGY_KCAL",
-        &user,
-    )
-    .await;
-    let total: f64 = summary["totals"][0]["amount"]
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-    // 52 kcal/100g * 200g = 104
-    assert!((total - 104.0).abs() < 0.001, "summary kcal was {total}");
+    assert!(updated["device_timezone"].is_null());
 
     // ── Delete ──────────────────────────────────────────────────────────
     delete_no_content(&router, &format!("/api/logs/{log_id}"), &user).await;

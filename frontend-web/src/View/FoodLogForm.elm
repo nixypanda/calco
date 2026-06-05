@@ -17,6 +17,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Quantity exposing (Quantity)
 import Data.Units as Units
 import Element exposing (Element)
+import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
 import View.QuantityInput
@@ -45,6 +46,7 @@ type Msg
 
 type ValidationError
     = AmountRequired
+    | InvalidDate
 
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
@@ -95,19 +97,25 @@ update msg model =
             { model | unitOpen = not model.unitOpen, mealSlotOpen = False }
 
 
-createProductLogRequest : String -> String -> Model -> Result ValidationError CreateLogRequest
-createProductLogRequest loggedAt productId model =
+createProductLogRequest : String -> Maybe String -> String -> Model -> Result ValidationError CreateLogRequest
+createProductLogRequest rawDate deviceTimezone productId model =
     if Text.isBlank model.amount then
         Err AmountRequired
 
     else
-        Ok
-            { loggedAt = loggedAt
-            , mealSlot = Maybe.map MealSlot.toString model.mealSlot
-            , item = { itemType = "product", id = productId }
-            , quantity = Quantity model.amount model.unit
-            , notes = Text.blankToMaybe model.notes
-            }
+        case LocalDate.fromString rawDate of
+            Nothing ->
+                Err InvalidDate
+
+            Just logDate ->
+                Ok
+                    { logDate = logDate
+                    , deviceTimezone = deviceTimezone
+                    , mealSlot = Maybe.map MealSlot.toString model.mealSlot
+                    , item = { itemType = "product", id = productId }
+                    , quantity = Quantity model.amount model.unit
+                    , notes = Text.blankToMaybe model.notes
+                    }
 
 
 createUpdateLogRequest : Model -> Result ValidationError UpdateLogRequest

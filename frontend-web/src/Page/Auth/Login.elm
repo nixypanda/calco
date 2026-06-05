@@ -5,7 +5,6 @@ module Page.Auth.Login exposing
     , OutMsg(..)
     , Problem(..)
     , State(..)
-    , currentForm
     , init
     , loginPayload
     , update

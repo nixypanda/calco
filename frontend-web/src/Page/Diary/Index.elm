@@ -12,7 +12,7 @@ module Page.Diary.Index exposing
 
 import Api.Client as Client
 import Api.Result as ApiResult
-import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -34,7 +34,7 @@ type alias Model =
     { currentDate : LocalDate
     , today : LocalDate
     , logs : List FoodLog
-    , summary : List NutrientAmount
+    , dailyTotals : List NutrientAmount
     , loading : Bool
     , error : Maybe String
     , macroMode : MacroMode
@@ -44,7 +44,6 @@ type alias Model =
 type Msg
     = LoadStarted
     | LogsLoaded (Result Client.ApiError (List FoodLog))
-    | SummaryLoaded (Result Client.ApiError SummaryResponse)
     | PreviousDayClicked
     | NextDayClicked
     | MacroModeToggled
@@ -72,7 +71,7 @@ init args =
     ( { currentDate = currentDate
       , today = args.today
       , logs = []
-      , summary = []
+      , dailyTotals = []
       , loading = True
       , error = Nothing
       , macroMode = Grams
@@ -90,18 +89,12 @@ update msg model =
         LogsLoaded result ->
             case result of
                 Ok logs ->
-                    ( { model | logs = logs, loading = False, error = Nothing }
-                    , Cmd.none
-                    , NoOp
-                    )
-
-                Err error ->
-                    failure error model
-
-        SummaryLoaded result ->
-            case result of
-                Ok response ->
-                    ( { model | summary = response.totals, loading = False, error = Nothing }
+                    ( { model
+                        | logs = logs
+                        , dailyTotals = Nutrition.totalsFromLogs logs
+                        , loading = False
+                        , error = Nothing
+                      }
                     , Cmd.none
                     , NoOp
                     )
@@ -236,7 +229,7 @@ dateCard model =
                 , label = Element.text "Next"
                 }
             ]
-        , totalsView model.summary
+        , totalsView model.dailyTotals
         ]
 
 

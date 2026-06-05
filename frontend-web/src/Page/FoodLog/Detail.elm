@@ -19,6 +19,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Font as Font
+import Lib.Date as LocalDate
 import Page.Food.Detail
 import Ui
 import View.FoodLogForm as FoodLogForm
@@ -163,6 +164,14 @@ update msg model =
 
                         Err FoodLogForm.AmountRequired ->
                             ( { model | form = Just { form | error = Just "Amount is required." } }
+                            , Cmd.none
+                            , NoOp
+                            )
+
+                        Err FoodLogForm.InvalidDate ->
+                            ( { model
+                                | form = Just { form | error = Just "Could not read device date." }
+                              }
                             , Cmd.none
                             , NoOp
                             )
@@ -402,10 +411,10 @@ metaText maybeFood log =
         Just food ->
             [ food.brand
             , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-            , Just ("Logged " ++ log.loggedAt)
+            , Just ("Logged " ++ LocalDate.display log.logDate)
             ]
                 |> List.filterMap identity
                 |> String.join " - "
 
         Nothing ->
-            "Logged " ++ log.loggedAt
+            "Logged " ++ LocalDate.display log.logDate

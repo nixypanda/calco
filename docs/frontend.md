@@ -25,10 +25,10 @@ The older `frontend/` React/Vite app is not the documented frontend target here.
 
 ## Runtime Shape
 
-`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js` and owns the small JavaScript bridge for local timestamps:
+`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js` and owns the small JavaScript bridge for the local date and IANA timezone:
 
-- Elm calls the `requestLocalTimestamp` port.
-- JavaScript replies through `localTimestampReceived` with a local ISO timestamp including the timezone offset.
+- Elm calls the `requestLocalContext` port.
+- JavaScript replies through `localContextReceived` with a `{ date, timezone }` record where `date` is the local `YYYY-MM-DD` (from `toLocaleDateString('en-CA')`) and `timezone` is the resolved IANA zone (from `Intl.DateTimeFormat().resolvedOptions().timeZone`).
 
 `frontend-web/dev-server.mjs` serves static frontend files and proxies `/api/*` to the backend. Defaults:
 

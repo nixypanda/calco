@@ -39,7 +39,7 @@ type Msg
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
-    | LocalTimestampReceived String
+    | LocalContextReceived { date : String, timezone : String }
     | LogCompleted (Result Client.ApiError FoodLog)
     | EditCustomFoodClicked
 
@@ -47,7 +47,7 @@ type Msg
 type OutMsg
     = NoOp
     | RequestInitialData String
-    | RequestLocalTimestamp
+    | RequestLocalContext
     | RequestCreateLog CreateLogRequest
     | Navigate Route
     | SessionExpired
@@ -103,29 +103,33 @@ update msg model =
         SubmitClicked ->
             case model.form of
                 Just form ->
-                    case FoodLogForm.createProductLogRequest "pending" model.productId form of
-                        Ok _ ->
-                            ( { model
-                                | form = Just { form | submitting = True, error = Nothing }
-                                , error = Nothing
-                              }
-                            , Cmd.none
-                            , RequestLocalTimestamp
-                            )
+                    if String.trim form.amount == "" then
+                        ( { model | form = Just { form | error = Just "Amount is required." } }
+                        , Cmd.none
+                        , NoOp
+                        )
 
-                        Err FoodLogForm.AmountRequired ->
-                            ( { model | form = Just { form | error = Just "Amount is required." } }
-                            , Cmd.none
-                            , NoOp
-                            )
+                    else
+                        ( { model
+                            | form = Just { form | submitting = True, error = Nothing }
+                            , error = Nothing
+                          }
+                        , Cmd.none
+                        , RequestLocalContext
+                        )
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
 
-        LocalTimestampReceived loggedAt ->
+        LocalContextReceived context ->
             case model.form of
                 Just form ->
-                    case FoodLogForm.createProductLogRequest loggedAt model.productId form of
+                    case
+                        FoodLogForm.createProductLogRequest context.date
+                            (Just context.timezone)
+                            model.productId
+                            form
+                    of
                         Ok request ->
                             ( model, Cmd.none, RequestCreateLog request )
 
@@ -136,6 +140,19 @@ update msg model =
                                         { form
                                             | submitting = False
                                             , error = Just "Amount is required."
+                                        }
+                              }
+                            , Cmd.none
+                            , NoOp
+                            )
+
+                        Err FoodLogForm.InvalidDate ->
+                            ( { model
+                                | form =
+                                    Just
+                                        { form
+                                            | submitting = False
+                                            , error = Just "Could not read device date."
                                         }
                               }
                             , Cmd.none

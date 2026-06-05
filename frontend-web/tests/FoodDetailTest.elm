@@ -6,6 +6,7 @@ import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Food.Detail as FoodDetail
 import Test exposing (Test, describe, test)
 import View.FoodLogForm as FoodLogForm
@@ -50,25 +51,54 @@ tests =
                     foodWithNutrition
                     { form | unit = "cup" }
                     |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
-        , test "submit requests local timestamp after validation" <|
+        , test "submit requests local context after validation" <|
             \_ ->
                 FoodDetail.update FoodDetail.SubmitClicked loadedModel
                     |> third
-                    |> Expect.equal FoodDetail.RequestLocalTimestamp
-        , test "local timestamp creates log request" <|
+                    |> Expect.equal FoodDetail.RequestLocalContext
+        , test "local context creates log request" <|
             \_ ->
                 FoodDetail.update
-                    (FoodDetail.LocalTimestampReceived "2026-06-04T10:00:00+05:30")
+                    (FoodDetail.LocalContextReceived
+                        { date = "2026-06-04"
+                        , timezone = "Asia/Kolkata"
+                        }
+                    )
                     loadedModel
                     |> third
                     |> Expect.equal
                         (FoodDetail.RequestCreateLog
-                            { loggedAt = "2026-06-04T10:00:00+05:30"
+                            { logDate = sampleDate
+                            , deviceTimezone = Just "Asia/Kolkata"
                             , mealSlot = Just "lunch"
                             , item = { itemType = "product", id = "food-1" }
                             , quantity = { amount = "2", unit = "serving" }
                             , notes = Nothing
                             }
+                        )
+        , test "local context with bad date reports a validation error" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        FoodDetail.update
+                            (FoodDetail.LocalContextReceived
+                                { date = "not-a-date"
+                                , timezone = "Asia/Kolkata"
+                                }
+                            )
+                            loadedModel
+
+                    formError : Maybe String
+                    formError =
+                        model.form
+                            |> Maybe.andThen .error
+                in
+                ( outMsg
+                , formError
+                )
+                    |> Expect.equal
+                        ( FoodDetail.NoOp
+                        , Just "Could not read device date."
                         )
         , test "log success navigates home" <|
             \_ ->
@@ -165,13 +195,40 @@ gram =
 log : FoodLog
 log =
     { id = "log-1"
-    , loggedAt = "2026-06-04T10:00:00+05:30"
+    , logDate = sampleDate
+    , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just "lunch"
     , item = { itemType = "product", id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Nothing
     }
+
+
+sampleDate : LocalDate
+sampleDate =
+    sampleDateFromString "2026-06-04"
+
+
+sampleDateFromString : String -> LocalDate
+sampleDateFromString raw =
+    case LocalDate.fromString raw of
+        Just d ->
+            d
+
+        Nothing ->
+            todayFallback
+
+
+todayFallback : LocalDate
+todayFallback =
+    case LocalDate.fromParts 1970 1 1 of
+        Just d ->
+            d
+
+        Nothing ->
+            -- Unreachable: 1970-01-01 is always valid.
+            sampleDate
 
 
 first : ( a, b, c ) -> a

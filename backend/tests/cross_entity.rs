@@ -5,11 +5,11 @@ use common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-/// Exercises the wiring between catalog → meal → food log → summary:
+/// Exercises the wiring between catalog → meal → food log:
 /// builds a meal from a product, logs both the meal and the bare product
-/// on the same day, and asserts the summary sums kcal across entities.
+/// on the same day, and asserts the returned log snapshots can be summed.
 #[sqlx::test]
-async fn product_to_meal_to_log_to_summary(pool: PgPool) {
+async fn product_to_meal_to_log(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
 
@@ -62,7 +62,7 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
     // ── 3. Log the meal at lunch ────────────────────────────────────────
     // Logging the meal at 60g of its 60g total → 1 portion → 150 kcal.
     let log_meal_payload = json!({
-        "logged_at": "2026-06-01T12:00:00Z",
+        "log_date": "2026-06-01",
         "meal_slot": "lunch",
         "item": { "type": "meal", "id": meal_id },
         "quantity": { "amount": 60, "unit": "g" }
@@ -99,7 +99,7 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
     // ── 4. Log the bare product at breakfast ────────────────────────────
     // 40g bread = 40 * 250 / 100 = 100 kcal
     let log_product_payload = json!({
-        "logged_at": "2026-06-01T08:00:00Z",
+        "log_date": "2026-06-01",
         "meal_slot": "breakfast",
         "item": { "type": "product", "id": product_id },
         "quantity": { "amount": 40, "unit": "g" }
@@ -113,32 +113,21 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
     )
     .await;
 
-    // ── 5. Summary for the day should reflect both entries ─────────────
-    let summary: Value = get_json(
-        &router,
-        "/api/summary?from=2026-06-01&to=2026-06-01&codes=ENERGY_KCAL",
-        &user,
-    )
-    .await;
+    // ── 5. Logs for the day should carry summable nutrient snapshots ───
+    let logs: Value = get_json(&router, "/api/logs?log_date=2026-06-01", &user).await;
+    let items = logs["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
 
-    let total_kcal: f64 = summary["totals"]
-        .as_array()
-        .unwrap()
+    let total_kcal: f64 = items
         .iter()
-        .find(|t| t["code"] == "ENERGY_KCAL")
-        .expect("ENERGY_KCAL missing from summary")["amount"]
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap();
+        .flat_map(|item| item["nutrients"].as_array().unwrap())
+        .filter(|nutrient| nutrient["code"] == "ENERGY_KCAL")
+        .map(|nutrient| nutrient["amount"].as_str().unwrap().parse::<f64>().unwrap())
+        .sum();
 
     // 150 (meal log) + 100 (product log) = 250 kcal
     assert!(
         (total_kcal - 250.0).abs() < 0.001,
         "expected 250 kcal across both entries, got {total_kcal}"
     );
-
-    // Sanity: listing logs for the day yields both entries
-    let logs: Value = get_json(&router, "/api/logs?from=2026-06-01&to=2026-06-01", &user).await;
-    assert_eq!(logs["items"].as_array().unwrap().len(), 2);
 }

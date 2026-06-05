@@ -10,6 +10,7 @@ import Data.User as User
 import Expect
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, test)
 
 
@@ -76,7 +77,8 @@ tests =
         , test "encodes create product log request without meal slot" <|
             \_ ->
                 Logs.createLogRequestEncoder
-                    { loggedAt = "2026-06-04T10:00:00+05:30"
+                    { logDate = date "2026-06-04"
+                    , deviceTimezone = Just "Asia/Kolkata"
                     , mealSlot = Nothing
                     , item = { itemType = "product", id = "food-1" }
                     , quantity = { amount = "1", unit = "g" }
@@ -88,7 +90,8 @@ tests =
         , test "encodes create product log request with meal slot and notes" <|
             \_ ->
                 Logs.createLogRequestEncoder
-                    { loggedAt = "2026-06-04T10:00:00+05:30"
+                    { logDate = date "2026-06-04"
+                    , deviceTimezone = Just "Asia/Kolkata"
                     , mealSlot = Just "lunch"
                     , item = { itemType = "product", id = "food-1" }
                     , quantity = { amount = "1", unit = "g" }
@@ -203,7 +206,8 @@ unitListJson =
 createLogWithoutMealSlotJson : String
 createLogWithoutMealSlotJson =
     """
-    { "logged_at": "2026-06-04T10:00:00+05:30"
+    { "log_date": "2026-06-04"
+    , "device_timezone": "Asia/Kolkata"
     , "item": { "type": "product", "id": "food-1" }
     , "quantity": { "amount": "1", "unit": "g" }
     , "notes": null
@@ -214,7 +218,8 @@ createLogWithoutMealSlotJson =
 createLogWithMealSlotJson : String
 createLogWithMealSlotJson =
     """
-    { "logged_at": "2026-06-04T10:00:00+05:30"
+    { "log_date": "2026-06-04"
+    , "device_timezone": "Asia/Kolkata"
     , "item": { "type": "product", "id": "food-1" }
     , "quantity": { "amount": "1", "unit": "g" }
     , "notes": "Ate after run"
@@ -237,7 +242,8 @@ foodLogJson : String
 foodLogJson =
     """
     { "id": "log-1"
-    , "logged_at": "2026-06-04T10:00:00+05:30"
+    , "log_date": "2026-06-04"
+    , "device_timezone": "Asia/Kolkata"
     , "meal_slot": "lunch"
     , "item":
         { "type": "product"
@@ -270,3 +276,24 @@ userListJson =
          }]
     }
     """
+
+
+today : LocalDate
+today =
+    date "2026-06-04"
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    -- Unreachable: 1970-01-01 is always valid.
+                    today

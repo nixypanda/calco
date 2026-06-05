@@ -5,14 +5,13 @@ module Api.Logs exposing
     , createLogRequestEncoder
     , deleteLog
     , getLog
-    , getSummary
     , listLogs
     , updateLog
     , updateLogRequestEncoder
     )
 
 import Api.Client as Client
-import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Encode as Encode
@@ -22,7 +21,8 @@ import Url.Builder as Builder
 
 
 type alias CreateLogRequest =
-    { loggedAt : String
+    { logDate : LocalDate
+    , deviceTimezone : Maybe String
     , mealSlot : Maybe String
     , item : ItemRef
     , quantity : Quantity
@@ -75,32 +75,20 @@ listLogs date toMsg =
     Client.get
         (Builder.absolute
             [ "api", "logs" ]
-            [ Builder.string "from" (LocalDate.format date)
-            , Builder.string "to" (LocalDate.format date)
+            [ Builder.string "log_date" (LocalDate.format date)
             ]
         )
         FoodLog.listDecoder
         toMsg
 
 
-getSummary : LocalDate -> (Result Client.ApiError SummaryResponse -> msg) -> Cmd msg
-getSummary date toMsg =
-    Client.get
-        (Builder.absolute
-            [ "api", "summary" ]
-            [ Builder.string "from" (LocalDate.format date)
-            , Builder.string "to" (LocalDate.format date)
-            , Builder.string "codes" "ENERGY_KCAL,PROTEIN_G,CARBS_G,FAT_G"
-            ]
-        )
-        FoodLog.summaryDecoder
-        toMsg
-
-
 createLogRequestEncoder : CreateLogRequest -> Encode.Value
 createLogRequestEncoder request =
     Encode.object
-        (baseLogFields request ++ mealSlotField request.mealSlot)
+        (baseLogFields request
+            ++ mealSlotField request.mealSlot
+            ++ deviceTimezoneField request.deviceTimezone
+        )
 
 
 updateLogRequestEncoder : UpdateLogRequest -> Encode.Value
@@ -114,7 +102,7 @@ updateLogRequestEncoder request =
 
 baseLogFields : CreateLogRequest -> List ( String, Encode.Value )
 baseLogFields request =
-    [ ( "logged_at", Encode.string request.loggedAt )
+    [ ( "log_date", Encode.string (LocalDate.format request.logDate) )
     , ( "item", ItemRef.encoder request.item )
     , ( "quantity", Quantity.encoder request.quantity )
     , ( "notes", Json.maybe Encode.string request.notes )
@@ -126,6 +114,16 @@ mealSlotField maybeSlot =
     case maybeSlot of
         Just slot ->
             [ ( "meal_slot", Encode.string slot ) ]
+
+        Nothing ->
+            []
+
+
+deviceTimezoneField : Maybe String -> List ( String, Encode.Value )
+deviceTimezoneField maybeTimezone =
+    case maybeTimezone of
+        Just tz ->
+            [ ( "device_timezone", Encode.string tz ) ]
 
         Nothing ->
             []

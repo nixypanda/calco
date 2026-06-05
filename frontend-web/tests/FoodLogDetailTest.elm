@@ -7,6 +7,7 @@ import Data.ItemNameLookup as ItemNameLookup
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.Detail as FoodLogDetail
 import Test exposing (Test, describe, test)
 import View.FoodLogForm as FoodLogForm
@@ -179,13 +180,40 @@ form =
 productLog : FoodLog
 productLog =
     { id = "log-1"
-    , loggedAt = "2026-06-04T10:00:00+05:30"
+    , logDate = sampleDate
+    , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just "lunch"
     , item = { itemType = "product", id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Just "Good"
     }
+
+
+sampleDate : LocalDate
+sampleDate =
+    sampleDateFromString "2026-06-04"
+
+
+sampleDateFromString : String -> LocalDate
+sampleDateFromString raw =
+    case LocalDate.fromString raw of
+        Just d ->
+            d
+
+        Nothing ->
+            todayFallback
+
+
+todayFallback : LocalDate
+todayFallback =
+    case LocalDate.fromParts 1970 1 1 of
+        Just d ->
+            d
+
+        Nothing ->
+            -- Unreachable: 1970-01-01 is always valid.
+            sampleDate
 
 
 mealLog : FoodLog

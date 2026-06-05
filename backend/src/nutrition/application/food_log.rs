@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::NaiveDate;
 #[cfg(test)]
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -9,19 +9,23 @@ use crate::nutrition::domain::catalog::*;
 use crate::nutrition::domain::food_log::*;
 use crate::nutrition::domain::meal::{Meal, MealComponentItem, MealRepository};
 use crate::nutrition::domain::units::UnitConverter;
+#[cfg(test)]
+use chrono::Utc;
 
 pub struct LogFoodInput {
     pub user_id: Uuid,
-    pub logged_at: DateTime<Utc>,
+    pub log_date: NaiveDate,
     pub meal_slot: Option<MealSlot>,
+    pub device_timezone: Option<String>,
     pub item: FoodLogItemRef,
     pub quantity: Quantity,
     pub notes: Option<String>,
 }
 
 pub struct UpdateFoodInput {
-    pub logged_at: Option<DateTime<Utc>>,
+    pub log_date: Option<NaiveDate>,
     pub meal_slot: Option<Option<MealSlot>>,
+    pub device_timezone: Option<Option<String>>,
     pub item: Option<FoodLogItemRef>,
     pub quantity: Option<Quantity>,
     pub notes: Option<Option<String>>,
@@ -62,8 +66,9 @@ impl FoodLogServices {
                     })?;
                 FoodLog::new_product_log(
                     input.user_id,
-                    input.logged_at,
+                    input.log_date,
                     input.meal_slot,
+                    input.device_timezone,
                     &product,
                     input.quantity,
                     &self.unit_converter,
@@ -77,8 +82,9 @@ impl FoodLogServices {
                 let products = load_meal_products(&meal, self.product_repo.as_ref()).await?;
                 FoodLog::new_meal_log(
                     input.user_id,
-                    input.logged_at,
+                    input.log_date,
                     input.meal_slot,
+                    input.device_timezone,
                     &meal,
                     input.quantity,
                     &products,
@@ -113,10 +119,14 @@ impl FoodLogServices {
             Quantity::new(existing.quantity_amount, existing.quantity_unit.clone())
                 .expect("existing food log quantity must be valid")
         });
-        let logged_at = input.logged_at.unwrap_or(existing.logged_at);
+        let log_date = input.log_date.unwrap_or(existing.log_date);
         let meal_slot = match input.meal_slot {
             Some(opt) => opt,
             None => existing.meal_slot,
+        };
+        let device_timezone = match input.device_timezone {
+            Some(opt) => opt,
+            None => existing.device_timezone.clone(),
         };
         let notes = input.notes.unwrap_or_else(|| existing.notes.clone());
 
@@ -128,8 +138,9 @@ impl FoodLogServices {
                     .await?
                     .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
                 existing.update_product_log(
-                    logged_at,
+                    log_date,
                     meal_slot,
+                    device_timezone,
                     &product,
                     quantity,
                     &self.unit_converter,
@@ -144,8 +155,9 @@ impl FoodLogServices {
                     .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
                 let products = load_meal_products(&meal, self.product_repo.as_ref()).await?;
                 existing.update_meal_log(
-                    logged_at,
+                    log_date,
                     meal_slot,
+                    device_timezone,
                     &meal,
                     quantity,
                     &products,
@@ -230,16 +242,15 @@ mod tests {
             Ok(logs.iter().find(|l| l.id == id).cloned())
         }
 
-        async fn list_by_user_and_range(
+        async fn list_by_user_and_date(
             &self,
             user_id: Uuid,
-            from: DateTime<Utc>,
-            to: DateTime<Utc>,
+            log_date: NaiveDate,
         ) -> Result<Vec<FoodLog>, NutritionError> {
             let logs = self.logs.lock().unwrap();
             Ok(logs
                 .iter()
-                .filter(|l| l.user_id == user_id && l.logged_at >= from && l.logged_at <= to)
+                .filter(|l| l.user_id == user_id && l.log_date == log_date)
                 .cloned()
                 .collect())
         }
@@ -252,16 +263,6 @@ mod tests {
             } else {
                 Err(NutritionError::NotFound("not found".into()))
             }
-        }
-
-        async fn sum_nutrients_by_user_and_range(
-            &self,
-            _user_id: Uuid,
-            _from: DateTime<Utc>,
-            _to: DateTime<Utc>,
-            _codes: Option<Vec<String>>,
-        ) -> Result<Vec<SummaryEntry>, NutritionError> {
-            Ok(vec![])
         }
 
         async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError> {
@@ -457,6 +458,10 @@ mod tests {
         ]))
     }
 
+    fn sample_log_date() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
+    }
+
     fn make_services(product: Option<Product>) -> FoodLogServices {
         build_services(product, None)
     }
@@ -491,7 +496,8 @@ mod tests {
         let result = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: Some("Asia/Kolkata".to_string()),
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -515,7 +521,8 @@ mod tests {
         let result = services
             .log_item(LogFoodInput {
                 user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -538,7 +545,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: Some("Asia/Kolkata".to_string()),
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -561,7 +569,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id: owner,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Breakfast),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -599,7 +608,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -613,7 +623,8 @@ mod tests {
                 created.id,
                 user_id,
                 UpdateFoodInput {
-                    logged_at: Some(Utc::now()),
+                    log_date: Some(sample_log_date()),
+                    device_timezone: None,
                     meal_slot: Some(Some(MealSlot::Dinner)),
                     item: None,
                     quantity: Some(
@@ -638,7 +649,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: Some("Asia/Kolkata".to_string()),
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -652,7 +664,8 @@ mod tests {
                 created.id,
                 user_id,
                 UpdateFoodInput {
-                    logged_at: None,
+                    log_date: None,
+                    device_timezone: Some(None),
                     meal_slot: Some(None),
                     item: None,
                     quantity: None,
@@ -663,6 +676,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(updated.meal_slot, None);
+        assert_eq!(updated.device_timezone, None);
         assert_eq!(updated.notes, None);
     }
 
@@ -673,7 +687,8 @@ mod tests {
         let log = services
             .log_item(LogFoodInput {
                 user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: None,
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(2, 0), UnitCode("kg".to_string())).unwrap(),
@@ -693,7 +708,8 @@ mod tests {
         let result = services
             .log_item(LogFoodInput {
                 user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: None,
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(1, 0), UnitCode("cup".to_string())).unwrap(),
@@ -711,7 +727,8 @@ mod tests {
         let log = services
             .log_item(LogFoodInput {
                 user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: None,
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(2, 0), UnitCode("slice".to_string())).unwrap(),
@@ -732,7 +749,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id: owner,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -746,7 +764,8 @@ mod tests {
                 created.id,
                 other,
                 UpdateFoodInput {
-                    logged_at: None,
+                    log_date: None,
+                    device_timezone: None,
                     meal_slot: None,
                     item: None,
                     quantity: None,
@@ -770,7 +789,8 @@ mod tests {
         let result = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Dinner),
                 item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string())).unwrap(),
@@ -796,7 +816,8 @@ mod tests {
         let created = services
             .log_item(LogFoodInput {
                 user_id,
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Dinner),
                 item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
@@ -810,7 +831,8 @@ mod tests {
                 created.id,
                 user_id,
                 UpdateFoodInput {
-                    logged_at: None,
+                    log_date: None,
+                    device_timezone: None,
                     meal_slot: None,
                     item: None,
                     quantity: Some(
@@ -834,7 +856,8 @@ mod tests {
         let result = services
             .log_item(LogFoodInput {
                 user_id: Uuid::new_v4(),
-                logged_at: Utc::now(),
+                log_date: sample_log_date(),
+                device_timezone: None,
                 meal_slot: Some(MealSlot::Lunch),
                 item: FoodLogItemRef::Meal(MealId::new()),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),

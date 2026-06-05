@@ -5,9 +5,10 @@ use axum::{
     response::{IntoResponse, Json},
     routing::{get, post},
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use std::str::FromStr;
@@ -30,14 +31,14 @@ pub fn food_log_routes(state: AppState) -> Router {
                 .put(update_log_handler)
                 .delete(delete_log_handler),
         )
-        .route("/summary", get(summary_handler))
         .with_state(state)
 }
 
 #[derive(Deserialize)]
 pub struct CreateLogRequest {
-    pub logged_at: DateTime<Utc>,
+    pub log_date: String,
     pub meal_slot: Option<String>,
+    pub device_timezone: Option<String>,
     pub item: ItemRefDto,
     pub quantity: QuantityDto,
     pub notes: Option<String>,
@@ -79,8 +80,9 @@ impl From<MealSlot> for MealSlotDto {
 #[derive(Serialize)]
 pub struct LogResponse {
     pub id: Uuid,
-    pub logged_at: DateTime<Utc>,
+    pub log_date: NaiveDate,
     pub meal_slot: Option<MealSlotDto>,
+    pub device_timezone: Option<String>,
     pub item: ItemDto,
     pub quantity: QuantityDto,
     pub nutrients: Vec<NutrientSnapshotDto>,
@@ -112,45 +114,26 @@ pub struct NutrientSnapshotDto {
 
 #[derive(Serialize)]
 pub struct LogListResponse {
-    pub from: String,
-    pub to: String,
+    pub log_date: NaiveDate,
     pub items: Vec<LogResponse>,
 }
 
 #[derive(Deserialize)]
 pub struct LogQuery {
-    pub from: String,
-    pub to: String,
+    pub log_date: String,
 }
 
 #[derive(Deserialize)]
 pub struct UpdateLogRequest {
-    pub logged_at: Option<DateTime<Utc>>,
-    pub meal_slot: Option<Option<String>>,
+    pub log_date: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_value")]
+    pub meal_slot: Option<Value>,
+    #[serde(default, deserialize_with = "deserialize_optional_value")]
+    pub device_timezone: Option<Value>,
     pub item: Option<ItemRefDto>,
     pub quantity: Option<QuantityDto>,
-    pub notes: Option<Option<String>>,
-}
-
-#[derive(Deserialize)]
-pub struct SummaryQuery {
-    pub from: String,
-    pub to: String,
-    pub codes: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct SummaryResponse {
-    pub from: String,
-    pub to: String,
-    pub totals: Vec<SummaryEntryDto>,
-}
-
-#[derive(Serialize)]
-pub struct SummaryEntryDto {
-    pub code: String,
-    pub amount: Decimal,
-    pub unit: String,
+    #[serde(default, deserialize_with = "deserialize_optional_value")]
+    pub notes: Option<Value>,
 }
 
 use crate::nutrition::interfaces::http::{ErrorResponse, error_response, internal_error};
@@ -199,17 +182,17 @@ async fn list_logs_handler(
     State(state): State<AppState>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
-    let range = match food_log_query_to_range_params(query) {
-        Ok(range) => range,
+    let log_date = match food_log_query_to_date(query) {
+        Ok(log_date) => log_date,
         Err(response) => return response.into_response(),
     };
 
     match state
         .food_log_repo
-        .list_by_user_and_range(auth.0.id, range.from_at, range.to_at)
+        .list_by_user_and_date(auth.0.id, log_date)
         .await
     {
-        Ok(logs) => Json(food_logs_to_list_response(range, logs)).into_response(),
+        Ok(logs) => Json(food_logs_to_list_response(log_date, logs)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -252,46 +235,7 @@ async fn delete_log_handler(
     }
 }
 
-async fn summary_handler(
-    auth: AuthUser,
-    State(state): State<AppState>,
-    Query(query): Query<SummaryQuery>,
-) -> impl IntoResponse {
-    let args = match food_log_summary_query_to_params(query) {
-        Ok(args) => args,
-        Err(response) => return response.into_response(),
-    };
-
-    match state
-        .food_log_repo
-        .sum_nutrients_by_user_and_range(
-            auth.0.id,
-            args.range.from_at,
-            args.range.to_at,
-            args.codes,
-        )
-        .await
-    {
-        Ok(totals) => {
-            Json(food_log_summary_entries_to_response(args.range, totals)).into_response()
-        }
-        Err(e) => internal_error(e).into_response(),
-    }
-}
-
 // ─── Conversions ───────────────────────────────────────────────
-
-struct LogRangeParams {
-    from: String,
-    to: String,
-    from_at: DateTime<Utc>,
-    to_at: DateTime<Utc>,
-}
-
-struct SummaryParams {
-    range: LogRangeParams,
-    codes: Option<Vec<String>>,
-}
 
 fn parse_meal_slot(s: &str) -> Result<MealSlot, NutritionError> {
     MealSlot::from_str(s).map_err(NutritionError::Validation)
@@ -311,17 +255,63 @@ fn parse_quantity(q: &QuantityDto) -> Result<Quantity, NutritionError> {
     Quantity::new(q.amount, UnitCode(q.unit.clone()))
 }
 
+fn parse_log_date(s: &str) -> Result<NaiveDate, NutritionError> {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .map_err(|_| NutritionError::Validation("invalid log_date".into()))
+}
+
+fn normalize_device_timezone(tz: Option<String>) -> Result<Option<String>, NutritionError> {
+    match tz {
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            if trimmed.len() > 64
+                || !trimmed
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '+'))
+            {
+                return Err(NutritionError::Validation("invalid device_timezone".into()));
+            }
+            Ok(Some(trimmed.to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
+fn parse_clearable_string(
+    value: Value,
+    field_name: &str,
+) -> Result<Option<String>, NutritionError> {
+    match value {
+        Value::Null => Ok(None),
+        Value::String(s) => Ok(Some(s)),
+        _ => Err(NutritionError::Validation(format!("invalid {field_name}"))),
+    }
+}
+
+fn deserialize_optional_value<'de, D>(deserializer: D) -> Result<Option<Value>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Value::deserialize(deserializer).map(Some)
+}
+
 fn food_log_create_request_to_input(
     req: CreateLogRequest,
     user_id: Uuid,
 ) -> Result<LogFoodInput, NutritionError> {
+    let log_date = parse_log_date(&req.log_date)?;
     let meal_slot = req.meal_slot.as_deref().map(parse_meal_slot).transpose()?;
+    let device_timezone = normalize_device_timezone(req.device_timezone)?;
     let item = parse_food_log_item_ref(&req.item)?;
     let quantity = parse_quantity(&req.quantity)?;
     Ok(LogFoodInput {
         user_id,
-        logged_at: req.logged_at,
+        log_date,
         meal_slot,
+        device_timezone,
         item,
         quantity,
         notes: req.notes,
@@ -332,72 +322,43 @@ fn food_log_update_request_to_input(
     req: UpdateLogRequest,
 ) -> Result<UpdateFoodInput, NutritionError> {
     let meal_slot = match req.meal_slot {
-        Some(Some(s)) => Some(Some(parse_meal_slot(&s)?)),
-        Some(None) => Some(None),
+        Some(value) => match parse_clearable_string(value, "meal_slot")? {
+            Some(s) => Some(Some(parse_meal_slot(&s)?)),
+            None => Some(None),
+        },
         None => None,
     };
+    let device_timezone = match req.device_timezone {
+        Some(value) => Some(normalize_device_timezone(parse_clearable_string(
+            value,
+            "device_timezone",
+        )?)?),
+        None => None,
+    };
+    let notes = req
+        .notes
+        .map(|value| parse_clearable_string(value, "notes"))
+        .transpose()?;
     let item = req.item.as_ref().map(parse_food_log_item_ref).transpose()?;
     let quantity = req.quantity.as_ref().map(parse_quantity).transpose()?;
     Ok(UpdateFoodInput {
-        logged_at: req.logged_at,
+        log_date: req.log_date.as_deref().map(parse_log_date).transpose()?,
         meal_slot,
+        device_timezone,
         item,
         quantity,
-        notes: req.notes,
+        notes,
     })
 }
 
-fn food_log_query_to_range_params(
-    query: LogQuery,
-) -> Result<LogRangeParams, (StatusCode, Json<ErrorResponse>)> {
-    query_dates_to_range(query.from, query.to)
+fn food_log_query_to_date(query: LogQuery) -> Result<NaiveDate, (StatusCode, Json<ErrorResponse>)> {
+    parse_log_date(&query.log_date)
+        .map_err(|_| error_response("validation", "invalid log_date".into()))
 }
 
-fn food_log_summary_query_to_params(
-    query: SummaryQuery,
-) -> Result<SummaryParams, (StatusCode, Json<ErrorResponse>)> {
-    let range = query_dates_to_range(query.from, query.to)?;
-    Ok(SummaryParams {
-        range,
-        codes: query.codes.map(codes_string_to_list),
-    })
-}
-
-fn query_dates_to_range(
-    from: String,
-    to: String,
-) -> Result<LogRangeParams, (StatusCode, Json<ErrorResponse>)> {
-    let from_at = match chrono::NaiveDate::parse_from_str(&from, "%Y-%m-%d") {
-        Ok(date) => date.and_hms_opt(0, 0, 0).unwrap().and_utc(),
-        Err(_) => return Err(error_response("validation", "invalid from date".into())),
-    };
-    let to_at = match chrono::NaiveDate::parse_from_str(&to, "%Y-%m-%d") {
-        Ok(date) => match date.succ_opt().and_then(|next| next.and_hms_opt(0, 0, 0)) {
-            Some(date_time) => date_time.and_utc(),
-            None => return Err(error_response("validation", "invalid to date".into())),
-        },
-        Err(_) => return Err(error_response("validation", "invalid to date".into())),
-    };
-
-    Ok(LogRangeParams {
-        from,
-        to,
-        from_at,
-        to_at,
-    })
-}
-
-fn codes_string_to_list(codes: String) -> Vec<String> {
-    codes
-        .split(',')
-        .map(|code| code.trim().to_string())
-        .collect()
-}
-
-fn food_logs_to_list_response(range: LogRangeParams, logs: Vec<FoodLog>) -> LogListResponse {
+fn food_logs_to_list_response(log_date: NaiveDate, logs: Vec<FoodLog>) -> LogListResponse {
     LogListResponse {
-        from: range.from,
-        to: range.to,
+        log_date,
         items: logs.iter().map(food_log_to_response).collect(),
     }
 }
@@ -405,8 +366,9 @@ fn food_logs_to_list_response(range: LogRangeParams, logs: Vec<FoodLog>) -> LogL
 fn food_log_to_response(log: &FoodLog) -> LogResponse {
     LogResponse {
         id: log.id.0,
-        logged_at: log.logged_at,
+        log_date: log.log_date,
         meal_slot: log.meal_slot.map(Into::into),
+        device_timezone: log.device_timezone.clone(),
         item: item_to_dto(&log.item),
         quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
         nutrients: log
@@ -443,27 +405,5 @@ fn nutrient_snapshot_to_dto(snapshot: &FoodLogNutrientSnapshot) -> NutrientSnaps
         code: snapshot.nutrient_code.0.clone(),
         amount: snapshot.amount,
         unit: snapshot.unit.0.clone(),
-    }
-}
-
-fn food_log_summary_entries_to_response(
-    range: LogRangeParams,
-    entries: Vec<SummaryEntry>,
-) -> SummaryResponse {
-    SummaryResponse {
-        from: range.from,
-        to: range.to,
-        totals: entries
-            .into_iter()
-            .map(food_log_summary_entry_to_dto)
-            .collect(),
-    }
-}
-
-fn food_log_summary_entry_to_dto(entry: SummaryEntry) -> SummaryEntryDto {
-    SummaryEntryDto {
-        code: entry.code.0,
-        amount: entry.amount,
-        unit: entry.unit.0,
     }
 }

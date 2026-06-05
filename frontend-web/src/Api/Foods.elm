@@ -10,7 +10,6 @@ module Api.Foods exposing
     , NutrientItem
     , NutrientListResponse
     , ProductDetail
-    , ProductName
     , SearchRequest
     , SearchResponse
     , SearchResult
@@ -21,7 +20,6 @@ module Api.Foods exposing
     , categorySuggestionResponseDecoder
     , createCustomFood
     , getFoodDetail
-    , getProductName
     , listCategorySuggestions
     , listNutrients
     , listUnits
@@ -38,12 +36,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Lib.Json as Json
 import Url.Builder as Builder
-
-
-type alias ProductName =
-    { id : String
-    , name : String
-    }
 
 
 type alias ProductDetail =
@@ -178,14 +170,6 @@ type alias SearchResult =
     }
 
 
-getProductName : String -> (Result Client.ApiError ProductName -> msg) -> Cmd msg
-getProductName id toMsg =
-    Client.get
-        (Builder.absolute [ "api", "foods", id ] [])
-        decoder
-        toMsg
-
-
 getFoodDetail : String -> (Result Client.ApiError ProductDetail -> msg) -> Cmd msg
 getFoodDetail id toMsg =
     Client.get
@@ -298,13 +282,6 @@ servingRequestEncoder serving =
         , ( "unit", Encode.string serving.unit )
         , ( "grams", Encode.string serving.grams )
         ]
-
-
-decoder : Decoder ProductName
-decoder =
-    Decode.map2 ProductName
-        (Decode.field "id" Decode.string)
-        (Decode.field "name" Decode.string)
 
 
 searchResponseDecoder : Decoder SearchResponse

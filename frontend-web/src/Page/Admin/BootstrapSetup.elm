@@ -5,8 +5,6 @@ module Page.Admin.BootstrapSetup exposing
     , OutMsg(..)
     , Problem(..)
     , State(..)
-    , bootstrapAdminPayload
-    , currentForm
     , init
     , update
     , validateBootstrapAdmin

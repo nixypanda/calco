@@ -14,6 +14,7 @@ module Data.Nutrition exposing
     , scaledSnapshotForQuantity
     , servingGrams
     , summaryValue
+    , totalsFromLogs
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -254,3 +255,73 @@ gramsFromServing amount serving =
 
     else
         Nothing
+
+
+totalsFromLogs : List { log | nutrients : List NutrientAmount } -> List NutrientAmount
+totalsFromLogs logs =
+    let
+        allNutrients : List NutrientAmount
+        allNutrients =
+            logs
+                |> List.concatMap .nutrients
+
+        codes : List String
+        codes =
+            allNutrients
+                |> List.map .code
+                |> uniqueCodes
+
+        units : List { code : String, unit : String }
+        units =
+            allNutrients
+                |> List.map (\n -> { code = n.code, unit = n.unit })
+                |> uniqueBy .code
+
+        unitForCode : String -> String
+        unitForCode code =
+            List.filter (.code >> (==) code) units
+                |> List.head
+                |> Maybe.map .unit
+                |> Maybe.withDefault ""
+    in
+    codes
+        |> List.map
+            (\code ->
+                { code = code
+                , amount =
+                    allNutrients
+                        |> List.filter (.code >> (==) code)
+                        |> List.map (.amount >> safeAmount)
+                        |> List.sum
+                        |> String.fromFloat
+                , unit = unitForCode code
+                }
+            )
+
+
+uniqueCodes : List String -> List String
+uniqueCodes list =
+    List.foldr
+        (\code acc ->
+            if List.member code acc then
+                acc
+
+            else
+                code :: acc
+        )
+        []
+        list
+
+
+uniqueBy : (a -> comparable) -> List a -> List a
+uniqueBy toKey list =
+    List.foldr
+        (\item acc ->
+            if List.member (toKey item) (List.map toKey acc) then
+                acc
+
+            else
+                item :: acc
+        )
+        []
+        list

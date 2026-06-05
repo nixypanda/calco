@@ -82,16 +82,17 @@ tests =
                             , False
                             , Diary.NoOp
                             )
-            , test "summary success stores summary" <|
+            , test "load success computes daily totals from log nutrients" <|
                 \_ ->
-                    Diary.update
-                        (Diary.SummaryLoaded
-                            (Ok { from = today, to = today, totals = summary })
-                        )
-                        emptyModel
+                    Diary.update (Diary.LogsLoaded (Ok [ lunchLog ])) emptyModel
                         |> first
-                        |> .summary
-                        |> Expect.equal summary
+                        |> .dailyTotals
+                        |> Expect.equal
+                            [ Nutrition.NutrientAmount "ENERGY_KCAL" "247.5" "kcal"
+                            , Nutrition.NutrientAmount "PROTEIN_G" "46.5" "g"
+                            , Nutrition.NutrientAmount "CARBS_G" "0" "g"
+                            , Nutrition.NutrientAmount "FAT_G" "3.5" "g"
+                            ]
             , test "load failure stores an error" <|
                 \_ ->
                     Diary.update
@@ -119,7 +120,7 @@ tests =
                 \_ ->
                     Diary.slotCalories Lunch [ lunchLog, secondLunchLog, breakfastLog ]
                         |> Expect.within (Expect.Absolute 0.0001) 347.5
-            , test "daily calories come from summary ENERGY_KCAL" <|
+            , test "daily calories come from totals ENERGY_KCAL" <|
                 \_ ->
                     Diary.dailyCalories summary
                         |> Expect.within (Expect.Absolute 0.0001) 247.5
@@ -188,7 +189,7 @@ emptyModel =
     { currentDate = date "2026-05-30"
     , today = today
     , logs = []
-    , summary = []
+    , dailyTotals = []
     , loading = False
     , error = Nothing
     , macroMode = Diary.Grams
@@ -275,7 +276,8 @@ summary =
 log : String -> Maybe String -> LogItem -> List NutrientAmount -> FoodLog
 log id mealSlot item nutrients =
     { id = id
-    , loggedAt = "2026-05-30T12:00:00Z"
+    , logDate = date "2026-05-30"
+    , deviceTimezone = Nothing
     , mealSlot = mealSlot
     , item = item
     , quantity = quantity

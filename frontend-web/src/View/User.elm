@@ -1,6 +1,5 @@
 module View.User exposing
-    ( statusBadge
-    , userListRow
+    ( userListRow
     , userSummaryCard
     )
 

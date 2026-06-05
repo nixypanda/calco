@@ -106,13 +106,13 @@ type Msg
     | GotMealsMsg Meals.Msg
     | GotMealFormMsg MealForm.Msg
     | GotMealDetailMsg MealDetail.Msg
-    | GotLocalTimestamp String
+    | GotLocalContext { date : String, timezone : String }
 
 
-port requestLocalTimestamp : () -> Cmd msg
+port requestLocalContext : () -> Cmd msg
 
 
-port localTimestampReceived : (String -> msg) -> Sub msg
+port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
 
 
 main : Program Flags Model Msg
@@ -129,7 +129,7 @@ main =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    localTimestampReceived GotLocalTimestamp
+    localContextReceived GotLocalContext
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -376,10 +376,10 @@ update msg model =
         GotFoodLogDetailMsg subMsg ->
             updateFoodLogDetail subMsg model
 
-        GotLocalTimestamp loggedAt ->
+        GotLocalContext context ->
             case model.page of
                 FoodDetailPage _ ->
-                    updateFoodDetail (FoodDetail.LocalTimestampReceived loggedAt) model
+                    updateFoodDetail (FoodDetail.LocalContextReceived context) model
 
                 _ ->
                     ( model, Cmd.none )
@@ -697,10 +697,7 @@ applyDiaryOutMsg outMsg model =
 
         Diary.RequestDiaryData date ->
             ( model
-            , Cmd.batch
-                [ Cmd.map GotDiaryMsg (Api.Logs.listLogs date Diary.LogsLoaded)
-                , Cmd.map GotDiaryMsg (Api.Logs.getSummary date Diary.SummaryLoaded)
-                ]
+            , Cmd.map GotDiaryMsg (Api.Logs.listLogs date Diary.LogsLoaded)
             )
 
         Diary.Navigate route ->
@@ -774,8 +771,8 @@ applyFoodDetailOutMsg outMsg model =
                 ]
             )
 
-        FoodDetail.RequestLocalTimestamp ->
-            ( model, requestLocalTimestamp () )
+        FoodDetail.RequestLocalContext ->
+            ( model, requestLocalContext () )
 
         FoodDetail.RequestCreateLog request ->
             ( model, Api.Logs.createLog request (GotFoodDetailMsg << FoodDetail.LogCompleted) )

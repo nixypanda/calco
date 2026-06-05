@@ -106,7 +106,6 @@ Major route groups:
 - `/nutrients`
 - `/units`
 - `/logs`
-- `/summary`
 - `/meals`
 - `/imports`
 

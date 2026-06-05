@@ -1,8 +1,7 @@
-module Data.ItemRef exposing (ItemRef, decoder, encoder, fallbackName, key, unique)
+module Data.ItemRef exposing (ItemRef, decoder, encoder, fallbackName, key)
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
-import Lib.ListExtra as ListExtra
 
 
 type alias ItemRef =
@@ -39,10 +38,3 @@ fallbackName item =
 
         _ ->
             "Unknown food"
-
-
-unique : List { a | item : ItemRef } -> List ItemRef
-unique items =
-    items
-        |> List.map .item
-        |> ListExtra.uniqueBy key

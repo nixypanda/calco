@@ -2,12 +2,10 @@ module Data.FoodLog exposing
     ( FoodLog
     , GroupedLogs
     , LogItem
-    , SummaryResponse
     , decoder
     , groupLogs
     , listDecoder
     , logsForSlot
-    , summaryDecoder
     )
 
 import Data.MealSlot as MealSlot exposing (MealSlot)
@@ -19,7 +17,8 @@ import Lib.Date as LocalDate exposing (LocalDate)
 
 type alias FoodLog =
     { id : String
-    , loggedAt : String
+    , logDate : LocalDate
+    , deviceTimezone : Maybe String
     , mealSlot : Maybe String
     , item : LogItem
     , quantity : Quantity
@@ -45,23 +44,31 @@ type alias GroupedLogs =
     }
 
 
-type alias SummaryResponse =
-    { from : LocalDate
-    , to : LocalDate
-    , totals : List NutrientAmount
-    }
-
-
 decoder : Decoder FoodLog
 decoder =
-    Decode.map7 FoodLog
+    Decode.map8 FoodLog
         (Decode.field "id" Decode.string)
-        (Decode.field "logged_at" Decode.string)
+        (Decode.field "log_date" dateFieldDecoder)
+        (Decode.field "device_timezone" (Decode.nullable Decode.string))
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
         (Decode.field "item" logItemDecoder)
         (Decode.field "quantity" Quantity.decoder)
         (Decode.field "nutrients" (Decode.list Nutrition.decoder))
         (Decode.field "notes" (Decode.nullable Decode.string))
+
+
+dateFieldDecoder : Decoder LocalDate
+dateFieldDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\raw ->
+                case LocalDate.fromString raw of
+                    Just date ->
+                        Decode.succeed date
+
+                    Nothing ->
+                        Decode.fail ("Invalid local date: " ++ raw)
+            )
 
 
 logItemDecoder : Decoder LogItem
@@ -82,14 +89,6 @@ listDecoder =
     Decode.field "items" (Decode.list decoder)
 
 
-summaryDecoder : Decoder SummaryResponse
-summaryDecoder =
-    Decode.map3 SummaryResponse
-        (Decode.field "from" localDateDecoder)
-        (Decode.field "to" localDateDecoder)
-        (Decode.field "totals" (Decode.list Nutrition.decoder))
-
-
 groupLogs : List FoodLog -> GroupedLogs
 groupLogs logs =
     { breakfast = logsForSlot MealSlot.Breakfast logs
@@ -103,17 +102,3 @@ groupLogs logs =
 logsForSlot : MealSlot -> List FoodLog -> List FoodLog
 logsForSlot slot logs =
     List.filter (\log -> MealSlot.matches slot log.mealSlot) logs
-
-
-localDateDecoder : Decoder LocalDate
-localDateDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                case LocalDate.fromString raw of
-                    Just date ->
-                        Decode.succeed date
-
-                    Nothing ->
-                        Decode.fail ("Invalid local date: " ++ raw)
-            )

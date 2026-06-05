@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
@@ -71,8 +71,9 @@ fn food_log_row_to_food_log(
     Ok(FoodLog {
         id: FoodLogId(row.id),
         user_id: row.user_id,
-        logged_at: row.logged_at,
+        log_date: row.log_date,
         meal_slot: row.meal_slot.and_then(|s| s.parse().ok()),
+        device_timezone: row.device_timezone,
         item,
         quantity_amount: row.quantity,
         quantity_unit: UnitCode(row.unit),
@@ -92,14 +93,15 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 
         sqlx::query(
             r#"
-            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, item_name, item_brand, quantity, unit, notes, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            INSERT INTO food_logs (id, user_id, log_date, meal_slot, device_timezone, item_product_id, item_meal_id, item_name, item_brand, quantity, unit, notes, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
         )
         .bind(log.id.0)
         .bind(log.user_id)
-        .bind(log.logged_at)
+        .bind(log.log_date)
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
+        .bind(&log.device_timezone)
         .bind(product_id)
         .bind(meal_id)
         .bind(item_name)
@@ -121,7 +123,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError> {
         let row = sqlx::query_as::<_, FoodLogRow>(
             r#"
-            SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
+            SELECT id, user_id, log_date, meal_slot, device_timezone, item_product_id, item_meal_id,
                    item_name, item_brand, quantity, unit, notes, created_at, updated_at
             FROM food_logs WHERE id = $1
             "#,
@@ -139,24 +141,28 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         }
     }
 
-    async fn list_by_user_and_range(
+    async fn list_by_user_and_date(
         &self,
         user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
+        log_date: NaiveDate,
     ) -> Result<Vec<FoodLog>, NutritionError> {
         let rows = sqlx::query_as::<_, FoodLogRow>(
             r#"
-            SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
+            SELECT id, user_id, log_date, meal_slot, device_timezone, item_product_id, item_meal_id,
                    item_name, item_brand, quantity, unit, notes, created_at, updated_at
             FROM food_logs
-            WHERE user_id = $1 AND logged_at >= $2 AND logged_at < $3
-            ORDER BY logged_at DESC
+            WHERE user_id = $1 AND log_date = $2
+            ORDER BY CASE meal_slot
+                WHEN 'breakfast' THEN 1
+                WHEN 'lunch' THEN 2
+                WHEN 'dinner' THEN 3
+                WHEN 'snack' THEN 4
+                ELSE 5
+            END, created_at DESC
             "#,
         )
         .bind(user_id)
-        .bind(from)
-        .bind(to)
+        .bind(log_date)
         .fetch_all(&self.pool)
         .await?;
 
@@ -205,15 +211,17 @@ impl FoodLogRepository for PostgresFoodLogRepository {
 
         sqlx::query(
             r#"
-            UPDATE food_logs SET logged_at=$2, meal_slot=$3, item_product_id=$4, item_meal_id=$5,
-                                 item_name=$6, item_brand=$7, quantity=$8, unit=$9, notes=$10,
+            UPDATE food_logs SET log_date=$2, meal_slot=$3, device_timezone=$4,
+                                 item_product_id=$5, item_meal_id=$6,
+                                 item_name=$7, item_brand=$8, quantity=$9, unit=$10, notes=$11,
                                  updated_at=now()
             WHERE id=$1
             "#,
         )
         .bind(log.id.0)
-        .bind(log.logged_at)
+        .bind(log.log_date)
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
+        .bind(&log.device_timezone)
         .bind(product_id)
         .bind(meal_id)
         .bind(item_name)
@@ -242,71 +250,15 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             .await?;
         Ok(())
     }
-
-    async fn sum_nutrients_by_user_and_range(
-        &self,
-        user_id: Uuid,
-        from: DateTime<Utc>,
-        to: DateTime<Utc>,
-        codes: Option<Vec<String>>,
-    ) -> Result<Vec<SummaryEntry>, NutritionError> {
-        let rows = if let Some(ref code_list) = codes {
-            sqlx::query_as::<_, SummaryRow>(
-                r#"
-                SELECT n.code, SUM(fln.amount) AS amount, n.unit
-                FROM food_log_nutrients fln
-                JOIN nutrients n ON n.id = fln.nutrient_id
-                JOIN food_logs fl ON fl.id = fln.food_log_id
-                WHERE fl.user_id = $1
-                  AND fl.logged_at >= $2
-                  AND fl.logged_at < $3
-                  AND n.code = ANY($4)
-                GROUP BY n.code, n.unit
-                "#,
-            )
-            .bind(user_id)
-            .bind(from)
-            .bind(to)
-            .bind(code_list)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, SummaryRow>(
-                r#"
-                SELECT n.code, SUM(fln.amount) AS amount, n.unit
-                FROM food_log_nutrients fln
-                JOIN nutrients n ON n.id = fln.nutrient_id
-                JOIN food_logs fl ON fl.id = fln.food_log_id
-                WHERE fl.user_id = $1
-                  AND fl.logged_at >= $2
-                  AND fl.logged_at < $3
-                GROUP BY n.code, n.unit
-                "#,
-            )
-            .bind(user_id)
-            .bind(from)
-            .bind(to)
-            .fetch_all(&self.pool)
-            .await?
-        };
-
-        Ok(rows
-            .into_iter()
-            .map(|r| SummaryEntry {
-                code: NutrientCode(r.code),
-                amount: r.amount.unwrap_or(Decimal::ZERO),
-                unit: UnitCode(r.unit),
-            })
-            .collect())
-    }
 }
 
 #[derive(sqlx::FromRow)]
 struct FoodLogRow {
     id: Uuid,
     user_id: Uuid,
-    logged_at: DateTime<Utc>,
+    log_date: NaiveDate,
     meal_slot: Option<String>,
+    device_timezone: Option<String>,
     item_product_id: Option<Uuid>,
     item_meal_id: Option<Uuid>,
     item_name: String,
@@ -331,13 +283,6 @@ struct FoodLogSnapshotJoinRow {
     amount: Decimal,
     unit: String,
     code: String,
-}
-
-#[derive(sqlx::FromRow)]
-struct SummaryRow {
-    code: String,
-    amount: Option<Decimal>,
-    unit: String,
 }
 
 fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &str, Option<&str>) {
