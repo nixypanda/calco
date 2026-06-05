@@ -14,12 +14,9 @@ tests =
             \_ ->
                 CreateUser.init
                     |> Tuple.first
-                    |> .form
+                    |> .state
                     |> Expect.equal
-                        { username = ""
-                        , displayName = ""
-                        , initialPassword = ""
-                        }
+                        (CreateUser.Editing emptyForm)
         , test "init emits NoOp" <|
             \_ ->
                 CreateUser.init
@@ -28,11 +25,12 @@ tests =
         , test "Submitted trims username and display name and emits RequestCreateUser" <|
             \_ ->
                 { initialModel
-                    | form =
-                        { username = " alice "
-                        , displayName = " Alice "
-                        , initialPassword = "secret"
-                        }
+                    | state =
+                        CreateUser.Editing
+                            { username = " alice "
+                            , displayName = " Alice "
+                            , initialPassword = "secret"
+                            }
                 }
                     |> CreateUser.update CreateUser.Submitted
                     |> thirdOfThree
@@ -46,56 +44,87 @@ tests =
         , test "Submitted rejects empty username" <|
             \_ ->
                 { initialModel
-                    | form =
-                        { username = ""
-                        , displayName = "Alice"
-                        , initialPassword = "secret"
-                        }
+                    | state =
+                        CreateUser.Editing
+                            { username = ""
+                            , displayName = "Alice"
+                            , initialPassword = "secret"
+                            }
                 }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal (Just "Username is required")
+                    |> .state
+                    |> Expect.equal
+                        (CreateUser.Invalid
+                            { username = ""
+                            , displayName = "Alice"
+                            , initialPassword = "secret"
+                            }
+                            CreateUser.UsernameRequired
+                        )
         , test "Submitted rejects empty display name" <|
             \_ ->
                 { initialModel
-                    | form =
-                        { username = "alice"
-                        , displayName = ""
-                        , initialPassword = "secret"
-                        }
+                    | state =
+                        CreateUser.Editing
+                            { username = "alice"
+                            , displayName = ""
+                            , initialPassword = "secret"
+                            }
                 }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal (Just "Display name is required")
+                    |> .state
+                    |> Expect.equal
+                        (CreateUser.Invalid
+                            { username = "alice"
+                            , displayName = ""
+                            , initialPassword = "secret"
+                            }
+                            CreateUser.DisplayNameRequired
+                        )
         , test "Submitted rejects empty password" <|
             \_ ->
                 { initialModel
-                    | form =
-                        { username = "alice"
-                        , displayName = "Alice"
-                        , initialPassword = ""
-                        }
+                    | state =
+                        CreateUser.Editing
+                            { username = "alice"
+                            , displayName = "Alice"
+                            , initialPassword = ""
+                            }
                 }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal (Just "Initial password is required")
-        , test "Submitted clears previous error on valid data" <|
+                    |> .state
+                    |> Expect.equal
+                        (CreateUser.Invalid
+                            { username = "alice"
+                            , displayName = "Alice"
+                            , initialPassword = ""
+                            }
+                            CreateUser.InitialPasswordRequired
+                        )
+        , test "Submitted moves valid data into submitting state" <|
             \_ ->
                 { initialModel
-                    | actionError = Just "old error"
-                    , form =
-                        { username = "alice"
-                        , displayName = "Alice"
-                        , initialPassword = "secret"
-                        }
+                    | state =
+                        CreateUser.Invalid
+                            { username = "alice"
+                            , displayName = "Alice"
+                            , initialPassword = "secret"
+                            }
+                            CreateUser.UsernameRequired
                 }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal Nothing
+                    |> .state
+                    |> Expect.equal
+                        (CreateUser.Submitting
+                            { username = "alice"
+                            , displayName = "Alice"
+                            , initialPassword = "secret"
+                            }
+                        )
         , test "Completed success emits CreateSucceeded" <|
             \_ ->
                 initialModel
@@ -119,22 +148,29 @@ tests =
                             (Err (Client.BadStatus 400 "bad" "Bad request"))
                         )
                     |> firstOfThree
-                    |> .actionError
-                    |> Expect.equal (Just "bad: Bad request")
+                    |> .state
+                    |> Expect.equal (CreateUser.Failed emptyForm "bad: Bad request")
         , test "field changes update form correctly" <|
             \_ ->
                 initialModel
                     |> CreateUser.update (CreateUser.UsernameChanged "bob")
                     |> firstOfThree
-                    |> .form
-                    |> .username
-                    |> Expect.equal "bob"
+                    |> .state
+                    |> Expect.equal (CreateUser.Editing { emptyForm | username = "bob" })
         ]
 
 
 initialModel : CreateUser.Model
 initialModel =
     CreateUser.init |> Tuple.first
+
+
+emptyForm : CreateUser.Form
+emptyForm =
+    { username = ""
+    , displayName = ""
+    , initialPassword = ""
+    }
 
 
 loginSession : Auth.LoginSession

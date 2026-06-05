@@ -3,6 +3,8 @@ module Page.Admin.CreateUser exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , Problem(..)
+    , State(..)
     , init
     , update
     , view
@@ -23,9 +25,22 @@ type alias Form =
 
 
 type alias Model =
-    { form : Form
-    , actionError : Maybe String
+    { state : State
     }
+
+
+type State
+    = Editing Form
+    | Invalid Form Problem
+    | Submitting Form
+    | Failed Form String
+    | Succeeded
+
+
+type Problem
+    = UsernameRequired
+    | DisplayNameRequired
+    | InitialPasswordRequired
 
 
 type Msg
@@ -45,38 +60,60 @@ type OutMsg
 
 init : ( Model, OutMsg )
 init =
-    ( { form = { username = "", displayName = "", initialPassword = "" }
-      , actionError = Nothing
-      }
+    ( { state = Editing emptyForm }
     , NoOp
     )
 
 
-createUserPayload : Model -> Result String User.CreateUserRequest
-createUserPayload model =
+emptyForm : Form
+emptyForm =
+    { username = "", displayName = "", initialPassword = "" }
+
+
+currentForm : State -> Form
+currentForm state =
+    case state of
+        Editing form ->
+            form
+
+        Invalid form _ ->
+            form
+
+        Submitting form ->
+            form
+
+        Failed form _ ->
+            form
+
+        Succeeded ->
+            emptyForm
+
+
+createUserPayload : Form -> Result Problem User.CreateUserRequest
+createUserPayload form =
     let
         username : String
         username =
-            String.trim model.form.username
+            String.trim form.username
 
         displayName : String
         displayName =
-            String.trim model.form.displayName
+            String.trim form.displayName
     in
     if String.isEmpty username then
-        Err "Username is required"
+        Err UsernameRequired
 
     else if String.isEmpty displayName then
-        Err "Display name is required"
+        Err DisplayNameRequired
 
-    else if String.isEmpty model.form.initialPassword then
-        Err "Initial password is required"
+    else if String.isEmpty form.initialPassword then
+        Err InitialPasswordRequired
 
     else
         Ok
             { username = username
             , displayName = displayName
-            , initialPassword = model.form.initialPassword
+            , initialPassword = form.initialPassword
             }
 
 
@@ -84,63 +121,64 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         UsernameChanged username ->
-            ( { model
-                | form =
-                    { username = username
-                    , displayName = model.form.displayName
-                    , initialPassword = model.form.initialPassword
-                    }
-              }
-            , Cmd.none
-            , NoOp
-            )
+            let
+                form : Form
+                form =
+                    currentForm model.state
+            in
+            ( { model | state = Editing { form | username = username } }, Cmd.none, NoOp )
 
         DisplayNameChanged displayName ->
-            ( { model
-                | form =
-                    { username = model.form.username
-                    , displayName = displayName
-                    , initialPassword = model.form.initialPassword
-                    }
-              }
-            , Cmd.none
-            , NoOp
-            )
+            let
+                form : Form
+                form =
+                    currentForm model.state
+            in
+            ( { model | state = Editing { form | displayName = displayName } }, Cmd.none, NoOp )
 
         PasswordChanged password ->
-            ( { model
-                | form =
-                    { username = model.form.username
-                    , displayName = model.form.displayName
-                    , initialPassword = password
-                    }
-              }
-            , Cmd.none
-            , NoOp
-            )
+            let
+                form : Form
+                form =
+                    currentForm model.state
+            in
+            ( { model | state = Editing { form | initialPassword = password } }, Cmd.none, NoOp )
 
         Submitted ->
-            case createUserPayload model of
+            let
+                form : Form
+                form =
+                    currentForm model.state
+            in
+            case createUserPayload form of
                 Ok request ->
-                    ( { model | actionError = Nothing }, Cmd.none, RequestCreateUser request )
+                    ( { model | state = Submitting form }
+                    , Cmd.none
+                    , RequestCreateUser request
+                    )
 
-                Err message ->
-                    ( { model | actionError = Just message }, Cmd.none, NoOp )
+                Err problem ->
+                    ( { model | state = Invalid form problem }, Cmd.none, NoOp )
 
         Completed result ->
             case result of
                 Ok _ ->
-                    ( model, Cmd.none, CreateSucceeded )
+                    ( { model | state = Succeeded }, Cmd.none, CreateSucceeded )
 
                 Err error ->
+                    let
+                        form : Form
+                        form =
+                            currentForm model.state
+                    in
                     if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }
+                        ( { model | state = Failed form (Client.displayError error) }
                         , Cmd.none
                         , SessionExpired
                         )
 
                     else
-                        ( { model | actionError = Just (Client.displayError error) }
+                        ( { model | state = Failed form (Client.displayError error) }
                         , Cmd.none
                         , NoOp
                         )
@@ -148,23 +186,44 @@ update msg model =
 
 view : Model -> Element Msg
 view model =
+    let
+        form : Form
+        form =
+            currentForm model.state
+    in
     Ui.pageContainer
-        (errorView model.actionError
+        (errorView model.state
             ++ [ Ui.card
-                    [ Ui.input "Username" model.form.username UsernameChanged
-                    , Ui.input "Display Name" model.form.displayName DisplayNameChanged
-                    , Ui.passwordInput "Initial Password" model.form.initialPassword PasswordChanged
+                    [ Ui.input "Username" form.username UsernameChanged
+                    , Ui.input "Display Name" form.displayName DisplayNameChanged
+                    , Ui.passwordInput "Initial Password" form.initialPassword PasswordChanged
                     , Ui.button "Save" Submitted
                     ]
                ]
         )
 
 
-errorView : Maybe String -> List (Element msg)
-errorView maybeError =
-    case maybeError of
-        Just message ->
+errorView : State -> List (Element msg)
+errorView state =
+    case state of
+        Invalid _ problem ->
+            [ Ui.errorBanner (problemMessage problem) ]
+
+        Failed _ message ->
             [ Ui.errorBanner message ]
 
-        Nothing ->
+        _ ->
             []
+
+
+problemMessage : Problem -> String
+problemMessage problem =
+    case problem of
+        UsernameRequired ->
+            "Username is required"
+
+        DisplayNameRequired ->
+            "Display name is required"
+
+        InitialPasswordRequired ->
+            "Initial password is required"

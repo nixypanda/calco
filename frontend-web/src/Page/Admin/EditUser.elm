@@ -1,7 +1,11 @@
 module Page.Admin.EditUser exposing
-    ( Model
+    ( ActionState(..)
+    , LoadedUser
+    , Model
     , Msg(..)
     , OutMsg(..)
+    , Problem(..)
+    , State(..)
     , init
     , update
     , view
@@ -13,16 +17,38 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Lib.Loadable exposing (Loadable(..))
 import Ui
 
 
 type alias Model =
     { userId : String
-    , user : Loadable Client.ApiError User.User
-    , password : String
-    , actionError : Maybe String
+    , state : State
     }
+
+
+type State
+    = Loading
+    | LoadFailed Client.ApiError
+    | Ready LoadedUser ActionState
+
+
+type alias LoadedUser =
+    { user : User.User
+    , password : String
+    }
+
+
+type ActionState
+    = Idle
+    | Invalid Problem
+    | ResettingPassword
+    | DisablingUser
+    | EnablingUser
+    | ActionFailed String
+
+
+type Problem
+    = NewPasswordRequired
 
 
 type Msg
@@ -49,9 +75,7 @@ type OutMsg
 init : String -> ( Model, OutMsg )
 init userId =
     ( { userId = userId
-      , user = Loading
-      , password = ""
-      , actionError = Nothing
+      , state = Loading
       }
     , RequestUser userId
     )
@@ -63,105 +87,159 @@ update msg model =
         UserLoaded result ->
             case result of
                 Ok user ->
-                    ( { model | user = Success user, actionError = Nothing }, Cmd.none, NoOp )
+                    ( { model | state = Ready { user = user, password = "" } Idle }, Cmd.none, NoOp )
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model
-                            | user = Failure error
-                            , actionError = Just (Client.displayError error)
-                          }
+                        ( { model | state = LoadFailed error }
                         , Cmd.none
                         , SessionExpired
                         )
 
                     else
-                        ( { model
-                            | user = Failure error
-                            , actionError = Just (Client.displayError error)
-                          }
+                        ( { model | state = LoadFailed error }
                         , Cmd.none
                         , NoOp
                         )
 
         PasswordChanged password ->
-            ( { model | password = password }, Cmd.none, NoOp )
+            case model.state of
+                Ready loadedUser actionState ->
+                    ( { model
+                        | state =
+                            Ready
+                                { loadedUser | password = password }
+                                (actionStateAfterEdit actionState)
+                      }
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         ResetSubmitted ->
-            if String.isEmpty model.password then
-                ( { model | actionError = Just "New password is required" }, Cmd.none, NoOp )
+            case model.state of
+                Ready loadedUser actionState ->
+                    if String.isEmpty loadedUser.password then
+                        ( { model | state = Ready loadedUser (Invalid NewPasswordRequired) }, Cmd.none, NoOp )
 
-            else
-                ( { model | actionError = Nothing }
-                , Cmd.none
-                , RequestResetPassword model.userId { newPassword = model.password }
-                )
+                    else if isPending actionState then
+                        ( model, Cmd.none, NoOp )
+
+                    else
+                        ( { model | state = Ready loadedUser ResettingPassword }
+                        , Cmd.none
+                        , RequestResetPassword model.userId { newPassword = loadedUser.password }
+                        )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         ResetCompleted result ->
-            case result of
-                Ok _ ->
-                    ( { model | password = "", actionError = Nothing }, Cmd.none, UpdateSucceeded )
-
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+            completePendingAction ResettingPassword
+                result
+                model
+                (\loadedUser -> Ready { loadedUser | password = "" } Idle)
 
         DisableClicked ->
-            ( { model | actionError = Nothing }, Cmd.none, RequestDisableUser model.userId )
+            case model.state of
+                Ready loadedUser actionState ->
+                    if isPending actionState then
+                        ( model, Cmd.none, NoOp )
+
+                    else
+                        ( { model | state = Ready loadedUser DisablingUser }, Cmd.none, RequestDisableUser model.userId )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         DisableCompleted result ->
-            case result of
-                Ok _ ->
-                    ( { model | actionError = Nothing }, Cmd.none, UpdateSucceeded )
-
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+            completePendingAction DisablingUser result model (\loadedUser -> Ready loadedUser Idle)
 
         EnableClicked ->
-            ( { model | actionError = Nothing }, Cmd.none, RequestEnableUser model.userId )
-
-        EnableCompleted result ->
-            case result of
-                Ok _ ->
-                    ( { model | actionError = Nothing }, Cmd.none, UpdateSucceeded )
-
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
+            case model.state of
+                Ready loadedUser actionState ->
+                    if isPending actionState then
+                        ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | actionError = Just (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( { model | state = Ready loadedUser EnablingUser }, Cmd.none, RequestEnableUser model.userId )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        EnableCompleted result ->
+            completePendingAction EnablingUser result model (\loadedUser -> Ready loadedUser Idle)
+
+
+actionStateAfterEdit : ActionState -> ActionState
+actionStateAfterEdit actionState =
+    case actionState of
+        Invalid _ ->
+            Idle
+
+        ActionFailed _ ->
+            Idle
+
+        _ ->
+            actionState
+
+
+isPending : ActionState -> Bool
+isPending actionState =
+    case actionState of
+        ResettingPassword ->
+            True
+
+        DisablingUser ->
+            True
+
+        EnablingUser ->
+            True
+
+        _ ->
+            False
+
+
+completePendingAction :
+    ActionState
+    -> Result Client.ApiError ()
+    -> Model
+    -> (LoadedUser -> State)
+    -> ( Model, Cmd Msg, OutMsg )
+completePendingAction pendingAction result model successState =
+    case model.state of
+        Ready loadedUser actionState ->
+            if actionState == pendingAction then
+                case result of
+                    Ok _ ->
+                        ( { model | state = successState loadedUser }, Cmd.none, UpdateSucceeded )
+
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( { model | state = Ready loadedUser (ActionFailed (Client.displayError error)) }
+                            , Cmd.none
+                            , SessionExpired
+                            )
+
+                        else
+                            ( { model | state = Ready loadedUser (ActionFailed (Client.displayError error)) }
+                            , Cmd.none
+                            , NoOp
+                            )
+
+            else
+                ( model, Cmd.none, NoOp )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        (errorView model.actionError
+        (errorView model.state
             ++ userInfoView model
             ++ resetPasswordView model
             ++ enableDisableView model
@@ -170,34 +248,31 @@ view model =
 
 userInfoView : Model -> List (Element Msg)
 userInfoView model =
-    case model.user of
+    case model.state of
         Loading ->
             [ Ui.loading "Loading user..." ]
 
-        NotAsked ->
-            [ Element.text "User has not loaded yet." ]
-
-        Failure error ->
+        LoadFailed error ->
             [ Ui.errorBanner ("Unable to load user: " ++ Client.displayError error) ]
 
-        Success user ->
+        Ready loadedUser _ ->
             [ Ui.card
                 [ Element.column [ Element.spacing 8, Element.width Element.fill ]
-                    [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
+                    [ Element.el [ Font.bold, Ui.heading3 ] (Element.text loadedUser.user.username)
                     , Element.row [ Element.spacing 4 ]
                         [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
                             (Element.text "Display Name:")
-                        , Element.el [ Ui.caption ] (Element.text user.displayName)
+                        , Element.el [ Ui.caption ] (Element.text loadedUser.user.displayName)
                         ]
                     , Element.row [ Element.spacing 4 ]
                         [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
                             (Element.text "Status:")
-                        , statusBadge user.status
+                        , statusBadge loadedUser.user.status
                         ]
                     , Element.row [ Element.spacing 4 ]
                         [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
                             (Element.text "Created:")
-                        , Element.el [ Ui.caption ] (Element.text user.createdAt)
+                        , Element.el [ Ui.caption ] (Element.text loadedUser.user.createdAt)
                         ]
                     ]
                 ]
@@ -234,7 +309,7 @@ resetPasswordView model =
     [ Ui.card
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing 8, Element.width Element.fill ]
-            [ Ui.passwordInput "New password" model.password PasswordChanged
+            [ Ui.passwordInput "New password" (currentPassword model.state) PasswordChanged
             , Ui.button "Reset Password" ResetSubmitted
             ]
         ]
@@ -243,12 +318,12 @@ resetPasswordView model =
 
 enableDisableView : Model -> List (Element Msg)
 enableDisableView model =
-    case model.user of
-        Success user ->
+    case model.state of
+        Ready loadedUser _ ->
             [ Ui.card
                 [ Element.el [ Font.medium, Ui.body, Font.color (Element.rgb255 153 27 27) ]
                     (Element.text "Danger Zone")
-                , if user.status == "active" then
+                , if loadedUser.user.status == "active" then
                     Ui.dangerButton "Disable User" DisableClicked
 
                   else
@@ -260,11 +335,31 @@ enableDisableView model =
             []
 
 
-errorView : Maybe String -> List (Element msg)
-errorView maybeError =
-    case maybeError of
-        Just message ->
+currentPassword : State -> String
+currentPassword state =
+    case state of
+        Ready loadedUser _ ->
+            loadedUser.password
+
+        _ ->
+            ""
+
+
+errorView : State -> List (Element msg)
+errorView state =
+    case state of
+        Ready _ (Invalid problem) ->
+            [ Ui.errorBanner (problemMessage problem) ]
+
+        Ready _ (ActionFailed message) ->
             [ Ui.errorBanner message ]
 
-        Nothing ->
+        _ ->
             []
+
+
+problemMessage : Problem -> String
+problemMessage problem =
+    case problem of
+        NewPasswordRequired ->
+            "New password is required"
