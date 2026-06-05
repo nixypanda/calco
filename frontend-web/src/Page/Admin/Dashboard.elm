@@ -11,12 +11,12 @@ import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Element)
-import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Lib.Loadable exposing (Loadable(..))
 import Ui
+import View.User
 
 
 type alias Model =
@@ -80,7 +80,12 @@ bodyView model =
             Ui.card [ createUserRow ]
 
         Success users ->
-            Ui.card (List.map userRow users ++ [ createUserRow ])
+            Ui.card
+                (List.map
+                    (\user -> View.User.userListRow { user = user, onSelect = NavigateEditUser })
+                    users
+                    ++ [ createUserRow ]
+                )
 
         Loading ->
             Ui.loading "Loading users..."
@@ -90,52 +95,6 @@ bodyView model =
 
         Failure error ->
             Ui.errorBanner (Client.displayError error)
-
-
-userRow : User.User -> Element Msg
-userRow user =
-    Input.button
-        [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color Ui.borderGray
-        ]
-        { onPress = Just (NavigateEditUser user.id)
-        , label =
-            Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.column [ Element.width Element.fill, Element.spacing 2 ]
-                    [ Element.el [ Font.bold ] (Element.text user.username)
-                    , Ui.mutedText user.displayName
-                    ]
-                , statusPill user.status
-                ]
-        }
-
-
-statusPill : String -> Element Msg
-statusPill status =
-    Element.el
-        [ Element.paddingXY 8 3
-        , Border.rounded 10
-        , Font.size 12
-        , Font.medium
-        , Element.alignRight
-        , Background.color
-            (if status == "active" then
-                Element.rgb255 220 252 231
-
-             else
-                Element.rgb255 254 226 226
-            )
-        , Font.color
-            (if status == "active" then
-                Element.rgb255 22 101 52
-
-             else
-                Element.rgb255 153 27 27
-            )
-        ]
-        (Element.text status)
 
 
 createUserRow : Element Msg

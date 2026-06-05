@@ -14,6 +14,7 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Element)
 import Element.Font as Font
+import Lib.Text as Text
 import Ui
 
 
@@ -57,19 +58,15 @@ init =
 
 validateBootstrapAdmin : Form -> Result String Auth.LoginRequest
 validateBootstrapAdmin form =
-    let
-        username : String
-        username =
-            String.trim form.username
-    in
-    if String.isEmpty username then
-        Err "Username is required"
+    Text.requireTrimmed "Username is required" form.username
+        |> Result.andThen
+            (\username ->
+                if String.length form.password < 8 then
+                    Err "Password must be at least 8 characters"
 
-    else if String.length form.password < 8 then
-        Err "Password must be at least 8 characters"
-
-    else
-        Ok { username = username, password = form.password }
+                else
+                    Ok { username = username, password = form.password }
+            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )

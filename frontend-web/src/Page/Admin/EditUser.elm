@@ -14,10 +14,9 @@ module Page.Admin.EditUser exposing
 import Api.Client as Client
 import Data.User as User
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Ui
+import View.User
 
 
 type alias Model =
@@ -256,52 +255,7 @@ userInfoView model =
             [ Ui.errorBanner ("Unable to load user: " ++ Client.displayError error) ]
 
         Ready loadedUser _ ->
-            [ Ui.card
-                [ Element.column [ Element.spacing 8, Element.width Element.fill ]
-                    [ Element.el [ Font.bold, Ui.heading3 ] (Element.text loadedUser.user.username)
-                    , Element.row [ Element.spacing 4 ]
-                        [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
-                            (Element.text "Display Name:")
-                        , Element.el [ Ui.caption ] (Element.text loadedUser.user.displayName)
-                        ]
-                    , Element.row [ Element.spacing 4 ]
-                        [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
-                            (Element.text "Status:")
-                        , statusBadge loadedUser.user.status
-                        ]
-                    , Element.row [ Element.spacing 4 ]
-                        [ Element.el [ Font.color Ui.mediumColor, Ui.caption ]
-                            (Element.text "Created:")
-                        , Element.el [ Ui.caption ] (Element.text loadedUser.user.createdAt)
-                        ]
-                    ]
-                ]
-            ]
-
-
-statusBadge : String -> Element Msg
-statusBadge status =
-    Element.el
-        [ Font.size 12
-        , Font.medium
-        , Element.paddingXY 8 2
-        , Border.rounded 4
-        , Background.color
-            (if status == "active" then
-                Element.rgb255 220 252 231
-
-             else
-                Element.rgb255 254 226 226
-            )
-        , Font.color
-            (if status == "active" then
-                Element.rgb255 22 101 52
-
-             else
-                Element.rgb255 153 27 27
-            )
-        ]
-        (Element.text status)
+            [ View.User.userSummaryCard loadedUser.user ]
 
 
 resetPasswordView : Model -> List (Element Msg)

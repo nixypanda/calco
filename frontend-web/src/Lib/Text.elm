@@ -3,6 +3,7 @@ module Lib.Text exposing
     , commaSeparatedUniqueLower
     , isBlank
     , quoteIfWhitespace
+    , requireTrimmed
     , splitQuotedWhitespace
     , stripBoundingQuotes
     , trimOrDefault
@@ -36,6 +37,16 @@ trimOrDefault fallback raw =
 
         Nothing ->
             fallback
+
+
+requireTrimmed : problem -> String -> Result problem String
+requireTrimmed problem raw =
+    case blankToMaybe raw of
+        Just value ->
+            Ok value
+
+        Nothing ->
+            Err problem
 
 
 commaSeparatedUniqueLower : String -> List String

@@ -14,6 +14,7 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Element)
+import Lib.Text as Text
 import Ui
 
 
@@ -91,30 +92,23 @@ currentForm state =
 
 createUserPayload : Form -> Result Problem User.CreateUserRequest
 createUserPayload form =
-    let
-        username : String
-        username =
-            String.trim form.username
-
-        displayName : String
-        displayName =
-            String.trim form.displayName
-    in
-    if String.isEmpty username then
-        Err UsernameRequired
-
-    else if String.isEmpty displayName then
-        Err DisplayNameRequired
-
-    else if String.isEmpty form.initialPassword then
-        Err InitialPasswordRequired
-
-    else
-        Ok
+    Result.map2
+        (\username displayName ->
             { username = username
             , displayName = displayName
             , initialPassword = form.initialPassword
             }
+        )
+        (Text.requireTrimmed UsernameRequired form.username)
+        (Text.requireTrimmed DisplayNameRequired form.displayName)
+        |> Result.andThen
+            (\request ->
+                if String.isEmpty form.initialPassword then
+                    Err InitialPasswordRequired
+
+                else
+                    Ok request
+            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )

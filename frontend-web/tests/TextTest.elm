@@ -20,6 +20,14 @@ tests =
             \_ ->
                 Text.trimOrDefault "g" " "
                     |> Expect.equal "g"
+        , test "requireTrimmed returns trimmed value" <|
+            \_ ->
+                Text.requireTrimmed "required" "  admin  "
+                    |> Expect.equal (Ok "admin")
+        , test "requireTrimmed rejects blank values with provided problem" <|
+            \_ ->
+                Text.requireTrimmed "required" "   "
+                    |> Expect.equal (Err "required")
         , test "commaSeparatedUniqueLower trims lowercases and deduplicates" <|
             \_ ->
                 Text.commaSeparatedUniqueLower " Fruit, snack, fruit , SNACK "

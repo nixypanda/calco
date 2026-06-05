@@ -8,9 +8,11 @@ module Ui exposing
     , card
     , cardActions
     , cardBg
+    , coloredBadge
     , dangerBg
     , dangerButton
     , darkColor
+    , detailRow
     , display
     , emptyState
     , errorBanner
@@ -370,6 +372,33 @@ badge label_ =
         , Font.medium
         ]
         (Element.text label_)
+
+
+coloredBadge :
+    { label : String
+    , background : Element.Color
+    , foreground : Element.Color
+    }
+    -> Element msg
+coloredBadge config =
+    Element.el
+        [ Background.color config.background
+        , Font.color config.foreground
+        , Border.rounded 10
+        , Element.paddingXY 8 3
+        , small
+        , Font.medium
+        ]
+        (Element.text config.label)
+
+
+detailRow : String -> Element msg -> Element msg
+detailRow label_ value =
+    Element.row [ Element.spacing 4 ]
+        [ Element.el [ Font.color mediumColor, caption ]
+            (Element.text (label_ ++ ":"))
+        , value
+        ]
 
 
 selectDropdown :
