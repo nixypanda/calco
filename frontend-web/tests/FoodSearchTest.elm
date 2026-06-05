@@ -3,6 +3,7 @@ module FoodSearchTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (SearchResult)
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Loadable exposing (Loadable(..))
@@ -168,6 +169,7 @@ apple =
     , brand = Just "Local"
     , categories = [ "fruit" ]
     , servingSizeG = Just "100"
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , energyKcalPer100g = Just "52"
     , energyKcalPerServing = Nothing
     }

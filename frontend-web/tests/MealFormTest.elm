@@ -3,7 +3,7 @@ module MealFormTest exposing (tests)
 import Api.Foods exposing (SearchResult)
 import Api.Meals exposing (Meal)
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Expect
 import Page.Meal.Form as MealForm
 import Test exposing (Test, describe, test)
@@ -213,6 +213,7 @@ result =
     , brand = Nothing
     , categories = []
     , servingSizeG = Nothing
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , energyKcalPer100g = Nothing
     , energyKcalPerServing = Nothing
     }
@@ -225,12 +226,14 @@ nutrient =
 
 nutrientPreview :
     { mealId : String
+    , nutritionSummary : Nutrition.NutritionSummary
     , nutrients : List NutrientAmount
     , quantity : { amount : String, unit : String }
     }
 nutrientPreview =
     { mealId = "meal-1"
     , quantity = { amount = "100", unit = "g" }
+    , nutritionSummary = Nutrition.emptySummary
     , nutrients = [ nutrient ]
     }
 
@@ -315,10 +318,12 @@ meal =
     , name = "Lunch"
     , notes = Nothing
     , totalQuantity = Nothing
+    , nutritionSummary = Nothing
     , components =
         [ { id = "component-1"
           , item = { itemType = "product", id = "food-1" }
           , quantity = { amount = "2", unit = "serving" }
+          , nutritionSummary = Nothing
           }
         ]
     , createdAt = "now"

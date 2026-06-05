@@ -2,7 +2,7 @@ module MealDetailTest exposing (tests)
 
 import Api.Meals exposing (Meal)
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Detail as MealDetail
@@ -116,12 +116,14 @@ nutrient =
 
 nutrientPreview :
     { mealId : String
+    , nutritionSummary : Nutrition.NutritionSummary
     , nutrients : List NutrientAmount
     , quantity : { amount : String, unit : String }
     }
 nutrientPreview =
     { mealId = "meal-1"
     , quantity = { amount = "100", unit = "g" }
+    , nutritionSummary = Nutrition.emptySummary
     , nutrients = [ nutrient ]
     }
 
@@ -132,10 +134,12 @@ meal =
     , name = "Lunch"
     , notes = Nothing
     , totalQuantity = Nothing
+    , nutritionSummary = Nothing
     , components =
         [ { id = "component-1"
           , item = { itemType = "product", id = "food-1" }
           , quantity = { amount = "100", unit = "g" }
+          , nutritionSummary = Nothing
           }
         ]
     , createdAt = "now"

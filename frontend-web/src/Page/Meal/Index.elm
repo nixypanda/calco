@@ -252,7 +252,13 @@ mealAccent name =
 
 mealSummaryText : Meal -> String
 mealSummaryText meal =
-    [ Just (String.fromInt (List.length meal.components) ++ " components")
+    [ Maybe.map
+        (\summary ->
+            String.fromInt (round (Nutrition.safeAmount (Maybe.withDefault "0" summary.energyKcal)))
+                ++ " kcal"
+        )
+        meal.nutritionSummary
+    , Just (String.fromInt (List.length meal.components) ++ " components")
     , meal.notes
     ]
         |> List.filterMap identity

@@ -4,6 +4,7 @@ import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
@@ -250,6 +251,7 @@ productLog =
         , brand = Just "Local"
         }
     , quantity = { amount = "2", unit = "serving" }
+    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Just "Good"
     }
@@ -311,6 +313,7 @@ food =
     , defaultQuantity = Just "2"
     , defaultUnit = Just "serving"
     , servingSizeG = Just "100"
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]

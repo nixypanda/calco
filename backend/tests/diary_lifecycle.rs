@@ -66,8 +66,13 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     assert_eq!(created["log_date"], "2026-06-01");
     assert_eq!(created["meal_slot"], "breakfast");
     assert_eq!(created["device_timezone"], "Asia/Kolkata");
+    assert_eq!(created["nutrition_summary"]["energy_kcal"], "78");
+    assert_eq!(created["nutrition_summary"]["carbs_g"], "21");
+    assert!(created["nutrition_summary"]["protein_g"].is_null());
 
     // Nutrient snapshot should include kcal scaled to 150g
+    let created_nutrients = created["nutrients"].as_array().unwrap();
+    assert_eq!(created_nutrients.len(), 2);
     let kcal = created["nutrients"]
         .as_array()
         .unwrap()

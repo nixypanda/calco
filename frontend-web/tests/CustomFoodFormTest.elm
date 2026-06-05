@@ -1,6 +1,7 @@
 module CustomFoodFormTest exposing (tests)
 
 import Api.Foods exposing (ProductDetail, UnitItem)
+import Data.Nutrition as Nutrition
 import Expect
 import Test exposing (Test, describe, test)
 import View.CustomFoodForm as Form
@@ -130,6 +131,7 @@ product =
     , defaultQuantity = Just "1"
     , defaultUnit = Just "cup"
     , servingSizeG = Just "245"
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , nutrients =
         [ { code = "PROTEIN_G"
           , amountPer100g = "3.5"

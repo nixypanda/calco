@@ -10,6 +10,7 @@ module Api.Foods exposing
     , NutrientItem
     , NutrientListResponse
     , ProductDetail
+    , ProductNutritionSummary
     , SearchRequest
     , SearchResponse
     , SearchResult
@@ -32,6 +33,7 @@ module Api.Foods exposing
     )
 
 import Api.Client as Client
+import Data.Nutrition as Nutrition exposing (NutritionSummary)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Lib.Json as Json
@@ -50,9 +52,16 @@ type alias ProductDetail =
     , defaultQuantity : Maybe String
     , defaultUnit : Maybe String
     , servingSizeG : Maybe String
+    , nutritionSummary : ProductNutritionSummary
     , nutrients : List NutrientEntry
     , servings : List ServingEntry
     , allowedUnits : List UnitItem
+    }
+
+
+type alias ProductNutritionSummary =
+    { per100g : NutritionSummary
+    , perServing : Maybe NutritionSummary
     }
 
 
@@ -165,6 +174,7 @@ type alias SearchResult =
     , brand : Maybe String
     , categories : List String
     , servingSizeG : Maybe String
+    , nutritionSummary : ProductNutritionSummary
     , energyKcalPer100g : Maybe String
     , energyKcalPerServing : Maybe String
     }
@@ -310,9 +320,17 @@ productDetailDecoder =
         |> Json.andMap (Decode.field "default_quantity" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "default_unit" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "serving_size_g" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "nutrition_summary" productNutritionSummaryDecoder)
         |> Json.andMap (Decode.field "nutrients" (Decode.list nutrientEntryDecoder))
         |> Json.andMap (Decode.field "servings" (Decode.list servingEntryDecoder))
         |> Json.andMap (Decode.field "allowed_units" (Decode.list unitItemDecoder))
+
+
+productNutritionSummaryDecoder : Decoder ProductNutritionSummary
+productNutritionSummaryDecoder =
+    Decode.map2 ProductNutritionSummary
+        (Decode.field "per_100g" Nutrition.summaryDecoder)
+        (Decode.field "per_serving" (Decode.nullable Nutrition.summaryDecoder))
 
 
 nutrientEntryDecoder : Decoder NutrientEntry
@@ -380,6 +398,7 @@ searchResultDecoder =
         (Decode.field "brand" (Decode.nullable Decode.string))
         (Decode.field "categories" (Decode.list Decode.string))
         (Decode.field "serving_size_g" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "nutrition_summary" productNutritionSummaryDecoder)
         |> Json.andMap (Decode.field "energy_kcal_per_100g" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "energy_kcal_per_serving" (Decode.nullable Decode.string))
 

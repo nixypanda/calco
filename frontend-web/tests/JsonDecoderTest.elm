@@ -144,6 +144,16 @@ searchResponseJson =
          , "brand": null
          , "categories": ["fruit"]
          , "serving_size_g": "100"
+         , "nutrition_summary":
+            { "per_100g":
+                { "energy_kcal": "52"
+                , "protein_g": null
+                , "carbs_g": null
+                , "fat_g": null
+                , "fiber_g": null
+                }
+            , "per_serving": null
+            }
          , "energy_kcal_per_100g": "52"
          , "energy_kcal_per_serving": null
          }]
@@ -174,6 +184,16 @@ productDetailJson =
     , "default_quantity": "1"
     , "default_unit": "g"
     , "serving_size_g": "100"
+    , "nutrition_summary":
+        { "per_100g":
+            { "energy_kcal": "52"
+            , "protein_g": null
+            , "carbs_g": null
+            , "fat_g": null
+            , "fiber_g": null
+            }
+        , "per_serving": null
+        }
     , "nutrients":
         [{ "code": "ENERGY_KCAL"
          , "amount_per_100g": "52"
@@ -252,6 +272,13 @@ foodLogJson =
         , "brand": "Local"
         }
     , "quantity": { "amount": "2", "unit": "serving" }
+    , "nutrition_summary":
+        { "energy_kcal": "104"
+        , "protein_g": null
+        , "carbs_g": null
+        , "fat_g": null
+        , "fiber_g": null
+        }
     , "nutrients":
         [{ "code": "ENERGY_KCAL"
          , "amount": "104"

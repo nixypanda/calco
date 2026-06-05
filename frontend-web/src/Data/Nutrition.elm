@@ -1,10 +1,12 @@
 module Data.Nutrition exposing
     ( MacroTotals
     , NutrientAmount
+    , NutritionSummary
     , Per100gNutrient
     , Serving
     , decoder
     , defaultCode
+    , emptySummary
     , macroTotals
     , nutrientAmount
     , nutrientsForQuantity
@@ -12,6 +14,7 @@ module Data.Nutrition exposing
     , scalePer100g
     , scaledSnapshotForQuantity
     , servingGrams
+    , summaryDecoder
     , summaryValue
     )
 
@@ -22,6 +25,25 @@ type alias NutrientAmount =
     { code : String
     , amount : String
     , unit : String
+    }
+
+
+type alias NutritionSummary =
+    { energyKcal : Maybe String
+    , proteinG : Maybe String
+    , carbsG : Maybe String
+    , fatG : Maybe String
+    , fiberG : Maybe String
+    }
+
+
+emptySummary : NutritionSummary
+emptySummary =
+    { energyKcal = Nothing
+    , proteinG = Nothing
+    , carbsG = Nothing
+    , fatG = Nothing
+    , fiberG = Nothing
     }
 
 
@@ -56,6 +78,16 @@ decoder =
         (Decode.field "code" Decode.string)
         (Decode.field "amount" Decode.string)
         (Decode.field "unit" Decode.string)
+
+
+summaryDecoder : Decoder NutritionSummary
+summaryDecoder =
+    Decode.map5 NutritionSummary
+        (Decode.field "energy_kcal" (Decode.nullable Decode.string))
+        (Decode.field "protein_g" (Decode.nullable Decode.string))
+        (Decode.field "carbs_g" (Decode.nullable Decode.string))
+        (Decode.field "fat_g" (Decode.nullable Decode.string))
+        (Decode.field "fiber_g" (Decode.nullable Decode.string))
 
 
 safeAmount : String -> Float

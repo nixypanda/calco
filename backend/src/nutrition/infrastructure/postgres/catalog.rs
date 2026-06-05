@@ -9,6 +9,9 @@ use crate::nutrition::domain::catalog::*;
 
 // ─── Product Repository ────────────────────────────────────────
 
+const SEARCH_NUTRIENT_CODES: [&str; 5] =
+    ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
+
 #[derive(Clone)]
 pub struct PostgresProductRepository {
     pool: PgPool,
@@ -127,45 +130,44 @@ impl ProductRepository for PostgresProductRepository {
         .await?;
 
         let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let energy_by_product = if product_ids.is_empty() {
+        let summary_nutrients_by_product = if product_ids.is_empty() {
             HashMap::new()
         } else {
-            let energy_rows = sqlx::query_as::<_, SearchEnergyRow>(
+            let summary_rows = sqlx::query_as::<_, SearchNutrientRow>(
                 r#"
                 SELECT pn.product_id, pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
                 FROM product_nutrients pn
                 JOIN nutrients n ON n.id = pn.nutrient_id
                 WHERE pn.product_id = ANY($1)
-                  AND n.code = 'ENERGY_KCAL'
+                  AND n.code = ANY($2)
                 "#,
             )
             .bind(&product_ids)
+            .bind(SEARCH_NUTRIENT_CODES.as_slice())
             .fetch_all(&self.pool)
             .await?;
 
-            energy_rows
-                .into_iter()
-                .map(|r| {
-                    Ok::<_, NutritionError>((
-                        r.product_id,
-                        ProductNutrient {
-                            nutrient_code: NutrientCode(r.code),
-                            amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
-                            unit: UnitCode(r.unit),
-                            source: r.source,
-                            confidence: r.confidence.and_then(|c| c.parse().ok()),
-                        },
-                    ))
-                })
-                .collect::<Result<HashMap<_, _>, _>>()?
+            let mut by_product: HashMap<Uuid, Vec<ProductNutrient>> = HashMap::new();
+            for r in summary_rows {
+                by_product
+                    .entry(r.product_id)
+                    .or_default()
+                    .push(ProductNutrient {
+                        nutrient_code: NutrientCode(r.code),
+                        amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
+                        unit: UnitCode(r.unit),
+                        source: r.source,
+                        confidence: r.confidence.and_then(|c| c.parse().ok()),
+                    });
+            }
+            by_product
         };
 
         rows.into_iter()
             .map(|r| {
-                let nutrients = energy_by_product
+                let nutrients = summary_nutrients_by_product
                     .get(&r.id)
                     .cloned()
-                    .map(|n| vec![n])
                     .unwrap_or_default();
                 product_row_to_product(r, nutrients, vec![])
             })
@@ -396,7 +398,7 @@ struct ProductNutrientRow {
 }
 
 #[derive(sqlx::FromRow)]
-struct SearchEnergyRow {
+struct SearchNutrientRow {
     product_id: Uuid,
     amount_per_100g: Decimal,
     source: Option<String>,

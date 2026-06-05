@@ -61,10 +61,17 @@ async fn meal_lifecycle_create_read_list_update_nutrients_delete(pool: PgPool) {
     let meal_id = created["id"].as_str().unwrap().to_string();
     assert_eq!(created["name"], "Porridge");
     assert_eq!(created["components"].as_array().unwrap().len(), 2);
+    assert_amount(&created["nutrition_summary"]["energy_kcal"], 310.0);
+    assert_amount(&created["nutrition_summary"]["protein_g"], 12.5);
+    assert_amount(
+        &created["components"][0]["nutrition_summary"]["energy_kcal"],
+        190.0,
+    );
 
     // ── Read by id ──────────────────────────────────────────────────────
     let fetched: Value = get_json(&router, &format!("/api/meals/{meal_id}"), &user).await;
     assert_eq!(fetched["id"], meal_id);
+    assert_amount(&fetched["nutrition_summary"]["energy_kcal"], 310.0);
 
     // ── List ────────────────────────────────────────────────────────────
     let list: Value = get_json(&router, "/api/meals", &user).await;
@@ -86,6 +93,8 @@ async fn meal_lifecycle_create_read_list_update_nutrients_delete(pool: PgPool) {
         &user,
     )
     .await;
+    assert_amount(&nutrients["nutrition_summary"]["energy_kcal"], 310.0);
+    assert_amount(&nutrients["nutrition_summary"]["protein_g"], 12.5);
     let kcal = nutrients["nutrients"]
         .as_array()
         .unwrap()
@@ -120,4 +129,12 @@ async fn meal_lifecycle_create_read_list_update_nutrients_delete(pool: PgPool) {
     delete_no_content(&router, &format!("/api/meals/{meal_id}"), &user).await;
     let (status, _) = get_status(&router, &format!("/api/meals/{meal_id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+fn assert_amount(value: &Value, expected: f64) {
+    let actual: f64 = value.as_str().unwrap().parse().unwrap();
+    assert!(
+        (actual - expected).abs() < 0.001,
+        "expected {expected}, got {actual}"
+    );
 }

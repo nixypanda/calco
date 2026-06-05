@@ -85,6 +85,7 @@ pub struct LogResponse {
     pub device_timezone: Option<String>,
     pub item: ItemDto,
     pub quantity: QuantityDto,
+    pub nutrition_summary: NutrientSummaryDto,
     pub nutrients: Vec<NutrientSnapshotDto>,
     pub notes: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -136,7 +137,10 @@ pub struct UpdateLogRequest {
     pub notes: Option<Value>,
 }
 
-use crate::nutrition::interfaces::http::{ErrorResponse, error_response, internal_error};
+use crate::nutrition::interfaces::http::{
+    ErrorResponse, NutrientSummaryDto, error_response, internal_error, is_summary_nutrient_code,
+    nutrient_summary_from_entries,
+};
 
 async fn create_log_handler(
     auth: AuthUser,
@@ -371,15 +375,25 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
         device_timezone: log.device_timezone.clone(),
         item: item_to_dto(&log.item),
         quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
+        nutrition_summary: food_log_nutrition_summary(log),
         nutrients: log
             .nutrient_snapshots
             .iter()
+            .filter(|snapshot| is_summary_nutrient_code(&snapshot.nutrient_code.0))
             .map(nutrient_snapshot_to_dto)
             .collect(),
         notes: log.notes.clone(),
         created_at: log.created_at,
         updated_at: log.updated_at,
     }
+}
+
+fn food_log_nutrition_summary(log: &FoodLog) -> NutrientSummaryDto {
+    nutrient_summary_from_entries(
+        log.nutrient_snapshots
+            .iter()
+            .map(|snapshot| (snapshot.nutrient_code.0.clone(), snapshot.amount)),
+    )
 }
 
 fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {

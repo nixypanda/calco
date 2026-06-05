@@ -17,7 +17,7 @@ module Api.Meals exposing
 
 import Api.Client as Client
 import Data.ItemRef as ItemRef exposing (ItemRef)
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount, NutritionSummary)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
@@ -36,6 +36,7 @@ type alias Meal =
     , name : String
     , notes : Maybe String
     , totalQuantity : Maybe Quantity
+    , nutritionSummary : Maybe NutritionSummary
     , components : List MealComponent
     , createdAt : String
     , updatedAt : String
@@ -46,6 +47,7 @@ type alias MealComponent =
     { id : String
     , item : ItemRef
     , quantity : Quantity
+    , nutritionSummary : Maybe NutritionSummary
     }
 
 
@@ -71,6 +73,7 @@ type alias CreateMealComponentRequest =
 type alias MealNutritionResponse =
     { mealId : String
     , quantity : Quantity
+    , nutritionSummary : NutritionSummary
     , nutrients : List NutrientAmount
     }
 
@@ -175,11 +178,12 @@ mealListDecoder =
 
 mealDecoder : Decoder Meal
 mealDecoder =
-    Decode.map7 Meal
+    Decode.map8 Meal
         (Decode.field "id" Decode.string)
         (Decode.field "name" Decode.string)
         (Decode.field "notes" (Decode.nullable Decode.string))
         (Decode.field "total_quantity" (Decode.nullable Quantity.decoder))
+        (Decode.field "nutrition_summary" (Decode.nullable Nutrition.summaryDecoder))
         (Decode.field "components" (Decode.list mealComponentDecoder))
         (Decode.field "created_at" Decode.string)
         (Decode.field "updated_at" Decode.string)
@@ -187,15 +191,17 @@ mealDecoder =
 
 mealComponentDecoder : Decoder MealComponent
 mealComponentDecoder =
-    Decode.map3 MealComponent
+    Decode.map4 MealComponent
         (Decode.field "id" Decode.string)
         (Decode.field "item" ItemRef.decoder)
         (Decode.field "quantity" Quantity.decoder)
+        (Decode.field "nutrition_summary" (Decode.nullable Nutrition.summaryDecoder))
 
 
 mealNutritionDecoder : Decoder MealNutritionResponse
 mealNutritionDecoder =
-    Decode.map3 MealNutritionResponse
+    Decode.map4 MealNutritionResponse
         (Decode.field "meal_id" Decode.string)
         (Decode.field "quantity" Quantity.decoder)
+        (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
         (Decode.field "nutrients" (Decode.list Nutrition.decoder))

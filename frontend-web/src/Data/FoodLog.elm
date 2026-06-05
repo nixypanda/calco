@@ -5,10 +5,11 @@ module Data.FoodLog exposing
     , listDecoder
     )
 
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount, NutritionSummary)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
 import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Json as Json
 
 
 type alias FoodLog =
@@ -18,6 +19,7 @@ type alias FoodLog =
     , mealSlot : Maybe String
     , item : LogItem
     , quantity : Quantity
+    , nutritionSummary : NutritionSummary
     , nutrients : List NutrientAmount
     , notes : Maybe String
     }
@@ -40,8 +42,9 @@ decoder =
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
         (Decode.field "item" logItemDecoder)
         (Decode.field "quantity" Quantity.decoder)
+        (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
         (Decode.field "nutrients" (Decode.list Nutrition.decoder))
-        (Decode.field "notes" (Decode.nullable Decode.string))
+        |> Json.andMap (Decode.field "notes" (Decode.nullable Decode.string))
 
 
 dateFieldDecoder : Decoder LocalDate

@@ -42,6 +42,15 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     assert_eq!(detail["brand"], "BrandCo");
     assert_eq!(detail["visibility"], "user_private");
     assert_eq!(detail["serving_size_g"], "50");
+    assert_eq!(
+        detail["nutrition_summary"]["per_100g"]["energy_kcal"],
+        "450"
+    );
+    assert_eq!(detail["nutrition_summary"]["per_100g"]["protein_g"], "9");
+    assert_amount(
+        &detail["nutrition_summary"]["per_serving"]["energy_kcal"],
+        225.0,
+    );
     let nutrient_codes: Vec<&str> = detail["nutrients"]
         .as_array()
         .unwrap()
@@ -90,12 +99,33 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         items.iter().any(|p| p["id"].as_str() == Some(&id)),
         "search did not return updated product; got: {items:?}"
     );
+    let search_item = items
+        .iter()
+        .find(|p| p["id"].as_str() == Some(&id))
+        .expect("updated product missing from search");
+    assert_eq!(
+        search_item["nutrition_summary"]["per_100g"]["energy_kcal"],
+        "460"
+    );
+    assert_eq!(
+        search_item["nutrition_summary"]["per_100g"]["protein_g"],
+        "10"
+    );
+    assert_eq!(search_item["nutrition_summary"]["per_100g"]["fat_g"], "18");
 
     // ── Delete ──────────────────────────────────────────────────────────
     delete_no_content(&router, &format!("/api/foods/custom/{id}"), &user).await;
 
     let (status, _) = get_status(&router, &format!("/api/foods/{id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+fn assert_amount(value: &Value, expected: f64) {
+    let actual: f64 = value.as_str().unwrap().parse().unwrap();
+    assert!(
+        (actual - expected).abs() < 0.001,
+        "expected {expected}, got {actual}"
+    );
 }
 
 #[sqlx::test]

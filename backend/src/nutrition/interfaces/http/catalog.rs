@@ -35,7 +35,9 @@ pub fn catalog_routes(state: AppState) -> Router {
 
 // ─── DTOs ──────────────────────────────────────────────────────
 
-use crate::nutrition::interfaces::http::{error_response, internal_error};
+use crate::nutrition::interfaces::http::{
+    NutrientSummaryDto, error_response, internal_error, nutrient_summary_from_entries,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -101,6 +103,7 @@ pub struct ProductSearchItemDto {
     pub brand: Option<String>,
     pub categories: Vec<String>,
     pub serving_size_g: Option<Decimal>,
+    pub nutrition_summary: ProductNutritionSummaryDto,
     pub energy_kcal_per_100g: Option<Decimal>,
     pub energy_kcal_per_serving: Option<Decimal>,
     pub created_at: DateTime<Utc>,
@@ -130,11 +133,18 @@ pub struct ProductDetailResponse {
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub serving_size_g: Option<Decimal>,
+    pub nutrition_summary: ProductNutritionSummaryDto,
     pub nutrients: Vec<ProductNutrientDto>,
     pub servings: Vec<ProductServingDto>,
     pub allowed_units: Vec<UnitItemDto>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct ProductNutritionSummaryDto {
+    pub per_100g: NutrientSummaryDto,
+    pub per_serving: Option<NutrientSummaryDto>,
 }
 
 #[derive(Serialize)]
@@ -551,6 +561,7 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
     let energy_kcal_per_100g = product_energy_kcal_per_100g(&product);
     let energy_kcal_per_serving =
         energy_kcal_per_serving(energy_kcal_per_100g, product.serving_size_g);
+    let nutrition_summary = product_nutrition_summary(&product);
 
     ProductSearchItemDto {
         id: product.id.0,
@@ -561,10 +572,33 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
         brand: product.brand.map(|b| b.0),
         categories: product.categories.into_iter().map(|c| c.0).collect(),
         serving_size_g: product.serving_size_g,
+        nutrition_summary,
         energy_kcal_per_100g,
         energy_kcal_per_serving,
         created_at: product.created_at,
         updated_at: product.updated_at,
+    }
+}
+
+fn product_nutrition_summary(product: &Product) -> ProductNutritionSummaryDto {
+    let per_100g = nutrient_summary_from_entries(
+        product
+            .nutrients
+            .iter()
+            .map(|n| (n.nutrient_code.0.clone(), n.amount_per_100g.value())),
+    );
+    let per_serving = product.serving_size_g.map(|serving_size_g| {
+        let factor = serving_size_g / Decimal::new(100, 0);
+        nutrient_summary_from_entries(product.nutrients.iter().map(|n| {
+            (
+                n.nutrient_code.0.clone(),
+                n.amount_per_100g.value() * factor,
+            )
+        }))
+    });
+    ProductNutritionSummaryDto {
+        per_100g,
+        per_serving,
     }
 }
 
@@ -630,6 +664,7 @@ fn product_to_detail_response(
         default_quantity: product.default_quantity,
         default_unit: product.default_unit.as_ref().map(|u| u.0.clone()),
         serving_size_g: product.serving_size_g,
+        nutrition_summary: product_nutrition_summary(product),
         nutrients: product
             .nutrients
             .iter()

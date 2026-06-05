@@ -3,6 +3,7 @@ module FoodLogFormTest exposing (tests)
 import Api.Foods exposing (ProductDetail)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
+import Data.Nutrition as Nutrition
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, test)
@@ -175,6 +176,7 @@ food =
     , defaultQuantity = Just "1"
     , defaultUnit = Just "g"
     , servingSizeG = Just "100"
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , nutrients = []
     , servings = []
     , allowedUnits = []
@@ -189,6 +191,7 @@ log =
     , mealSlot = Just "lunch"
     , item = { itemType = "product", id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
+    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Just "Good"
     }
