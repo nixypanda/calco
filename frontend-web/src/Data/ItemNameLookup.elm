@@ -1,7 +1,6 @@
 module Data.ItemNameLookup exposing
     ( Names
     , empty
-    , insert
     , insertProduct
     , insertResult
     , nameFor

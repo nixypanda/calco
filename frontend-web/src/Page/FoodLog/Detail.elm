@@ -1,7 +1,14 @@
 module Page.FoodLog.Detail exposing
-    ( Model
+    ( LoadFailedModel
+    , LoadedItem(..)
+    , LoadedModel
+    , LoadingModel
+    , MealState(..)
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , ProductState(..)
+    , RequestState(..)
     , init
     , nutrientsForDisplay
     , update
@@ -14,7 +21,6 @@ import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
 import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
-import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
@@ -26,15 +32,57 @@ import View.FoodLogForm as FoodLogForm
 import View.Nutrients
 
 
-type alias Model =
+type Model
+    = Loading LoadingModel
+    | Loaded LoadedModel
+    | LoadFailed LoadFailedModel
+
+
+type alias LoadingModel =
     { logId : String
     , log : Maybe FoodLog
-    , food : Maybe ProductDetail
-    , itemNames : ItemNameLookup.Names
     , units : Maybe (List UnitItem)
-    , form : Maybe FoodLogForm.Model
+    }
+
+
+type alias LoadedModel =
+    { logId : String
+    , log : FoodLog
+    , item : LoadedItem
+    , units : List UnitItem
+    , form : FoodLogForm.Model
     , error : Maybe String
-    , deleting : Bool
+    , request : RequestState
+    }
+
+
+type LoadedItem
+    = ProductItem ProductState
+    | MealItem MealState
+    | UnknownItem Data.FoodLog.LogItem
+
+
+type ProductState
+    = ProductLoading Data.FoodLog.LogItem
+    | ProductLoaded ProductDetail
+    | ProductUnavailable Data.FoodLog.LogItem
+
+
+type MealState
+    = MealLoading Data.FoodLog.LogItem
+    | MealLoaded MealName
+    | MealUnavailable Data.FoodLog.LogItem
+
+
+type RequestState
+    = Idle
+    | Saving
+    | Deleting
+
+
+type alias LoadFailedModel =
+    { logId : String
+    , error : String
     }
 
 
@@ -64,15 +112,11 @@ type OutMsg
 
 init : String -> ( Model, OutMsg )
 init logId =
-    ( { logId = logId
-      , log = Nothing
-      , food = Nothing
-      , itemNames = ItemNameLookup.empty
-      , units = Nothing
-      , form = Nothing
-      , error = Nothing
-      , deleting = False
-      }
+    ( Loading
+        { logId = logId
+        , log = Nothing
+        , units = Nothing
+        }
     , RequestInitialData logId
     )
 
@@ -83,127 +127,76 @@ update msg model =
         LogLoaded result ->
             case result of
                 Ok log ->
-                    ( { model
-                        | log = Just log
-                        , form = Just (FoodLogForm.initLogFormFromLog log)
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , itemResolutionOutMsg log
-                    )
+                    ( setLoadedLog log model, Cmd.none, itemResolutionOutMsg log )
 
                 Err error ->
-                    failure error model
+                    loadFailure error model
 
         UnitsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | units = Just response.items, error = Nothing }, Cmd.none, NoOp )
+                    ( setLoadedUnits response.items model, Cmd.none, NoOp )
 
                 Err error ->
-                    failure error model
+                    loadFailure error model
 
         ProductDetailLoaded result ->
-            case result of
-                Ok food ->
-                    ( { model
-                        | food = Just food
-                        , itemNames =
-                            ItemNameLookup.insertProduct food.id food.name model.itemNames
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
-
-                Err _ ->
-                    ( { model | itemNames = insertCurrentItemFallback model }
-                    , Cmd.none
-                    , NoOp
-                    )
+            ( updateLoadedItem (applyProductDetail result) model, Cmd.none, NoOp )
 
         MealNameLoaded result ->
-            case result of
-                Ok meal ->
-                    ( { model
-                        | itemNames =
-                            ItemNameLookup.insert
-                                { itemType = "meal", id = meal.id }
-                                meal.name
-                                model.itemNames
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
-
-                Err _ ->
-                    ( { model | itemNames = insertCurrentItemFallback model }
-                    , Cmd.none
-                    , NoOp
-                    )
+            ( updateLoadedItem (applyMealName result) model, Cmd.none, NoOp )
 
         FormMsg subMsg ->
-            case model.form of
-                Just form ->
-                    ( { model | form = Just (FoodLogForm.update subMsg form) }, Cmd.none, NoOp )
+            case model of
+                Loaded loaded ->
+                    ( Loaded { loaded | form = FoodLogForm.update subMsg loaded.form }
+                    , Cmd.none
+                    , NoOp
+                    )
 
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         SubmitClicked ->
-            case model.form of
-                Just form ->
-                    case FoodLogForm.createUpdateLogRequest form of
-                        Ok request ->
-                            ( { model
-                                | form = Just { form | submitting = True, error = Nothing }
-                                , error = Nothing
-                              }
-                            , Cmd.none
-                            , RequestUpdateLog model.logId request
-                            )
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Idle then
+                        submitLoaded loaded
 
-                        Err FoodLogForm.AmountRequired ->
-                            ( { model | form = Just { form | error = Just "Amount is required." } }
-                            , Cmd.none
-                            , NoOp
-                            )
+                    else
+                        ( model, Cmd.none, NoOp )
 
-                        Err FoodLogForm.InvalidDate ->
-                            ( { model
-                                | form = Just { form | error = Just "Could not read device date." }
-                              }
-                            , Cmd.none
-                            , NoOp
-                            )
-
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         UpdateCompleted result ->
             case result of
                 Ok log ->
-                    ( { model
-                        | log = Just log
-                        , form = Just (FoodLogForm.initLogFormFromLog log)
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( updateLoadedLog log model, Cmd.none, NoOp )
 
                 Err error ->
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                setFormSubmitting False { current | error = Just message }
+                        , applyError = \message current -> applyLoadedError message current
                         }
                         error
                         model
 
         DeleteClicked ->
-            ( { model | deleting = True, error = Nothing }, Cmd.none, RequestDeleteLog model.logId )
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Idle then
+                        ( Loaded { loaded | request = Deleting, error = Nothing }
+                        , Cmd.none
+                        , RequestDeleteLog loaded.logId
+                        )
+
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         DeleteCompleted result ->
             case result of
@@ -214,20 +207,309 @@ update msg model =
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                { current | deleting = False, error = Just message }
+                        , applyError = \message current -> applyLoadedDeleteError message current
                         }
                         error
                         model
 
         EditCustomFoodClicked ->
-            case Maybe.andThen Page.Food.Detail.customFoodEditRoute model.food of
-                Just route ->
-                    ( model, Cmd.none, Navigate route )
+            case model of
+                Loaded loaded ->
+                    case
+                        Maybe.andThen Page.Food.Detail.customFoodEditRoute
+                            (productDetail loaded.item)
+                    of
+                        Just route ->
+                            ( model, Cmd.none, Navigate route )
 
-                Nothing ->
+                        Nothing ->
+                            ( model, Cmd.none, NoOp )
+
+                _ ->
                     ( model, Cmd.none, NoOp )
+
+
+submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
+submitLoaded loaded =
+    case FoodLogForm.createUpdateLogRequest loaded.form of
+        Ok request ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+
+                nextForm : FoodLogForm.Model
+                nextForm =
+                    { form | submitting = True, error = Nothing }
+            in
+            ( Loaded { loaded | form = nextForm, error = Nothing, request = Saving }
+            , Cmd.none
+            , RequestUpdateLog loaded.logId request
+            )
+
+        Err FoodLogForm.AmountRequired ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+
+                nextForm : FoodLogForm.Model
+                nextForm =
+                    { form | error = Just "Amount is required." }
+            in
+            ( Loaded { loaded | form = nextForm }
+            , Cmd.none
+            , NoOp
+            )
+
+        Err FoodLogForm.InvalidDate ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+
+                nextForm : FoodLogForm.Model
+                nextForm =
+                    { form | error = Just "Could not read device date." }
+            in
+            ( Loaded { loaded | form = nextForm }
+            , Cmd.none
+            , NoOp
+            )
+
+
+setLoadedLog : FoodLog -> Model -> Model
+setLoadedLog log model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | log = Just log }
+
+        Loaded loaded ->
+            Loaded
+                { loaded
+                    | log = log
+                    , item = nextLoadedItem loaded log
+                    , form = FoodLogForm.initLogFormFromLog log
+                    , error = Nothing
+                    , request = Idle
+                }
+
+        LoadFailed _ ->
+            model
+
+
+setLoadedUnits : List UnitItem -> Model -> Model
+setLoadedUnits units model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | units = Just units }
+
+        Loaded loaded ->
+            Loaded { loaded | units = units, error = Nothing }
+
+        LoadFailed _ ->
+            model
+
+
+completeLoading : LoadingModel -> Model
+completeLoading loading =
+    case ( loading.log, loading.units ) of
+        ( Just log, Just units ) ->
+            Loaded
+                { logId = loading.logId
+                , log = log
+                , item = initialLoadedItem log
+                , units = units
+                , form = FoodLogForm.initLogFormFromLog log
+                , error = Nothing
+                , request = Idle
+                }
+
+        _ ->
+            Loading loading
+
+
+updateLoadedLog : FoodLog -> Model -> Model
+updateLoadedLog log model =
+    case model of
+        Loaded loaded ->
+            Loaded
+                { loaded
+                    | log = log
+                    , item = nextLoadedItem loaded log
+                    , form = FoodLogForm.initLogFormFromLog log
+                    , error = Nothing
+                    , request = Idle
+                }
+
+        _ ->
+            model
+
+
+nextLoadedItem : LoadedModel -> FoodLog -> LoadedItem
+nextLoadedItem loaded log =
+    if sameLogItem loaded.log.item log.item then
+        loaded.item
+
+    else
+        initialLoadedItem log
+
+
+sameLogItem : Data.FoodLog.LogItem -> Data.FoodLog.LogItem -> Bool
+sameLogItem left right =
+    left.itemType == right.itemType && left.id == right.id
+
+
+initialLoadedItem : FoodLog -> LoadedItem
+initialLoadedItem log =
+    case log.item.itemType of
+        "product" ->
+            ProductItem (ProductLoading log.item)
+
+        "meal" ->
+            MealItem (MealLoading log.item)
+
+        _ ->
+            UnknownItem log.item
+
+
+updateLoadedItem : (LoadedItem -> LoadedItem) -> Model -> Model
+updateLoadedItem transform model =
+    case model of
+        Loaded loaded ->
+            Loaded { loaded | item = transform loaded.item }
+
+        _ ->
+            model
+
+
+applyProductDetail :
+    Result Client.ApiError ProductDetail
+    -> LoadedItem
+    -> LoadedItem
+applyProductDetail result item =
+    case item of
+        ProductItem productState ->
+            case result of
+                Ok food ->
+                    if productStateId productState == food.id then
+                        ProductItem (ProductLoaded food)
+
+                    else
+                        item
+
+                Err _ ->
+                    ProductItem (ProductUnavailable (productStateItem productState))
+
+        _ ->
+            item
+
+
+applyMealName : Result Client.ApiError MealName -> LoadedItem -> LoadedItem
+applyMealName result item =
+    case item of
+        MealItem mealState ->
+            case result of
+                Ok meal ->
+                    if mealStateId mealState == meal.id then
+                        MealItem (MealLoaded meal)
+
+                    else
+                        item
+
+                Err _ ->
+                    MealItem (MealUnavailable (mealStateItem mealState))
+
+        _ ->
+            item
+
+
+productStateId : ProductState -> String
+productStateId state =
+    (productStateItem state).id
+
+
+productStateItem : ProductState -> Data.FoodLog.LogItem
+productStateItem state =
+    case state of
+        ProductLoading item ->
+            item
+
+        ProductLoaded food ->
+            { itemType = "product"
+            , id = food.id
+            , name = food.name
+            , brand = food.brand
+            }
+
+        ProductUnavailable item ->
+            item
+
+
+mealStateId : MealState -> String
+mealStateId state =
+    (mealStateItem state).id
+
+
+mealStateItem : MealState -> Data.FoodLog.LogItem
+mealStateItem state =
+    case state of
+        MealLoading item ->
+            item
+
+        MealLoaded meal ->
+            { itemType = "meal"
+            , id = meal.id
+            , name = meal.name
+            , brand = Nothing
+            }
+
+        MealUnavailable item ->
+            item
+
+
+productDetail : LoadedItem -> Maybe ProductDetail
+productDetail item =
+    case item of
+        ProductItem (ProductLoaded food) ->
+            Just food
+
+        _ ->
+            Nothing
+
+
+applyLoadedError : String -> Model -> Model
+applyLoadedError message model =
+    case model of
+        Loaded loaded ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+
+                nextForm : FoodLogForm.Model
+                nextForm =
+                    { form | submitting = False }
+            in
+            Loaded
+                { loaded
+                    | form = nextForm
+                    , error = Just message
+                    , request = Idle
+                }
+
+        _ ->
+            model
+
+
+applyLoadedDeleteError : String -> Model -> Model
+applyLoadedDeleteError message model =
+    case model of
+        Loaded loaded ->
+            Loaded { loaded | request = Idle, error = Just message }
+
+        _ ->
+            model
 
 
 itemResolutionOutMsg : FoodLog -> OutMsg
@@ -243,39 +525,33 @@ itemResolutionOutMsg log =
             NoOp
 
 
-insertCurrentItemFallback : Model -> ItemNameLookup.Names
-insertCurrentItemFallback model =
-    case model.log of
-        Just log ->
-            ItemNameLookup.insertResult log.item (Err ()) model.itemNames
-
-        Nothing ->
-            model.itemNames
-
-
-failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure =
+loadFailure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
+loadFailure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError =
+            \message current -> LoadFailed { logId = modelLogId current, error = message }
         }
 
 
-setFormSubmitting : Bool -> Model -> Model
-setFormSubmitting submitting model =
-    case model.form of
-        Just form ->
-            { model | form = Just { form | submitting = submitting } }
+modelLogId : Model -> String
+modelLogId model =
+    case model of
+        Loading loading ->
+            loading.logId
 
-        Nothing ->
-            model
+        Loaded loaded ->
+            loaded.logId
+
+        LoadFailed failed ->
+            failed.logId
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ case model.error of
+        [ case pageError model of
             Just message ->
                 Ui.errorBanner message
 
@@ -285,37 +561,50 @@ view model =
         ]
 
 
+pageError : Model -> Maybe String
+pageError model =
+    case model of
+        Loading _ ->
+            Nothing
+
+        Loaded loaded ->
+            loaded.error
+
+        LoadFailed failed ->
+            Just failed.error
+
+
 bodyView : Model -> Element Msg
 bodyView model =
-    case ( model.log, model.units, model.form ) of
-        ( Just log, Just units, Just form ) ->
-            loadedView model log units form
+    case model of
+        Loaded loaded ->
+            loadedView loaded
 
-        _ ->
-            if model.error /= Nothing then
-                Element.none
+        LoadFailed _ ->
+            Element.none
 
-            else
-                Ui.loading "Loading log..."
+        Loading _ ->
+            Ui.loading "Loading log..."
 
 
-loadedView : Model -> FoodLog -> List UnitItem -> FoodLogForm.Model -> Element Msg
-loadedView model log units form =
+loadedView : LoadedModel -> Element Msg
+loadedView model =
     let
         nutrients : List Nutrition.NutrientAmount
         nutrients =
-            nutrientsForDisplay model.food log form
+            nutrientsForDisplay (productDetail model.item) model.log model.form
     in
     Element.column
         [ Element.width Element.fill
         , Element.spacing 16
         ]
-        [ itemHeader model log
-        , Element.map FormMsg (FoodLogForm.view model.food units form)
+        [ itemHeader model
+        , Element.map FormMsg
+            (FoodLogForm.view (productDetail model.item) model.units model.form)
         , Ui.cardActions
-            [ Ui.submitButton form.submitting "Save" "Saving..." SubmitClicked
+            [ Ui.submitButton (model.request == Saving) "Save" "Saving..." SubmitClicked
             , Ui.dangerButton
-                (if model.deleting then
+                (if model.request == Deleting then
                     "Deleting..."
 
                  else
@@ -362,23 +651,25 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Model -> FoodLog -> Element Msg
-itemHeader model log =
+itemHeader : LoadedModel -> Element Msg
+itemHeader model =
     Ui.card
-        [ Element.el [ Ui.heading2, Font.bold ] (Element.text (itemTitle model log))
-        , Ui.mutedText (metaText model.food log)
-        , case model.food of
+        [ Element.el [ Ui.heading2, Font.bold ] (Element.text (itemTitle model.item))
+        , Ui.mutedText (metaText (productDetail model.item) model.log)
+        , case productDetail model.item of
             Just food ->
                 if List.isEmpty food.categories then
                     Element.none
 
                 else
-                    Element.row [ Element.spacing 4 ]
-                        (List.map Ui.badge food.categories)
+                    Element.row [ Element.spacing 4 ] (List.map Ui.badge food.categories)
 
             Nothing ->
                 Element.none
-        , case Maybe.andThen Page.Food.Detail.customFoodEditRoute model.food of
+        , case
+            Maybe.andThen Page.Food.Detail.customFoodEditRoute
+                (productDetail model.item)
+          of
             Just _ ->
                 Ui.button "Edit food" EditCustomFoodClicked
 
@@ -387,22 +678,33 @@ itemHeader model log =
         ]
 
 
-itemTitle : Model -> FoodLog -> String
-itemTitle model log =
-    ItemNameLookup.nameFor (loadingName log.item.itemType) log.item model.itemNames
+itemTitle : LoadedItem -> String
+itemTitle item =
+    case item of
+        ProductItem productState ->
+            case productState of
+                ProductLoading _ ->
+                    "Loading food..."
 
+                ProductLoaded food ->
+                    food.name
 
-loadingName : String -> String
-loadingName itemType =
-    case itemType of
-        "meal" ->
-            "Loading meal..."
+                ProductUnavailable fallback ->
+                    fallback.name
 
-        "product" ->
-            "Loading food..."
+        MealItem mealState ->
+            case mealState of
+                MealLoading _ ->
+                    "Loading meal..."
 
-        _ ->
-            "Unknown item"
+                MealLoaded meal ->
+                    meal.name
+
+                MealUnavailable fallback ->
+                    fallback.name
+
+        UnknownItem fallback ->
+            fallback.name
 
 
 metaText : Maybe ProductDetail -> FoodLog -> String

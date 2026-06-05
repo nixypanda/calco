@@ -97,7 +97,12 @@ update msg model =
             { model | unitOpen = not model.unitOpen, mealSlotOpen = False }
 
 
-createProductLogRequest : String -> Maybe String -> String -> Model -> Result ValidationError CreateLogRequest
+createProductLogRequest :
+    String
+    -> Maybe String
+    -> String
+    -> Model
+    -> Result ValidationError CreateLogRequest
 createProductLogRequest rawDate deviceTimezone productId model =
     if Text.isBlank model.amount then
         Err AmountRequired
