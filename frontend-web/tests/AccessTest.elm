@@ -39,6 +39,18 @@ tests =
             \_ ->
                 Access.resolveRoute normalUser True AdminDashboard
                     |> Expect.equal (Navigate (Diary Nothing))
+        , test "Loading session holds for Root when admin exists" <|
+            \_ ->
+                Access.resolveRoute Loading True Root
+                    |> Expect.equal Hold
+        , test "Loading session holds for Diary when admin exists" <|
+            \_ ->
+                Access.resolveRoute Loading True (Diary Nothing)
+                    |> Expect.equal Hold
+        , test "Loading session holds when no admin exists" <|
+            \_ ->
+                Access.resolveRoute Loading False Root
+                    |> Expect.equal Hold
         ]
 
 

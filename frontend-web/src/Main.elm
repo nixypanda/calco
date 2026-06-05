@@ -428,6 +428,9 @@ applyBootstrapProgress model =
 changeRouteTo : Route -> Model -> ( Model, Cmd Msg )
 changeRouteTo route model =
     case Access.resolveRoute model.session model.adminExists route of
+        Access.Hold ->
+            ( model, Cmd.none )
+
         Access.Render renderRoute ->
             loadPage renderRoute model
 
@@ -1540,51 +1543,62 @@ closeChrome model =
 
 pageView : Model -> Element.Element Msg
 pageView model =
-    case model.page of
-        LoadingPage ->
-            Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
+    if
+        model.session
+            == Session.Loading
+            || model.pendingSession
+            == Nothing
+            || model.pendingBootstrap
+            == Nothing
+    then
+        Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
 
-        LoginPage loginModel ->
-            Element.map GotLoginMsg (Login.view loginModel)
+    else
+        case model.page of
+            LoadingPage ->
+                Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
 
-        SetupPage setupModel ->
-            Element.map GotSetupMsg (Setup.view setupModel)
+            LoginPage loginModel ->
+                Element.map GotLoginMsg (Login.view loginModel)
 
-        AdminPage adminModel ->
-            Element.map GotAdminMsg (AdminDashboard.view adminModel)
+            SetupPage setupModel ->
+                Element.map GotSetupMsg (Setup.view setupModel)
 
-        AdminCreateUserPage createUserModel ->
-            Element.map GotAdminCreateUserMsg (AdminCreateUser.view createUserModel)
+            AdminPage adminModel ->
+                Element.map GotAdminMsg (AdminDashboard.view adminModel)
 
-        AdminEditUserPage editUserModel ->
-            Element.map GotAdminEditUserMsg (AdminEditUser.view editUserModel)
+            AdminCreateUserPage createUserModel ->
+                Element.map GotAdminCreateUserMsg (AdminCreateUser.view createUserModel)
 
-        DiaryPage diaryModel ->
-            Element.map GotDiaryMsg (Diary.view diaryModel)
+            AdminEditUserPage editUserModel ->
+                Element.map GotAdminEditUserMsg (AdminEditUser.view editUserModel)
 
-        FoodSearchPage foodSearchModel ->
-            Element.map GotFoodSearchMsg (FoodSearch.view foodSearchModel)
+            DiaryPage diaryModel ->
+                Element.map GotDiaryMsg (Diary.view diaryModel)
 
-        FoodDetailPage foodDetailModel ->
-            Element.map GotFoodDetailMsg (FoodDetail.view foodDetailModel)
+            FoodSearchPage foodSearchModel ->
+                Element.map GotFoodSearchMsg (FoodSearch.view foodSearchModel)
 
-        FoodLogDetailPage foodLogDetailModel ->
-            Element.map GotFoodLogDetailMsg (FoodLogDetail.view foodLogDetailModel)
+            FoodDetailPage foodDetailModel ->
+                Element.map GotFoodDetailMsg (FoodDetail.view foodDetailModel)
 
-        CustomFoodCreatePage customFoodCreateModel ->
-            Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view customFoodCreateModel)
+            FoodLogDetailPage foodLogDetailModel ->
+                Element.map GotFoodLogDetailMsg (FoodLogDetail.view foodLogDetailModel)
 
-        CustomFoodEditPage customFoodEditModel ->
-            Element.map GotCustomFoodEditMsg (CustomFoodEdit.view customFoodEditModel)
+            CustomFoodCreatePage customFoodCreateModel ->
+                Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view customFoodCreateModel)
 
-        MealsPage mealsModel ->
-            Element.map GotMealsMsg (Meals.view mealsModel)
+            CustomFoodEditPage customFoodEditModel ->
+                Element.map GotCustomFoodEditMsg (CustomFoodEdit.view customFoodEditModel)
 
-        MealFormPage mealFormModel ->
-            Element.map GotMealFormMsg (MealForm.view mealFormModel)
+            MealsPage mealsModel ->
+                Element.map GotMealsMsg (Meals.view mealsModel)
 
-        MealDetailPage mealDetailModel ->
-            Element.map GotMealDetailMsg (MealDetail.view mealDetailModel)
+            MealFormPage mealFormModel ->
+                Element.map GotMealFormMsg (MealForm.view mealFormModel)
 
-        PlaceholderPage message ->
-            Element.el [ Element.padding 24 ] (Element.text message)
+            MealDetailPage mealDetailModel ->
+                Element.map GotMealDetailMsg (MealDetail.view mealDetailModel)
+
+            PlaceholderPage message ->
+                Element.el [ Element.padding 24 ] (Element.text message)

@@ -7,10 +7,21 @@ import Session
 type RouteDecision
     = Render Route
     | Navigate Route
+    | Hold
 
 
 resolveRoute : Session.Session -> Bool -> Route -> RouteDecision
 resolveRoute session adminExists route =
+    case session of
+        Session.Loading ->
+            Hold
+
+        _ ->
+            resolveKnownSession session adminExists route
+
+
+resolveKnownSession : Session.Session -> Bool -> Route -> RouteDecision
+resolveKnownSession session adminExists route =
     if not adminExists then
         case route of
             Setup ->
