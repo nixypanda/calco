@@ -22,6 +22,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
@@ -439,22 +440,9 @@ slotView model allLogs slot label =
         totals =
             Nutrition.macroTotals logs
     in
-    Ui.card
-        (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]
-            [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                [ Element.el [ Font.bold ] (Element.text label)
-                , Input.button [ Font.color Ui.mutedColor, Ui.caption ]
-                    { onPress = Just MacroModeToggled
-                    , label = Element.text (macroSummary model.macroMode totals)
-                    }
-                ]
-            , Element.el
-                [ Ui.caption
-                , Font.color Ui.mutedColor
-                ]
-                (Element.text (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal"))
-            ]
-            :: Ui.hairline
+    mealSlotCard slot
+        (mealSlotHeader model allLogs slot label totals)
+        (Ui.hairline
             :: (if List.isEmpty logs then
                     [ Element.el
                         [ Element.padding 14
@@ -477,6 +465,159 @@ slotView model allLogs slot label =
                         ]
                )
         )
+
+
+mealSlotHeader : Model -> List FoodLog -> MealSlot -> String -> MacroTotals -> Element Msg
+mealSlotHeader model allLogs slot label totals =
+    let
+        headerContent : Element Msg
+        headerContent =
+            Element.row
+                [ Element.width Element.fill
+                , Element.padding 14
+                , Element.spacing 12
+                ]
+                [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
+                    [ Element.el [ Font.bold ] (Element.text label)
+                    , Input.button [ Font.color Ui.mutedColor, Ui.caption ]
+                        { onPress = Just MacroModeToggled
+                        , label = Element.text (macroSummary model.macroMode totals)
+                        }
+                    ]
+                , Element.el
+                    [ Ui.caption
+                    , Font.color Ui.mutedColor
+                    ]
+                    (Element.text
+                        (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal")
+                    )
+                ]
+    in
+    case slot of
+        Other ->
+            headerContent
+
+        _ ->
+            Element.el
+                (List.concat
+                    [ [ Element.width Element.fill
+                      , Element.height (Element.px mealSlotHeaderHeight)
+                      , Border.roundEach
+                            { topLeft = 20
+                            , topRight = 20
+                            , bottomLeft = 0
+                            , bottomRight = 0
+                            }
+                      , Element.clip
+                      , Element.inFront mealSlotFade
+                      , Element.inFront
+                            (Element.el
+                                [ Element.width Element.fill
+                                , Element.height Element.fill
+                                , Element.paddingEach
+                                    { top = 38, right = 34, bottom = 20, left = 34 }
+                                ]
+                                headerContent
+                            )
+                      ]
+                    , mealSlotBackground slot
+                    ]
+                )
+                Element.none
+
+
+mealSlotHeaderHeight : Int
+mealSlotHeaderHeight =
+    118
+
+
+mealSlotFade : Element msg
+mealSlotFade =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.htmlAttribute
+            (Html.Attributes.style
+                "background-image"
+                ("linear-gradient(to bottom, "
+                    ++ "rgba(255,255,255,0) 0%, "
+                    ++ "rgba(255,255,255,0) 46%, "
+                    ++ "rgba(255,255,255,0.48) 78%, "
+                    ++ "white 100%)"
+                )
+            )
+        ]
+        Element.none
+
+
+mealSlotCard : MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
+mealSlotCard slot header bodyChildren =
+    case slot of
+        Other ->
+            Ui.card (header :: bodyChildren)
+
+        _ ->
+            Element.column
+                [ Element.width Element.fill
+                , Background.color Ui.cardBg
+                , Border.rounded 20
+                , Ui.cardShadow
+                , Element.spacing 0
+                ]
+                [ header
+                , Element.column
+                    [ Element.width Element.fill
+                    , Element.paddingEach { top = 0, right = 20, bottom = 20, left = 20 }
+                    , Element.spacing 12
+                    ]
+                    bodyChildren
+                ]
+
+
+mealSlotBackground : MealSlot -> List (Element.Attribute msg)
+mealSlotBackground slot =
+    case mealSlotImage slot of
+        Just image ->
+            [ Element.htmlAttribute
+                (Html.Attributes.style
+                    "background-image"
+                    ("url(\"" ++ image.url ++ "\")")
+                )
+            , Element.htmlAttribute
+                (Html.Attributes.style
+                    "background-size"
+                    "max(100%, 1120px) auto"
+                )
+            , Element.htmlAttribute
+                (Html.Attributes.style
+                    "background-position"
+                    (image.focusX ++ " top")
+                )
+            , Element.htmlAttribute
+                (Html.Attributes.style "background-repeat" "no-repeat")
+            ]
+
+        Nothing ->
+            []
+
+
+mealSlotImage : MealSlot -> Maybe { url : String, focusX : String }
+mealSlotImage slot =
+    case slot of
+        Breakfast ->
+            Just { url = "/assets/breakfast.png", focusX = "13%" }
+
+        Lunch ->
+            Just { url = "/assets/lunch.png", focusX = "50%" }
+
+        Dinner ->
+            Just { url = "/assets/dinner.png", focusX = "47%" }
+
+        Snack ->
+            Just { url = "/assets/snacks.png", focusX = "82%" }
+
+        Other ->
+            Nothing
 
 
 macroSummary : MacroMode -> MacroTotals -> String
