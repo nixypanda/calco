@@ -1,6 +1,7 @@
 module Data.FoodLog exposing
     ( FoodLog
     , GroupedLogs
+    , LogItem
     , SummaryResponse
     , decoder
     , groupLogs
@@ -9,7 +10,6 @@ module Data.FoodLog exposing
     , summaryDecoder
     )
 
-import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)
@@ -21,10 +21,18 @@ type alias FoodLog =
     { id : String
     , loggedAt : String
     , mealSlot : Maybe String
-    , item : ItemRef
+    , item : LogItem
     , quantity : Quantity
     , nutrients : List NutrientAmount
     , notes : Maybe String
+    }
+
+
+type alias LogItem =
+    { itemType : String
+    , id : String
+    , name : String
+    , brand : Maybe String
     }
 
 
@@ -50,10 +58,23 @@ decoder =
         (Decode.field "id" Decode.string)
         (Decode.field "logged_at" Decode.string)
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
-        (Decode.field "item" ItemRef.decoder)
+        (Decode.field "item" logItemDecoder)
         (Decode.field "quantity" Quantity.decoder)
         (Decode.field "nutrients" (Decode.list Nutrition.decoder))
         (Decode.field "notes" (Decode.nullable Decode.string))
+
+
+logItemDecoder : Decoder LogItem
+logItemDecoder =
+    Decode.map4 LogItem
+        (Decode.field "type" Decode.string)
+        (Decode.field "id" Decode.string)
+        (Decode.field "name" Decode.string)
+        (Decode.oneOf
+            [ Decode.field "brand" (Decode.nullable Decode.string)
+            , Decode.succeed Nothing
+            ]
+        )
 
 
 listDecoder : Decoder (List FoodLog)

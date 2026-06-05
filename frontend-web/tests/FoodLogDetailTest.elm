@@ -181,7 +181,7 @@ productLog =
     { id = "log-1"
     , loggedAt = "2026-06-04T10:00:00+05:30"
     , mealSlot = Just "lunch"
-    , item = { itemType = "product", id = "food-1" }
+    , item = { itemType = "product", id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Just "Good"
@@ -190,7 +190,9 @@ productLog =
 
 mealLog : FoodLog
 mealLog =
-    { productLog | item = { itemType = "meal", id = "meal-1" } }
+    { productLog
+        | item = { itemType = "meal", id = "meal-1", name = "Lunch meal", brand = Nothing }
+    }
 
 
 updatedLog : FoodLog

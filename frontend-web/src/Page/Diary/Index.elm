@@ -13,8 +13,6 @@ module Page.Diary.Index exposing
 import Api.Client as Client
 import Api.Result as ApiResult
 import Data.FoodLog as FoodLog exposing (FoodLog, SummaryResponse)
-import Data.ItemNameLookup as ItemNameLookup
-import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -37,7 +35,6 @@ type alias Model =
     , today : LocalDate
     , logs : List FoodLog
     , summary : List NutrientAmount
-    , itemNames : ItemNameLookup.Names
     , loading : Bool
     , error : Maybe String
     , macroMode : MacroMode
@@ -48,7 +45,6 @@ type Msg
     = LoadStarted
     | LogsLoaded (Result Client.ApiError (List FoodLog))
     | SummaryLoaded (Result Client.ApiError SummaryResponse)
-    | NameLookupCompleted ItemRef (Result Client.ApiError String)
     | PreviousDayClicked
     | NextDayClicked
     | MacroModeToggled
@@ -60,7 +56,6 @@ type Msg
 type OutMsg
     = NoOp
     | RequestDiaryData LocalDate
-    | RequestItemNames (List ItemRef)
     | Navigate Route
     | SessionExpired
 
@@ -78,7 +73,6 @@ init args =
       , today = args.today
       , logs = []
       , summary = []
-      , itemNames = ItemNameLookup.empty
       , loading = True
       , error = Nothing
       , macroMode = Grams
@@ -98,7 +92,7 @@ update msg model =
                 Ok logs ->
                     ( { model | logs = logs, loading = False, error = Nothing }
                     , Cmd.none
-                    , RequestItemNames (ItemRef.unique logs)
+                    , NoOp
                     )
 
                 Err error ->
@@ -114,15 +108,6 @@ update msg model =
 
                 Err error ->
                     failure error model
-
-        NameLookupCompleted item result ->
-            ( { model
-                | itemNames =
-                    ItemNameLookup.insertResult item result model.itemNames
-              }
-            , Cmd.none
-            , NoOp
-            )
 
         PreviousDayClicked ->
             let
@@ -366,7 +351,7 @@ slotView model slot label =
                     ]
 
                  else
-                    List.map (logRow model.itemNames) logs
+                    List.map logRow logs
                 )
                     ++ (case slot of
                             Other ->
@@ -396,24 +381,24 @@ macroSummary mode totals =
         Grams ->
             "carbs "
                 ++ Nutrition.oneDecimal totals.carbs
-                ++ "g, protein "
+                ++ "g ⋅ protein "
                 ++ Nutrition.oneDecimal totals.protein
-                ++ "g, fat "
+                ++ "g ⋅ fat "
                 ++ Nutrition.oneDecimal totals.fat
                 ++ "g"
 
         Percent ->
             "carbs "
                 ++ String.fromInt (round totals.carbsPct)
-                ++ "%, protein "
+                ++ "% ⋅ protein "
                 ++ String.fromInt (round totals.proteinPct)
-                ++ "%, fat "
+                ++ "% ⋅ fat "
                 ++ String.fromInt (round totals.fatPct)
                 ++ "%"
 
 
-logRow : ItemNameLookup.Names -> FoodLog -> Element Msg
-logRow itemNames log =
+logRow : FoodLog -> Element Msg
+logRow log =
     Input.button
         [ Element.width Element.fill
         , Element.padding 12
@@ -427,9 +412,7 @@ logRow itemNames log =
                     [ Element.width Element.fill
                     , Font.medium
                     ]
-                    (Element.text
-                        (ItemNameLookup.nameFor "Loading..." log.item itemNames)
-                    )
+                    (Element.text log.item.name)
                 , Element.el
                     [ Ui.caption
                     , Font.color Ui.mutedColor

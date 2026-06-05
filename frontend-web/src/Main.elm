@@ -10,7 +10,6 @@ import Api.Meals
 import Browser
 import Browser.Navigation as Nav
 import Data.Auth as Auth
-import Data.ItemRef exposing (ItemRef)
 import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..))
 import Data.Units as Units
@@ -704,9 +703,6 @@ applyDiaryOutMsg outMsg model =
                 ]
             )
 
-        Diary.RequestItemNames items ->
-            ( model, Cmd.batch (List.map itemNameCommand items) )
-
         Diary.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
@@ -1153,24 +1149,6 @@ applyMealDetailOutMsg outMsg model =
 
         MealDetail.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
-
-
-itemNameCommand : ItemRef -> Cmd Msg
-itemNameCommand item =
-    case item.itemType of
-        "meal" ->
-            Api.Meals.getMealName item.id
-                (\result ->
-                    Diary.NameLookupCompleted item (Result.map .name result)
-                        |> GotDiaryMsg
-                )
-
-        _ ->
-            Api.Foods.getProductName item.id
-                (\result ->
-                    Diary.NameLookupCompleted item (Result.map .name result)
-                        |> GotDiaryMsg
-                )
 
 
 type LeadingAction

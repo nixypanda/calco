@@ -26,12 +26,12 @@ encoder item =
         ]
 
 
-key : ItemRef -> String
+key : { a | itemType : String, id : String } -> String
 key item =
     item.itemType ++ ":" ++ item.id
 
 
-fallbackName : ItemRef -> String
+fallbackName : { a | itemType : String } -> String
 fallbackName item =
     case item.itemType of
         "meal" ->

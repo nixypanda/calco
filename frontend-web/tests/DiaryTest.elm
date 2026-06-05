@@ -1,13 +1,11 @@
 module DiaryTest exposing (tests)
 
 import Api.Client as Client
-import Data.FoodLog as FoodLog exposing (FoodLog)
-import Data.ItemRef exposing (ItemRef)
+import Data.FoodLog as FoodLog exposing (FoodLog, LogItem)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
 import Data.Route exposing (Route(..))
-import Dict
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Diary.Index as Diary
@@ -72,7 +70,7 @@ tests =
                         |> first
                         |> (\model -> ( model.loading, model.error ))
                         |> Expect.equal ( True, Nothing )
-            , test "load success stores logs and requests name lookup" <|
+            , test "load success stores logs" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
@@ -82,7 +80,7 @@ tests =
                         |> Expect.equal
                             ( [ lunchLog ]
                             , False
-                            , Diary.RequestItemNames [ productRef ]
+                            , Diary.NoOp
                             )
             , test "summary success stores summary" <|
                 \_ ->
@@ -102,20 +100,6 @@ tests =
                         |> first
                         |> (\model -> ( model.loading, model.error, model.logs ))
                         |> Expect.equal ( False, Just "Network error", [ lunchLog ] )
-            , test "name lookup success merges item names" <|
-                \_ ->
-                    Diary.update (Diary.NameLookupCompleted productRef (Ok "Chicken")) emptyModel
-                        |> first
-                        |> .itemNames
-                        |> Expect.equal (Dict.fromList [ ( "product:food-1", "Chicken" ) ])
-            , test "name lookup failure uses unknown item fallback" <|
-                \_ ->
-                    Diary.update
-                        (Diary.NameLookupCompleted mealRef (Err Client.NetworkError))
-                        emptyModel
-                        |> first
-                        |> .itemNames
-                        |> Expect.equal (Dict.fromList [ ( "meal:meal-1", "Unknown meal" ) ])
             ]
         , describe "derived behavior"
             [ test "logs are grouped into meal slots and other" <|
@@ -205,7 +189,6 @@ emptyModel =
     , today = today
     , logs = []
     , summary = []
-    , itemNames = Dict.empty
     , loading = False
     , error = Nothing
     , macroMode = Diary.Grams
@@ -233,14 +216,14 @@ date raw =
                     today
 
 
-productRef : ItemRef
+productRef : LogItem
 productRef =
-    { itemType = "product", id = "food-1" }
+    { itemType = "product", id = "food-1", name = "Chicken", brand = Nothing }
 
 
-mealRef : ItemRef
+mealRef : LogItem
 mealRef =
-    { itemType = "meal", id = "meal-1" }
+    { itemType = "meal", id = "meal-1", name = "Lunch meal", brand = Nothing }
 
 
 lunchLog : FoodLog
@@ -289,7 +272,7 @@ summary =
     ]
 
 
-log : String -> Maybe String -> ItemRef -> List NutrientAmount -> FoodLog
+log : String -> Maybe String -> LogItem -> List NutrientAmount -> FoodLog
 log id mealSlot item nutrients =
     { id = id
     , loggedAt = "2026-05-30T12:00:00Z"

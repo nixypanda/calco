@@ -67,7 +67,7 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
         "item": { "type": "meal", "id": meal_id },
         "quantity": { "amount": 60, "unit": "g" }
     });
-    let _: Value = post_json(
+    let meal_log: Value = post_json(
         &router,
         "/api/logs",
         &user,
@@ -75,6 +75,26 @@ async fn product_to_meal_to_log_to_summary(pool: PgPool) {
         StatusCode::CREATED,
     )
     .await;
+    let meal_log_id = meal_log["id"].as_str().unwrap().to_string();
+    assert_eq!(meal_log["item"]["type"], "meal");
+    assert_eq!(meal_log["item"]["id"], meal_id);
+    assert_eq!(meal_log["item"]["name"], "Toast");
+    assert!(meal_log.get("item_snapshot").is_none());
+
+    let rename_meal_payload = json!({
+        "name": "Renamed Toast"
+    });
+    let _: Value = put_json(
+        &router,
+        &format!("/api/meals/{meal_id}"),
+        &user,
+        &rename_meal_payload,
+        StatusCode::OK,
+    )
+    .await;
+    let meal_log_after_rename: Value =
+        get_json(&router, &format!("/api/logs/{meal_log_id}"), &user).await;
+    assert_eq!(meal_log_after_rename["item"]["name"], "Toast");
 
     // ── 4. Log the bare product at breakfast ────────────────────────────
     // 40g bread = 40 * 250 / 100 = 100 kcal

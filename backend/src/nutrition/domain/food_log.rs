@@ -64,9 +64,46 @@ impl FromStr for MealSlot {
 }
 
 #[derive(Debug, Clone)]
-pub enum LoggedItem {
+pub enum FoodLogItemRef {
     Product(ProductId),
     Meal(MealId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FoodLogItemSnapshot {
+    Product {
+        id: ProductId,
+        name: String,
+        brand: Option<String>,
+    },
+    Meal {
+        id: MealId,
+        name: String,
+    },
+}
+
+impl FoodLogItemSnapshot {
+    pub fn from_product(product: &Product) -> Self {
+        Self::Product {
+            id: product.id,
+            name: product.name.0.clone(),
+            brand: product.brand.as_ref().map(|brand| brand.0.clone()),
+        }
+    }
+
+    pub fn from_meal(meal: &Meal) -> Self {
+        Self::Meal {
+            id: meal.id,
+            name: meal.name.0.clone(),
+        }
+    }
+
+    pub fn as_ref(&self) -> FoodLogItemRef {
+        match self {
+            Self::Product { id, .. } => FoodLogItemRef::Product(*id),
+            Self::Meal { id, .. } => FoodLogItemRef::Meal(*id),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -82,7 +119,7 @@ pub struct FoodLog {
     pub user_id: Uuid,
     pub logged_at: DateTime<Utc>,
     pub meal_slot: Option<MealSlot>,
-    pub item: LoggedItem,
+    pub item: FoodLogItemSnapshot,
     pub quantity_amount: Decimal,
     pub quantity_unit: UnitCode,
     pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
@@ -108,7 +145,7 @@ impl FoodLog {
             user_id,
             logged_at,
             meal_slot,
-            LoggedItem::Product(product.id),
+            FoodLogItemSnapshot::from_product(product),
             quantity,
             nutrition,
             notes,
@@ -133,7 +170,7 @@ impl FoodLog {
             user_id,
             logged_at,
             meal_slot,
-            LoggedItem::Meal(meal.id),
+            FoodLogItemSnapshot::from_meal(meal),
             quantity,
             nutrition,
             notes,
@@ -155,7 +192,7 @@ impl FoodLog {
         Ok(self.update(
             logged_at,
             meal_slot,
-            LoggedItem::Product(product.id),
+            FoodLogItemSnapshot::from_product(product),
             quantity,
             nutrition,
             notes,
@@ -179,7 +216,7 @@ impl FoodLog {
         Ok(self.update(
             logged_at,
             meal_slot,
-            LoggedItem::Meal(meal.id),
+            FoodLogItemSnapshot::from_meal(meal),
             quantity,
             nutrition,
             notes,
@@ -194,7 +231,7 @@ impl FoodLog {
         user_id: Uuid,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        item: LoggedItem,
+        item: FoodLogItemSnapshot,
         quantity: Quantity,
         nutrition: CalculatedNutrition,
         notes: Option<String>,
@@ -220,7 +257,7 @@ impl FoodLog {
         &self,
         logged_at: DateTime<Utc>,
         meal_slot: Option<MealSlot>,
-        item: LoggedItem,
+        item: FoodLogItemSnapshot,
         quantity: Quantity,
         nutrition: CalculatedNutrition,
         notes: Option<String>,
@@ -384,10 +421,14 @@ mod tests {
         )
         .unwrap();
 
-        match log.item {
-            LoggedItem::Product(id) => assert_eq!(id, product.id),
-            LoggedItem::Meal(_) => panic!("expected product item"),
-        }
+        assert_eq!(
+            log.item,
+            FoodLogItemSnapshot::Product {
+                id: product.id,
+                name: "Test".into(),
+                brand: None,
+            }
+        );
         assert_eq!(log.quantity_amount, Decimal::new(100, 0));
         assert_eq!(log.quantity_unit.0, "g");
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(250, 0));
@@ -411,10 +452,13 @@ mod tests {
         )
         .unwrap();
 
-        match log.item {
-            LoggedItem::Meal(id) => assert_eq!(id, meal.id),
-            LoggedItem::Product(_) => panic!("expected meal item"),
-        }
+        assert_eq!(
+            log.item,
+            FoodLogItemSnapshot::Meal {
+                id: meal.id,
+                name: "Test".into(),
+            }
+        );
         assert_eq!(log.quantity_amount, Decimal::new(50, 0));
         // meal scaled to 50g of 100g = 0.5x → 250 kcal/100g * 100g comp / 100 = 250, scaled by 0.5 = 125
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(125, 0));
@@ -456,10 +500,14 @@ mod tests {
         assert_eq!(updated.user_id, user_id);
         assert_eq!(updated.logged_at, logged_at);
         assert_eq!(updated.meal_slot, Some(MealSlot::Snack));
-        match updated.item {
-            LoggedItem::Product(id) => assert_eq!(id, product.id),
-            LoggedItem::Meal(_) => panic!("expected product item"),
-        }
+        assert_eq!(
+            updated.item,
+            FoodLogItemSnapshot::Product {
+                id: product.id,
+                name: "Test".into(),
+                brand: None,
+            }
+        );
         assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
         // 250 kcal/100g * 50g / 100 = 125
         assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
@@ -501,10 +549,13 @@ mod tests {
         assert_eq!(updated.user_id, user_id);
         assert_eq!(updated.logged_at, logged_at);
         assert_eq!(updated.meal_slot, Some(MealSlot::Dinner));
-        match updated.item {
-            LoggedItem::Meal(id) => assert_eq!(id, meal.id),
-            LoggedItem::Product(_) => panic!("expected meal item"),
-        }
+        assert_eq!(
+            updated.item,
+            FoodLogItemSnapshot::Meal {
+                id: meal.id,
+                name: "Test".into(),
+            }
+        );
         assert_eq!(updated.quantity_amount, Decimal::new(50, 0));
         assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(125, 0));
         assert!(updated.notes.is_none());

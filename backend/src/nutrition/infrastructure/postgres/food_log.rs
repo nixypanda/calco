@@ -50,9 +50,18 @@ fn food_log_row_to_food_log(
     snapshots: Vec<FoodLogNutrientSnapshot>,
 ) -> Result<FoodLog, NutritionError> {
     let item = if let Some(pid) = row.item_product_id {
-        LoggedItem::Product(ProductId(pid))
+        let product_id = ProductId(pid);
+        FoodLogItemSnapshot::Product {
+            id: product_id,
+            name: row.item_name,
+            brand: row.item_brand,
+        }
     } else if let Some(mid) = row.item_meal_id {
-        LoggedItem::Meal(MealId(mid))
+        let meal_id = MealId(mid);
+        FoodLogItemSnapshot::Meal {
+            id: meal_id,
+            name: row.item_name,
+        }
     } else {
         return Err(NutritionError::Internal(
             "food log has no item reference".into(),
@@ -79,15 +88,12 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn create(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (product_id, meal_id) = match &log.item {
-            LoggedItem::Product(pid) => (Some(pid.0), None),
-            LoggedItem::Meal(mid) => (None, Some(mid.0)),
-        };
+        let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
 
         sqlx::query(
             r#"
-            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, quantity, unit, notes, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            INSERT INTO food_logs (id, user_id, logged_at, meal_slot, item_product_id, item_meal_id, item_name, item_brand, quantity, unit, notes, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )
         .bind(log.id.0)
@@ -96,6 +102,8 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
         .bind(product_id)
         .bind(meal_id)
+        .bind(item_name)
+        .bind(item_brand)
         .bind(log.quantity_amount)
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
@@ -114,7 +122,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let row = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes, created_at, updated_at
+                   item_name, item_brand, quantity, unit, notes, created_at, updated_at
             FROM food_logs WHERE id = $1
             "#,
         )
@@ -140,7 +148,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let rows = sqlx::query_as::<_, FoodLogRow>(
             r#"
             SELECT id, user_id, logged_at, meal_slot, item_product_id, item_meal_id,
-                   quantity, unit, notes, created_at, updated_at
+                   item_name, item_brand, quantity, unit, notes, created_at, updated_at
             FROM food_logs
             WHERE user_id = $1 AND logged_at >= $2 AND logged_at < $3
             ORDER BY logged_at DESC
@@ -193,15 +201,13 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (product_id, meal_id) = match &log.item {
-            LoggedItem::Product(pid) => (Some(pid.0), None),
-            LoggedItem::Meal(mid) => (None, Some(mid.0)),
-        };
+        let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
 
         sqlx::query(
             r#"
             UPDATE food_logs SET logged_at=$2, meal_slot=$3, item_product_id=$4, item_meal_id=$5,
-                                 quantity=$6, unit=$7, notes=$8, updated_at=now()
+                                 item_name=$6, item_brand=$7, quantity=$8, unit=$9, notes=$10,
+                                 updated_at=now()
             WHERE id=$1
             "#,
         )
@@ -210,6 +216,8 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
         .bind(product_id)
         .bind(meal_id)
+        .bind(item_name)
+        .bind(item_brand)
         .bind(log.quantity_amount)
         .bind(&log.quantity_unit.0)
         .bind(&log.notes)
@@ -301,6 +309,8 @@ struct FoodLogRow {
     meal_slot: Option<String>,
     item_product_id: Option<Uuid>,
     item_meal_id: Option<Uuid>,
+    item_name: String,
+    item_brand: Option<String>,
     quantity: Decimal,
     unit: String,
     notes: Option<String>,
@@ -328,6 +338,15 @@ struct SummaryRow {
     code: String,
     amount: Option<Decimal>,
     unit: String,
+}
+
+fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &str, Option<&str>) {
+    match item {
+        FoodLogItemSnapshot::Product { id, name, brand } => {
+            (Some(id.0), None, name.as_str(), brand.as_deref())
+        }
+        FoodLogItemSnapshot::Meal { id, name } => (None, Some(id.0), name.as_str(), None),
+    }
 }
 
 async fn insert_food_log_nutrients(

@@ -3,6 +3,7 @@ module JsonDecoderTest exposing (tests)
 import Api.Foods as Foods
 import Api.Logs as Logs
 import Data.Auth as Auth
+import Data.FoodLog as FoodLog
 import Data.ItemRef as ItemRef
 import Data.Quantity as Quantity
 import Data.User as User
@@ -106,6 +107,11 @@ tests =
                     |> Encode.encode 0
                     |> Decode.decodeString Decode.value
                     |> Expect.equal (Decode.decodeString Decode.value updateLogJson)
+        , test "decodes food log item identity" <|
+            \_ ->
+                Decode.decodeString FoodLog.decoder foodLogJson
+                    |> Result.map (\log -> ( log.item.itemType, log.item.name, log.item.brand ))
+                    |> Expect.equal (Ok ( "product", "Apple", Just "Local" ))
         , test "decodes admin user list" <|
             \_ ->
                 Decode.decodeString User.listUsersDecoder userListJson
@@ -223,6 +229,31 @@ updateLogJson =
     { "quantity": { "amount": "2", "unit": "g" }
     , "meal_slot": null
     , "notes": null
+    }
+    """
+
+
+foodLogJson : String
+foodLogJson =
+    """
+    { "id": "log-1"
+    , "logged_at": "2026-06-04T10:00:00+05:30"
+    , "meal_slot": "lunch"
+    , "item":
+        { "type": "product"
+        , "id": "food-1"
+        , "name": "Apple"
+        , "brand": "Local"
+        }
+    , "quantity": { "amount": "2", "unit": "serving" }
+    , "nutrients":
+        [{ "code": "ENERGY_KCAL"
+         , "amount": "104"
+         , "unit": "kcal"
+         }]
+    , "notes": null
+    , "created_at": "2026-06-04T10:00:00+05:30"
+    , "updated_at": "2026-06-04T10:00:00+05:30"
     }
     """
 

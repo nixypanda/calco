@@ -8,6 +8,7 @@ use sqlx::PgPool;
 async fn seed_product(router: &axum::Router, user: &str) -> String {
     let payload = json!({
         "name": "Diary Test Apple",
+        "brand": "Orchard Lab",
         "categories": ["fruit"],
         "serving_size_g": 100,
         "default_quantity": 1,
@@ -57,6 +58,9 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     let log_id = created["id"].as_str().unwrap().to_string();
     assert_eq!(created["item"]["type"], "product");
     assert_eq!(created["item"]["id"], product_id);
+    assert_eq!(created["item"]["name"], "Diary Test Apple");
+    assert_eq!(created["item"]["brand"], "Orchard Lab");
+    assert!(created.get("item_snapshot").is_none());
     assert_eq!(created["meal_slot"], "breakfast");
 
     // Nutrient snapshot should include kcal scaled to 150g
@@ -74,6 +78,37 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     let fetched: Value = get_json(&router, &format!("/api/logs/{log_id}"), &user).await;
     assert_eq!(fetched["id"], log_id);
     assert_eq!(fetched["notes"], "with yogurt");
+
+    let renamed_product_payload = json!({
+        "name": "Renamed Apple",
+        "brand": "New Brand",
+        "categories": ["fruit"],
+        "serving_size_g": 100,
+        "default_quantity": 1,
+        "default_unit": "serving",
+        "nutrients": [
+            { "code": "ENERGY_KCAL", "amount_per_100g": 52 },
+            { "code": "CARBS_G", "amount_per_100g": 14 }
+        ],
+        "servings": [
+            { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }
+        ]
+    });
+    let _: Value = put_json(
+        &router,
+        &format!("/api/foods/custom/{product_id}"),
+        &user,
+        &renamed_product_payload,
+        StatusCode::OK,
+    )
+    .await;
+    let fetched_after_product_rename: Value =
+        get_json(&router, &format!("/api/logs/{log_id}"), &user).await;
+    assert_eq!(
+        fetched_after_product_rename["item"]["name"],
+        "Diary Test Apple"
+    );
+    assert_eq!(fetched_after_product_rename["item"]["brand"], "Orchard Lab");
 
     // ── List by date range ──────────────────────────────────────────────
     let list: Value = get_json(&router, "/api/logs?from=2026-06-01&to=2026-06-01", &user).await;

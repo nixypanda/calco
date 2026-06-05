@@ -29,7 +29,7 @@ productRef id =
     { itemType = "product", id = id }
 
 
-insert : ItemRef -> String -> Names -> Names
+insert : { a | itemType : String, id : String } -> String -> Names -> Names
 insert item name names =
     Dict.insert (ItemRef.key item) name names
 
@@ -39,7 +39,7 @@ insertProduct id name names =
     insert (productRef id) name names
 
 
-insertResult : ItemRef -> Result error String -> Names -> Names
+insertResult : { a | itemType : String, id : String } -> Result error String -> Names -> Names
 insertResult item result names =
     insert item
         (case result of
@@ -52,7 +52,7 @@ insertResult item result names =
         names
 
 
-nameFor : String -> ItemRef -> Names -> String
+nameFor : String -> { a | itemType : String, id : String } -> Names -> String
 nameFor fallback item names =
     Dict.get (ItemRef.key item) names
         |> Maybe.withDefault fallback

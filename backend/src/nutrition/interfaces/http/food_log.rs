@@ -90,10 +90,17 @@ pub struct LogResponse {
 }
 
 #[derive(Serialize)]
-pub struct ItemDto {
-    #[serde(rename = "type")]
-    pub item_type: String,
-    pub id: Uuid,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ItemDto {
+    Product {
+        id: Uuid,
+        name: String,
+        brand: Option<String>,
+    },
+    Meal {
+        id: Uuid,
+        name: String,
+    },
 }
 
 #[derive(Serialize)]
@@ -290,10 +297,10 @@ fn parse_meal_slot(s: &str) -> Result<MealSlot, NutritionError> {
     MealSlot::from_str(s).map_err(NutritionError::Validation)
 }
 
-fn parse_logged_item(item: &ItemRefDto) -> Result<LoggedItem, NutritionError> {
+fn parse_food_log_item_ref(item: &ItemRefDto) -> Result<FoodLogItemRef, NutritionError> {
     match item.item_type.as_str() {
-        "product" => Ok(LoggedItem::Product(ProductId(item.id))),
-        "meal" => Ok(LoggedItem::Meal(MealId(item.id))),
+        "product" => Ok(FoodLogItemRef::Product(ProductId(item.id))),
+        "meal" => Ok(FoodLogItemRef::Meal(MealId(item.id))),
         other => Err(NutritionError::Validation(format!(
             "unsupported item type: {other}"
         ))),
@@ -309,7 +316,7 @@ fn food_log_create_request_to_input(
     user_id: Uuid,
 ) -> Result<LogFoodInput, NutritionError> {
     let meal_slot = req.meal_slot.as_deref().map(parse_meal_slot).transpose()?;
-    let item = parse_logged_item(&req.item)?;
+    let item = parse_food_log_item_ref(&req.item)?;
     let quantity = parse_quantity(&req.quantity)?;
     Ok(LogFoodInput {
         user_id,
@@ -329,7 +336,7 @@ fn food_log_update_request_to_input(
         Some(None) => Some(None),
         None => None,
     };
-    let item = req.item.as_ref().map(parse_logged_item).transpose()?;
+    let item = req.item.as_ref().map(parse_food_log_item_ref).transpose()?;
     let quantity = req.quantity.as_ref().map(parse_quantity).transpose()?;
     Ok(UpdateFoodInput {
         logged_at: req.logged_at,
@@ -396,13 +403,11 @@ fn food_logs_to_list_response(range: LogRangeParams, logs: Vec<FoodLog>) -> LogL
 }
 
 fn food_log_to_response(log: &FoodLog) -> LogResponse {
-    let (item_type, item_id) = logged_item_to_parts(&log.item);
-
     LogResponse {
         id: log.id.0,
         logged_at: log.logged_at,
         meal_slot: log.meal_slot.map(Into::into),
-        item: item_parts_to_dto(item_type, item_id),
+        item: item_to_dto(&log.item),
         quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
         nutrients: log
             .nutrient_snapshots
@@ -415,17 +420,17 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
     }
 }
 
-fn logged_item_to_parts(item: &LoggedItem) -> (&'static str, Uuid) {
+fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {
     match item {
-        LoggedItem::Product(pid) => ("product", pid.0),
-        LoggedItem::Meal(mid) => ("meal", mid.0),
-    }
-}
-
-fn item_parts_to_dto(item_type: &str, id: Uuid) -> ItemDto {
-    ItemDto {
-        item_type: item_type.to_string(),
-        id,
+        FoodLogItemSnapshot::Product { id, name, brand } => ItemDto::Product {
+            id: id.0,
+            name: name.clone(),
+            brand: brand.clone(),
+        },
+        FoodLogItemSnapshot::Meal { id, name } => ItemDto::Meal {
+            id: id.0,
+            name: name.clone(),
+        },
     }
 }
 

@@ -14,7 +14,7 @@ pub struct LogFoodInput {
     pub user_id: Uuid,
     pub logged_at: DateTime<Utc>,
     pub meal_slot: Option<MealSlot>,
-    pub item: LoggedItem,
+    pub item: FoodLogItemRef,
     pub quantity: Quantity,
     pub notes: Option<String>,
 }
@@ -22,7 +22,7 @@ pub struct LogFoodInput {
 pub struct UpdateFoodInput {
     pub logged_at: Option<DateTime<Utc>>,
     pub meal_slot: Option<Option<MealSlot>>,
-    pub item: Option<LoggedItem>,
+    pub item: Option<FoodLogItemRef>,
     pub quantity: Option<Quantity>,
     pub notes: Option<Option<String>>,
 }
@@ -52,7 +52,7 @@ impl FoodLogServices {
 
     pub async fn log_item(&self, input: LogFoodInput) -> Result<FoodLog, NutritionError> {
         let log = match input.item {
-            LoggedItem::Product(product_id) => {
+            FoodLogItemRef::Product(product_id) => {
                 let product = self
                     .product_repo
                     .find_by_id(product_id)
@@ -70,7 +70,7 @@ impl FoodLogServices {
                     input.notes,
                 )?
             }
-            LoggedItem::Meal(meal_id) => {
+            FoodLogItemRef::Meal(meal_id) => {
                 let meal = self.meal_repo.find_by_id(meal_id).await?.ok_or_else(|| {
                     NutritionError::NotFound(format!("meal {} not found", meal_id.0))
                 })?;
@@ -108,7 +108,7 @@ impl FoodLogServices {
             return Err(NutritionError::Forbidden("not your food log".into()));
         }
 
-        let item = input.item.unwrap_or_else(|| existing.item.clone());
+        let item = input.item.unwrap_or_else(|| existing.item.as_ref());
         let quantity = input.quantity.unwrap_or_else(|| {
             Quantity::new(existing.quantity_amount, existing.quantity_unit.clone())
                 .expect("existing food log quantity must be valid")
@@ -121,7 +121,7 @@ impl FoodLogServices {
         let notes = input.notes.unwrap_or_else(|| existing.notes.clone());
 
         let updated = match item {
-            LoggedItem::Product(product_id) => {
+            FoodLogItemRef::Product(product_id) => {
                 let product = self
                     .product_repo
                     .find_by_id(product_id)
@@ -136,7 +136,7 @@ impl FoodLogServices {
                     notes,
                 )?
             }
-            LoggedItem::Meal(meal_id) => {
+            FoodLogItemRef::Meal(meal_id) => {
                 let meal = self
                     .meal_repo
                     .find_by_id(meal_id)
@@ -493,7 +493,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -517,7 +517,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::new_v4())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -540,7 +540,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -563,7 +563,7 @@ mod tests {
                 user_id: owner,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Breakfast),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -601,7 +601,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -640,7 +640,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: Some("clear me".to_string()),
             })
@@ -675,7 +675,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 logged_at: Utc::now(),
                 meal_slot: None,
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(2, 0), UnitCode("kg".to_string())).unwrap(),
                 notes: None,
             })
@@ -695,7 +695,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 logged_at: Utc::now(),
                 meal_slot: None,
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(1, 0), UnitCode("cup".to_string())).unwrap(),
                 notes: None,
             })
@@ -713,7 +713,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 logged_at: Utc::now(),
                 meal_slot: None,
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(2, 0), UnitCode("slice".to_string())).unwrap(),
                 notes: None,
             })
@@ -734,7 +734,7 @@ mod tests {
                 user_id: owner,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Product(ProductId(Uuid::nil())),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -772,7 +772,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Dinner),
-                item: LoggedItem::Meal(MealId(Uuid::nil())),
+                item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string())).unwrap(),
                 notes: Some("meal note".to_string()),
             })
@@ -782,7 +782,7 @@ mod tests {
         let log = result.unwrap();
         assert_eq!(log.user_id, user_id);
         assert_eq!(log.meal_slot, Some(MealSlot::Dinner));
-        assert!(matches!(log.item, LoggedItem::Meal(_)));
+        assert!(matches!(log.item, FoodLogItemSnapshot::Meal { .. }));
         assert_eq!(log.nutrient_snapshots.len(), 1);
         assert_eq!(log.nutrient_snapshots[0].nutrient_code.0, "ENERGY_KCAL");
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(150, 0));
@@ -798,7 +798,7 @@ mod tests {
                 user_id,
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Dinner),
-                item: LoggedItem::Meal(MealId(Uuid::nil())),
+                item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
@@ -822,7 +822,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(matches!(updated.item, LoggedItem::Meal(_)));
+        assert!(matches!(updated.item, FoodLogItemSnapshot::Meal { .. }));
         assert_eq!(updated.quantity_amount, Decimal::new(200, 0));
         assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(200, 0));
     }
@@ -836,7 +836,7 @@ mod tests {
                 user_id: Uuid::new_v4(),
                 logged_at: Utc::now(),
                 meal_slot: Some(MealSlot::Lunch),
-                item: LoggedItem::Meal(MealId::new()),
+                item: FoodLogItemRef::Meal(MealId::new()),
                 quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
                 notes: None,
             })
