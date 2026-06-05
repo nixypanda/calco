@@ -543,7 +543,7 @@ headerView : Model -> Element Msg
 headerView model =
     case model of
         Loaded loaded ->
-            Element.row [ Element.width Element.fill, Element.spacing 12 ]
+            Element.row [ Element.width Element.fill, Element.spacing 16 ]
                 [ Element.el [ Ui.heading1, Font.bold ] (Element.text loaded.meal.name)
                 , Ui.button "Edit" EditClicked
                 , Ui.button "Delete" DeleteClicked
@@ -576,17 +576,42 @@ componentView loaded component =
     Element.row
         [ Element.width Element.fill
         , Element.spacing 12
-        , Element.padding 12
+        , Element.padding 14
         , Background.color Ui.cardBg
-        , Border.rounded 8
-        , Border.width 1
-        , Border.color Ui.borderGray
+        , Border.rounded 16
+        , Ui.cardShadow
         ]
-        [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
+        [ Ui.accentDot
+            (componentAccent (nameFor component.item.id loaded))
+        , Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
         , Element.el
             [ Font.color Ui.mutedColor ]
             (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
         ]
+
+
+componentAccent : String -> Element.Color
+componentAccent name =
+    case String.uncons (String.toLower (String.trim name)) of
+        Just ( first, _ ) ->
+            case first of
+                'a' ->
+                    Ui.accentPink
+
+                'b' ->
+                    Ui.accentYellow
+
+                'c' ->
+                    Ui.accentSoftGreen
+
+                'd' ->
+                    Ui.accentLavender
+
+                _ ->
+                    Ui.accentLightBlue
+
+        Nothing ->
+            Ui.accentLightBlue
 
 
 nutritionView : LoadedModel -> Element Msg
@@ -671,7 +696,7 @@ confirmDeleteContent maybeError deleting =
         [ Element.spacing 8
         , Element.padding 12
         , Background.color Ui.dangerBg
-        , Border.rounded 8
+        , Border.rounded 16
         ]
         [ Element.el [ Font.bold ] (Element.text "Delete meal?")
         , case maybeError of

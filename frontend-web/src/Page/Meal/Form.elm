@@ -41,6 +41,7 @@ import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
 import Element exposing (Element)
+import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
@@ -942,7 +943,7 @@ formView maybeMealId form =
         , Element.column
             [ Element.width Element.fill, Element.spacing 10 ]
             (List.map componentRowView form.components)
-        , Ui.button "+ Add Component" AddComponentClicked
+        , Ui.ghostButton "+ Add Component" AddComponentClicked
         , nutritionView maybeMealId form
         , Ui.submitButton form.submitting
             (if maybeMealId == Nothing then
@@ -1011,10 +1012,9 @@ componentSearchInput row =
     in
     Element.column [ Element.width Element.fill, Element.spacing 4 ]
         [ Input.text
-            [ Border.rounded 6
-            , Border.width 1
-            , Border.color (Element.rgb255 209 213 219)
-            , Element.padding 10
+            [ Border.rounded 12
+            , Background.color Ui.inputFill
+            , Element.padding 12
             , Element.htmlAttribute
                 (SearchView.tabCompletionHandler
                     (CompleteFirstComponentSuggestion row.rowId)

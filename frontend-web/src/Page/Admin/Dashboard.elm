@@ -13,7 +13,6 @@ import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Element)
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Ui
@@ -104,35 +103,25 @@ bodyView model =
 
 createUserRow : Element Msg
 createUserRow =
-    Input.button
-        [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 0, right = 0, bottom = 0, left = 0 }
-        , Border.color Ui.borderGray
-        , Font.color Ui.primaryTeal
-        , Font.medium
-        ]
-        { onPress = Just NavigateCreateUser
-        , label = Element.text "Create User"
-        }
+    Ui.ghostButton "+ Create User" NavigateCreateUser
 
 
 statusBadge : String -> Element msg
 statusBadge status =
-    Ui.coloredBadge
+    Ui.coloredPill
         { label = status
-        , background =
+        , bg =
             if status == "active" then
-                Element.rgb255 220 252 231
+                Ui.accentSoftGreen
 
             else
-                Element.rgb255 254 226 226
-        , foreground =
+                Ui.accentSoftPink
+        , fg =
             if status == "active" then
-                Element.rgb255 22 101 52
+                Element.rgb255 50 110 60
 
             else
-                Element.rgb255 153 27 27
+                Element.rgb255 180 60 80
         }
 
 
@@ -140,17 +129,40 @@ userListRow : { user : User.User, onSelect : String -> msg } -> Element msg
 userListRow config =
     Input.button
         [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color Ui.borderGray
+        , Element.padding 16
         ]
         { onPress = Just (config.onSelect config.user.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.column [ Element.width Element.fill, Element.spacing 2 ]
+                [ Ui.accentDot (userAccent config.user.username)
+                , Element.column [ Element.width Element.fill, Element.spacing 2 ]
                     [ Element.el [ Font.bold ] (Element.text config.user.username)
                     , Ui.mutedText config.user.displayName
                     ]
                 , Element.el [ Element.alignRight ] (statusBadge config.user.status)
                 ]
         }
+
+
+userAccent : String -> Element.Color
+userAccent username =
+    case String.uncons (String.toLower (String.trim username)) of
+        Just ( first, _ ) ->
+            case first of
+                'a' ->
+                    Ui.accentPink
+
+                'b' ->
+                    Ui.accentYellow
+
+                'c' ->
+                    Ui.accentSoftGreen
+
+                'd' ->
+                    Ui.accentLavender
+
+                _ ->
+                    Ui.accentLightBlue
+
+        Nothing ->
+            Ui.accentLightBlue

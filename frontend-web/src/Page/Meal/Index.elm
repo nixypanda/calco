@@ -15,7 +15,6 @@ import Api.Meals as Meals exposing (Meal)
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Ui
@@ -195,21 +194,22 @@ mealRow : ActionState -> Meal -> Element Msg
 mealRow action meal =
     Element.row
         [ Element.width Element.fill
-        , Element.padding 12
+        , Element.padding 16
         , Element.spacing 12
-        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color Ui.borderGray
         ]
         [ Input.button
             [ Element.width Element.fill ]
             { onPress = Just (OpenMealClicked meal.id)
             , label =
-                Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                    [ Element.el [ Font.bold ] (Element.text meal.name)
-                    , Ui.mutedText (mealSummaryText meal)
+                Element.row [ Element.width Element.fill, Element.spacing 12 ]
+                    [ Ui.accentDot (mealAccent meal.name)
+                    , Element.column [ Element.width Element.fill, Element.spacing 4 ]
+                        [ Element.el [ Font.bold ] (Element.text meal.name)
+                        , Ui.mutedText (mealSummaryText meal)
+                        ]
                     ]
             }
-        , Ui.smallButton "Edit" (EditMealClicked meal.id)
+        , Ui.iconButton "✎" (EditMealClicked meal.id)
         , Ui.dangerButton
             (if action == Deleting meal.id then
                 "Deleting..."
@@ -223,17 +223,31 @@ mealRow action meal =
 
 createMealRow : Element Msg
 createMealRow =
-    Input.button
-        [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 0, right = 0, bottom = 0, left = 0 }
-        , Border.color Ui.borderGray
-        , Font.color Ui.primaryTeal
-        , Font.medium
-        ]
-        { onPress = Just CreateMealClicked
-        , label = Element.text "Create Meal"
-        }
+    Ui.ghostButton "+ Create Meal" CreateMealClicked
+
+
+mealAccent : String -> Element.Color
+mealAccent name =
+    case String.uncons (String.toLower (String.trim name)) of
+        Just ( first, _ ) ->
+            case first of
+                'a' ->
+                    Ui.accentPink
+
+                'b' ->
+                    Ui.accentYellow
+
+                'c' ->
+                    Ui.accentSoftGreen
+
+                'd' ->
+                    Ui.accentLavender
+
+                _ ->
+                    Ui.accentLightBlue
+
+        Nothing ->
+            Ui.accentLightBlue
 
 
 mealSummaryText : Meal -> String

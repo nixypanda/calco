@@ -101,7 +101,7 @@ macroBreakdownView nutrients =
             [ Element.width Element.fill
             , Element.height (Element.px 24)
             , Background.color Ui.borderGray
-            , Border.rounded 12
+            , Border.rounded 999
             , Element.clip
             ]
             [ Element.el
@@ -150,7 +150,7 @@ legendDot color =
         [ Element.width (Element.px 10)
         , Element.height (Element.px 10)
         , Background.color color
-        , Border.rounded 3
+        , Border.rounded 999
         ]
         Element.none
 
@@ -163,30 +163,37 @@ nutrientsTable nutrients =
             , columns =
                 [ { header =
                         Element.el
-                            [ Font.bold, Ui.body, Element.paddingXY 0 4 ]
-                            (Element.text "Nutrient")
+                            [ Font.bold
+                            , Ui.body
+                            , Font.letterSpacing 0.5
+                            , Font.color Ui.mutedColor
+                            , Element.paddingXY 0 8
+                            ]
+                            (Element.text (String.toUpper "Nutrient"))
                   , width = Element.fill
                   , view =
                         \n ->
                             Element.el
-                                [ Ui.body, Element.paddingXY 0 4 ]
+                                [ Ui.body, Element.paddingXY 0 8 ]
                                 (Element.text (nutrientLabel n.code))
                   }
                 , { header =
                         Element.el
                             [ Font.bold
                             , Ui.body
+                            , Font.letterSpacing 0.5
+                            , Font.color Ui.mutedColor
                             , Font.alignRight
-                            , Element.paddingEach { top = 4, bottom = 4, left = 0, right = 8 }
+                            , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
                             ]
-                            (Element.text "Amount")
+                            (Element.text (String.toUpper "Amount"))
                   , width = Element.shrink
                   , view =
                         \n ->
                             Element.el
                                 [ Ui.body
                                 , Font.alignRight
-                                , Element.paddingEach { top = 4, bottom = 4, left = 0, right = 8 }
+                                , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
                                 ]
                                 (Element.text (formatAmount n.amount))
                   }
@@ -194,14 +201,16 @@ nutrientsTable nutrients =
                         Element.el
                             [ Font.bold
                             , Ui.body
-                            , Element.paddingEach { top = 4, bottom = 4, left = 0, right = 0 }
+                            , Font.letterSpacing 0.5
+                            , Font.color Ui.mutedColor
+                            , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 0 }
                             ]
-                            (Element.text "Unit")
+                            (Element.text (String.toUpper "Unit"))
                   , width = Element.shrink
                   , view =
                         \n ->
                             Element.el
-                                [ Ui.body, Element.paddingXY 0 4 ]
+                                [ Ui.body, Element.paddingXY 0 8 ]
                                 (Element.text n.unit)
                   }
                 ]

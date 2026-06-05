@@ -302,39 +302,37 @@ dateCard model =
             [ Element.width Element.fill
             , Element.spacing 12
             ]
-            [ Ui.smallButton "Previous" PreviousDayClicked
+            [ Ui.iconButton "←" PreviousDayClicked
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
                 , Font.bold
+                , Ui.heading3
                 ]
                 (Element.text (LocalDate.display model.currentDate))
             , Input.button
-                [ Background.color
-                    (if canGoNext then
-                        Ui.primaryTeal
+                (List.concat
+                    [ [ Element.width (Element.px 40)
+                      , Element.height (Element.px 40)
+                      , Background.color Ui.inputFill
+                      , Font.color Ui.darkColor
+                      , Font.center
+                      , Border.rounded 999
+                      ]
+                    , if canGoNext then
+                        []
 
-                     else
-                        Ui.borderGray
-                    )
-                , Font.color
-                    (if canGoNext then
-                        Element.rgb255 255 255 255
-
-                     else
-                        Ui.mutedColor
-                    )
-                , Border.rounded 6
-                , Element.paddingXY 12 8
-                , Ui.caption
-                ]
+                      else
+                        [ Font.color Ui.mutedColor ]
+                    ]
+                )
                 { onPress =
                     if canGoNext then
                         Just NextDayClicked
 
                     else
                         Nothing
-                , label = Element.text "Next"
+                , label = Element.text "→"
                 }
             ]
         , totalsView (totalsFromLogs (loadedLogs model.currentDate model.diary))
@@ -440,6 +438,10 @@ slotView model allLogs slot label =
         totals : MacroTotals
         totals =
             Nutrition.macroTotals logs
+
+        accent : Element.Color
+        accent =
+            slotAccent slot
     in
     Ui.card
         (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]
@@ -456,7 +458,8 @@ slotView model allLogs slot label =
                 ]
                 (Element.text (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal"))
             ]
-            :: ((if List.isEmpty logs then
+            :: Ui.hairline
+            :: (if List.isEmpty logs then
                     [ Element.el
                         [ Element.padding 14
                         , Font.color Ui.mutedColor
@@ -465,29 +468,38 @@ slotView model allLogs slot label =
                         (Element.text "No items")
                     ]
 
-                 else
-                    List.map logRow logs
-                )
-                    ++ (case slot of
-                            Other ->
-                                []
+                else
+                    List.map (logRow accent) logs
+               )
+            ++ (case slot of
+                    Other ->
+                        []
 
-                            _ ->
-                                [ Input.button
-                                    [ Element.width Element.fill
-                                    , Element.padding 12
-                                    , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
-                                    , Border.color Ui.borderGray
-                                    , Font.color Ui.primaryTeal
-                                    , Font.medium
-                                    ]
-                                    { onPress = Just (AddFoodClicked slot)
-                                    , label = Element.text "Add Food"
-                                    }
-                                ]
-                       )
+                    _ ->
+                        [ Ui.hairline
+                        , Ui.ghostButton "+ Add Food" (AddFoodClicked slot)
+                        ]
                )
         )
+
+
+slotAccent : MealSlot -> Element.Color
+slotAccent slot =
+    case slot of
+        Breakfast ->
+            Ui.accentYellow
+
+        Lunch ->
+            Ui.accentSoftGreen
+
+        Dinner ->
+            Ui.accentLavender
+
+        Snack ->
+            Ui.accentPink
+
+        Other ->
+            Ui.accentLightBlue
 
 
 macroSummary : MacroMode -> MacroTotals -> String
@@ -512,18 +524,17 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : FoodLog -> Element Msg
-logRow log =
+logRow : Element.Color -> FoodLog -> Element Msg
+logRow accent log =
     Input.button
         [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 1, right = 0, bottom = 0, left = 0 }
-        , Border.color Ui.borderGray
+        , Element.padding 14
         ]
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.el
+                [ Ui.accentDot accent
+                , Element.el
                     [ Element.width Element.fill
                     , Font.medium
                     ]

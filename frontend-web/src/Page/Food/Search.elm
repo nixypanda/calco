@@ -19,6 +19,7 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
 import Element exposing (Element)
+import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
@@ -215,10 +216,9 @@ searchInput model =
     in
     Element.column [ Element.width Element.fill, Element.spacing 4 ]
         [ Input.text
-            [ Border.rounded 6
-            , Border.width 1
-            , Border.color (Element.rgb255 209 213 219)
-            , Element.padding 10
+            [ Border.rounded 12
+            , Background.color Ui.inputFill
+            , Element.padding 12
             , Element.htmlAttribute
                 (SearchView.tabCompletionHandler CompleteFirstSuggestion options)
             ]

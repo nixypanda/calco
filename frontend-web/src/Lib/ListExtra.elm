@@ -1,4 +1,4 @@
-module Lib.ListExtra exposing (removeAt, uniqueBy, updateAt)
+module Lib.ListExtra exposing (groupsOf, removeAt, uniqueBy, updateAt)
 
 
 updateAt : Int -> (a -> a) -> List a -> List a
@@ -44,3 +44,21 @@ uniqueByHelp toKey seen items =
 
             else
                 item :: uniqueByHelp toKey (key :: seen) rest
+
+
+{-| Group elements into pairs. Trailing singletons are dropped. Used for
+2×2 grid layouts.
+-}
+groupsOf : Int -> List a -> List ( a, a )
+groupsOf n list =
+    let
+        step : Int -> List a -> List ( a, a ) -> List ( a, a )
+        step _ remaining acc =
+            case remaining of
+                x :: y :: rest ->
+                    step n rest (( x, y ) :: acc)
+
+                _ ->
+                    List.reverse acc
+    in
+    step n list []

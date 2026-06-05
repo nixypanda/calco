@@ -28,11 +28,11 @@ view config =
         , case config.nutrients of
             Just nutrients ->
                 Element.column [ Element.width Element.fill, Element.spacing 8 ]
-                    [ View.Nutrients.nutrientsTable nutrients
-                    , Ui.card
+                    [ Ui.card
                         [ Ui.sectionHeader "Macro Breakdown"
                         , View.Nutrients.macroBreakdownView nutrients
                         ]
+                    , View.Nutrients.nutrientsTable nutrients
                     ]
 
             Nothing ->

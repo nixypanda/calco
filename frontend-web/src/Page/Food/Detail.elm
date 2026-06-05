@@ -21,10 +21,13 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Ui
 import View.FoodLogForm as FoodLogForm
 import View.Nutrients
+import View.Search as SearchView
 
 
 type Model
@@ -458,21 +461,40 @@ foodNutrientsPer100g food =
 
 foodHeader : ProductDetail -> Element Msg
 foodHeader food =
-    Ui.card
-        [ Element.el [ Ui.heading2, Font.bold ] (Element.text food.name)
-        , Ui.mutedText (metaText food)
-        , if List.isEmpty food.categories then
-            Element.none
-
-          else
-            Element.row [ Element.spacing 4 ]
-                (List.map Ui.badge food.categories)
-        , case customFoodEditRoute food of
-            Just _ ->
-                Ui.button "Edit food" EditCustomFoodClicked
-
-            Nothing ->
+    Element.row
+        [ Element.width Element.fill
+        , Element.padding 20
+        , Element.spacing 16
+        , Background.color Ui.cardBg
+        , Border.rounded 20
+        , Ui.cardShadow
+        ]
+        [ Ui.accentDot (SearchView.categoryAccent food.categories)
+        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
+            [ Element.el [ Ui.heading1, Font.bold ] (Element.text food.name)
+            , Ui.mutedText (metaText food)
+            , if List.isEmpty food.categories then
                 Element.none
+
+              else
+                Element.row [ Element.spacing 4 ]
+                    (List.map
+                        (\category ->
+                            Ui.chip
+                                { label = category
+                                , selected = False
+                                , onClick = Nothing
+                                }
+                        )
+                        food.categories
+                    )
+            , case customFoodEditRoute food of
+                Just _ ->
+                    Ui.button "Edit food" EditCustomFoodClicked
+
+                Nothing ->
+                    Element.none
+            ]
         ]
 
 

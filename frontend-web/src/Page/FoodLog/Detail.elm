@@ -24,12 +24,15 @@ import Data.FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Lib.Date as LocalDate
 import Page.Food.Detail
 import Ui
 import View.FoodLogForm as FoodLogForm
 import View.Nutrients
+import View.Search as SearchView
 
 
 type Model
@@ -653,28 +656,60 @@ nutrientsForDisplay maybeFood log form =
 
 itemHeader : LoadedModel -> Element Msg
 itemHeader model =
-    Ui.card
-        [ Element.el [ Ui.heading2, Font.bold ] (Element.text (itemTitle model.item))
-        , Ui.mutedText (metaText (productDetail model.item) model.log)
-        , case productDetail model.item of
-            Just food ->
-                if List.isEmpty food.categories then
+    let
+        maybeFood : Maybe ProductDetail
+        maybeFood =
+            productDetail model.item
+    in
+    Element.row
+        [ Element.width Element.fill
+        , Element.padding 20
+        , Element.spacing 16
+        , Background.color Ui.cardBg
+        , Border.rounded 20
+        , Ui.cardShadow
+        ]
+        [ Ui.accentDot
+            (case maybeFood of
+                Just food ->
+                    SearchView.categoryAccent food.categories
+
+                Nothing ->
+                    Ui.accentLightBlue
+            )
+        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
+            [ Element.el [ Ui.heading1, Font.bold ]
+                (Element.text (itemTitle model.item))
+            , Ui.mutedText (metaText maybeFood model.log)
+            , case maybeFood of
+                Just food ->
+                    if List.isEmpty food.categories then
+                        Element.none
+
+                    else
+                        Element.row [ Element.spacing 4 ]
+                            (List.map
+                                (\category ->
+                                    Ui.chip
+                                        { label = category
+                                        , selected = False
+                                        , onClick = Nothing
+                                        }
+                                )
+                                food.categories
+                            )
+
+                Nothing ->
                     Element.none
+            , case
+                Maybe.andThen Page.Food.Detail.customFoodEditRoute maybeFood
+              of
+                Just _ ->
+                    Ui.button "Edit food" EditCustomFoodClicked
 
-                else
-                    Element.row [ Element.spacing 4 ] (List.map Ui.badge food.categories)
-
-            Nothing ->
-                Element.none
-        , case
-            Maybe.andThen Page.Food.Detail.customFoodEditRoute
-                (productDetail model.item)
-          of
-            Just _ ->
-                Ui.button "Edit food" EditCustomFoodClicked
-
-            Nothing ->
-                Element.none
+                Nothing ->
+                    Element.none
+            ]
         ]
 
 

@@ -24,14 +24,14 @@ credentialCard config =
         [ Element.centerX
         , Element.centerY
         , Element.width (Element.fill |> Element.maximum 420)
-        , Element.padding 20
+        , Element.padding 24
         ]
         (Ui.card
             ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
              , Element.el
                 [ Ui.heading2
                 , Font.medium
-                , Font.color Ui.mediumColor
+                , Font.color Ui.textMedium
                 ]
                 (Element.text config.title)
              ]
@@ -56,7 +56,7 @@ descriptionView maybeDescription =
         Just description ->
             [ Element.paragraph
                 [ Ui.body
-                , Font.color Ui.mediumColor
+                , Font.color Ui.textMedium
                 ]
                 [ Element.text description ]
             ]

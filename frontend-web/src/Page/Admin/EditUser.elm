@@ -15,6 +15,8 @@ import Api.Client as Client
 import Api.Result as ApiResult
 import Data.User as User
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Ui
 
@@ -281,13 +283,25 @@ enableDisableView model =
     case model.state of
         Ready loadedUser _ ->
             [ Ui.card
-                [ Element.el [ Font.medium, Ui.body, Font.color (Element.rgb255 153 27 27) ]
-                    (Element.text "Danger Zone")
-                , if loadedUser.user.status == "active" then
-                    Ui.dangerButton "Disable User" DisableClicked
+                [ Element.column
+                    [ Element.width Element.fill
+                    , Background.color Ui.accentSoftPink
+                    , Border.rounded 16
+                    , Element.padding 16
+                    , Element.spacing 12
+                    ]
+                    [ Element.el
+                        [ Font.medium
+                        , Ui.body
+                        , Font.color Ui.dangerFg
+                        ]
+                        (Element.text "Danger Zone")
+                    , if loadedUser.user.status == "active" then
+                        Ui.dangerButton "Disable User" DisableClicked
 
-                  else
-                    Ui.button "Enable User" EnableClicked
+                      else
+                        Ui.button "Enable User" EnableClicked
+                    ]
                 ]
             ]
 
@@ -327,20 +341,20 @@ problemMessage problem =
 
 statusBadge : String -> Element msg
 statusBadge status =
-    Ui.coloredBadge
+    Ui.coloredPill
         { label = status
-        , background =
+        , bg =
             if status == "active" then
-                Element.rgb255 220 252 231
+                Ui.accentSoftGreen
 
             else
-                Element.rgb255 254 226 226
-        , foreground =
+                Ui.accentSoftPink
+        , fg =
             if status == "active" then
-                Element.rgb255 22 101 52
+                Element.rgb255 50 110 60
 
             else
-                Element.rgb255 153 27 27
+                Element.rgb255 180 60 80
         }
 
 

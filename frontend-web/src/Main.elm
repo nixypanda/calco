@@ -1232,8 +1232,6 @@ topBarView model =
         , Element.paddingXY 16 0
         , Element.spacing 12
         , Background.color Ui.cardBg
-        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color Ui.borderGray
         , Font.color Ui.darkColor
         ]
         [ leadingButton meta.leading
@@ -1243,7 +1241,7 @@ topBarView model =
             , Ui.heading3
             , Font.bold
             ]
-            (Element.text ("CalCo | " ++ meta.title))
+            (Element.text meta.title)
         , profileButton model
         ]
 
@@ -1252,57 +1250,36 @@ leadingButton : LeadingAction -> Element.Element Msg
 leadingButton leading =
     case leading of
         OpenMenu ->
-            iconButton "Menu" MenuClicked
+            Ui.iconButton "☰" MenuClicked
 
         GoBack route ->
-            iconButton "Back" (AppBackClicked route)
+            Ui.iconButton "←" (AppBackClicked route)
 
         NoLeadingAction ->
-            Element.el [ Element.width (Element.px 56) ] Element.none
-
-
-iconButton : String -> Msg -> Element.Element Msg
-iconButton label msg =
-    Input.button
-        [ Element.width (Element.px 56)
-        , Element.height (Element.px 40)
-        , Border.rounded 6
-        , Border.width 1
-        , Border.color Ui.borderGray
-        , Font.color Ui.darkColor
-        , Ui.caption
-        , Font.medium
-        ]
-        { onPress = Just msg
-        , label = Element.el [ Element.centerX, Element.centerY ] (Element.text label)
-        }
+            Element.el [ Element.width (Element.px 40) ] Element.none
 
 
 profileButton : Model -> Element.Element Msg
 profileButton model =
     let
-        label : String
-        label =
+        letter : String
+        letter =
             case model.session of
                 Session.Authenticated identity ->
-                    identity.username
+                    initial identity.username
 
                 _ ->
-                    "Profile"
+                    "?"
     in
-    Input.button
-        [ Element.height (Element.px 40)
-        , Element.paddingXY 12 0
-        , Border.rounded 6
-        , Border.width 1
-        , Border.color Ui.borderGray
-        , Font.color Ui.darkColor
-        , Ui.caption
-        , Font.medium
-        ]
-        { onPress = Just ProfileClicked
-        , label = Element.text label
-        }
+    Ui.iconButton letter ProfileClicked
+
+
+initial : String -> String
+initial value =
+    value
+        |> String.uncons
+        |> Maybe.map (\( c, _ ) -> String.fromChar c |> String.toUpper)
+        |> Maybe.withDefault "?"
 
 
 screenMeta : Route -> ScreenMeta
@@ -1398,11 +1375,10 @@ drawerView model =
     Element.column
         [ Element.width (Element.fill |> Element.maximum 320)
         , Element.height Element.fill
-        , Element.padding 20
-        , Element.spacing 12
+        , Element.padding 24
+        , Element.spacing 8
         , Background.color Ui.cardBg
-        , Border.widthEach { top = 0, right = 1, bottom = 0, left = 0 }
-        , Border.color Ui.borderGray
+        , Ui.cardShadow
         ]
         (Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
             :: drawerItems model
@@ -1430,11 +1406,11 @@ drawerItem current label target =
     in
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY 12 12
-        , Border.rounded 6
+        , Element.paddingXY 16 14
+        , Border.rounded 12
         , Background.color
             (if selected then
-                Element.rgb255 230 247 247
+                Element.rgb255 238 232 255
 
              else
                 Ui.cardBg
@@ -1505,9 +1481,8 @@ profileOverlay model =
                 , Element.padding 12
                 , Element.spacing 10
                 , Background.color Ui.cardBg
-                , Border.rounded 8
-                , Border.width 1
-                , Border.color Ui.borderGray
+                , Border.rounded 20
+                , Ui.cardShadow
                 ]
                 (profileMenuContent model)
             )

@@ -1,5 +1,6 @@
 module View.Search exposing
-    ( completionDropdown
+    ( categoryAccent
+    , completionDropdown
     , resultRow
     , tabCompletionHandler
     )
@@ -29,10 +30,9 @@ completionDropdown config options =
             , Element.scrollbarY
             , Element.spacing 2
             , Element.padding 4
-            , Border.rounded 6
-            , Border.width 1
-            , Border.color Ui.borderGray
+            , Border.rounded 12
             , Background.color Ui.cardBg
+            , Ui.cardShadow
             ]
             (List.map (completionRow config.onSelect) options)
 
@@ -56,9 +56,7 @@ resultRow : { query : String, item : SearchResult, onSelect : String -> msg } ->
 resultRow config =
     Input.button
         [ Element.width Element.fill
-        , Element.padding 12
-        , Border.widthEach { top = 0, right = 0, bottom = 1, left = 0 }
-        , Border.color Ui.borderGray
+        , Element.padding 16
         ]
         { onPress = Just (config.onSelect config.item.id)
         , label =
@@ -66,7 +64,8 @@ resultRow config =
                 [ Element.width Element.fill
                 , Element.spacing 12
                 ]
-                [ Element.column
+                [ Ui.accentDot (categoryAccent config.item.categories)
+                , Element.column
                     [ Element.width Element.fill
                     , Element.spacing 4
                     , Element.clip
@@ -92,8 +91,8 @@ completionRow : (Completion -> msg) -> Completion -> Element msg
 completionRow onSelect completion =
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY 10 8
-        , Border.rounded 4
+        , Element.paddingXY 12 10
+        , Border.rounded 999
         ]
         { onPress = Just (onSelect completion)
         , label =
@@ -192,17 +191,43 @@ pillRow pills =
 
 categoryPill : String -> Element msg
 categoryPill label =
-    Element.el
-        [ Element.width (Element.px 76)
-        , Element.clip
-        , Background.color Ui.borderGray
-        , Font.color Ui.mutedColor
-        , Border.rounded 12
-        , Element.paddingXY 8 4
-        , Font.size 12
-        , Font.medium
-        ]
-        (Element.text (truncatePillLabel label))
+    Ui.chip
+        { label = truncatePillLabel label
+        , selected = False
+        , onClick = Nothing
+        }
+
+
+categoryAccent : List String -> Element.Color
+categoryAccent categories =
+    case categories of
+        first :: _ ->
+            let
+                lower : String
+                lower =
+                    String.toLower first
+
+                matches : String -> Bool
+                matches needle =
+                    String.contains (String.toLower needle) lower
+            in
+            if matches "fruit" then
+                Ui.accentPink
+
+            else if matches "vegetable" || matches "veg" then
+                Ui.accentSoftGreen
+
+            else if matches "sweet" || matches "dessert" then
+                Ui.accentLavender
+
+            else if matches "grain" || matches "bread" then
+                Ui.accentYellow
+
+            else
+                Ui.accentLightBlue
+
+        [] ->
+            Ui.accentLightBlue
 
 
 truncatePillLabel : String -> String
