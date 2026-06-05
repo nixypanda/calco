@@ -14,13 +14,32 @@ import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
+import Data.Nutrition exposing (defaultCode)
 import Data.Quantity exposing (Quantity)
-import Data.Units as Units
 import Element exposing (Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
 import View.QuantityInput
+
+
+defaultQuantity : String
+defaultQuantity =
+    "1"
+
+
+sourceForFood : Maybe ProductDetail -> List UnitItem -> List UnitItem
+sourceForFood food units =
+    case Maybe.map .allowedUnits food of
+        Just allowed ->
+            if List.isEmpty allowed then
+                units
+
+            else
+                allowed
+
+        Nothing ->
+            units
 
 
 type alias Model =
@@ -51,8 +70,8 @@ type ValidationError
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
 initLogFormFromFood mealSlot food =
-    { amount = food.defaultQuantity |> Maybe.withDefault Units.defaultQuantity
-    , unit = food.defaultUnit |> Maybe.withDefault Units.defaultCode
+    { amount = food.defaultQuantity |> Maybe.withDefault defaultQuantity
+    , unit = food.defaultUnit |> Maybe.withDefault defaultCode
     , mealSlot = mealSlot
     , notes = ""
     , mealSlotOpen = False
@@ -156,7 +175,7 @@ view food units model =
                 , onAmountChange = AmountChanged
                 , unitLabel = "Unit"
                 , unit = model.unit
-                , units = Units.sourceForFood food units
+                , units = sourceForFood food units
                 , onUnitChange = UnitChanged
                 , unitOpen = model.unitOpen
                 , onUnitToggle = ToggleUnitDropdown

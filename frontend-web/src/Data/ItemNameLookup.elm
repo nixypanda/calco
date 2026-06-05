@@ -2,14 +2,13 @@ module Data.ItemNameLookup exposing
     ( Names
     , empty
     , insertProduct
-    , insertResult
     , nameFor
     , nextMissingProductId
     , productRef
     , uniqueProductIds
     )
 
-import Data.ItemRef as ItemRef exposing (ItemRef)
+import Data.ItemRef exposing (ItemRef)
 import Dict exposing (Dict)
 import Lib.ListExtra as ListExtra
 
@@ -28,9 +27,14 @@ productRef id =
     { itemType = "product", id = id }
 
 
+key : { a | itemType : String, id : String } -> String
+key item =
+    item.itemType ++ ":" ++ item.id
+
+
 insert : { a | itemType : String, id : String } -> String -> Names -> Names
 insert item name names =
-    Dict.insert (ItemRef.key item) name names
+    Dict.insert (key item) name names
 
 
 insertProduct : String -> String -> Names -> Names
@@ -38,28 +42,15 @@ insertProduct id name names =
     insert (productRef id) name names
 
 
-insertResult : { a | itemType : String, id : String } -> Result error String -> Names -> Names
-insertResult item result names =
-    insert item
-        (case result of
-            Ok name ->
-                name
-
-            Err _ ->
-                ItemRef.fallbackName item
-        )
-        names
-
-
 nameFor : String -> { a | itemType : String, id : String } -> Names -> String
 nameFor fallback item names =
-    Dict.get (ItemRef.key item) names
+    Dict.get (key item) names
         |> Maybe.withDefault fallback
 
 
 isLoaded : ItemRef -> Names -> Bool
 isLoaded item names =
-    Dict.member (ItemRef.key item) names
+    Dict.member (key item) names
 
 
 uniqueProductIds : List String -> List String

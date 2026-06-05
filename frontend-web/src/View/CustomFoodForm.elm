@@ -6,15 +6,13 @@ module View.CustomFoodForm exposing
     , ValidationError(..)
     , emptyForm
     , fromProductDetail
-    , parseCategoriesInput
     , toCreateFoodRequest
     , update
     , view
     )
 
 import Api.Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
-import Data.Category as Category
-import Data.Units as Units
+import Data.Nutrition exposing (defaultCode)
 import Element exposing (Element)
 import Element.Font as Font
 import Lib.ListExtra as ListExtra
@@ -81,7 +79,7 @@ emptyForm =
     , categories = ""
     , servingSizeG = ""
     , defaultQuantity = ""
-    , defaultUnit = Units.defaultCode
+    , defaultUnit = defaultCode
     , nutrients = [ emptyNutrientRow ]
     , servings = []
     , submitting = False
@@ -96,7 +94,7 @@ emptyNutrientRow =
 
 emptyServingRow : ServingRow
 emptyServingRow =
-    { label = "", quantity = "", unit = Units.defaultCode, grams = "" }
+    { label = "", quantity = "", unit = defaultCode, grams = "" }
 
 
 fromProductDetail : ProductDetail -> FormModel
@@ -104,10 +102,10 @@ fromProductDetail food =
     { emptyForm
         | name = food.name
         , brand = Maybe.withDefault "" food.brand
-        , categories = Category.formatInput food.categories
+        , categories = formatInput food.categories
         , servingSizeG = Maybe.withDefault "" food.servingSizeG
         , defaultQuantity = Maybe.withDefault "" food.defaultQuantity
-        , defaultUnit = Maybe.withDefault Units.defaultCode food.defaultUnit
+        , defaultUnit = Maybe.withDefault defaultCode food.defaultUnit
         , nutrients =
             case
                 List.map
@@ -146,7 +144,7 @@ toCreateFoodRequest form =
         Ok
             { name = name
             , brand = Text.blankToMaybe form.brand
-            , categories = Category.parseInput form.categories
+            , categories = parseInput form.categories
             , servingSizeG = Text.blankToMaybe form.servingSizeG
             , defaultQuantity = Text.blankToMaybe form.defaultQuantity
             , defaultUnit = Text.blankToMaybe form.defaultUnit
@@ -177,7 +175,7 @@ toCreateFoodRequest form =
                             , quantity = String.trim row.quantity
                             , unit =
                                 if String.isEmpty (String.trim row.unit) then
-                                    Units.defaultCode
+                                    defaultCode
 
                                 else
                                     String.trim row.unit
@@ -185,11 +183,6 @@ toCreateFoodRequest form =
                             }
                         )
             }
-
-
-parseCategoriesInput : String -> List String
-parseCategoriesInput raw =
-    Category.parseInput raw
 
 
 update : Msg -> FormModel -> FormModel
@@ -358,3 +351,13 @@ servingRowView units index row =
         , Ui.input "Grams" row.grams (ServingGramsChanged index)
         , Ui.button "Remove" (RemoveServingRow index)
         ]
+
+
+parseInput : String -> List String
+parseInput raw =
+    Text.commaSeparatedUniqueLower raw
+
+
+formatInput : List String -> String
+formatInput categories =
+    String.join ", " categories

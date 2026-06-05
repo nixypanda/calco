@@ -128,17 +128,17 @@ macroBreakdownView nutrients =
             [ Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.proteinColor
                 , Element.el [ Ui.body ]
-                    (Element.text ("Protein " ++ Nutrition.oneDecimal totals.protein ++ "g"))
+                    (Element.text ("Protein " ++ Number.toFixedOne totals.protein ++ "g"))
                 ]
             , Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.carbsColor
                 , Element.el [ Ui.body ]
-                    (Element.text ("Carbs " ++ Nutrition.oneDecimal totals.carbs ++ "g"))
+                    (Element.text ("Carbs " ++ Number.toFixedOne totals.carbs ++ "g"))
                 ]
             , Element.row [ Element.spacing 4 ]
                 [ legendDot Ui.fatColor
                 , Element.el [ Ui.body ]
-                    (Element.text ("Fat " ++ Nutrition.oneDecimal totals.fat ++ "g"))
+                    (Element.text ("Fat " ++ Number.toFixedOne totals.fat ++ "g"))
                 ]
             ]
         ]

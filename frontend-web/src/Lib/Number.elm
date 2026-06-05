@@ -1,4 +1,9 @@
-module Lib.Number exposing (toFixed, toFixedTrimmed)
+module Lib.Number exposing (toFixed, toFixedOne, toFixedTrimmed)
+
+
+toFixedOne : Float -> String
+toFixedOne value =
+    toFixed 1 value
 
 
 toFixed : Int -> Float -> String

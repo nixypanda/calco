@@ -1,6 +1,5 @@
 module View.Search exposing
     ( completionDropdown
-    , isBarcodeVisible
     , resultRow
     , tabCompletionHandler
     )

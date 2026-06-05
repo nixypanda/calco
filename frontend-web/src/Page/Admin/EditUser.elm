@@ -17,7 +17,6 @@ import Data.User as User
 import Element exposing (Element)
 import Element.Font as Font
 import Ui
-import View.User
 
 
 type alias Model =
@@ -262,7 +261,7 @@ userInfoView model =
             [ Ui.errorBanner ("Unable to load user: " ++ Client.displayError error) ]
 
         Ready loadedUser _ ->
-            [ View.User.userSummaryCard loadedUser.user ]
+            [ userSummaryCard loadedUser.user ]
 
 
 resetPasswordView : Model -> List (Element Msg)
@@ -324,3 +323,36 @@ problemMessage problem =
     case problem of
         NewPasswordRequired ->
             "New password is required"
+
+
+statusBadge : String -> Element msg
+statusBadge status =
+    Ui.coloredBadge
+        { label = status
+        , background =
+            if status == "active" then
+                Element.rgb255 220 252 231
+
+            else
+                Element.rgb255 254 226 226
+        , foreground =
+            if status == "active" then
+                Element.rgb255 22 101 52
+
+            else
+                Element.rgb255 153 27 27
+        }
+
+
+userSummaryCard : User.User -> Element msg
+userSummaryCard user =
+    Ui.card
+        [ Element.column [ Element.spacing 8, Element.width Element.fill ]
+            [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
+            , Ui.detailRow "Display Name"
+                (Element.el [ Ui.caption ] (Element.text user.displayName))
+            , Ui.detailRow "Status" (statusBadge user.status)
+            , Ui.detailRow "Created"
+                (Element.el [ Ui.caption ] (Element.text user.createdAt))
+            ]
+        ]

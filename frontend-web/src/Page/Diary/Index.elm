@@ -13,7 +13,7 @@ module Page.Diary.Index exposing
 
 import Api.Client as Client
 import Api.Result as ApiResult
-import Data.FoodLog as FoodLog exposing (FoodLog)
+import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -23,6 +23,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Number as Number
 import Ui
 
 
@@ -161,6 +162,11 @@ logsForDate date logs =
     List.filter (\log -> LocalDate.equals log.logDate date) logs
 
 
+logsForSlot : MealSlot -> List FoodLog -> List FoodLog
+logsForSlot slot logs =
+    List.filter (\log -> MealSlot.matches slot log.mealSlot) logs
+
+
 toggleMacroMode : MacroMode -> MacroMode
 toggleMacroMode mode =
     case mode of
@@ -174,14 +180,89 @@ toggleMacroMode mode =
 slotCalories : MealSlot -> List FoodLog -> Float
 slotCalories slot logs =
     logs
-        |> FoodLog.logsForSlot slot
-        |> List.map (.nutrients >> Nutrition.caloriesFrom)
+        |> logsForSlot slot
+        |> List.map (.nutrients >> caloriesFrom)
         |> List.sum
+
+
+caloriesFrom : List NutrientAmount -> Float
+caloriesFrom nutrients =
+    Nutrition.nutrientAmount "ENERGY_KCAL" nutrients
+
+
+totalsFromLogs : List { log | nutrients : List NutrientAmount } -> List NutrientAmount
+totalsFromLogs logs =
+    let
+        allNutrients : List NutrientAmount
+        allNutrients =
+            logs
+                |> List.concatMap .nutrients
+
+        codes : List String
+        codes =
+            allNutrients
+                |> List.map .code
+                |> uniqueCodes
+
+        units : List { code : String, unit : String }
+        units =
+            allNutrients
+                |> List.map (\n -> { code = n.code, unit = n.unit })
+                |> uniqueBy .code
+
+        unitForCode : String -> String
+        unitForCode code =
+            List.filter (.code >> (==) code) units
+                |> List.head
+                |> Maybe.map .unit
+                |> Maybe.withDefault ""
+    in
+    codes
+        |> List.map
+            (\code ->
+                { code = code
+                , amount =
+                    allNutrients
+                        |> List.filter (.code >> (==) code)
+                        |> List.map (.amount >> Nutrition.safeAmount)
+                        |> List.sum
+                        |> String.fromFloat
+                , unit = unitForCode code
+                }
+            )
+
+
+uniqueCodes : List String -> List String
+uniqueCodes list =
+    List.foldr
+        (\code acc ->
+            if List.member code acc then
+                acc
+
+            else
+                code :: acc
+        )
+        []
+        list
+
+
+uniqueBy : (a -> comparable) -> List a -> List a
+uniqueBy toKey list =
+    List.foldr
+        (\item acc ->
+            if List.member (toKey item) (List.map toKey acc) then
+                acc
+
+            else
+                item :: acc
+        )
+        []
+        list
 
 
 dailyCalories : List NutrientAmount -> Float
 dailyCalories summary =
-    Nutrition.nutrientAmount "ENERGY_KCAL" summary
+    caloriesFrom summary
 
 
 view : Model -> Element Msg
@@ -256,7 +337,7 @@ dateCard model =
                 , label = Element.text "Next"
                 }
             ]
-        , totalsView (Nutrition.totalsFromLogs (loadedLogs model.currentDate model.diary))
+        , totalsView (totalsFromLogs (loadedLogs model.currentDate model.diary))
         ]
 
 
@@ -339,7 +420,7 @@ logGroupsView model logs =
         , let
             otherLogs : List FoodLog
             otherLogs =
-                FoodLog.logsForSlot Other logs
+                logsForSlot Other logs
           in
           if List.isEmpty otherLogs then
             Element.none
@@ -354,7 +435,7 @@ slotView model allLogs slot label =
     let
         logs : List FoodLog
         logs =
-            FoodLog.logsForSlot slot allLogs
+            logsForSlot slot allLogs
 
         totals : MacroTotals
         totals =
@@ -414,11 +495,11 @@ macroSummary mode totals =
     case mode of
         Grams ->
             "carbs "
-                ++ Nutrition.oneDecimal totals.carbs
+                ++ Number.toFixedOne totals.carbs
                 ++ "g ⋅ protein "
-                ++ Nutrition.oneDecimal totals.protein
+                ++ Number.toFixedOne totals.protein
                 ++ "g ⋅ fat "
-                ++ Nutrition.oneDecimal totals.fat
+                ++ Number.toFixedOne totals.fat
                 ++ "g"
 
         Percent ->
@@ -458,7 +539,7 @@ logRow log =
                     ]
                     (Element.text
                         (String.fromInt
-                            (round (Nutrition.caloriesFrom log.nutrients))
+                            (round (caloriesFrom log.nutrients))
                             ++ " kcal"
                         )
                     )

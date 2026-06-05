@@ -26,7 +26,7 @@ tests =
                     |> Expect.equal 0
         , test "calories are read from ENERGY_KCAL" <|
             \_ ->
-                Nutrition.caloriesFrom nutrients
+                Nutrition.nutrientAmount "ENERGY_KCAL" nutrients
                     |> Expect.equal 120
         , test "macro totals and percentages use 4/4/9 kcal factors" <|
             \_ ->

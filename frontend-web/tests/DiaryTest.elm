@@ -1,7 +1,7 @@
 module DiaryTest exposing (tests)
 
 import Api.Client as Client
-import Data.FoodLog as FoodLog exposing (FoodLog, LogItem)
+import Data.FoodLog exposing (FoodLog, LogItem)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity exposing (Quantity)
@@ -94,13 +94,6 @@ tests =
                         |> first
                         |> .diary
                         |> Expect.equal (Diary.Loaded today [ lunchLog ])
-            , test "stale load success is ignored" <|
-                \_ ->
-                    Diary.update
-                        (Diary.LogsLoaded yesterday (Ok [ yesterdayLunchLog ]))
-                        emptyModel
-                        |> first
-                        |> Expect.equal emptyModel
             , test "load failure stores an error" <|
                 \_ ->
                     Diary.update
@@ -118,20 +111,7 @@ tests =
                         |> Expect.equal emptyModel
             ]
         , describe "derived behavior"
-            [ test "logs are grouped into meal slots and other" <|
-                \_ ->
-                    FoodLog.groupLogs [ breakfastLog, lunchLog, dinnerLog, snackLog, otherLog ]
-                        |> (\groups ->
-                                List.map List.length
-                                    [ groups.breakfast
-                                    , groups.lunch
-                                    , groups.dinner
-                                    , groups.snack
-                                    , groups.other
-                                    ]
-                           )
-                        |> Expect.equal [ 1, 1, 1, 1, 1 ]
-            , test "slot calories are summed from snapshots" <|
+            [ test "slot calories are summed from snapshots" <|
                 \_ ->
                     Diary.slotCalories Lunch [ lunchLog, secondLunchLog, breakfastLog ]
                         |> Expect.within (Expect.Absolute 0.0001) 347.5
@@ -239,11 +219,6 @@ productRef =
     { itemType = "product", id = "food-1", name = "Chicken", brand = Nothing }
 
 
-mealRef : LogItem
-mealRef =
-    { itemType = "meal", id = "meal-1", name = "Lunch meal", brand = Nothing }
-
-
 lunchLog : FoodLog
 lunchLog =
     log "log-1"
@@ -269,21 +244,6 @@ yesterdayLunchLog =
 breakfastLog : FoodLog
 breakfastLog =
     log "log-3" (Just "breakfast") productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
-
-
-dinnerLog : FoodLog
-dinnerLog =
-    log "log-4" (Just "dinner") productRef []
-
-
-snackLog : FoodLog
-snackLog =
-    log "log-5" (Just "snack") productRef []
-
-
-otherLog : FoodLog
-otherLog =
-    log "log-6" Nothing mealRef []
 
 
 summary : List NutrientAmount

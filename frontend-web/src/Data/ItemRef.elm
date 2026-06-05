@@ -1,4 +1,4 @@
-module Data.ItemRef exposing (ItemRef, decoder, encoder, fallbackName, key)
+module Data.ItemRef exposing (ItemRef, decoder, encoder)
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
@@ -23,18 +23,3 @@ encoder item =
         [ ( "type", Encode.string item.itemType )
         , ( "id", Encode.string item.id )
         ]
-
-
-key : { a | itemType : String, id : String } -> String
-key item =
-    item.itemType ++ ":" ++ item.id
-
-
-fallbackName : { a | itemType : String } -> String
-fallbackName item =
-    case item.itemType of
-        "meal" ->
-            "Unknown meal"
-
-        _ ->
-            "Unknown food"

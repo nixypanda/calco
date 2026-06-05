@@ -20,8 +20,18 @@ tests =
                     |> Expect.equal (Err Form.NameRequired)
         , test "categories are trimmed lowercased and deduplicated" <|
             \_ ->
-                Form.parseCategoriesInput " Fruit, snack, fruit , SNACK "
-                    |> Expect.equal [ "fruit", "snack" ]
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+                in
+                Form.toCreateFoodRequest
+                    { base
+                        | name = "Paneer"
+                        , categories = " Fruit, snack, fruit , SNACK "
+                    }
+                    |> Result.map .categories
+                    |> Expect.equal (Ok [ "fruit", "snack" ])
         , test "payload filters incomplete rows and maps blanks to null" <|
             \_ ->
                 let

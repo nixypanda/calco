@@ -18,9 +18,8 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition exposing (NutrientAmount)
+import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
-import Data.Units as Units
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -356,7 +355,7 @@ clearNutritionPreview loaded =
 
 defaultNutritionInput : NutritionInput
 defaultNutritionInput =
-    { amount = "100", unit = Units.defaultCode, unitOpen = False }
+    { amount = "100", unit = defaultCode, unitOpen = False }
 
 
 nutritionInput : NutritionState -> NutritionInput
@@ -512,7 +511,7 @@ applyDeleteError message model =
 
 fallbackUnits : List UnitItem
 fallbackUnits =
-    [ { code = Units.defaultCode, name = Units.defaultCode, kind = "mass" } ]
+    [ { code = defaultCode, name = defaultCode, kind = "mass" } ]
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )

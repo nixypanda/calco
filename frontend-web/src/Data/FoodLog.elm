@@ -1,14 +1,10 @@
 module Data.FoodLog exposing
     ( FoodLog
-    , GroupedLogs
     , LogItem
     , decoder
-    , groupLogs
     , listDecoder
-    , logsForSlot
     )
 
-import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
@@ -32,15 +28,6 @@ type alias LogItem =
     , id : String
     , name : String
     , brand : Maybe String
-    }
-
-
-type alias GroupedLogs =
-    { breakfast : List FoodLog
-    , lunch : List FoodLog
-    , dinner : List FoodLog
-    , snack : List FoodLog
-    , other : List FoodLog
     }
 
 
@@ -87,18 +74,3 @@ logItemDecoder =
 listDecoder : Decoder (List FoodLog)
 listDecoder =
     Decode.field "items" (Decode.list decoder)
-
-
-groupLogs : List FoodLog -> GroupedLogs
-groupLogs logs =
-    { breakfast = logsForSlot MealSlot.Breakfast logs
-    , lunch = logsForSlot MealSlot.Lunch logs
-    , dinner = logsForSlot MealSlot.Dinner logs
-    , snack = logsForSlot MealSlot.Snack logs
-    , other = logsForSlot MealSlot.Other logs
-    }
-
-
-logsForSlot : MealSlot -> List FoodLog -> List FoodLog
-logsForSlot slot logs =
-    List.filter (\log -> MealSlot.matches slot log.mealSlot) logs

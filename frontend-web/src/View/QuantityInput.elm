@@ -1,7 +1,7 @@
-module View.QuantityInput exposing (dropdown, select, text)
+module View.QuantityInput exposing (dropdown, select)
 
 import Api.Foods exposing (UnitItem)
-import Data.Units as Units
+import Data.Nutrition exposing (defaultCode)
 import Element exposing (Element)
 import Ui
 
@@ -52,24 +52,36 @@ select config =
         ]
 
 
-text :
-    { amountLabel : String
-    , amount : String
-    , onAmountChange : String -> msg
-    , unitLabel : String
-    , unit : String
-    , onUnitChange : String -> msg
-    }
-    -> Element msg
-text config =
-    Element.row [ Element.width Element.fill, Element.spacing 8 ]
-        [ Ui.input config.amountLabel config.amount config.onAmountChange
-        , Ui.input config.unitLabel config.unit config.onUnitChange
-        ]
-
-
 unitOptions : String -> List UnitItem -> List ( String, String )
 unitOptions selected units =
     units
-        |> Units.ensureSelected selected
-        |> Units.options
+        |> ensureSelected selected
+        |> options
+
+
+ensureSelected : String -> List UnitItem -> List UnitItem
+ensureSelected selectedUnit units =
+    if String.isEmpty selectedUnit || List.any (\unit -> unit.code == selectedUnit) units then
+        units
+
+    else
+        { code = selectedUnit, name = selectedUnit, kind = "" } :: units
+
+
+options : List UnitItem -> List ( String, String )
+options units =
+    case units of
+        [] ->
+            [ ( defaultCode, defaultCode ) ]
+
+        _ ->
+            List.map (\unit -> ( unit.code, label unit )) units
+
+
+label : UnitItem -> String
+label unit =
+    if unit.name == unit.code then
+        unit.code
+
+    else
+        unit.name ++ " (" ++ unit.code ++ ")"

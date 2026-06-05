@@ -11,8 +11,8 @@ import Browser
 import Browser.Navigation as Nav
 import Data.Auth as Auth
 import Data.MealSlot as MealSlot
+import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Data.Units as Units
 import Element
 import Element.Background as Background
 import Element.Border as Border
@@ -1022,7 +1022,7 @@ applyMealFormOutMsg outMsg model =
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
-                    Units.defaultCode
+                    defaultCode
                     (GotMealFormMsg << MealForm.NutrientPreviewLoaded)
                 ]
             )
@@ -1117,7 +1117,7 @@ applyMealDetailOutMsg outMsg model =
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
-                    Units.defaultCode
+                    defaultCode
                     (GotMealDetailMsg << MealDetail.NutrientPreviewLoaded)
                 ]
             )

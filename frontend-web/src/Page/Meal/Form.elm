@@ -37,10 +37,9 @@ import Api.Meals
         )
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition exposing (NutrientAmount)
+import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
-import Data.Units as Units
 import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
@@ -48,7 +47,6 @@ import Element.Input as Input
 import Lib.Text as Text
 import Ui
 import View.NutritionPreview
-import View.QuantityInput
 import View.Search as SearchView
 
 
@@ -175,7 +173,7 @@ initCreate =
         { name = ""
         , notes = ""
         , totalQuantity = ""
-        , totalUnit = Units.defaultCode
+        , totalUnit = defaultCode
         , components = [ emptyComponentRow 1 ]
         , productNames = ItemNameLookup.empty
         , nextRowId = 2
@@ -208,7 +206,7 @@ emptyComponentRow rowId =
     , productId = ""
     , productName = ""
     , quantity = "100"
-    , unit = Units.defaultCode
+    , unit = defaultCode
     , searchQuery = ""
     , searchResults = []
     , searching = False
@@ -570,7 +568,7 @@ editFormFromMeal meal loadedRows =
             |> Maybe.withDefault ""
     , totalUnit =
         Maybe.map .unit meal.totalQuantity
-            |> Maybe.withDefault Units.defaultCode
+            |> Maybe.withDefault defaultCode
     , components = loadedRows
     , productNames = ItemNameLookup.empty
     , nextRowId = List.length loadedRows + 1
@@ -783,7 +781,7 @@ toMealRequestForm form =
                             |> Maybe.map
                                 (\amount ->
                                     { amount = amount
-                                    , unit = Text.trimOrDefault Units.defaultCode form.totalUnit
+                                    , unit = Text.trimOrDefault defaultCode form.totalUnit
                                     }
                                 )
                     , components = components
@@ -799,7 +797,7 @@ selectedComponents rows =
                 { item = { itemType = "product", id = String.trim row.productId }
                 , quantity =
                     { amount = Text.trimOrDefault "100" row.quantity
-                    , unit = Text.trimOrDefault Units.defaultCode row.unit
+                    , unit = Text.trimOrDefault defaultCode row.unit
                     }
                 }
             )
@@ -932,7 +930,7 @@ formView maybeMealId form =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
         [ Ui.input "Name" form.name NameChanged
         , Ui.input "Notes" form.notes NotesChanged
-        , View.QuantityInput.text
+        , quantityTextInput
             { amountLabel = "Total Quantity"
             , amount = form.totalQuantity
             , onAmountChange = TotalQuantityChanged
@@ -975,7 +973,7 @@ componentRowView row =
                 ]
                 (List.map (searchResultView row.searchQuery row.rowId) row.searchResults)
         , Element.row [ Element.width Element.fill, Element.spacing 8 ]
-            [ View.QuantityInput.text
+            [ quantityTextInput
                 { amountLabel = "Qty"
                 , amount = row.quantity
                 , onAmountChange = ComponentQuantityChanged row.rowId
@@ -985,6 +983,22 @@ componentRowView row =
                 }
             , Ui.button "Remove" (RemoveComponentClicked row.rowId)
             ]
+        ]
+
+
+quantityTextInput :
+    { amountLabel : String
+    , amount : String
+    , onAmountChange : String -> msg
+    , unitLabel : String
+    , unit : String
+    , onUnitChange : String -> msg
+    }
+    -> Element msg
+quantityTextInput config =
+    Element.row [ Element.width Element.fill, Element.spacing 8 ]
+        [ Ui.input config.amountLabel config.amount config.onAmountChange
+        , Ui.input config.unitLabel config.unit config.onUnitChange
         ]
 
 
