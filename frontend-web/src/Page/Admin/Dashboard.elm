@@ -2,6 +2,7 @@ module Page.Admin.Dashboard exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
+    , State(..)
     , init
     , update
     , view
@@ -15,14 +16,19 @@ import Element exposing (Element)
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Lib.Loadable exposing (Loadable(..))
 import Ui
 import View.User
 
 
 type alias Model =
-    { users : Loadable Client.ApiError (List User.User)
+    { state : State
     }
+
+
+type State
+    = Loading
+    | LoadFailed Client.ApiError
+    | Ready (List User.User)
 
 
 type Msg
@@ -40,7 +46,7 @@ type OutMsg
 
 init : ( Model, OutMsg )
 init =
-    ( { users = Loading }
+    ( { state = Loading }
     , RequestUsers
     )
 
@@ -51,13 +57,13 @@ update msg model =
         UsersLoaded result ->
             case result of
                 Ok users ->
-                    ( { model | users = Success users }, Cmd.none, NoOp )
+                    ( { model | state = Ready users }, Cmd.none, NoOp )
 
                 Err error ->
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \_ current -> { current | users = Failure error }
+                        , applyError = \_ current -> { current | state = LoadFailed error }
                         }
                         error
                         model
@@ -78,11 +84,11 @@ view model =
 
 bodyView : Model -> Element Msg
 bodyView model =
-    case model.users of
-        Success [] ->
+    case model.state of
+        Ready [] ->
             Ui.card [ createUserRow ]
 
-        Success users ->
+        Ready users ->
             Ui.card
                 (List.map
                     (\user -> View.User.userListRow { user = user, onSelect = NavigateEditUser })
@@ -93,10 +99,7 @@ bodyView model =
         Loading ->
             Ui.loading "Loading users..."
 
-        NotAsked ->
-            Element.none
-
-        Failure error ->
+        LoadFailed error ->
             Ui.errorBanner (Client.displayError error)
 
 

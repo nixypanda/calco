@@ -20,19 +20,19 @@ tests =
             \_ ->
                 Meals.update (Meals.MealsLoaded (Ok { items = [] })) (Tuple.first Meals.init)
                     |> first
-                    |> .meals
+                    |> mealsOf
                     |> Expect.equal (Just [])
         , test "load failure stores error" <|
             \_ ->
                 Meals.update (Meals.MealsLoaded (Err Client.NetworkError)) (Tuple.first Meals.init)
                     |> first
-                    |> .error
+                    |> errorOf
                     |> Expect.equal (Just "Network error")
         , test "empty list derives empty state" <|
             \_ ->
                 Meals.update (Meals.MealsLoaded (Ok { items = [] })) (Tuple.first Meals.init)
                     |> first
-                    |> .meals
+                    |> mealsOf
                     |> Expect.equal (Just [])
         , test "meal summary includes notes when present" <|
             \_ ->
@@ -68,6 +68,34 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+mealsOf : Meals.Model -> Maybe (List Meal)
+mealsOf model =
+    case model of
+        Meals.Loaded loaded ->
+            Just loaded.meals
+
+        _ ->
+            Nothing
+
+
+errorOf : Meals.Model -> Maybe String
+errorOf model =
+    case model of
+        Meals.LoadFailed message ->
+            Just message
+
+        Meals.Loaded { action } ->
+            case action of
+                Meals.DeleteFailed message ->
+                    Just message
+
+                _ ->
+                    Nothing
+
+        Meals.Loading ->
+            Nothing
 
 
 mealWithNotes : Meal

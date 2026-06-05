@@ -2,6 +2,7 @@ module MealFormTest exposing (tests)
 
 import Api.Foods exposing (SearchResult)
 import Api.Meals exposing (Meal)
+import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount)
 import Expect
 import Page.Meal.Form as MealForm
@@ -15,7 +16,7 @@ tests =
             \_ ->
                 MealForm.initCreate
                     |> Tuple.first
-                    |> .components
+                    |> componentsOf
                     |> List.map (\row -> ( row.quantity, row.unit, row.productId ))
                     |> Expect.equal [ ( "100", "g", "" ) ]
         , test "name is required" <|
@@ -25,11 +26,11 @@ tests =
         , test "at least one selected product is required" <|
             \_ ->
                 let
-                    base : MealForm.Model
+                    base : MealForm.FormModel
                     base =
-                        Tuple.first MealForm.initCreate
+                        createForm
                 in
-                MealForm.toMealRequest { base | name = "Lunch" }
+                MealForm.toMealRequest (MealForm.Creating { base | name = "Lunch" })
                     |> Expect.equal (Err MealForm.ComponentRequired)
         , test "selected components default quantity to 100 g" <|
             \_ ->
@@ -48,29 +49,31 @@ tests =
         , test "total quantity is included only when present" <|
             \_ ->
                 let
-                    base : MealForm.Model
+                    base : MealForm.FormModel
                     base =
-                        Tuple.first MealForm.initCreate
+                        createForm
 
                     row : MealForm.ComponentRow
                     row =
                         MealForm.emptyComponentRow 1
                 in
                 MealForm.toMealRequest
-                    { base
-                        | name = "Lunch"
-                        , totalQuantity = "250"
-                        , totalUnit = "g"
-                        , components = [ { row | productId = "food-1" } ]
-                    }
+                    (MealForm.Creating
+                        { base
+                            | name = "Lunch"
+                            , totalQuantity = "250"
+                            , totalUnit = "g"
+                            , components = [ { row | productId = "food-1" } ]
+                        }
+                    )
                     |> Result.map .totalQuantity
                     |> Expect.equal (Ok (Just { amount = "250", unit = "g" }))
         , test "stale row search result is ignored" <|
             \_ ->
                 let
-                    base : MealForm.Model
+                    base : MealForm.FormModel
                     base =
-                        Tuple.first MealForm.initCreate
+                        createForm
 
                     row : MealForm.ComponentRow
                     row =
@@ -78,22 +81,22 @@ tests =
 
                     model : MealForm.Model
                     model =
-                        { base | components = [ { row | searchToken = 2 } ] }
+                        MealForm.Creating { base | components = [ { row | searchToken = 2 } ] }
                 in
                 MealForm.update
                     (MealForm.ComponentSearchCompleted 1 1 (Ok { items = [ result ] }))
                     model
                     |> first
-                    |> .components
+                    |> componentsOf
                     |> List.head
                     |> Maybe.map .searchResults
                     |> Expect.equal (Just [])
         , test "matching row search result stores results" <|
             \_ ->
                 let
-                    base : MealForm.Model
+                    base : MealForm.FormModel
                     base =
-                        Tuple.first MealForm.initCreate
+                        createForm
 
                     row : MealForm.ComponentRow
                     row =
@@ -101,13 +104,13 @@ tests =
 
                     model : MealForm.Model
                     model =
-                        { base | components = [ { row | searchToken = 2 } ] }
+                        MealForm.Creating { base | components = [ { row | searchToken = 2 } ] }
                 in
                 MealForm.update
                     (MealForm.ComponentSearchCompleted 1 2 (Ok { items = [ result ] }))
                     model
                     |> first
-                    |> .components
+                    |> componentsOf
                     |> List.head
                     |> Maybe.map .searchResults
                     |> Expect.equal (Just [ result ])
@@ -161,7 +164,7 @@ tests =
                         { emptyRow | categoryToken = 2 }
                     )
                     |> first
-                    |> .components
+                    |> componentsOf
                     |> List.head
                     |> Maybe.map .categorySuggestions
                     |> Expect.equal
@@ -186,7 +189,7 @@ tests =
                     (MealForm.MealLoaded (Ok meal))
                     (Tuple.first (MealForm.initEdit "meal-1"))
                     |> first
-                    |> .components
+                    |> componentsOf
                     |> List.map (\row -> ( row.productId, row.quantity, row.unit ))
                     |> Expect.equal [ ( "food-1", "2", "serving" ) ]
         , test "edit meal stores nutrient preview" <|
@@ -195,7 +198,7 @@ tests =
                     (MealForm.NutrientPreviewLoaded (Ok nutrientPreview))
                     (Tuple.first (MealForm.initEdit "meal-1"))
                     |> first
-                    |> .nutrients
+                    |> nutrientsOf
                     |> Expect.equal (Just [ nutrient ])
         ]
 
@@ -239,19 +242,71 @@ emptyRow =
 
 modelWithRow : MealForm.ComponentRow -> MealForm.Model
 modelWithRow row =
-    let
-        base : MealForm.Model
-        base =
-            Tuple.first MealForm.initCreate
-    in
-    { base | components = [ row ] }
+    MealForm.Creating { createForm | components = [ row ] }
 
 
 firstRowQuery : MealForm.Model -> Maybe String
 firstRowQuery model =
-    model.components
+    componentsOf model
         |> List.head
         |> Maybe.map .searchQuery
+
+
+createForm : MealForm.FormModel
+createForm =
+    case Tuple.first MealForm.initCreate of
+        MealForm.Creating form ->
+            form
+
+        _ ->
+            emptyCreateForm
+
+
+emptyCreateForm : MealForm.FormModel
+emptyCreateForm =
+    { name = ""
+    , notes = ""
+    , totalQuantity = ""
+    , totalUnit = "g"
+    , components = [ MealForm.emptyComponentRow 1 ]
+    , productNames = ItemNameLookup.empty
+    , nextRowId = 2
+    , nextSearchToken = 1
+    , submitting = False
+    , nutrients = Nothing
+    , nutritionLoading = False
+    , nutritionError = Nothing
+    , error = Nothing
+    }
+
+
+componentsOf : MealForm.Model -> List MealForm.ComponentRow
+componentsOf model =
+    case model of
+        MealForm.Creating form ->
+            form.components
+
+        MealForm.Editing _ form ->
+            form.components
+
+        _ ->
+            []
+
+
+nutrientsOf : MealForm.Model -> Maybe (List NutrientAmount)
+nutrientsOf model =
+    case model of
+        MealForm.Creating form ->
+            form.nutrients
+
+        MealForm.LoadingEdit loading ->
+            loading.nutrients
+
+        MealForm.Editing _ form ->
+            form.nutrients
+
+        MealForm.EditLoadFailed _ ->
+            Nothing
 
 
 meal : Meal

@@ -2,7 +2,9 @@ module Page.Meal.Form exposing
     ( CategorySuggestionResult
     , ComponentPatch(..)
     , ComponentRow
-    , Model
+    , FormModel
+    , LoadingEditModel
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
     , ProductAndCategoryRequests
@@ -82,9 +84,23 @@ type alias ProductAndCategoryRequests =
     }
 
 
-type alias Model =
-    { mealId : Maybe String
-    , name : String
+type Model
+    = Creating FormModel
+    | LoadingEdit LoadingEditModel
+    | EditLoadFailed String
+    | Editing String FormModel
+
+
+type alias LoadingEditModel =
+    { mealId : String
+    , nutrients : Maybe (List NutrientAmount)
+    , nutritionLoading : Bool
+    , nutritionError : Maybe String
+    }
+
+
+type alias FormModel =
+    { name : String
     , notes : String
     , totalQuantity : String
     , totalUnit : String
@@ -92,7 +108,6 @@ type alias Model =
     , productNames : ItemNameLookup.Names
     , nextRowId : RowId
     , nextSearchToken : Int
-    , fetching : Bool
     , submitting : Bool
     , nutrients : Maybe (List NutrientAmount)
     , nutritionLoading : Bool
@@ -156,33 +171,33 @@ type OutMsg
 
 initCreate : ( Model, OutMsg )
 initCreate =
-    ( { mealId = Nothing
-      , name = ""
-      , notes = ""
-      , totalQuantity = ""
-      , totalUnit = Units.defaultCode
-      , components = [ emptyComponentRow 1 ]
-      , productNames = ItemNameLookup.empty
-      , nextRowId = 2
-      , nextSearchToken = 1
-      , fetching = False
-      , submitting = False
-      , nutrients = Nothing
-      , nutritionLoading = False
-      , nutritionError = Nothing
-      , error = Nothing
-      }
+    ( Creating
+        { name = ""
+        , notes = ""
+        , totalQuantity = ""
+        , totalUnit = Units.defaultCode
+        , components = [ emptyComponentRow 1 ]
+        , productNames = ItemNameLookup.empty
+        , nextRowId = 2
+        , nextSearchToken = 1
+        , submitting = False
+        , nutrients = Nothing
+        , nutritionLoading = False
+        , nutritionError = Nothing
+        , error = Nothing
+        }
     , NoOp
     )
 
 
 initEdit : String -> ( Model, OutMsg )
 initEdit mealId =
-    let
-        ( model, _ ) =
-            initCreate
-    in
-    ( { model | mealId = Just mealId, fetching = True, nutritionLoading = True }
+    ( LoadingEdit
+        { mealId = mealId
+        , nutrients = Nothing
+        , nutritionLoading = True
+        , nutritionError = Nothing
+        }
     , RequestMeal mealId
     )
 
@@ -203,20 +218,20 @@ emptyComponentRow rowId =
     }
 
 
-onComponentSearchChanged : RowId -> String -> Model -> ( Model, Cmd Msg, OutMsg )
-onComponentSearchChanged rowId query model =
+onComponentSearchChanged : RowId -> String -> FormModel -> ( FormModel, Cmd Msg, OutMsg )
+onComponentSearchChanged rowId query form =
     let
         token : Int
         token =
-            model.nextSearchToken
+            form.nextSearchToken
 
         categoryToken : Int
         categoryToken =
             token + 1
 
-        nextModel : Model
+        nextModel : FormModel
         nextModel =
-            model
+            form
                 |> updateComponent rowId (SetSearchQuery query)
                 |> updateComponent rowId (SetSearchStarted token)
                 |> updateComponent rowId
@@ -285,102 +300,51 @@ update msg model =
         MealLoaded result ->
             case result of
                 Ok meal ->
-                    let
-                        rows : List ComponentRow
-                        rows =
-                            List.indexedMap
-                                (\index component ->
-                                    let
-                                        row : ComponentRow
-                                        row =
-                                            emptyComponentRow (index + 1)
-                                    in
-                                    { row
-                                        | productId = component.item.id
-                                        , quantity = component.quantity.amount
-                                        , unit = component.quantity.unit
-                                    }
-                                )
-                                meal.components
-
-                        loadedRows : List ComponentRow
-                        loadedRows =
-                            if List.isEmpty rows then
-                                [ emptyComponentRow 1 ]
-
-                            else
-                                rows
-                    in
-                    ( { model
-                        | name = meal.name
-                        , notes = Maybe.withDefault "" meal.notes
-                        , totalQuantity =
-                            Maybe.map .amount meal.totalQuantity
-                                |> Maybe.withDefault ""
-                        , totalUnit =
-                            Maybe.map .unit meal.totalQuantity
-                                |> Maybe.withDefault Units.defaultCode
-                        , components = loadedRows
-                        , productNames = ItemNameLookup.empty
-                        , nextRowId = List.length loadedRows + 1
-                        , fetching = False
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , requestNextMissingProductName Nothing loadedRows ItemNameLookup.empty
-                    )
+                    loadMeal meal model
 
                 Err error ->
-                    failure error { model | fetching = False }
+                    failure error model
 
         ProductNameLoaded productId result ->
-            case result of
-                Ok product ->
+            withForm model
+                (\maybeMealId form ->
                     let
-                        nextNames : ItemNameLookup.Names
-                        nextNames =
-                            ItemNameLookup.insertProduct productId product.name model.productNames
-                    in
-                    ( { model
-                        | components =
-                            List.map
-                                (mergeProductName productId product.name)
-                                model.components
-                        , productNames = nextNames
-                      }
-                    , Cmd.none
-                    , requestNextMissingProductName (Just productId) model.components nextNames
-                    )
+                        name : String
+                        name =
+                            case result of
+                                Ok product ->
+                                    product.name
 
-                Err _ ->
-                    let
-                        fallbackName : String
-                        fallbackName =
-                            "Unknown food"
+                                Err _ ->
+                                    "Unknown food"
 
                         nextNames : ItemNameLookup.Names
                         nextNames =
-                            ItemNameLookup.insertProduct productId fallbackName model.productNames
+                            ItemNameLookup.insertProduct productId name form.productNames
+
+                        nextForm : FormModel
+                        nextForm =
+                            { form
+                                | components =
+                                    List.map (mergeProductName productId name) form.components
+                                , productNames = nextNames
+                            }
                     in
-                    ( { model
-                        | components =
-                            List.map
-                                (mergeProductName productId fallbackName)
-                                model.components
-                        , productNames = nextNames
-                      }
+                    ( wrapForm maybeMealId nextForm
                     , Cmd.none
-                    , requestNextMissingProductName (Just productId) model.components nextNames
+                    , requestNextMissingProductName (Just productId) form.components nextNames
                     )
+                )
 
         NutrientPreviewLoaded result ->
             case result of
                 Ok response ->
-                    ( { model
-                        | nutrients = Just response.nutrients
+                    ( mapNutritionFields
+                        { nutrients = Just response.nutrients
                         , nutritionLoading = False
                         , nutritionError = Nothing
-                      }
+                        }
+                        model
                     , Cmd.none
                     , NoOp
                     )
@@ -391,34 +355,44 @@ update msg model =
                         , sessionExpired = SessionExpired
                         , applyError =
                             \message current ->
-                                { current
-                                    | nutrients = Nothing
+                                mapNutritionFields
+                                    { nutrients = Nothing
                                     , nutritionLoading = False
                                     , nutritionError = Just message
-                                }
+                                    }
+                                    current
                         }
                         error
                         model
 
         NameChanged value ->
-            ( { model | name = value }, Cmd.none, NoOp )
+            ( mapForm (\form -> { form | name = value }) model, Cmd.none, NoOp )
 
         NotesChanged value ->
-            ( { model | notes = value }, Cmd.none, NoOp )
+            ( mapForm (\form -> { form | notes = value }) model, Cmd.none, NoOp )
 
         TotalQuantityChanged value ->
-            ( { model | totalQuantity = value }, Cmd.none, NoOp )
+            ( mapForm (\form -> { form | totalQuantity = value }) model, Cmd.none, NoOp )
 
         TotalUnitChanged value ->
-            ( { model | totalUnit = value }, Cmd.none, NoOp )
+            ( mapForm (\form -> { form | totalUnit = value }) model, Cmd.none, NoOp )
 
         ComponentSearchChanged rowId query ->
-            onComponentSearchChanged rowId query model
+            withForm model
+                (\maybeMealId form ->
+                    let
+                        ( nextForm, cmd, outMsg ) =
+                            onComponentSearchChanged rowId query form
+                    in
+                    ( wrapForm maybeMealId nextForm, cmd, outMsg )
+                )
 
         ComponentSearchCompleted rowId token result ->
             case result of
                 Ok response ->
-                    ( updateComponent rowId (SetSearchResults token response.items) model
+                    ( mapForm
+                        (updateComponent rowId (SetSearchResults token response.items))
+                        model
                     , Cmd.none
                     , NoOp
                     )
@@ -428,7 +402,8 @@ update msg model =
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError =
-                            \_ current -> updateComponent rowId (SetSearching False) current
+                            \_ current ->
+                                mapForm (updateComponent rowId (SetSearching False)) current
                         }
                         error
                         model
@@ -436,7 +411,9 @@ update msg model =
         ComponentCategoriesCompleted rowId token result ->
             case result of
                 Ok response ->
-                    ( updateComponent rowId (SetCategorySuggestions token response.items) model
+                    ( mapForm
+                        (updateComponent rowId (SetCategorySuggestions token response.items))
+                        model
                     , Cmd.none
                     , NoOp
                     )
@@ -446,92 +423,73 @@ update msg model =
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError =
-                            \_ current -> updateComponent rowId ClearCategorySuggestions current
+                            \_ current ->
+                                mapForm (updateComponent rowId ClearCategorySuggestions) current
                         }
                         error
                         model
 
         CompleteFirstComponentSuggestion rowId ->
-            case findRow rowId model.components of
-                Just row ->
-                    case List.head (Search.completions row.searchQuery row.categorySuggestions) of
-                        Just completion ->
-                            onComponentSearchChanged rowId
-                                (Search.applyCompletion completion row.searchQuery)
-                                model
+            completeComponentSuggestion rowId model
+
+        ComponentCompletionClicked rowId completion ->
+            withForm model
+                (\maybeMealId form ->
+                    case findRow rowId form.components of
+                        Just row ->
+                            let
+                                ( nextForm, cmd, outMsg ) =
+                                    onComponentSearchChanged rowId
+                                        (Search.applyCompletion completion row.searchQuery)
+                                        form
+                            in
+                            ( wrapForm maybeMealId nextForm, cmd, outMsg )
 
                         Nothing ->
                             ( model, Cmd.none, NoOp )
-
-                Nothing ->
-                    ( model, Cmd.none, NoOp )
-
-        ComponentCompletionClicked rowId completion ->
-            case findRow rowId model.components of
-                Just row ->
-                    onComponentSearchChanged rowId
-                        (Search.applyCompletion completion row.searchQuery)
-                        model
-
-                Nothing ->
-                    ( model, Cmd.none, NoOp )
+                )
 
         SelectProduct rowId result ->
-            ( updateComponent rowId (SetProduct result.id result.name) model, Cmd.none, NoOp )
+            ( mapForm (updateComponent rowId (SetProduct result.id result.name)) model
+            , Cmd.none
+            , NoOp
+            )
 
         ComponentQuantityChanged rowId value ->
-            ( updateComponent rowId (SetQuantity value) model, Cmd.none, NoOp )
+            ( mapForm (updateComponent rowId (SetQuantity value)) model, Cmd.none, NoOp )
 
         ComponentUnitChanged rowId value ->
-            ( updateComponent rowId (SetUnit value) model, Cmd.none, NoOp )
+            ( mapForm (updateComponent rowId (SetUnit value)) model, Cmd.none, NoOp )
 
         AddComponentClicked ->
-            ( { model
-                | components = model.components ++ [ emptyComponentRow model.nextRowId ]
-                , nextRowId = model.nextRowId + 1
-              }
+            ( mapForm
+                (\form ->
+                    { form
+                        | components = form.components ++ [ emptyComponentRow form.nextRowId ]
+                        , nextRowId = form.nextRowId + 1
+                    }
+                )
+                model
             , Cmd.none
             , NoOp
             )
 
         RemoveComponentClicked rowId ->
-            ( { model | components = removeRow rowId model.components }, Cmd.none, NoOp )
+            ( mapForm (\form -> { form | components = removeRow rowId form.components }) model
+            , Cmd.none
+            , NoOp
+            )
 
         SubmitClicked ->
-            case toMealRequest model of
-                Ok request ->
-                    case model.mealId of
-                        Just mealId ->
-                            ( { model | submitting = True, error = Nothing }
-                            , Cmd.none
-                            , RequestUpdateMeal mealId request
-                            )
-
-                        Nothing ->
-                            ( { model | submitting = True, error = Nothing }
-                            , Cmd.none
-                            , RequestCreateMeal request
-                            )
-
-                Err MealNameRequired ->
-                    ( { model | error = Just "Name is required", submitting = False }
-                    , Cmd.none
-                    , NoOp
-                    )
-
-                Err ComponentRequired ->
-                    ( { model
-                        | error = Just "At least one component with a selected product is required"
-                        , submitting = False
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+            submitModel model
 
         SaveCompleted result ->
             case result of
                 Ok meal ->
-                    ( { model | submitting = False }, Cmd.none, Navigate (MealDetail meal.id) )
+                    ( mapForm (\form -> { form | submitting = False }) model
+                    , Cmd.none
+                    , Navigate (MealDetail meal.id)
+                    )
 
                 Err error ->
                     ApiResult.failure
@@ -539,10 +497,229 @@ update msg model =
                         , sessionExpired = SessionExpired
                         , applyError =
                             \message current ->
-                                { current | submitting = False, error = Just message }
+                                mapForm
+                                    (\form ->
+                                        { form | submitting = False, error = Just message }
+                                    )
+                                    current
                         }
                         error
                         model
+
+
+loadMeal : Meal -> Model -> ( Model, Cmd Msg, OutMsg )
+loadMeal meal model =
+    let
+        rows : List ComponentRow
+        rows =
+            List.indexedMap
+                (\index component ->
+                    let
+                        row : ComponentRow
+                        row =
+                            emptyComponentRow (index + 1)
+                    in
+                    { row
+                        | productId = component.item.id
+                        , quantity = component.quantity.amount
+                        , unit = component.quantity.unit
+                    }
+                )
+                meal.components
+
+        loadedRows : List ComponentRow
+        loadedRows =
+            if List.isEmpty rows then
+                [ emptyComponentRow 1 ]
+
+            else
+                rows
+
+        form : FormModel
+        form =
+            editFormFromMeal meal loadedRows
+    in
+    case model of
+        LoadingEdit loading ->
+            ( Editing loading.mealId
+                { form
+                    | nutrients = loading.nutrients
+                    , nutritionLoading = loading.nutritionLoading
+                    , nutritionError = loading.nutritionError
+                }
+            , Cmd.none
+            , requestNextMissingProductName Nothing loadedRows ItemNameLookup.empty
+            )
+
+        Editing mealId _ ->
+            ( Editing mealId form
+            , Cmd.none
+            , requestNextMissingProductName Nothing loadedRows ItemNameLookup.empty
+            )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
+editFormFromMeal : Meal -> List ComponentRow -> FormModel
+editFormFromMeal meal loadedRows =
+    { name = meal.name
+    , notes = Maybe.withDefault "" meal.notes
+    , totalQuantity =
+        Maybe.map .amount meal.totalQuantity
+            |> Maybe.withDefault ""
+    , totalUnit =
+        Maybe.map .unit meal.totalQuantity
+            |> Maybe.withDefault Units.defaultCode
+    , components = loadedRows
+    , productNames = ItemNameLookup.empty
+    , nextRowId = List.length loadedRows + 1
+    , nextSearchToken = 1
+    , submitting = False
+    , nutrients = Nothing
+    , nutritionLoading = True
+    , nutritionError = Nothing
+    , error = Nothing
+    }
+
+
+withForm :
+    Model
+    -> (Maybe String -> FormModel -> ( Model, Cmd Msg, OutMsg ))
+    -> ( Model, Cmd Msg, OutMsg )
+withForm model transform =
+    case model of
+        Creating form ->
+            transform Nothing form
+
+        Editing mealId form ->
+            transform (Just mealId) form
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
+wrapForm : Maybe String -> FormModel -> Model
+wrapForm maybeMealId form =
+    case maybeMealId of
+        Just mealId ->
+            Editing mealId form
+
+        Nothing ->
+            Creating form
+
+
+mapForm : (FormModel -> FormModel) -> Model -> Model
+mapForm transform model =
+    case model of
+        Creating form ->
+            Creating (transform form)
+
+        Editing mealId form ->
+            Editing mealId (transform form)
+
+        _ ->
+            model
+
+
+mapNutritionFields :
+    { nutrients : Maybe (List NutrientAmount)
+    , nutritionLoading : Bool
+    , nutritionError : Maybe String
+    }
+    -> Model
+    -> Model
+mapNutritionFields nutrition model =
+    case model of
+        LoadingEdit loading ->
+            LoadingEdit
+                { loading
+                    | nutrients = nutrition.nutrients
+                    , nutritionLoading = nutrition.nutritionLoading
+                    , nutritionError = nutrition.nutritionError
+                }
+
+        Editing mealId form ->
+            Editing mealId
+                { form
+                    | nutrients = nutrition.nutrients
+                    , nutritionLoading = nutrition.nutritionLoading
+                    , nutritionError = nutrition.nutritionError
+                }
+
+        Creating form ->
+            Creating
+                { form
+                    | nutrients = nutrition.nutrients
+                    , nutritionLoading = nutrition.nutritionLoading
+                    , nutritionError = nutrition.nutritionError
+                }
+
+        EditLoadFailed _ ->
+            model
+
+
+completeComponentSuggestion : RowId -> Model -> ( Model, Cmd Msg, OutMsg )
+completeComponentSuggestion rowId model =
+    withForm model
+        (\maybeMealId form ->
+            case findRow rowId form.components of
+                Just row ->
+                    case List.head (Search.completions row.searchQuery row.categorySuggestions) of
+                        Just completion ->
+                            let
+                                ( nextForm, cmd, outMsg ) =
+                                    onComponentSearchChanged rowId
+                                        (Search.applyCompletion completion row.searchQuery)
+                                        form
+                            in
+                            ( wrapForm maybeMealId nextForm, cmd, outMsg )
+
+                        Nothing ->
+                            ( model, Cmd.none, NoOp )
+
+                Nothing ->
+                    ( model, Cmd.none, NoOp )
+        )
+
+
+submitModel : Model -> ( Model, Cmd Msg, OutMsg )
+submitModel model =
+    withForm model
+        (\maybeMealId form ->
+            case toMealRequestForm form of
+                Ok request ->
+                    case maybeMealId of
+                        Just mealId ->
+                            ( Editing mealId { form | submitting = True, error = Nothing }
+                            , Cmd.none
+                            , RequestUpdateMeal mealId request
+                            )
+
+                        Nothing ->
+                            ( Creating { form | submitting = True, error = Nothing }
+                            , Cmd.none
+                            , RequestCreateMeal request
+                            )
+
+                Err MealNameRequired ->
+                    ( wrapForm maybeMealId
+                        { form | error = Just "Name is required", submitting = False }
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                Err ComponentRequired ->
+                    ( wrapForm maybeMealId
+                        { form
+                            | error =
+                                Just "At least one component with a selected product is required"
+                            , submitting = False
+                        }
+                    , Cmd.none
+                    , NoOp
+                    )
+        )
 
 
 requestNextMissingProductName : Maybe String -> List ComponentRow -> ItemNameLookup.Names -> OutMsg
@@ -571,29 +748,42 @@ mergeProductName productId name row =
 
 toMealRequest : Model -> Result ValidationError CreateMealRequest
 toMealRequest model =
+    case model of
+        Creating form ->
+            toMealRequestForm form
+
+        Editing _ form ->
+            toMealRequestForm form
+
+        _ ->
+            Err ComponentRequired
+
+
+toMealRequestForm : FormModel -> Result ValidationError CreateMealRequest
+toMealRequestForm form =
     let
         trimmedName : String
         trimmedName =
-            String.trim model.name
+            String.trim form.name
     in
     if String.isEmpty trimmedName then
         Err MealNameRequired
 
     else
-        case selectedComponents model.components of
+        case selectedComponents form.components of
             [] ->
                 Err ComponentRequired
 
             components ->
                 Ok
                     { name = trimmedName
-                    , notes = Text.blankToMaybe model.notes
+                    , notes = Text.blankToMaybe form.notes
                     , totalQuantity =
-                        Text.blankToMaybe model.totalQuantity
+                        Text.blankToMaybe form.totalQuantity
                             |> Maybe.map
                                 (\amount ->
                                     { amount = amount
-                                    , unit = Text.trimOrDefault Units.defaultCode model.totalUnit
+                                    , unit = Text.trimOrDefault Units.defaultCode form.totalUnit
                                     }
                                 )
                     , components = components
@@ -615,9 +805,9 @@ selectedComponents rows =
             )
 
 
-updateComponent : RowId -> ComponentPatch -> Model -> Model
-updateComponent rowId patch model =
-    { model | components = List.map (patchRow rowId patch) model.components }
+updateComponent : RowId -> ComponentPatch -> FormModel -> FormModel
+updateComponent rowId patch form =
+    { form | components = List.map (patchRow rowId patch) form.components }
 
 
 patchRow : RowId -> ComponentPatch -> ComponentRow -> ComponentRow
@@ -694,48 +884,70 @@ failure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError =
+            \message model ->
+                case model of
+                    LoadingEdit _ ->
+                        EditLoadFailed message
+
+                    _ ->
+                        mapForm (\form -> { form | error = Just message }) model
         }
 
 
 view : Model -> Element Msg
 view model =
-    Ui.pageContainer
-        [ case model.error of
-            Just message ->
-                Ui.errorBanner message
+    case model of
+        Creating form ->
+            Ui.pageContainer
+                [ errorView form
+                , formView Nothing form
+                ]
 
-            Nothing ->
-                Element.none
-        , if model.fetching then
-            Ui.loading "Loading meal..."
+        LoadingEdit _ ->
+            Ui.pageContainer [ Ui.loading "Loading meal..." ]
 
-          else
-            formView model
-        ]
+        EditLoadFailed message ->
+            Ui.pageContainer [ Ui.errorBanner message ]
+
+        Editing mealId form ->
+            Ui.pageContainer
+                [ errorView form
+                , formView (Just mealId) form
+                ]
 
 
-formView : Model -> Element Msg
-formView model =
+errorView : FormModel -> Element msg
+errorView form =
+    case form.error of
+        Just message ->
+            Ui.errorBanner message
+
+        Nothing ->
+            Element.none
+
+
+formView : Maybe String -> FormModel -> Element Msg
+formView maybeMealId form =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
-        [ Ui.input "Name" model.name NameChanged
-        , Ui.input "Notes" model.notes NotesChanged
+        [ Ui.input "Name" form.name NameChanged
+        , Ui.input "Notes" form.notes NotesChanged
         , View.QuantityInput.text
             { amountLabel = "Total Quantity"
-            , amount = model.totalQuantity
+            , amount = form.totalQuantity
             , onAmountChange = TotalQuantityChanged
             , unitLabel = "Total Unit"
-            , unit = model.totalUnit
+            , unit = form.totalUnit
             , onUnitChange = TotalUnitChanged
             }
         , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 10 ]
-            (List.map componentRowView model.components)
+            (List.map componentRowView form.components)
         , Ui.button "+ Add Component" AddComponentClicked
-        , nutritionView model
-        , Ui.submitButton model.submitting
-            (if model.mealId == Nothing then
+        , nutritionView maybeMealId form
+        , Ui.submitButton form.submitting
+            (if maybeMealId == Nothing then
                 "Create Meal"
 
              else
@@ -815,16 +1027,16 @@ searchResultView query rowId result =
         }
 
 
-nutritionView : Model -> Element Msg
-nutritionView model =
-    case model.mealId of
+nutritionView : Maybe String -> FormModel -> Element Msg
+nutritionView maybeMealId form =
+    case maybeMealId of
         Just _ ->
             Element.column [ Element.width Element.fill, Element.spacing 10 ]
                 [ Ui.sectionHeader "Nutrition"
                 , View.NutritionPreview.view
-                    { loading = model.nutritionLoading
-                    , error = model.nutritionError
-                    , nutrients = model.nutrients
+                    { loading = form.nutritionLoading
+                    , error = form.nutritionError
+                    , nutrients = form.nutrients
                     }
                 ]
 

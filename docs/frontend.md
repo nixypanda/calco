@@ -60,13 +60,98 @@ type OutMsg = NoOp | SessionExpired | NavigateTo Route
 
 `Main.update` branches on `OutMsg` to clear session, navigate, or do nothing.
 
-### Async State
+### Invalid States
 
-HTTP state uses a `Loadable` type:
+Frontend models should make important invalid states unrepresentable to a
+pragmatic extent. Prefer types that describe the real states a page can be in
+over records of independent `Maybe`s and booleans that can contradict each
+other.
+
+Use page-specific union types when state changes what data is available or
+which actions are valid:
 
 ```elm
-type Loadable error value = NotAsked | Loading | Failure error | Success value
+type Model
+    = Loading LoadingModel
+    | Loaded LoadedModel
+    | LoadFailed String
 ```
+
+In this shape, `LoadedModel` should contain the data required to render the
+loaded page without defensive `Maybe` checks:
+
+```elm
+type alias LoadedModel =
+    { food : ProductDetail
+    , units : List UnitItem
+    , form : FoodLogForm.Model
+    , request : RequestState
+    }
+```
+
+Avoid loaded-page records like this when the fields are logically dependent:
+
+```elm
+type alias Model =
+    { food : Maybe ProductDetail
+    , units : Maybe (List UnitItem)
+    , form : Maybe FoodLogForm.Model
+    , error : Maybe String
+    }
+```
+
+That record can represent states the UI should never see, such as a form
+without its food, units without a form, or an error and loaded data competing
+for the same screen.
+
+Partial `Maybe`s are acceptable inside loading aggregators when independent
+requests complete in any order:
+
+```elm
+type alias LoadingModel =
+    { food : Maybe ProductDetail
+    , units : Maybe (List UnitItem)
+    }
+```
+
+Once all required data is present, transition to `Loaded`. Keep the partial
+state scoped to loading instead of leaking it into the loaded model.
+
+Model form and action lifecycles explicitly when they affect behavior:
+
+```elm
+type FormState
+    = Editing Form
+    | Invalid Form Problem
+    | Submitting Form
+    | Failed Form String
+
+type RequestState
+    = Idle
+    | Saving
+    | Deleting
+```
+
+This is especially useful for submit/delete flows, validation errors, and
+stale async completions. If a completion should only apply while a matching
+request is pending, store enough state to check that before updating the page.
+
+The goal is not to eliminate every theoretical impossible state. It is to avoid
+state shapes that force views and updates to repeatedly defend against
+combinations that should not happen. Small, isolated state can still use a
+generic `Loadable`:
+
+```elm
+type Loadable error value
+    = NotAsked
+    | Loading
+    | Failure error
+    | Success value
+```
+
+Use `Loadable` when all of its variants are meaningful for that local value.
+Use a page-specific union when the page has dependent data, multiple requests,
+or action state.
 
 ### API Errors
 

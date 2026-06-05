@@ -1,6 +1,7 @@
 module MealDetailTest exposing (tests)
 
 import Api.Meals exposing (Meal)
+import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
@@ -17,8 +18,7 @@ tests =
                     (MealDetail.MealLoaded (Ok meal))
                     (Tuple.first (MealDetail.init "meal-1"))
                     |> first
-                    |> .meal
-                    |> Maybe.map .id
+                    |> mealIdOf
                     |> Expect.equal (Just "meal-1")
         , test "component product ids are extracted uniquely" <|
             \_ ->
@@ -36,38 +36,39 @@ tests =
                     (MealDetail.NutrientPreviewLoaded (Ok nutrientPreview))
                     baseModel
                     |> first
-                    |> .nutrients
+                    |> nutrientsOf
                     |> Expect.equal (Just [ nutrient ])
         , test "amount changes request nutrient preview" <|
             \_ ->
                 MealDetail.update
                     (MealDetail.AmountChanged "150")
-                    baseModel
+                    loadedModel
                     |> third
                     |> Expect.equal (MealDetail.RequestNutrientPreview "meal-1" "150" "g")
         , test "invalid amount clears nutrient preview" <|
             \_ ->
                 MealDetail.update
                     (MealDetail.AmountChanged "nope")
-                    { baseModel
-                        | nutrients = Just [ nutrient ]
-                        , nutritionError = Just "old error"
-                        , nutritionLoading = True
-                    }
+                    nutritionLoadedModel
                     |> first
-                    |> (\model -> ( model.nutrients, model.nutritionError, model.nutritionLoading ))
+                    |> (\model ->
+                            ( nutrientsOf model
+                            , nutritionErrorOf model
+                            , nutritionLoadingOf model
+                            )
+                       )
                     |> Expect.equal ( Nothing, Nothing, False )
         , test "delete confirmation opens and closes" <|
             \_ ->
-                MealDetail.update MealDetail.DeleteClicked baseModel
+                MealDetail.update MealDetail.DeleteClicked loadedModel
                     |> first
                     |> MealDetail.update MealDetail.CancelDeleteClicked
                     |> first
-                    |> .confirmDeleteOpen
-                    |> Expect.equal False
+                    |> deleteOf
+                    |> Expect.equal (Just MealDetail.DeleteIdle)
         , test "edit action navigates to meal edit" <|
             \_ ->
-                MealDetail.update MealDetail.EditClicked baseModel
+                MealDetail.update MealDetail.EditClicked loadedModel
                     |> third
                     |> Expect.equal (MealDetail.Navigate (MealEdit "meal-1"))
         ]
@@ -76,6 +77,36 @@ tests =
 baseModel : MealDetail.Model
 baseModel =
     Tuple.first (MealDetail.init "meal-1")
+
+
+loadedModel : MealDetail.Model
+loadedModel =
+    MealDetail.Loaded
+        { mealId = "meal-1"
+        , meal = meal
+        , productNames = ItemNameLookup.empty
+        , units = [ { code = "g", name = "Gram", kind = "mass" } ]
+        , nutrition =
+            MealDetail.NutritionLoaded
+                { amount = "100", unit = "g", unitOpen = False }
+                [ nutrient ]
+        , delete = MealDetail.DeleteIdle
+        }
+
+
+nutritionLoadedModel : MealDetail.Model
+nutritionLoadedModel =
+    MealDetail.Loaded
+        { mealId = "meal-1"
+        , meal = meal
+        , productNames = ItemNameLookup.empty
+        , units = [ { code = "g", name = "Gram", kind = "mass" } ]
+        , nutrition =
+            MealDetail.NutritionLoaded
+                { amount = "100", unit = "g", unitOpen = False }
+                [ nutrient ]
+        , delete = MealDetail.DeleteIdle
+        }
 
 
 nutrient : NutrientAmount
@@ -120,3 +151,92 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+mealIdOf : MealDetail.Model -> Maybe String
+mealIdOf model =
+    case model of
+        MealDetail.Loaded loaded ->
+            Just loaded.meal.id
+
+        _ ->
+            Nothing
+
+
+nutrientsOf : MealDetail.Model -> Maybe (List NutrientAmount)
+nutrientsOf model =
+    case model of
+        MealDetail.Loading loading ->
+            nutrientsFromState loading.nutrition
+
+        MealDetail.Loaded loaded ->
+            nutrientsFromState loaded.nutrition
+
+        MealDetail.LoadFailed _ ->
+            Nothing
+
+
+nutritionErrorOf : MealDetail.Model -> Maybe String
+nutritionErrorOf model =
+    case model of
+        MealDetail.Loading loading ->
+            errorFromState loading.nutrition
+
+        MealDetail.Loaded loaded ->
+            errorFromState loaded.nutrition
+
+        MealDetail.LoadFailed _ ->
+            Nothing
+
+
+nutritionLoadingOf : MealDetail.Model -> Bool
+nutritionLoadingOf model =
+    case model of
+        MealDetail.Loading loading ->
+            isLoadingState loading.nutrition
+
+        MealDetail.Loaded loaded ->
+            isLoadingState loaded.nutrition
+
+        MealDetail.LoadFailed _ ->
+            False
+
+
+deleteOf : MealDetail.Model -> Maybe MealDetail.DeleteState
+deleteOf model =
+    case model of
+        MealDetail.Loaded loaded ->
+            Just loaded.delete
+
+        _ ->
+            Nothing
+
+
+nutrientsFromState : MealDetail.NutritionState -> Maybe (List NutrientAmount)
+nutrientsFromState nutrition =
+    case nutrition of
+        MealDetail.NutritionLoaded _ nutrients ->
+            Just nutrients
+
+        _ ->
+            Nothing
+
+
+errorFromState : MealDetail.NutritionState -> Maybe String
+errorFromState nutrition =
+    case nutrition of
+        MealDetail.NutritionFailed _ message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+isLoadingState : MealDetail.NutritionState -> Bool
+isLoadingState nutrition =
+    case nutrition of
+        MealDetail.NutritionLoading _ ->
+            True
+
+        _ ->
+            False

@@ -1,5 +1,7 @@
 module Page.Meal.Index exposing
-    ( Model
+    ( ActionState(..)
+    , LoadedModel
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
     , init
@@ -19,11 +21,22 @@ import Element.Input as Input
 import Ui
 
 
-type alias Model =
-    { meals : Maybe (List Meal)
-    , error : Maybe String
-    , deletingMealId : Maybe String
+type Model
+    = Loading
+    | LoadFailed String
+    | Loaded LoadedModel
+
+
+type alias LoadedModel =
+    { meals : List Meal
+    , action : ActionState
     }
+
+
+type ActionState
+    = Idle
+    | Deleting String
+    | DeleteFailed String
 
 
 type Msg
@@ -46,7 +59,7 @@ type OutMsg
 
 init : ( Model, OutMsg )
 init =
-    ( { meals = Nothing, error = Nothing, deletingMealId = Nothing }, RequestMeals )
+    ( Loading, RequestMeals )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -55,7 +68,7 @@ update msg model =
         MealsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | meals = Just response.items, error = Nothing }, Cmd.none, NoOp )
+                    ( Loaded { meals = response.items, action = Idle }, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
@@ -67,33 +80,52 @@ update msg model =
             ( model, Cmd.none, Navigate (MealEdit id) )
 
         DeleteMealClicked id ->
-            ( { model | deletingMealId = Just id, error = Nothing }
-            , Cmd.none
-            , RequestDeleteMeal id
-            )
+            case model of
+                Loaded loaded ->
+                    case loaded.action of
+                        Deleting _ ->
+                            ( model, Cmd.none, NoOp )
+
+                        _ ->
+                            ( Loaded { loaded | action = Deleting id }
+                            , Cmd.none
+                            , RequestDeleteMeal id
+                            )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         DeleteCompleted id result ->
-            case result of
-                Ok _ ->
-                    ( { model
-                        | meals = Maybe.map (List.filter (\meal -> meal.id /= id)) model.meals
-                        , deletingMealId = Nothing
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+            case model of
+                Loaded loaded ->
+                    if loaded.action == Deleting id then
+                        case result of
+                            Ok _ ->
+                                ( Loaded
+                                    { loaded
+                                        | meals = List.filter (\meal -> meal.id /= id) loaded.meals
+                                        , action = Idle
+                                    }
+                                , Cmd.none
+                                , NoOp
+                                )
 
-                Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                { current | deletingMealId = Nothing, error = Just message }
-                        }
-                        error
-                        model
+                            Err error ->
+                                ApiResult.failure
+                                    { noOp = NoOp
+                                    , sessionExpired = SessionExpired
+                                    , applyError =
+                                        \message current ->
+                                            applyLoadedActionError message current
+                                    }
+                                    error
+                                    model
+
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         CreateMealClicked ->
             ( model, Cmd.none, Navigate MealCreate )
@@ -107,18 +139,36 @@ failure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError = \message _ -> LoadFailed message
         }
+
+
+applyLoadedActionError : String -> Model -> Model
+applyLoadedActionError message model =
+    case model of
+        Loaded loaded ->
+            Loaded { loaded | action = DeleteFailed message }
+
+        _ ->
+            model
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ case model.error of
-            Just message ->
+        [ case model of
+            Loaded loaded ->
+                case loaded.action of
+                    DeleteFailed message ->
+                        Ui.errorBanner message
+
+                    _ ->
+                        Element.none
+
+            LoadFailed message ->
                 Ui.errorBanner message
 
-            Nothing ->
+            Loading ->
                 Element.none
         , bodyView model
         ]
@@ -126,23 +176,23 @@ view model =
 
 bodyView : Model -> Element Msg
 bodyView model =
-    case model.meals of
-        Just [] ->
-            Ui.card [ createMealRow ]
-
-        Just meals ->
-            Ui.card (List.map (mealRow model.deletingMealId) meals ++ [ createMealRow ])
-
-        Nothing ->
-            if model.error /= Nothing then
-                Element.none
+    case model of
+        Loaded loaded ->
+            if List.isEmpty loaded.meals then
+                Ui.card [ createMealRow ]
 
             else
-                Ui.loading "Loading meals..."
+                Ui.card (List.map (mealRow loaded.action) loaded.meals ++ [ createMealRow ])
+
+        LoadFailed _ ->
+            Element.none
+
+        Loading ->
+            Ui.loading "Loading meals..."
 
 
-mealRow : Maybe String -> Meal -> Element Msg
-mealRow deletingMealId meal =
+mealRow : ActionState -> Meal -> Element Msg
+mealRow action meal =
     Element.row
         [ Element.width Element.fill
         , Element.padding 12
@@ -161,7 +211,7 @@ mealRow deletingMealId meal =
             }
         , Ui.smallButton "Edit" (EditMealClicked meal.id)
         , Ui.dangerButton
-            (if deletingMealId == Just meal.id then
+            (if action == Deleting meal.id then
                 "Deleting..."
 
              else

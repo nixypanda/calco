@@ -1,7 +1,10 @@
 module Page.Food.Detail exposing
-    ( Model
+    ( LoadedModel
+    , LoadingModel
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , RequestState(..)
     , customFoodEditRoute
     , foodNutrientsForDisplay
     , init
@@ -24,14 +27,35 @@ import View.FoodLogForm as FoodLogForm
 import View.Nutrients
 
 
-type alias Model =
+type Model
+    = Loading LoadingModel
+    | Loaded LoadedModel
+    | LoadFailed String
+
+
+type alias LoadingModel =
     { productId : String
     , mealSlot : Maybe MealSlot
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
-    , form : Maybe FoodLogForm.Model
-    , error : Maybe String
     }
+
+
+type alias LoadedModel =
+    { productId : String
+    , mealSlot : Maybe MealSlot
+    , food : ProductDetail
+    , units : List UnitItem
+    , form : FoodLogForm.Model
+    , error : Maybe String
+    , request : RequestState
+    }
+
+
+type RequestState
+    = Idle
+    | RequestingLocalContext
+    | Saving
 
 
 type Msg
@@ -55,13 +79,12 @@ type OutMsg
 
 init : String -> Maybe MealSlot -> ( Model, OutMsg )
 init productId mealSlot =
-    ( { productId = productId
-      , mealSlot = mealSlot
-      , food = Nothing
-      , units = Nothing
-      , form = Nothing
-      , error = Nothing
-      }
+    ( Loading
+        { productId = productId
+        , mealSlot = mealSlot
+        , food = Nothing
+        , units = Nothing
+        }
     , RequestInitialData productId
     )
 
@@ -72,14 +95,7 @@ update msg model =
         FoodLoaded result ->
             case result of
                 Ok food ->
-                    ( { model
-                        | food = Just food
-                        , form = Just (FoodLogForm.initLogFormFromFood model.mealSlot food)
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( setLoadedFood food model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
@@ -87,104 +103,228 @@ update msg model =
         UnitsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | units = Just response.items, error = Nothing }, Cmd.none, NoOp )
+                    ( setLoadedUnits response.items model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
 
         FormMsg subMsg ->
-            case model.form of
-                Just form ->
-                    ( { model | form = Just (FoodLogForm.update subMsg form) }, Cmd.none, NoOp )
+            case model of
+                Loaded loaded ->
+                    ( Loaded { loaded | form = FoodLogForm.update subMsg loaded.form }
+                    , Cmd.none
+                    , NoOp
+                    )
 
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         SubmitClicked ->
-            case model.form of
-                Just form ->
-                    if String.trim form.amount == "" then
-                        ( { model | form = Just { form | error = Just "Amount is required." } }
-                        , Cmd.none
-                        , NoOp
-                        )
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Idle then
+                        if String.trim loaded.form.amount == "" then
+                            let
+                                form : FoodLogForm.Model
+                                form =
+                                    loaded.form
+                            in
+                            ( Loaded
+                                { loaded
+                                    | form =
+                                        { form | error = Just "Amount is required." }
+                                }
+                            , Cmd.none
+                            , NoOp
+                            )
+
+                        else
+                            let
+                                form : FoodLogForm.Model
+                                form =
+                                    loaded.form
+                            in
+                            ( Loaded
+                                { loaded
+                                    | form = { form | error = Nothing }
+                                    , error = Nothing
+                                    , request = RequestingLocalContext
+                                }
+                            , Cmd.none
+                            , RequestLocalContext
+                            )
 
                     else
-                        ( { model
-                            | form = Just { form | submitting = True, error = Nothing }
-                            , error = Nothing
-                          }
-                        , Cmd.none
-                        , RequestLocalContext
-                        )
+                        ( model, Cmd.none, NoOp )
 
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         LocalContextReceived context ->
-            case model.form of
-                Just form ->
-                    case
-                        FoodLogForm.createProductLogRequest context.date
-                            (Just context.timezone)
-                            model.productId
-                            form
-                    of
-                        Ok request ->
-                            ( model, Cmd.none, RequestCreateLog request )
+            case model of
+                Loaded loaded ->
+                    if loaded.request /= RequestingLocalContext then
+                        ( model, Cmd.none, NoOp )
 
-                        Err FoodLogForm.AmountRequired ->
-                            ( { model
-                                | form =
-                                    Just
-                                        { form
-                                            | submitting = False
-                                            , error = Just "Amount is required."
-                                        }
-                              }
-                            , Cmd.none
-                            , NoOp
-                            )
+                    else
+                        createLogFromLocalContext context loaded
 
-                        Err FoodLogForm.InvalidDate ->
-                            ( { model
-                                | form =
-                                    Just
-                                        { form
-                                            | submitting = False
-                                            , error = Just "Could not read device date."
-                                        }
-                              }
-                            , Cmd.none
-                            , NoOp
-                            )
-
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         LogCompleted result ->
-            case result of
-                Ok _ ->
-                    ( model, Cmd.none, Navigate (Diary Nothing) )
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Saving then
+                        case result of
+                            Ok _ ->
+                                ( model, Cmd.none, Navigate (Diary Nothing) )
 
-                Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                setFormSubmitting False { current | error = Just message }
-                        }
-                        error
-                        model
+                            Err error ->
+                                ApiResult.failure
+                                    { noOp = NoOp
+                                    , sessionExpired = SessionExpired
+                                    , applyError =
+                                        \message current ->
+                                            applyLoadedError message current
+                                    }
+                                    error
+                                    model
+
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         EditCustomFoodClicked ->
-            case Maybe.andThen customFoodEditRoute model.food of
-                Just route ->
-                    ( model, Cmd.none, Navigate route )
+            case model of
+                Loaded loaded ->
+                    case customFoodEditRoute loaded.food of
+                        Just route ->
+                            ( model, Cmd.none, Navigate route )
 
-                Nothing ->
+                        Nothing ->
+                            ( model, Cmd.none, NoOp )
+
+                _ ->
                     ( model, Cmd.none, NoOp )
+
+
+createLogFromLocalContext :
+    { date : String, timezone : String }
+    -> LoadedModel
+    -> ( Model, Cmd Msg, OutMsg )
+createLogFromLocalContext context loaded =
+    case
+        FoodLogForm.createProductLogRequest context.date
+            (Just context.timezone)
+            loaded.productId
+            loaded.form
+    of
+        Ok request ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+            in
+            ( Loaded
+                { loaded
+                    | form = { form | submitting = True, error = Nothing }
+                    , error = Nothing
+                    , request = Saving
+                }
+            , Cmd.none
+            , RequestCreateLog request
+            )
+
+        Err FoodLogForm.AmountRequired ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+            in
+            ( Loaded
+                { loaded
+                    | form =
+                        { form
+                            | submitting = False
+                            , error = Just "Amount is required."
+                        }
+                    , request = Idle
+                }
+            , Cmd.none
+            , NoOp
+            )
+
+        Err FoodLogForm.InvalidDate ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+            in
+            ( Loaded
+                { loaded
+                    | form =
+                        { form
+                            | submitting = False
+                            , error = Just "Could not read device date."
+                        }
+                    , request = Idle
+                }
+            , Cmd.none
+            , NoOp
+            )
+
+
+setLoadedFood : ProductDetail -> Model -> Model
+setLoadedFood food model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | food = Just food }
+
+        Loaded loaded ->
+            Loaded
+                { loaded
+                    | food = food
+                    , form = FoodLogForm.initLogFormFromFood loaded.mealSlot food
+                    , error = Nothing
+                    , request = Idle
+                }
+
+        LoadFailed _ ->
+            model
+
+
+setLoadedUnits : List UnitItem -> Model -> Model
+setLoadedUnits units model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | units = Just units }
+
+        Loaded loaded ->
+            Loaded { loaded | units = units, error = Nothing }
+
+        LoadFailed _ ->
+            model
+
+
+completeLoading : LoadingModel -> Model
+completeLoading loading =
+    case ( loading.food, loading.units ) of
+        ( Just food, Just units ) ->
+            Loaded
+                { productId = loading.productId
+                , mealSlot = loading.mealSlot
+                , food = food
+                , units = units
+                , form = FoodLogForm.initLogFormFromFood loading.mealSlot food
+                , error = Nothing
+                , request = Idle
+                }
+
+        _ ->
+            Loading loading
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -192,17 +332,27 @@ failure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError = \message _ -> LoadFailed message
         }
 
 
-setFormSubmitting : Bool -> Model -> Model
-setFormSubmitting submitting model =
-    case model.form of
-        Just form ->
-            { model | form = Just { form | submitting = submitting } }
+applyLoadedError : String -> Model -> Model
+applyLoadedError message model =
+    case model of
+        Loaded loaded ->
+            let
+                form : FoodLogForm.Model
+                form =
+                    loaded.form
+            in
+            Loaded
+                { loaded
+                    | form = { form | submitting = False }
+                    , error = Just message
+                    , request = Idle
+                }
 
-        Nothing ->
+        _ ->
             model
 
 
@@ -218,11 +368,19 @@ customFoodEditRoute food =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ case model.error of
-            Just message ->
+        [ case model of
+            Loaded loaded ->
+                case loaded.error of
+                    Just message ->
+                        Ui.errorBanner message
+
+                    Nothing ->
+                        Element.none
+
+            LoadFailed message ->
                 Ui.errorBanner message
 
-            Nothing ->
+            Loading _ ->
                 Element.none
         , bodyView model
         ]
@@ -230,21 +388,28 @@ view model =
 
 bodyView : Model -> Element Msg
 bodyView model =
-    case ( model.food, model.units, model.form ) of
-        ( Just food, Just units, Just form ) ->
-            loadedView food units form
+    case model of
+        Loaded loaded ->
+            loadedView loaded
 
-        _ ->
-            if model.error /= Nothing then
-                Element.none
+        LoadFailed _ ->
+            Element.none
 
-            else
-                Ui.loading "Loading food..."
+        Loading _ ->
+            Ui.loading "Loading food..."
 
 
-loadedView : ProductDetail -> List UnitItem -> FoodLogForm.Model -> Element Msg
-loadedView food units form =
+loadedView : LoadedModel -> Element Msg
+loadedView loaded =
     let
+        food : ProductDetail
+        food =
+            loaded.food
+
+        form : FoodLogForm.Model
+        form =
+            loaded.form
+
         nutrients : List Nutrition.NutrientAmount
         nutrients =
             foodNutrientsForDisplay food form
@@ -254,9 +419,13 @@ loadedView food units form =
         , Element.spacing 16
         ]
         [ foodHeader food
-        , Element.map FormMsg (FoodLogForm.view (Just food) units form)
+        , Element.map FormMsg (FoodLogForm.view (Just food) loaded.units form)
         , Ui.cardActions
-            [ Ui.submitButton form.submitting "Log Food" "Logging..." SubmitClicked
+            [ Ui.submitButton
+                (loaded.request == Saving)
+                "Log Food"
+                "Logging..."
+                SubmitClicked
             ]
         , Ui.card
             [ Ui.sectionHeader "Macro Breakdown"

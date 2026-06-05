@@ -1,6 +1,11 @@
 module Page.Meal.Detail exposing
-    ( Model
+    ( DeleteState(..)
+    , LoadedModel
+    , LoadingModel
+    , Model(..)
     , Msg(..)
+    , NutritionInput
+    , NutritionState(..)
     , OutMsg(..)
     , init
     , uniqueProductIds
@@ -25,22 +30,48 @@ import View.NutritionPreview
 import View.QuantityInput
 
 
-type alias Model =
+type Model
+    = Loading LoadingModel
+    | LoadFailed String
+    | Loaded LoadedModel
+
+
+type alias LoadingModel =
     { mealId : String
-    , meal : Maybe Meal
-    , productNames : ItemNameLookup.Names
-    , amount : String
-    , unit : String
     , units : List UnitItem
-    , unitOpen : Bool
-    , nutrients : Maybe (List NutrientAmount)
-    , nutritionLoading : Bool
-    , nutritionError : Maybe String
-    , error : Maybe String
-    , confirmDeleteOpen : Bool
-    , deleting : Bool
-    , deleteError : Maybe String
+    , nutrition : NutritionState
     }
+
+
+type alias LoadedModel =
+    { mealId : String
+    , meal : Meal
+    , productNames : ItemNameLookup.Names
+    , units : List UnitItem
+    , nutrition : NutritionState
+    , delete : DeleteState
+    }
+
+
+type alias NutritionInput =
+    { amount : String
+    , unit : String
+    , unitOpen : Bool
+    }
+
+
+type NutritionState
+    = NutritionLoading NutritionInput
+    | NutritionLoaded NutritionInput (List NutrientAmount)
+    | NutritionFailed NutritionInput String
+    | NutritionUnavailable NutritionInput
+
+
+type DeleteState
+    = DeleteIdle
+    | DeleteConfirming
+    | Deleting
+    | DeleteFailed String
 
 
 type Msg
@@ -70,21 +101,11 @@ type OutMsg
 
 init : String -> ( Model, OutMsg )
 init mealId =
-    ( { mealId = mealId
-      , meal = Nothing
-      , productNames = ItemNameLookup.empty
-      , amount = "100"
-      , unit = Units.defaultCode
-      , units = fallbackUnits
-      , unitOpen = False
-      , nutrients = Nothing
-      , nutritionLoading = True
-      , nutritionError = Nothing
-      , error = Nothing
-      , confirmDeleteOpen = False
-      , deleting = False
-      , deleteError = Nothing
-      }
+    ( Loading
+        { mealId = mealId
+        , units = fallbackUnits
+        , nutrition = NutritionLoading defaultNutritionInput
+        }
     , RequestInitialData mealId
     )
 
@@ -95,147 +116,173 @@ update msg model =
         MealLoaded result ->
             case result of
                 Ok meal ->
-                    ( { model | meal = Just meal, error = Nothing }
-                    , Cmd.none
-                    , requestProductNames (uniqueProductIds meal)
-                    )
+                    let
+                        loaded : LoadedModel
+                        loaded =
+                            loadedFromMeal meal model
+                    in
+                    ( Loaded loaded, Cmd.none, requestProductNames (uniqueProductIds meal) )
 
                 Err error ->
                     failure error model
 
         ProductDetailLoaded productId result ->
-            case result of
-                Ok product ->
-                    ( { model
-                        | productNames =
-                            ItemNameLookup.insertProduct productId product.name model.productNames
-                      }
-                    , Cmd.none
-                    , nextProductNameRequest productId model
-                    )
-
-                Err _ ->
+            case model of
+                Loaded loaded ->
                     let
-                        nextModel : Model
-                        nextModel =
-                            { model
+                        name : String
+                        name =
+                            case result of
+                                Ok product ->
+                                    product.name
+
+                                Err _ ->
+                                    "Unknown food"
+
+                        nextLoaded : LoadedModel
+                        nextLoaded =
+                            { loaded
                                 | productNames =
                                     ItemNameLookup.insertProduct
                                         productId
-                                        "Unknown food"
-                                        model.productNames
+                                        name
+                                        loaded.productNames
                             }
                     in
-                    ( nextModel, Cmd.none, nextProductNameRequest productId nextModel )
+                    ( Loaded nextLoaded
+                    , Cmd.none
+                    , nextProductNameRequest productId nextLoaded
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         UnitsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model
-                        | units =
-                            if List.isEmpty response.items then
-                                fallbackUnits
+                    ( mapUnits (unitsOrFallback response.items) model, Cmd.none, NoOp )
 
-                            else
-                                response.items
-                        , error = Nothing
-                      }
+                Err _ ->
+                    ( mapUnits fallbackUnits model, Cmd.none, NoOp )
+
+        AmountChanged value ->
+            case model of
+                Loaded loaded ->
+                    requestNutritionFor
+                        { loaded
+                            | nutrition =
+                                mapNutritionInput
+                                    (\input -> { input | amount = value, unitOpen = False })
+                                    loaded.nutrition
+                        }
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        UnitChanged value ->
+            case model of
+                Loaded loaded ->
+                    requestNutritionFor
+                        { loaded
+                            | nutrition =
+                                mapNutritionInput
+                                    (\input -> { input | unit = value, unitOpen = False })
+                                    loaded.nutrition
+                        }
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        ToggleUnitDropdown ->
+            case model of
+                Loaded loaded ->
+                    ( Loaded
+                        { loaded
+                            | nutrition =
+                                mapNutritionInput
+                                    (\input -> { input | unitOpen = not input.unitOpen })
+                                    loaded.nutrition
+                        }
                     , Cmd.none
                     , NoOp
                     )
 
-                Err _ ->
-                    ( { model | units = fallbackUnits }, Cmd.none, NoOp )
-
-        AmountChanged value ->
-            requestNutritionFor
-                { model
-                    | amount = value
-                    , unitOpen = False
-                    , nutritionError = Nothing
-                }
-
-        UnitChanged value ->
-            requestNutritionFor
-                { model
-                    | unit = value
-                    , unitOpen = False
-                    , nutritionError = Nothing
-                }
-
-        ToggleUnitDropdown ->
-            ( { model | unitOpen = not model.unitOpen }, Cmd.none, NoOp )
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         NutrientPreviewLoaded result ->
-            case result of
-                Ok response ->
-                    if
-                        response.quantity.amount
-                            == model.amount
-                            && response.quantity.unit
-                            == model.unit
-                    then
-                        ( { model
-                            | nutrients = Just response.nutrients
-                            , nutritionLoading = False
-                            , nutritionError = Nothing
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+            applyNutritionResult result model
+
+        DeleteClicked ->
+            case model of
+                Loaded loaded ->
+                    ( Loaded { loaded | delete = DeleteConfirming }, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        CancelDeleteClicked ->
+            case model of
+                Loaded loaded ->
+                    ( Loaded { loaded | delete = DeleteIdle }, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        ConfirmDeleteClicked ->
+            case model of
+                Loaded loaded ->
+                    case loaded.delete of
+                        DeleteConfirming ->
+                            ( Loaded { loaded | delete = Deleting }
+                            , Cmd.none
+                            , RequestDeleteMeal loaded.mealId
+                            )
+
+                        DeleteFailed _ ->
+                            ( Loaded { loaded | delete = Deleting }
+                            , Cmd.none
+                            , RequestDeleteMeal loaded.mealId
+                            )
+
+                        _ ->
+                            ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        DeleteCompleted result ->
+            case model of
+                Loaded loaded ->
+                    if loaded.delete == Deleting then
+                        case result of
+                            Ok _ ->
+                                ( model, Cmd.none, Navigate Meals )
+
+                            Err error ->
+                                ApiResult.failure
+                                    { noOp = NoOp
+                                    , sessionExpired = SessionExpired
+                                    , applyError =
+                                        \message current ->
+                                            applyDeleteError message current
+                                    }
+                                    error
+                                    model
 
                     else
                         ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                { current
-                                    | nutrients = Nothing
-                                    , nutritionLoading = False
-                                    , nutritionError = Just message
-                                }
-                        }
-                        error
-                        model
-
-        DeleteClicked ->
-            ( { model | confirmDeleteOpen = True, deleteError = Nothing }, Cmd.none, NoOp )
-
-        CancelDeleteClicked ->
-            ( { model | confirmDeleteOpen = False, deleteError = Nothing }, Cmd.none, NoOp )
-
-        ConfirmDeleteClicked ->
-            ( { model | deleting = True, deleteError = Nothing }
-            , Cmd.none
-            , RequestDeleteMeal model.mealId
-            )
-
-        DeleteCompleted result ->
-            case result of
-                Ok _ ->
-                    ( model, Cmd.none, Navigate Meals )
-
-                Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                { current
-                                    | deleting = False
-                                    , confirmDeleteOpen = True
-                                    , deleteError = Just message
-                                }
-                        }
-                        error
-                        model
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         EditClicked ->
-            ( model, Cmd.none, Navigate (MealEdit model.mealId) )
+            case model of
+                Loaded loaded ->
+                    ( model, Cmd.none, Navigate (MealEdit loaded.mealId) )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
 
 uniqueProductIds : Meal -> List String
@@ -259,56 +306,208 @@ requestProductNames ids =
         |> Maybe.withDefault NoOp
 
 
-nextProductNameRequest : String -> Model -> OutMsg
-nextProductNameRequest completedId model =
-    case model.meal of
-        Just meal ->
-            uniqueProductIds meal
-                |> (\ids ->
-                        ItemNameLookup.nextMissingProductId
-                            (Just completedId)
-                            ids
-                            model.productNames
-                   )
-                |> Maybe.map RequestProductDetail
-                |> Maybe.withDefault NoOp
-
-        Nothing ->
-            NoOp
+nextProductNameRequest : String -> LoadedModel -> OutMsg
+nextProductNameRequest completedId loaded =
+    uniqueProductIds loaded.meal
+        |> (\ids ->
+                ItemNameLookup.nextMissingProductId
+                    (Just completedId)
+                    ids
+                    loaded.productNames
+           )
+        |> Maybe.map RequestProductDetail
+        |> Maybe.withDefault NoOp
 
 
-nameFor : String -> Model -> String
-nameFor id model =
-    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) model.productNames
+nameFor : String -> LoadedModel -> String
+nameFor id loaded =
+    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) loaded.productNames
 
 
-requestNutritionFor : Model -> ( Model, Cmd Msg, OutMsg )
-requestNutritionFor model =
-    case String.toFloat model.amount of
+requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
+requestNutritionFor loaded =
+    let
+        input : NutritionInput
+        input =
+            nutritionInput loaded.nutrition
+    in
+    case String.toFloat input.amount of
         Just amount ->
             if amount > 0 then
-                ( { model | nutritionLoading = True }
+                ( Loaded { loaded | nutrition = NutritionLoading input }
                 , Cmd.none
-                , RequestNutrientPreview model.mealId model.amount model.unit
+                , RequestNutrientPreview loaded.mealId input.amount input.unit
                 )
 
             else
-                clearNutritionPreview model
+                clearNutritionPreview loaded
 
         Nothing ->
-            clearNutritionPreview model
+            clearNutritionPreview loaded
 
 
-clearNutritionPreview : Model -> ( Model, Cmd Msg, OutMsg )
-clearNutritionPreview model =
-    ( { model
-        | nutrients = Nothing
-        , nutritionLoading = False
-        , nutritionError = Nothing
-      }
+clearNutritionPreview : LoadedModel -> ( Model, Cmd Msg, OutMsg )
+clearNutritionPreview loaded =
+    ( Loaded { loaded | nutrition = NutritionUnavailable (nutritionInput loaded.nutrition) }
     , Cmd.none
     , NoOp
     )
+
+
+defaultNutritionInput : NutritionInput
+defaultNutritionInput =
+    { amount = "100", unit = Units.defaultCode, unitOpen = False }
+
+
+nutritionInput : NutritionState -> NutritionInput
+nutritionInput nutrition =
+    case nutrition of
+        NutritionLoading input ->
+            input
+
+        NutritionLoaded input _ ->
+            input
+
+        NutritionFailed input _ ->
+            input
+
+        NutritionUnavailable input ->
+            input
+
+
+mapNutritionInput : (NutritionInput -> NutritionInput) -> NutritionState -> NutritionState
+mapNutritionInput transform nutrition =
+    let
+        input : NutritionInput
+        input =
+            transform (nutritionInput nutrition)
+    in
+    case nutrition of
+        NutritionLoading _ ->
+            NutritionLoading input
+
+        NutritionLoaded _ nutrients ->
+            NutritionLoaded input nutrients
+
+        NutritionFailed _ message ->
+            NutritionFailed input message
+
+        NutritionUnavailable _ ->
+            NutritionUnavailable input
+
+
+loadedFromMeal : Meal -> Model -> LoadedModel
+loadedFromMeal meal model =
+    case model of
+        Loading loading ->
+            { mealId = loading.mealId
+            , meal = meal
+            , productNames = ItemNameLookup.empty
+            , units = loading.units
+            , nutrition = loading.nutrition
+            , delete = DeleteIdle
+            }
+
+        Loaded loaded ->
+            { loaded | meal = meal, productNames = ItemNameLookup.empty, delete = DeleteIdle }
+
+        LoadFailed _ ->
+            { mealId = meal.id
+            , meal = meal
+            , productNames = ItemNameLookup.empty
+            , units = fallbackUnits
+            , nutrition = NutritionLoading defaultNutritionInput
+            , delete = DeleteIdle
+            }
+
+
+mapUnits : List UnitItem -> Model -> Model
+mapUnits units model =
+    case model of
+        Loading loading ->
+            Loading { loading | units = units }
+
+        Loaded loaded ->
+            Loaded { loaded | units = units }
+
+        LoadFailed _ ->
+            model
+
+
+unitsOrFallback : List UnitItem -> List UnitItem
+unitsOrFallback units =
+    if List.isEmpty units then
+        fallbackUnits
+
+    else
+        units
+
+
+applyNutritionResult :
+    Result Client.ApiError MealNutritionResponse
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+applyNutritionResult result model =
+    case result of
+        Ok response ->
+            ( mapNutrition
+                (\nutrition ->
+                    let
+                        input : NutritionInput
+                        input =
+                            nutritionInput nutrition
+                    in
+                    if
+                        response.quantity.amount
+                            == input.amount
+                            && response.quantity.unit
+                            == input.unit
+                    then
+                        NutritionLoaded input response.nutrients
+
+                    else
+                        nutrition
+                )
+                model
+            , Cmd.none
+            , NoOp
+            )
+
+        Err error ->
+            ApiResult.failure
+                { noOp = NoOp
+                , sessionExpired = SessionExpired
+                , applyError =
+                    \message current ->
+                        mapNutrition
+                            (\nutrition -> NutritionFailed (nutritionInput nutrition) message)
+                            current
+                }
+                error
+                model
+
+
+mapNutrition : (NutritionState -> NutritionState) -> Model -> Model
+mapNutrition transform model =
+    case model of
+        Loading loading ->
+            Loading { loading | nutrition = transform loading.nutrition }
+
+        Loaded loaded ->
+            Loaded { loaded | nutrition = transform loaded.nutrition }
+
+        LoadFailed _ ->
+            model
+
+
+applyDeleteError : String -> Model -> Model
+applyDeleteError message model =
+    case model of
+        Loaded loaded ->
+            Loaded { loaded | delete = DeleteFailed message }
+
+        _ ->
+            model
 
 
 fallbackUnits : List UnitItem
@@ -321,39 +520,44 @@ failure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError = \message _ -> LoadFailed message
         }
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ Element.row [ Element.width Element.fill, Element.spacing 12 ]
-            [ Element.el
-                [ Ui.heading1, Font.bold ]
-                (Element.text (Maybe.map .name model.meal |> Maybe.withDefault "Meal"))
-            , Ui.button "Edit" EditClicked
-            , Ui.button "Delete" DeleteClicked
-            ]
-        , case model.error of
-            Just message ->
+        [ headerView model
+        , case model of
+            Loaded loaded ->
+                loadedView loaded
+
+            LoadFailed message ->
                 Ui.errorBanner message
 
-            Nothing ->
-                Element.none
-        , case model.meal of
-            Just meal ->
-                loadedView model meal
-
-            Nothing ->
+            Loading _ ->
                 Ui.loading "Loading meal..."
         ]
 
 
-loadedView : Model -> Meal -> Element Msg
-loadedView model meal =
+headerView : Model -> Element Msg
+headerView model =
+    case model of
+        Loaded loaded ->
+            Element.row [ Element.width Element.fill, Element.spacing 12 ]
+                [ Element.el [ Ui.heading1, Font.bold ] (Element.text loaded.meal.name)
+                , Ui.button "Edit" EditClicked
+                , Ui.button "Delete" DeleteClicked
+                ]
+
+        _ ->
+            Element.el [ Ui.heading1, Font.bold ] (Element.text "Meal")
+
+
+loadedView : LoadedModel -> Element Msg
+loadedView loaded =
     Element.column [ Element.width Element.fill, Element.spacing 16 ]
-        [ case meal.notes of
+        [ case loaded.meal.notes of
             Just notes ->
                 Ui.mutedText notes
 
@@ -362,14 +566,14 @@ loadedView model meal =
         , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 8 ]
-            (List.map (componentView model) meal.components)
-        , nutritionView model
-        , confirmDeleteView model
+            (List.map (componentView loaded) loaded.meal.components)
+        , nutritionView loaded
+        , confirmDeleteView loaded
         ]
 
 
-componentView : Model -> Meals.MealComponent -> Element Msg
-componentView model component =
+componentView : LoadedModel -> Meals.MealComponent -> Element Msg
+componentView loaded component =
     Element.row
         [ Element.width Element.fill
         , Element.spacing 12
@@ -379,66 +583,113 @@ componentView model component =
         , Border.width 1
         , Border.color Ui.borderGray
         ]
-        [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id model))
+        [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
         , Element.el
             [ Font.color Ui.mutedColor ]
             (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
         ]
 
 
-nutritionView : Model -> Element Msg
-nutritionView model =
+nutritionView : LoadedModel -> Element Msg
+nutritionView loaded =
+    let
+        input : NutritionInput
+        input =
+            nutritionInput loaded.nutrition
+    in
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
         [ Ui.sectionHeader "Nutrition"
         , Ui.card
             [ View.QuantityInput.dropdown
                 { amountLabel = "Amount"
-                , amount = model.amount
+                , amount = input.amount
                 , onAmountChange = AmountChanged
                 , unitLabel = "Unit"
-                , unit = model.unit
-                , units = model.units
+                , unit = input.unit
+                , units = loaded.units
                 , onUnitChange = UnitChanged
-                , unitOpen = model.unitOpen
+                , unitOpen = input.unitOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
         , View.NutritionPreview.view
-            { loading = model.nutritionLoading
-            , error = model.nutritionError
-            , nutrients = model.nutrients
+            { loading = nutritionLoading loaded.nutrition
+            , error = nutritionError loaded.nutrition
+            , nutrients = nutritionNutrients loaded.nutrition
             }
         ]
 
 
-confirmDeleteView : Model -> Element Msg
-confirmDeleteView model =
-    if model.confirmDeleteOpen then
-        Element.column
-            [ Element.spacing 8
-            , Element.padding 12
-            , Background.color Ui.dangerBg
-            , Border.rounded 8
+nutritionLoading : NutritionState -> Bool
+nutritionLoading nutrition =
+    case nutrition of
+        NutritionLoading _ ->
+            True
+
+        _ ->
+            False
+
+
+nutritionError : NutritionState -> Maybe String
+nutritionError nutrition =
+    case nutrition of
+        NutritionFailed _ message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+nutritionNutrients : NutritionState -> Maybe (List NutrientAmount)
+nutritionNutrients nutrition =
+    case nutrition of
+        NutritionLoaded _ nutrients ->
+            Just nutrients
+
+        _ ->
+            Nothing
+
+
+confirmDeleteView : LoadedModel -> Element Msg
+confirmDeleteView loaded =
+    case loaded.delete of
+        DeleteConfirming ->
+            confirmDeleteContent Nothing False
+
+        Deleting ->
+            confirmDeleteContent Nothing True
+
+        DeleteFailed message ->
+            confirmDeleteContent (Just message) False
+
+        DeleteIdle ->
+            Element.none
+
+
+confirmDeleteContent : Maybe String -> Bool -> Element Msg
+confirmDeleteContent maybeError deleting =
+    Element.column
+        [ Element.spacing 8
+        , Element.padding 12
+        , Background.color Ui.dangerBg
+        , Border.rounded 8
+        ]
+        [ Element.el [ Font.bold ] (Element.text "Delete meal?")
+        , case maybeError of
+            Just message ->
+                Ui.errorBanner message
+
+            Nothing ->
+                Element.none
+        , Element.row [ Element.spacing 8 ]
+            [ Ui.button "Cancel" CancelDeleteClicked
+            , Ui.dangerButton
+                (if deleting then
+                    "Deleting..."
+
+                 else
+                    "Confirm Delete"
+                )
+                ConfirmDeleteClicked
             ]
-            [ Element.el [ Font.bold ] (Element.text "Delete meal?")
-            , case model.deleteError of
-                Just message ->
-                    Ui.errorBanner message
-
-                Nothing ->
-                    Element.none
-            , Element.row [ Element.spacing 8 ]
-                [ Ui.button "Cancel" CancelDeleteClicked
-                , Ui.dangerButton
-                    (if model.deleting then
-                        "Deleting..."
-
-                     else
-                        "Confirm Delete"
-                    )
-                    ConfirmDeleteClicked
-                ]
-            ]
-
-    else
-        Element.none
+        ]

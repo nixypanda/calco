@@ -24,14 +24,16 @@ tests =
             \_ ->
                 FoodDetail.update (FoodDetail.FoodLoaded (Ok food)) emptyModel
                     |> first
-                    |> .form
+                    |> FoodDetail.update (FoodDetail.UnitsLoaded (Ok { items = [ gram ] }))
+                    |> first
+                    |> formOf
                     |> Maybe.map (\current -> ( current.amount, current.unit, current.mealSlot ))
                     |> Expect.equal (Just ( "2", "serving", Just Lunch ))
         , test "units load success stores units" <|
             \_ ->
                 FoodDetail.update (FoodDetail.UnitsLoaded (Ok { items = [ gram ] })) emptyModel
                     |> first
-                    |> .units
+                    |> unitsOf
                     |> Expect.equal (Just [ gram ])
         , test "custom food source USER exposes edit path" <|
             \_ ->
@@ -64,7 +66,7 @@ tests =
                         , timezone = "Asia/Kolkata"
                         }
                     )
-                    loadedModel
+                    contextReadyModel
                     |> third
                     |> Expect.equal
                         (FoodDetail.RequestCreateLog
@@ -86,11 +88,11 @@ tests =
                                 , timezone = "Asia/Kolkata"
                                 }
                             )
-                            loadedModel
+                            contextReadyModel
 
                     formError : Maybe String
                     formError =
-                        model.form
+                        formOf model
                             |> Maybe.andThen .error
                 in
                 ( outMsg
@@ -102,7 +104,7 @@ tests =
                         )
         , test "log success navigates home" <|
             \_ ->
-                FoodDetail.update (FoodDetail.LogCompleted (Ok log)) loadedModel
+                FoodDetail.update (FoodDetail.LogCompleted (Ok log)) savingModel
                     |> third
                     |> Expect.equal (FoodDetail.Navigate (Diary Nothing))
         , test "log failure keeps form state and stores error" <|
@@ -111,12 +113,10 @@ tests =
                     ( model, _, _ ) =
                         FoodDetail.update
                             (FoodDetail.LogCompleted (Err Client.NetworkError))
-                            { loadedModel | form = Just { form | submitting = True } }
+                            savingModel
                 in
-                ( Maybe.map
-                    (\current -> ( current.amount, current.submitting ))
-                    model.form
-                , model.error
+                ( Maybe.map (\current -> ( current.amount, current.submitting )) (formOf model)
+                , errorOf model
                 )
                     |> Expect.equal ( Just ( "2", False ), Just "Network error" )
         ]
@@ -124,22 +124,87 @@ tests =
 
 emptyModel : FoodDetail.Model
 emptyModel =
-    { productId = "food-1"
-    , mealSlot = Just Lunch
-    , food = Nothing
-    , units = Nothing
-    , form = Nothing
-    , error = Nothing
-    }
+    FoodDetail.Loading
+        { productId = "food-1"
+        , mealSlot = Just Lunch
+        , food = Nothing
+        , units = Nothing
+        }
 
 
 loadedModel : FoodDetail.Model
 loadedModel =
-    { emptyModel
-        | food = Just food
-        , units = Just [ gram ]
-        , form = Just form
-    }
+    FoodDetail.Loaded
+        { productId = "food-1"
+        , mealSlot = Just Lunch
+        , food = food
+        , units = [ gram ]
+        , form = form
+        , error = Nothing
+        , request = FoodDetail.Idle
+        }
+
+
+contextReadyModel : FoodDetail.Model
+contextReadyModel =
+    FoodDetail.Loaded
+        { productId = "food-1"
+        , mealSlot = Just Lunch
+        , food = food
+        , units = [ gram ]
+        , form = form
+        , error = Nothing
+        , request = FoodDetail.RequestingLocalContext
+        }
+
+
+savingModel : FoodDetail.Model
+savingModel =
+    FoodDetail.Loaded
+        { productId = "food-1"
+        , mealSlot = Just Lunch
+        , food = food
+        , units = [ gram ]
+        , form = { form | submitting = True }
+        , error = Nothing
+        , request = FoodDetail.Saving
+        }
+
+
+formOf : FoodDetail.Model -> Maybe FoodLogForm.Model
+formOf model =
+    case model of
+        FoodDetail.Loaded loaded ->
+            Just loaded.form
+
+        _ ->
+            Nothing
+
+
+unitsOf : FoodDetail.Model -> Maybe (List UnitItem)
+unitsOf model =
+    case model of
+        FoodDetail.Loading loading ->
+            loading.units
+
+        FoodDetail.Loaded loaded ->
+            Just loaded.units
+
+        FoodDetail.LoadFailed _ ->
+            Nothing
+
+
+errorOf : FoodDetail.Model -> Maybe String
+errorOf model =
+    case model of
+        FoodDetail.Loaded loaded ->
+            loaded.error
+
+        FoodDetail.LoadFailed message ->
+            Just message
+
+        FoodDetail.Loading _ ->
+            Nothing
 
 
 form : FoodLogForm.Model

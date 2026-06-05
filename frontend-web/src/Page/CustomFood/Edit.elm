@@ -1,4 +1,14 @@
-module Page.CustomFood.Edit exposing (Model, Msg(..), OutMsg(..), init, update, view)
+module Page.CustomFood.Edit exposing
+    ( LoadedModel
+    , LoadingModel
+    , Model(..)
+    , Msg(..)
+    , OutMsg(..)
+    , SubmitState(..)
+    , init
+    , update
+    , view
+    )
 
 import Api.Client as Client
 import Api.Foods as Foods
@@ -16,13 +26,33 @@ import Ui
 import View.CustomFoodForm as Form
 
 
-type alias Model =
+type Model
+    = Loading LoadingModel
+    | Loaded LoadedModel
+    | LoadFailed String
+
+
+type alias LoadingModel =
     { productId : String
-    , form : Maybe Form.FormModel
+    , food : Maybe ProductDetail
+    , nutrients : Maybe (List NutrientItem)
+    , units : Maybe (List UnitItem)
+    }
+
+
+type alias LoadedModel =
+    { productId : String
+    , form : Form.FormModel
     , nutrients : List NutrientItem
     , units : List UnitItem
-    , error : Maybe String
+    , submit : SubmitState
     }
+
+
+type SubmitState
+    = Editing
+    | Submitting
+    | Failed String
 
 
 type Msg
@@ -44,7 +74,12 @@ type OutMsg
 
 init : String -> ( Model, OutMsg )
 init productId =
-    ( { productId = productId, form = Nothing, nutrients = [], units = [], error = Nothing }
+    ( Loading
+        { productId = productId
+        , food = Nothing
+        , nutrients = Nothing
+        , units = Nothing
+        }
     , RequestInitialData productId
     )
 
@@ -55,13 +90,7 @@ update msg model =
         FoodLoaded result ->
             case result of
                 Ok food ->
-                    ( { model
-                        | form = Just (Form.fromProductDetail food)
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( setLoadedFood food model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
@@ -69,7 +98,7 @@ update msg model =
         NutrientsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | nutrients = response.items, error = Nothing }, Cmd.none, NoOp )
+                    ( setLoadedNutrients response.items model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
@@ -77,60 +106,182 @@ update msg model =
         UnitsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | units = response.items, error = Nothing }, Cmd.none, NoOp )
+                    ( setLoadedUnits response.items model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
 
         FormMsg subMsg ->
-            case model.form of
-                Just form ->
-                    ( { model | form = Just (Form.update subMsg form) }, Cmd.none, NoOp )
+            case model of
+                Loaded loaded ->
+                    ( Loaded
+                        { loaded
+                            | form = Form.update subMsg loaded.form
+                            , submit = Editing
+                        }
+                    , Cmd.none
+                    , NoOp
+                    )
 
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         SubmitClicked ->
-            case model.form of
-                Just form ->
-                    case Form.toCreateFoodRequest form of
-                        Ok request ->
-                            ( { model
-                                | form = Just { form | submitting = True, error = Nothing }
-                                , error = Nothing
-                              }
-                            , Cmd.none
-                            , RequestUpdateFood model.productId request
-                            )
+            case model of
+                Loaded loaded ->
+                    submitLoaded loaded
 
-                        Err Form.NameRequired ->
-                            ( { model | form = Just { form | error = Just "Name is required" } }
-                            , Cmd.none
-                            , NoOp
-                            )
-
-                Nothing ->
+                _ ->
                     ( model, Cmd.none, NoOp )
 
         SaveCompleted result ->
-            case result of
-                Ok response ->
-                    ( model, Cmd.none, Navigate (FoodDetail response.id Nothing) )
+            case model of
+                Loaded loaded ->
+                    if loaded.submit == Submitting then
+                        completeSave result model
 
-                Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                { current
-                                    | form =
-                                        Maybe.map (\f -> { f | submitting = False }) current.form
-                                    , error = Just message
-                                }
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+
+submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
+submitLoaded loaded =
+    case Form.toCreateFoodRequest loaded.form of
+        Ok request ->
+            let
+                form : Form.FormModel
+                form =
+                    loaded.form
+            in
+            ( Loaded
+                { loaded
+                    | form = { form | submitting = True, error = Nothing }
+                    , submit = Submitting
+                }
+            , Cmd.none
+            , RequestUpdateFood loaded.productId request
+            )
+
+        Err Form.NameRequired ->
+            let
+                form : Form.FormModel
+                form =
+                    loaded.form
+            in
+            ( Loaded
+                { loaded
+                    | form =
+                        { form
+                            | submitting = False
+                            , error = Just "Name is required"
                         }
-                        error
-                        model
+                    , submit = Editing
+                }
+            , Cmd.none
+            , NoOp
+            )
+
+
+completeSave :
+    Result Client.ApiError CreateFoodResponse
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+completeSave result model =
+    case result of
+        Ok response ->
+            ( model, Cmd.none, Navigate (FoodDetail response.id Nothing) )
+
+        Err error ->
+            ApiResult.failure
+                { noOp = NoOp
+                , sessionExpired = SessionExpired
+                , applyError =
+                    \message current ->
+                        applySubmitError message current
+                }
+                error
+                model
+
+
+setLoadedFood : ProductDetail -> Model -> Model
+setLoadedFood food model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | food = Just food }
+
+        Loaded loaded ->
+            Loaded
+                { loaded
+                    | form = Form.fromProductDetail food
+                    , submit = Editing
+                }
+
+        LoadFailed _ ->
+            model
+
+
+setLoadedNutrients : List NutrientItem -> Model -> Model
+setLoadedNutrients nutrients model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | nutrients = Just nutrients }
+
+        Loaded loaded ->
+            Loaded { loaded | nutrients = nutrients }
+
+        LoadFailed _ ->
+            model
+
+
+setLoadedUnits : List UnitItem -> Model -> Model
+setLoadedUnits units model =
+    case model of
+        Loading loading ->
+            completeLoading { loading | units = Just units }
+
+        Loaded loaded ->
+            Loaded { loaded | units = units }
+
+        LoadFailed _ ->
+            model
+
+
+completeLoading : LoadingModel -> Model
+completeLoading loading =
+    case ( loading.food, loading.nutrients, loading.units ) of
+        ( Just food, Just nutrients, Just units ) ->
+            Loaded
+                { productId = loading.productId
+                , form = Form.fromProductDetail food
+                , nutrients = nutrients
+                , units = units
+                , submit = Editing
+                }
+
+        _ ->
+            Loading loading
+
+
+applySubmitError : String -> Model -> Model
+applySubmitError message model =
+    case model of
+        Loaded loaded ->
+            let
+                form : Form.FormModel
+                form =
+                    loaded.form
+            in
+            Loaded
+                { loaded
+                    | form = { form | submitting = False }
+                    , submit = Failed message
+                }
+
+        _ ->
+            model
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -138,26 +289,51 @@ failure =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | error = Just message }
+        , applyError = \message _ -> LoadFailed message
         }
 
 
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ case model.error of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
-        , case model.form of
-            Just form ->
-                Element.column [ Element.width Element.fill, Element.spacing 14 ]
-                    [ Element.map FormMsg (Form.view model.nutrients model.units form)
-                    , Ui.submitButton form.submitting "Save Food" "Saving..." SubmitClicked
-                    ]
-
-            Nothing ->
-                Ui.loading "Loading food..."
+        [ errorView model
+        , bodyView model
         ]
+
+
+errorView : Model -> Element Msg
+errorView model =
+    case model of
+        Loaded loaded ->
+            case loaded.submit of
+                Failed message ->
+                    Ui.errorBanner message
+
+                _ ->
+                    Element.none
+
+        LoadFailed message ->
+            Ui.errorBanner message
+
+        Loading _ ->
+            Element.none
+
+
+bodyView : Model -> Element Msg
+bodyView model =
+    case model of
+        Loaded loaded ->
+            Element.column [ Element.width Element.fill, Element.spacing 14 ]
+                [ Element.map FormMsg (Form.view loaded.nutrients loaded.units loaded.form)
+                , Ui.submitButton
+                    (loaded.submit == Submitting)
+                    "Save Food"
+                    "Saving..."
+                    SubmitClicked
+                ]
+
+        LoadFailed _ ->
+            Element.none
+
+        Loading _ ->
+            Ui.loading "Loading food..."
