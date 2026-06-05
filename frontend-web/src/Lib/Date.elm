@@ -1,8 +1,10 @@
 module Lib.Date exposing
     ( LocalDate
     , addDays
+    , clampTo
     , compare
     , display
+    , equals
     , format
     , fromParts
     , fromPosix
@@ -80,6 +82,21 @@ addDays offset date =
 compare : LocalDate -> LocalDate -> Order
 compare (LocalDate left) (LocalDate right) =
     Basics.compare ( left.year, left.month, left.day ) ( right.year, right.month, right.day )
+
+
+equals : LocalDate -> LocalDate -> Bool
+equals left right =
+    compare left right == EQ
+
+
+clampTo : LocalDate -> LocalDate -> LocalDate
+clampTo maximum date =
+    case compare date maximum of
+        GT ->
+            maximum
+
+        _ ->
+            date
 
 
 nextOnOrBefore : LocalDate -> LocalDate -> Maybe LocalDate

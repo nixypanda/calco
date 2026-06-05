@@ -697,7 +697,7 @@ applyDiaryOutMsg outMsg model =
 
         Diary.RequestDiaryData date ->
             ( model
-            , Cmd.map GotDiaryMsg (Api.Logs.listLogs date Diary.LogsLoaded)
+            , Cmd.map GotDiaryMsg (Api.Logs.listLogs date (Diary.LogsLoaded date))
             )
 
         Diary.Navigate route ->

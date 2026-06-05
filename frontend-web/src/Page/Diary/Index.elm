@@ -1,5 +1,6 @@
 module Page.Diary.Index exposing
-    ( MacroMode(..)
+    ( DiaryState(..)
+    , MacroMode(..)
     , Model
     , Msg(..)
     , OutMsg(..)
@@ -30,20 +31,23 @@ type MacroMode
     | Percent
 
 
+type DiaryState
+    = Loading LocalDate
+    | Loaded LocalDate (List FoodLog)
+    | Failed LocalDate String
+
+
 type alias Model =
     { currentDate : LocalDate
     , today : LocalDate
-    , logs : List FoodLog
-    , dailyTotals : List NutrientAmount
-    , loading : Bool
-    , error : Maybe String
+    , diary : DiaryState
     , macroMode : MacroMode
     }
 
 
 type Msg
     = LoadStarted
-    | LogsLoaded (Result Client.ApiError (List FoodLog))
+    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | PreviousDayClicked
     | NextDayClicked
     | MacroModeToggled
@@ -67,13 +71,11 @@ init args =
             args.dateParam
                 |> Maybe.andThen LocalDate.fromString
                 |> Maybe.withDefault args.today
+                |> LocalDate.clampTo args.today
     in
     ( { currentDate = currentDate
       , today = args.today
-      , logs = []
-      , dailyTotals = []
-      , loading = True
-      , error = Nothing
+      , diary = Loading currentDate
       , macroMode = Grams
       }
     , RequestDiaryData currentDate
@@ -84,23 +86,31 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         LoadStarted ->
-            ( { model | loading = True, error = Nothing }, Cmd.none, NoOp )
+            case model.diary of
+                Loading date ->
+                    if LocalDate.equals date model.currentDate then
+                        ( model, Cmd.none, NoOp )
 
-        LogsLoaded result ->
-            case result of
-                Ok logs ->
-                    ( { model
-                        | logs = logs
-                        , dailyTotals = Nutrition.totalsFromLogs logs
-                        , loading = False
-                        , error = Nothing
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    else
+                        ( { model | diary = Loading model.currentDate }, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+                _ ->
+                    ( { model | diary = Loading model.currentDate }, Cmd.none, NoOp )
+
+        LogsLoaded requestDate result ->
+            if not (LocalDate.equals requestDate model.currentDate) then
+                ( model, Cmd.none, NoOp )
+
+            else
+                case result of
+                    Ok logs ->
+                        ( { model | diary = Loaded requestDate (logsForDate requestDate logs) }
+                        , Cmd.none
+                        , NoOp
+                        )
+
+                    Err error ->
+                        failure requestDate error model
 
         PreviousDayClicked ->
             let
@@ -108,7 +118,7 @@ update msg model =
                 previous =
                     LocalDate.addDays -1 model.currentDate
             in
-            ( { model | currentDate = previous, loading = True, error = Nothing }
+            ( { model | currentDate = previous, diary = Loading previous }
             , Cmd.none
             , Navigate (Diary (Just (LocalDate.format previous)))
             )
@@ -116,7 +126,7 @@ update msg model =
         NextDayClicked ->
             case LocalDate.nextOnOrBefore model.today model.currentDate of
                 Just next ->
-                    ( { model | currentDate = next, loading = True, error = Nothing }
+                    ( { model | currentDate = next, diary = Loading next }
                     , Cmd.none
                     , Navigate (Diary (Just (LocalDate.format next)))
                     )
@@ -137,13 +147,18 @@ update msg model =
             ( model, Cmd.none, Navigate Meals )
 
 
-failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
-failure =
+failure : LocalDate -> Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
+failure requestDate =
     ApiResult.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message model -> { model | loading = False, error = Just message }
+        , applyError = \message model -> { model | diary = Failed requestDate message }
         }
+
+
+logsForDate : LocalDate -> List FoodLog -> List FoodLog
+logsForDate date logs =
+    List.filter (\log -> LocalDate.equals log.logDate date) logs
 
 
 toggleMacroMode : MacroMode -> MacroMode
@@ -172,23 +187,35 @@ dailyCalories summary =
 view : Model -> Element Msg
 view model =
     Ui.pageContainer
-        [ dateCard model
-        , case model.error of
-            Just message ->
-                Ui.errorBanner message
+        (dateCard model
+            :: (case model.diary of
+                    Loading _ ->
+                        [ Ui.skeletonLoading ]
 
-            Nothing ->
-                Element.none
-        , if model.loading then
-            Ui.skeletonLoading
+                    Loaded date logs ->
+                        if LocalDate.equals date model.currentDate then
+                            [ logGroupsView model logs ]
 
-          else
-            logGroupsView model
-        ]
+                        else
+                            [ Ui.skeletonLoading ]
+
+                    Failed date message ->
+                        if LocalDate.equals date model.currentDate then
+                            [ Ui.errorBanner message ]
+
+                        else
+                            [ Ui.skeletonLoading ]
+               )
+        )
 
 
 dateCard : Model -> Element Msg
 dateCard model =
+    let
+        canGoNext : Bool
+        canGoNext =
+            LocalDate.compare model.currentDate model.today == LT
+    in
     Ui.card
         [ Element.row
             [ Element.width Element.fill
@@ -203,33 +230,33 @@ dateCard model =
                 (Element.text (LocalDate.display model.currentDate))
             , Input.button
                 [ Background.color
-                    (if LocalDate.compare model.currentDate model.today == EQ then
-                        Ui.borderGray
+                    (if canGoNext then
+                        Ui.primaryTeal
 
                      else
-                        Ui.primaryTeal
+                        Ui.borderGray
                     )
                 , Font.color
-                    (if LocalDate.compare model.currentDate model.today == EQ then
-                        Ui.mutedColor
+                    (if canGoNext then
+                        Element.rgb255 255 255 255
 
                      else
-                        Element.rgb255 255 255 255
+                        Ui.mutedColor
                     )
                 , Border.rounded 6
                 , Element.paddingXY 12 8
                 , Ui.caption
                 ]
                 { onPress =
-                    if LocalDate.compare model.currentDate model.today == EQ then
-                        Nothing
+                    if canGoNext then
+                        Just NextDayClicked
 
                     else
-                        Just NextDayClicked
+                        Nothing
                 , label = Element.text "Next"
                 }
             ]
-        , totalsView model.dailyTotals
+        , totalsView (Nutrition.totalsFromLogs (loadedLogs model.currentDate model.diary))
         ]
 
 
@@ -288,32 +315,46 @@ diaryDefaults =
     }
 
 
-logGroupsView : Model -> Element Msg
-logGroupsView model =
+loadedLogs : LocalDate -> DiaryState -> List FoodLog
+loadedLogs currentDate diary =
+    case diary of
+        Loaded loadedDate logs ->
+            if LocalDate.equals loadedDate currentDate then
+                logs
+
+            else
+                []
+
+        _ ->
+            []
+
+
+logGroupsView : Model -> List FoodLog -> Element Msg
+logGroupsView model logs =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
-        [ slotView model Breakfast (MealSlot.label Breakfast)
-        , slotView model Lunch (MealSlot.label Lunch)
-        , slotView model Dinner (MealSlot.label Dinner)
-        , slotView model Snack (MealSlot.label Snack)
+        [ slotView model logs Breakfast (MealSlot.label Breakfast)
+        , slotView model logs Lunch (MealSlot.label Lunch)
+        , slotView model logs Dinner (MealSlot.label Dinner)
+        , slotView model logs Snack (MealSlot.label Snack)
         , let
             otherLogs : List FoodLog
             otherLogs =
-                FoodLog.logsForSlot Other model.logs
+                FoodLog.logsForSlot Other logs
           in
           if List.isEmpty otherLogs then
             Element.none
 
           else
-            slotView model Other (MealSlot.label Other)
+            slotView model logs Other (MealSlot.label Other)
         ]
 
 
-slotView : Model -> MealSlot -> String -> Element Msg
-slotView model slot label =
+slotView : Model -> List FoodLog -> MealSlot -> String -> Element Msg
+slotView model allLogs slot label =
     let
         logs : List FoodLog
         logs =
-            FoodLog.logsForSlot slot model.logs
+            FoodLog.logsForSlot slot allLogs
 
         totals : MacroTotals
         totals =
@@ -332,7 +373,7 @@ slotView model slot label =
                 [ Ui.caption
                 , Font.color Ui.mutedColor
                 ]
-                (Element.text (String.fromInt (round (slotCalories slot model.logs)) ++ " kcal"))
+                (Element.text (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal"))
             ]
             :: ((if List.isEmpty logs then
                     [ Element.el

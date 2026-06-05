@@ -32,6 +32,11 @@ tests =
                     initModel Nothing
                         |> .currentDate
                         |> Expect.equal today
+            , test "future date query param is clamped to today" <|
+                \_ ->
+                    initModel (Just "2026-05-31")
+                        |> .currentDate
+                        |> Expect.equal today
             ]
         , describe "date navigation"
             [ test "previous day decrements selected date" <|
@@ -66,41 +71,51 @@ tests =
         , describe "loading"
             [ test "load started marks diary data as loading" <|
                 \_ ->
-                    Diary.update Diary.LoadStarted { emptyModel | error = Just "old" }
+                    Diary.update Diary.LoadStarted { emptyModel | diary = Diary.Failed today "old" }
                         |> first
-                        |> (\model -> ( model.loading, model.error ))
-                        |> Expect.equal ( True, Nothing )
+                        |> .diary
+                        |> Expect.equal (Diary.Loading today)
             , test "load success stores logs" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
-                            Diary.update (Diary.LogsLoaded (Ok [ lunchLog ])) emptyModel
+                            Diary.update (Diary.LogsLoaded today (Ok [ lunchLog ])) emptyModel
                     in
-                    ( model.logs, model.loading, outMsg )
+                    ( model.diary, outMsg )
                         |> Expect.equal
-                            ( [ lunchLog ]
-                            , False
+                            ( Diary.Loaded today [ lunchLog ]
                             , Diary.NoOp
                             )
-            , test "load success computes daily totals from log nutrients" <|
+            , test "load success filters logs that do not match the selected date" <|
                 \_ ->
-                    Diary.update (Diary.LogsLoaded (Ok [ lunchLog ])) emptyModel
+                    Diary.update
+                        (Diary.LogsLoaded today (Ok [ lunchLog, yesterdayLunchLog ]))
+                        emptyModel
                         |> first
-                        |> .dailyTotals
-                        |> Expect.equal
-                            [ Nutrition.NutrientAmount "ENERGY_KCAL" "247.5" "kcal"
-                            , Nutrition.NutrientAmount "PROTEIN_G" "46.5" "g"
-                            , Nutrition.NutrientAmount "CARBS_G" "0" "g"
-                            , Nutrition.NutrientAmount "FAT_G" "3.5" "g"
-                            ]
+                        |> .diary
+                        |> Expect.equal (Diary.Loaded today [ lunchLog ])
+            , test "stale load success is ignored" <|
+                \_ ->
+                    Diary.update
+                        (Diary.LogsLoaded yesterday (Ok [ yesterdayLunchLog ]))
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
             , test "load failure stores an error" <|
                 \_ ->
                     Diary.update
-                        (Diary.LogsLoaded (Err Client.NetworkError))
-                        { emptyModel | loading = True, logs = [ lunchLog ] }
+                        (Diary.LogsLoaded today (Err Client.NetworkError))
+                        { emptyModel | diary = Diary.Loading today }
                         |> first
-                        |> (\model -> ( model.loading, model.error, model.logs ))
-                        |> Expect.equal ( False, Just "Network error", [ lunchLog ] )
+                        |> .diary
+                        |> Expect.equal (Diary.Failed today "Network error")
+            , test "stale load failure is ignored" <|
+                \_ ->
+                    Diary.update
+                        (Diary.LogsLoaded yesterday (Err Client.NetworkError))
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
             ]
         , describe "derived behavior"
             [ test "logs are grouped into meal slots and other" <|
@@ -188,10 +203,7 @@ emptyModel : Diary.Model
 emptyModel =
     { currentDate = date "2026-05-30"
     , today = today
-    , logs = []
-    , dailyTotals = []
-    , loading = False
-    , error = Nothing
+    , diary = Diary.Loaded today []
     , macroMode = Diary.Grams
     }
 
@@ -199,6 +211,11 @@ emptyModel =
 today : LocalDate
 today =
     date "2026-05-30"
+
+
+yesterday : LocalDate
+yesterday =
+    date "2026-05-29"
 
 
 date : String -> LocalDate
@@ -242,6 +259,11 @@ lunchLog =
 secondLunchLog : FoodLog
 secondLunchLog =
     log "log-2" (Just "lunch") productRef [ nutrient "ENERGY_KCAL" "100" "kcal" ]
+
+
+yesterdayLunchLog : FoodLog
+yesterdayLunchLog =
+    { lunchLog | id = "log-yesterday", logDate = yesterday }
 
 
 breakfastLog : FoodLog
