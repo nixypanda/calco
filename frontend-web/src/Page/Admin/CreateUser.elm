@@ -11,6 +11,7 @@ module Page.Admin.CreateUser exposing
     )
 
 import Api.Client as Client
+import Api.Result as ApiResult
 import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Element)
@@ -165,17 +166,13 @@ update msg model =
                         form =
                             currentForm model.state
                     in
-                    if Client.isUnauthorized error then
-                        ( { model | state = Failed form (Client.displayError error) }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | state = Failed form (Client.displayError error) }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \message current -> { current | state = Failed form message }
+                        }
+                        error
+                        model
 
 
 view : Model -> Element Msg

@@ -15,9 +15,8 @@ module Page.Auth.Login exposing
 import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Element)
-import Element.Font as Font
 import Lib.Text as Text
-import Ui
+import View.Auth
 
 
 type alias Form =
@@ -154,27 +153,19 @@ view model =
         form =
             currentForm model
     in
-    Element.el
-        [ Element.centerX
-        , Element.centerY
-        , Element.width (Element.fill |> Element.maximum 420)
-        , Element.padding 20
-        ]
-        (Ui.card
-            ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
-             , Element.el
-                [ Ui.heading2
-                , Font.medium
-                , Font.color Ui.mediumColor
-                ]
-                (Element.text "Log In")
-             , Ui.input "Username" form.username UsernameChanged
-             , Ui.passwordInput "Password" form.password PasswordChanged
-             ]
-                ++ errorView model.state
-                ++ [ Ui.submitButton (isSubmitting model.state) "Log In" "Logging in..." Submitted ]
-            )
-        )
+    View.Auth.credentialCard
+        { title = "Log In"
+        , description = Nothing
+        , username = form.username
+        , password = form.password
+        , onUsernameChanged = UsernameChanged
+        , onPasswordChanged = PasswordChanged
+        , error = errorMessage model.state
+        , submitting = isSubmitting model.state
+        , submitLabel = "Log In"
+        , submittingLabel = "Logging in..."
+        , onSubmit = Submitted
+        }
 
 
 isSubmitting : State -> Bool
@@ -187,17 +178,17 @@ isSubmitting state =
             False
 
 
-errorView : State -> List (Element msg)
-errorView state =
+errorMessage : State -> Maybe String
+errorMessage state =
     case state of
         Invalid _ problem ->
-            [ Ui.errorBanner (problemMessage problem) ]
+            Just (problemMessage problem)
 
         Failed _ message ->
-            [ Ui.errorBanner message ]
+            Just message
 
         _ ->
-            []
+            Nothing
 
 
 problemMessage : Problem -> String

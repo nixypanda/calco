@@ -3,7 +3,10 @@ module Page.Admin.BootstrapSetup exposing
     , Model
     , Msg(..)
     , OutMsg(..)
-    , SubmitStatus
+    , Problem(..)
+    , State(..)
+    , bootstrapAdminPayload
+    , currentForm
     , init
     , update
     , validateBootstrapAdmin
@@ -13,9 +16,8 @@ module Page.Admin.BootstrapSetup exposing
 import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Element)
-import Element.Font as Font
 import Lib.Text as Text
-import Ui
+import View.Auth
 
 
 type alias Form =
@@ -24,16 +26,21 @@ type alias Form =
     }
 
 
-type SubmitStatus
-    = Idle
-    | Submitting
-    | Failed String
-
-
 type alias Model =
-    { form : Form
-    , submitStatus : SubmitStatus
+    { state : State
     }
+
+
+type State
+    = Editing Form
+    | Invalid Form Problem
+    | Submitting Form
+    | Failed Form String
+
+
+type Problem
+    = UsernameRequired
+    | PasswordTooShort
 
 
 type Msg
@@ -51,113 +58,150 @@ type OutMsg
 
 init : Model
 init =
-    { form = { username = "", password = "" }
-    , submitStatus = Idle
-    }
+    { state = Editing emptyForm }
 
 
-validateBootstrapAdmin : Form -> Result String Auth.LoginRequest
-validateBootstrapAdmin form =
-    Text.requireTrimmed "Username is required" form.username
+emptyForm : Form
+emptyForm =
+    { username = "", password = "" }
+
+
+currentForm : Model -> Form
+currentForm model =
+    case model.state of
+        Editing form ->
+            form
+
+        Invalid form _ ->
+            form
+
+        Submitting form ->
+            form
+
+        Failed form _ ->
+            form
+
+
+bootstrapAdminPayload : Form -> Result Problem Auth.LoginRequest
+bootstrapAdminPayload form =
+    Text.requireTrimmed UsernameRequired form.username
         |> Result.andThen
             (\username ->
                 if String.length form.password < 8 then
-                    Err "Password must be at least 8 characters"
+                    Err PasswordTooShort
 
                 else
                     Ok { username = username, password = form.password }
             )
 
 
+validateBootstrapAdmin : Form -> Result Problem Auth.LoginRequest
+validateBootstrapAdmin =
+    bootstrapAdminPayload
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         UsernameChanged username ->
-            ( { model
-                | form = { username = username, password = model.form.password }
-                , submitStatus = Idle
-              }
-            , Cmd.none
-            , NoOp
-            )
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            ( { model | state = Editing { form | username = username } }, Cmd.none, NoOp )
 
         PasswordChanged password ->
-            ( { model
-                | form =
-                    { username = model.form.username
-                    , password = password
-                    }
-                , submitStatus = Idle
-              }
-            , Cmd.none
-            , NoOp
-            )
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            ( { model | state = Editing { form | password = password } }, Cmd.none, NoOp )
 
         Submitted ->
-            case validateBootstrapAdmin model.form of
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            case bootstrapAdminPayload form of
                 Ok request ->
-                    ( { model | submitStatus = Submitting }
+                    ( { model | state = Submitting form }
                     , Cmd.none
                     , RequestCreateAdmin request
                     )
 
-                Err message ->
-                    ( { model | submitStatus = Failed message }, Cmd.none, NoOp )
+                Err problem ->
+                    ( { model | state = Invalid form problem }, Cmd.none, NoOp )
 
         CreateAdminCompleted result ->
-            case result of
-                Ok loginSession ->
-                    ( { model | submitStatus = Idle }
-                    , Cmd.none
-                    , CreateAdminSucceeded loginSession
-                    )
+            case model.state of
+                Submitting form ->
+                    case result of
+                        Ok loginSession ->
+                            ( model, Cmd.none, CreateAdminSucceeded loginSession )
 
-                Err error ->
-                    ( { model | submitStatus = Failed (Client.displayError error) }
-                    , Cmd.none
-                    , NoOp
-                    )
+                        Err error ->
+                            ( { model | state = Failed form (Client.displayError error) }
+                            , Cmd.none
+                            , NoOp
+                            )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
 
 view : Model -> Element Msg
 view model =
-    Element.el
-        [ Element.centerX
-        , Element.centerY
-        , Element.width (Element.fill |> Element.maximum 420)
-        , Element.padding 20
-        ]
-        (Ui.card
-            ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
-             , Element.el
-                [ Ui.heading2
-                , Font.medium
-                , Font.color Ui.mediumColor
-                ]
-                (Element.text "First-Time Setup")
-             , Element.paragraph
-                [ Ui.body
-                , Font.color Ui.mediumColor
-                ]
-                [ Element.text "Create the admin account to get started." ]
-             , Ui.input "Username" model.form.username UsernameChanged
-             , Ui.passwordInput "Password" model.form.password PasswordChanged
-             ]
-                ++ errorView model.submitStatus
-                ++ [ Ui.submitButton (model.submitStatus == Submitting)
-                        "Create Admin"
-                        "Creating..."
-                        Submitted
-                   ]
-            )
-        )
+    let
+        form : Form
+        form =
+            currentForm model
+    in
+    View.Auth.credentialCard
+        { title = "First-Time Setup"
+        , description = Just "Create the admin account to get started."
+        , username = form.username
+        , password = form.password
+        , onUsernameChanged = UsernameChanged
+        , onPasswordChanged = PasswordChanged
+        , error = errorMessage model.state
+        , submitting = isSubmitting model.state
+        , submitLabel = "Create Admin"
+        , submittingLabel = "Creating..."
+        , onSubmit = Submitted
+        }
 
 
-errorView : SubmitStatus -> List (Element msg)
-errorView status =
-    case status of
-        Failed message ->
-            [ Ui.errorBanner message ]
+isSubmitting : State -> Bool
+isSubmitting state =
+    case state of
+        Submitting _ ->
+            True
 
         _ ->
-            []
+            False
+
+
+errorMessage : State -> Maybe String
+errorMessage state =
+    case state of
+        Invalid _ problem ->
+            Just (problemMessage problem)
+
+        Failed _ message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+problemMessage : Problem -> String
+problemMessage problem =
+    case problem of
+        UsernameRequired ->
+            "Username is required"
+
+        PasswordTooShort ->
+            "Password must be at least 8 characters"

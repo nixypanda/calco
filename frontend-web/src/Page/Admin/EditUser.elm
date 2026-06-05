@@ -12,6 +12,7 @@ module Page.Admin.EditUser exposing
     )
 
 import Api.Client as Client
+import Api.Result as ApiResult
 import Data.User as User
 import Element exposing (Element)
 import Element.Font as Font
@@ -86,20 +87,19 @@ update msg model =
         UserLoaded result ->
             case result of
                 Ok user ->
-                    ( { model | state = Ready { user = user, password = "" } Idle }, Cmd.none, NoOp )
+                    ( { model | state = Ready { user = user, password = "" } Idle }
+                    , Cmd.none
+                    , NoOp
+                    )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | state = LoadFailed error }
-                        , Cmd.none
-                        , SessionExpired
-                        )
-
-                    else
-                        ( { model | state = LoadFailed error }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \_ current -> { current | state = LoadFailed error }
+                        }
+                        error
+                        model
 
         PasswordChanged password ->
             case model.state of
@@ -121,7 +121,10 @@ update msg model =
             case model.state of
                 Ready loadedUser actionState ->
                     if String.isEmpty loadedUser.password then
-                        ( { model | state = Ready loadedUser (Invalid NewPasswordRequired) }, Cmd.none, NoOp )
+                        ( { model | state = Ready loadedUser (Invalid NewPasswordRequired) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     else if isPending actionState then
                         ( model, Cmd.none, NoOp )
@@ -148,7 +151,10 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | state = Ready loadedUser DisablingUser }, Cmd.none, RequestDisableUser model.userId )
+                        ( { model | state = Ready loadedUser DisablingUser }
+                        , Cmd.none
+                        , RequestDisableUser model.userId
+                        )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -163,7 +169,10 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | state = Ready loadedUser EnablingUser }, Cmd.none, RequestEnableUser model.userId )
+                        ( { model | state = Ready loadedUser EnablingUser }
+                        , Cmd.none
+                        , RequestEnableUser model.userId
+                        )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -216,17 +225,15 @@ completePendingAction pendingAction result model successState =
                         ( { model | state = successState loadedUser }, Cmd.none, UpdateSucceeded )
 
                     Err error ->
-                        if Client.isUnauthorized error then
-                            ( { model | state = Ready loadedUser (ActionFailed (Client.displayError error)) }
-                            , Cmd.none
-                            , SessionExpired
-                            )
-
-                        else
-                            ( { model | state = Ready loadedUser (ActionFailed (Client.displayError error)) }
-                            , Cmd.none
-                            , NoOp
-                            )
+                        ApiResult.failure
+                            { noOp = NoOp
+                            , sessionExpired = SessionExpired
+                            , applyError =
+                                \message current ->
+                                    { current | state = Ready loadedUser (ActionFailed message) }
+                            }
+                            error
+                            model
 
             else
                 ( model, Cmd.none, NoOp )

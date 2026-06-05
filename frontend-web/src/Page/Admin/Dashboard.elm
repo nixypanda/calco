@@ -8,6 +8,7 @@ module Page.Admin.Dashboard exposing
     )
 
 import Api.Client as Client
+import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Element)
@@ -53,11 +54,13 @@ update msg model =
                     ( { model | users = Success users }, Cmd.none, NoOp )
 
                 Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | users = Failure error }, Cmd.none, SessionExpired )
-
-                    else
-                        ( { model | users = Failure error }, Cmd.none, NoOp )
+                    ApiResult.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \_ current -> { current | users = Failure error }
+                        }
+                        error
+                        model
 
         NavigateCreateUser ->
             ( model, Cmd.none, Navigate AdminCreateUser )
