@@ -438,10 +438,6 @@ slotView model allLogs slot label =
         totals : MacroTotals
         totals =
             Nutrition.macroTotals logs
-
-        accent : Element.Color
-        accent =
-            slotAccent slot
     in
     Ui.card
         (Element.row [ Element.width Element.fill, Element.padding 14, Element.spacing 12 ]
@@ -469,7 +465,7 @@ slotView model allLogs slot label =
                     ]
 
                 else
-                    List.map (logRow accent) logs
+                    List.map logRow logs
                )
             ++ (case slot of
                     Other ->
@@ -481,25 +477,6 @@ slotView model allLogs slot label =
                         ]
                )
         )
-
-
-slotAccent : MealSlot -> Element.Color
-slotAccent slot =
-    case slot of
-        Breakfast ->
-            Ui.accentYellow
-
-        Lunch ->
-            Ui.accentSoftGreen
-
-        Dinner ->
-            Ui.accentLavender
-
-        Snack ->
-            Ui.accentPink
-
-        Other ->
-            Ui.accentLightBlue
 
 
 macroSummary : MacroMode -> MacroTotals -> String
@@ -524,8 +501,24 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : Element.Color -> FoodLog -> Element Msg
-logRow accent log =
+logRow : FoodLog -> Element Msg
+logRow log =
+    let
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            log.nutrients
+                |> Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element Msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
+    in
     Input.button
         [ Element.width Element.fill
         , Element.padding 14
@@ -533,26 +526,27 @@ logRow accent log =
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Ui.accentDot accent
-                , Element.el
-                    [ Element.width Element.fill
-                    , Font.medium
-                    ]
-                    (Element.text log.item.name)
-                , Element.el
-                    [ Ui.caption
-                    , Font.color Ui.mutedColor
-                    ]
-                    (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
-                , Element.el
-                    [ Ui.caption
-                    , Font.color Ui.mutedColor
-                    ]
-                    (Element.text
-                        (String.fromInt
-                            (round (caloriesFrom log.nutrients))
-                            ++ " kcal"
-                        )
-                    )
-                ]
+                (dot
+                    ++ [ Element.el
+                            [ Element.width Element.fill
+                            , Font.medium
+                            ]
+                            (Element.text log.item.name)
+                       , Element.el
+                            [ Ui.caption
+                            , Font.color Ui.mutedColor
+                            ]
+                            (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
+                       , Element.el
+                            [ Ui.caption
+                            , Font.color Ui.mutedColor
+                            ]
+                            (Element.text
+                                (String.fromInt
+                                    (round (caloriesFrom log.nutrients))
+                                    ++ " kcal"
+                                )
+                            )
+                       ]
+                )
         }

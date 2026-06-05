@@ -17,6 +17,7 @@ we:
 
 -}
 
+import Data.Nutrition
 import Element
 import Expect
 import Test exposing (Test, describe, test)
@@ -104,6 +105,18 @@ renderingSmoke =
             \_ -> Ui.chip { label = "Fruit", selected = True, onClick = Nothing } |> pass
         , test "chip renders interactive with Just msg" <|
             \_ -> Ui.chip { label = "Fruit", selected = True, onClick = Just () } |> pass
+        , test "macroColor resolves Protein to accentPink" <|
+            \_ ->
+                Ui.macroColor Data.Nutrition.Protein
+                    |> Expect.equal Ui.proteinColor
+        , test "macroColor resolves Carbs to accentSoftGreen" <|
+            \_ ->
+                Ui.macroColor Data.Nutrition.Carbs
+                    |> Expect.equal Ui.carbsColor
+        , test "macroColor resolves Fat to accentYellow" <|
+            \_ ->
+                Ui.macroColor Data.Nutrition.Fat
+                    |> Expect.equal Ui.fatColor
         ]
 
 

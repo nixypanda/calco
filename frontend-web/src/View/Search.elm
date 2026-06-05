@@ -1,11 +1,11 @@
 module View.Search exposing
-    ( categoryAccent
-    , completionDropdown
+    ( completionDropdown
     , resultRow
     , tabCompletionHandler
     )
 
 import Api.Foods exposing (SearchResult)
+import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
 import Element exposing (Element)
 import Element.Background as Background
@@ -54,6 +54,23 @@ tabCompletionHandler completeMsg options =
 
 resultRow : { query : String, item : SearchResult, onSelect : String -> msg } -> Element msg
 resultRow config =
+    let
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            config.item.nutritionSummary.per100g
+                |> Nutrition.summaryToNutrients
+                |> Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
+    in
     Input.button
         [ Element.width Element.fill
         , Element.padding 16
@@ -64,21 +81,22 @@ resultRow config =
                 [ Element.width Element.fill
                 , Element.spacing 12
                 ]
-                [ Ui.accentDot (categoryAccent config.item.categories)
-                , Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing 4
-                    , Element.clip
-                    ]
-                    [ Element.el [ Font.medium ] (Element.text config.item.name)
-                    , Element.el
-                        [ Ui.caption
-                        , Font.color Ui.mutedColor
-                        ]
-                        (Element.text (metaText config.query config.item))
-                    ]
-                , categoryPills config.item.categories
-                ]
+                (dot
+                    ++ [ Element.column
+                            [ Element.width Element.fill
+                            , Element.spacing 4
+                            , Element.clip
+                            ]
+                            [ Element.el [ Font.medium ] (Element.text config.item.name)
+                            , Element.el
+                                [ Ui.caption
+                                , Font.color Ui.mutedColor
+                                ]
+                                (Element.text (metaText config.query config.item))
+                            ]
+                       , categoryPills config.item.categories
+                       ]
+                )
         }
 
 
@@ -196,38 +214,6 @@ categoryPill label =
         , selected = False
         , onClick = Nothing
         }
-
-
-categoryAccent : List String -> Element.Color
-categoryAccent categories =
-    case categories of
-        first :: _ ->
-            let
-                lower : String
-                lower =
-                    String.toLower first
-
-                matches : String -> Bool
-                matches needle =
-                    String.contains (String.toLower needle) lower
-            in
-            if matches "fruit" then
-                Ui.accentPink
-
-            else if matches "vegetable" || matches "veg" then
-                Ui.accentSoftGreen
-
-            else if matches "sweet" || matches "dessert" then
-                Ui.accentLavender
-
-            else if matches "grain" || matches "bread" then
-                Ui.accentYellow
-
-            else
-                Ui.accentLightBlue
-
-        [] ->
-            Ui.accentLightBlue
 
 
 truncatePillLabel : String -> String

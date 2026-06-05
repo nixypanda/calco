@@ -32,7 +32,6 @@ import Page.Food.Detail
 import Ui
 import View.FoodLogForm as FoodLogForm
 import View.Nutrients
-import View.Search as SearchView
 
 
 type Model
@@ -660,6 +659,21 @@ itemHeader model =
         maybeFood : Maybe ProductDetail
         maybeFood =
             productDetail model.item
+
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            model.log.nutrients
+                |> Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element Msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
     in
     Element.row
         [ Element.width Element.fill
@@ -669,48 +683,42 @@ itemHeader model =
         , Border.rounded 20
         , Ui.cardShadow
         ]
-        [ Ui.accentDot
-            (case maybeFood of
-                Just food ->
-                    SearchView.categoryAccent food.categories
+        (dot
+            ++ [ Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                    [ Element.el [ Ui.heading1, Font.bold ]
+                        (Element.text (itemTitle model.item))
+                    , Ui.mutedText (metaText maybeFood model.log)
+                    , case maybeFood of
+                        Just food ->
+                            if List.isEmpty food.categories then
+                                Element.none
 
-                Nothing ->
-                    Ui.accentLightBlue
-            )
-        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
-            [ Element.el [ Ui.heading1, Font.bold ]
-                (Element.text (itemTitle model.item))
-            , Ui.mutedText (metaText maybeFood model.log)
-            , case maybeFood of
-                Just food ->
-                    if List.isEmpty food.categories then
-                        Element.none
+                            else
+                                Element.row [ Element.spacing 4 ]
+                                    (List.map
+                                        (\category ->
+                                            Ui.chip
+                                                { label = category
+                                                , selected = False
+                                                , onClick = Nothing
+                                                }
+                                        )
+                                        food.categories
+                                    )
 
-                    else
-                        Element.row [ Element.spacing 4 ]
-                            (List.map
-                                (\category ->
-                                    Ui.chip
-                                        { label = category
-                                        , selected = False
-                                        , onClick = Nothing
-                                        }
-                                )
-                                food.categories
-                            )
+                        Nothing ->
+                            Element.none
+                    , case
+                        Maybe.andThen Page.Food.Detail.customFoodEditRoute maybeFood
+                      of
+                        Just _ ->
+                            Ui.button "Edit food" EditCustomFoodClicked
 
-                Nothing ->
-                    Element.none
-            , case
-                Maybe.andThen Page.Food.Detail.customFoodEditRoute maybeFood
-              of
-                Just _ ->
-                    Ui.button "Edit food" EditCustomFoodClicked
-
-                Nothing ->
-                    Element.none
-            ]
-        ]
+                        Nothing ->
+                            Element.none
+                    ]
+               ]
+        )
 
 
 itemTitle : LoadedItem -> String

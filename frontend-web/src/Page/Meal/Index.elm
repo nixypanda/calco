@@ -13,6 +13,7 @@ module Page.Meal.Index exposing
 import Api.Client as Client
 import Api.Meals as Meals exposing (Meal)
 import Api.Result as ApiResult
+import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Font as Font
@@ -192,6 +193,23 @@ bodyView model =
 
 mealRow : ActionState -> Meal -> Element Msg
 mealRow action meal =
+    let
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            meal.nutritionSummary
+                |> Maybe.map Nutrition.summaryToNutrients
+                |> Maybe.andThen Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element Msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
+    in
     Element.row
         [ Element.width Element.fill
         , Element.padding 16
@@ -202,12 +220,13 @@ mealRow action meal =
             { onPress = Just (OpenMealClicked meal.id)
             , label =
                 Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                    [ Ui.accentDot (mealAccent meal.name)
-                    , Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                        [ Element.el [ Font.bold ] (Element.text meal.name)
-                        , Ui.mutedText (mealSummaryText meal)
-                        ]
-                    ]
+                    (dot
+                        ++ [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
+                                [ Element.el [ Font.bold ] (Element.text meal.name)
+                                , Ui.mutedText (mealSummaryText meal)
+                                ]
+                           ]
+                    )
             }
         , Ui.iconButton "✎" (EditMealClicked meal.id)
         , Ui.dangerButton
@@ -224,30 +243,6 @@ mealRow action meal =
 createMealRow : Element Msg
 createMealRow =
     Ui.ghostButton "+ Create Meal" CreateMealClicked
-
-
-mealAccent : String -> Element.Color
-mealAccent name =
-    case String.uncons (String.toLower (String.trim name)) of
-        Just ( first, _ ) ->
-            case first of
-                'a' ->
-                    Ui.accentPink
-
-                'b' ->
-                    Ui.accentYellow
-
-                'c' ->
-                    Ui.accentSoftGreen
-
-                'd' ->
-                    Ui.accentLavender
-
-                _ ->
-                    Ui.accentLightBlue
-
-        Nothing ->
-            Ui.accentLightBlue
 
 
 mealSummaryText : Meal -> String

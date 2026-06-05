@@ -1,11 +1,13 @@
 module Data.Nutrition exposing
-    ( MacroTotals
+    ( Macro(..)
+    , MacroTotals
     , NutrientAmount
     , NutritionSummary
     , Per100gNutrient
     , Serving
     , decoder
     , defaultCode
+    , dominantMacro
     , emptySummary
     , macroTotals
     , nutrientAmount
@@ -15,6 +17,7 @@ module Data.Nutrition exposing
     , scaledSnapshotForQuantity
     , servingGrams
     , summaryDecoder
+    , summaryToNutrients
     , summaryValue
     )
 
@@ -47,6 +50,19 @@ emptySummary =
     }
 
 
+{-| Convert a `NutritionSummary` into a `List NutrientAmount` keyed by the
+standard macro codes (`PROTEIN_G`, `CARBS_G`, `FAT_G`) so it can be
+passed to `dominantMacro` (or `macroTotals` etc.). Missing or `Nothing`
+fields become `"0"`.
+-}
+summaryToNutrients : NutritionSummary -> List NutrientAmount
+summaryToNutrients summary =
+    [ { code = "PROTEIN_G", amount = Maybe.withDefault "0" summary.proteinG, unit = "g" }
+    , { code = "CARBS_G", amount = Maybe.withDefault "0" summary.carbsG, unit = "g" }
+    , { code = "FAT_G", amount = Maybe.withDefault "0" summary.fatG, unit = "g" }
+    ]
+
+
 type alias Per100gNutrient =
     { code : String
     , amountPer100g : String
@@ -70,6 +86,56 @@ type alias MacroTotals =
     , carbsPct : Float
     , fatPct : Float
     }
+
+
+type Macro
+    = Protein
+    | Carbs
+    | Fat
+
+
+{-| Find the dominant macro (highest calorie share) in a list of nutrients.
+Protein and Carbs contribute 4 kcal/g, Fat 9 kcal/g. Tie-break order:
+Protein > Carbs > Fat. Returns Nothing when all are zero or absent.
+-}
+dominantMacro : List NutrientAmount -> Maybe Macro
+dominantMacro nutrients =
+    let
+        proteinG : Float
+        proteinG =
+            nutrientAmount "PROTEIN_G" nutrients
+
+        carbsG : Float
+        carbsG =
+            nutrientAmount "CARBS_G" nutrients
+
+        fatG : Float
+        fatG =
+            nutrientAmount "FAT_G" nutrients
+
+        proteinKcal : Float
+        proteinKcal =
+            proteinG * 4
+
+        carbsKcal : Float
+        carbsKcal =
+            carbsG * 4
+
+        fatKcal : Float
+        fatKcal =
+            fatG * 9
+    in
+    if proteinKcal + carbsKcal + fatKcal <= 0 then
+        Nothing
+
+    else if proteinKcal >= carbsKcal && proteinKcal >= fatKcal then
+        Just Protein
+
+    else if carbsKcal >= proteinKcal && carbsKcal >= fatKcal then
+        Just Carbs
+
+    else
+        Just Fat
 
 
 decoder : Decoder NutrientAmount

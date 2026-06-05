@@ -1,7 +1,5 @@
 module Ui exposing
     ( accentDot
-    , accentLavender
-    , accentLightBlue
     , accentPink
     , accentSoftGreen
     , accentSoftPink
@@ -40,6 +38,7 @@ module Ui exposing
     , linearProgress
     , loading
     , macroBar
+    , macroColor
     , mutedColor
     , mutedText
     , pageContainer
@@ -56,6 +55,7 @@ module Ui exposing
     , textMedium
     )
 
+import Data.Nutrition
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -86,21 +86,6 @@ value behind `fatColor`.
 accentYellow : Element.Color
 accentYellow =
     Element.rgb255 255 210 80
-
-
-{-| Soft lavender, used for selected drawer items, dinner meal slots,
-and sweet/dessert categories.
--}
-accentLavender : Element.Color
-accentLavender =
-    Element.rgb255 186 170 255
-
-
-{-| Light blue, used as a category fallback and for the "Other" meal slot.
--}
-accentLightBlue : Element.Color
-accentLightBlue =
-    Element.rgb255 150 200 255
 
 
 {-| Soft pastel green for success states and the carbs bar fill.
@@ -640,6 +625,19 @@ selectDropdown config =
                     ]
             }
         ]
+
+
+macroColor : Data.Nutrition.Macro -> Element.Color
+macroColor m =
+    case m of
+        Data.Nutrition.Protein ->
+            proteinColor
+
+        Data.Nutrition.Carbs ->
+            carbsColor
+
+        Data.Nutrition.Fat ->
+            fatColor
 
 
 macroBar :

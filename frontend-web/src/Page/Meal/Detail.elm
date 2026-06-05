@@ -18,7 +18,7 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition exposing (NutrientAmount, defaultCode)
+import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Background as Background
@@ -573,6 +573,35 @@ loadedView loaded =
 
 componentView : LoadedModel -> Meals.MealComponent -> Element Msg
 componentView loaded component =
+    let
+        summaryText : String
+        summaryText =
+            component.nutritionSummary
+                |> Maybe.andThen .energyKcal
+                |> Maybe.map
+                    (\kcal ->
+                        " - "
+                            ++ String.fromInt (round (Nutrition.safeAmount kcal))
+                            ++ " kcal"
+                    )
+                |> Maybe.withDefault ""
+
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            component.nutritionSummary
+                |> Maybe.map Nutrition.summaryToNutrients
+                |> Maybe.andThen Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element Msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
+    in
     Element.row
         [ Element.width Element.fill
         , Element.spacing 12
@@ -581,37 +610,15 @@ componentView loaded component =
         , Border.rounded 16
         , Ui.cardShadow
         ]
-        [ Ui.accentDot
-            (componentAccent (nameFor component.item.id loaded))
-        , Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
-        , Element.el
-            [ Font.color Ui.mutedColor ]
-            (Element.text (component.quantity.amount ++ " " ++ component.quantity.unit))
-        ]
-
-
-componentAccent : String -> Element.Color
-componentAccent name =
-    case String.uncons (String.toLower (String.trim name)) of
-        Just ( first, _ ) ->
-            case first of
-                'a' ->
-                    Ui.accentPink
-
-                'b' ->
-                    Ui.accentYellow
-
-                'c' ->
-                    Ui.accentSoftGreen
-
-                'd' ->
-                    Ui.accentLavender
-
-                _ ->
-                    Ui.accentLightBlue
-
-        Nothing ->
-            Ui.accentLightBlue
+        (dot
+            ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
+               , Element.el
+                    [ Font.color Ui.mutedColor ]
+                    (Element.text
+                        (component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText)
+                    )
+               ]
+        )
 
 
 nutritionView : LoadedModel -> Element Msg

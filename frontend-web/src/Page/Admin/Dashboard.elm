@@ -134,35 +134,10 @@ userListRow config =
         { onPress = Just (config.onSelect config.user.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Ui.accentDot (userAccent config.user.username)
-                , Element.column [ Element.width Element.fill, Element.spacing 2 ]
+                [ Element.column [ Element.width Element.fill, Element.spacing 2 ]
                     [ Element.el [ Font.bold ] (Element.text config.user.username)
                     , Ui.mutedText config.user.displayName
                     ]
                 , Element.el [ Element.alignRight ] (statusBadge config.user.status)
                 ]
         }
-
-
-userAccent : String -> Element.Color
-userAccent username =
-    case String.uncons (String.toLower (String.trim username)) of
-        Just ( first, _ ) ->
-            case first of
-                'a' ->
-                    Ui.accentPink
-
-                'b' ->
-                    Ui.accentYellow
-
-                'c' ->
-                    Ui.accentSoftGreen
-
-                'd' ->
-                    Ui.accentLavender
-
-                _ ->
-                    Ui.accentLightBlue
-
-        Nothing ->
-            Ui.accentLightBlue

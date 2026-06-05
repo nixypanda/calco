@@ -27,7 +27,6 @@ import Element.Font as Font
 import Ui
 import View.FoodLogForm as FoodLogForm
 import View.Nutrients
-import View.Search as SearchView
 
 
 type Model
@@ -461,6 +460,23 @@ foodNutrientsPer100g food =
 
 foodHeader : ProductDetail -> Element Msg
 foodHeader food =
+    let
+        macroAccent : Maybe Element.Color
+        macroAccent =
+            food.nutrients
+                |> List.map (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
+                |> Nutrition.dominantMacro
+                |> Maybe.map Ui.macroColor
+
+        dot : List (Element Msg)
+        dot =
+            case macroAccent of
+                Just c ->
+                    [ Ui.accentDot c ]
+
+                Nothing ->
+                    []
+    in
     Element.row
         [ Element.width Element.fill
         , Element.padding 20
@@ -469,33 +485,34 @@ foodHeader food =
         , Border.rounded 20
         , Ui.cardShadow
         ]
-        [ Ui.accentDot (SearchView.categoryAccent food.categories)
-        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
-            [ Element.el [ Ui.heading1, Font.bold ] (Element.text food.name)
-            , Ui.mutedText (metaText food)
-            , if List.isEmpty food.categories then
-                Element.none
+        (dot
+            ++ [ Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                    [ Element.el [ Ui.heading1, Font.bold ] (Element.text food.name)
+                    , Ui.mutedText (metaText food)
+                    , if List.isEmpty food.categories then
+                        Element.none
 
-              else
-                Element.row [ Element.spacing 4 ]
-                    (List.map
-                        (\category ->
-                            Ui.chip
-                                { label = category
-                                , selected = False
-                                , onClick = Nothing
-                                }
-                        )
-                        food.categories
-                    )
-            , case customFoodEditRoute food of
-                Just _ ->
-                    Ui.button "Edit food" EditCustomFoodClicked
+                      else
+                        Element.row [ Element.spacing 4 ]
+                            (List.map
+                                (\category ->
+                                    Ui.chip
+                                        { label = category
+                                        , selected = False
+                                        , onClick = Nothing
+                                        }
+                                )
+                                food.categories
+                            )
+                    , case customFoodEditRoute food of
+                        Just _ ->
+                            Ui.button "Edit food" EditCustomFoodClicked
 
-                Nothing ->
-                    Element.none
-            ]
-        ]
+                        Nothing ->
+                            Element.none
+                    ]
+               ]
+        )
 
 
 metaText : ProductDetail -> String
