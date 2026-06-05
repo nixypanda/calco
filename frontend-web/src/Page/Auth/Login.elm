@@ -3,9 +3,12 @@ module Page.Auth.Login exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , Problem(..)
+    , State(..)
+    , currentForm
     , init
+    , loginPayload
     , update
-    , validateLogin
     , view
     )
 
@@ -13,6 +16,7 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Element)
 import Element.Font as Font
+import Lib.Text as Text
 import Ui
 
 
@@ -23,10 +27,20 @@ type alias Form =
 
 
 type alias Model =
-    { form : Form
-    , submitting : Bool
-    , error : Maybe String
+    { state : State
     }
+
+
+type State
+    = Editing Form
+    | Invalid Form Problem
+    | Submitting Form
+    | Failed Form String
+
+
+type Problem
+    = UsernameRequired
+    | PasswordRequired
 
 
 type Msg
@@ -44,76 +58,102 @@ type OutMsg
 
 init : Model
 init =
-    { form = { username = "", password = "" }
-    , submitting = False
-    , error = Nothing
-    }
+    { state = Editing emptyForm }
 
 
-validateLogin : Form -> Result String Auth.LoginRequest
-validateLogin form =
-    let
-        username : String
-        username =
-            String.trim form.username
-    in
-    if String.isEmpty username || String.isEmpty form.password then
-        Err "Username and password are required"
+emptyForm : Form
+emptyForm =
+    { username = "", password = "" }
 
-    else
-        Ok { username = username, password = form.password }
+
+currentForm : Model -> Form
+currentForm model =
+    case model.state of
+        Editing form ->
+            form
+
+        Invalid form _ ->
+            form
+
+        Submitting form ->
+            form
+
+        Failed form _ ->
+            form
+
+
+loginPayload : Form -> Result Problem Auth.LoginRequest
+loginPayload form =
+    Text.requireTrimmed UsernameRequired form.username
+        |> Result.andThen
+            (\username ->
+                if String.isEmpty form.password then
+                    Err PasswordRequired
+
+                else
+                    Ok { username = username, password = form.password }
+            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         UsernameChanged username ->
-            ( { model | form = updateUsername username model.form }, Cmd.none, NoOp )
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            ( { model | state = Editing { form | username = username } }, Cmd.none, NoOp )
 
         PasswordChanged password ->
-            ( { model | form = updatePassword password model.form }, Cmd.none, NoOp )
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            ( { model | state = Editing { form | password = password } }, Cmd.none, NoOp )
 
         Submitted ->
-            case validateLogin model.form of
+            let
+                form : Form
+                form =
+                    currentForm model
+            in
+            case loginPayload form of
                 Ok request ->
-                    ( { model | submitting = True, error = Nothing }
+                    ( { model | state = Submitting form }
                     , Cmd.none
                     , RequestLogin request
                     )
 
-                Err message ->
-                    ( { model | error = Just message }, Cmd.none, NoOp )
+                Err problem ->
+                    ( { model | state = Invalid form problem }, Cmd.none, NoOp )
 
         LoginCompleted result ->
-            case result of
-                Ok loginSession ->
-                    ( { model | submitting = False, error = Nothing }
-                    , Cmd.none
-                    , LoginSucceeded loginSession
-                    )
+            case model.state of
+                Submitting form ->
+                    case result of
+                        Ok loginSession ->
+                            ( model, Cmd.none, LoginSucceeded loginSession )
 
-                Err error ->
-                    ( { model
-                        | submitting = False
-                        , error = Just (Client.displayError error)
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
+                        Err error ->
+                            ( { model | state = Failed form (Client.displayError error) }
+                            , Cmd.none
+                            , NoOp
+                            )
 
-
-updateUsername : String -> Form -> Form
-updateUsername username form =
-    { form | username = username }
-
-
-updatePassword : String -> Form -> Form
-updatePassword password form =
-    { form | password = password }
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
 
 view : Model -> Element Msg
 view model =
+    let
+        form : Form
+        form =
+            currentForm model
+    in
     Element.el
         [ Element.centerX
         , Element.centerY
@@ -128,20 +168,43 @@ view model =
                 , Font.color Ui.mediumColor
                 ]
                 (Element.text "Log In")
-             , Ui.input "Username" model.form.username UsernameChanged
-             , Ui.passwordInput "Password" model.form.password PasswordChanged
+             , Ui.input "Username" form.username UsernameChanged
+             , Ui.passwordInput "Password" form.password PasswordChanged
              ]
-                ++ errorView model.error
-                ++ [ Ui.submitButton model.submitting "Log In" "Logging in..." Submitted ]
+                ++ errorView model.state
+                ++ [ Ui.submitButton (isSubmitting model.state) "Log In" "Logging in..." Submitted ]
             )
         )
 
 
-errorView : Maybe String -> List (Element msg)
-errorView maybeError =
-    case maybeError of
-        Just message ->
+isSubmitting : State -> Bool
+isSubmitting state =
+    case state of
+        Submitting _ ->
+            True
+
+        _ ->
+            False
+
+
+errorView : State -> List (Element msg)
+errorView state =
+    case state of
+        Invalid _ problem ->
+            [ Ui.errorBanner (problemMessage problem) ]
+
+        Failed _ message ->
             [ Ui.errorBanner message ]
 
-        Nothing ->
+        _ ->
             []
+
+
+problemMessage : Problem -> String
+problemMessage problem =
+    case problem of
+        UsernameRequired ->
+            "Username is required"
+
+        PasswordRequired ->
+            "Password is required"
