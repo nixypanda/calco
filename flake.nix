@@ -42,7 +42,6 @@
 
             # Frontend
             nodejs_22
-            pnpm
             elmPackages.elm
             elmPackages.elm-format
             elmPackages.elm-review
@@ -63,7 +62,7 @@
             echo "  Commands:"
             echo "    just up         — start PostgreSQL"
             echo "    just backend-dev — run backend"
-            echo "    just frontend-dev — run frontend"
+            echo "    just frontend-web-dev — run frontend"
           '';
         };
 

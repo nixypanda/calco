@@ -21,7 +21,64 @@ frontend-web/
 
 It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
 
-The older `frontend/` React/Vite app is not the documented frontend target here. Keep new product UI work pointed at `frontend-web/` unless the project explicitly reactivates the React app.
+The initial React/Vite frontend has been removed. All frontend work lives in `frontend-web/`.
+
+## Architecture
+
+Every page module follows the canonical TEA (The Elm Architecture) pattern:
+
+```elm
+module Page.Diary exposing (Model, Msg, init, update, view, subscriptions)
+
+type alias Model = { ... }
+type Msg = ...
+
+init : Args -> Session -> ( Model, Cmd Msg )
+update : Msg -> Model -> ( Model, Cmd Msg )
+view : Model -> Element Msg
+subscriptions : Model -> Sub Msg
+```
+
+### Global State
+
+`Main.elm` owns the top-level model and uses a `PageModel` ADT to scope page state:
+
+```text
+Model: key, route, session, bootstrap, page
+PageModel = DiaryPage | MealDetailPage | FoodLogDetailPage | ... | NotFound
+Msg: UrlChanged | LinkClicked | SessionLoaded | GotPage PageMsg
+PageMsg = DiaryMsg | MealDetailMsg | ... (Cmd.map'd into Main.update)
+```
+
+### Page → App Boundary
+
+When a page needs to signal the global layer (session expired, navigate), it returns an `OutMsg` from `update`:
+
+```elm
+type OutMsg = NoOp | SessionExpired | NavigateTo Route
+```
+
+`Main.update` branches on `OutMsg` to clear session, navigate, or do nothing.
+
+### Async State
+
+HTTP state uses a `Loadable` type:
+
+```elm
+type Loadable error value = NotAsked | Loading | Failure error | Success value
+```
+
+### API Errors
+
+Backend error envelopes are preserved as an ADT in `Api.Client`:
+
+```elm
+type ApiError = BadUrl String | Timeout | NetworkError | BadStatus Int String String | BadBody String
+```
+
+### URL As Source Of Truth
+
+`Browser.application` enforces URL-sourced state. Diary date, meal slot context, and other navigation-critical state live in query params, not in application state.
 
 ## Runtime Shape
 

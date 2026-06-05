@@ -53,27 +53,7 @@ backend-migrate:
     cd backend && DATABASE_URL="${DATABASE_URL:-postgres://calco:calco@localhost:5432/calco}" sqlx migrate run --ignore-missing
 
 # ──────────────────────────────────────────────
-# Frontend
-# ──────────────────────────────────────────────
-
-# Install frontend dependencies
-frontend-setup:
-    cd frontend && pnpm install
-
-# Run frontend dev server
-frontend-dev:
-    cd frontend && pnpm dev
-
-# Build frontend for production
-frontend-build:
-    cd frontend && pnpm run build
-
-# Run frontend tests
-frontend-test:
-    cd frontend && pnpm test
-
-# ──────────────────────────────────────────────
-# Elm Frontend Web
+# Frontend (Web)
 # ──────────────────────────────────────────────
 
 # Build Elm frontend-web
@@ -116,14 +96,14 @@ frontend-web-test:
 dev: db-wait
     @echo "Starting backend and frontend..."
     (cd backend && cargo run) &
-    (cd frontend && pnpm dev) &
+    (cd frontend-web && node dev-server.mjs) &
     wait
 
 # Build everything
-build: backend-build frontend-build frontend-web-build
+build: backend-build frontend-web-build
 
 # Run all tests
-test: backend-test frontend-test frontend-web-test
+test: backend-test frontend-web-test
 
 # ──────────────────────────────────────────────
 # Misc

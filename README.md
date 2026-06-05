@@ -7,9 +7,9 @@ The app is intentionally simple: search or create foods, log what was eaten, sna
 ## Stack
 
 - Backend: Rust, axum, sqlx, PostgreSQL
-- Frontend: React, TypeScript, Vite, Tailwind CSS
+- Frontend: Elm 0.19.1, elm-ui
 - Database: PostgreSQL via Docker Compose
-- Tooling: Nix flake, just, pnpm, Python import scripts
+- Tooling: Nix flake, just, Python import scripts
 
 ## Current Scope
 
@@ -48,12 +48,10 @@ DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-dev
 Run the frontend:
 
 ```bash
-cd frontend
-pnpm install
-pnpm dev
+just frontend-web-dev
 ```
 
-The backend listens on port `3001` by default. The Vite frontend listens on port `5173`.
+The backend listens on port `3001` by default. The Elm frontend dev server listens on port `1234`.
 
 ## Verification
 
@@ -62,9 +60,8 @@ Reliable current checks:
 ```bash
 just test
 just backend-test
-cd frontend
-pnpm test
-pnpm run build
+just frontend-web-test
+just frontend-web-build
 ```
 
 ## Documentation
