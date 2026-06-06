@@ -18,7 +18,7 @@ import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -475,9 +475,9 @@ failure =
         }
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ headerView model
         , case model of
             Loaded loaded ->

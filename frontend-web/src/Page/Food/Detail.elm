@@ -20,7 +20,7 @@ import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -367,9 +367,9 @@ customFoodEditRoute food =
         Nothing
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ case model of
             Loaded loaded ->
                 case loaded.error of

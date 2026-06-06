@@ -22,6 +22,7 @@ module Ui exposing
     , dangerFg
     , dangerIconButton
     , darkColor
+    , defaultTruncationChars
     , detailRow
     , display
     , emptyState
@@ -36,6 +37,7 @@ module Ui exposing
     , iconButton
     , input
     , inputFill
+    , isSmall
     , layout
     , linearProgress
     , loading
@@ -55,6 +57,9 @@ module Ui exposing
     , statBlockGroup
     , submitButton
     , textMedium
+    , truncateWithEllipsis
+    , truncatedText
+    , truncationCap
     )
 
 import Data.Nutrition
@@ -295,15 +300,101 @@ layout content =
         [ content ]
 
 
-pageContainer : List (Element msg) -> Element msg
-pageContainer children =
+pageContainer : Element.Device -> List (Element msg) -> Element msg
+pageContainer device children =
+    let
+        horizontalPadding : Int
+        horizontalPadding =
+            if isSmall device then
+                16
+
+            else
+                24
+    in
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing 16
-        , Element.paddingEach { top = 24, right = 24, bottom = 24, left = 24 }
+        , Element.paddingEach
+            { top = horizontalPadding
+            , right = horizontalPadding
+            , bottom = horizontalPadding
+            , left = horizontalPadding
+            }
         ]
         children
+
+
+{-| True when the device is classified as a phone by `Element.classifyDevice`
+(elm-ui's `shortSide < 600` rule). Use this as the single small-screen gate
+across the app so call sites stay readable. `Tablet`, `Desktop`, and
+`BigDesktop` all return `False`.
+-}
+isSmall : Element.Device -> Bool
+isSmall device =
+    device.class == Element.Phone
+
+
+{-| Default cap used by `truncatedText` when the caller doesn't supply one.
+40 chars matches the long-name truncation sites in the diary, meal, and food
+list views.
+-}
+defaultTruncationChars : Int
+defaultTruncationChars =
+    40
+
+
+{-| Single-line character cap used by `truncateWithEllipsis` call sites that
+should be tighter on phones. Defaults to `defaultTruncationChars` (40) on
+non-Phone devices; Phone gets 25 to keep long names from blowing past narrow
+viewports.
+-}
+truncationCap : Element.Device -> Int
+truncationCap device =
+    if isSmall device then
+        25
+
+    else
+        defaultTruncationChars
+
+
+{-| Truncate a string to at most `maxChars` code points and append a single
+ellipsis character. Pairs with `Ui.truncatedText` for the rendered form. Pure
+Elm, no CSS, safe to use inside a flex row. The cap counts the ellipsis: a
+`maxChars` of 4 always returns a 4-character string.
+
+    Ui.truncateWithEllipsis 12 "Roasted Sweet Potato" --> "Roasted Swe..."
+
+-}
+truncateWithEllipsis : Int -> String -> String
+truncateWithEllipsis maxChars string =
+    let
+        visible : Int
+        visible =
+            Basics.max 0 (maxChars - 3)
+    in
+    if String.length string <= maxChars then
+        string
+
+    else
+        String.left visible string ++ "..."
+
+
+{-| Render `string` as a single-line text element that fills its parent,
+clips overflow, and truncates to the device-aware cap. Use this for long
+product / meal / log names that would otherwise push the row wider than a
+phone viewport.
+
+    Ui.truncatedText device "Roasted Sweet Potato"
+
+-}
+truncatedText : Element.Device -> String -> Element msg
+truncatedText device string =
+    Element.el
+        [ Element.width Element.fill
+        , Element.clip
+        ]
+        (Element.text (truncateWithEllipsis (truncationCap device) string))
 
 
 card : List (Element msg) -> Element msg

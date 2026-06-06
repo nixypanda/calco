@@ -37,6 +37,8 @@ tests : Test
 tests =
     describe "Ui"
         [ chipBehavior
+        , deviceHelpers
+        , truncationHelpers
         , renderingSmoke
         , chartSmoke
         ]
@@ -53,6 +55,80 @@ chipBehavior =
             \_ -> Ui.chipBackground False |> Expect.equal (Element.rgb255 244 246 248)
         , test "uses primaryTeal background when selected" <|
             \_ -> Ui.chipBackground True |> Expect.equal Ui.primaryTeal
+        ]
+
+
+
+-- Device / truncation helpers (Round 3 plumbing)
+
+
+phone : Element.Device
+phone =
+    Element.Device Element.Phone Element.Portrait
+
+
+tablet : Element.Device
+tablet =
+    Element.Device Element.Tablet Element.Landscape
+
+
+desktop : Element.Device
+desktop =
+    Element.Device Element.Desktop Element.Landscape
+
+
+bigDesktop : Element.Device
+bigDesktop =
+    Element.Device Element.BigDesktop Element.Landscape
+
+
+deviceHelpers : Test
+deviceHelpers =
+    describe "device helpers"
+        [ test "isSmall is True for Phone" <|
+            \_ -> Ui.isSmall phone |> Expect.equal True
+        , test "isSmall is False for Tablet" <|
+            \_ -> Ui.isSmall tablet |> Expect.equal False
+        , test "isSmall is False for Desktop" <|
+            \_ -> Ui.isSmall desktop |> Expect.equal False
+        , test "isSmall is False for BigDesktop" <|
+            \_ -> Ui.isSmall bigDesktop |> Expect.equal False
+        , test "truncationCap returns the tighter Phone cap" <|
+            \_ -> Ui.truncationCap phone |> Expect.equal 25
+        , test "truncationCap returns the default for Tablet" <|
+            \_ -> Ui.truncationCap tablet |> Expect.equal Ui.defaultTruncationChars
+        , test "truncationCap returns the default for Desktop" <|
+            \_ -> Ui.truncationCap desktop |> Expect.equal Ui.defaultTruncationChars
+        , test "defaultTruncationChars is 40" <|
+            \_ -> Ui.defaultTruncationChars |> Expect.equal 40
+        ]
+
+
+truncationHelpers : Test
+truncationHelpers =
+    describe "truncation helpers"
+        [ test "truncateWithEllipsis returns the string unchanged when short enough" <|
+            \_ ->
+                Ui.truncateWithEllipsis 12 "Apple"
+                    |> Expect.equal "Apple"
+        , test "truncateWithEllipsis appends a single ellipsis and caps the total length" <|
+            \_ ->
+                Ui.truncateWithEllipsis 8 "Roasted Sweet Potato"
+                    |> Expect.equal "Roast..."
+        , test "truncateWithEllipsis caps the visible prefix at maxChars - 3" <|
+            \_ ->
+                Ui.truncateWithEllipsis 8 "Hello World"
+                    |> Expect.equal "Hello..."
+        , test "truncateWithEllipsis still truncates when maxChars is very small" <|
+            \_ ->
+                Ui.truncateWithEllipsis 2 "Hello"
+                    |> Expect.equal "..."
+        , test "truncatedText renders without crashing on a phone-sized string" <|
+            \_ -> Ui.truncatedText phone "Roasted Sweet Potato" |> pass
+        , test "truncatedText renders without crashing on a desktop-sized string" <|
+            \_ -> Ui.truncatedText desktop "Roasted Sweet Potato" |> pass
+        , test "truncatedText renders an empty string" <|
+            \_ -> Ui.truncatedText phone "" |> pass
         ]
 
 

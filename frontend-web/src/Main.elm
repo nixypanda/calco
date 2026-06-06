@@ -8,6 +8,7 @@ import Api.Foods
 import Api.Logs
 import Api.Meals
 import Browser
+import Browser.Events
 import Browser.Navigation as Nav
 import Data.Auth as Auth
 import Data.MealSlot as MealSlot
@@ -43,7 +44,9 @@ import Url exposing (Url)
 
 
 type alias Flags =
-    {}
+    { windowWidth : Int
+    , windowHeight : Int
+    }
 
 
 type alias Model =
@@ -58,6 +61,7 @@ type alias Model =
     , page : PageModel
     , drawerOpen : Bool
     , profileOpen : Bool
+    , device : Element.Device
     }
 
 
@@ -95,6 +99,7 @@ type Msg
     | ProfileClicked
     | AppBackClicked Route
     | AppNavigationClicked Route
+    | WindowResized Int Int
     | GotLoginMsg Login.Msg
     | GotSetupMsg Setup.Msg
     | GotAdminMsg AdminDashboard.Msg
@@ -133,11 +138,14 @@ main =
 
 subscriptions : Model -> Sub Msg
 subscriptions _ =
-    localContextReceived GotLocalContext
+    Sub.batch
+        [ localContextReceived GotLocalContext
+        , Browser.Events.onResize WindowResized
+        ]
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
-init _ url key =
+init flags url key =
     ( { key = key
       , route = Data.Route.fromUrl url
       , session = Session.init
@@ -149,6 +157,11 @@ init _ url key =
       , page = LoadingPage
       , drawerOpen = False
       , profileOpen = False
+      , device =
+            Element.classifyDevice
+                { width = flags.windowWidth
+                , height = flags.windowHeight
+                }
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
@@ -226,6 +239,13 @@ update msg model =
 
         AppNavigationClicked route ->
             ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        WindowResized width height ->
+            ( { model
+                | device = Element.classifyDevice { width = width, height = height }
+              }
+            , Cmd.none
+            )
 
         GotLoginMsg subMsg ->
             case model.page of
@@ -1607,54 +1627,70 @@ pageView model =
         Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
 
     else
+        let
+            device : Element.Device
+            device =
+                model.device
+        in
         case model.page of
             LoadingPage ->
                 Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
 
             LoginPage loginModel ->
-                Element.map GotLoginMsg (Login.view loginModel)
+                Element.map GotLoginMsg (Login.view { model = loginModel, device = device })
 
             SetupPage setupModel ->
-                Element.map GotSetupMsg (Setup.view setupModel)
+                Element.map GotSetupMsg (Setup.view { model = setupModel, device = device })
 
             AdminPage adminModel ->
-                Element.map GotAdminMsg (AdminDashboard.view adminModel)
+                Element.map GotAdminMsg
+                    (AdminDashboard.view { model = adminModel, device = device })
 
             AdminCreateUserPage createUserModel ->
-                Element.map GotAdminCreateUserMsg (AdminCreateUser.view createUserModel)
+                Element.map GotAdminCreateUserMsg
+                    (AdminCreateUser.view { model = createUserModel, device = device })
 
             AdminEditUserPage editUserModel ->
-                Element.map GotAdminEditUserMsg (AdminEditUser.view editUserModel)
+                Element.map GotAdminEditUserMsg
+                    (AdminEditUser.view { model = editUserModel, device = device })
 
             DiaryPage diaryModel ->
-                Element.map GotDiaryMsg (Diary.view diaryModel)
+                Element.map GotDiaryMsg (Diary.view { model = diaryModel, device = device })
 
             FoodSearchPage foodSearchModel ->
-                Element.map GotFoodSearchMsg (FoodSearch.view foodSearchModel)
+                Element.map GotFoodSearchMsg
+                    (FoodSearch.view { model = foodSearchModel, device = device })
 
             FoodDetailPage foodDetailModel ->
-                Element.map GotFoodDetailMsg (FoodDetail.view foodDetailModel)
+                Element.map GotFoodDetailMsg
+                    (FoodDetail.view { model = foodDetailModel, device = device })
 
             FoodLogDetailPage foodLogDetailModel ->
-                Element.map GotFoodLogDetailMsg (FoodLogDetail.view foodLogDetailModel)
+                Element.map GotFoodLogDetailMsg
+                    (FoodLogDetail.view { model = foodLogDetailModel, device = device })
 
             CustomFoodCreatePage customFoodCreateModel ->
-                Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view customFoodCreateModel)
+                Element.map GotCustomFoodCreateMsg
+                    (CustomFoodCreate.view { model = customFoodCreateModel, device = device })
 
             CustomFoodEditPage customFoodEditModel ->
-                Element.map GotCustomFoodEditMsg (CustomFoodEdit.view customFoodEditModel)
+                Element.map GotCustomFoodEditMsg
+                    (CustomFoodEdit.view { model = customFoodEditModel, device = device })
 
             MealsPage mealsModel ->
-                Element.map GotMealsMsg (Meals.view mealsModel)
+                Element.map GotMealsMsg (Meals.view { model = mealsModel, device = device })
 
             MealCreatePage mealCreateModel ->
-                Element.map GotMealCreateMsg (MealCreate.view mealCreateModel)
+                Element.map GotMealCreateMsg
+                    (MealCreate.view { model = mealCreateModel, device = device })
 
             MealEditPage mealEditModel ->
-                Element.map GotMealEditMsg (MealEdit.view mealEditModel)
+                Element.map GotMealEditMsg
+                    (MealEdit.view { model = mealEditModel, device = device })
 
             MealDetailPage mealDetailModel ->
-                Element.map GotMealDetailMsg (MealDetail.view mealDetailModel)
+                Element.map GotMealDetailMsg
+                    (MealDetail.view { model = mealDetailModel, device = device })
 
             PlaceholderPage message ->
                 Element.el [ Element.padding 24 ] (Element.text message)

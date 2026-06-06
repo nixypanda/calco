@@ -13,7 +13,7 @@ module Page.Auth.Login exposing
 
 import Api.Client as Client
 import Data.Auth as Auth
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Lib.Text as Text
 import View.Auth
 
@@ -145,15 +145,16 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-view : Model -> Element Msg
-view model =
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
     let
         form : Form
         form =
             currentForm model
     in
     View.Auth.credentialCard
-        { title = "Log In"
+        { device = device
+        , title = "Log In"
         , description = Nothing
         , username = form.username
         , password = form.password

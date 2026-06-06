@@ -13,7 +13,7 @@ module Page.Admin.BootstrapSetup exposing
 
 import Api.Client as Client
 import Data.Auth as Auth
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Lib.Text as Text
 import View.Auth
 
@@ -150,15 +150,16 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-view : Model -> Element Msg
-view model =
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
     let
         form : Form
         form =
             currentForm model
     in
     View.Auth.credentialCard
-        { title = "First-Time Setup"
+        { device = device
+        , title = "First-Time Setup"
         , description = Just "Create the admin account to get started."
         , username = form.username
         , password = form.password

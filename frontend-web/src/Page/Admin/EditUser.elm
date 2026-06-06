@@ -14,7 +14,7 @@ module Page.Admin.EditUser exposing
 import Api.Client as Client
 import Api.Result as ApiResult
 import Data.User as User
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -243,9 +243,9 @@ completePendingAction pendingAction result model successState =
             ( model, Cmd.none, NoOp )
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         (errorView model.state
             ++ userInfoView model
             ++ resetPasswordView model

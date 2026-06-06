@@ -10,7 +10,7 @@ import Api.Foods as Foods
         )
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Ui
 import View.CustomFoodForm as Form
 
@@ -130,9 +130,9 @@ failure =
         }
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ case model.error of
             Just message ->
                 Ui.errorBanner message

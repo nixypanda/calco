@@ -15,7 +15,7 @@ import Api.Meals as Meals exposing (Meal)
 import Api.Result as ApiResult
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Font as Font
 import Element.Input as Input
 import Ui
@@ -153,9 +153,9 @@ applyLoadedActionError message model =
             model
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ case model of
             Loaded loaded ->
                 case loaded.action of

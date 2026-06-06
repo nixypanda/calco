@@ -12,7 +12,7 @@ import Api.Client as Client
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Data.User as User
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Font as Font
 import Element.Input as Input
 import Ui
@@ -73,9 +73,9 @@ update msg model =
             ( model, Cmd.none, Navigate (AdminEditUser userId) )
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ bodyView model
         ]
 

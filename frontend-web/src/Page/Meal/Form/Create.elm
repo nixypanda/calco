@@ -11,7 +11,7 @@ import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal)
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Page.Meal.Form.Common as Common
 import Ui
 
@@ -125,9 +125,14 @@ mapFormOutMsg maybeOutMsg =
             SessionExpired
 
 
-view : Model -> Element Msg
-view fields =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    let
+        fields : Common.FormFields
+        fields =
+            model
+    in
+    Ui.pageContainer device
         [ Common.errorView fields
         , Common.viewFormFields FormMsg fields
         , Ui.submitButton fields.submitting

@@ -17,7 +17,7 @@ import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -266,9 +266,9 @@ dailyCalories summary =
     caloriesFrom summary
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         (dateCard model
             :: (case model.diary of
                     Loading _ ->

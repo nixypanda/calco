@@ -18,7 +18,7 @@ import Api.Foods as Foods
 import Data.MealSlot exposing (MealSlot)
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -199,9 +199,9 @@ debounce token query =
         |> Task.perform (\_ -> DebounceElapsed token query)
 
 
-view : Model -> Element Msg
-view model =
-    Ui.pageContainer
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
+    Ui.pageContainer device
         [ searchInput model
         , bodyView model
         ]

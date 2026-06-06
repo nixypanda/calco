@@ -15,7 +15,7 @@ import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Page.Meal.Form.Common as Common
 import Ui
 import View.Nutrients
@@ -379,17 +379,17 @@ mapFormOutMsg maybeOutMsg =
             SessionExpired
 
 
-view : Model -> Element Msg
-view model =
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer [ Ui.loading "Loading meal..." ]
+            Ui.pageContainer device [ Ui.loading "Loading meal..." ]
 
         EditLoadFailed message ->
-            Ui.pageContainer [ Ui.errorBanner message ]
+            Ui.pageContainer device [ Ui.errorBanner message ]
 
         Editing loaded ->
-            Ui.pageContainer
+            Ui.pageContainer device
                 [ Common.errorView loaded.fields
                 , Common.viewFormFields FormMsg loaded.fields
                 , nutritionView loaded

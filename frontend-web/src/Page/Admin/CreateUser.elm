@@ -14,7 +14,7 @@ import Api.Client as Client
 import Api.Result as ApiResult
 import Data.Auth as Auth
 import Data.User as User
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui
 
@@ -175,14 +175,14 @@ update msg model =
                         model
 
 
-view : Model -> Element Msg
-view model =
+view : { model : Model, device : Device } -> Element Msg
+view { model, device } =
     let
         form : Form
         form =
             currentForm model.state
     in
-    Ui.pageContainer
+    Ui.pageContainer device
         (errorView model.state
             ++ [ Ui.card
                     [ Ui.input "Username" form.username UsernameChanged

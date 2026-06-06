@@ -1,12 +1,13 @@
 module View.Auth exposing (credentialCard)
 
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
 
 
 credentialCard :
-    { title : String
+    { device : Device
+    , title : String
     , description : Maybe String
     , username : String
     , password : String
@@ -20,11 +21,20 @@ credentialCard :
     }
     -> Element msg
 credentialCard config =
+    let
+        outerPadding : Int
+        outerPadding =
+            if Ui.isSmall config.device then
+                16
+
+            else
+                24
+    in
     Element.el
         [ Element.centerX
         , Element.centerY
         , Element.width (Element.fill |> Element.maximum 420)
-        , Element.padding 24
+        , Element.padding outerPadding
         ]
         (Ui.card
             ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
