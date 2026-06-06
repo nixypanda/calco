@@ -280,12 +280,7 @@ update msg form =
 view : List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing 14 ]
-        [ case form.error of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
+        [ Ui.maybeErrorBanner form.error
         , section "Basic Info"
             [ Ui.input "Name" form.name NameChanged
             , Ui.input "Brand" form.brand BrandChanged
@@ -301,6 +296,9 @@ view nutrients units form =
                 , unit = form.defaultUnit
                 , units = units
                 , onUnitChange = DefaultUnitChanged
+
+                -- , unitOpen = False
+                -- , onUnitToggle = DefaultUnitChanged
                 }
             ]
         , section "Nutrients (per 100g)"

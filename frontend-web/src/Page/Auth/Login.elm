@@ -18,6 +18,10 @@ import Lib.Text as Text
 import View.Auth
 
 
+
+-- MODEL
+
+
 type alias Form =
     { username : String
     , password : String
@@ -26,19 +30,34 @@ type alias Form =
 
 type alias Model =
     { state : State
+    , form : Form
     }
 
 
+init : Model
+init =
+    { state = Editing, form = emptyForm }
+
+
+emptyForm : Form
+emptyForm =
+    { username = "", password = "" }
+
+
 type State
-    = Editing Form
-    | Invalid Form Problem
-    | Submitting Form
-    | Failed Form String
+    = Editing
+    | Invalid Problem
+    | Submitting
+    | Failed String
 
 
 type Problem
     = UsernameRequired
     | PasswordRequired
+
+
+
+-- UPDATE
 
 
 type Msg
@@ -52,32 +71,6 @@ type OutMsg
     = NoOp
     | RequestLogin Auth.LoginRequest
     | LoginSucceeded Auth.LoginSession
-
-
-init : Model
-init =
-    { state = Editing emptyForm }
-
-
-emptyForm : Form
-emptyForm =
-    { username = "", password = "" }
-
-
-currentForm : Model -> Form
-currentForm model =
-    case model.state of
-        Editing form ->
-            form
-
-        Invalid form _ ->
-            form
-
-        Submitting form ->
-            form
-
-        Failed form _ ->
-            form
 
 
 loginPayload : Form -> Result Problem Auth.LoginRequest
@@ -95,48 +88,34 @@ loginPayload form =
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
+    let
+        form =
+            model.form
+    in
     case msg of
         UsernameChanged username ->
-            let
-                form : Form
-                form =
-                    currentForm model
-            in
-            ( { model | state = Editing { form | username = username } }, Cmd.none, NoOp )
+            ( { state = Editing, form = { form | username = username } }, Cmd.none, NoOp )
 
         PasswordChanged password ->
-            let
-                form : Form
-                form =
-                    currentForm model
-            in
-            ( { model | state = Editing { form | password = password } }, Cmd.none, NoOp )
+            ( { state = Editing, form = { form | password = password } }, Cmd.none, NoOp )
 
         Submitted ->
-            let
-                form : Form
-                form =
-                    currentForm model
-            in
-            case loginPayload form of
+            case loginPayload model.form of
                 Ok request ->
-                    ( { model | state = Submitting form }
-                    , Cmd.none
-                    , RequestLogin request
-                    )
+                    ( { model | state = Submitting }, Cmd.none, RequestLogin request )
 
                 Err problem ->
-                    ( { model | state = Invalid form problem }, Cmd.none, NoOp )
+                    ( { model | state = Invalid problem }, Cmd.none, NoOp )
 
         LoginCompleted result ->
             case model.state of
-                Submitting form ->
+                Submitting ->
                     case result of
                         Ok loginSession ->
                             ( model, Cmd.none, LoginSucceeded loginSession )
 
                         Err error ->
-                            ( { model | state = Failed form (Client.displayError error) }
+                            ( { model | state = Failed (Client.displayError error) }
                             , Cmd.none
                             , NoOp
                             )
@@ -145,46 +124,35 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
+
+-- VIEW
+
+
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
-    let
-        form : Form
-        form =
-            currentForm model
-    in
     View.Auth.credentialCard
         { device = device
         , title = "Log In"
         , description = Nothing
-        , username = form.username
-        , password = form.password
+        , username = model.form.username
+        , password = model.form.password
         , onUsernameChanged = UsernameChanged
         , onPasswordChanged = PasswordChanged
         , error = errorMessage model.state
-        , submitting = isSubmitting model.state
+        , submitting = model.state == Submitting
         , submitLabel = "Log In"
         , submittingLabel = "Logging in..."
         , onSubmit = Submitted
         }
 
 
-isSubmitting : State -> Bool
-isSubmitting state =
-    case state of
-        Submitting _ ->
-            True
-
-        _ ->
-            False
-
-
 errorMessage : State -> Maybe String
 errorMessage state =
     case state of
-        Invalid _ problem ->
+        Invalid problem ->
             Just (problemMessage problem)
 
-        Failed _ message ->
+        Failed message ->
             Just message
 
         _ ->

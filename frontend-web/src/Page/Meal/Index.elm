@@ -203,10 +203,7 @@ mealRow device action meal =
                 )
     in
     Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.padding 16
-        , Element.spacing 12
-        ]
+        [ Element.width Element.fill, Element.padding 16, Element.spacing 12 ]
         [ Input.button
             [ Element.width Element.fill ]
             { onPress = Just (OpenMealClicked meal.id)
@@ -221,17 +218,19 @@ mealRow device action meal =
                            ]
                     )
             }
-        , Ui.iconButton { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
-        , Ui.dangerIconButton
-            { label = "×"
-            , title =
-                if action == Deleting meal.id then
-                    "Deleting..."
+        , Element.row [ Element.padding 8, Element.spacing 12 ]
+            [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
+            , Ui.dangerIconButton
+                { label = "×"
+                , title =
+                    if action == Deleting meal.id then
+                        "Deleting..."
 
-                else
-                    "Delete"
-            , onPress = DeleteMealClicked meal.id
-            }
+                    else
+                        "Delete"
+                , onPress = DeleteMealClicked meal.id
+                }
+            ]
         ]
 
 
@@ -250,5 +249,4 @@ mealSummaryText meal =
         meal.nutritionSummary
     , Just (String.fromInt (List.length meal.components) ++ " components")
     ]
-        |> List.filterMap identity
-        |> String.join " ⋅ "
+        |> Ui.dotSeparated

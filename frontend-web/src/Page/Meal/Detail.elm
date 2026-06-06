@@ -650,12 +650,7 @@ confirmDeleteContent maybeError deleting =
         , Border.rounded 16
         ]
         [ Element.el [ Font.bold ] (Element.text "Delete meal?")
-        , case maybeError of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
+        , Ui.maybeErrorBanner maybeError
         , Element.row [ Element.spacing 8 ]
             [ Ui.button "Cancel" CancelDeleteClicked
             , Ui.dangerButton

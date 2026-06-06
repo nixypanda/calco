@@ -9,7 +9,6 @@ module Page.Meal.Common exposing
     , ValidationError(..)
     , emptyComponentRow
     , emptyFormFields
-    , errorView
     , toMealRequest
     , updateFormField
     , viewFormFields
@@ -315,16 +314,6 @@ updateFormField msg form =
             , Cmd.none
             , Nothing
             )
-
-
-errorView : FormFields -> Element msg
-errorView form =
-    case form.error of
-        Just message ->
-            Ui.errorBanner message
-
-        Nothing ->
-            Element.none
 
 
 viewFormFields :

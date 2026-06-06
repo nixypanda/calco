@@ -474,17 +474,7 @@ foodHeader device food =
         , Element.column [ Element.width Element.fill, Element.spacing 8 ]
             [ Ui.truncatedHeader device food.name
             , Ui.mutedText (metaText food)
-            , if List.isEmpty food.categories then
-                Element.none
-
-              else
-                Element.wrappedRow [ Element.spacing 4 ]
-                    (List.map
-                        (\category ->
-                            Ui.chip { label = category, selected = False, onClick = Nothing }
-                        )
-                        food.categories
-                    )
+            , Ui.chips food.categories
             , case customFoodEditRoute food of
                 Just _ ->
                     Ui.button "Edit food" EditCustomFoodClicked
@@ -499,11 +489,5 @@ metaText : ProductDetail -> String
 metaText food =
     [ food.brand
     , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-    , if List.isEmpty food.categories then
-        Nothing
-
-      else
-        Just (String.join ", " food.categories)
     ]
-        |> List.filterMap identity
-        |> String.join " ⋅ "
+        |> Ui.dotSeparated

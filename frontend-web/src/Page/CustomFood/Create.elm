@@ -15,12 +15,27 @@ import Ui
 import View.CustomFoodForm as Form
 
 
+
+-- MODEL
+
+
 type alias Model =
     { form : Form.FormModel
     , nutrients : List NutrientItem
     , units : List UnitItem
     , error : Maybe String
     }
+
+
+init : ( Model, OutMsg )
+init =
+    ( { form = Form.emptyForm, nutrients = [], units = [], error = Nothing }
+    , RequestInitialData
+    )
+
+
+
+-- UPDATE
 
 
 type Msg
@@ -37,13 +52,6 @@ type OutMsg
     | RequestCreateFood CreateFoodRequest
     | Navigate Route
     | SessionExpired
-
-
-init : ( Model, OutMsg )
-init =
-    ( { form = Form.emptyForm, nutrients = [], units = [], error = Nothing }
-    , RequestInitialData
-    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -130,15 +138,14 @@ failure =
         }
 
 
+
+-- VIEW
+
+
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        [ case model.error of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
+        [ Ui.maybeErrorBanner model.error
         , Element.map FormMsg (Form.view model.nutrients model.units model.form)
         , Ui.submitButton model.form.submitting "Create Food" "Creating..." SubmitClicked
         ]

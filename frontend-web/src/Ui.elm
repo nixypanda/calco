@@ -16,6 +16,7 @@ module Ui exposing
     , cardShadow
     , chip
     , chipBackground
+    , chips
     , coloredPill
     , dangerBg
     , dangerButton
@@ -25,6 +26,7 @@ module Ui exposing
     , defaultTruncationChars
     , detailRow
     , display
+    , dotSeparated
     , emptyState
     , errorBanner
     , fatColor
@@ -43,6 +45,7 @@ module Ui exposing
     , loading
     , macroBar
     , macroColor
+    , maybeErrorBanner
     , mutedColor
     , mutedParagraph
     , mutedText
@@ -453,6 +456,11 @@ emptyState message =
             ]
             [ Element.text message ]
         ]
+
+
+maybeErrorBanner : Maybe String -> Element msg
+maybeErrorBanner maybeError =
+    Maybe.withDefault Element.none (Maybe.map errorBanner maybeError)
 
 
 errorBanner : String -> Element msg
@@ -1010,6 +1018,16 @@ chipHtml config =
                 [ Html.text config.label ]
 
 
+chips : List String -> Element msg
+chips strings =
+    if List.isEmpty strings then
+        Element.none
+
+    else
+        Element.wrappedRow [ Element.spacing 4 ]
+            (List.map (\c -> chip { label = c, selected = False, onClick = Nothing }) strings)
+
+
 {-| 24px-tall pastel pill, useful for status indicators.
 -}
 coloredPill :
@@ -1124,3 +1142,8 @@ hairline =
         , Background.color divider
         ]
         Element.none
+
+
+dotSeparated : List (Maybe String) -> String
+dotSeparated strings =
+    strings |> List.filterMap identity |> String.join " ⋅ "

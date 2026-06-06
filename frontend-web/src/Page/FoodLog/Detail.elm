@@ -675,18 +675,7 @@ itemHeader device model =
             , Ui.mutedText (metaText maybeFood model.log)
             , case maybeFood of
                 Just food ->
-                    if List.isEmpty food.categories then
-                        Element.none
-
-                    else
-                        Element.wrappedRow [ Element.spacing 4 ]
-                            (List.map
-                                (\category ->
-                                    Ui.chip
-                                        { label = category, selected = False, onClick = Nothing }
-                                )
-                                food.categories
-                            )
+                    Ui.chips food.categories
 
                 Nothing ->
                     Element.none
@@ -739,8 +728,7 @@ metaText maybeFood log =
             , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
             , Just ("Logged " ++ LocalDate.display log.logDate)
             ]
-                |> List.filterMap identity
-                |> String.join " ⋅ "
+                |> Ui.dotSeparated
 
         Nothing ->
             "Logged " ++ LocalDate.display log.logDate

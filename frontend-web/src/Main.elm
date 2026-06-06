@@ -1473,12 +1473,16 @@ drawerView model =
     Element.column
         [ Element.width (Element.fill |> Element.maximum 320)
         , Element.height Element.fill
-        , Element.padding 24
-        , Element.spacing 8
+        , Element.paddingXY 16 9
+        , Element.spacing 12
         , Background.color Ui.cardBg
         , Ui.cardShadow
         ]
-        (Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
+        (Element.row [ Element.spacing 8 ]
+            [ Ui.iconButton { label = "☰", title = "Close", onPress = DrawerClosed }
+            , Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
+            ]
+            :: Ui.hairline
             :: drawerItems model
         )
 

@@ -127,15 +127,10 @@ mapFormOutMsg maybeOutMsg =
 
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
-    let
-        fields : Common.FormFields
-        fields =
-            model
-    in
     Ui.pageContainer device
-        [ Common.errorView fields
-        , Common.viewFormFields device FormMsg fields
-        , Ui.submitButton fields.submitting
+        [ Ui.maybeErrorBanner model.error
+        , Common.viewFormFields device FormMsg model
+        , Ui.submitButton model.submitting
             "Create Meal"
             "Saving..."
             SubmitClicked

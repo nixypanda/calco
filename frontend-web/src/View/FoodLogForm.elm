@@ -161,12 +161,7 @@ view food units model =
         [ Element.width Element.fill
         , Element.spacing 16
         ]
-        [ case model.error of
-            Just message ->
-                Ui.errorBanner message
-
-            Nothing ->
-                Element.none
+        [ Ui.maybeErrorBanner model.error
         , Ui.card
             [ mealSlotDropdown model
             , View.QuantityInput.dropdown

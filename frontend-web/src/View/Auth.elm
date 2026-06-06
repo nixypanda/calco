@@ -48,9 +48,8 @@ credentialCard config =
                 ++ descriptionView config.description
                 ++ [ Ui.input "Username" config.username config.onUsernameChanged
                    , Ui.passwordInput "Password" config.password config.onPasswordChanged
-                   ]
-                ++ errorView config.error
-                ++ [ Ui.submitButton
+                   , Ui.maybeErrorBanner config.error
+                   , Ui.submitButton
                         config.submitting
                         config.submitLabel
                         config.submittingLabel
@@ -70,16 +69,6 @@ descriptionView maybeDescription =
                 ]
                 [ Element.text description ]
             ]
-
-        Nothing ->
-            []
-
-
-errorView : Maybe String -> List (Element msg)
-errorView maybeError =
-    case maybeError of
-        Just message ->
-            [ Ui.errorBanner message ]
 
         Nothing ->
             []

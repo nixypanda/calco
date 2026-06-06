@@ -28,73 +28,56 @@ tests =
                     |> Expect.equal (Err Login.PasswordRequired)
         , test "login submit moves valid form into submitting state" <|
             \_ ->
-                { state = Login.Editing { username = " alice ", password = "secret" } }
+                { state = Login.Editing, form = { username = " alice ", password = "secret" } }
                     |> Login.update Login.Submitted
                     |> firstOfThree
                     |> .state
-                    |> Expect.equal (Login.Submitting { username = " alice ", password = "secret" })
+                    |> Expect.equal Login.Submitting
         , test "login submit emits trimmed request" <|
             \_ ->
-                { state = Login.Editing { username = " alice ", password = "secret" } }
+                { state = Login.Editing, form = { username = " alice ", password = "secret" } }
                     |> Login.update Login.Submitted
                     |> thirdOfThree
                     |> Expect.equal (Login.RequestLogin { username = "alice", password = "secret" })
         , test "login submit stores typed validation problem" <|
             \_ ->
-                { state = Login.Editing { username = "", password = "secret" } }
+                { state = Login.Editing, form = { username = "", password = "secret" } }
                     |> Login.update Login.Submitted
                     |> firstOfThree
                     |> .state
-                    |> Expect.equal
-                        (Login.Invalid
-                            { username = "", password = "secret" }
-                            Login.UsernameRequired
-                        )
+                    |> Expect.equal (Login.Invalid Login.UsernameRequired)
         , test "login field edit clears invalid state" <|
             \_ ->
-                { state =
-                    Login.Invalid
-                        { username = "", password = "secret" }
-                        Login.UsernameRequired
+                { state = Login.Invalid Login.UsernameRequired
+                , form = { username = "", password = "secret" }
                 }
                     |> Login.update (Login.UsernameChanged "alice")
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (Login.Editing { username = "alice", password = "secret" })
+                    |> Expect.equal { state = Login.Editing, form = { username = "alice", password = "secret" } }
         , test "login field edit clears failed state" <|
             \_ ->
-                { state =
-                    Login.Failed
-                        { username = "alice", password = "wrong" }
-                        "Invalid credentials"
+                { state = Login.Failed "Invalid credentials"
+                , form = { username = "alice", password = "wrong" }
                 }
                     |> Login.update (Login.PasswordChanged "secret")
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (Login.Editing { username = "alice", password = "secret" })
+                    |> Expect.equal { state = Login.Editing, form = { username = "alice", password = "secret" } }
         , test "login failed completion stores api error with form" <|
             \_ ->
-                { state = Login.Submitting { username = "alice", password = "wrong" } }
+                { state = Login.Submitting, form = { username = "alice", password = "wrong" } }
                     |> Login.update
                         (Login.LoginCompleted
                             (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
                         )
                     |> firstOfThree
                     |> .state
-                    |> Expect.equal
-                        (Login.Failed
-                            { username = "alice", password = "wrong" }
-                            "unauthorized: Unauthorized"
-                        )
+                    |> Expect.equal (Login.Failed "unauthorized: Unauthorized")
         , test "login completion is ignored when not submitting" <|
             \_ ->
-                { state = Login.Editing { username = "alice", password = "secret" } }
+                { state = Login.Editing, form = { username = "alice", password = "secret" } }
                     |> Login.update (Login.LoginCompleted (Err Client.NetworkError))
                     |> resultSummary
-                    |> Expect.equal
-                        ( Login.Editing { username = "alice", password = "secret" }
-                        , Login.NoOp
-                        )
+                    |> Expect.equal ( Login.Editing, Login.NoOp )
         , test "setup rejects short password" <|
             \_ ->
                 Setup.validateBootstrapAdmin { username = "admin", password = "short" }

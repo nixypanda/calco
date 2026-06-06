@@ -390,7 +390,7 @@ view { model, device } =
 
         Editing loaded ->
             Ui.pageContainer device
-                [ Common.errorView loaded.fields
+                [ Ui.maybeErrorBanner loaded.fields.error
                 , Common.viewFormFields device FormMsg loaded.fields
                 , nutritionView device loaded
                 , Ui.submitButton loaded.fields.submitting

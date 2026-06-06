@@ -165,8 +165,7 @@ metaText query item =
         Nothing
     , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.energyKcalPer100g
     ]
-        |> List.filterMap identity
-        |> String.join " ⋅ "
+        |> Ui.dotSeparated
 
 
 isBarcodeVisible : String -> SearchResult -> Bool
