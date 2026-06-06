@@ -1,4 +1,4 @@
-module View.Nutrients exposing (macroBreakdownView, nutrientsTable)
+module View.Nutrients exposing (macroBreakdownView, nutrientLabel, nutrientsTable)
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Element exposing (Element)
@@ -9,6 +9,14 @@ import Lib.Number as Number
 import Ui
 
 
+{-| Render a friendly name for a nutrient code. Known backend codes
+(`ENERGY_KCAL`, `SATURATED_FAT_G`, etc.) are mapped explicitly. Unknown
+codes are parsed generically: `RIBOFLAVIN_MG` becomes `"Riboflavin (mg)"`.
+
+Codes that have no recognized unit suffix (e.g. a bare `MYSTERY`) fall
+back to the raw code.
+
+-}
 nutrientLabel : String -> String
 nutrientLabel code =
     case code of
@@ -24,16 +32,16 @@ nutrientLabel code =
         "FAT_G" ->
             "Fat"
 
-        "FAT_SATURATED_G" ->
+        "SATURATED_FAT_G" ->
             "Saturated Fat"
 
-        "FAT_MONO_G" ->
+        "MONOUNSATURATED_FAT_G" ->
             "Monounsaturated Fat"
 
-        "FAT_POLY_G" ->
+        "POLYUNSATURATED_FAT_G" ->
             "Polyunsaturated Fat"
 
-        "FAT_TRANS_G" ->
+        "TRANS_FAT_G" ->
             "Trans Fat"
 
         "FIBER_G" ->
@@ -60,6 +68,15 @@ nutrientLabel code =
         "IRON_MG" ->
             "Iron"
 
+        "MAGNESIUM_MG" ->
+            "Magnesium"
+
+        "ZINC_MG" ->
+            "Zinc"
+
+        "PHOSPHORUS_MG" ->
+            "Phosphorus"
+
         "VITAMIN_A_UG" ->
             "Vitamin A"
 
@@ -69,8 +86,102 @@ nutrientLabel code =
         "VITAMIN_D_UG" ->
             "Vitamin D"
 
+        "VITAMIN_E_MG" ->
+            "Vitamin E"
+
+        "VITAMIN_B6_MG" ->
+            "Vitamin B6"
+
+        "VITAMIN_B12_UG" ->
+            "Vitamin B12"
+
+        "FOLATE_UG" ->
+            "Folate"
+
         _ ->
+            genericNutrientLabel code
+
+
+{-| Parses arbitrary backend nutrient codes into readable labels.
+
+Examples:
+
+  - `RIBOFLAVIN_MG` → `"Riboflavin (mg)"`
+  - `BETA_CAROTENE_UG` → `"Beta Carotene (ug)"`
+  - `LYCOPENE_G` → `"Lycopene (g)"`
+  - `MYSTERY` → `"MYSTERY"` (no recognized unit)
+
+A recognized unit is the suffix token if it matches one of `G`, `MG`,
+`UG`, or `KCAL` (case-insensitive).
+
+-}
+genericNutrientLabel : String -> String
+genericNutrientLabel code =
+    let
+        tokens : List String
+        tokens =
+            String.split "_" code
+
+        lastToken : Maybe String
+        lastToken =
+            tokens |> List.reverse |> List.head
+
+        unit : Maybe String
+        unit =
+            lastToken
+                |> Maybe.andThen
+                    (\t ->
+                        case String.toUpper t of
+                            "G" ->
+                                Just "g"
+
+                            "MG" ->
+                                Just "mg"
+
+                            "UG" ->
+                                Just "ug"
+
+                            "KCAL" ->
+                                Just "kcal"
+
+                            _ ->
+                                Nothing
+                    )
+
+        nameTokens : List String
+        nameTokens =
+            case unit of
+                Just _ ->
+                    tokens |> List.reverse |> List.drop 1 |> List.reverse
+
+                Nothing ->
+                    tokens
+    in
+    case ( unit, nameTokens ) of
+        ( Nothing, [] ) ->
             code
+
+        ( Just u, [] ) ->
+            code ++ " (" ++ u ++ ")"
+
+        ( Just u, words ) ->
+            words
+                |> List.map titleCase
+                |> String.join " "
+                |> (\rendered -> rendered ++ " (" ++ u ++ ")")
+
+        ( Nothing, words ) ->
+            words |> List.map titleCase |> String.join " "
+
+
+titleCase : String -> String
+titleCase word =
+    case String.uncons word of
+        Just ( head, rest ) ->
+            String.fromChar (Char.toUpper head) ++ String.toLower rest
+
+        Nothing ->
+            word
 
 
 macroBreakdownView : List NutrientAmount -> Element msg

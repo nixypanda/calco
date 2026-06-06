@@ -228,15 +228,17 @@ mealRow action meal =
                            ]
                     )
             }
-        , Ui.iconButton "✎" (EditMealClicked meal.id)
-        , Ui.dangerButton
-            (if action == Deleting meal.id then
-                "Deleting..."
+        , Ui.iconButton { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
+        , Ui.dangerIconButton
+            { label = "×"
+            , title =
+                if action == Deleting meal.id then
+                    "Deleting..."
 
-             else
-                "Delete"
-            )
-            (DeleteMealClicked meal.id)
+                else
+                    "Delete"
+            , onPress = DeleteMealClicked meal.id
+            }
         ]
 
 

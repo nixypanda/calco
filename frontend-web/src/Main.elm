@@ -1167,7 +1167,17 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "CalCo"
     , body =
-        [ Element.layout [] <|
+        [ Element.layoutWith
+            { options =
+                [ Element.focusStyle
+                    { borderColor = Nothing
+                    , backgroundColor = Nothing
+                    , shadow = Nothing
+                    }
+                ]
+            }
+            []
+          <|
             Ui.layout <|
                 appFrame model
         ]
@@ -1250,10 +1260,10 @@ leadingButton : LeadingAction -> Element.Element Msg
 leadingButton leading =
     case leading of
         OpenMenu ->
-            Ui.iconButton "☰" MenuClicked
+            Ui.iconButton { label = "☰", title = "Menu", onPress = MenuClicked }
 
         GoBack route ->
-            Ui.iconButton "←" (AppBackClicked route)
+            Ui.iconButton { label = "←", title = "Back", onPress = AppBackClicked route }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -1271,7 +1281,7 @@ profileButton model =
                 _ ->
                     "?"
     in
-    Ui.iconButton letter ProfileClicked
+    Ui.iconButton { label = letter, title = "Profile", onPress = ProfileClicked }
 
 
 initial : String -> String

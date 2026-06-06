@@ -303,7 +303,7 @@ dateCard model =
             [ Element.width Element.fill
             , Element.spacing 12
             ]
-            [ Ui.iconButton "←" PreviousDayClicked
+            [ Ui.iconButton { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
@@ -342,7 +342,7 @@ dateCard model =
 
 totalsView : List NutrientAmount -> Element Msg
 totalsView summary =
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+    Element.column [ Element.width Element.fill, Element.spacing 18 ]
         [ Ui.macroBar
             { label = "Calories"
             , value = dailyCalories summary

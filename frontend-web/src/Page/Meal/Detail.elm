@@ -545,8 +545,8 @@ headerView model =
         Loaded loaded ->
             Element.row [ Element.width Element.fill, Element.spacing 16 ]
                 [ Element.el [ Ui.heading1, Font.bold ] (Element.text loaded.meal.name)
-                , Ui.button "Edit" EditClicked
-                , Ui.button "Delete" DeleteClicked
+                , Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
+                , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
                 ]
 
         _ ->

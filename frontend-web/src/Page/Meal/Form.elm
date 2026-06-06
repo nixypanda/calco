@@ -982,7 +982,13 @@ componentRowView row =
                 , unit = row.unit
                 , onUnitChange = ComponentUnitChanged row.rowId
                 }
-            , Ui.button "Remove" (RemoveComponentClicked row.rowId)
+            , Element.el [ Element.centerY ]
+                (Ui.dangerIconButton
+                    { label = "×"
+                    , title = "Remove"
+                    , onPress = RemoveComponentClicked row.rowId
+                    }
+                )
             ]
         ]
 

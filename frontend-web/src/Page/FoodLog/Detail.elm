@@ -605,14 +605,16 @@ loadedView model =
             (FoodLogForm.view (productDetail model.item) model.units model.form)
         , Ui.cardActions
             [ Ui.submitButton (model.request == Saving) "Save" "Saving..." SubmitClicked
-            , Ui.dangerButton
-                (if model.request == Deleting then
-                    "Deleting..."
+            , Ui.dangerIconButton
+                { label = "×"
+                , title =
+                    if model.request == Deleting then
+                        "Deleting..."
 
-                 else
-                    "Delete"
-                )
-                DeleteClicked
+                    else
+                        "Delete"
+                , onPress = DeleteClicked
+                }
             ]
         , Ui.card
             [ Ui.sectionHeader "Macro Breakdown"

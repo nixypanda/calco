@@ -64,9 +64,13 @@ renderingSmoke : Test
 renderingSmoke =
     describe "new components (smoke)"
         [ test "iconButton does not crash on empty label" <|
-            \_ -> Ui.iconButton "" () |> pass
+            \_ -> Ui.iconButton { label = "", title = "Empty", onPress = () } |> pass
         , test "iconButton renders with a glyph" <|
-            \_ -> Ui.iconButton "←" () |> pass
+            \_ -> Ui.iconButton { label = "←", title = "Back", onPress = () } |> pass
+        , test "dangerIconButton renders with a glyph" <|
+            \_ -> Ui.dangerIconButton { label = "×", title = "Delete", onPress = () } |> pass
+        , test "fieldLabel renders with a label" <|
+            \_ -> Ui.fieldLabel "Amount" |> pass
         , test "accentDot produces a value for any color" <|
             \_ -> Ui.accentDot Ui.accentPink |> pass
         , test "coloredPill uses the provided bg and fg" <|

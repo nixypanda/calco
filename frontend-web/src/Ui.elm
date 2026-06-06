@@ -20,12 +20,14 @@ module Ui exposing
     , dangerBg
     , dangerButton
     , dangerFg
+    , dangerIconButton
     , darkColor
     , detailRow
     , display
     , emptyState
     , errorBanner
     , fatColor
+    , fieldLabel
     , ghostButton
     , hairline
     , heading1
@@ -64,6 +66,7 @@ import Element.Input as Input
 import Html
 import Html.Attributes
 import Html.Events
+import Json.Decode
 import Lib.ListExtra as ListExtra
 import View.Charts
 
@@ -446,7 +449,7 @@ input label value onChange =
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [ body, medium, Font.color textPrimary ] (Element.text label)
+        , label = Input.labelAbove [] (fieldLabel label)
         }
 
 
@@ -460,7 +463,7 @@ passwordInput label value onChange =
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [ body, medium, Font.color textPrimary ] (Element.text label)
+        , label = Input.labelAbove [] (fieldLabel label)
         , show = False
         }
 
@@ -475,9 +478,22 @@ select label_ selected options onChange =
     Input.radio [ Element.spacing 8 ]
         { onChange = onChange
         , selected = Just selected
-        , label = Input.labelAbove [ body, medium, Font.color textPrimary ] (Element.text label_)
+        , label = Input.labelAbove [] (fieldLabel label_)
         , options = List.map (\( val, lbl ) -> Input.option val (Element.text lbl)) options
         }
+
+
+{-| Caption-sized, semibold label used above inputs, dropdowns, and other
+form controls. Visually reads as a small section header.
+-}
+fieldLabel : String -> Element msg
+fieldLabel label_ =
+    Element.el
+        [ caption
+        , medium
+        , Font.color textPrimary
+        ]
+        (Element.text label_)
 
 
 
@@ -535,6 +551,10 @@ selectDropdown config =
                 [] ->
                     ""
 
+        isSelected : a -> Bool
+        isSelected val =
+            val == config.selected
+
         optionsElement : Element msg
         optionsElement =
             if config.isOpen then
@@ -547,29 +567,40 @@ selectDropdown config =
                     ]
                     (List.map
                         (\( val, lbl ) ->
-                            Input.button
-                                [ Element.width Element.fill
-                                , Element.paddingEach
-                                    { top = 10, bottom = 10, left = 14, right = 14 }
-                                , body
-                                , Background.color
-                                    (if val == config.selected then
-                                        primaryTealPressed
+                            Element.html
+                                (Html.button
+                                    [ Html.Attributes.style "width" "100%"
+                                    , Html.Attributes.style "padding" "10px 14px"
+                                    , Html.Attributes.style "font-family" "inherit"
+                                    , Html.Attributes.style "font-size" "14px"
+                                    , Html.Attributes.style "text-align" "left"
+                                    , Html.Attributes.style "border" "none"
+                                    , Html.Attributes.style "cursor" "pointer"
+                                    , Html.Attributes.style "background-color"
+                                        (toCssColor
+                                            (if isSelected val then
+                                                primaryTealPressed
 
-                                     else
-                                        cardBg
-                                    )
-                                , Font.color
-                                    (if val == config.selected then
-                                        Element.rgb255 255 255 255
+                                             else
+                                                cardBg
+                                            )
+                                        )
+                                    , Html.Attributes.style "color"
+                                        (toCssColor
+                                            (if isSelected val then
+                                                Element.rgb255 255 255 255
 
-                                     else
-                                        textPrimary
-                                    )
-                                ]
-                                { onPress = Just (config.onChange val)
-                                , label = Element.text lbl
-                                }
+                                             else
+                                                textPrimary
+                                            )
+                                        )
+                                    , Html.Events.stopPropagationOn "click"
+                                        (Json.Decode.succeed
+                                            ( config.onChange val, True )
+                                        )
+                                    ]
+                                    [ Html.text lbl ]
+                                )
                         )
                         config.options
                     )
@@ -578,7 +609,7 @@ selectDropdown config =
                 Element.none
     in
     Element.column [ Element.width Element.fill, Element.spacing 4 ]
-        [ Element.el [ body, Font.medium, Font.color textPrimary ] (Element.text config.label)
+        [ fieldLabel config.label
         , Input.button
             (List.concat
                 [ [ Element.width Element.fill
@@ -720,21 +751,52 @@ skeletonBar =
 
 
 {-| 40×40 circular icon button. The label is rendered as text glyphs
-(←, ☰, ✕, +, etc.). Empty string is allowed and renders an invisible
-clickable circle, useful as a no-op leading placeholder.
+(←, ☰, ✕, +, etc.). `title` is forwarded as both a tooltip and a
+semantic label for screen readers. Empty `label` is allowed and
+renders an invisible clickable circle, useful as a no-op leading
+placeholder.
+
+Background is `cardBg` (white) with a 1px `divider` border so the
+button has a defined edge whether it sits on the page background
+(`pageBg`) or inside a white card.
+
 -}
-iconButton : String -> msg -> Element msg
-iconButton label msg =
+iconButton : { label : String, title : String, onPress : msg } -> Element msg
+iconButton config =
     Input.button
         [ Element.width (Element.px 40)
         , Element.height (Element.px 40)
-        , Background.color inputFill
+        , Background.color cardBg
         , Font.color textPrimary
         , Font.center
         , Border.rounded 999
+        , Border.width 1
+        , Border.color divider
+        , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
-        { onPress = Just msg
-        , label = Element.text label
+        { onPress = Just config.onPress
+        , label = Element.text config.label
+        }
+
+
+{-| 40×40 circular icon button styled for destructive actions. Mirrors
+`iconButton` but uses the solid danger palette (the same vibrant red
+as the legacy `dangerButton`). `title` doubles as the tooltip and the
+semantic label for screen readers.
+-}
+dangerIconButton : { label : String, title : String, onPress : msg } -> Element msg
+dangerIconButton config =
+    Input.button
+        [ Element.width (Element.px 40)
+        , Element.height (Element.px 40)
+        , Background.color dangerSolid
+        , Font.color (Element.rgb255 255 255 255)
+        , Font.center
+        , Border.rounded 999
+        , Element.htmlAttribute (Html.Attributes.title config.title)
+        ]
+        { onPress = Just config.onPress
+        , label = Element.text config.label
         }
 
 
