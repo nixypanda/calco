@@ -1,17 +1,160 @@
 module Data.Search exposing
-    ( Completion(..)
+    ( CategoryRequest
+    , CategorySuggestion
+    , Completion(..)
+    , QueryState
     , applyCompletion
     , categoryQuery
     , completionLabel
     , completions
+    , empty
+    , onQueryChanged
+    , setCategorySuggestions
+    , withCategoryToken
+    , withQuery
+    , withSearchToken
     )
 
 import Lib.Text as Text
+import Process
+import Task
 
 
 type Completion
     = OperatorCompletion String
     | CategoryCompletion String Int
+
+
+type alias CategorySuggestion =
+    { value : String
+    , count : Int
+    }
+
+
+type alias CategoryRequest =
+    { token : Int
+    , query : String
+    }
+
+
+type alias QueryState =
+    { query : String
+    , searchToken : Int
+    , categoryToken : Int
+    , categorySuggestions : List CategorySuggestion
+    }
+
+
+empty : QueryState
+empty =
+    { query = ""
+    , searchToken = 0
+    , categoryToken = 0
+    , categorySuggestions = []
+    }
+
+
+onQueryChanged :
+    String
+    -> QueryState
+    -> Maybe { delayMs : Int, onFire : Int -> String -> msg }
+    -> ( QueryState, Cmd msg, Maybe CategoryRequest )
+onQueryChanged rawQuery state debounce =
+    let
+        trimmed : String
+        trimmed =
+            String.trim rawQuery
+
+        isEmpty : Bool
+        isEmpty =
+            String.isEmpty trimmed
+
+        nextSearchToken : Int
+        nextSearchToken =
+            state.searchToken + 1
+
+        nextCategoryToken : Int
+        nextCategoryToken =
+            state.categoryToken + 1
+
+        categoryReq : Maybe CategoryRequest
+        categoryReq =
+            categoryQuery rawQuery
+                |> Maybe.map
+                    (\value ->
+                        { token = nextCategoryToken
+                        , query = value
+                        }
+                    )
+
+        nextCategorySuggestions : List CategorySuggestion
+        nextCategorySuggestions =
+            case categoryReq of
+                Nothing ->
+                    []
+
+                Just _ ->
+                    if isEmpty then
+                        []
+
+                    else
+                        state.categorySuggestions
+
+        debounceCmd : Cmd msg
+        debounceCmd =
+            if isEmpty then
+                Cmd.none
+
+            else
+                case debounce of
+                    Nothing ->
+                        Cmd.none
+
+                    Just config ->
+                        debounceAfter config.delayMs
+                            nextSearchToken
+                            trimmed
+                            config.onFire
+    in
+    ( { state
+        | query = rawQuery
+        , searchToken = nextSearchToken
+        , categoryToken = nextCategoryToken
+        , categorySuggestions = nextCategorySuggestions
+      }
+    , debounceCmd
+    , categoryReq
+    )
+
+
+debounceAfter : Int -> Int -> String -> (Int -> String -> msg) -> Cmd msg
+debounceAfter delayMs token query onFire =
+    Process.sleep (toFloat delayMs)
+        |> Task.perform (\_ -> onFire token query)
+
+
+setCategorySuggestions : Int -> List CategorySuggestion -> QueryState -> QueryState
+setCategorySuggestions token suggestions state =
+    if state.categoryToken == token then
+        { state | categorySuggestions = suggestions }
+
+    else
+        state
+
+
+withQuery : String -> QueryState -> QueryState
+withQuery query state =
+    { state | query = query }
+
+
+withSearchToken : Int -> QueryState -> QueryState
+withSearchToken token state =
+    { state | searchToken = token }
+
+
+withCategoryToken : Int -> QueryState -> QueryState
+withCategoryToken token state =
+    { state | categoryToken = token }
 
 
 completions : String -> List { a | value : String, count : Int } -> List Completion

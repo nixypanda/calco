@@ -5,6 +5,7 @@ import Api.Foods exposing (SearchResult)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
+import Data.Search as Search
 import Expect
 import Lib.Loadable exposing (Loadable(..))
 import Page.Food.Search as FoodSearch
@@ -20,40 +21,49 @@ tests =
                     (FoodSearch.QueryChanged "   ")
                     { loadedModel | results = Failure Client.NetworkError }
                     |> first
-                    |> (\model -> ( model.query, model.results ))
+                    |> (\model -> ( model.search.query, model.results ))
                     |> Expect.equal ( "   ", NotAsked )
         , test "non-empty query increments search token" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "apple") emptyModel
                     |> first
+                    |> .search
                     |> .searchToken
                     |> Expect.equal 1
         , test "tab completion expands include category operator" <|
             \_ ->
-                FoodSearch.update FoodSearch.CompleteFirstSuggestion { emptyModel | query = "c" }
+                FoodSearch.update
+                    FoodSearch.CompleteFirstSuggestion
+                    { emptyModel | search = Search.withQuery "c" emptyModel.search }
                     |> first
+                    |> .search
                     |> .query
                     |> Expect.equal "category:"
         , test "tab completion preserves the gap before the current token" <|
             \_ ->
                 FoodSearch.update
                     FoodSearch.CompleteFirstSuggestion
-                    { emptyModel | query = "apple c" }
+                    { emptyModel | search = Search.withQuery "apple c" emptyModel.search }
                     |> first
+                    |> .search
                     |> .query
                     |> Expect.equal "apple category:"
         , test "tab completion preserves repeated gaps before the current token" <|
             \_ ->
                 FoodSearch.update
                     FoodSearch.CompleteFirstSuggestion
-                    { emptyModel | query = "apple  c" }
+                    { emptyModel | search = Search.withQuery "apple  c" emptyModel.search }
                     |> first
+                    |> .search
                     |> .query
                     |> Expect.equal "apple  category:"
         , test "tab completion expands exclude category operator" <|
             \_ ->
-                FoodSearch.update FoodSearch.CompleteFirstSuggestion { emptyModel | query = "-c" }
+                FoodSearch.update
+                    FoodSearch.CompleteFirstSuggestion
+                    { emptyModel | search = Search.withQuery "-c" emptyModel.search }
                     |> first
+                    |> .search
                     |> .query
                     |> Expect.equal "-category:"
         , test "typing a category value requests suggestions" <|
@@ -74,8 +84,13 @@ tests =
                             }
                         )
                     )
-                    { emptyModel | categoryToken = 1 }
+                    { emptyModel
+                        | search =
+                            Search.withCategoryToken 1
+                                emptyModel.search
+                    }
                     |> first
+                    |> .search
                     |> .categorySuggestions
                     |> Expect.equal [ { value = "food and beverages", count = 4 } ]
         , test "tab completion applies first category suggestion with quotes when needed" <|
@@ -83,10 +98,15 @@ tests =
                 FoodSearch.update
                     FoodSearch.CompleteFirstSuggestion
                     { emptyModel
-                        | query = "category:foo"
-                        , categorySuggestions = [ { value = "food and beverages", count = 4 } ]
+                        | search =
+                            { query = "category:foo"
+                            , searchToken = 0
+                            , categoryToken = 0
+                            , categorySuggestions = [ { value = "food and beverages", count = 4 } ]
+                            }
                     }
                     |> first
+                    |> .search
                     |> .query
                     |> Expect.equal "category:\"food and beverages\""
         , test "search started sets loading" <|
@@ -99,14 +119,23 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.DebounceElapsed 2 "apple")
-                    { emptyModel | searchToken = 2 }
+                    { emptyModel
+                        | search =
+                            Search.withSearchToken 2
+                                emptyModel.search
+                    }
                     |> third
                     |> Expect.equal (FoodSearch.RequestSearch 2 { query = "apple" })
         , test "matching search result stores items and clears loading" <|
             \_ ->
                 FoodSearch.update
                     (FoodSearch.SearchCompleted 2 (Ok { items = [ apple ] }))
-                    { emptyModel | searchToken = 2, results = Loading }
+                    { emptyModel
+                        | search =
+                            Search.withSearchToken 2
+                                emptyModel.search
+                        , results = Loading
+                    }
                     |> first
                     |> .results
                     |> Expect.equal (Success [ apple ])
@@ -114,7 +143,12 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.SearchCompleted 1 (Ok { items = [ apple ] }))
-                    { emptyModel | searchToken = 2, results = Loading }
+                    { emptyModel
+                        | search =
+                            Search.withSearchToken 2
+                                emptyModel.search
+                        , results = Loading
+                    }
                     |> first
                     |> .results
                     |> Expect.equal Loading
@@ -122,7 +156,12 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.SearchCompleted 2 (Err Client.NetworkError))
-                    { loadedModel | searchToken = 2, results = Loading }
+                    { loadedModel
+                        | search =
+                            Search.withSearchToken 2
+                                loadedModel.search
+                        , results = Loading
+                    }
                     |> first
                     |> .results
                     |> Expect.equal (Failure Client.NetworkError)
@@ -130,7 +169,11 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.SearchCompleted 1 (Err Client.NetworkError))
-                    { loadedModel | searchToken = 2 }
+                    { loadedModel
+                        | search =
+                            Search.withSearchToken 2
+                                loadedModel.search
+                    }
                     |> first
                     |> .results
                     |> Expect.equal (Success [ apple ])
@@ -156,7 +199,10 @@ emptyModel =
 
 loadedModel : FoodSearch.Model
 loadedModel =
-    { emptyModel | results = Success [ apple ], searchToken = 1 }
+    { emptyModel
+        | results = Success [ apple ]
+        , search = Search.withSearchToken 1 emptyModel.search
+    }
 
 
 apple : SearchResult

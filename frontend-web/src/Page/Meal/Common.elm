@@ -18,8 +18,7 @@ module Page.Meal.Common exposing
 import Api.Client as Client
 import Api.Foods as Foods
     exposing
-        ( CategorySuggestion
-        , ProductDetail
+        ( ProductDetail
         , SearchResponse
         , SearchResult
         )
@@ -31,12 +30,8 @@ import Api.Meals
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (defaultCode)
-import Data.Search as Search exposing (Completion)
+import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
-import Element.Input as Input
 import Lib.Text as Text
 import Ui
 import View.Search as SearchView
@@ -52,12 +47,9 @@ type alias ComponentRow =
     , productName : String
     , quantity : String
     , unit : String
-    , searchQuery : String
+    , search : QueryState
     , searchResults : List SearchResult
     , searching : Bool
-    , searchToken : Int
-    , categoryToken : Int
-    , categorySuggestions : List CategorySuggestion
     }
 
 
@@ -141,12 +133,9 @@ emptyComponentRow rowId =
     , productName = ""
     , quantity = "100"
     , unit = defaultCode
-    , searchQuery = ""
+    , search = Search.empty
     , searchResults = []
     , searching = False
-    , searchToken = 0
-    , categoryToken = 0
-    , categorySuggestions = []
     }
 
 
@@ -233,8 +222,21 @@ updateFormField msg form =
         ComponentCategoriesCompleted rowId token result ->
             case result of
                 Ok response ->
+                    let
+                        priorSearch : QueryState
+                        priorSearch =
+                            findRow rowId form.components
+                                |> Maybe.map .search
+                                |> Maybe.withDefault Search.empty
+                    in
                     ( updateComponent rowId
-                        (SetCategorySuggestions token response.items)
+                        (SetSearch
+                            (Search.setCategorySuggestions
+                                token
+                                response.items
+                                priorSearch
+                            )
+                        )
                         form
                     , Cmd.none
                     , Nothing
@@ -248,7 +250,18 @@ updateFormField msg form =
                                 , sessionExpired = Just FormSessionExpired
                                 , applyError =
                                     \_ current ->
-                                        updateComponent rowId ClearCategorySuggestions current
+                                        updateComponent rowId
+                                            (SetSearch
+                                                (Search.setCategorySuggestions
+                                                    token
+                                                    []
+                                                    (findRow rowId current.components
+                                                        |> Maybe.map .search
+                                                        |> Maybe.withDefault Search.empty
+                                                    )
+                                                )
+                                            )
+                                            current
                                 }
                                 error
                                 form
@@ -262,7 +275,7 @@ updateFormField msg form =
             case findRow rowId form.components of
                 Just row ->
                     onComponentSearchChanged rowId
-                        (Search.applyCompletion completion row.searchQuery)
+                        (Search.applyCompletion completion row.search.query)
                         form
 
                 Nothing ->
@@ -392,6 +405,15 @@ onComponentSearchChanged :
     -> ( FormFields, Cmd FormFieldMsg, Maybe FormFieldOutMsg )
 onComponentSearchChanged rowId query form =
     let
+        priorSearch : QueryState
+        priorSearch =
+            findRow rowId form.components
+                |> Maybe.map .search
+                |> Maybe.withDefault Search.empty
+
+        ( transitionedSearch, _, categoryReq ) =
+            Search.onQueryChanged query priorSearch Nothing
+
         token : Int
         token =
             form.nextSearchToken
@@ -400,19 +422,16 @@ onComponentSearchChanged rowId query form =
         categoryToken =
             token + 1
 
-        nextModel : FormFields
-        nextModel =
-            form
-                |> updateComponent rowId (SetSearchQuery query)
-                |> updateComponent rowId (SetSearchStarted token)
-                |> updateComponent rowId
-                    (case Search.categoryQuery query of
-                        Just _ ->
-                            SetCategorySuggestionsStarted categoryToken
+        nextSearch : QueryState
+        nextSearch =
+            { transitionedSearch
+                | searchToken = token
+                , categoryToken = categoryToken
+            }
 
-                        Nothing ->
-                            ClearCategorySuggestions
-                    )
+        nextForm : FormFields
+        nextForm =
+            form |> updateComponent rowId (SetSearch nextSearch)
 
         searchRequest : Maybe Foods.SearchRequest
         searchRequest =
@@ -421,18 +440,10 @@ onComponentSearchChanged rowId query form =
 
             else
                 Just { query = query }
-
-        categoryRequest : Maybe Foods.CategorySuggestionRequest
-        categoryRequest =
-            Search.categoryQuery query
-                |> Maybe.map
-                    (\value ->
-                        { query = value, limit = 8 }
-                    )
     in
-    case ( searchRequest, categoryRequest ) of
-        ( Just productRequest, Just categorySuggestionRequest ) ->
-            ( { nextModel | nextSearchToken = token + 2 }
+    case ( searchRequest, categoryReq ) of
+        ( Just productRequest, Just cat ) ->
+            ( { nextForm | nextSearchToken = token + 2 }
             , Cmd.none
             , Just
                 (RequestProductAndCats
@@ -440,31 +451,31 @@ onComponentSearchChanged rowId query form =
                     , searchToken = token
                     , searchRequest = productRequest
                     , categoryToken = categoryToken
-                    , categoryRequest = categorySuggestionRequest
+                    , categoryRequest = { query = cat.query, limit = 8 }
                     }
                 )
             )
 
         ( Just productRequest, Nothing ) ->
-            ( { nextModel | nextSearchToken = token + 1 }
+            ( { nextForm | nextSearchToken = token + 1 }
             , Cmd.none
             , Just (RequestProductSearch rowId token productRequest)
             )
 
-        ( Nothing, Just categorySuggestionRequest ) ->
-            ( { nextModel | nextSearchToken = token + 2 }
+        ( Nothing, Just cat ) ->
+            ( { nextForm | nextSearchToken = token + 2 }
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Just
                 (RequestCategorySuggestions
                     rowId
                     categoryToken
-                    categorySuggestionRequest
+                    { query = cat.query, limit = 8 }
                 )
             )
 
         _ ->
-            ( nextModel |> updateComponent rowId (SetSearchResults token [])
+            ( nextForm |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Nothing
             )
@@ -477,10 +488,10 @@ completeComponentSuggestion :
 completeComponentSuggestion rowId form =
     case findRow rowId form.components of
         Just row ->
-            case List.head (Search.completions row.searchQuery row.categorySuggestions) of
+            case List.head (Search.completions row.search.query row.search.categorySuggestions) of
                 Just completion ->
                     onComponentSearchChanged rowId
-                        (Search.applyCompletion completion row.searchQuery)
+                        (Search.applyCompletion completion row.search.query)
                         form
 
                 Nothing ->
@@ -511,7 +522,7 @@ requestNextMissingProductName completedProductId rows productNames =
 mergeProductName : String -> String -> ComponentRow -> ComponentRow
 mergeProductName productId name row =
     if row.productId == productId then
-        { row | productName = name, searchQuery = name }
+        { row | productName = name, search = Search.withQuery name row.search }
 
     else
         row
@@ -526,13 +537,9 @@ type ComponentPatch
     = SetProduct String String
     | SetQuantity String
     | SetUnit String
-    | SetSearchQuery String
-    | SetSearchStarted Int
+    | SetSearch QueryState
     | SetSearchResults Int (List SearchResult)
     | SetSearchingFalse
-    | SetCategorySuggestionsStarted Int
-    | SetCategorySuggestions Int (List CategorySuggestion)
-    | ClearCategorySuggestions
 
 
 patchRow : RowId -> ComponentPatch -> ComponentRow -> ComponentRow
@@ -546,10 +553,14 @@ patchRow rowId patch row =
                 { row
                     | productId = id
                     , productName = name
-                    , searchQuery = name
+                    , search =
+                        { query = name
+                        , searchToken = 0
+                        , categoryToken = 0
+                        , categorySuggestions = []
+                        }
                     , searchResults = []
                     , searching = False
-                    , categorySuggestions = []
                 }
 
             SetQuantity value ->
@@ -558,14 +569,11 @@ patchRow rowId patch row =
             SetUnit value ->
                 { row | unit = value }
 
-            SetSearchQuery value ->
-                { row | searchQuery = value }
-
-            SetSearchStarted token ->
-                { row | searchToken = token, searching = True }
+            SetSearch queryState ->
+                { row | search = queryState }
 
             SetSearchResults token results ->
-                if row.searchToken == token then
+                if row.search.searchToken == token then
                     { row | searchResults = results, searching = False }
 
                 else
@@ -573,19 +581,6 @@ patchRow rowId patch row =
 
             SetSearchingFalse ->
                 { row | searching = False }
-
-            SetCategorySuggestionsStarted token ->
-                { row | categoryToken = token }
-
-            SetCategorySuggestions token suggestions ->
-                if row.categoryToken == token then
-                    { row | categorySuggestions = suggestions }
-
-                else
-                    row
-
-            ClearCategorySuggestions ->
-                { row | categorySuggestions = [] }
 
 
 findRow : RowId -> List ComponentRow -> Maybe ComponentRow
@@ -607,7 +602,14 @@ removeRow rowId rows =
 componentRowView : Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
 componentRowView device toMsg row =
     Ui.card
-        [ componentSearchInput toMsg row
+        [ SearchView.searchInput
+            { onChange = toMsg << ComponentSearchChanged row.rowId
+            , text = row.search.query
+            , label = "Search Product"
+            , completions = Search.completions row.search.query row.search.categorySuggestions
+            , onTabComplete = toMsg (CompleteFirstComponentSuggestion row.rowId)
+            , onCompletionClick = toMsg << ComponentCompletionClicked row.rowId
+            }
         , if row.searching then
             Ui.loading "Searching foods..."
 
@@ -619,7 +621,7 @@ componentRowView device toMsg row =
                 [ Element.width Element.fill
                 , Element.spacing 0
                 ]
-                (List.map (searchResultView device toMsg row.searchQuery row.rowId)
+                (List.map (searchResultView device toMsg row.search.query row.rowId)
                     row.searchResults
                 )
         , Element.row [ Element.width Element.fill, Element.spacing 8 ]
@@ -663,35 +665,6 @@ quantityTextInput device config =
         [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input config.amountLabel config.amount config.onAmountChange
         , Ui.input config.unitLabel config.unit config.onUnitChange
-        ]
-
-
-componentSearchInput : (FormFieldMsg -> msg) -> ComponentRow -> Element msg
-componentSearchInput toMsg row =
-    let
-        options : List Completion
-        options =
-            Search.completions row.searchQuery row.categorySuggestions
-    in
-    Element.column [ Element.width Element.fill, Element.spacing 4 ]
-        [ Input.text
-            [ Border.rounded 12
-            , Background.color Ui.inputFill
-            , Element.padding 12
-            , Element.htmlAttribute
-                (SearchView.tabCompletionHandler
-                    (toMsg (CompleteFirstComponentSuggestion row.rowId))
-                    options
-                )
-            ]
-            { onChange = toMsg << ComponentSearchChanged row.rowId
-            , text = row.searchQuery
-            , placeholder = Nothing
-            , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Search Product")
-            }
-        , SearchView.completionDropdown
-            { onSelect = toMsg << ComponentCompletionClicked row.rowId }
-            options
         ]
 
 

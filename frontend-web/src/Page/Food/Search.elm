@@ -9,33 +9,18 @@ module Page.Food.Search exposing
 
 import Api.Client as Client
 import Api.Foods as Foods
-    exposing
-        ( CategorySuggestion
-        , CategorySuggestionRequest
-        , SearchRequest
-        , SearchResult
-        )
 import Data.MealSlot exposing (MealSlot)
 import Data.Route exposing (Route(..))
-import Data.Search as Search exposing (Completion)
+import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
-import Element.Input as Input
 import Lib.Loadable exposing (Loadable(..))
-import Process
-import Task
 import Ui
 import View.Search as SearchView
 
 
 type alias Model =
-    { query : String
-    , searchToken : Int
-    , categoryToken : Int
-    , categorySuggestions : List CategorySuggestion
-    , results : Loadable Client.ApiError (List SearchResult)
+    { search : QueryState
+    , results : Loadable Client.ApiError (List Foods.SearchResult)
     , mealSlot : Maybe MealSlot
     }
 
@@ -53,125 +38,122 @@ type Msg
 
 type OutMsg
     = NoOp
-    | RequestSearch Int SearchRequest
-    | RequestCategorySuggestions Int CategorySuggestionRequest
+    | RequestSearch Int Foods.SearchRequest
+    | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | Navigate Route
     | SessionExpired
 
 
 init : Maybe MealSlot -> Model
 init mealSlot =
-    { query = ""
-    , searchToken = 0
-    , categoryToken = 0
-    , categorySuggestions = []
+    { search = Search.empty
     , results = NotAsked
     , mealSlot = mealSlot
     }
 
 
-onQueryChanged : String -> Model -> ( Model, Cmd Msg, OutMsg )
-onQueryChanged rawQuery model =
+debounceConfig : { delayMs : Int, onFire : Int -> String -> Msg }
+debounceConfig =
+    { delayMs = 300
+    , onFire = DebounceElapsed
+    }
+
+
+applyQueryChange : String -> Model -> ( Model, Cmd Msg, OutMsg )
+applyQueryChange rawQuery model =
     let
-        query : String
-        query =
-            rawQuery
+        ( search, debounceCmd, categoryReq ) =
+            Search.onQueryChanged rawQuery model.search (Just debounceConfig)
 
-        trimmed : String
-        trimmed =
-            String.trim query
+        results : Loadable Client.ApiError (List Foods.SearchResult)
+        results =
+            if String.isEmpty (String.trim rawQuery) then
+                NotAsked
 
-        nextCategoryToken : Int
-        nextCategoryToken =
-            model.categoryToken + 1
-
-        categoryOutMsg : OutMsg
-        categoryOutMsg =
-            case Search.categoryQuery query of
-                Just value ->
-                    RequestCategorySuggestions nextCategoryToken
-                        { query = value, limit = 8 }
-
-                Nothing ->
-                    NoOp
+            else
+                Loading
     in
-    if String.isEmpty trimmed then
-        ( { model
-            | query = query
-            , results = NotAsked
-            , searchToken = model.searchToken + 1
-            , categoryToken = nextCategoryToken
-            , categorySuggestions = []
-          }
-        , Cmd.none
-        , NoOp
-        )
+    ( { model | search = search, results = results }
+    , debounceCmd
+    , case categoryReq of
+        Just req ->
+            RequestCategorySuggestions req.token { query = req.query, limit = 8 }
 
-    else
-        let
-            nextToken : Int
-            nextToken =
-                model.searchToken + 1
-        in
-        ( { model
-            | query = query
-            , searchToken = nextToken
-            , categoryToken = nextCategoryToken
-            , categorySuggestions =
-                if categoryOutMsg == NoOp then
-                    []
-
-                else
-                    model.categorySuggestions
-            , results = Loading
-          }
-        , debounce nextToken trimmed
-        , categoryOutMsg
-        )
+        Nothing ->
+            NoOp
+    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         QueryChanged rawQuery ->
-            onQueryChanged rawQuery model
+            applyQueryChange rawQuery model
 
         CategorySuggestionsCompleted token result ->
-            if token /= model.categoryToken then
+            if token /= model.search.categoryToken then
                 ( model, Cmd.none, NoOp )
 
             else
                 case result of
                     Ok response ->
-                        ( { model | categorySuggestions = response.items }, Cmd.none, NoOp )
+                        ( { model
+                            | search =
+                                Search.setCategorySuggestions
+                                    token
+                                    response.items
+                                    model.search
+                          }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     Err error ->
                         if Client.isUnauthorized error then
-                            ( { model | categorySuggestions = [] }, Cmd.none, SessionExpired )
+                            ( { model
+                                | search =
+                                    Search.setCategorySuggestions token [] model.search
+                              }
+                            , Cmd.none
+                            , SessionExpired
+                            )
 
                         else
-                            ( { model | categorySuggestions = [] }, Cmd.none, NoOp )
+                            ( { model
+                                | search =
+                                    Search.setCategorySuggestions token [] model.search
+                              }
+                            , Cmd.none
+                            , NoOp
+                            )
 
         CompleteFirstSuggestion ->
-            case List.head (Search.completions model.query model.categorySuggestions) of
+            case
+                List.head
+                    (Search.completions model.search.query model.search.categorySuggestions)
+            of
                 Just completion ->
-                    onQueryChanged (Search.applyCompletion completion model.query) model
+                    applyQueryChange
+                        (Search.applyCompletion completion model.search.query)
+                        model
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
 
         CompletionClicked completion ->
-            onQueryChanged (Search.applyCompletion completion model.query) model
+            applyQueryChange
+                (Search.applyCompletion completion model.search.query)
+                model
 
         DebounceElapsed token query ->
-            if token == model.searchToken then
+            if token == model.search.searchToken then
                 ( model, Cmd.none, RequestSearch token { query = query } )
 
             else
                 ( model, Cmd.none, NoOp )
 
         SearchCompleted token result ->
-            if token /= model.searchToken then
+            if token /= model.search.searchToken then
                 ( model, Cmd.none, NoOp )
 
             else
@@ -193,42 +175,29 @@ update msg model =
             ( model, Cmd.none, Navigate CustomFoodCreate )
 
 
-debounce : Int -> String -> Cmd Msg
-debounce token query =
-    Process.sleep 300
-        |> Task.perform (\_ -> DebounceElapsed token query)
-
-
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        [ searchInput model
+        [ searchInputView model
         , bodyView model device
         ]
 
 
-searchInput : Model -> Element Msg
-searchInput model =
+searchInputView : Model -> Element Msg
+searchInputView model =
     let
         options : List Completion
         options =
-            Search.completions model.query model.categorySuggestions
+            Search.completions model.search.query model.search.categorySuggestions
     in
-    Element.column [ Element.width Element.fill, Element.spacing 4 ]
-        [ Input.text
-            [ Border.rounded 12
-            , Background.color Ui.inputFill
-            , Element.padding 12
-            , Element.htmlAttribute
-                (SearchView.tabCompletionHandler CompleteFirstSuggestion options)
-            ]
-            { onChange = QueryChanged
-            , text = model.query
-            , placeholder = Nothing
-            , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text "Search for a food")
-            }
-        , SearchView.completionDropdown { onSelect = CompletionClicked } options
-        ]
+    SearchView.searchInput
+        { onChange = QueryChanged
+        , text = model.search.query
+        , label = "Search for a food"
+        , completions = options
+        , onTabComplete = CompleteFirstSuggestion
+        , onCompletionClick = CompletionClicked
+        }
 
 
 bodyView : Model -> Device -> Element Msg
@@ -259,7 +228,7 @@ bodyView model device =
                         (\item ->
                             SearchView.resultRow
                                 device
-                                { query = model.query
+                                { query = model.search.query
                                 , item = item
                                 , onSelect = ResultClicked
                                 }

@@ -1,7 +1,6 @@
 module View.Search exposing
-    ( completionDropdown
-    , resultRow
-    , tabCompletionHandler
+    ( resultRow
+    , searchInput
     )
 
 import Api.Foods exposing (SearchResult)
@@ -36,6 +35,32 @@ completionDropdown config options =
             , Ui.cardShadow
             ]
             (List.map (completionRow config.onSelect) options)
+
+
+searchInput :
+    { onChange : String -> msg
+    , text : String
+    , label : String
+    , completions : List Completion
+    , onTabComplete : msg
+    , onCompletionClick : Completion -> msg
+    }
+    -> Element msg
+searchInput config =
+    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+        [ Input.text
+            [ Border.rounded 12
+            , Background.color Ui.inputFill
+            , Element.padding 12
+            , Element.htmlAttribute (tabCompletionHandler config.onTabComplete config.completions)
+            ]
+            { onChange = config.onChange
+            , text = config.text
+            , placeholder = Nothing
+            , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text config.label)
+            }
+        , completionDropdown { onSelect = config.onCompletionClick } config.completions
+        ]
 
 
 tabCompletionHandler : msg -> List Completion -> Html.Attribute msg

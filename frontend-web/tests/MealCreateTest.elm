@@ -4,6 +4,7 @@ import Api.Foods exposing (SearchResult)
 import Api.Meals exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
+import Data.Search as Search
 import Expect
 import Page.Meal.Common as Common
 import Page.Meal.Create as MealCreate
@@ -81,7 +82,12 @@ tests =
                         (Common.ComponentSearchCompleted 1 1 (Ok { items = [ result ] }))
                     )
                     { emptyFormFields
-                        | components = [ { row | searchToken = 2 } ]
+                        | components =
+                            [ { row
+                                | search =
+                                    Search.withSearchToken 2 row.search
+                              }
+                            ]
                     }
                     |> first
                     |> componentsOf
@@ -100,7 +106,12 @@ tests =
                         (Common.ComponentSearchCompleted 1 2 (Ok { items = [ result ] }))
                     )
                     { emptyFormFields
-                        | components = [ { row | searchToken = 2 } ]
+                        | components =
+                            [ { row
+                                | search =
+                                    Search.withSearchToken 2 row.search
+                              }
+                            ]
                     }
                     |> first
                     |> componentsOf
@@ -112,7 +123,7 @@ tests =
                 MealCreate.update
                     (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
                     (modelWithRow
-                        { emptyRow | searchQuery = "c" }
+                        { emptyRow | search = Search.withQuery "c" emptyRow.search }
                     )
                     |> first
                     |> firstRowQuery
@@ -122,7 +133,7 @@ tests =
                 MealCreate.update
                     (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
                     (modelWithRow
-                        { emptyRow | searchQuery = "apple c" }
+                        { emptyRow | search = Search.withQuery "apple c" emptyRow.search }
                     )
                     |> first
                     |> firstRowQuery
@@ -158,11 +169,14 @@ tests =
                         )
                     )
                     (modelWithRow
-                        { emptyRow | categoryToken = 2 }
+                        { emptyRow
+                            | search = Search.withCategoryToken 2 emptyRow.search
+                        }
                     )
                     |> first
                     |> componentsOf
                     |> List.head
+                    |> Maybe.map .search
                     |> Maybe.map .categorySuggestions
                     |> Expect.equal
                         (Just [ { value = "food and beverages", count = 4 } ])
@@ -172,9 +186,13 @@ tests =
                     (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
                     (modelWithRow
                         { emptyRow
-                            | searchQuery = "category:foo"
-                            , categorySuggestions =
-                                [ { value = "food and beverages", count = 4 } ]
+                            | search =
+                                { query = "category:foo"
+                                , searchToken = 0
+                                , categoryToken = 0
+                                , categorySuggestions =
+                                    [ { value = "food and beverages", count = 4 } ]
+                                }
                         }
                     )
                     |> first
@@ -252,7 +270,8 @@ firstRowQuery : Common.FormFields -> Maybe String
 firstRowQuery model =
     componentsOf model
         |> List.head
-        |> Maybe.map .searchQuery
+        |> Maybe.map .search
+        |> Maybe.map .query
 
 
 componentsOf : Common.FormFields -> List Common.ComponentRow
