@@ -1,12 +1,42 @@
-module View.Nutrients exposing (macroBreakdownView, nutrientLabel, nutrientsTable)
+module View.Nutrients exposing
+    ( NutritionInput
+    , NutritionState(..)
+    , defaultNutritionInput
+    , macroBreakdownCompact
+    , macroBreakdownView
+    , mapNutritionInput
+    , nutrientLabel
+    , nutrientsTable
+    , nutritionInput
+    , preview
+    )
 
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
+import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Lib.Number as Number
 import Ui
+
+
+type alias NutritionInput =
+    { amount : String
+    , unit : String
+    , unitOpen : Bool
+    }
+
+
+type NutritionState
+    = NutritionLoading NutritionInput
+    | NutritionLoaded NutritionInput (List NutrientAmount)
+    | NutritionFailed NutritionInput String
+    | NutritionUnavailable NutritionInput
+
+
+defaultNutritionInput : NutritionInput
+defaultNutritionInput =
+    { amount = "100", unit = defaultCode, unitOpen = False }
 
 
 {-| Render a friendly name for a nutrient code. Known backend codes
@@ -184,8 +214,108 @@ titleCase word =
             word
 
 
+preview : NutritionState -> Element msg
+preview state =
+    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        [ case state of
+            NutritionLoading _ ->
+                Ui.loading "Loading nutrition..."
+
+            NutritionLoaded _ nutrients ->
+                Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                    [ Ui.card
+                        [ Ui.sectionHeader "Macro Breakdown"
+                        , macroBreakdownView nutrients
+                        ]
+                    , nutrientsTable nutrients
+                    ]
+
+            NutritionFailed _ errMsg ->
+                Ui.errorBanner errMsg
+
+            NutritionUnavailable _ ->
+                Ui.errorBanner "Unavailable"
+        ]
+
+
+nutritionInput : NutritionState -> NutritionInput
+nutritionInput state =
+    case state of
+        NutritionLoading input ->
+            input
+
+        NutritionLoaded input _ ->
+            input
+
+        NutritionFailed input _ ->
+            input
+
+        NutritionUnavailable input ->
+            input
+
+
+mapNutritionInput :
+    (NutritionInput -> NutritionInput)
+    -> NutritionState
+    -> NutritionState
+mapNutritionInput transform state =
+    let
+        input : NutritionInput
+        input =
+            transform (nutritionInput state)
+    in
+    case state of
+        NutritionLoading _ ->
+            NutritionLoading input
+
+        NutritionLoaded _ nutrients ->
+            NutritionLoaded input nutrients
+
+        NutritionFailed _ message ->
+            NutritionFailed input message
+
+        NutritionUnavailable _ ->
+            NutritionUnavailable input
+
+
 macroBreakdownView : List NutrientAmount -> Element msg
 macroBreakdownView nutrients =
+    let
+        portions : MacroPortions
+        portions =
+            macroPortions nutrients
+    in
+    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        [ macroBarRow 24 portions
+        , macroLegend portions
+        ]
+
+
+{-| Compact variant of the macro breakdown. Renders only the stacked
+bar (no legend) at a slim 12px height. Intended for inline use on
+compact rows (e.g. each `componentView` row in `Page.Meal.Detail`).
+
+Omit the call entirely (render `Element.none` instead) when the
+caller has no macro data, so empty rows stay compact.
+
+-}
+macroBreakdownCompact : List NutrientAmount -> Element msg
+macroBreakdownCompact nutrients =
+    macroBarRow 12 (macroPortions nutrients)
+
+
+type alias MacroPortions =
+    { protein : Float
+    , carbs : Float
+    , fat : Float
+    , proteinPct : Int
+    , carbsPct : Int
+    , fatPct : Int
+    }
+
+
+macroPortions : List NutrientAmount -> MacroPortions
+macroPortions nutrients =
     let
         totals : Nutrition.MacroTotals
         totals =
@@ -207,50 +337,58 @@ macroBreakdownView nutrients =
             else
                 round totals.fatPct
     in
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
-        [ Element.row
-            [ Element.width Element.fill
-            , Element.height (Element.px 24)
-            , Background.color Ui.borderGray
-            , Border.rounded 999
-            , Element.clip
+    { protein = totals.protein
+    , carbs = totals.carbs
+    , fat = totals.fat
+    , proteinPct = pProtein
+    , carbsPct = pCarbs
+    , fatPct = pFat
+    }
+
+
+macroBarRow : Int -> MacroPortions -> Element msg
+macroBarRow height portions =
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px height)
+        , Background.color Ui.borderGray
+        , Border.rounded 999
+        , Element.clip
+        ]
+        [ barSegment Ui.proteinColor portions.proteinPct
+        , barSegment Ui.carbsColor portions.carbsPct
+        , barSegment Ui.fatColor portions.fatPct
+        ]
+
+
+barSegment : Element.Color -> Int -> Element msg
+barSegment color pct =
+    Element.el
+        [ Element.width (Element.fillPortion pct)
+        , Element.height Element.fill
+        , Background.color color
+        ]
+        Element.none
+
+
+macroLegend : MacroPortions -> Element msg
+macroLegend portions =
+    Element.row
+        [ Element.width Element.fill, Element.spacing 16 ]
+        [ Element.row [ Element.spacing 4 ]
+            [ legendDot Ui.proteinColor
+            , Element.el [ Ui.body ]
+                (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
             ]
-            [ Element.el
-                [ Element.width (Element.fillPortion pProtein)
-                , Element.height Element.fill
-                , Background.color Ui.proteinColor
-                ]
-                Element.none
-            , Element.el
-                [ Element.width (Element.fillPortion pCarbs)
-                , Element.height Element.fill
-                , Background.color Ui.carbsColor
-                ]
-                Element.none
-            , Element.el
-                [ Element.width (Element.fillPortion pFat)
-                , Element.height Element.fill
-                , Background.color Ui.fatColor
-                ]
-                Element.none
+        , Element.row [ Element.spacing 4 ]
+            [ legendDot Ui.carbsColor
+            , Element.el [ Ui.body ]
+                (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
             ]
-        , Element.row
-            [ Element.width Element.fill, Element.spacing 16 ]
-            [ Element.row [ Element.spacing 4 ]
-                [ legendDot Ui.proteinColor
-                , Element.el [ Ui.body ]
-                    (Element.text ("Protein " ++ Number.toFixedOne totals.protein ++ "g"))
-                ]
-            , Element.row [ Element.spacing 4 ]
-                [ legendDot Ui.carbsColor
-                , Element.el [ Ui.body ]
-                    (Element.text ("Carbs " ++ Number.toFixedOne totals.carbs ++ "g"))
-                ]
-            , Element.row [ Element.spacing 4 ]
-                [ legendDot Ui.fatColor
-                , Element.el [ Ui.body ]
-                    (Element.text ("Fat " ++ Number.toFixedOne totals.fat ++ "g"))
-                ]
+        , Element.row [ Element.spacing 4 ]
+            [ legendDot Ui.fatColor
+            , Element.el [ Ui.body ]
+                (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
             ]
         ]
 
@@ -276,11 +414,10 @@ nutrientsTable nutrients =
                         Element.el
                             [ Font.bold
                             , Ui.body
-                            , Font.letterSpacing 0.5
                             , Font.color Ui.mutedColor
                             , Element.paddingXY 0 8
                             ]
-                            (Element.text (String.toUpper "Nutrient"))
+                            (Element.text "Nutrient")
                   , width = Element.fill
                   , view =
                         \n ->
@@ -292,12 +429,11 @@ nutrientsTable nutrients =
                         Element.el
                             [ Font.bold
                             , Ui.body
-                            , Font.letterSpacing 0.5
                             , Font.color Ui.mutedColor
                             , Font.alignRight
                             , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
                             ]
-                            (Element.text (String.toUpper "Amount"))
+                            (Element.text "Amount")
                   , width = Element.shrink
                   , view =
                         \n ->
@@ -312,11 +448,10 @@ nutrientsTable nutrients =
                         Element.el
                             [ Font.bold
                             , Ui.body
-                            , Font.letterSpacing 0.5
                             , Font.color Ui.mutedColor
                             , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 0 }
                             ]
-                            (Element.text (String.toUpper "Unit"))
+                            (Element.text "Unit")
                   , width = Element.shrink
                   , view =
                         \n ->

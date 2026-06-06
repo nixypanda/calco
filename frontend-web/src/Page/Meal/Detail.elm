@@ -4,8 +4,6 @@ module Page.Meal.Detail exposing
     , LoadingModel
     , Model(..)
     , Msg(..)
-    , NutritionInput
-    , NutritionState(..)
     , OutMsg(..)
     , init
     , uniqueProductIds
@@ -18,14 +16,14 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as Meals exposing (Meal, MealNutritionResponse)
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
-import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
+import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Ui
-import View.NutritionPreview
+import View.Nutrients exposing (NutritionInput, NutritionState(..), defaultNutritionInput)
 import View.QuantityInput
 
 
@@ -50,20 +48,6 @@ type alias LoadedModel =
     , nutrition : NutritionState
     , delete : DeleteState
     }
-
-
-type alias NutritionInput =
-    { amount : String
-    , unit : String
-    , unitOpen : Bool
-    }
-
-
-type NutritionState
-    = NutritionLoading NutritionInput
-    | NutritionLoaded NutritionInput (List NutrientAmount)
-    | NutritionFailed NutritionInput String
-    | NutritionUnavailable NutritionInput
 
 
 type DeleteState
@@ -353,46 +337,14 @@ clearNutritionPreview loaded =
     )
 
 
-defaultNutritionInput : NutritionInput
-defaultNutritionInput =
-    { amount = "100", unit = defaultCode, unitOpen = False }
-
-
 nutritionInput : NutritionState -> NutritionInput
-nutritionInput nutrition =
-    case nutrition of
-        NutritionLoading input ->
-            input
-
-        NutritionLoaded input _ ->
-            input
-
-        NutritionFailed input _ ->
-            input
-
-        NutritionUnavailable input ->
-            input
+nutritionInput =
+    View.Nutrients.nutritionInput
 
 
 mapNutritionInput : (NutritionInput -> NutritionInput) -> NutritionState -> NutritionState
-mapNutritionInput transform nutrition =
-    let
-        input : NutritionInput
-        input =
-            transform (nutritionInput nutrition)
-    in
-    case nutrition of
-        NutritionLoading _ ->
-            NutritionLoading input
-
-        NutritionLoaded _ nutrients ->
-            NutritionLoaded input nutrients
-
-        NutritionFailed _ message ->
-            NutritionFailed input message
-
-        NutritionUnavailable _ ->
-            NutritionUnavailable input
+mapNutritionInput =
+    View.Nutrients.mapNutritionInput
 
 
 loadedFromMeal : Meal -> Model -> LoadedModel
@@ -562,6 +514,15 @@ loadedView loaded =
 
             Nothing ->
                 Element.none
+        , case loaded.meal.nutritionSummary of
+            Just summary ->
+                Ui.card
+                    [ Ui.sectionHeader "Macro Breakdown"
+                    , View.Nutrients.macroBreakdownView (Nutrition.summaryToNutrients summary)
+                    ]
+
+            Nothing ->
+                Element.none
         , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 8 ]
@@ -601,24 +562,44 @@ componentView loaded component =
 
                 Nothing ->
                     []
+
+        compactBar : Element Msg
+        compactBar =
+            case component.nutritionSummary of
+                Just summary ->
+                    View.Nutrients.macroBreakdownCompact (Nutrition.summaryToNutrients summary)
+
+                Nothing ->
+                    Element.none
+
+        quantityText : String
+        quantityText =
+            component.quantity.amount
+                ++ " "
+                ++ component.quantity.unit
+                ++ summaryText
     in
-    Element.row
+    Element.column
         [ Element.width Element.fill
-        , Element.spacing 12
+        , Element.spacing 8
         , Element.padding 14
         , Background.color Ui.cardBg
         , Border.rounded 16
         , Ui.cardShadow
         ]
-        (dot
-            ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
-               , Element.el
-                    [ Font.color Ui.mutedColor ]
-                    (Element.text
-                        (component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText)
-                    )
-               ]
-        )
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spacing 12
+            ]
+            (dot
+                ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
+                   , Element.el
+                        [ Font.color Ui.mutedColor ]
+                        (Element.text quantityText)
+                   ]
+            )
+        , compactBar
+        ]
 
 
 nutritionView : LoadedModel -> Element Msg
@@ -643,42 +624,8 @@ nutritionView loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.NutritionPreview.view
-            { loading = nutritionLoading loaded.nutrition
-            , error = nutritionError loaded.nutrition
-            , nutrients = nutritionNutrients loaded.nutrition
-            }
+        , View.Nutrients.preview loaded.nutrition
         ]
-
-
-nutritionLoading : NutritionState -> Bool
-nutritionLoading nutrition =
-    case nutrition of
-        NutritionLoading _ ->
-            True
-
-        _ ->
-            False
-
-
-nutritionError : NutritionState -> Maybe String
-nutritionError nutrition =
-    case nutrition of
-        NutritionFailed _ message ->
-            Just message
-
-        _ ->
-            Nothing
-
-
-nutritionNutrients : NutritionState -> Maybe (List NutrientAmount)
-nutritionNutrients nutrition =
-    case nutrition of
-        NutritionLoaded _ nutrients ->
-            Just nutrients
-
-        _ ->
-            Nothing
 
 
 confirmDeleteView : LoadedModel -> Element Msg

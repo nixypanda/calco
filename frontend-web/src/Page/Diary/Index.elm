@@ -336,7 +336,12 @@ dateCard model =
                 , label = Element.text "→"
                 }
             ]
-        , totalsView (totalsFromLogs (loadedLogs model.currentDate model.diary))
+        , Ui.hairline
+        , Element.column
+            [ Element.width Element.fill
+            , Element.paddingEach { top = 8, right = 0, bottom = 0, left = 0 }
+            ]
+            [ totalsView (totalsFromLogs (loadedLogs model.currentDate model.diary)) ]
         ]
 
 

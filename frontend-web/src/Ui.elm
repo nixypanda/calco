@@ -324,10 +324,9 @@ sectionHeader title =
     Element.el
         [ heading3
         , bold
-        , Font.letterSpacing 0.5
         , Element.paddingEach { top = 0, right = 0, bottom = 0, left = 0 }
         ]
-        (Element.text (String.toUpper title))
+        (Element.text title)
 
 
 cardActions : List (Element msg) -> Element msg

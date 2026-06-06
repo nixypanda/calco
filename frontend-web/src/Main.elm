@@ -31,7 +31,9 @@ import Page.Food.Detail as FoodDetail
 import Page.Food.Search as FoodSearch
 import Page.FoodLog.Detail as FoodLogDetail
 import Page.Meal.Detail as MealDetail
-import Page.Meal.Form as MealForm
+import Page.Meal.Form.Common as MealFormCommon
+import Page.Meal.Form.Create as MealCreate
+import Page.Meal.Form.Edit as MealEdit
 import Page.Meal.Index as Meals
 import Session
 import Task
@@ -73,7 +75,8 @@ type PageModel
     | CustomFoodCreatePage CustomFoodCreate.Model
     | CustomFoodEditPage CustomFoodEdit.Model
     | MealsPage Meals.Model
-    | MealFormPage MealForm.Model
+    | MealCreatePage MealCreate.Model
+    | MealEditPage MealEdit.Model
     | MealDetailPage MealDetail.Model
     | PlaceholderPage String
 
@@ -104,7 +107,8 @@ type Msg
     | GotCustomFoodCreateMsg CustomFoodCreate.Msg
     | GotCustomFoodEditMsg CustomFoodEdit.Msg
     | GotMealsMsg Meals.Msg
-    | GotMealFormMsg MealForm.Msg
+    | GotMealCreateMsg MealCreate.Msg
+    | GotMealEditMsg MealEdit.Msg
     | GotMealDetailMsg MealDetail.Msg
     | GotLocalContext { date : String, timezone : String }
 
@@ -393,8 +397,11 @@ update msg model =
         GotMealsMsg subMsg ->
             updateMeals subMsg model
 
-        GotMealFormMsg subMsg ->
-            updateMealForm subMsg model
+        GotMealCreateMsg subMsg ->
+            updateMealCreate subMsg model
+
+        GotMealEditMsg subMsg ->
+            updateMealEdit subMsg model
 
         GotMealDetailMsg subMsg ->
             updateMealDetail subMsg model
@@ -555,20 +562,20 @@ loadPage route model =
         MealCreate ->
             let
                 ( pageModel, outMsg ) =
-                    MealForm.initCreate
+                    MealCreate.init
 
                 ( nextModel, outCmd ) =
-                    applyMealFormOutMsg outMsg { model | page = MealFormPage pageModel }
+                    applyMealCreateOutMsg outMsg { model | page = MealCreatePage pageModel }
             in
             ( nextModel, outCmd )
 
         MealEdit mealId ->
             let
                 ( pageModel, outMsg ) =
-                    MealForm.initEdit mealId
+                    MealEdit.init mealId
 
                 ( nextModel, outCmd ) =
-                    applyMealFormOutMsg outMsg { model | page = MealFormPage pageModel }
+                    applyMealEditOutMsg outMsg { model | page = MealEditPage pageModel }
             in
             ( nextModel, outCmd )
 
@@ -995,97 +1002,158 @@ applyMealsOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateMealForm : MealForm.Msg -> Model -> ( Model, Cmd Msg )
-updateMealForm subMsg model =
+updateMealCreate : MealCreate.Msg -> Model -> ( Model, Cmd Msg )
+updateMealCreate subMsg model =
     case model.page of
-        MealFormPage subModel ->
+        MealCreatePage subModel ->
             let
                 ( newSubModel, subCmd, outMsg ) =
-                    MealForm.update subMsg subModel
+                    MealCreate.update subMsg subModel
 
                 ( finalModel, outCmd ) =
-                    applyMealFormOutMsg outMsg { model | page = MealFormPage newSubModel }
+                    applyMealCreateOutMsg outMsg { model | page = MealCreatePage newSubModel }
             in
-            ( finalModel, Cmd.batch [ Cmd.map GotMealFormMsg subCmd, outCmd ] )
+            ( finalModel, Cmd.batch [ Cmd.map GotMealCreateMsg subCmd, outCmd ] )
 
         _ ->
             ( model, Cmd.none )
 
 
-applyMealFormOutMsg : MealForm.OutMsg -> Model -> ( Model, Cmd Msg )
-applyMealFormOutMsg outMsg model =
+applyMealCreateOutMsg : MealCreate.OutMsg -> Model -> ( Model, Cmd Msg )
+applyMealCreateOutMsg outMsg model =
     case outMsg of
-        MealForm.NoOp ->
+        MealCreate.NoOp ->
             ( model, Cmd.none )
 
-        MealForm.RequestMeal mealId ->
+        MealCreate.FormOutMsg formOutMsg ->
+            applyMealFormOutMsg
+                { toPageMsg = GotMealCreateMsg << MealCreate.FormMsg }
+                formOutMsg
+                model
+
+        MealCreate.RequestCreateMeal request ->
+            ( model, Api.Meals.createMeal request (GotMealCreateMsg << MealCreate.SaveCompleted) )
+
+        MealCreate.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        MealCreate.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+updateMealEdit : MealEdit.Msg -> Model -> ( Model, Cmd Msg )
+updateMealEdit subMsg model =
+    case model.page of
+        MealEditPage subModel ->
+            let
+                ( newSubModel, subCmd, outMsg ) =
+                    MealEdit.update subMsg subModel
+
+                ( finalModel, outCmd ) =
+                    applyMealEditOutMsg outMsg { model | page = MealEditPage newSubModel }
+            in
+            ( finalModel, Cmd.batch [ Cmd.map GotMealEditMsg subCmd, outCmd ] )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+applyMealEditOutMsg : MealEdit.OutMsg -> Model -> ( Model, Cmd Msg )
+applyMealEditOutMsg outMsg model =
+    case outMsg of
+        MealEdit.NoOp ->
+            ( model, Cmd.none )
+
+        MealEdit.FormOutMsg formOutMsg ->
+            applyMealFormOutMsg
+                { toPageMsg = GotMealEditMsg << MealEdit.FormMsg }
+                formOutMsg
+                model
+
+        MealEdit.RequestMeal mealId ->
             ( model
             , Cmd.batch
-                [ Api.Meals.getMeal mealId (GotMealFormMsg << MealForm.MealLoaded)
+                [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded)
                 , Api.Meals.getMealNutrients
                     mealId
                     "100"
                     defaultCode
-                    (GotMealFormMsg << MealForm.NutrientPreviewLoaded)
+                    (GotMealEditMsg << MealEdit.NutrientPreviewLoaded)
                 ]
             )
 
-        MealForm.RequestProductName productId ->
+        MealEdit.RequestUpdateMeal mealId request ->
+            ( model
+            , Api.Meals.updateMeal
+                mealId
+                request
+                (GotMealEditMsg << MealEdit.SaveCompleted)
+            )
+
+        MealEdit.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        MealEdit.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+applyMealFormOutMsg :
+    { toPageMsg : MealFormCommon.FormFieldMsg -> Msg }
+    -> MealFormCommon.FormFieldOutMsg
+    -> Model
+    -> ( Model, Cmd Msg )
+applyMealFormOutMsg { toPageMsg } outMsg model =
+    case outMsg of
+        MealFormCommon.RequestProductName productId ->
             ( model
             , Api.Foods.getFoodDetail
                 productId
-                (GotMealFormMsg << MealForm.ProductNameLoaded productId)
+                (toPageMsg << MealFormCommon.ProductNameLoaded productId)
             )
 
-        MealForm.RequestProductSearch rowId token request ->
+        MealFormCommon.RequestProductSearch rowId token request ->
             ( model
             , Api.Foods.searchFoods
                 request
-                (GotMealFormMsg << MealForm.ComponentSearchCompleted rowId token)
+                (toPageMsg
+                    << MealFormCommon.ComponentSearchCompleted
+                        rowId
+                        token
+                )
             )
 
-        MealForm.RequestCategorySuggestions rowId token request ->
+        MealFormCommon.RequestCategorySuggestions rowId token request ->
             ( model
             , Api.Foods.listCategorySuggestions
                 request
-                (GotMealFormMsg << MealForm.ComponentCategoriesCompleted rowId token)
+                (toPageMsg
+                    << MealFormCommon.ComponentCategoriesCompleted
+                        rowId
+                        token
+                )
             )
 
-        MealForm.RequestProductAndCats requests ->
+        MealFormCommon.RequestProductAndCats requests ->
             ( model
             , Cmd.batch
                 [ Api.Foods.searchFoods
                     requests.searchRequest
-                    (GotMealFormMsg
-                        << MealForm.ComponentSearchCompleted
+                    (toPageMsg
+                        << MealFormCommon.ComponentSearchCompleted
                             requests.rowId
                             requests.searchToken
                     )
                 , Api.Foods.listCategorySuggestions
                     requests.categoryRequest
-                    (GotMealFormMsg
-                        << MealForm.ComponentCategoriesCompleted
+                    (toPageMsg
+                        << MealFormCommon.ComponentCategoriesCompleted
                             requests.rowId
                             requests.categoryToken
                     )
                 ]
             )
 
-        MealForm.RequestCreateMeal request ->
-            ( model, Api.Meals.createMeal request (GotMealFormMsg << MealForm.SaveCompleted) )
-
-        MealForm.RequestUpdateMeal mealId request ->
-            ( model
-            , Api.Meals.updateMeal
-                mealId
-                request
-                (GotMealFormMsg << MealForm.SaveCompleted)
-            )
-
-        MealForm.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        MealForm.SessionExpired ->
+        MealFormCommon.FormSessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -1579,8 +1647,11 @@ pageView model =
             MealsPage mealsModel ->
                 Element.map GotMealsMsg (Meals.view mealsModel)
 
-            MealFormPage mealFormModel ->
-                Element.map GotMealFormMsg (MealForm.view mealFormModel)
+            MealCreatePage mealCreateModel ->
+                Element.map GotMealCreateMsg (MealCreate.view mealCreateModel)
+
+            MealEditPage mealEditModel ->
+                Element.map GotMealEditMsg (MealEdit.view mealEditModel)
 
             MealDetailPage mealDetailModel ->
                 Element.map GotMealDetailMsg (MealDetail.view mealDetailModel)

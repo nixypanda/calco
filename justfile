@@ -58,7 +58,7 @@ backend-migrate:
 
 # Build Elm frontend-web
 frontend-web-build:
-    cd frontend-web && mkdir -p dist && elm make src/Main.elm --output=dist/main.js
+    cd frontend-web && mkdir -p dist && elm make src/Main.elm --debug --output=dist/main.js
 
 # Run Elm frontend-web locally
 frontend-web-dev: frontend-web-build

@@ -7,6 +7,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Detail as MealDetail
 import Test exposing (Test, describe, test)
+import View.Nutrients exposing (NutritionState(..))
 
 
 tests : Test
@@ -87,7 +88,7 @@ loadedModel =
         , productNames = ItemNameLookup.empty
         , units = [ { code = "g", name = "Gram", kind = "mass" } ]
         , nutrition =
-            MealDetail.NutritionLoaded
+            NutritionLoaded
                 { amount = "100", unit = "g", unitOpen = False }
                 [ nutrient ]
         , delete = MealDetail.DeleteIdle
@@ -102,7 +103,7 @@ nutritionLoadedModel =
         , productNames = ItemNameLookup.empty
         , units = [ { code = "g", name = "Gram", kind = "mass" } ]
         , nutrition =
-            MealDetail.NutritionLoaded
+            NutritionLoaded
                 { amount = "100", unit = "g", unitOpen = False }
                 [ nutrient ]
         , delete = MealDetail.DeleteIdle
@@ -216,30 +217,30 @@ deleteOf model =
             Nothing
 
 
-nutrientsFromState : MealDetail.NutritionState -> Maybe (List NutrientAmount)
+nutrientsFromState : NutritionState -> Maybe (List NutrientAmount)
 nutrientsFromState nutrition =
     case nutrition of
-        MealDetail.NutritionLoaded _ nutrients ->
+        NutritionLoaded _ nutrients ->
             Just nutrients
 
         _ ->
             Nothing
 
 
-errorFromState : MealDetail.NutritionState -> Maybe String
+errorFromState : NutritionState -> Maybe String
 errorFromState nutrition =
     case nutrition of
-        MealDetail.NutritionFailed _ message ->
+        NutritionFailed _ message ->
             Just message
 
         _ ->
             Nothing
 
 
-isLoadingState : MealDetail.NutritionState -> Bool
+isLoadingState : NutritionState -> Bool
 isLoadingState nutrition =
     case nutrition of
-        MealDetail.NutritionLoading _ ->
+        NutritionLoading _ ->
             True
 
         _ ->
