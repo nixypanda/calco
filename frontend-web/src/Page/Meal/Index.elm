@@ -170,19 +170,19 @@ view { model, device } =
 
             Loading ->
                 Element.none
-        , bodyView model
+        , bodyView device model
         ]
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : Device -> Model -> Element Msg
+bodyView device model =
     case model of
         Loaded loaded ->
             if List.isEmpty loaded.meals then
                 Ui.card [ createMealRow ]
 
             else
-                Ui.card (List.map (mealRow loaded.action) loaded.meals ++ [ createMealRow ])
+                Ui.card (List.map (mealRow device loaded.action) loaded.meals ++ [ createMealRow ])
 
         LoadFailed _ ->
             Element.none
@@ -191,8 +191,8 @@ bodyView model =
             Ui.loading "Loading meals..."
 
 
-mealRow : ActionState -> Meal -> Element Msg
-mealRow action meal =
+mealRow : Device -> ActionState -> Meal -> Element Msg
+mealRow device action meal =
     let
         macroAccent : Maybe Element.Color
         macroAccent =
@@ -210,7 +210,7 @@ mealRow action meal =
                 Nothing ->
                     []
     in
-    Element.row
+    Element.wrappedRow
         [ Element.width Element.fill
         , Element.padding 16
         , Element.spacing 12
@@ -222,8 +222,9 @@ mealRow action meal =
                 Element.row [ Element.width Element.fill, Element.spacing 12 ]
                     (dot
                         ++ [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                                [ Element.el [ Font.bold ] (Element.text meal.name)
+                                [ Ui.truncatedHeader device meal.name
                                 , Ui.mutedText (mealSummaryText meal)
+                                , Ui.mutedParagraph (Maybe.withDefault "" meal.notes)
                                 ]
                            ]
                     )
@@ -256,7 +257,6 @@ mealSummaryText meal =
         )
         meal.nutritionSummary
     , Just (String.fromInt (List.length meal.components) ++ " components")
-    , meal.notes
     ]
         |> List.filterMap identity
-        |> String.join " - "
+        |> String.join " ⋅ "

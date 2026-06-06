@@ -134,7 +134,7 @@ view { model, device } =
     in
     Ui.pageContainer device
         [ Common.errorView fields
-        , Common.viewFormFields FormMsg fields
+        , Common.viewFormFields device FormMsg fields
         , Ui.submitButton fields.submitting
             "Create Meal"
             "Saving..."

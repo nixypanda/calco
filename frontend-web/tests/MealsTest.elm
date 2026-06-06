@@ -37,11 +37,11 @@ tests =
         , test "meal summary includes notes when present" <|
             \_ ->
                 Meals.mealSummaryText mealWithNotes
-                    |> Expect.equal "420 kcal - 0 components - Prep on Sunday"
+                    |> Expect.equal "420 kcal ⋅ 0 components"
         , test "meal summary omits separator when notes are absent" <|
             \_ ->
                 Meals.mealSummaryText { mealWithNotes | notes = Nothing }
-                    |> Expect.equal "420 kcal - 0 components"
+                    |> Expect.equal "420 kcal ⋅ 0 components"
         , test "open meal navigates to meal detail" <|
             \_ ->
                 Meals.update (Meals.OpenMealClicked "meal-1") (Tuple.first Meals.init)

@@ -391,8 +391,8 @@ view { model, device } =
         Editing loaded ->
             Ui.pageContainer device
                 [ Common.errorView loaded.fields
-                , Common.viewFormFields FormMsg loaded.fields
-                , nutritionView loaded
+                , Common.viewFormFields device FormMsg loaded.fields
+                , nutritionView device loaded
                 , Ui.submitButton loaded.fields.submitting
                     "Update Meal"
                     "Saving..."
@@ -400,9 +400,9 @@ view { model, device } =
                 ]
 
 
-nutritionView : LoadedModel -> Element Msg
-nutritionView loaded =
+nutritionView : Device -> LoadedModel -> Element Msg
+nutritionView device loaded =
     Element.column [ Element.width Element.fill, Element.spacing 10 ]
         [ Ui.sectionHeader "Nutrition"
-        , View.Nutrients.preview loaded.nutrition
+        , View.Nutrients.preview device loaded.nutrition
         ]

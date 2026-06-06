@@ -559,7 +559,7 @@ view { model, device } =
 
             Nothing ->
                 Element.none
-        , bodyView model
+        , bodyView device model
         ]
 
 
@@ -576,11 +576,11 @@ pageError model =
             Just failed.error
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : Device -> Model -> Element Msg
+bodyView device model =
     case model of
         Loaded loaded ->
-            loadedView loaded
+            loadedView device loaded
 
         LoadFailed _ ->
             Element.none
@@ -589,8 +589,8 @@ bodyView model =
             Ui.loading "Loading log..."
 
 
-loadedView : LoadedModel -> Element Msg
-loadedView model =
+loadedView : Device -> LoadedModel -> Element Msg
+loadedView device model =
     let
         nutrients : List Nutrition.NutrientAmount
         nutrients =
@@ -600,7 +600,7 @@ loadedView model =
         [ Element.width Element.fill
         , Element.spacing 16
         ]
-        [ itemHeader model
+        [ itemHeader device model
         , Element.map FormMsg
             (FoodLogForm.view (productDetail model.item) model.units model.form)
         , Ui.cardActions
@@ -618,7 +618,7 @@ loadedView model =
             ]
         , Ui.card
             [ Ui.sectionHeader "Macro Breakdown"
-            , View.Nutrients.macroBreakdownView nutrients
+            , View.Nutrients.macroBreakdownView device nutrients
             ]
         , View.Nutrients.nutrientsTable nutrients
         ]
@@ -655,8 +655,8 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : LoadedModel -> Element Msg
-itemHeader model =
+itemHeader : Device -> LoadedModel -> Element Msg
+itemHeader device model =
     let
         maybeFood : Maybe ProductDetail
         maybeFood =
@@ -687,8 +687,7 @@ itemHeader model =
         ]
         (dot
             ++ [ Element.column [ Element.width Element.fill, Element.spacing 8 ]
-                    [ Element.el [ Ui.heading1, Font.bold ]
-                        (Element.text (itemTitle model.item))
+                    [ Ui.truncatedHeader device (itemTitle model.item)
                     , Ui.mutedText (metaText maybeFood model.log)
                     , case maybeFood of
                         Just food ->
@@ -696,7 +695,7 @@ itemHeader model =
                                 Element.none
 
                             else
-                                Element.row [ Element.spacing 4 ]
+                                Element.wrappedRow [ Element.spacing 4 ]
                                     (List.map
                                         (\category ->
                                             Ui.chip
@@ -761,7 +760,7 @@ metaText maybeFood log =
             , Just ("Logged " ++ LocalDate.display log.logDate)
             ]
                 |> List.filterMap identity
-                |> String.join " - "
+                |> String.join " ⋅ "
 
         Nothing ->
             "Logged " ++ LocalDate.display log.logDate

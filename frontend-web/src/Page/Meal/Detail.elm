@@ -478,10 +478,10 @@ failure =
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        [ headerView model
+        [ headerView device model
         , case model of
             Loaded loaded ->
-                loadedView loaded
+                loadedView device loaded
 
             LoadFailed message ->
                 Ui.errorBanner message
@@ -491,12 +491,12 @@ view { model, device } =
         ]
 
 
-headerView : Model -> Element Msg
-headerView model =
+headerView : Device -> Model -> Element Msg
+headerView device model =
     case model of
         Loaded loaded ->
-            Element.row [ Element.width Element.fill, Element.spacing 16 ]
-                [ Element.el [ Ui.heading1, Font.bold ] (Element.text loaded.meal.name)
+            Element.wrappedRow [ Element.width Element.fill, Element.spacing 16 ]
+                [ Ui.truncatedHeader device loaded.meal.name
                 , Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
                 , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
                 ]
@@ -505,20 +505,25 @@ headerView model =
             Element.el [ Ui.heading1, Font.bold ] (Element.text "Meal")
 
 
-loadedView : LoadedModel -> Element Msg
-loadedView loaded =
+loadedView : Device -> LoadedModel -> Element Msg
+loadedView device loaded =
     Element.column [ Element.width Element.fill, Element.spacing 16 ]
         [ case loaded.meal.notes of
             Just notes ->
-                Ui.mutedText notes
+                Ui.mutedParagraph notes
 
             Nothing ->
                 Element.none
         , case loaded.meal.nutritionSummary of
             Just summary ->
+                let
+                    summaryNutrients : List Nutrition.NutrientAmount
+                    summaryNutrients =
+                        Nutrition.summaryToNutrients summary
+                in
                 Ui.card
                     [ Ui.sectionHeader "Macro Breakdown"
-                    , View.Nutrients.macroBreakdownView (Nutrition.summaryToNutrients summary)
+                    , View.Nutrients.macroBreakdownView device summaryNutrients
                     ]
 
             Nothing ->
@@ -527,7 +532,7 @@ loadedView loaded =
         , Element.column
             [ Element.width Element.fill, Element.spacing 8 ]
             (List.map (componentView loaded) loaded.meal.components)
-        , nutritionView loaded
+        , nutritionView device loaded
         , confirmDeleteView loaded
         ]
 
@@ -541,7 +546,7 @@ componentView loaded component =
                 |> Maybe.andThen .energyKcal
                 |> Maybe.map
                     (\kcal ->
-                        " - "
+                        " ⋅ "
                             ++ String.fromInt (round (Nutrition.safeAmount kcal))
                             ++ " kcal"
                     )
@@ -602,8 +607,8 @@ componentView loaded component =
         ]
 
 
-nutritionView : LoadedModel -> Element Msg
-nutritionView loaded =
+nutritionView : Device -> LoadedModel -> Element Msg
+nutritionView device loaded =
     let
         input : NutritionInput
         input =
@@ -624,7 +629,7 @@ nutritionView loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.Nutrients.preview loaded.nutrition
+        , View.Nutrients.preview device loaded.nutrition
         ]
 
 

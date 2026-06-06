@@ -322,7 +322,7 @@ section title children =
 
 nutrientRowView : List NutrientItem -> Int -> NutrientRow -> Element Msg
 nutrientRowView nutrients index row =
-    Element.row [ Element.width Element.fill, Element.spacing 8 ]
+    Element.wrappedRow [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.select
             "Nutrient"
             row.code
@@ -331,13 +331,17 @@ nutrientRowView nutrients index row =
             )
             (NutrientCodeChanged index)
         , Ui.input "Amount" row.amountPer100g (NutrientAmountChanged index)
-        , Ui.button "Remove" (RemoveNutrientRow index)
+        , Ui.dangerIconButton
+            { label = "×"
+            , title = "Remove"
+            , onPress = RemoveNutrientRow index
+            }
         ]
 
 
 servingRowView : List UnitItem -> Int -> ServingRow -> Element Msg
 servingRowView units index row =
-    Element.row [ Element.width Element.fill, Element.spacing 8 ]
+    Element.wrappedRow [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input "Label" row.label (ServingLabelChanged index)
         , View.QuantityInput.select
             { amountLabel = "Qty"
@@ -349,7 +353,11 @@ servingRowView units index row =
             , onUnitChange = ServingUnitChanged index
             }
         , Ui.input "Grams" row.grams (ServingGramsChanged index)
-        , Ui.button "Remove" (RemoveServingRow index)
+        , Ui.dangerIconButton
+            { label = "×"
+            , title = "Remove"
+            , onPress = RemoveServingRow index
+            }
         ]
 
 

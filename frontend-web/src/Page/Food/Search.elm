@@ -203,7 +203,7 @@ view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
         [ searchInput model
-        , bodyView model
+        , bodyView model device
         ]
 
 
@@ -231,8 +231,8 @@ searchInput model =
         ]
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : Model -> Device -> Element Msg
+bodyView model device =
     case model.results of
         NotAsked ->
             Ui.emptyState "Search for a food to get started."
@@ -258,6 +258,7 @@ bodyView model =
                     (List.map
                         (\item ->
                             SearchView.resultRow
+                                device
                                 { query = model.query
                                 , item = item
                                 , onSelect = ResultClicked

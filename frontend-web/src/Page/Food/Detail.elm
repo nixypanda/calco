@@ -384,15 +384,15 @@ view { model, device } =
 
             Loading _ ->
                 Element.none
-        , bodyView model
+        , bodyView device model
         ]
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : Device -> Model -> Element Msg
+bodyView device model =
     case model of
         Loaded loaded ->
-            loadedView loaded
+            loadedView device loaded
 
         LoadFailed _ ->
             Element.none
@@ -401,8 +401,8 @@ bodyView model =
             Ui.loading "Loading food..."
 
 
-loadedView : LoadedModel -> Element Msg
-loadedView loaded =
+loadedView : Device -> LoadedModel -> Element Msg
+loadedView device loaded =
     let
         food : ProductDetail
         food =
@@ -420,7 +420,7 @@ loadedView loaded =
         [ Element.width Element.fill
         , Element.spacing 16
         ]
-        [ foodHeader food
+        [ foodHeader device food
         , Element.map FormMsg (FoodLogForm.view (Just food) loaded.units form)
         , Ui.cardActions
             [ Ui.submitButton
@@ -431,7 +431,7 @@ loadedView loaded =
             ]
         , Ui.card
             [ Ui.sectionHeader "Macro Breakdown"
-            , View.Nutrients.macroBreakdownView nutrients
+            , View.Nutrients.macroBreakdownView device nutrients
             ]
         , View.Nutrients.nutrientsTable nutrients
         ]
@@ -458,8 +458,8 @@ foodNutrientsPer100g food =
         food.nutrients
 
 
-foodHeader : ProductDetail -> Element Msg
-foodHeader food =
+foodHeader : Device -> ProductDetail -> Element Msg
+foodHeader device food =
     let
         macroAccent : Maybe Element.Color
         macroAccent =
@@ -487,13 +487,13 @@ foodHeader food =
         ]
         (dot
             ++ [ Element.column [ Element.width Element.fill, Element.spacing 8 ]
-                    [ Element.el [ Ui.heading1, Font.bold ] (Element.text food.name)
+                    [ Ui.truncatedHeader device food.name
                     , Ui.mutedText (metaText food)
                     , if List.isEmpty food.categories then
                         Element.none
 
                       else
-                        Element.row [ Element.spacing 4 ]
+                        Element.wrappedRow [ Element.spacing 4 ]
                             (List.map
                                 (\category ->
                                     Ui.chip
@@ -526,4 +526,4 @@ metaText food =
         Just (String.join ", " food.categories)
     ]
         |> List.filterMap identity
-        |> String.join " - "
+        |> String.join " ⋅ "

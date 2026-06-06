@@ -32,7 +32,7 @@ import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (defaultCode)
 import Data.Search as Search exposing (Completion)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -315,14 +315,15 @@ errorView form =
 
 
 viewFormFields :
-    (FormFieldMsg -> msg)
+    Device
+    -> (FormFieldMsg -> msg)
     -> FormFields
     -> Element msg
-viewFormFields toMsg form =
+viewFormFields device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
         [ Ui.input "Name" form.name (toMsg << NameChanged)
         , Ui.input "Notes" form.notes (toMsg << NotesChanged)
-        , quantityTextInput
+        , quantityTextInput device
             { amountLabel = "Total Quantity"
             , amount = form.totalQuantity
             , onAmountChange = toMsg << TotalQuantityChanged
@@ -333,7 +334,7 @@ viewFormFields toMsg form =
         , Ui.sectionHeader "Components"
         , Element.column
             [ Element.width Element.fill, Element.spacing 10 ]
-            (List.map (componentRowView toMsg) form.components)
+            (List.map (componentRowView device toMsg) form.components)
         , Ui.ghostButton "+ Add Component" (toMsg AddComponentClicked)
         ]
 
@@ -603,8 +604,8 @@ removeRow rowId rows =
         List.filter (\row -> row.rowId /= rowId) rows
 
 
-componentRowView : (FormFieldMsg -> msg) -> ComponentRow -> Element msg
-componentRowView toMsg row =
+componentRowView : Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
+componentRowView device toMsg row =
     Ui.card
         [ componentSearchInput toMsg row
         , if row.searching then
@@ -618,9 +619,11 @@ componentRowView toMsg row =
                 [ Element.width Element.fill
                 , Element.spacing 0
                 ]
-                (List.map (searchResultView toMsg row.searchQuery row.rowId) row.searchResults)
+                (List.map (searchResultView device toMsg row.searchQuery row.rowId)
+                    row.searchResults
+                )
         , Element.row [ Element.width Element.fill, Element.spacing 8 ]
-            [ quantityTextInput
+            [ quantityTextInput device
                 { amountLabel = "Qty"
                 , amount = row.quantity
                 , onAmountChange = toMsg << ComponentQuantityChanged row.rowId
@@ -640,16 +643,24 @@ componentRowView toMsg row =
 
 
 quantityTextInput :
-    { amountLabel : String
-    , amount : String
-    , onAmountChange : String -> msg
-    , unitLabel : String
-    , unit : String
-    , onUnitChange : String -> msg
-    }
+    Device
+    ->
+        { amountLabel : String
+        , amount : String
+        , onAmountChange : String -> msg
+        , unitLabel : String
+        , unit : String
+        , onUnitChange : String -> msg
+        }
     -> Element msg
-quantityTextInput config =
-    Element.row [ Element.width Element.fill, Element.spacing 8 ]
+quantityTextInput device config =
+    (if Ui.isSmall device then
+        Element.column
+
+     else
+        Element.row
+    )
+        [ Element.width Element.fill, Element.spacing 8 ]
         [ Ui.input config.amountLabel config.amount config.onAmountChange
         , Ui.input config.unitLabel config.unit config.onUnitChange
         ]
@@ -684,9 +695,10 @@ componentSearchInput toMsg row =
         ]
 
 
-searchResultView : (FormFieldMsg -> msg) -> String -> RowId -> SearchResult -> Element msg
-searchResultView toMsg query rowId result =
+searchResultView : Device -> (FormFieldMsg -> msg) -> String -> RowId -> SearchResult -> Element msg
+searchResultView device toMsg query rowId result =
     SearchView.resultRow
+        device
         { query = query
         , item = result
         , onSelect = \_ -> toMsg (SelectProduct rowId result)

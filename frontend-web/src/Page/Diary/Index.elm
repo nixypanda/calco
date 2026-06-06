@@ -269,14 +269,14 @@ dailyCalories summary =
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        (dateCard model
+        (dateCard model device
             :: (case model.diary of
                     Loading _ ->
                         [ Ui.skeletonLoading ]
 
                     Loaded date logs ->
                         if LocalDate.equals date model.currentDate then
-                            [ logGroupsView model logs ]
+                            [ logGroupsView model logs device ]
 
                         else
                             [ Ui.skeletonLoading ]
@@ -291,8 +291,8 @@ view { model, device } =
         )
 
 
-dateCard : Model -> Element Msg
-dateCard model =
+dateCard : Model -> Device -> Element Msg
+dateCard model _ =
     let
         canGoNext : Bool
         canGoNext =
@@ -414,13 +414,13 @@ loadedLogs currentDate diary =
             []
 
 
-logGroupsView : Model -> List FoodLog -> Element Msg
-logGroupsView model logs =
+logGroupsView : Model -> List FoodLog -> Device -> Element Msg
+logGroupsView model logs device =
     Element.column [ Element.width Element.fill, Element.spacing 12 ]
-        [ slotView model logs Breakfast (MealSlot.label Breakfast)
-        , slotView model logs Lunch (MealSlot.label Lunch)
-        , slotView model logs Dinner (MealSlot.label Dinner)
-        , slotView model logs Snack (MealSlot.label Snack)
+        [ slotView model logs Breakfast (MealSlot.label Breakfast) device
+        , slotView model logs Lunch (MealSlot.label Lunch) device
+        , slotView model logs Dinner (MealSlot.label Dinner) device
+        , slotView model logs Snack (MealSlot.label Snack) device
         , let
             otherLogs : List FoodLog
             otherLogs =
@@ -430,12 +430,12 @@ logGroupsView model logs =
             Element.none
 
           else
-            slotView model logs Other (MealSlot.label Other)
+            slotView model logs Other (MealSlot.label Other) device
         ]
 
 
-slotView : Model -> List FoodLog -> MealSlot -> String -> Element Msg
-slotView model allLogs slot label =
+slotView : Model -> List FoodLog -> MealSlot -> String -> Device -> Element Msg
+slotView model allLogs slot label device =
     let
         logs : List FoodLog
         logs =
@@ -446,7 +446,7 @@ slotView model allLogs slot label =
             Nutrition.macroTotals logs
     in
     mealSlotCard slot
-        (mealSlotHeader model allLogs slot label totals)
+        (mealSlotHeader model allLogs slot label totals device)
         (Ui.hairline
             :: (if List.isEmpty logs then
                     [ Element.el
@@ -458,7 +458,7 @@ slotView model allLogs slot label =
                     ]
 
                 else
-                    List.map logRow logs
+                    List.map (logRow device) logs
                )
             ++ (case slot of
                     Other ->
@@ -472,9 +472,17 @@ slotView model allLogs slot label =
         )
 
 
-mealSlotHeader : Model -> List FoodLog -> MealSlot -> String -> MacroTotals -> Element Msg
-mealSlotHeader model allLogs slot label totals =
+mealSlotHeader : Model -> List FoodLog -> MealSlot -> String -> MacroTotals -> Device -> Element Msg
+mealSlotHeader model allLogs slot label totals device =
     let
+        horizontalPadding : Int
+        horizontalPadding =
+            if Ui.isSmall device then
+                16
+
+            else
+                34
+
         headerContent : Element Msg
         headerContent =
             Element.row
@@ -520,7 +528,11 @@ mealSlotHeader model allLogs slot label totals =
                                 [ Element.width Element.fill
                                 , Element.height Element.fill
                                 , Element.paddingEach
-                                    { top = 38, right = 34, bottom = 20, left = 34 }
+                                    { top = 38
+                                    , right = horizontalPadding
+                                    , bottom = 20
+                                    , left = horizontalPadding
+                                    }
                                 ]
                                 headerContent
                             )
@@ -647,8 +659,8 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : FoodLog -> Element Msg
-logRow log =
+logRow : Device -> FoodLog -> Element Msg
+logRow device log =
     let
         macroAccent : Maybe Element.Color
         macroAccent =
@@ -676,8 +688,14 @@ logRow log =
                     ++ [ Element.el
                             [ Element.width Element.fill
                             , Font.medium
+                            , Element.clip
                             ]
-                            (Element.text log.item.name)
+                            (Element.text
+                                (Ui.truncateWithEllipsis
+                                    (Ui.truncationCap device)
+                                    log.item.name
+                                )
+                            )
                        , Element.el
                             [ Ui.caption
                             , Font.color Ui.mutedColor

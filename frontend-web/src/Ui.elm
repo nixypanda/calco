@@ -44,6 +44,7 @@ module Ui exposing
     , macroBar
     , macroColor
     , mutedColor
+    , mutedParagraph
     , mutedText
     , pageContainer
     , passwordInput
@@ -58,12 +59,13 @@ module Ui exposing
     , submitButton
     , textMedium
     , truncateWithEllipsis
+    , truncatedHeader
     , truncatedText
     , truncationCap
     )
 
 import Data.Nutrition
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -599,6 +601,15 @@ mutedText text =
         (Element.text text)
 
 
+mutedParagraph : String -> Element msg
+mutedParagraph text =
+    Element.paragraph
+        [ Font.color textMuted
+        , body
+        ]
+        [ Element.text text ]
+
+
 detailRow : String -> Element msg -> Element msg
 detailRow label_ value =
     Element.row [ Element.spacing 4 ]
@@ -840,6 +851,18 @@ skeletonBar =
 -- New components (see docs/visual-reskin.md §6)
 
 
+truncatedHeader : Device -> String -> Element msg
+truncatedHeader device heading =
+    Element.el
+        [ heading1
+        , Font.bold
+        , Element.width Element.fill
+        , Element.clip
+        , Element.height (Element.px 28)
+        ]
+        (Element.text (truncateWithEllipsis (truncationCap device) heading))
+
+
 {-| 40×40 circular icon button. The label is rendered as text glyphs
 (←, ☰, ✕, +, etc.). `title` is forwarded as both a tooltip and a
 semantic label for screen readers. Empty `label` is allowed and
@@ -959,7 +982,7 @@ chipHtml config =
             [ Html.Attributes.style "display" "inline-flex"
             , Html.Attributes.style "align-items" "center"
             , Html.Attributes.style "justify-content" "center"
-            , Html.Attributes.style "height" "32px"
+            , Html.Attributes.style "height" "22px"
             , Html.Attributes.style "padding" "0 12px"
             , Html.Attributes.style "border-radius" "999px"
             , Html.Attributes.style "background-color" (toCssColor (chipBackground config.selected))

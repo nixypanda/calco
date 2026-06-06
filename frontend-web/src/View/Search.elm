@@ -7,7 +7,7 @@ module View.Search exposing
 import Api.Foods exposing (SearchResult)
 import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -52,8 +52,11 @@ tabCompletionHandler completeMsg options =
         )
 
 
-resultRow : { query : String, item : SearchResult, onSelect : String -> msg } -> Element msg
-resultRow config =
+resultRow :
+    Device
+    -> { query : String, item : SearchResult, onSelect : String -> msg }
+    -> Element msg
+resultRow device config =
     let
         macroAccent : Maybe Element.Color
         macroAccent =
@@ -70,6 +73,31 @@ resultRow config =
 
                 Nothing ->
                     []
+
+        maybeCategoryTags : List (Element msg)
+        maybeCategoryTags =
+            if Ui.isSmall device then
+                []
+
+            else
+                [ categoryPills config.item.categories ]
+
+        searchItem : List (Element msg)
+        searchItem =
+            [ Element.column
+                [ Element.width Element.fill
+                , Element.spacing 4
+                , Element.clip
+                ]
+                [ Element.el [ Font.medium ]
+                    (Element.text
+                        (Ui.truncateWithEllipsis (Ui.truncationCap device) config.item.name)
+                    )
+                , Element.el
+                    [ Ui.caption, Font.color Ui.mutedColor ]
+                    (Element.text (metaText config.query config.item))
+                ]
+            ]
     in
     Input.button
         [ Element.width Element.fill
@@ -81,22 +109,7 @@ resultRow config =
                 [ Element.width Element.fill
                 , Element.spacing 12
                 ]
-                (dot
-                    ++ [ Element.column
-                            [ Element.width Element.fill
-                            , Element.spacing 4
-                            , Element.clip
-                            ]
-                            [ Element.el [ Font.medium ] (Element.text config.item.name)
-                            , Element.el
-                                [ Ui.caption
-                                , Font.color Ui.mutedColor
-                                ]
-                                (Element.text (metaText config.query config.item))
-                            ]
-                       , categoryPills config.item.categories
-                       ]
-                )
+                (dot ++ searchItem ++ maybeCategoryTags)
         }
 
 
@@ -139,7 +152,7 @@ metaText query item =
     , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.energyKcalPer100g
     ]
         |> List.filterMap identity
-        |> String.join " - "
+        |> String.join " ⋅ "
 
 
 isBarcodeVisible : String -> SearchResult -> Bool

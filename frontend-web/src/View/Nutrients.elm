@@ -12,7 +12,7 @@ module View.Nutrients exposing
     )
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -214,8 +214,8 @@ titleCase word =
             word
 
 
-preview : NutritionState -> Element msg
-preview state =
+preview : Device -> NutritionState -> Element msg
+preview device state =
     Element.column [ Element.width Element.fill, Element.spacing 8 ]
         [ case state of
             NutritionLoading _ ->
@@ -225,7 +225,7 @@ preview state =
                 Element.column [ Element.width Element.fill, Element.spacing 8 ]
                     [ Ui.card
                         [ Ui.sectionHeader "Macro Breakdown"
-                        , macroBreakdownView nutrients
+                        , macroBreakdownView device nutrients
                         ]
                     , nutrientsTable nutrients
                     ]
@@ -278,8 +278,8 @@ mapNutritionInput transform state =
             NutritionUnavailable input
 
 
-macroBreakdownView : List NutrientAmount -> Element msg
-macroBreakdownView nutrients =
+macroBreakdownView : Device -> List NutrientAmount -> Element msg
+macroBreakdownView device nutrients =
     let
         portions : MacroPortions
         portions =
@@ -287,7 +287,11 @@ macroBreakdownView nutrients =
     in
     Element.column [ Element.width Element.fill, Element.spacing 8 ]
         [ macroBarRow 24 portions
-        , macroLegend portions
+        , if Ui.isSmall device then
+            Element.none
+
+          else
+            macroLegend portions
         ]
 
 
