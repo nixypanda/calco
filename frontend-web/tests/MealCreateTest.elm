@@ -5,8 +5,8 @@ import Api.Meals exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
-import Page.Meal.Form.Common as Common
-import Page.Meal.Form.Create as MealCreate
+import Page.Meal.Common as Common
+import Page.Meal.Create as MealCreate
 import Test exposing (Test, describe, test)
 
 

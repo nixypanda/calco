@@ -19,6 +19,10 @@ import Lib.Text as Text
 import Ui
 
 
+
+-- MODEL
+
+
 type alias Form =
     { username : String
     , displayName : String
@@ -45,6 +49,22 @@ type Problem
     | InitialPasswordRequired
 
 
+init : ( Model, OutMsg )
+init =
+    ( { state = Editing emptyForm }
+    , NoOp
+    )
+
+
+emptyForm : Form
+emptyForm =
+    { username = "", displayName = "", initialPassword = "" }
+
+
+
+-- UPDATE
+
+
 type Msg
     = UsernameChanged String
     | DisplayNameChanged String
@@ -58,58 +78,6 @@ type OutMsg
     | RequestCreateUser User.CreateUserRequest
     | CreateSucceeded
     | SessionExpired
-
-
-init : ( Model, OutMsg )
-init =
-    ( { state = Editing emptyForm }
-    , NoOp
-    )
-
-
-emptyForm : Form
-emptyForm =
-    { username = "", displayName = "", initialPassword = "" }
-
-
-currentForm : State -> Form
-currentForm state =
-    case state of
-        Editing form ->
-            form
-
-        Invalid form _ ->
-            form
-
-        Submitting form ->
-            form
-
-        Failed form _ ->
-            form
-
-        Succeeded ->
-            emptyForm
-
-
-createUserPayload : Form -> Result Problem User.CreateUserRequest
-createUserPayload form =
-    Result.map2
-        (\username displayName ->
-            { username = username
-            , displayName = displayName
-            , initialPassword = form.initialPassword
-            }
-        )
-        (Text.requireTrimmed UsernameRequired form.username)
-        (Text.requireTrimmed DisplayNameRequired form.displayName)
-        |> Result.andThen
-            (\request ->
-                if String.isEmpty form.initialPassword then
-                    Err InitialPasswordRequired
-
-                else
-                    Ok request
-            )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -173,6 +141,50 @@ update msg model =
                         }
                         error
                         model
+
+
+currentForm : State -> Form
+currentForm state =
+    case state of
+        Editing form ->
+            form
+
+        Invalid form _ ->
+            form
+
+        Submitting form ->
+            form
+
+        Failed form _ ->
+            form
+
+        Succeeded ->
+            emptyForm
+
+
+createUserPayload : Form -> Result Problem User.CreateUserRequest
+createUserPayload form =
+    Result.map2
+        (\username displayName ->
+            { username = username
+            , displayName = displayName
+            , initialPassword = form.initialPassword
+            }
+        )
+        (Text.requireTrimmed UsernameRequired form.username)
+        (Text.requireTrimmed DisplayNameRequired form.displayName)
+        |> Result.andThen
+            (\request ->
+                if String.isEmpty form.initialPassword then
+                    Err InitialPasswordRequired
+
+                else
+                    Ok request
+            )
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device } -> Element Msg

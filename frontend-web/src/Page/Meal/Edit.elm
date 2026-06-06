@@ -1,4 +1,4 @@
-module Page.Meal.Form.Edit exposing
+module Page.Meal.Edit exposing
     ( LoadedModel
     , LoadingModel
     , Model(..)
@@ -16,7 +16,7 @@ import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form.Common as Common
+import Page.Meal.Common as Common
 import Ui
 import View.Nutrients
     exposing

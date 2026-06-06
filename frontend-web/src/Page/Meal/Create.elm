@@ -1,4 +1,4 @@
-module Page.Meal.Form.Create exposing
+module Page.Meal.Create exposing
     ( Model
     , Msg(..)
     , OutMsg(..)
@@ -12,7 +12,7 @@ import Api.Meals exposing (CreateMealRequest, Meal)
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form.Common as Common
+import Page.Meal.Common as Common
 import Ui
 
 

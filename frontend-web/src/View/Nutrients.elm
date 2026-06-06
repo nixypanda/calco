@@ -4,6 +4,7 @@ module View.Nutrients exposing
     , defaultNutritionInput
     , macroBreakdownCompact
     , macroBreakdownView
+    , macroDot
     , mapNutritionInput
     , nutrientLabel
     , nutrientsTable
@@ -130,6 +131,16 @@ nutrientLabel code =
 
         _ ->
             genericNutrientLabel code
+
+
+macroDot : List NutrientAmount -> Element msg
+macroDot nutrients =
+    case nutrients |> Nutrition.dominantMacro |> Maybe.map Ui.macroColor of
+        Just c ->
+            Ui.accentDot c
+
+        Nothing ->
+            Ui.accentDot Ui.primaryTeal
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.

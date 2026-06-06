@@ -552,21 +552,13 @@ componentView loaded component =
                     )
                 |> Maybe.withDefault ""
 
-        macroAccent : Maybe Element.Color
-        macroAccent =
-            component.nutritionSummary
-                |> Maybe.map Nutrition.summaryToNutrients
-                |> Maybe.andThen Nutrition.dominantMacro
-                |> Maybe.map Ui.macroColor
-
-        dot : List (Element Msg)
-        dot =
-            case macroAccent of
-                Just c ->
-                    [ Ui.accentDot c ]
-
-                Nothing ->
-                    []
+        macroDot : List (Element msg)
+        macroDot =
+            Maybe.withDefault []
+                (Maybe.map
+                    (List.singleton << View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                    component.nutritionSummary
+                )
 
         compactBar : Element Msg
         compactBar =
@@ -596,7 +588,7 @@ componentView loaded component =
             [ Element.width Element.fill
             , Element.spacing 12
             ]
-            (dot
+            (macroDot
                 ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
                    , Element.el
                         [ Font.color Ui.mutedColor ]

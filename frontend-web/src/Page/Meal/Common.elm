@@ -1,4 +1,4 @@
-module Page.Meal.Form.Common exposing
+module Page.Meal.Common exposing
     ( CategorySuggestionResult
     , ComponentRow
     , FormFieldMsg(..)

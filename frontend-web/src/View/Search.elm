@@ -16,6 +16,7 @@ import Html
 import Html.Events
 import Json.Decode as Decode
 import Ui
+import View.Nutrients
 
 
 completionDropdown : { onSelect : Completion -> msg } -> List Completion -> Element msg
@@ -58,22 +59,6 @@ resultRow :
     -> Element msg
 resultRow device config =
     let
-        macroAccent : Maybe Element.Color
-        macroAccent =
-            config.item.nutritionSummary.per100g
-                |> Nutrition.summaryToNutrients
-                |> Nutrition.dominantMacro
-                |> Maybe.map Ui.macroColor
-
-        dot : List (Element msg)
-        dot =
-            case macroAccent of
-                Just c ->
-                    [ Ui.accentDot c ]
-
-                Nothing ->
-                    []
-
         maybeCategoryTags : List (Element msg)
         maybeCategoryTags =
             if Ui.isSmall device then
@@ -82,9 +67,14 @@ resultRow device config =
             else
                 [ categoryPills config.item.categories ]
 
-        searchItem : List (Element msg)
+        macroDot : Element msg
+        macroDot =
+            View.Nutrients.macroDot
+                (config.item.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
+
+        searchItem : Element msg
         searchItem =
-            [ Element.column
+            Element.column
                 [ Element.width Element.fill
                 , Element.spacing 4
                 , Element.clip
@@ -97,7 +87,6 @@ resultRow device config =
                     [ Ui.caption, Font.color Ui.mutedColor ]
                     (Element.text (metaText config.query config.item))
                 ]
-            ]
     in
     Input.button
         [ Element.width Element.fill
@@ -109,7 +98,7 @@ resultRow device config =
                 [ Element.width Element.fill
                 , Element.spacing 12
                 ]
-                (dot ++ searchItem ++ maybeCategoryTags)
+                ([ macroDot, searchItem ] ++ maybeCategoryTags)
         }
 
 

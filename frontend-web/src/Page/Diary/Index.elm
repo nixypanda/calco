@@ -26,6 +26,7 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import View.Nutrients
 
 
 type MacroMode
@@ -661,22 +662,6 @@ macroSummary mode totals =
 
 logRow : Device -> FoodLog -> Element Msg
 logRow device log =
-    let
-        macroAccent : Maybe Element.Color
-        macroAccent =
-            log.nutrients
-                |> Nutrition.dominantMacro
-                |> Maybe.map Ui.macroColor
-
-        dot : List (Element Msg)
-        dot =
-            case macroAccent of
-                Just c ->
-                    [ Ui.accentDot c ]
-
-                Nothing ->
-                    []
-    in
     Input.button
         [ Element.width Element.fill
         , Element.padding 14
@@ -684,33 +669,19 @@ logRow device log =
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                (dot
-                    ++ [ Element.el
-                            [ Element.width Element.fill
-                            , Font.medium
-                            , Element.clip
-                            ]
-                            (Element.text
-                                (Ui.truncateWithEllipsis
-                                    (Ui.truncationCap device)
-                                    log.item.name
-                                )
-                            )
-                       , Element.el
-                            [ Ui.caption
-                            , Font.color Ui.mutedColor
-                            ]
-                            (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
-                       , Element.el
-                            [ Ui.caption
-                            , Font.color Ui.mutedColor
-                            ]
-                            (Element.text
-                                (String.fromInt
-                                    (round (caloriesFrom log.nutrients))
-                                    ++ " kcal"
-                                )
-                            )
-                       ]
-                )
+                [ View.Nutrients.macroDot log.nutrients
+                , Element.el
+                    [ Element.width Element.fill, Font.medium, Element.clip ]
+                    (Element.text
+                        (Ui.truncateWithEllipsis (Ui.truncationCap device) log.item.name)
+                    )
+                , Element.el
+                    [ Ui.caption, Font.color Ui.mutedColor ]
+                    (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
+                , Element.el
+                    [ Ui.caption, Font.color Ui.mutedColor ]
+                    (Element.text
+                        (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
+                    )
+                ]
         }

@@ -31,10 +31,10 @@ import Page.Diary.Index as Diary
 import Page.Food.Detail as FoodDetail
 import Page.Food.Search as FoodSearch
 import Page.FoodLog.Detail as FoodLogDetail
+import Page.Meal.Common as MealFormCommon
+import Page.Meal.Create as MealCreate
 import Page.Meal.Detail as MealDetail
-import Page.Meal.Form.Common as MealFormCommon
-import Page.Meal.Form.Create as MealCreate
-import Page.Meal.Form.Edit as MealEdit
+import Page.Meal.Edit as MealEdit
 import Page.Meal.Index as Meals
 import Session
 import Task

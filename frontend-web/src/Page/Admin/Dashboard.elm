@@ -16,6 +16,11 @@ import Element exposing (Device, Element)
 import Element.Font as Font
 import Element.Input as Input
 import Ui
+import View.Admin
+
+
+
+-- MODEL
 
 
 type alias Model =
@@ -29,6 +34,17 @@ type State
     | Ready (List User.User)
 
 
+init : ( Model, OutMsg )
+init =
+    ( { state = Loading }
+    , RequestUsers
+    )
+
+
+
+-- UPDATE
+
+
 type Msg
     = UsersLoaded (Result Client.ApiError (List User.User))
     | NavigateCreateUser
@@ -40,13 +56,6 @@ type OutMsg
     | RequestUsers
     | Navigate Route
     | SessionExpired
-
-
-init : ( Model, OutMsg )
-init =
-    ( { state = Loading }
-    , RequestUsers
-    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -71,6 +80,10 @@ update msg model =
 
         NavigateEditUser userId ->
             ( model, Cmd.none, Navigate (AdminEditUser userId) )
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device } -> Element Msg
@@ -106,25 +119,6 @@ createUserRow =
     Ui.ghostButton "+ Create User" NavigateCreateUser
 
 
-statusBadge : String -> Element msg
-statusBadge status =
-    Ui.coloredPill
-        { label = status
-        , bg =
-            if status == "active" then
-                Ui.accentSoftGreen
-
-            else
-                Ui.accentSoftPink
-        , fg =
-            if status == "active" then
-                Element.rgb255 50 110 60
-
-            else
-                Element.rgb255 180 60 80
-        }
-
-
 userListRow : { user : User.User, onSelect : String -> msg } -> Element msg
 userListRow config =
     Input.button
@@ -138,6 +132,6 @@ userListRow config =
                     [ Element.el [ Font.bold ] (Element.text config.user.username)
                     , Ui.mutedText config.user.displayName
                     ]
-                , Element.el [ Element.alignRight ] (statusBadge config.user.status)
+                , Element.el [ Element.alignRight ] (View.Admin.statusBadge config.user.status)
                 ]
         }

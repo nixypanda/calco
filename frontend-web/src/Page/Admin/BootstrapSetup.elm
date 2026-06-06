@@ -18,6 +18,10 @@ import Lib.Text as Text
 import View.Auth
 
 
+
+-- MODEL
+
+
 type alias Form =
     { username : String
     , password : String
@@ -41,6 +45,20 @@ type Problem
     | PasswordTooShort
 
 
+init : Model
+init =
+    { state = Editing emptyForm }
+
+
+emptyForm : Form
+emptyForm =
+    { username = "", password = "" }
+
+
+
+-- UPDATE
+
+
 type Msg
     = UsernameChanged String
     | PasswordChanged String
@@ -52,16 +70,6 @@ type OutMsg
     = NoOp
     | RequestCreateAdmin Auth.LoginRequest
     | CreateAdminSucceeded Auth.LoginSession
-
-
-init : Model
-init =
-    { state = Editing emptyForm }
-
-
-emptyForm : Form
-emptyForm =
-    { username = "", password = "" }
 
 
 currentForm : Model -> Form
@@ -80,8 +88,8 @@ currentForm model =
             form
 
 
-bootstrapAdminPayload : Form -> Result Problem Auth.LoginRequest
-bootstrapAdminPayload form =
+validateBootstrapAdmin : Form -> Result Problem Auth.LoginRequest
+validateBootstrapAdmin form =
     Text.requireTrimmed UsernameRequired form.username
         |> Result.andThen
             (\username ->
@@ -91,11 +99,6 @@ bootstrapAdminPayload form =
                 else
                     Ok { username = username, password = form.password }
             )
-
-
-validateBootstrapAdmin : Form -> Result Problem Auth.LoginRequest
-validateBootstrapAdmin =
-    bootstrapAdminPayload
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -123,7 +126,7 @@ update msg model =
                 form =
                     currentForm model
             in
-            case bootstrapAdminPayload form of
+            case validateBootstrapAdmin form of
                 Ok request ->
                     ( { model | state = Submitting form }
                     , Cmd.none
@@ -148,6 +151,10 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none, NoOp )
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device } -> Element Msg

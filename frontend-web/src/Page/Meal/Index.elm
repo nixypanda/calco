@@ -16,9 +16,9 @@ import Api.Result as ApiResult
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Font as Font
 import Element.Input as Input
 import Ui
+import View.Nutrients
 
 
 type Model
@@ -194,21 +194,13 @@ bodyView device model =
 mealRow : Device -> ActionState -> Meal -> Element Msg
 mealRow device action meal =
     let
-        macroAccent : Maybe Element.Color
-        macroAccent =
-            meal.nutritionSummary
-                |> Maybe.map Nutrition.summaryToNutrients
-                |> Maybe.andThen Nutrition.dominantMacro
-                |> Maybe.map Ui.macroColor
-
-        dot : List (Element Msg)
-        dot =
-            case macroAccent of
-                Just c ->
-                    [ Ui.accentDot c ]
-
-                Nothing ->
-                    []
+        macroDot : List (Element msg)
+        macroDot =
+            Maybe.withDefault []
+                (Maybe.map
+                    (List.singleton << View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                    meal.nutritionSummary
+                )
     in
     Element.wrappedRow
         [ Element.width Element.fill
@@ -220,7 +212,7 @@ mealRow device action meal =
             { onPress = Just (OpenMealClicked meal.id)
             , label =
                 Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                    (dot
+                    (macroDot
                         ++ [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
                                 [ Ui.truncatedHeader device meal.name
                                 , Ui.mutedText (mealSummaryText meal)

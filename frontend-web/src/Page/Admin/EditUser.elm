@@ -19,6 +19,11 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Ui
+import View.Admin
+
+
+
+-- MODEL
 
 
 type alias Model =
@@ -52,6 +57,19 @@ type Problem
     = NewPasswordRequired
 
 
+init : String -> ( Model, OutMsg )
+init userId =
+    ( { userId = userId
+      , state = Loading
+      }
+    , RequestUser userId
+    )
+
+
+
+-- UPDATE
+
+
 type Msg
     = UserLoaded (Result Client.ApiError User.User)
     | PasswordChanged String
@@ -71,15 +89,6 @@ type OutMsg
     | RequestEnableUser String
     | UpdateSucceeded
     | SessionExpired
-
-
-init : String -> ( Model, OutMsg )
-init userId =
-    ( { userId = userId
-      , state = Loading
-      }
-    , RequestUser userId
-    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -243,6 +252,10 @@ completePendingAction pendingAction result model successState =
             ( model, Cmd.none, NoOp )
 
 
+
+-- VIEW
+
+
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
@@ -339,25 +352,6 @@ problemMessage problem =
             "New password is required"
 
 
-statusBadge : String -> Element msg
-statusBadge status =
-    Ui.coloredPill
-        { label = status
-        , bg =
-            if status == "active" then
-                Ui.accentSoftGreen
-
-            else
-                Ui.accentSoftPink
-        , fg =
-            if status == "active" then
-                Element.rgb255 50 110 60
-
-            else
-                Element.rgb255 180 60 80
-        }
-
-
 userSummaryCard : User.User -> Element msg
 userSummaryCard user =
     Ui.card
@@ -365,7 +359,7 @@ userSummaryCard user =
             [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
             , Ui.detailRow "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
-            , Ui.detailRow "Status" (statusBadge user.status)
+            , Ui.detailRow "Status" (View.Admin.statusBadge user.status)
             , Ui.detailRow "Created"
                 (Element.el [ Ui.caption ] (Element.text user.createdAt))
             ]

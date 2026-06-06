@@ -6,8 +6,8 @@ import Data.ItemNameLookup as ItemNameLookup
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
-import Page.Meal.Form.Common as Common
-import Page.Meal.Form.Edit as MealEdit
+import Page.Meal.Common as Common
+import Page.Meal.Edit as MealEdit
 import Test exposing (Test, describe, test)
 import View.Nutrients exposing (NutritionState(..))
 
