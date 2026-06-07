@@ -133,7 +133,7 @@ type Msg
     | RemoveCategory String
     | AcceptCategorySuggestion String
     | CategorySuggestionsLoaded Int (Result Client.ApiError (List CategorySuggestion))
-    | NutrientCodeChanged Int String
+    | NutrientCodeChanged Int String String
     | ToggleNutrientCodeDropdown Int
     | NutrientAmountChanged Int String
     | AddNutrientRow
@@ -533,13 +533,7 @@ update msg formIn =
                     Err _ ->
                         ( form, Cmd.none, NoOutMsg )
 
-        NutrientCodeChanged index value ->
-            let
-                unit : String
-                unit =
-                    Dict.get value form.nutrientCatalog
-                        |> Maybe.withDefault ""
-            in
+        NutrientCodeChanged index value unit ->
             ( { form
                 | nutrients =
                     ListExtra.updateAt
@@ -915,7 +909,16 @@ nutrientRowView nutrients openDropdown index row =
             , options =
                 ( "", "Select nutrient..." )
                     :: List.map (\n -> ( n.code, n.name )) nutrients
-            , onChange = NutrientCodeChanged index
+            , onChange =
+                \code ->
+                    NutrientCodeChanged index
+                        code
+                        (nutrients
+                            |> List.filter (\n -> n.code == code)
+                            |> List.head
+                            |> Maybe.map .unit
+                            |> Maybe.withDefault ""
+                        )
             , isOpen = openDropdown == NutrientCodeOpen index
             , onToggle = ToggleNutrientCodeDropdown index
             }

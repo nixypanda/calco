@@ -1632,6 +1632,11 @@ drawerItem current label target =
                 Ui.darkColor
             )
         , Font.medium
+        , if selected then
+            Element.mouseOver []
+
+          else
+            Element.mouseOver [ Background.color Ui.brandBlueSoft ]
         ]
         { onPress = Just (AppNavigationClicked target)
         , label = Element.text label

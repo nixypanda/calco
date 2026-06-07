@@ -8,6 +8,7 @@ module Ui exposing
     , body
     , borderGray
     , brandBlue
+    , brandBlueSoft
     , button
     , caption
     , carbsColor

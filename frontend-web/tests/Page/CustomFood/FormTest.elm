@@ -239,7 +239,7 @@ tests =
                         Form.update (Form.NutrientsLoaded items) Form.emptyForm
 
                     ( afterCode, _, _ ) =
-                        Form.update (Form.NutrientCodeChanged 0 "PROTEIN_G") afterLoad
+                        Form.update (Form.NutrientCodeChanged 0 "PROTEIN_G" "g") afterLoad
                 in
                 afterCode.nutrients
                     |> List.head
@@ -300,7 +300,7 @@ tests =
                 let
                     ( afterCode, _, _ ) =
                         Form.update
-                            (Form.NutrientCodeChanged 0 "NOT_A_CODE")
+                            (Form.NutrientCodeChanged 0 "NOT_A_CODE" "")
                             Form.emptyForm
                 in
                 afterCode.nutrients
