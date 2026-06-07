@@ -16,6 +16,7 @@ module Ui exposing
     , cardShadow
     , chip
     , chipBackground
+    , chipForeground
     , chips
     , coloredPill
     , dangerBg
@@ -54,7 +55,6 @@ module Ui exposing
     , primaryTeal
     , proteinColor
     , sectionHeader
-    , select
     , selectDropdown
     , skeletonLoading
     , statBlock
@@ -565,21 +565,6 @@ passwordInput label value onChange =
         , placeholder = Nothing
         , label = Input.labelAbove [] (fieldLabel label)
         , show = False
-        }
-
-
-select :
-    String
-    -> a
-    -> List ( a, String )
-    -> (a -> msg)
-    -> Element msg
-select label_ selected options onChange =
-    Input.radio [ Element.spacing 8 ]
-        { onChange = onChange
-        , selected = Just selected
-        , label = Input.labelAbove [] (fieldLabel label_)
-        , options = List.map (\( val, lbl ) -> Input.option val (Element.text lbl)) options
         }
 
 

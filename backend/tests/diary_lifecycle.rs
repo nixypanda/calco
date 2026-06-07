@@ -15,7 +15,9 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
         "default_unit": "serving",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 52 },
-            { "code": "CARBS_G", "amount_per_100g": 14 }
+            { "code": "PROTEIN_G", "amount_per_100g": 1 },
+            { "code": "CARBS_G", "amount_per_100g": 14 },
+            { "code": "FAT_G", "amount_per_100g": 0 }
         ],
         "servings": [
             { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }
@@ -68,11 +70,12 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     assert_eq!(created["device_timezone"], "Asia/Kolkata");
     assert_eq!(created["nutrition_summary"]["energy_kcal"], "78");
     assert_eq!(created["nutrition_summary"]["carbs_g"], "21");
-    assert!(created["nutrition_summary"]["protein_g"].is_null());
+    assert_eq!(created["nutrition_summary"]["protein_g"], "1.50");
+    assert_eq!(created["nutrition_summary"]["fat_g"], "0");
 
     // Nutrient snapshot should include kcal scaled to 150g
     let created_nutrients = created["nutrients"].as_array().unwrap();
-    assert_eq!(created_nutrients.len(), 2);
+    assert_eq!(created_nutrients.len(), 4);
     let kcal = created["nutrients"]
         .as_array()
         .unwrap()
@@ -97,7 +100,9 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
         "default_unit": "serving",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 52 },
-            { "code": "CARBS_G", "amount_per_100g": 14 }
+            { "code": "PROTEIN_G", "amount_per_100g": 1 },
+            { "code": "CARBS_G", "amount_per_100g": 14 },
+            { "code": "FAT_G", "amount_per_100g": 0 }
         ],
         "servings": [
             { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }

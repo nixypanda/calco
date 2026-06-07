@@ -308,6 +308,13 @@ mod tests {
             unimplemented!("not used in test")
         }
 
+        async fn list_by_user_id(
+            &self,
+            _user_id: Uuid,
+        ) -> Result<Vec<Product>, NutritionError> {
+            unimplemented!("not used in test")
+        }
+
         async fn create(&self, _product: &Product) -> Result<(), NutritionError> {
             unimplemented!("not used in test")
         }

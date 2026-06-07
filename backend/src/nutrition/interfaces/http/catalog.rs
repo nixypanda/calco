@@ -22,7 +22,10 @@ pub fn catalog_routes(state: AppState) -> Router {
         .route("/foods/categories", get(list_categories_handler))
         .route("/foods/barcode/{barcode}", get(barcode_lookup_handler))
         .route("/foods/{id}", get(product_detail_handler))
-        .route("/foods/custom", post(create_custom_food_handler))
+        .route(
+            "/foods/custom",
+            post(create_custom_food_handler).get(list_custom_foods_handler),
+        )
         .route(
             "/foods/custom/{id}",
             put(update_custom_food_handler).delete(delete_custom_food_handler),
@@ -113,6 +116,11 @@ pub struct ProductSearchItemDto {
 #[derive(Serialize)]
 pub struct SearchListResponse {
     pub items: Vec<ProductSearchItemDto>,
+}
+
+#[derive(Serialize)]
+pub struct CustomFoodListResponse {
+    pub items: Vec<ProductDetailResponse>,
 }
 
 #[derive(Serialize)]
@@ -287,6 +295,21 @@ async fn list_categories_handler(
                 .collect();
             Json(CategoryListResponse { items }).into_response()
         }
+        Err(e) => internal_error(e).into_response(),
+    }
+}
+
+async fn list_custom_foods_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let products = match state.product_repo.list_by_user_id(auth.0.id).await {
+        Ok(p) => p,
+        Err(e) => return internal_error(e).into_response(),
+    };
+
+    match custom_foods_to_list_response(&state, &products).await {
+        Ok(resp) => Json(resp).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -555,6 +578,24 @@ fn products_to_search_response(products: Vec<Product>) -> SearchListResponse {
             .map(product_to_search_item_dto)
             .collect(),
     }
+}
+
+async fn custom_foods_to_list_response(
+    state: &AppState,
+    products: &[Product],
+) -> Result<CustomFoodListResponse, NutritionError> {
+    let all_units = state.unit_repo.list_all().await?;
+    let mut items = Vec::with_capacity(products.len());
+    for product in products {
+        let allowed = product.allowed_unit_codes(&state.unit_converter);
+        let allowed_units: Vec<(UnitCode, String, String)> = all_units
+            .iter()
+            .cloned()
+            .filter(|(code, _, _)| allowed.contains(&code.0))
+            .collect();
+        items.push(product_to_detail_response(product, allowed_units));
+    }
+    Ok(CustomFoodListResponse { items })
 }
 
 fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {

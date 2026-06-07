@@ -21,6 +21,7 @@ type Route
     | FoodLogDetail String
     | FoodSearch (Maybe MealSlot)
     | FoodDetail String (Maybe MealSlot)
+    | CustomFoods
     | CustomFoodCreate
     | CustomFoodEdit String
     | Meals
@@ -48,6 +49,7 @@ routeParser =
         , Parser.map Diary (s "home" <?> Query.string "date")
         , Parser.map FoodLogDetail (s "logs" </> string)
         , Parser.map FoodSearch (s "search" <?> mealSlotQuery)
+        , Parser.map CustomFoods (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
         , Parser.map FoodDetail (s "foods" </> string <?> mealSlotQuery)
@@ -101,6 +103,9 @@ routeToPath route =
 
         FoodDetail id maybeSlot ->
             withMealSlot ("/foods/" ++ id) maybeSlot
+
+        CustomFoods ->
+            "/foods/custom"
 
         CustomFoodCreate ->
             "/foods/custom/new"

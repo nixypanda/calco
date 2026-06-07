@@ -27,6 +27,7 @@ import Page.Admin.EditUser as AdminEditUser
 import Page.Auth.Login as Login
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
+import Page.CustomFood.Index as CustomFoodIndex
 import Page.Diary.Index as Diary
 import Page.Food.Detail as FoodDetail
 import Page.Food.Search as FoodSearch
@@ -78,6 +79,7 @@ type PageModel
     | FoodLogDetailPage FoodLogDetail.Model
     | CustomFoodCreatePage CustomFoodCreate.Model
     | CustomFoodEditPage CustomFoodEdit.Model
+    | CustomFoodsPage CustomFoodIndex.Model
     | MealsPage Meals.Model
     | MealCreatePage MealCreate.Model
     | MealEditPage MealEdit.Model
@@ -111,6 +113,7 @@ type Msg
     | GotFoodLogDetailMsg FoodLogDetail.Msg
     | GotCustomFoodCreateMsg CustomFoodCreate.Msg
     | GotCustomFoodEditMsg CustomFoodEdit.Msg
+    | GotCustomFoodsMsg CustomFoodIndex.Msg
     | GotMealsMsg Meals.Msg
     | GotMealCreateMsg MealCreate.Msg
     | GotMealEditMsg MealEdit.Msg
@@ -414,6 +417,9 @@ update msg model =
         GotCustomFoodEditMsg subMsg ->
             updateCustomFoodEdit subMsg model
 
+        GotCustomFoodsMsg subMsg ->
+            updateCustomFoods subMsg model
+
         GotMealsMsg subMsg ->
             updateMeals subMsg model
 
@@ -566,6 +572,18 @@ loadPage route model =
 
                 ( nextModel, outCmd ) =
                     applyCustomFoodEditOutMsg outMsg { model | page = CustomFoodEditPage pageModel }
+            in
+            ( nextModel, outCmd )
+
+        CustomFoods ->
+            let
+                ( pageModel, outMsg ) =
+                    CustomFoodIndex.init
+
+                ( nextModel, outCmd ) =
+                    applyCustomFoodsOutMsg
+                        outMsg
+                        { model | page = CustomFoodsPage pageModel }
             in
             ( nextModel, outCmd )
 
@@ -928,6 +946,13 @@ applyCustomFoodCreateOutMsg outMsg model =
                 (GotCustomFoodCreateMsg << CustomFoodCreate.SaveCompleted)
             )
 
+        CustomFoodCreate.RequestCategorySuggestions token request ->
+            ( model
+            , Api.Foods.listCategorySuggestions
+                request
+                (GotCustomFoodCreateMsg << CustomFoodCreate.CategorySuggestionsLoaded token)
+            )
+
         CustomFoodCreate.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
@@ -979,10 +1004,59 @@ applyCustomFoodEditOutMsg outMsg model =
                 (GotCustomFoodEditMsg << CustomFoodEdit.SaveCompleted)
             )
 
+        CustomFoodEdit.RequestCategorySuggestions token request ->
+            ( model
+            , Api.Foods.listCategorySuggestions
+                request
+                (GotCustomFoodEditMsg << CustomFoodEdit.CategorySuggestionsLoaded token)
+            )
+
         CustomFoodEdit.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodEdit.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+updateCustomFoods : CustomFoodIndex.Msg -> Model -> ( Model, Cmd Msg )
+updateCustomFoods subMsg model =
+    case model.page of
+        CustomFoodsPage subModel ->
+            let
+                ( newSubModel, subCmd, outMsg ) =
+                    CustomFoodIndex.update subMsg subModel
+
+                ( finalModel, outCmd ) =
+                    applyCustomFoodsOutMsg outMsg { model | page = CustomFoodsPage newSubModel }
+            in
+            ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodsMsg subCmd, outCmd ] )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+applyCustomFoodsOutMsg : CustomFoodIndex.OutMsg -> Model -> ( Model, Cmd Msg )
+applyCustomFoodsOutMsg outMsg model =
+    case outMsg of
+        CustomFoodIndex.NoOp ->
+            ( model, Cmd.none )
+
+        CustomFoodIndex.RequestFoods ->
+            ( model
+            , Api.Foods.listCustomFoods (GotCustomFoodsMsg << CustomFoodIndex.FoodsLoaded)
+            )
+
+        CustomFoodIndex.RequestDeleteFood foodId ->
+            ( model
+            , Api.Foods.deleteCustomFood
+                foodId
+                (GotCustomFoodsMsg << CustomFoodIndex.DeleteCompleted foodId)
+            )
+
+        CustomFoodIndex.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        CustomFoodIndex.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -1416,10 +1490,13 @@ screenMeta route =
             { title = "Edit Log", leading = GoBack (Diary Nothing) }
 
         CustomFoodCreate ->
-            { title = "Create Food", leading = GoBack (FoodSearch Nothing) }
+            { title = "Create Food", leading = GoBack CustomFoods }
 
         CustomFoodEdit _ ->
-            { title = "Edit Food", leading = GoBack (FoodSearch Nothing) }
+            { title = "Edit Food", leading = GoBack CustomFoods }
+
+        CustomFoods ->
+            { title = "My Foods", leading = GoBack (Diary Nothing) }
 
         Meals ->
             { title = "My Meals", leading = GoBack (Diary Nothing) }
@@ -1495,6 +1572,7 @@ drawerItems model =
     else
         [ drawerItem model.route "Diary" (Diary Nothing)
         , drawerItem model.route "Search Foods" (FoodSearch Nothing)
+        , drawerItem model.route "My Foods" CustomFoods
         , drawerItem model.route "My Meals" Meals
         ]
 
@@ -1538,10 +1616,10 @@ primaryRoute route =
             FoodSearch Nothing
 
         CustomFoodCreate ->
-            FoodSearch Nothing
+            CustomFoods
 
         CustomFoodEdit _ ->
-            FoodSearch Nothing
+            CustomFoods
 
         AdminCreateUser ->
             AdminDashboard
@@ -1680,6 +1758,10 @@ pageView model =
             CustomFoodEditPage customFoodEditModel ->
                 Element.map GotCustomFoodEditMsg
                     (CustomFoodEdit.view { model = customFoodEditModel, device = device })
+
+            CustomFoodsPage customFoodsModel ->
+                Element.map GotCustomFoodsMsg
+                    (CustomFoodIndex.view { model = customFoodsModel, device = device })
 
             MealsPage mealsModel ->
                 Element.map GotMealsMsg (Meals.view { model = mealsModel, device = device })

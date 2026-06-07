@@ -69,6 +69,75 @@ impl PostgresProductRepository {
             })
             .collect())
     }
+
+    async fn load_nutrients_for_products(
+        &self,
+        product_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<ProductNutrient>>, NutritionError> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = sqlx::query_as::<_, ProductNutrientWithProductRow>(
+            r#"
+            SELECT pn.product_id, pn.amount_per_100g, pn.source, pn.confidence, n.code, n.unit
+            FROM product_nutrients pn
+            JOIN nutrients n ON n.id = pn.nutrient_id
+            WHERE pn.product_id = ANY($1)
+            "#,
+        )
+        .bind(product_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut by_product: HashMap<Uuid, Vec<ProductNutrient>> = HashMap::new();
+        for r in rows {
+            by_product
+                .entry(r.product_id)
+                .or_default()
+                .push(ProductNutrient {
+                    nutrient_code: NutrientCode(r.code),
+                    amount_per_100g: AmountPer100g::new(r.amount_per_100g)?,
+                    unit: UnitCode(r.unit),
+                    source: r.source,
+                    confidence: r.confidence.and_then(|c| c.parse().ok()),
+                });
+        }
+        Ok(by_product)
+    }
+
+    async fn load_servings_for_products(
+        &self,
+        product_ids: &[Uuid],
+    ) -> Result<HashMap<Uuid, Vec<ProductServing>>, NutritionError> {
+        if product_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = sqlx::query_as::<_, ProductServingWithProductRow>(
+            r#"
+            SELECT product_id, label, quantity, unit, grams
+            FROM product_servings
+            WHERE product_id = ANY($1)
+            ORDER BY product_id, created_at
+            "#,
+        )
+        .bind(product_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut by_product: HashMap<Uuid, Vec<ProductServing>> = HashMap::new();
+        for r in rows {
+            by_product
+                .entry(r.product_id)
+                .or_default()
+                .push(ProductServing {
+                    label: ServingLabel(r.label),
+                    quantity: r.quantity,
+                    unit: UnitCode(r.unit),
+                    grams: r.grams,
+                });
+        }
+        Ok(by_product)
+    }
 }
 
 #[async_trait]
@@ -278,6 +347,46 @@ impl ProductRepository for PostgresProductRepository {
         }
     }
 
+    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Product>, NutritionError> {
+        let rows = sqlx::query_as::<_, ProductRow>(
+            r#"
+            SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
+                   categories, default_quantity, default_unit, serving_size_g,
+                   created_at, updated_at
+            FROM products
+            WHERE user_id = $1
+              AND visibility = 'user_private'
+              AND deleted_at IS NULL
+            ORDER BY created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let nutrients_by_product = self.load_nutrients_for_products(&product_ids).await?;
+        let servings_by_product = self.load_servings_for_products(&product_ids).await?;
+
+        rows.into_iter()
+            .map(|r| {
+                let nutrients = nutrients_by_product
+                    .get(&r.id)
+                    .cloned()
+                    .unwrap_or_default();
+                let servings = servings_by_product
+                    .get(&r.id)
+                    .cloned()
+                    .unwrap_or_default();
+                product_row_to_product(r, nutrients, servings)
+            })
+            .collect()
+    }
+
     async fn create(&self, product: &Product) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
@@ -398,6 +507,16 @@ struct ProductNutrientRow {
 }
 
 #[derive(sqlx::FromRow)]
+struct ProductNutrientWithProductRow {
+    product_id: Uuid,
+    amount_per_100g: Decimal,
+    source: Option<String>,
+    confidence: Option<String>,
+    code: String,
+    unit: String,
+}
+
+#[derive(sqlx::FromRow)]
 struct SearchNutrientRow {
     product_id: Uuid,
     amount_per_100g: Decimal,
@@ -409,6 +528,15 @@ struct SearchNutrientRow {
 
 #[derive(sqlx::FromRow)]
 struct ProductServingRow {
+    label: String,
+    quantity: Decimal,
+    unit: String,
+    grams: Decimal,
+}
+
+#[derive(sqlx::FromRow)]
+struct ProductServingWithProductRow {
+    product_id: Uuid,
     label: String,
     quantity: Decimal,
     unit: String,

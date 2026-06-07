@@ -21,7 +21,10 @@ async fn product_to_meal_to_log(pool: PgPool) {
         "default_quantity": 1,
         "default_unit": "serving",
         "nutrients": [
-            { "code": "ENERGY_KCAL", "amount_per_100g": 250 }
+            { "code": "ENERGY_KCAL", "amount_per_100g": 250 },
+            { "code": "PROTEIN_G", "amount_per_100g": 9 },
+            { "code": "CARBS_G", "amount_per_100g": 49 },
+            { "code": "FAT_G", "amount_per_100g": 3 }
         ],
         "servings": [
             { "label": "slice", "quantity": 1, "unit": "serving", "grams": 30 }

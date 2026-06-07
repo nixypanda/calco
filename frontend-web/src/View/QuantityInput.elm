@@ -1,4 +1,4 @@
-module View.QuantityInput exposing (dropdown, select)
+module View.QuantityInput exposing (dropdown, unitOptions)
 
 import Api.Foods exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
@@ -29,26 +29,6 @@ dropdown config =
             , isOpen = config.unitOpen
             , onToggle = config.onUnitToggle
             }
-        ]
-
-
-select :
-    { amountLabel : String
-    , amount : String
-    , onAmountChange : String -> msg
-    , unitLabel : String
-    , unit : String
-    , units : List UnitItem
-    , onUnitChange : String -> msg
-    }
-    -> Element msg
-select config =
-    Element.row [ Element.width Element.fill, Element.spacing 8 ]
-        [ Ui.input config.amountLabel config.amount config.onAmountChange
-        , Ui.select config.unitLabel
-            config.unit
-            (unitOptions config.unit config.units)
-            config.onUnitChange
         ]
 
 

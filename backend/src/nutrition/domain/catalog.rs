@@ -325,6 +325,9 @@ impl Product {
     ) -> Result<Self, NutritionError> {
         Self::validate_name(&name)?;
 
+        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
+        validate_required_nutrients(&nutrients)?;
+
         let now = Utc::now();
         Ok(Self {
             id: ProductId::new(),
@@ -339,7 +342,7 @@ impl Product {
             default_quantity,
             default_unit: default_unit.map(UnitCode),
             serving_size_g,
-            nutrients: build_product_nutrients(nutrients, nutrient_catalog)?,
+            nutrients,
             servings: build_product_servings(servings)?,
             created_at: now,
             updated_at: now,
@@ -361,6 +364,9 @@ impl Product {
     ) -> Result<Self, NutritionError> {
         Self::validate_name(&name)?;
 
+        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
+        validate_required_nutrients(&nutrients)?;
+
         Ok(Self {
             name: ProductName(name.trim().to_string()),
             brand: brand.map(Brand),
@@ -368,7 +374,7 @@ impl Product {
             serving_size_g,
             default_quantity,
             default_unit: default_unit.map(UnitCode),
-            nutrients: build_product_nutrients(nutrients, nutrient_catalog)?,
+            nutrients,
             servings: build_product_servings(servings)?,
             ..self.clone()
         })
@@ -502,6 +508,27 @@ impl ProductServing {
     }
 }
 
+const REQUIRED_NUTRIENT_CODES: &[&str] =
+    &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
+
+fn validate_required_nutrients(
+    nutrients: &[ProductNutrient],
+) -> Result<(), NutritionError> {
+    let missing: Vec<&str> = REQUIRED_NUTRIENT_CODES
+        .iter()
+        .copied()
+        .filter(|code| !nutrients.iter().any(|n| n.nutrient_code.0 == *code))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(NutritionError::Validation(format!(
+            "custom food is missing required nutrient(s): {}",
+            missing.join(", ")
+        )))
+    }
+}
+
 fn build_product_nutrients(
     nutrients: Vec<ProductNutrientInput>,
     catalog: &NutrientCatalog,
@@ -561,6 +588,7 @@ pub trait ProductRepository: Send + Sync {
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
     async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError>;
     async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError>;
+    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Product>, NutritionError>;
     async fn create(&self, product: &Product) -> Result<(), NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
     async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
@@ -613,6 +641,24 @@ mod tests {
         }
     }
 
+    fn nutrient_input_for(code: &str, amount_per_100g: Decimal) -> ProductNutrientInput {
+        ProductNutrientInput {
+            code: code.into(),
+            amount_per_100g,
+            source: Some("manual".into()),
+            confidence: Some("approved".into()),
+        }
+    }
+
+    fn required_nutrient_inputs(amount_per_100g: Decimal) -> Vec<ProductNutrientInput> {
+        vec![
+            nutrient_input_for("ENERGY_KCAL", amount_per_100g),
+            nutrient_input_for("PROTEIN_G", amount_per_100g),
+            nutrient_input_for("CARBS_G", amount_per_100g),
+            nutrient_input_for("FAT_G", amount_per_100g),
+        ]
+    }
+
     fn serving_input(quantity: Decimal, grams: Decimal) -> ProductServingInput {
         ProductServingInput {
             label: "serving".into(),
@@ -623,12 +669,32 @@ mod tests {
     }
 
     fn test_catalog() -> NutrientCatalog {
-        [Nutrient(
-            NutrientCode("ENERGY_KCAL".into()),
-            "Energy".into(),
-            UnitCode("kcal".into()),
-            "energy".into(),
-        )]
+        [
+            Nutrient(
+                NutrientCode("ENERGY_KCAL".into()),
+                "Energy".into(),
+                UnitCode("kcal".into()),
+                "energy".into(),
+            ),
+            Nutrient(
+                NutrientCode("PROTEIN_G".into()),
+                "Protein".into(),
+                UnitCode("g".into()),
+                "macros".into(),
+            ),
+            Nutrient(
+                NutrientCode("CARBS_G".into()),
+                "Carbohydrates".into(),
+                UnitCode("g".into()),
+                "macros".into(),
+            ),
+            Nutrient(
+                NutrientCode("FAT_G".into()),
+                "Fat".into(),
+                UnitCode("g".into()),
+                "macros".into(),
+            ),
+        ]
         .into_iter()
         .collect()
     }
@@ -644,7 +710,7 @@ mod tests {
             Some(Decimal::new(250, 0)),
             Some(Decimal::new(1, 0)),
             Some("serving".into()),
-            vec![nutrient_input(Decimal::new(120, 0))],
+            required_nutrient_inputs(Decimal::new(120, 0)),
             vec![serving_input(Decimal::new(1, 0), Decimal::new(250, 0))],
             &catalog,
         )
@@ -758,7 +824,7 @@ mod tests {
             None,
             None,
             None,
-            vec![nutrient_input(Decimal::new(10, 0))],
+            required_nutrient_inputs(Decimal::new(10, 0)),
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
         )
@@ -774,7 +840,7 @@ mod tests {
                 Some(Decimal::new(50, 0)),
                 Some(Decimal::new(2, 0)),
                 Some("piece".into()),
-                vec![nutrient_input(Decimal::new(20, 0))],
+                required_nutrient_inputs(Decimal::new(20, 0)),
                 vec![serving_input(Decimal::new(2, 0), Decimal::new(50, 0))],
                 &catalog,
             )
@@ -789,5 +855,101 @@ mod tests {
         assert_eq!(updated.name.0, "Updated");
         assert_eq!(updated.brand.unwrap().0, "Brand");
         assert_eq!(updated.default_unit.unwrap().0, "piece");
+    }
+
+    #[test]
+    fn custom_product_creation_rejects_missing_required_macros() {
+        let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
+        let result = Product::new_custom(
+            user_id,
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            vec![nutrient_input(Decimal::new(100, 0))],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+        );
+        match result {
+            Err(NutritionError::Validation(msg)) => {
+                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
+                assert!(msg.contains("CARBS_G"), "msg: {msg}");
+                assert!(msg.contains("FAT_G"), "msg: {msg}");
+                assert!(!msg.contains("ENERGY_KCAL"), "msg: {msg}");
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn custom_product_update_rejects_missing_required_macros() {
+        let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
+        let product = Product::new_custom(
+            user_id,
+            "Original".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            required_nutrient_inputs(Decimal::new(100, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+        )
+        .unwrap();
+
+        let result = product.update_custom(
+            "Updated".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            vec![nutrient_input(Decimal::new(200, 0))],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+        );
+        match result {
+            Err(NutritionError::Validation(msg)) => {
+                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
+                assert!(msg.contains("CARBS_G"), "msg: {msg}");
+                assert!(msg.contains("FAT_G"), "msg: {msg}");
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn custom_product_creation_keeps_unknown_code_error_first() {
+        let user_id = Uuid::new_v4();
+        let catalog = test_catalog();
+        let result = Product::new_custom(
+            user_id,
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            vec![ProductNutrientInput {
+                code: "NOT_A_CODE".into(),
+                amount_per_100g: Decimal::new(10, 0),
+                source: None,
+                confidence: None,
+            }],
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+        );
+        match result {
+            Err(NutritionError::Validation(msg)) => {
+                assert!(msg.contains("NOT_A_CODE"), "msg: {msg}");
+                assert!(!msg.contains("missing required"), "msg: {msg}");
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
     }
 }

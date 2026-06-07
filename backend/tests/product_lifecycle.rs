@@ -20,7 +20,9 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "default_unit": "serving",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 450 },
-            { "code": "PROTEIN_G", "amount_per_100g": 9 }
+            { "code": "PROTEIN_G", "amount_per_100g": 9 },
+            { "code": "CARBS_G", "amount_per_100g": 60 },
+            { "code": "FAT_G", "amount_per_100g": 15 }
         ],
         "servings": [
             { "label": "1 bowl", "quantity": 1, "unit": "serving", "grams": 50 }
@@ -72,6 +74,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 460 },
             { "code": "PROTEIN_G", "amount_per_100g": 10 },
+            { "code": "CARBS_G", "amount_per_100g": 62 },
             { "code": "FAT_G", "amount_per_100g": 18 }
         ],
         "servings": [
@@ -90,7 +93,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     let after_update: Value = get_json(&router, &format!("/api/foods/{id}"), &user).await;
     assert_eq!(after_update["name"], "Test Granola (Honey)");
     assert_eq!(after_update["serving_size_g"], "55");
-    assert_eq!(after_update["nutrients"].as_array().unwrap().len(), 3);
+    assert_eq!(after_update["nutrients"].as_array().unwrap().len(), 4);
 
     // ── Search ──────────────────────────────────────────────────────────
     let search: Value = get_json(&router, "/api/foods/search?q=granola", &user).await;
@@ -113,11 +116,47 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     );
     assert_eq!(search_item["nutrition_summary"]["per_100g"]["fat_g"], "18");
 
+    // ── List custom foods ──────────────────────────────────────────────
+    let list: Value = get_json(&router, "/api/foods/custom", &user).await;
+    let list_items = list["items"].as_array().expect("list items missing");
+    assert_eq!(
+        list_items.len(),
+        1,
+        "expected only the caller's custom food, got: {list_items:?}"
+    );
+    let listed = &list_items[0];
+    assert_eq!(listed["id"], id);
+    assert_eq!(listed["name"], "Test Granola (Honey)");
+    assert_eq!(listed["brand"], "BrandCo");
+    assert_eq!(listed["visibility"], "user_private");
+    assert_eq!(listed["source"], "USER");
+    assert_eq!(listed["serving_size_g"], "55");
+    assert_eq!(
+        listed["nutrition_summary"]["per_100g"]["energy_kcal"],
+        "460"
+    );
+    assert_amount(
+        &listed["nutrition_summary"]["per_serving"]["energy_kcal"],
+        253.0,
+    );
+    let listed_nutrients = listed["nutrients"].as_array().expect("nutrients");
+    assert_eq!(listed_nutrients.len(), 4);
+    assert_eq!(listed["servings"].as_array().unwrap().len(), 1);
+    let allowed_units = listed["allowed_units"].as_array().expect("allowed_units");
+    assert!(!allowed_units.is_empty(), "allowed_units should not be empty");
+
     // ── Delete ──────────────────────────────────────────────────────────
     delete_no_content(&router, &format!("/api/foods/custom/{id}"), &user).await;
 
     let (status, _) = get_status(&router, &format!("/api/foods/{id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let after_delete: Value = get_json(&router, "/api/foods/custom", &user).await;
+    assert_eq!(
+        after_delete["items"].as_array().unwrap().len(),
+        0,
+        "deleted custom food should not appear in the listing"
+    );
 }
 
 fn assert_amount(value: &Value, expected: f64) {

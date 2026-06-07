@@ -87,6 +87,9 @@ resolveKnownSession session adminExists route =
             FoodDetail _ _ ->
                 Render route
 
+            CustomFoods ->
+                Render route
+
             CustomFoodCreate ->
                 Render route
 

@@ -3,7 +3,8 @@ module Page.CustomFood.Create exposing (Model, Msg(..), OutMsg(..), init, update
 import Api.Client as Client
 import Api.Foods as Foods
     exposing
-        ( CreateFoodRequest
+        ( CategorySuggestionResponse
+        , CreateFoodRequest
         , CreateFoodResponse
         , NutrientItem
         , UnitItem
@@ -42,6 +43,7 @@ type Msg
     = NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
+    | CategorySuggestionsLoaded Int (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
 
@@ -50,6 +52,7 @@ type OutMsg
     = NoOp
     | RequestInitialData
     | RequestCreateFood CreateFoodRequest
+    | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | Navigate Route
     | SessionExpired
 
@@ -60,7 +63,18 @@ update msg model =
         NutrientsLoaded result ->
             case result of
                 Ok response ->
-                    ( { model | nutrients = response.items, error = Nothing }, Cmd.none, NoOp )
+                    let
+                        ( nextForm, subCmd, _ ) =
+                            Form.update (Form.NutrientsLoaded response.items) model.form
+                    in
+                    ( { model
+                        | nutrients = response.items
+                        , form = nextForm
+                        , error = Nothing
+                      }
+                    , Cmd.map FormMsg subCmd
+                    , NoOp
+                    )
 
                 Err error ->
                     failure error model
@@ -74,7 +88,33 @@ update msg model =
                     failure error model
 
         FormMsg subMsg ->
-            ( { model | form = Form.update subMsg model.form }, Cmd.none, NoOp )
+            let
+                ( nextForm, subCmd, formOut ) =
+                    Form.update subMsg model.form
+            in
+            ( { model | form = nextForm }
+            , Cmd.map FormMsg subCmd
+            , case formOut of
+                Form.NoOutMsg ->
+                    NoOp
+
+                Form.RequestCategorySuggestions token request ->
+                    RequestCategorySuggestions token request
+            )
+
+        CategorySuggestionsLoaded token result ->
+            let
+                ( nextForm, subCmd, _ ) =
+                    Form.update
+                        (Form.CategorySuggestionsLoaded token
+                            (Result.map .items result)
+                        )
+                        model.form
+            in
+            ( { model | form = nextForm }
+            , Cmd.map FormMsg subCmd
+            , NoOp
+            )
 
         SubmitClicked ->
             case Form.toCreateFoodRequest model.form of
@@ -93,13 +133,16 @@ update msg model =
                     , RequestCreateFood request
                     )
 
-                Err Form.NameRequired ->
+                Err validationError ->
                     let
                         form : Form.FormModel
                         form =
                             model.form
                     in
-                    ( { model | form = { form | error = Just "Name is required" } }
+                    ( { model
+                        | form = { form | error = Just (validationMessage validationError) }
+                        , error = Nothing
+                      }
                     , Cmd.none
                     , NoOp
                     )
@@ -124,6 +167,22 @@ update msg model =
                         model
 
 
+validationMessage : Form.ValidationError -> String
+validationMessage err =
+    case err of
+        Form.NameRequired ->
+            "Name is required"
+
+        Form.InvalidNutrientAmount value ->
+            "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
+
+        Form.InvalidServingQuantity value ->
+            "Serving quantity must be a positive number (got: " ++ value ++ ")"
+
+        Form.InvalidServingGrams value ->
+            "Serving grams must be a positive number (got: " ++ value ++ ")"
+
+
 setSubmitting : Bool -> Form.FormModel -> Form.FormModel
 setSubmitting submitting form =
     { form | submitting = submitting }
@@ -146,6 +205,6 @@ view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner model.error
-        , Element.map FormMsg (Form.view model.nutrients model.units model.form)
+        , Element.map FormMsg (Form.view device model.nutrients model.units model.form)
         , Ui.submitButton model.form.submitting "Create Food" "Creating..." SubmitClicked
         ]

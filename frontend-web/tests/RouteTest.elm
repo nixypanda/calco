@@ -22,6 +22,7 @@ tests =
         , parses "/foods/abc?meal_slot=breakfast" (FoodDetail "abc" (Just Breakfast))
         , parses "/foods/custom/new" CustomFoodCreate
         , parses "/foods/custom/abc/edit" (CustomFoodEdit "abc")
+        , parses "/foods/custom" CustomFoods
         , parses "/meals" Meals
         , parses "/meals/new" MealCreate
         , parses "/meals/abc" (MealDetail "abc")

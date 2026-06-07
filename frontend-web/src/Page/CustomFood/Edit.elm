@@ -13,7 +13,8 @@ module Page.CustomFood.Edit exposing
 import Api.Client as Client
 import Api.Foods as Foods
     exposing
-        ( CreateFoodRequest
+        ( CategorySuggestionResponse
+        , CreateFoodRequest
         , CreateFoodResponse
         , NutrientItem
         , ProductDetail
@@ -60,6 +61,7 @@ type Msg
     | NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
+    | CategorySuggestionsLoaded Int (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
 
@@ -68,6 +70,7 @@ type OutMsg
     = NoOp
     | RequestInitialData String
     | RequestUpdateFood String CreateFoodRequest
+    | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | Navigate Route
     | SessionExpired
 
@@ -98,7 +101,19 @@ update msg model =
         NutrientsLoaded result ->
             case result of
                 Ok response ->
-                    ( setLoadedNutrients response.items model, Cmd.none, NoOp )
+                    case model of
+                        Loaded loaded ->
+                            let
+                                ( nextForm, subCmd, _ ) =
+                                    Form.update (Form.NutrientsLoaded response.items) loaded.form
+                            in
+                            ( Loaded { loaded | form = nextForm, nutrients = response.items }
+                            , Cmd.map FormMsg subCmd
+                            , NoOp
+                            )
+
+                        _ ->
+                            ( setLoadedNutrients response.items model, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
@@ -114,12 +129,40 @@ update msg model =
         FormMsg subMsg ->
             case model of
                 Loaded loaded ->
+                    let
+                        ( nextForm, subCmd, formOut ) =
+                            Form.update subMsg loaded.form
+                    in
                     ( Loaded
                         { loaded
-                            | form = Form.update subMsg loaded.form
+                            | form = nextForm
                             , submit = Editing
                         }
-                    , Cmd.none
+                    , Cmd.map FormMsg subCmd
+                    , case formOut of
+                        Form.NoOutMsg ->
+                            NoOp
+
+                        Form.RequestCategorySuggestions token request ->
+                            RequestCategorySuggestions token request
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        CategorySuggestionsLoaded token result ->
+            case model of
+                Loaded loaded ->
+                    let
+                        ( nextForm, subCmd, _ ) =
+                            Form.update
+                                (Form.CategorySuggestionsLoaded token
+                                    (Result.map .items result)
+                                )
+                                loaded.form
+                    in
+                    ( Loaded { loaded | form = nextForm }
+                    , Cmd.map FormMsg subCmd
                     , NoOp
                     )
 
@@ -165,7 +208,7 @@ submitLoaded loaded =
             , RequestUpdateFood loaded.productId request
             )
 
-        Err Form.NameRequired ->
+        Err validationError ->
             let
                 form : Form.FormModel
                 form =
@@ -176,13 +219,29 @@ submitLoaded loaded =
                     | form =
                         { form
                             | submitting = False
-                            , error = Just "Name is required"
+                            , error = Just (validationMessage validationError)
                         }
                     , submit = Editing
                 }
             , Cmd.none
             , NoOp
             )
+
+
+validationMessage : Form.ValidationError -> String
+validationMessage err =
+    case err of
+        Form.NameRequired ->
+            "Name is required"
+
+        Form.InvalidNutrientAmount value ->
+            "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
+
+        Form.InvalidServingQuantity value ->
+            "Serving quantity must be a positive number (got: " ++ value ++ ")"
+
+        Form.InvalidServingGrams value ->
+            "Serving grams must be a positive number (got: " ++ value ++ ")"
 
 
 completeSave :
@@ -294,10 +353,10 @@ failure =
 
 
 view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
-    Ui.pageContainer device
-        [ errorView model
-        , bodyView model
+view config =
+    Ui.pageContainer config.device
+        [ errorView config.model
+        , bodyView config
         ]
 
 
@@ -319,12 +378,12 @@ errorView model =
             Element.none
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : { model : Model, device : Device } -> Element Msg
+bodyView { model, device } =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing 14 ]
-                [ Element.map FormMsg (Form.view loaded.nutrients loaded.units loaded.form)
+                [ Element.map FormMsg (Form.view device loaded.nutrients loaded.units loaded.form)
                 , Ui.submitButton
                     (loaded.submit == Submitting)
                     "Save Food"

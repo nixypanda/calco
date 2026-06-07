@@ -14,7 +14,9 @@ async fn seed_product(router: &axum::Router, user: &str, name: &str, kcal: i64) 
         "default_unit": "serving",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": kcal },
-            { "code": "PROTEIN_G", "amount_per_100g": 5 }
+            { "code": "PROTEIN_G", "amount_per_100g": 5 },
+            { "code": "CARBS_G", "amount_per_100g": 10 },
+            { "code": "FAT_G", "amount_per_100g": 2 }
         ],
         "servings": [
             { "label": "100g", "quantity": 100, "unit": "g", "grams": 100 }

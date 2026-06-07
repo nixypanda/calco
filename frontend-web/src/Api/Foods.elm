@@ -6,6 +6,7 @@ module Api.Foods exposing
     , CreateFoodRequest
     , CreateFoodResponse
     , CreateFoodServingRequest
+    , CustomFoodListResponse
     , NutrientEntry
     , NutrientItem
     , NutrientListResponse
@@ -20,8 +21,10 @@ module Api.Foods exposing
     , categorySuggestionPath
     , categorySuggestionResponseDecoder
     , createCustomFood
+    , deleteCustomFood
     , getFoodDetail
     , listCategorySuggestions
+    , listCustomFoods
     , listNutrients
     , listUnits
     , productDetailDecoder
@@ -121,20 +124,25 @@ type alias CreateFoodRequest =
 
 type alias CreateFoodNutrientRequest =
     { code : String
-    , amountPer100g : String
+    , amountPer100g : Float
     }
 
 
 type alias CreateFoodServingRequest =
     { label : String
-    , quantity : String
+    , quantity : Float
     , unit : String
-    , grams : String
+    , grams : Float
     }
 
 
 type alias CreateFoodResponse =
     { id : String
+    }
+
+
+type alias CustomFoodListResponse =
+    { items : List ProductDetail
     }
 
 
@@ -248,6 +256,23 @@ updateCustomFood id request toMsg =
         toMsg
 
 
+listCustomFoods :
+    (Result Client.ApiError CustomFoodListResponse -> msg)
+    -> Cmd msg
+listCustomFoods toMsg =
+    Client.get
+        (Builder.absolute [ "api", "foods", "custom" ] [])
+        customFoodListDecoder
+        toMsg
+
+
+deleteCustomFood : String -> (Result Client.ApiError () -> msg) -> Cmd msg
+deleteCustomFood id toMsg =
+    Client.delete
+        (Builder.absolute [ "api", "foods", "custom", id ] [])
+        toMsg
+
+
 searchPath : SearchRequest -> String
 searchPath request =
     Builder.absolute [ "api", "foods", "search" ]
@@ -280,7 +305,7 @@ nutrientRequestEncoder : CreateFoodNutrientRequest -> Encode.Value
 nutrientRequestEncoder nutrient =
     Encode.object
         [ ( "code", Encode.string nutrient.code )
-        , ( "amount_per_100g", Encode.string nutrient.amountPer100g )
+        , ( "amount_per_100g", Encode.float nutrient.amountPer100g )
         ]
 
 
@@ -288,9 +313,9 @@ servingRequestEncoder : CreateFoodServingRequest -> Encode.Value
 servingRequestEncoder serving =
     Encode.object
         [ ( "label", Encode.string serving.label )
-        , ( "quantity", Encode.string serving.quantity )
+        , ( "quantity", Encode.float serving.quantity )
         , ( "unit", Encode.string serving.unit )
-        , ( "grams", Encode.string serving.grams )
+        , ( "grams", Encode.float serving.grams )
         ]
 
 
@@ -377,6 +402,12 @@ createFoodResponseDecoder : Decoder CreateFoodResponse
 createFoodResponseDecoder =
     Decode.map CreateFoodResponse
         (Decode.field "id" Decode.string)
+
+
+customFoodListDecoder : Decoder CustomFoodListResponse
+customFoodListDecoder =
+    Decode.map CustomFoodListResponse
+        (Decode.field "items" (Decode.list productDetailDecoder))
 
 
 unitItemDecoder : Decoder UnitItem

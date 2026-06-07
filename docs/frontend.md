@@ -200,6 +200,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /search?meal_slot=:slot
 /foods/:id
 /foods/:id?meal_slot=:slot
+/foods/custom
 /foods/custom/new
 /foods/custom/:id/edit
 /meals
@@ -246,6 +247,7 @@ Users can inspect previous days with the diary date selector. A separate history
 
 - `Page.Food.Search`
 - `Page.Food.Detail`
+- `Page.CustomFood.Index`
 - `Page.CustomFood.Create`
 - `Page.CustomFood.Edit`
 

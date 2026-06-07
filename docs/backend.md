@@ -210,6 +210,7 @@ Profile read/update endpoints are intentionally out of scope.
 GET    /foods/search?q=
 GET    /foods/barcode/{barcode}
 GET    /foods/{id}
+GET    /foods/custom
 POST   /foods/custom
 PUT    /foods/custom/{id}
 DELETE /foods/custom/{id}
