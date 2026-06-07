@@ -14,64 +14,80 @@
       rust-overlay,
       flake-utils,
     }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ rust-overlay.overlays.default ];
-        };
+    let
+      perSystem = flake-utils.lib.eachDefaultSystem (
+        system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
 
-        toolchain = pkgs.rust-bin.stable.latest.default.override {
-          extensions = [
-            "rust-src"
-            "rust-analyzer"
-            "llvm-tools"
-          ];
-        };
-      in
-      {
-        # Dev shell with all tooling for both backend and frontend
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            # Backend
-            toolchain
-            cargo-nextest
-            cargo-llvm-cov
-            sqlx-cli
+          toolchain = pkgs.rust-bin.stable.latest.default.override {
+            extensions = [
+              "rust-src"
+              "rust-analyzer"
+              "llvm-tools"
+            ];
+          };
 
-            # Frontend
-            nodejs_22
-            elmPackages.elm
-            elmPackages.elm-format
-            elmPackages.elm-review
-            elmPackages.elm-test
+          rustPlatform = pkgs.makeRustPlatform {
+            cargo = toolchain;
+            rustc = toolchain;
+          };
+        in
+        {
+          packages.backend = pkgs.callPackage ./nix/backend.nix {
+            inherit rustPlatform;
+          };
 
-            # Tools
-            just
-            docker-compose
-            uv
-          ];
+          packages.frontend = pkgs.callPackage ./nix/frontend.nix { };
 
-          shellHook = ''
-            echo "CalCo dev shell"
-            echo "  Rust:  $(cargo --version)"
-            echo "  Node:  $(node --version)"
-            echo "  Elm:   $(elm --version)"
-            echo "  Vite:  $(vite --version)"
-            echo ""
-            if [ ! -d frontend-web/node_modules ]; then
-              echo "  Installing frontend-web npm dependencies (one-time)..."
-              (cd frontend-web && npm install)
-            fi
-            echo ""
-            echo "  Commands:"
-            echo "    just up         — start PostgreSQL"
-            echo "    just backend-dev — run backend"
-            echo "    just frontend-web-dev — run frontend"
-          '';
-        };
+          packages.default = self.packages.${system}.backend;
 
-      }
-    );
+          devShells.default = pkgs.mkShell {
+            buildInputs = with pkgs; [
+              # Backend
+              toolchain
+              cargo-nextest
+              cargo-llvm-cov
+              sqlx-cli
+
+              # Frontend
+              nodejs_22
+              elmPackages.elm
+              elmPackages.elm-format
+              elmPackages.elm-review
+              elmPackages.elm-test
+
+              # Tools
+              just
+              docker-compose
+              uv
+            ];
+
+            shellHook = ''
+              echo "CalCo dev shell"
+              echo "  Rust:  $(cargo --version)"
+              echo "  Node:  $(node --version)"
+              echo "  Elm:   $(elm --version)"
+              echo ""
+              if [ ! -d frontend-web/node_modules ]; then
+                echo "  Installing frontend-web npm dependencies (one-time)..."
+                (cd frontend-web && npm install)
+              fi
+              echo ""
+              echo "  Commands:"
+              echo "    just up         — start PostgreSQL"
+              echo "    just backend-dev — run backend"
+              echo "    just frontend-web-dev — run frontend"
+            '';
+          };
+        }
+      );
+    in
+    perSystem
+    // {
+      nixosModules.default = import ./nix/module.nix { inherit self; };
+    };
 }
