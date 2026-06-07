@@ -58,6 +58,12 @@
             echo "  Rust:  $(cargo --version)"
             echo "  Node:  $(node --version)"
             echo "  Elm:   $(elm --version)"
+            echo "  Vite:  $(vite --version)"
+            echo ""
+            if [ ! -d frontend-web/node_modules ]; then
+              echo "  Installing frontend-web npm dependencies (one-time)..."
+              (cd frontend-web && npm install)
+            fi
             echo ""
             echo "  Commands:"
             echo "    just up         — start PostgreSQL"

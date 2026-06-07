@@ -58,11 +58,11 @@ backend-migrate:
 
 # Build Elm frontend-web
 frontend-web-build:
-    cd frontend-web && mkdir -p dist && elm make src/Main.elm --debug --output=dist/main.js
+    cd frontend-web && npm run build
 
 # Run Elm frontend-web locally
 frontend-web-dev: frontend-web-build
-    cd frontend-web && node dev-server.mjs
+    cd frontend-web && npm run dev
 
 # Format Elm frontend-web sources
 frontend-web-format:
@@ -96,7 +96,7 @@ frontend-web-test:
 dev: db-wait
     @echo "Starting backend and frontend..."
     (cd backend && cargo run) &
-    (cd frontend-web && node dev-server.mjs) &
+    (cd frontend-web && npm run dev) &
     wait
 
 # Build everything
