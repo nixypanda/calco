@@ -104,7 +104,7 @@ bodyView model =
                 }
 
         Loading ->
-            Ui.loading "Loading users..."
+            Ui.skeletonList 5
 
         LoadFailed error ->
             Ui.errorBanner (Client.displayError error)

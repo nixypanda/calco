@@ -304,9 +304,19 @@ nextProductNameRequest completedId loaded =
         |> Maybe.withDefault NoOp
 
 
-nameFor : String -> LoadedModel -> String
+nameFor : String -> LoadedModel -> Maybe String
 nameFor id loaded =
-    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) loaded.productNames
+    ItemNameLookup.lookup (ItemNameLookup.productRef id) loaded.productNames
+
+
+componentTitleView : String -> LoadedModel -> Element Msg
+componentTitleView id loaded =
+    case nameFor id loaded of
+        Just name ->
+            Ui.listItemTitle name
+
+        Nothing ->
+            Ui.skeletonListItemTitle
 
 
 requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
@@ -496,7 +506,7 @@ view { model, device } =
                         Ui.errorBanner message
 
                     Loading _ ->
-                        Ui.loading "Loading meal..."
+                        Ui.skeletonLoading
                 ]
             , footer = Nothing
             }
@@ -508,7 +518,7 @@ view { model, device } =
                 Ui.errorBanner message
 
             Loading _ ->
-                Ui.loading "Loading meal..."
+                Ui.skeletonCard
         ]
 
 
@@ -521,7 +531,7 @@ headerView device model =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
                             (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
-                , title = loaded.meal.name
+                , title = Ui.truncatedPageTitle device loaded.meal.name
                 , subtitle = Nothing
                 , actions =
                     [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
@@ -591,7 +601,7 @@ componentView loaded component =
             , Element.spacing Ui.space4
             , Element.alignTop
             ]
-            [ Ui.listItemTitle (nameFor component.item.id loaded)
+            [ componentTitleView component.item.id loaded
             , Element.el
                 [ Font.color Ui.mutedColor ]
                 (Element.text quantityText)

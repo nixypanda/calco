@@ -67,7 +67,11 @@ module Ui exposing
     , section
     , sectionTitle
     , selectDropdown
+    , skeletonCard
+    , skeletonList
+    , skeletonListItemTitle
     , skeletonLoading
+    , skeletonPageTitle
     , space12
     , space16
     , space2
@@ -83,6 +87,7 @@ module Ui exposing
     , textMedium
     , truncateWithEllipsis
     , truncatedHeader
+    , truncatedPageTitle
     , truncatedText
     , truncationCap
     )
@@ -587,12 +592,12 @@ pageHeader :
     Element.Device
     ->
         { leading : Maybe (Element msg)
-        , title : String
+        , title : Element msg
         , subtitle : Maybe String
         , actions : List (Element msg)
         }
     -> Element msg
-pageHeader device config =
+pageHeader _ config =
     let
         leadingElement : Element msg
         leadingElement =
@@ -607,7 +612,7 @@ pageHeader device config =
         titleColumn =
             Element.column
                 [ Element.width Element.fill, Element.spacing space4 ]
-                (truncatedPageTitle device config.title
+                (config.title
                     :: (case config.subtitle of
                             Just text ->
                                 [ mutedBody text ]
@@ -1211,6 +1216,120 @@ skeletonBar =
         , Border.rounded 8
         ]
         Element.none
+
+
+{-| Fixed-width skeleton bar, given as a fraction (0..1) of the parent
+width. Useful for title placeholders that shouldn't span the whole row.
+-}
+skeletonBarFraction : Int -> Element msg
+skeletonBarFraction portion =
+    Element.row [ Element.width Element.fill ]
+        [ Element.el
+            [ Element.width (Element.fillPortion portion)
+            , Element.height (Element.px 16)
+            , Background.color inputFill
+            , Border.rounded 8
+            ]
+            Element.none
+        , Element.el [ Element.width (Element.fillPortion (10 - portion)) ] Element.none
+        ]
+
+
+{-| Page-level placeholder for a single-resource load: a card with a short
+title bar and two body bars. Drop in where a full page is mid-fetch.
+-}
+skeletonCard : Element msg
+skeletonCard =
+    card
+        [ skeletonBarFraction 4
+        , Element.el [ Element.height (Element.px space4) ] Element.none
+        , skeletonBar
+        , skeletonBar
+        , skeletonBarFraction 7
+        ]
+
+
+{-| Single list-row placeholder: a leading circle and two stacked text
+bars, padded to match `listRow`.
+-}
+skeletonRow : Element msg
+skeletonRow =
+    Element.row
+        [ Element.width Element.fill
+        , Element.padding space16
+        , Element.spacing space12
+        ]
+        [ Element.el
+            [ Element.width (Element.px 28)
+            , Element.height (Element.px 28)
+            , Background.color inputFill
+            , Border.rounded 999
+            ]
+            Element.none
+        , Element.column
+            [ Element.width Element.fill
+            , Element.spacing space8
+            , Element.alignTop
+            ]
+            [ skeletonBarFraction 5
+            , skeletonBarFraction 3
+            ]
+        ]
+
+
+{-| Inline placeholder sized to match `truncatedPageTitle` (height 34).
+Drop into `pageHeader`'s `title` slot while the title is mid-fetch.
+-}
+skeletonPageTitle : Element msg
+skeletonPageTitle =
+    Element.el
+        [ Element.width (Element.maximum 240 Element.fill)
+        , Element.height (Element.px 34)
+        , Element.paddingXY 0 8
+        ]
+        (Element.el
+            [ Element.width Element.fill
+            , Element.height (Element.px 18)
+            , Background.color inputFill
+            , Border.rounded 8
+            ]
+            Element.none
+        )
+
+
+{-| Inline placeholder sized to match `listItemTitle`'s bold body line.
+Drop in where a list-row title would normally appear.
+-}
+skeletonListItemTitle : Element msg
+skeletonListItemTitle =
+    Element.el
+        [ Element.width (Element.maximum 180 Element.fill)
+        , Element.height (Element.px 20)
+        , Element.paddingXY 0 2
+        ]
+        (Element.el
+            [ Element.width Element.fill
+            , Element.height (Element.px 16)
+            , Background.color inputFill
+            , Border.rounded 6
+            ]
+            Element.none
+        )
+
+
+{-| Page-level placeholder for a list of resources: N stacked `skeletonRow`s
+inside a card, separated by hairlines, matching the visual rhythm of
+`listCard`.
+-}
+skeletonList : Int -> Element msg
+skeletonList count =
+    card
+        [ Element.column
+            [ Element.width Element.fill ]
+            (List.repeat count skeletonRow
+                |> List.intersperse hairline
+            )
+        ]
 
 
 

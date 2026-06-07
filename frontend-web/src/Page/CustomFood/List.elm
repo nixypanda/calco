@@ -186,7 +186,7 @@ bodyView device model =
             Element.none
 
         Loading ->
-            Ui.loading "Loading foods..."
+            Ui.skeletonList 5
 
 
 foodRow : Device -> ActionState -> ProductDetail -> Element Msg

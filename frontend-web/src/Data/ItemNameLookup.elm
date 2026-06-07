@@ -2,7 +2,7 @@ module Data.ItemNameLookup exposing
     ( Names
     , empty
     , insertProduct
-    , nameFor
+    , lookup
     , nextMissingProductId
     , productRef
     , uniqueProductIds
@@ -42,10 +42,9 @@ insertProduct id name names =
     insert (productRef id) name names
 
 
-nameFor : String -> { a | itemType : ItemType, id : String } -> Names -> String
-nameFor fallback item names =
+lookup : { a | itemType : ItemType, id : String } -> Names -> Maybe String
+lookup item names =
     Dict.get (key item) names
-        |> Maybe.withDefault fallback
 
 
 isLoaded : ItemRef -> Names -> Bool

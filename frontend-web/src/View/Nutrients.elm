@@ -228,7 +228,7 @@ preview device state =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ case state of
             NutritionLoading _ ->
-                Ui.loading "Loading nutrition..."
+                Ui.skeletonCard
 
             NutritionLoaded _ nutrients ->
                 nutritionCard device nutrients

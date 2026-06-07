@@ -395,7 +395,7 @@ bodyView device model =
             Element.none
 
         Loading _ ->
-            Ui.loading "Loading food..."
+            Ui.skeletonCard
 
 
 loadedView : Device -> LoadedModel -> Element Msg
@@ -477,7 +477,7 @@ foodHeader device food =
     Ui.card
         [ Ui.pageHeader device
             { leading = Just (View.Nutrients.macroDot macroNutrients)
-            , title = food.name
+            , title = Ui.truncatedPageTitle device food.name
             , subtitle = Just (metaText food)
             , actions = editAction
             }

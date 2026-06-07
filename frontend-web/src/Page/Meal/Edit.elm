@@ -380,7 +380,7 @@ view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ Ui.loading "Loading meal..." ]
+            Ui.pageContainer device [ Ui.skeletonCard ]
 
         EditLoadFailed message ->
             Ui.pageContainer device [ Ui.errorBanner message ]

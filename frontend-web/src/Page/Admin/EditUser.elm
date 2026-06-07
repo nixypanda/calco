@@ -270,7 +270,7 @@ userInfoView : Model -> List (Element Msg)
 userInfoView model =
     case model.state of
         Loading ->
-            [ Ui.loading "Loading user..." ]
+            [ Ui.skeletonCard ]
 
         LoadFailed error ->
             [ Ui.errorBanner ("Unable to load user: " ++ Client.displayError error) ]

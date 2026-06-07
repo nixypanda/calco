@@ -580,7 +580,7 @@ bodyView device model =
             Element.none
 
         Loading _ ->
-            Ui.loading "Loading log..."
+            Ui.skeletonCard
 
 
 loadedView : Device -> LoadedModel -> Element Msg
@@ -673,7 +673,7 @@ itemHeader device model =
     Ui.card
         [ Ui.pageHeader device
             { leading = Just (View.Nutrients.macroDot model.log.nutrients)
-            , title = itemTitle model.item
+            , title = itemTitle device model.item
             , subtitle = Just (metaText maybeFood model.log)
             , actions = editAction ++ deleteAction
             }
@@ -691,30 +691,30 @@ itemHeader device model =
         ]
 
 
-itemTitle : LoadedItem -> String
-itemTitle item =
+itemTitle : Device -> LoadedItem -> Element Msg
+itemTitle device item =
     case item of
         ProductItem productState ->
             case productState of
                 DetailLoading _ ->
-                    "Loading food..."
+                    Ui.skeletonPageTitle
 
                 DetailLoaded food ->
-                    food.name
+                    Ui.truncatedPageTitle device food.name
 
                 DetailUnavailable fallback ->
-                    fallback.name
+                    Ui.truncatedPageTitle device fallback.name
 
         MealItem mealState ->
             case mealState of
                 DetailLoading _ ->
-                    "Loading meal..."
+                    Ui.skeletonPageTitle
 
                 DetailLoaded meal ->
-                    meal.name
+                    Ui.truncatedPageTitle device meal.name
 
                 DetailUnavailable fallback ->
-                    fallback.name
+                    Ui.truncatedPageTitle device fallback.name
 
 
 metaText : Maybe ProductDetail -> FoodLog -> String

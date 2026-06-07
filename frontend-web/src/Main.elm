@@ -1712,7 +1712,13 @@ pageView model =
             || model.pendingBootstrap
             == Nothing
     then
-        Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
+        Element.el
+            [ Element.centerX
+            , Element.centerY
+            , Element.width (Element.maximum 480 Element.fill)
+            , Element.padding Ui.space16
+            ]
+            Ui.skeletonCard
 
     else
         let
@@ -1722,7 +1728,13 @@ pageView model =
         in
         case model.page of
             LoadingPage ->
-                Element.el [ Element.centerX, Element.centerY ] (Ui.loading "Loading...")
+                Element.el
+                    [ Element.centerX
+                    , Element.centerY
+                    , Element.width (Element.maximum 480 Element.fill)
+                    , Element.padding Ui.space16
+                    ]
+                    Ui.skeletonCard
 
             LoginPage loginModel ->
                 Element.map GotLoginMsg (AuthLogin.view { model = loginModel, device = device })

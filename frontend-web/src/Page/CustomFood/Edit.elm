@@ -341,4 +341,4 @@ bodyView { model, device } =
             Ui.errorBanner message
 
         Loading _ ->
-            Ui.loading "Loading food..."
+            Ui.skeletonCard
