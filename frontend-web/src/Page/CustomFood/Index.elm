@@ -16,7 +16,6 @@ import Api.Result as ApiResult
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Input as Input
 import Ui
 import View.Nutrients
 
@@ -178,11 +177,10 @@ bodyView : Device -> Model -> Element Msg
 bodyView device model =
     case model of
         Loaded loaded ->
-            if List.isEmpty loaded.foods then
-                Ui.card [ createFoodRow ]
-
-            else
-                Ui.card (List.map (foodRow device loaded.action) loaded.foods ++ [ createFoodRow ])
+            Ui.listCard
+                { rows = List.map (foodRow device loaded.action) loaded.foods
+                , createButton = Ui.ghostButton "+ Create Food" CreateCustomFoodClicked
+                }
 
         LoadFailed _ ->
             Element.none
@@ -194,27 +192,20 @@ bodyView device model =
 foodRow : Device -> ActionState -> ProductDetail -> Element Msg
 foodRow device action food =
     let
-        macroDot : Element msg
+        macroDot : Element Msg
         macroDot =
             View.Nutrients.macroDot
                 (food.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
     in
-    Element.wrappedRow
-        [ Element.width Element.fill, Element.padding 16, Element.spacing 12 ]
-        [ Input.button
-            [ Element.width Element.fill ]
-            { onPress = Just (OpenFoodClicked food.id)
-            , label =
-                Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                    [ macroDot
-                    , Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                        [ Ui.truncatedHeader device food.name
-                        , Ui.mutedText (foodSummaryText food)
-                        , Ui.chips food.categories
-                        ]
-                    ]
-            }
-        , Element.row [ Element.padding 8, Element.spacing 12 ]
+    Ui.listRow
+        { onSelect = OpenFoodClicked food.id
+        , leading = [ macroDot ]
+        , title = Ui.truncatedHeader device food.name
+        , subtitle =
+            [ Ui.mutedText (foodSummaryText food)
+            , Ui.chips food.categories
+            ]
+        , trailing =
             [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditFoodClicked food.id }
             , Ui.dangerIconButton
                 { label = "×"
@@ -227,12 +218,7 @@ foodRow device action food =
                 , onPress = DeleteFoodClicked food.id
                 }
             ]
-        ]
-
-
-createFoodRow : Element Msg
-createFoodRow =
-    Ui.ghostButton "+ Create Food" CreateCustomFoodClicked
+        }
 
 
 foodSummaryText : ProductDetail -> String

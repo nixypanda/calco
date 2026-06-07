@@ -417,7 +417,7 @@ loadedView device loaded =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 16
+        , Element.spacing Ui.space16
         ]
         [ foodHeader device food
         , Element.map FormMsg (FoodLogForm.view (Just food) loaded.units form)
@@ -461,8 +461,8 @@ foodHeader : Device -> ProductDetail -> Element Msg
 foodHeader device food =
     Element.row
         [ Element.width Element.fill
-        , Element.padding 20
-        , Element.spacing 16
+        , Element.padding Ui.space20
+        , Element.spacing Ui.space16
         , Background.color Ui.cardBg
         , Border.rounded 20
         , Ui.cardShadow
@@ -471,7 +471,7 @@ foodHeader device food =
             (food.nutrients
                 |> List.map (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
             )
-        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        , Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
             [ Ui.truncatedHeader device food.name
             , Ui.mutedText (metaText food)
             , Ui.chips food.categories

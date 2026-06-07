@@ -495,7 +495,7 @@ headerView : Device -> Model -> Element Msg
 headerView device model =
     case model of
         Loaded loaded ->
-            Element.wrappedRow [ Element.width Element.fill, Element.spacing 16 ]
+            Element.wrappedRow [ Element.width Element.fill, Element.spacing Ui.space16 ]
                 [ Ui.truncatedHeader device loaded.meal.name
                 , Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
                 , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
@@ -507,7 +507,7 @@ headerView device model =
 
 loadedView : Device -> LoadedModel -> Element Msg
 loadedView device loaded =
-    Element.column [ Element.width Element.fill, Element.spacing 16 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ case loaded.meal.notes of
             Just notes ->
                 Ui.mutedParagraph notes
@@ -530,7 +530,7 @@ loadedView device loaded =
                 Element.none
         , Ui.sectionHeader "Components"
         , Element.column
-            [ Element.width Element.fill, Element.spacing 8 ]
+            [ Element.width Element.fill, Element.spacing Ui.space8 ]
             (List.map (componentView loaded) loaded.meal.components)
         , nutritionView device loaded
         , confirmDeleteView loaded
@@ -578,7 +578,7 @@ componentView loaded component =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 8
+        , Element.spacing Ui.space8
         , Element.padding 14
         , Background.color Ui.cardBg
         , Border.rounded 16
@@ -586,7 +586,7 @@ componentView loaded component =
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing 12
+            , Element.spacing Ui.space12
             ]
             (macroDot
                 ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
@@ -644,14 +644,14 @@ confirmDeleteView loaded =
 confirmDeleteContent : Maybe String -> Bool -> Element Msg
 confirmDeleteContent maybeError deleting =
     Element.column
-        [ Element.spacing 8
-        , Element.padding 12
+        [ Element.spacing Ui.space8
+        , Element.padding Ui.space12
         , Background.color Ui.dangerBg
         , Border.rounded 16
         ]
         [ Element.el [ Font.bold ] (Element.text "Delete meal?")
         , Ui.maybeErrorBanner maybeError
-        , Element.row [ Element.spacing 8 ]
+        , Element.row [ Element.spacing Ui.space8 ]
             [ Ui.button "Cancel" CancelDeleteClicked
             , Ui.dangerButton
                 (if deleting then

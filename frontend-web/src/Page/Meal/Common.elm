@@ -322,7 +322,7 @@ viewFormFields :
     -> FormFields
     -> Element msg
 viewFormFields device toMsg form =
-    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.input "Name" form.name (toMsg << NameChanged)
         , Ui.input "Notes" form.notes (toMsg << NotesChanged)
         , quantityTextInput device
@@ -613,7 +613,7 @@ componentRowView device toMsg row =
                 (List.map (searchResultView device toMsg row.search.query row.rowId)
                     row.searchResults
                 )
-        , Element.row [ Element.width Element.fill, Element.spacing 8 ]
+        , Element.row [ Element.width Element.fill, Element.spacing Ui.space8 ]
             [ quantityTextInput device
                 { amountLabel = "Qty"
                 , amount = row.quantity
@@ -651,7 +651,7 @@ quantityTextInput device config =
      else
         Element.row
     )
-        [ Element.width Element.fill, Element.spacing 8 ]
+        [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ Ui.input config.amountLabel config.amount config.onAmountChange
         , Ui.input config.unitLabel config.unit config.onUnitChange
         ]

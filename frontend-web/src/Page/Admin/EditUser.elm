@@ -283,7 +283,7 @@ resetPasswordView : Model -> List (Element Msg)
 resetPasswordView model =
     [ Ui.card
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
-        , Element.column [ Element.spacing 8, Element.width Element.fill ]
+        , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
             [ Ui.passwordInput "New password" (currentPassword model.state) PasswordChanged
             , Ui.button "Reset Password" ResetSubmitted
             ]
@@ -300,8 +300,8 @@ enableDisableView model =
                     [ Element.width Element.fill
                     , Background.color Ui.accentSoftPink
                     , Border.rounded 16
-                    , Element.padding 16
-                    , Element.spacing 12
+                    , Element.padding Ui.space16
+                    , Element.spacing Ui.space12
                     ]
                     [ Element.el
                         [ Font.medium
@@ -355,7 +355,7 @@ problemMessage problem =
 userSummaryCard : User.User -> Element msg
 userSummaryCard user =
     Ui.card
-        [ Element.column [ Element.spacing 8, Element.width Element.fill ]
+        [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
             [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
             , Ui.detailRow "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))

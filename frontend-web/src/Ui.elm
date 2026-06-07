@@ -27,11 +27,14 @@ module Ui exposing
     , defaultTruncationChars
     , detailRow
     , display
+    , divider
     , dotSeparated
+    , drawerSelectionBg
     , emptyState
     , errorBanner
     , fatColor
     , fieldLabel
+    , formSection
     , ghostButton
     , hairline
     , heading1
@@ -43,6 +46,8 @@ module Ui exposing
     , isSmall
     , layout
     , linearProgress
+    , listCard
+    , listRow
     , loading
     , macroBar
     , macroColor
@@ -57,8 +62,18 @@ module Ui exposing
     , sectionHeader
     , selectDropdown
     , skeletonLoading
+    , space12
+    , space16
+    , space2
+    , space20
+    , space24
+    , space32
+    , space4
+    , space8
     , statBlock
     , statBlockGroup
+    , statusGreen
+    , statusRed
     , submitButton
     , textMedium
     , truncateWithEllipsis
@@ -73,10 +88,10 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import Html
 import Html.Attributes
 import Html.Events
-import Json.Decode
 import Lib.ListExtra as ListExtra
 import View.Charts
 
@@ -195,6 +210,30 @@ dangerSolid =
     Element.rgb255 255 107 122
 
 
+{-| Foreground color for the "active" status pill in the Admin views.
+Paired with `accentSoftGreen` as the background.
+-}
+statusGreen : Element.Color
+statusGreen =
+    Element.rgb255 50 110 60
+
+
+{-| Foreground color for the "disabled" status pill in the Admin views.
+Paired with `accentSoftPink` as the background.
+-}
+statusRed : Element.Color
+statusRed =
+    Element.rgb255 180 60 80
+
+
+{-| Lavender used as the selected-state background for navigation items in
+the side drawer.
+-}
+drawerSelectionBg : Element.Color
+drawerSelectionBg =
+    Element.rgb255 238 232 255
+
+
 {-| Backwards-compatible alias for the pink protein accent.
 -}
 proteinColor : Element.Color
@@ -229,6 +268,55 @@ mutedColor =
 darkColor : Element.Color
 darkColor =
     textPrimary
+
+
+
+-- Spacing scale
+--
+-- A 4px-based scale used for `Element.spacing`, `Element.padding`, and
+-- `Element.paddingXY`. Stick to these values when adding new layout — only
+-- reach for raw literals if the layout genuinely needs an off-scale value
+-- (e.g., aligning to a 1px hairline or a known control height).
+
+
+space2 : Int
+space2 =
+    2
+
+
+space4 : Int
+space4 =
+    4
+
+
+space8 : Int
+space8 =
+    8
+
+
+space12 : Int
+space12 =
+    12
+
+
+space16 : Int
+space16 =
+    16
+
+
+space20 : Int
+space20 =
+    20
+
+
+space24 : Int
+space24 =
+    24
+
+
+space32 : Int
+space32 =
+    32
 
 
 
@@ -319,7 +407,7 @@ pageContainer device children =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
-        , Element.spacing 16
+        , Element.spacing space16
         , Element.paddingEach
             { top = horizontalPadding
             , right = horizontalPadding
@@ -409,8 +497,8 @@ card children =
         , Background.color cardBg
         , Border.rounded 20
         , cardShadow
-        , Element.padding 20
-        , Element.spacing 12
+        , Element.padding space20
+        , Element.spacing space12
         ]
         children
 
@@ -420,7 +508,7 @@ sectionHeader title =
     Element.el
         [ heading3
         , bold
-        , Element.paddingEach { top = 0, right = 0, bottom = 0, left = 0 }
+        , Region.heading 2
         ]
         (Element.text title)
 
@@ -430,9 +518,66 @@ cardActions buttons =
     Element.row
         [ Element.width Element.fill
         , Element.paddingEach { top = 12, right = 0, bottom = 0, left = 0 }
-        , Element.spacing 12
+        , Element.spacing space12
         ]
         buttons
+
+
+{-| A card whose body is a title, a hairline, and then its content. Used for
+form sections in `View.CustomFoodForm` so every section reads the same way.
+-}
+formSection : String -> List (Element msg) -> Element msg
+formSection title content =
+    card (sectionHeader title :: hairline :: content)
+
+
+{-| A card containing a vertical list of rows with a "+ Create X" ghost
+button pinned to the bottom. The create button is shown even when the row
+list is empty, which is the canonical empty state for the index pages.
+-}
+listCard : { rows : List (Element msg), createButton : Element msg } -> Element msg
+listCard config =
+    card (config.rows ++ [ config.createButton ])
+
+
+{-| A clickable list row with an optional leading element (macro dot,
+icon), a title + subtitle column in the middle, and optional trailing
+elements (action icons, badges). Clicking the title area fires `onSelect`;
+trailing items keep their own click handlers so destructive actions stay
+out of the row's primary tap target.
+-}
+listRow :
+    { onSelect : msg
+    , leading : List (Element msg)
+    , title : Element msg
+    , subtitle : List (Element msg)
+    , trailing : List (Element msg)
+    }
+    -> Element msg
+listRow config =
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.padding space16
+        , Element.spacing space12
+        ]
+        [ Input.button
+            [ Element.width Element.fill ]
+            { onPress = Just config.onSelect
+            , label =
+                Element.row [ Element.width Element.fill, Element.spacing space12 ]
+                    (config.leading
+                        ++ [ Element.column
+                                [ Element.width Element.fill, Element.spacing space4 ]
+                                (config.title :: config.subtitle)
+                           ]
+                    )
+            }
+        , if List.isEmpty config.trailing then
+            Element.none
+
+          else
+            Element.row [ Element.padding space8, Element.spacing space12 ] config.trailing
+        ]
 
 
 
@@ -452,7 +597,7 @@ emptyState message =
         [ Element.paragraph
             [ Font.color textMuted
             , Font.center
-            , Element.padding 8
+            , Element.padding space8
             ]
             [ Element.text message ]
         ]
@@ -469,7 +614,7 @@ errorBanner message =
         [ Background.color dangerBg
         , Font.color dangerFg
         , Border.rounded 12
-        , Element.padding 12
+        , Element.padding space12
         , Element.width Element.fill
         ]
         (Element.text message)
@@ -605,7 +750,7 @@ mutedParagraph text =
 
 detailRow : String -> Element msg -> Element msg
 detailRow label_ value =
-    Element.row [ Element.spacing 4 ]
+    Element.row [ Element.spacing space4 ]
         [ Element.el [ Font.color textMedium, caption ]
             (Element.text (label_ ++ ":"))
         , value
@@ -649,106 +794,90 @@ selectDropdown config =
         isSelected val =
             val == config.selected
 
+        renderOption : ( a, String ) -> Element msg
+        renderOption ( val, lbl ) =
+            Input.button
+                [ Element.width Element.fill
+                , Element.paddingXY 14 10
+                , Background.color
+                    (if isSelected val then
+                        primaryTealPressed
+
+                     else
+                        cardBg
+                    )
+                , Font.color
+                    (if isSelected val then
+                        Element.rgb255 255 255 255
+
+                     else
+                        textPrimary
+                    )
+                ]
+                { onPress = Just (config.onChange val)
+                , label = Element.text lbl
+                }
+
         optionsElement : Element msg
         optionsElement =
+            Element.column
+                [ Element.width Element.fill
+                , Border.rounded 12
+                , Background.color cardBg
+                , cardShadow
+                , Element.moveDown 4
+                ]
+                (List.map renderOption config.options)
+
+        triggerAnchor : List (Element.Attribute msg)
+        triggerAnchor =
             if config.isOpen then
-                Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing 0
-                    , Border.rounded 12
-                    , Background.color cardBg
-                    , cardShadow
-                    ]
-                    (List.map
-                        (\( val, lbl ) ->
-                            Element.html
-                                (Html.button
-                                    [ Html.Attributes.style "width" "100%"
-                                    , Html.Attributes.style "padding" "10px 14px"
-                                    , Html.Attributes.style "font-family" "inherit"
-                                    , Html.Attributes.style "font-size" "14px"
-                                    , Html.Attributes.style "text-align" "left"
-                                    , Html.Attributes.style "border" "none"
-                                    , Html.Attributes.style "cursor" "pointer"
-                                    , Html.Attributes.style "background-color"
-                                        (toCssColor
-                                            (if isSelected val then
-                                                primaryTealPressed
-
-                                             else
-                                                cardBg
-                                            )
-                                        )
-                                    , Html.Attributes.style "color"
-                                        (toCssColor
-                                            (if isSelected val then
-                                                Element.rgb255 255 255 255
-
-                                             else
-                                                textPrimary
-                                            )
-                                        )
-                                    , Html.Events.stopPropagationOn "click"
-                                        (Json.Decode.succeed
-                                            ( config.onChange val, True )
-                                        )
-                                    ]
-                                    [ Html.text lbl ]
-                                )
-                        )
-                        config.options
-                    )
+                [ Element.width Element.fill, Element.below optionsElement ]
 
             else
-                Element.none
+                [ Element.width Element.fill ]
     in
-    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+    Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ fieldLabel config.label
-        , Input.button
-            (List.concat
-                [ [ Element.width Element.fill
-                  , Border.rounded 12
-                  , Background.color inputFill
-                  , Element.padding 10
-                  ]
-                , if config.isOpen then
-                    [ Element.below optionsElement ]
-
-                  else
-                    []
+        , Element.el triggerAnchor
+            (Input.button
+                [ Element.width Element.fill
+                , Border.rounded 12
+                , Background.color inputFill
+                , Element.padding 10
                 ]
-            )
-            { onPress = Just config.onToggle
-            , label =
-                Element.row [ Element.width Element.fill, Element.spacing 8 ]
-                    [ Element.el
-                        [ Element.width Element.fill
-                        , body
-                        , Font.color
-                            (if selectedLabel == "" then
-                                textMuted
+                { onPress = Just config.onToggle
+                , label =
+                    Element.row [ Element.width Element.fill, Element.spacing space8 ]
+                        [ Element.el
+                            [ Element.width Element.fill
+                            , body
+                            , Font.color
+                                (if selectedLabel == "" then
+                                    textMuted
+
+                                 else
+                                    textPrimary
+                                )
+                            ]
+                            (Element.text
+                                (if selectedLabel == "" then
+                                    "Select…"
+
+                                 else
+                                    selectedLabel
+                                )
+                            )
+                        , Element.text
+                            (if config.isOpen then
+                                "▲"
 
                              else
-                                textPrimary
+                                "▼"
                             )
                         ]
-                        (Element.text
-                            (if selectedLabel == "" then
-                                "Select…"
-
-                             else
-                                selectedLabel
-                            )
-                        )
-                    , Element.text
-                        (if config.isOpen then
-                            "▲"
-
-                         else
-                            "▼"
-                        )
-                    ]
-            }
+                }
+            )
         ]
 
 
@@ -791,7 +920,7 @@ macroBar config =
         remaining =
             max 0 (100 - filled)
     in
-    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+    Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ Element.row [ Element.width Element.fill ]
             [ Element.el [ bold, body, Font.color textPrimary ] (Element.text config.label)
             , Element.el
@@ -822,7 +951,7 @@ macroBar config =
 
 skeletonLoading : Element msg
 skeletonLoading =
-    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+    Element.column [ Element.width Element.fill, Element.spacing space12 ]
         [ skeletonBar
         , skeletonBar
         , skeletonBar
@@ -1009,7 +1138,7 @@ chips strings =
         Element.none
 
     else
-        Element.wrappedRow [ Element.spacing 4 ]
+        Element.wrappedRow [ Element.spacing space4 ]
             (List.map (\c -> chip { label = c, selected = False, onClick = Nothing }) strings)
 
 
@@ -1050,7 +1179,7 @@ statBlock config =
         , Background.color config.color
         , Border.rounded 24
         , Element.paddingEach { top = 12, right = 12, bottom = 12, left = 12 }
-        , Element.spacing 2
+        , Element.spacing space2
         ]
         [ Element.el
             [ Font.size 32
@@ -1082,12 +1211,12 @@ statBlockGroup blocks =
 
         row : ( Element msg, Element msg ) -> Element msg
         row ( a, b ) =
-            Element.row [ Element.spacing 12 ]
+            Element.row [ Element.spacing space12 ]
                 [ a
                 , b
                 ]
     in
-    Element.column [ Element.spacing 12 ]
+    Element.column [ Element.spacing space12 ]
         (List.map row pairs)
 
 
@@ -1098,7 +1227,12 @@ linearProgress :
     }
     -> Element msg
 linearProgress config =
-    View.Charts.linearProgress config
+    View.Charts.linearProgress
+        { value = config.value
+        , max = config.max
+        , color = config.color
+        , trackColor = inputFill
+        }
 
 
 {-| 4px × 24px rounded vertical bar used as a leading element on list

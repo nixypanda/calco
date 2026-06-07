@@ -28,8 +28,8 @@ completionDropdown config options =
             [ Element.width Element.fill
             , Element.height (Element.px (completionDropdownHeight options))
             , Element.scrollbarY
-            , Element.spacing 2
-            , Element.padding 4
+            , Element.spacing Ui.space2
+            , Element.padding Ui.space4
             , Border.rounded 12
             , Background.color Ui.cardBg
             , Ui.cardShadow
@@ -47,11 +47,11 @@ searchInput :
     }
     -> Element msg
 searchInput config =
-    Element.column [ Element.width Element.fill, Element.spacing 4 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
         [ Input.text
             [ Border.rounded 12
             , Background.color Ui.inputFill
-            , Element.padding 12
+            , Element.padding Ui.space12
             , Element.htmlAttribute (tabCompletionHandler config.onTabComplete config.completions)
             ]
             { onChange = config.onChange
@@ -101,7 +101,7 @@ resultRow device config =
         searchItem =
             Element.column
                 [ Element.width Element.fill
-                , Element.spacing 4
+                , Element.spacing Ui.space4
                 , Element.clip
                 ]
                 [ Element.el [ Font.medium ]
@@ -115,13 +115,13 @@ resultRow device config =
     in
     Input.button
         [ Element.width Element.fill
-        , Element.padding 16
+        , Element.padding Ui.space16
         ]
         { onPress = Just (config.onSelect config.item.id)
         , label =
             Element.row
                 [ Element.width Element.fill
-                , Element.spacing 12
+                , Element.spacing Ui.space12
                 ]
                 ([ macroDot, searchItem ] ++ maybeCategoryTags)
         }
@@ -141,7 +141,7 @@ completionRow onSelect completion =
         ]
         { onPress = Just (onSelect completion)
         , label =
-            Element.row [ Element.width Element.fill, Element.spacing 8 ]
+            Element.row [ Element.width Element.fill, Element.spacing Ui.space8 ]
                 [ Element.el
                     [ Element.width Element.fill, Font.medium ]
                     (Element.text (Search.completionLabel completion))
@@ -192,7 +192,7 @@ categoryPills categories =
     else
         Element.column
             [ Element.width (Element.px 160)
-            , Element.spacing 4
+            , Element.spacing Ui.space4
             , Element.alignRight
             ]
             (pills
@@ -227,7 +227,7 @@ chunkPairs items =
 pillRow : List String -> Element msg
 pillRow pills =
     Element.row
-        [ Element.spacing 4
+        [ Element.spacing Ui.space4
         , Element.alignRight
         ]
         (List.map categoryPill pills)

@@ -302,7 +302,7 @@ dateCard model _ =
     Ui.card
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing 12
+            , Element.spacing Ui.space12
             ]
             [ Ui.iconButton { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
             , Element.el
@@ -417,7 +417,7 @@ loadedLogs currentDate diary =
 
 logGroupsView : Model -> List FoodLog -> Device -> Element Msg
 logGroupsView model logs device =
-    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ slotView model logs Breakfast (MealSlot.label Breakfast) device
         , slotView model logs Lunch (MealSlot.label Lunch) device
         , slotView model logs Dinner (MealSlot.label Dinner) device
@@ -489,9 +489,9 @@ mealSlotHeader model allLogs slot label totals device =
             Element.row
                 [ Element.width Element.fill
                 , Element.padding 14
-                , Element.spacing 12
+                , Element.spacing Ui.space12
                 ]
-                [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
+                [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
                     [ Element.el [ Font.bold ] (Element.text label)
                     , Input.button [ Font.color Ui.mutedColor, Ui.caption ]
                         { onPress = Just MacroModeToggled
@@ -586,7 +586,7 @@ mealSlotCard slot header bodyChildren =
                 , Element.column
                     [ Element.width Element.fill
                     , Element.paddingEach { top = 0, right = 20, bottom = 20, left = 20 }
-                    , Element.spacing 12
+                    , Element.spacing Ui.space12
                     ]
                     bodyChildren
                 ]
@@ -668,7 +668,7 @@ logRow device log =
         ]
         { onPress = Just (LogClicked log.id)
         , label =
-            Element.row [ Element.width Element.fill, Element.spacing 12 ]
+            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
                 [ View.Nutrients.macroDot log.nutrients
                 , Element.el
                     [ Element.width Element.fill, Font.medium, Element.clip ]

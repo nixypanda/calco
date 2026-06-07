@@ -597,7 +597,7 @@ loadedView device model =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 16
+        , Element.spacing Ui.space16
         ]
         [ itemHeader device model
         , Element.map FormMsg
@@ -663,14 +663,14 @@ itemHeader device model =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.padding 20
-        , Element.spacing 16
+        , Element.padding Ui.space20
+        , Element.spacing Ui.space16
         , Background.color Ui.cardBg
         , Border.rounded 20
         , Ui.cardShadow
         ]
         [ View.Nutrients.macroDot model.log.nutrients
-        , Element.column [ Element.width Element.fill, Element.spacing 8 ]
+        , Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
             [ Ui.truncatedHeader device (itemTitle model.item)
             , Ui.mutedText (metaText maybeFood model.log)
             , case maybeFood of

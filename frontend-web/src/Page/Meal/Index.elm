@@ -16,7 +16,6 @@ import Api.Result as ApiResult
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Input as Input
 import Ui
 import View.Nutrients
 
@@ -178,11 +177,10 @@ bodyView : Device -> Model -> Element Msg
 bodyView device model =
     case model of
         Loaded loaded ->
-            if List.isEmpty loaded.meals then
-                Ui.card [ createMealRow ]
-
-            else
-                Ui.card (List.map (mealRow device loaded.action) loaded.meals ++ [ createMealRow ])
+            Ui.listCard
+                { rows = List.map (mealRow device loaded.action) loaded.meals
+                , createButton = Ui.ghostButton "+ Create Meal" CreateMealClicked
+                }
 
         LoadFailed _ ->
             Element.none
@@ -194,7 +192,7 @@ bodyView device model =
 mealRow : Device -> ActionState -> Meal -> Element Msg
 mealRow device action meal =
     let
-        macroDot : List (Element msg)
+        macroDot : List (Element Msg)
         macroDot =
             Maybe.withDefault []
                 (Maybe.map
@@ -202,23 +200,15 @@ mealRow device action meal =
                     meal.nutritionSummary
                 )
     in
-    Element.wrappedRow
-        [ Element.width Element.fill, Element.padding 16, Element.spacing 12 ]
-        [ Input.button
-            [ Element.width Element.fill ]
-            { onPress = Just (OpenMealClicked meal.id)
-            , label =
-                Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                    (macroDot
-                        ++ [ Element.column [ Element.width Element.fill, Element.spacing 4 ]
-                                [ Ui.truncatedHeader device meal.name
-                                , Ui.mutedText (mealSummaryText meal)
-                                , Ui.mutedParagraph (Maybe.withDefault "" meal.notes)
-                                ]
-                           ]
-                    )
-            }
-        , Element.row [ Element.padding 8, Element.spacing 12 ]
+    Ui.listRow
+        { onSelect = OpenMealClicked meal.id
+        , leading = macroDot
+        , title = Ui.truncatedHeader device meal.name
+        , subtitle =
+            [ Ui.mutedText (mealSummaryText meal)
+            , Ui.mutedParagraph (Maybe.withDefault "" meal.notes)
+            ]
+        , trailing =
             [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
             , Ui.dangerIconButton
                 { label = "×"
@@ -231,12 +221,7 @@ mealRow device action meal =
                 , onPress = DeleteMealClicked meal.id
                 }
             ]
-        ]
-
-
-createMealRow : Element Msg
-createMealRow =
-    Ui.ghostButton "+ Create Meal" CreateMealClicked
+        }
 
 
 mealSummaryText : Meal -> String

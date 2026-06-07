@@ -14,7 +14,6 @@ import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Element.Input as Input
 import Ui
 import View.Admin
 
@@ -96,16 +95,14 @@ view { model, device } =
 bodyView : Model -> Element Msg
 bodyView model =
     case model.state of
-        Ready [] ->
-            Ui.card [ createUserRow ]
-
         Ready users ->
-            Ui.card
-                (List.map
-                    (\user -> userListRow { user = user, onSelect = NavigateEditUser })
-                    users
-                    ++ [ createUserRow ]
-                )
+            Ui.listCard
+                { rows =
+                    List.map
+                        (\user -> userListRow { user = user, onSelect = NavigateEditUser })
+                        users
+                , createButton = Ui.ghostButton "+ Create User" NavigateCreateUser
+                }
 
         Loading ->
             Ui.loading "Loading users..."
@@ -114,24 +111,12 @@ bodyView model =
             Ui.errorBanner (Client.displayError error)
 
 
-createUserRow : Element Msg
-createUserRow =
-    Ui.ghostButton "+ Create User" NavigateCreateUser
-
-
 userListRow : { user : User.User, onSelect : String -> msg } -> Element msg
 userListRow config =
-    Input.button
-        [ Element.width Element.fill
-        , Element.padding 16
-        ]
-        { onPress = Just (config.onSelect config.user.id)
-        , label =
-            Element.row [ Element.width Element.fill, Element.spacing 12 ]
-                [ Element.column [ Element.width Element.fill, Element.spacing 2 ]
-                    [ Element.el [ Font.bold ] (Element.text config.user.username)
-                    , Ui.mutedText config.user.displayName
-                    ]
-                , Element.el [ Element.alignRight ] (View.Admin.statusBadge config.user.status)
-                ]
+    Ui.listRow
+        { onSelect = config.onSelect config.user.id
+        , leading = []
+        , title = Element.el [ Font.bold ] (Element.text config.user.username)
+        , subtitle = [ Ui.mutedText config.user.displayName ]
+        , trailing = [ View.Admin.statusBadge config.user.status ]
         }

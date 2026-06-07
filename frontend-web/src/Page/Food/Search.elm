@@ -210,14 +210,14 @@ bodyView model device =
             Ui.loading "Searching foods..."
 
         Failure error ->
-            Element.column [ Element.width Element.fill, Element.spacing 12 ]
+            Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
                 [ Ui.errorBanner (Client.displayError error)
                 , Ui.emptyState "No foods found. Try a different search."
                 ]
 
         Success items ->
             if List.isEmpty items then
-                Element.column [ Element.width Element.fill, Element.spacing 12 ]
+                Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
                     [ Ui.emptyState "No foods found. Try a different search."
                     , Ui.button "Create Custom Food" CreateCustomFoodClicked
                     ]

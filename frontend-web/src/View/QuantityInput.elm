@@ -19,7 +19,7 @@ dropdown :
     }
     -> Element msg
 dropdown config =
-    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.input config.amountLabel config.amount config.onAmountChange
         , Ui.selectDropdown
             { label = config.unitLabel

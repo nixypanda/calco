@@ -19,6 +19,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Element.Region as Region
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Admin.BootstrapSetup as Setup
 import Page.Admin.CreateUser as AdminCreateUser
@@ -1348,27 +1349,28 @@ view model =
 
 appFrame : Model -> Element.Element Msg
 appFrame model =
-    let
-        overlays : List (Element.Attribute Msg)
-        overlays =
-            drawerOverlay model ++ profileOverlay model
-    in
     Element.column
         ([ Element.width Element.fill
          , Element.height Element.fill
          ]
-            ++ overlays
+            ++ drawerOverlay model
         )
         (if showsAppChrome model then
             [ topBarView model
             , Element.el
-                [ Element.width Element.fill, Element.height Element.fill ]
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Region.mainContent
+                ]
                 (pageView model)
             ]
 
          else
             [ Element.el
-                [ Element.width Element.fill, Element.height Element.fill ]
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Region.mainContent
+                ]
                 (pageView model)
             ]
         )
@@ -1401,8 +1403,8 @@ topBarView model =
     Element.row
         [ Element.width Element.fill
         , Element.height (Element.px 58)
-        , Element.paddingXY 16 0
-        , Element.spacing 12
+        , Element.paddingXY Ui.space16 0
+        , Element.spacing Ui.space12
         , Background.color Ui.cardBg
         , Font.color Ui.darkColor
         ]
@@ -1412,6 +1414,7 @@ topBarView model =
             , Element.clip
             , Ui.heading3
             , Font.bold
+            , Region.heading 1
             ]
             (Element.text meta.title)
         , profileButton model
@@ -1443,7 +1446,33 @@ profileButton model =
                 _ ->
                     "?"
     in
-    Ui.iconButton { label = letter, title = "Profile", onPress = ProfileClicked }
+    Element.el
+        (profileMenuAnchor model)
+        (Ui.iconButton { label = letter, title = "Profile", onPress = ProfileClicked })
+
+
+profileMenuAnchor : Model -> List (Element.Attribute Msg)
+profileMenuAnchor model =
+    if model.profileOpen && showsAppChrome model then
+        [ Element.below (profileMenu model) ]
+
+    else
+        []
+
+
+profileMenu : Model -> Element.Element Msg
+profileMenu model =
+    Element.column
+        [ Element.alignRight
+        , Element.moveDown 4
+        , Element.width (Element.px 240)
+        , Element.padding Ui.space12
+        , Element.spacing 10
+        , Background.color Ui.cardBg
+        , Border.rounded 20
+        , Ui.cardShadow
+        ]
+        (profileMenuContent model)
 
 
 initial : String -> String
@@ -1551,11 +1580,12 @@ drawerView model =
         [ Element.width (Element.fill |> Element.maximum 320)
         , Element.height Element.fill
         , Element.paddingXY 16 9
-        , Element.spacing 12
+        , Element.spacing Ui.space12
         , Background.color Ui.cardBg
         , Ui.cardShadow
+        , Region.navigation
         ]
-        (Element.row [ Element.spacing 8 ]
+        (Element.row [ Element.spacing Ui.space8 ]
             [ Ui.iconButton { label = "☰", title = "Close", onPress = DrawerClosed }
             , Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
             ]
@@ -1590,7 +1620,7 @@ drawerItem current label target =
         , Border.rounded 12
         , Background.color
             (if selected then
-                Element.rgb255 238 232 255
+                Ui.drawerSelectionBg
 
              else
                 Ui.cardBg
@@ -1647,29 +1677,6 @@ primaryRoute route =
 
         other ->
             other
-
-
-profileOverlay : Model -> List (Element.Attribute Msg)
-profileOverlay model =
-    if model.profileOpen && showsAppChrome model then
-        [ Element.inFront
-            (Element.column
-                [ Element.alignRight
-                , Element.moveDown 62
-                , Element.moveLeft 16
-                , Element.width (Element.px 240)
-                , Element.padding 12
-                , Element.spacing 10
-                , Background.color Ui.cardBg
-                , Border.rounded 20
-                , Ui.cardShadow
-                ]
-                (profileMenuContent model)
-            )
-        ]
-
-    else
-        []
 
 
 profileMenuContent : Model -> List (Element.Element Msg)
@@ -1779,4 +1786,4 @@ pageView model =
                     (MealDetail.view { model = mealDetailModel, device = device })
 
             PlaceholderPage message ->
-                Element.el [ Element.padding 24 ] (Element.text message)
+                Element.el [ Element.padding Ui.space24 ] (Element.text message)

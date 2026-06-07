@@ -159,7 +159,7 @@ view : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
 view food units model =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 16
+        , Element.spacing Ui.space16
         ]
         [ Ui.maybeErrorBanner model.error
         , Ui.card

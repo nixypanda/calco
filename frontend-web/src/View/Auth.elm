@@ -2,6 +2,7 @@ module View.Auth exposing (credentialCard)
 
 import Element exposing (Device, Element)
 import Element.Font as Font
+import Element.Region as Region
 import Ui
 
 
@@ -37,7 +38,7 @@ credentialCard config =
         , Element.padding outerPadding
         ]
         (Ui.card
-            ([ Element.el [ Ui.display, Font.bold ] (Element.text "CalCo")
+            ([ Element.el [ Ui.display, Font.bold, Region.heading 1 ] (Element.text "CalCo")
              , Element.el
                 [ Ui.heading2
                 , Font.medium

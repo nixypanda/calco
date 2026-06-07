@@ -14,13 +14,15 @@ import Element.Background as Background
 import Element.Border as Border
 
 
-{-| A 10px-tall pill progress bar. The track uses the `inputFill` token
-and the fill color is provided by the caller.
+{-| A 10px-tall pill progress bar. Both the track color and the fill color
+are provided by the caller so this module stays independent of `Ui`'s
+color tokens (avoids a circular import).
 -}
 linearProgress :
     { value : Float
     , max : Float
     , color : Element.Color
+    , trackColor : Element.Color
     }
     -> Element msg
 linearProgress config =
@@ -44,7 +46,7 @@ linearProgress config =
     Element.row
         [ Element.width Element.fill
         , Element.height (Element.px 10)
-        , Background.color (Element.rgb255 244 246 248)
+        , Background.color config.trackColor
         , Border.rounded 999
         , Element.clip
         ]
@@ -64,13 +66,15 @@ baseline. Reserved for a future "activity by day" view; see
 `docs/visual-reskin.md` §12.
 -}
 verticalBarChart :
-    List
-        { label : String
-        , value : Float
-        , color : Element.Color
-        }
+    { baselineColor : Element.Color }
+    ->
+        List
+            { label : String
+            , value : Float
+            , color : Element.Color
+            }
     -> Element msg
-verticalBarChart bars =
+verticalBarChart config bars =
     let
         barWidth : Int
         barWidth =
@@ -85,7 +89,7 @@ verticalBarChart bars =
             Element.el
                 [ Element.width Element.fill
                 , Element.height (Element.px 1)
-                , Background.color (Element.rgb255 232 234 238)
+                , Background.color config.baselineColor
                 ]
                 Element.none
 

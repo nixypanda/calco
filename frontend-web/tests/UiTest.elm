@@ -220,6 +220,7 @@ chartSmoke =
         , test "verticalBarChart renders a list of bars" <|
             \_ ->
                 View.Charts.verticalBarChart
+                    { baselineColor = Ui.divider }
                     [ { label = "M", value = 10, color = Ui.accentPink }
                     , { label = "T", value = 20, color = Ui.accentYellow }
                     ]

@@ -16,8 +16,8 @@ statusBadge status =
                 Ui.accentSoftPink
         , fg =
             if status == "active" then
-                Element.rgb255 50 110 60
+                Ui.statusGreen
 
             else
-                Element.rgb255 180 60 80
+                Ui.statusRed
         }

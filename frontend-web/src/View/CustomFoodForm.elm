@@ -644,7 +644,7 @@ addCategoryTag raw selected =
 
 view : Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view _ nutrients units form =
-    Element.column [ Element.width Element.fill, Element.spacing 12 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.maybeErrorBanner form.error
         , basicInfoCard form
         , portionInfoCard form units
@@ -655,9 +655,8 @@ view _ nutrients units form =
 
 basicInfoCard : FormModel -> Element Msg
 basicInfoCard form =
-    Ui.card
-        [ sectionTitle "Basic Info"
-        , Ui.input "Name" form.name NameChanged
+    Ui.formSection "Basic Info"
+        [ Ui.input "Name" form.name NameChanged
         , Ui.input "Brand" form.brand BrandChanged
         , categoryInputView form.categoryInput
         ]
@@ -665,9 +664,8 @@ basicInfoCard form =
 
 portionInfoCard : FormModel -> List UnitItem -> Element Msg
 portionInfoCard form units =
-    Ui.card
-        [ sectionTitle "Portion Info"
-        , Ui.input "Serving Size (g)" form.servingSizeG ServingSizeChanged
+    Ui.formSection "Portion Info"
+        [ Ui.input "Serving Size (g)" form.servingSizeG ServingSizeChanged
         , View.QuantityInput.dropdown
             { amountLabel = "Default Quantity"
             , amount = form.defaultQuantity
@@ -684,15 +682,15 @@ portionInfoCard form units =
 
 nutrientsCard : FormModel -> List NutrientItem -> Element Msg
 nutrientsCard form nutrients =
-    Ui.card
-        [ sectionTitle "Nutrients (per 100g)"
+    Ui.formSection "Nutrients (per 100g)"
+        [ addRowHint
         , Element.column
             [ Element.width Element.fill
-            , Element.spacing 12
+            , Element.spacing Ui.space12
             ]
             (List.indexedMap (nutrientRowView nutrients) form.nutrients
-                ++ [ Ui.ghostButton "+ Add Nutrient" AddNutrientRow
-                   , addRowHint
+                ++ [ Ui.hairline
+                   , Ui.ghostButton "+ Add Nutrient" AddNutrientRow
                    ]
             )
         ]
@@ -700,11 +698,10 @@ nutrientsCard form nutrients =
 
 servingsCard : FormModel -> List UnitItem -> Element Msg
 servingsCard form units =
-    Ui.card
-        [ sectionTitle "Servings"
-        , Element.column
+    Ui.formSection "Servings"
+        [ Element.column
             [ Element.width Element.fill
-            , Element.spacing 12
+            , Element.spacing Ui.space12
             ]
             (if List.isEmpty form.servings then
                 [ Ui.mutedParagraph
@@ -718,56 +715,26 @@ servingsCard form units =
         ]
 
 
-sectionTitle : String -> Element msg
-sectionTitle title =
-    Element.el
-        [ Ui.heading3
-        , Font.bold
-        , Font.color Ui.darkColor
-        ]
-        (Element.text title)
-
-
 categoryInputView : CategoryInput -> Element Msg
 categoryInputView input =
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ Element.el [ Ui.caption, Font.medium, Font.color Ui.darkColor ]
             (Element.text "Categories")
-        , chipRowView input.selected
-        , Ui.input "Add a category" input.query CategoryQueryChanged
-        , Element.row
-            [ Element.width Element.fill
-            , Element.spacing 8
+        , Element.el
+            [ Ui.caption
+            , Font.color Ui.mutedColor
             ]
-            [ addCategoryButton input
-            , Element.el
-                [ Ui.caption
-                , Font.color Ui.mutedColor
-                ]
-                (Element.text "Type and press Enter (or click Add) to tag this food.")
-            ]
+            (Element.text "Type and press Enter (or click Add) to tag this food.")
+        , Ui.input "" input.query CategoryQueryChanged
         , suggestionRowView input
+        , addCategoryButton input
+        , chipRowView input.selected
         ]
 
 
 addCategoryButton : CategoryInput -> Element Msg
 addCategoryButton input =
-    Input.button
-        [ Background.color Ui.primaryTeal
-        , Font.color Ui.darkColor
-        , Border.rounded 999
-        , Element.paddingEach { top = 8, right = 14, bottom = 8, left = 14 }
-        , Font.medium
-        , Ui.body
-        ]
-        { onPress =
-            if Text.isBlank input.query then
-                Nothing
-
-            else
-                Just (AddCategory input.query)
-        , label = Element.text "Add"
-        }
+    Ui.ghostButton "Add" (AddCategory input.query)
 
 
 chipRowView : List String -> Element Msg
@@ -841,12 +808,12 @@ suggestionRowView input =
     else
         Element.column
             [ Element.width Element.fill
-            , Element.spacing 4
+            , Element.spacing Ui.space4
             , Border.rounded 12
             , Background.color Ui.cardBg
             , Border.width 1
             , Border.color Ui.borderGray
-            , Element.padding 8
+            , Element.padding Ui.space8
             ]
             (List.map suggestionPill matching)
 
@@ -854,14 +821,14 @@ suggestionRowView input =
 suggestionPill : CategorySuggestion -> Element Msg
 suggestionPill s =
     Input.button
-        [ Element.padding 4
+        [ Element.padding Ui.space4
         , Element.width Element.fill
         ]
         { onPress = Just (AcceptCategorySuggestion s.value)
         , label =
             Element.row
                 [ Element.width Element.fill
-                , Element.spacing 8
+                , Element.spacing Ui.space8
                 , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
                 ]
                 [ Element.el [ Ui.caption, Font.medium ] (Element.text s.value)
@@ -883,7 +850,7 @@ nutrientRowView nutrients index row =
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing 8
+            , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.selectDropdown
@@ -905,7 +872,7 @@ nutrientRowView nutrients index row =
             ]
         , Element.row
             [ Element.width Element.fill
-            , Element.spacing 8
+            , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.input "Amount" row.amountPer100g (NutrientAmountChanged index))
@@ -963,7 +930,7 @@ servingRowView units index row =
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing 8
+            , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.input "Label" row.label (ServingLabelChanged index))
@@ -975,7 +942,7 @@ servingRowView units index row =
             ]
         , Element.row
             [ Element.width Element.fill
-            , Element.spacing 8
+            , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.input "Qty" row.quantity (ServingQuantityChanged index))

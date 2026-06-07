@@ -227,13 +227,13 @@ titleCase word =
 
 preview : Device -> NutritionState -> Element msg
 preview device state =
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ case state of
             NutritionLoading _ ->
                 Ui.loading "Loading nutrition..."
 
             NutritionLoaded _ nutrients ->
-                Element.column [ Element.width Element.fill, Element.spacing 8 ]
+                Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
                     [ Ui.card
                         [ Ui.sectionHeader "Macro Breakdown"
                         , macroBreakdownView device nutrients
@@ -296,7 +296,7 @@ macroBreakdownView device nutrients =
         portions =
             macroPortions nutrients
     in
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ macroBarRow 24 portions
         , if Ui.isSmall device then
             Element.none
@@ -389,18 +389,18 @@ barSegment color pct =
 macroLegend : MacroPortions -> Element msg
 macroLegend portions =
     Element.row
-        [ Element.width Element.fill, Element.spacing 16 ]
-        [ Element.row [ Element.spacing 4 ]
+        [ Element.width Element.fill, Element.spacing Ui.space16 ]
+        [ Element.row [ Element.spacing Ui.space4 ]
             [ legendDot Ui.proteinColor
             , Element.el [ Ui.body ]
                 (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
             ]
-        , Element.row [ Element.spacing 4 ]
+        , Element.row [ Element.spacing Ui.space4 ]
             [ legendDot Ui.carbsColor
             , Element.el [ Ui.body ]
                 (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
             ]
-        , Element.row [ Element.spacing 4 ]
+        , Element.row [ Element.spacing Ui.space4 ]
             [ legendDot Ui.fatColor
             , Element.el [ Ui.body ]
                 (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
@@ -430,14 +430,14 @@ nutrientsTable nutrients =
                             [ Font.bold
                             , Ui.body
                             , Font.color Ui.mutedColor
-                            , Element.paddingXY 0 8
+                            , Element.paddingXY 0 Ui.space8
                             ]
                             (Element.text "Nutrient")
                   , width = Element.fill
                   , view =
                         \n ->
                             Element.el
-                                [ Ui.body, Element.paddingXY 0 8 ]
+                                [ Ui.body, Element.paddingXY 0 Ui.space8 ]
                                 (Element.text (nutrientLabel n.code))
                   }
                 , { header =
@@ -471,7 +471,7 @@ nutrientsTable nutrients =
                   , view =
                         \n ->
                             Element.el
-                                [ Ui.body, Element.paddingXY 0 8 ]
+                                [ Ui.body, Element.paddingXY 0 Ui.space8 ]
                                 (Element.text n.unit)
                   }
                 ]
