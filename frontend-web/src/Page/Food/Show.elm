@@ -23,6 +23,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.FoodLog.Form as FoodLogForm
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
@@ -364,42 +365,42 @@ customFoodEditRoute food =
         Nothing
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
         [ case model of
             Loaded loaded ->
                 case loaded.error of
                     Just message ->
-                        Ui.errorBanner message
+                        Ui.errorBanner theme message
 
                     Nothing ->
                         Element.none
 
             LoadFailed message ->
-                Ui.errorBanner message
+                Ui.errorBanner theme message
 
             Loading _ ->
                 Element.none
-        , bodyView device model
+        , bodyView theme device model
         ]
 
 
-bodyView : Device -> Model -> Element Msg
-bodyView device model =
+bodyView : Theme -> Device -> Model -> Element Msg
+bodyView theme device model =
     case model of
         Loaded loaded ->
-            loadedView device loaded
+            loadedView theme device loaded
 
         LoadFailed _ ->
             Element.none
 
         Loading _ ->
-            Ui.skeletonCard
+            Ui.loading theme "Loading food..."
 
 
-loadedView : Device -> LoadedModel -> Element Msg
-loadedView device loaded =
+loadedView : Theme -> Device -> LoadedModel -> Element Msg
+loadedView theme device loaded =
     let
         food : ProductDetail
         food =
@@ -417,16 +418,16 @@ loadedView device loaded =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ foodHeader device food
-        , Element.map FormMsg (FoodLogForm.view (Just food) loaded.units form)
+        [ foodHeader theme device food
+        , Element.map FormMsg (FoodLogForm.view theme (Just food) loaded.units form)
         , Ui.cardActions
-            [ Ui.primarySubmitButton
+            [ Ui.primarySubmitButton theme
                 (loaded.request == Saving)
                 "Log Food"
                 "Logging..."
                 SubmitClicked
             ]
-        , View.Nutrients.nutritionCard device nutrients
+        , View.Nutrients.nutritionCard theme device nutrients
         ]
 
 
@@ -451,14 +452,14 @@ foodNutrientsPer100g food =
         food.nutrients
 
 
-foodHeader : Device -> ProductDetail -> Element Msg
-foodHeader device food =
+foodHeader : Theme -> Device -> ProductDetail -> Element Msg
+foodHeader theme device food =
     let
         editAction : List (Element Msg)
         editAction =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ Ui.iconButton
+                    [ Ui.iconButton theme
                         { label = "✎"
                         , title = "Edit food"
                         , onPress = EditCustomFoodClicked
@@ -474,10 +475,11 @@ foodHeader device food =
                 |> List.map
                     (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
     in
-    Ui.card
-        [ Ui.pageHeader device
+    Ui.card theme
+        [ Ui.pageHeader theme
+            device
             { leading = Just (View.Nutrients.macroDot macroNutrients)
-            , title = Ui.truncatedPageTitle device food.name
+            , title = food.name
             , subtitle = Just (metaText food)
             , actions = editAction
             }
@@ -486,7 +488,7 @@ foodHeader device food =
 
           else
             Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                [ Ui.macroDotGhost, Ui.chips food.categories ]
+                [ Ui.macroDotGhost, Ui.chips theme food.categories ]
         ]
 
 

@@ -42,12 +42,14 @@ import Session
 import Task
 import Time
 import Ui
+import Ui.Theme as Theme exposing (Mode, Theme)
 import Url exposing (Url)
 
 
 type alias Flags =
     { windowWidth : Int
     , windowHeight : Int
+    , themeMode : String
     }
 
 
@@ -64,6 +66,8 @@ type alias Model =
     , drawerOpen : Bool
     , profileOpen : Bool
     , device : Element.Device
+    , themeMode : Mode
+    , theme : Theme
     }
 
 
@@ -120,12 +124,16 @@ type Msg
     | GotMealEditMsg MealEdit.Msg
     | GotMealDetailMsg MealShow.Msg
     | GotLocalContext { date : String, timezone : String }
+    | ThemeToggleClicked
 
 
 port requestLocalContext : () -> Cmd msg
 
 
 port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
+
+
+port persistThemeMode : String -> Cmd msg
 
 
 main : Program Flags Model Msg
@@ -150,6 +158,11 @@ subscriptions _ =
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
+    let
+        themeMode : Mode
+        themeMode =
+            Theme.modeFromString flags.themeMode
+    in
     ( { key = key
       , route = Data.Route.fromUrl url
       , session = Session.init
@@ -166,6 +179,8 @@ init flags url key =
                 { width = flags.windowWidth
                 , height = flags.windowHeight
                 }
+      , themeMode = themeMode
+      , theme = Theme.forMode themeMode
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
@@ -249,6 +264,19 @@ update msg model =
                 | device = Element.classifyDevice { width = width, height = height }
               }
             , Cmd.none
+            )
+
+        ThemeToggleClicked ->
+            let
+                nextMode : Mode
+                nextMode =
+                    Theme.toggle model.themeMode
+            in
+            ( { model
+                | themeMode = nextMode
+                , theme = Theme.forMode nextMode
+              }
+            , persistThemeMode (Theme.modeToString nextMode)
             )
 
         GotLoginMsg subMsg ->
@@ -1343,7 +1371,7 @@ view model =
             }
             []
           <|
-            Ui.layout <|
+            Ui.layout model.theme <|
                 appFrame model
         ]
     }
@@ -1407,27 +1435,27 @@ topBarView model =
         , Element.height (Element.px 58)
         , Element.paddingXY Ui.space16 0
         , Element.spacing Ui.space12
-        , Background.color Ui.cardBg
-        , Font.color Ui.darkColor
+        , Background.color model.theme.cardBg
+        , Font.color model.theme.textPrimary
         ]
-        [ leadingButton meta.leading
+        [ leadingButton model.theme meta.leading
         , Element.el
             [ Element.width Element.fill
             , Element.clip
             ]
-            (Ui.subsectionTitle meta.title)
+            (Ui.subsectionTitle model.theme meta.title)
         , profileButton model
         ]
 
 
-leadingButton : LeadingAction -> Element.Element Msg
-leadingButton leading =
+leadingButton : Theme -> LeadingAction -> Element.Element Msg
+leadingButton theme leading =
     case leading of
         OpenMenu ->
-            Ui.iconButton { label = "☰", title = "Menu", onPress = MenuClicked }
+            Ui.iconButton theme { label = "☰", title = "Menu", onPress = MenuClicked }
 
         GoBack route ->
-            Ui.iconButton { label = "←", title = "Back", onPress = AppBackClicked route }
+            Ui.iconButton theme { label = "←", title = "Back", onPress = AppBackClicked route }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -1447,7 +1475,7 @@ profileButton model =
     in
     Element.el
         (profileMenuAnchor model)
-        (Ui.iconButton { label = letter, title = "Profile", onPress = ProfileClicked })
+        (Ui.iconButton model.theme { label = letter, title = "Profile", onPress = ProfileClicked })
 
 
 profileMenuAnchor : Model -> List (Element.Attribute Msg)
@@ -1467,9 +1495,9 @@ profileMenu model =
         , Element.width (Element.px 240)
         , Element.padding Ui.space12
         , Element.spacing 10
-        , Background.color Ui.cardBg
+        , Background.color model.theme.cardBg
         , Border.rounded 20
-        , Ui.cardShadow
+        , Ui.cardShadow model.theme
         ]
         (profileMenuContent model)
 
@@ -1580,15 +1608,15 @@ drawerView model =
         , Element.height Element.fill
         , Element.paddingXY 16 9
         , Element.spacing Ui.space12
-        , Background.color Ui.cardBg
-        , Ui.cardShadow
+        , Background.color model.theme.cardBg
+        , Ui.cardShadow model.theme
         , Region.navigation
         ]
         (Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.iconButton { label = "☰", title = "Close", onPress = DrawerClosed }
-            , Ui.sectionTitle "CalCo"
+            [ Ui.iconButton model.theme { label = "☰", title = "Close", onPress = DrawerClosed }
+            , Ui.sectionTitle model.theme "CalCo"
             ]
-            :: Ui.hairline
+            :: Ui.hairline model.theme
             :: drawerItems model
         )
 
@@ -1596,18 +1624,18 @@ drawerView model =
 drawerItems : Model -> List (Element.Element Msg)
 drawerItems model =
     if Session.isAdmin model.session then
-        [ drawerItem model.route "Admin" AdminDashboard ]
+        [ drawerItem model.theme model.route "Admin" AdminDashboard ]
 
     else
-        [ drawerItem model.route "Diary" (DiaryDay Nothing)
-        , drawerItem model.route "Search Foods" (FoodSearch Nothing)
-        , drawerItem model.route "My Foods" CustomFoodList
-        , drawerItem model.route "My Meals" MealList
+        [ drawerItem model.theme model.route "Diary" (DiaryDay Nothing)
+        , drawerItem model.theme model.route "Search Foods" (FoodSearch Nothing)
+        , drawerItem model.theme model.route "My Foods" CustomFoodList
+        , drawerItem model.theme model.route "My Meals" MealList
         ]
 
 
-drawerItem : Route -> String -> Route -> Element.Element Msg
-drawerItem current label target =
+drawerItem : Theme -> Route -> String -> Route -> Element.Element Msg
+drawerItem theme current label target =
     let
         selected : Bool
         selected =
@@ -1619,24 +1647,19 @@ drawerItem current label target =
         , Border.rounded 12
         , Background.color
             (if selected then
-                Ui.drawerSelectionBg
+                theme.drawerSelectionBg
 
              else
-                Ui.cardBg
+                theme.cardBg
             )
         , Font.color
             (if selected then
-                Ui.brandBlue
+                theme.brandBlue
 
              else
-                Ui.darkColor
+                theme.textPrimary
             )
         , Font.medium
-        , if selected then
-            Element.mouseOver []
-
-          else
-            Element.mouseOver [ Background.color Ui.brandBlueSoft ]
         ]
         { onPress = Just (AppNavigationClicked target)
         , label = Element.text label
@@ -1685,7 +1708,17 @@ primaryRoute route =
 
 profileMenuContent : Model -> List (Element.Element Msg)
 profileMenuContent model =
-    [ Ui.mutedCaption
+    let
+        toggleLabel : String
+        toggleLabel =
+            case model.themeMode of
+                Theme.Light ->
+                    "Switch to Dark"
+
+                Theme.Dark ->
+                    "Switch to Light"
+    in
+    [ Ui.mutedCaption model.theme
         (case model.session of
             Session.Authenticated identity ->
                 "Signed in as " ++ identity.username
@@ -1693,7 +1726,8 @@ profileMenuContent model =
             _ ->
                 "Signed in"
         )
-    , Ui.button "Logout" LogoutClicked
+    , Ui.ghostButton model.theme toggleLabel ThemeToggleClicked
+    , Ui.button model.theme "Logout" LogoutClicked
     ]
 
 
@@ -1712,90 +1746,74 @@ pageView model =
             || model.pendingBootstrap
             == Nothing
     then
-        Element.el
-            [ Element.centerX
-            , Element.centerY
-            , Element.width (Element.maximum 480 Element.fill)
-            , Element.padding Ui.space16
-            ]
-            Ui.skeletonCard
+        Element.el [ Element.centerX, Element.centerY ] (Ui.loading model.theme "Loading...")
 
     else
         let
             device : Element.Device
             device =
                 model.device
+
+            theme : Theme
+            theme =
+                model.theme
+
+            props : subModel -> { model : subModel, device : Element.Device, theme : Theme }
+            props subModel =
+                { model = subModel, device = device, theme = theme }
         in
         case model.page of
             LoadingPage ->
-                Element.el
-                    [ Element.centerX
-                    , Element.centerY
-                    , Element.width (Element.maximum 480 Element.fill)
-                    , Element.padding Ui.space16
-                    ]
-                    Ui.skeletonCard
+                Element.el [ Element.centerX, Element.centerY ] (Ui.loading theme "Loading...")
 
             LoginPage loginModel ->
-                Element.map GotLoginMsg (AuthLogin.view { model = loginModel, device = device })
+                Element.map GotLoginMsg (AuthLogin.view (props loginModel))
 
             SetupPage setupModel ->
-                Element.map GotSetupMsg
-                    (BootstrapSetup.view { model = setupModel, device = device })
+                Element.map GotSetupMsg (BootstrapSetup.view (props setupModel))
 
             AdminPage adminModel ->
-                Element.map GotAdminMsg
-                    (AdminDashboard.view { model = adminModel, device = device })
+                Element.map GotAdminMsg (AdminDashboard.view (props adminModel))
 
             AdminCreateUserPage createUserModel ->
-                Element.map GotAdminCreateUserMsg
-                    (AdminCreateUser.view { model = createUserModel, device = device })
+                Element.map GotAdminCreateUserMsg (AdminCreateUser.view (props createUserModel))
 
             AdminEditUserPage editUserModel ->
-                Element.map GotAdminEditUserMsg
-                    (AdminEditUser.view { model = editUserModel, device = device })
+                Element.map GotAdminEditUserMsg (AdminEditUser.view (props editUserModel))
 
             DiaryPage diaryModel ->
-                Element.map GotDiaryMsg (DiaryDay.view { model = diaryModel, device = device })
+                Element.map GotDiaryMsg (DiaryDay.view (props diaryModel))
 
             FoodSearchPage foodSearchModel ->
-                Element.map GotFoodSearchMsg
-                    (FoodSearch.view { model = foodSearchModel, device = device })
+                Element.map GotFoodSearchMsg (FoodSearch.view (props foodSearchModel))
 
             FoodDetailPage foodDetailModel ->
-                Element.map GotFoodDetailMsg
-                    (FoodShow.view { model = foodDetailModel, device = device })
+                Element.map GotFoodDetailMsg (FoodShow.view (props foodDetailModel))
 
             FoodLogDetailPage foodLogDetailModel ->
-                Element.map GotFoodLogDetailMsg
-                    (FoodLogEntry.view { model = foodLogDetailModel, device = device })
+                Element.map GotFoodLogDetailMsg (FoodLogEntry.view (props foodLogDetailModel))
 
             CustomFoodCreatePage customFoodCreateModel ->
                 Element.map GotCustomFoodCreateMsg
-                    (CustomFoodCreate.view { model = customFoodCreateModel, device = device })
+                    (CustomFoodCreate.view (props customFoodCreateModel))
 
             CustomFoodEditPage customFoodEditModel ->
-                Element.map GotCustomFoodEditMsg
-                    (CustomFoodEdit.view { model = customFoodEditModel, device = device })
+                Element.map GotCustomFoodEditMsg (CustomFoodEdit.view (props customFoodEditModel))
 
             CustomFoodsPage customFoodsModel ->
-                Element.map GotCustomFoodsMsg
-                    (CustomFoodList.view { model = customFoodsModel, device = device })
+                Element.map GotCustomFoodsMsg (CustomFoodList.view (props customFoodsModel))
 
             MealsPage mealsModel ->
-                Element.map GotMealsMsg (MealList.view { model = mealsModel, device = device })
+                Element.map GotMealsMsg (MealList.view (props mealsModel))
 
             MealCreatePage mealCreateModel ->
-                Element.map GotMealCreateMsg
-                    (MealCreate.view { model = mealCreateModel, device = device })
+                Element.map GotMealCreateMsg (MealCreate.view (props mealCreateModel))
 
             MealEditPage mealEditModel ->
-                Element.map GotMealEditMsg
-                    (MealEdit.view { model = mealEditModel, device = device })
+                Element.map GotMealEditMsg (MealEdit.view (props mealEditModel))
 
             MealDetailPage mealDetailModel ->
-                Element.map GotMealDetailMsg
-                    (MealShow.view { model = mealDetailModel, device = device })
+                Element.map GotMealDetailMsg (MealShow.view (props mealDetailModel))
 
             PlaceholderPage message ->
                 Element.el [ Element.padding Ui.space24 ] (Element.text message)

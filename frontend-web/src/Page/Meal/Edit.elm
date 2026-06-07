@@ -19,6 +19,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
     exposing
         ( NutritionState(..)
@@ -376,29 +377,30 @@ mapFormOutMsg maybeOutMsg =
             SessionExpired
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ Ui.skeletonCard ]
+            Ui.pageContainer device [ Ui.loading theme "Loading meal..." ]
 
         EditLoadFailed message ->
-            Ui.pageContainer device [ Ui.errorBanner message ]
+            Ui.pageContainer device [ Ui.errorBanner theme message ]
 
         Editing loaded ->
             Ui.pageContainer device
-                [ Ui.maybeErrorBanner (Common.submitErrorMessage loaded.fields.submit)
-                , Common.viewFormFields device FormMsg loaded.fields
-                , nutritionView device loaded
-                , Ui.primarySubmitButton (Common.isSubmitting loaded.fields.submit)
+                [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
+                , Common.viewFormFields theme device FormMsg loaded.fields
+                , nutritionView theme device loaded
+                , Ui.primarySubmitButton theme
+                    (Common.isSubmitting loaded.fields.submit)
                     "Update Meal"
                     "Saving..."
                     SubmitClicked
                 ]
 
 
-nutritionView : Device -> LoadedModel -> Element Msg
-nutritionView device loaded =
+nutritionView : Theme -> Device -> LoadedModel -> Element Msg
+nutritionView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ View.Nutrients.preview device loaded.nutrition
+        [ View.Nutrients.preview theme device loaded.nutrition
         ]

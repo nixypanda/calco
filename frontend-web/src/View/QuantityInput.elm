@@ -4,24 +4,27 @@ import Api.Foods exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Element)
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 dropdown :
-    { amountLabel : String
-    , amount : String
-    , onAmountChange : String -> msg
-    , unitLabel : String
-    , unit : String
-    , units : List UnitItem
-    , onUnitChange : String -> msg
-    , unitOpen : Bool
-    , onUnitToggle : msg
-    }
+    Theme
+    ->
+        { amountLabel : String
+        , amount : String
+        , onAmountChange : String -> msg
+        , unitLabel : String
+        , unit : String
+        , units : List UnitItem
+        , onUnitChange : String -> msg
+        , unitOpen : Bool
+        , onUnitToggle : msg
+        }
     -> Element msg
-dropdown config =
+dropdown theme config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.input config.amountLabel config.amount config.onAmountChange
-        , Ui.selectDropdown
+        [ Ui.input theme config.amountLabel config.amount config.onAmountChange
+        , Ui.selectDropdown theme
             { label = config.unitLabel
             , selected = config.unit
             , options = unitOptions config.unit config.units

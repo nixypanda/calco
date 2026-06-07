@@ -38,6 +38,7 @@ import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
 
@@ -344,18 +345,20 @@ updateFormField msg form =
 
 
 viewFormFields :
-    Device
+    Theme
+    -> Device
     -> (FormFieldMsg -> msg)
     -> FormFields
     -> Element msg
-viewFormFields device toMsg form =
+viewFormFields theme device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.section
+        [ Ui.section theme
             { header = Nothing
             , body =
-                [ Ui.input "Name" form.name (toMsg << NameChanged)
-                , Ui.input "Notes" form.notes (toMsg << NotesChanged)
-                , quantityTextInput device
+                [ Ui.input theme "Name" form.name (toMsg << NameChanged)
+                , Ui.input theme "Notes" form.notes (toMsg << NotesChanged)
+                , quantityTextInput theme
+                    device
                     { amountLabel = "Total Quantity"
                     , amount = form.totalQuantity
                     , onAmountChange = toMsg << TotalQuantityChanged
@@ -366,12 +369,12 @@ viewFormFields device toMsg form =
                 ]
             , footer = Nothing
             }
-        , Ui.section
-            { header = Just (Ui.subsectionTitle "Components")
+        , Ui.section theme
+            { header = Just (Ui.subsectionTitle theme "Components")
             , body =
-                List.intersperse Ui.hairline
-                    (List.map (componentRowView device toMsg) form.components)
-            , footer = Just (Ui.ghostButton "+ Add Component" (toMsg AddComponentClicked))
+                List.intersperse (Ui.hairline theme)
+                    (List.map (componentRowView theme device toMsg) form.components)
+            , footer = Just (Ui.ghostButton theme "+ Add Component" (toMsg AddComponentClicked))
             }
         ]
 
@@ -628,11 +631,11 @@ removeRow rowId rows =
         List.filter (\row -> row.rowId /= rowId) rows
 
 
-componentRowView : Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
-componentRowView device toMsg row =
+componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
+componentRowView theme device toMsg row =
     Element.column
         [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ SearchView.searchInput
+        [ SearchView.searchInput theme
             { onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query
             , label = "Search Product"
@@ -642,7 +645,7 @@ componentRowView device toMsg row =
             }
         , case row.searchResults of
             Loading ->
-                Ui.loading "Searching foods..."
+                Ui.loading theme "Searching foods..."
 
             Success results ->
                 if List.isEmpty results then
@@ -653,7 +656,7 @@ componentRowView device toMsg row =
                         [ Element.width Element.fill
                         , Element.spacing 0
                         ]
-                        (List.map (searchResultView device toMsg row.search.query row.rowId)
+                        (List.map (searchResultView theme device toMsg row.search.query row.rowId)
                             results
                         )
 
@@ -663,7 +666,8 @@ componentRowView device toMsg row =
             NotAsked ->
                 Element.none
         , Element.row [ Element.width Element.fill, Element.spacing Ui.space8 ]
-            [ quantityTextInput device
+            [ quantityTextInput theme
+                device
                 { amountLabel = "Qty"
                 , amount = row.quantity
                 , onAmountChange = toMsg << ComponentQuantityChanged row.rowId
@@ -672,7 +676,7 @@ componentRowView device toMsg row =
                 , onUnitChange = toMsg << ComponentUnitChanged row.rowId
                 }
             , Element.el [ Element.centerY ]
-                (Ui.dangerIconButton
+                (Ui.dangerIconButton theme
                     { label = "×"
                     , title = "Remove"
                     , onPress = toMsg (RemoveComponentClicked row.rowId)
@@ -683,7 +687,8 @@ componentRowView device toMsg row =
 
 
 quantityTextInput :
-    Device
+    Theme
+    -> Device
     ->
         { amountLabel : String
         , amount : String
@@ -693,7 +698,7 @@ quantityTextInput :
         , onUnitChange : String -> msg
         }
     -> Element msg
-quantityTextInput device config =
+quantityTextInput theme device config =
     (if Ui.isSmall device then
         Element.column
 
@@ -701,14 +706,21 @@ quantityTextInput device config =
         Element.row
     )
         [ Element.width Element.fill, Element.spacing Ui.space8 ]
-        [ Ui.input config.amountLabel config.amount config.onAmountChange
-        , Ui.input config.unitLabel config.unit config.onUnitChange
+        [ Ui.input theme config.amountLabel config.amount config.onAmountChange
+        , Ui.input theme config.unitLabel config.unit config.onUnitChange
         ]
 
 
-searchResultView : Device -> (FormFieldMsg -> msg) -> String -> RowId -> SearchResult -> Element msg
-searchResultView device toMsg query rowId result =
-    SearchView.resultRow
+searchResultView :
+    Theme
+    -> Device
+    -> (FormFieldMsg -> msg)
+    -> String
+    -> RowId
+    -> SearchResult
+    -> Element msg
+searchResultView theme device toMsg query rowId result =
+    SearchView.resultRow theme
         device
         { query = query
         , item = result

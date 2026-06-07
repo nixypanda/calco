@@ -24,6 +24,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients exposing (NutritionInput, NutritionState(..), defaultNutritionInput)
 import View.QuantityInput
 
@@ -304,19 +305,9 @@ nextProductNameRequest completedId loaded =
         |> Maybe.withDefault NoOp
 
 
-nameFor : String -> LoadedModel -> Maybe String
+nameFor : String -> LoadedModel -> String
 nameFor id loaded =
-    ItemNameLookup.lookup (ItemNameLookup.productRef id) loaded.productNames
-
-
-componentTitleView : String -> LoadedModel -> Element Msg
-componentTitleView id loaded =
-    case nameFor id loaded of
-        Just name ->
-            Ui.listItemTitle name
-
-        Nothing ->
-            Ui.skeletonListItemTitle
+    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) loaded.productNames
 
 
 requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
@@ -487,77 +478,80 @@ failure =
         }
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        [ Ui.section
-            { header = Just (headerView device model)
+        [ Ui.section theme
+            { header = Just (headerView theme device model)
             , body =
                 [ case model of
                     Loaded loaded ->
                         case loaded.meal.notes of
                             Just notes ->
-                                Ui.mutedParagraph notes
+                                Ui.mutedParagraph theme notes
 
                             Nothing ->
                                 Element.none
 
                     LoadFailed message ->
-                        Ui.errorBanner message
+                        Ui.errorBanner theme message
 
                     Loading _ ->
-                        Ui.skeletonLoading
+                        Ui.loading theme "Loading meal..."
                 ]
             , footer = Nothing
             }
         , case model of
             Loaded loaded ->
-                loadedView device loaded
+                loadedView theme device loaded
 
             LoadFailed message ->
-                Ui.errorBanner message
+                Ui.errorBanner theme message
 
             Loading _ ->
-                Ui.skeletonCard
+                Ui.loading theme "Loading meal..."
         ]
 
 
-headerView : Device -> Model -> Element Msg
-headerView device model =
+headerView : Theme -> Device -> Model -> Element Msg
+headerView theme device model =
     case model of
         Loaded loaded ->
-            Ui.pageHeader device
+            Ui.pageHeader theme
+                device
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
                             (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
-                , title = Ui.truncatedPageTitle device loaded.meal.name
+                , title = loaded.meal.name
                 , subtitle = Nothing
                 , actions =
-                    [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
-                    , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
+                    [ Ui.iconButton theme
+                        { label = "✎", title = "Edit", onPress = EditClicked }
+                    , Ui.dangerIconButton theme
+                        { label = "×", title = "Delete", onPress = DeleteClicked }
                     ]
                 }
 
         _ ->
-            Ui.pageTitle "Meal"
+            Ui.pageTitle theme "Meal"
 
 
-loadedView : Device -> LoadedModel -> Element Msg
-loadedView device loaded =
+loadedView : Theme -> Device -> LoadedModel -> Element Msg
+loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
-        [ Ui.section
-            { header = Just (Ui.subsectionTitle "Components")
-            , body = List.map (componentView loaded) loaded.meal.components
+        [ Ui.section theme
+            { header = Just (Ui.subsectionTitle theme "Components")
+            , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
             }
-        , nutritionView device loaded
-        , confirmDeleteView loaded
+        , nutritionView theme device loaded
+        , confirmDeleteView theme loaded
         ]
 
 
-componentView : LoadedModel -> MealsApi.MealComponent -> Element Msg
-componentView loaded component =
+componentView : Theme -> LoadedModel -> MealsApi.MealComponent -> Element Msg
+componentView theme loaded component =
     let
         summaryText : String
         summaryText =
@@ -601,24 +595,24 @@ componentView loaded component =
             , Element.spacing Ui.space4
             , Element.alignTop
             ]
-            [ componentTitleView component.item.id loaded
+            [ Ui.listItemTitle theme (nameFor component.item.id loaded)
             , Element.el
-                [ Font.color Ui.mutedColor ]
+                [ Font.color theme.textMuted ]
                 (Element.text quantityText)
             ]
         ]
 
 
-nutritionView : Device -> LoadedModel -> Element Msg
-nutritionView device loaded =
+nutritionView : Theme -> Device -> LoadedModel -> Element Msg
+nutritionView theme device loaded =
     let
         input : NutritionInput
         input =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.card
-            [ View.QuantityInput.dropdown
+        [ Ui.card theme
+            [ View.QuantityInput.dropdown theme
                 { amountLabel = "Amount"
                 , amount = input.amount
                 , onAmountChange = AmountChanged
@@ -630,39 +624,39 @@ nutritionView device loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.Nutrients.preview device loaded.nutrition
+        , View.Nutrients.preview theme device loaded.nutrition
         ]
 
 
-confirmDeleteView : LoadedModel -> Element Msg
-confirmDeleteView loaded =
+confirmDeleteView : Theme -> LoadedModel -> Element Msg
+confirmDeleteView theme loaded =
     case loaded.delete of
         DeleteConfirming ->
-            confirmDeleteContent Nothing False
+            confirmDeleteContent theme Nothing False
 
         Deleting ->
-            confirmDeleteContent Nothing True
+            confirmDeleteContent theme Nothing True
 
         DeleteFailed message ->
-            confirmDeleteContent (Just message) False
+            confirmDeleteContent theme (Just message) False
 
         DeleteIdle ->
             Element.none
 
 
-confirmDeleteContent : Maybe String -> Bool -> Element Msg
-confirmDeleteContent maybeError deleting =
+confirmDeleteContent : Theme -> Maybe String -> Bool -> Element Msg
+confirmDeleteContent theme maybeError deleting =
     Element.column
         [ Element.spacing Ui.space8
         , Element.padding Ui.space12
-        , Background.color Ui.dangerBg
+        , Background.color theme.dangerBg
         , Border.rounded 16
         ]
-        [ Ui.sectionTitle "Delete meal?"
-        , Ui.maybeErrorBanner maybeError
+        [ Ui.sectionTitle theme "Delete meal?"
+        , Ui.maybeErrorBanner theme maybeError
         , Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.button "Cancel" CancelDeleteClicked
-            , Ui.dangerButton
+            [ Ui.button theme "Cancel" CancelDeleteClicked
+            , Ui.dangerButton theme
                 (if deleting then
                     "Deleting..."
 

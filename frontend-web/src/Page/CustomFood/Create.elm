@@ -14,6 +14,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.CustomFood.Form as Form
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 
@@ -191,12 +192,13 @@ failure =
 -- VIEW
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        [ Ui.maybeErrorBanner model.error
-        , Element.map FormMsg (Form.view device model.nutrients model.units model.form)
-        , Ui.primarySubmitButton (Form.isSubmitting model.form.submit)
+        [ Ui.maybeErrorBanner theme model.error
+        , Element.map FormMsg (Form.view theme device model.nutrients model.units model.form)
+        , Ui.primarySubmitButton theme
+            (Form.isSubmitting model.form.submit)
             "Create Food"
             "Creating..."
             SubmitClicked

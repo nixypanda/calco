@@ -20,6 +20,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Page.Admin.StatusBadge
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 
@@ -256,49 +257,49 @@ completePendingAction pendingAction result model successState =
 -- VIEW
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        (errorView model.state
-            ++ userInfoView model
-            ++ resetPasswordView model
-            ++ enableDisableView model
+        (errorView theme model.state
+            ++ userInfoView theme model
+            ++ resetPasswordView theme model
+            ++ enableDisableView theme model
         )
 
 
-userInfoView : Model -> List (Element Msg)
-userInfoView model =
+userInfoView : Theme -> Model -> List (Element Msg)
+userInfoView theme model =
     case model.state of
         Loading ->
-            [ Ui.skeletonCard ]
+            [ Ui.loading theme "Loading user..." ]
 
         LoadFailed error ->
-            [ Ui.errorBanner ("Unable to load user: " ++ Client.displayError error) ]
+            [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Ready loadedUser _ ->
-            [ userSummaryCard loadedUser.user ]
+            [ userSummaryCard theme loadedUser.user ]
 
 
-resetPasswordView : Model -> List (Element Msg)
-resetPasswordView model =
-    [ Ui.card
+resetPasswordView : Theme -> Model -> List (Element Msg)
+resetPasswordView theme model =
+    [ Ui.card theme
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.passwordInput "New password" (currentPassword model.state) PasswordChanged
-            , Ui.button "Reset Password" ResetSubmitted
+            [ Ui.passwordInput theme "New password" (currentPassword model.state) PasswordChanged
+            , Ui.button theme "Reset Password" ResetSubmitted
             ]
         ]
     ]
 
 
-enableDisableView : Model -> List (Element Msg)
-enableDisableView model =
+enableDisableView : Theme -> Model -> List (Element Msg)
+enableDisableView theme model =
     case model.state of
         Ready loadedUser _ ->
-            [ Ui.card
+            [ Ui.card theme
                 [ Element.column
                     [ Element.width Element.fill
-                    , Background.color Ui.accentSoftPink
+                    , Background.color theme.statusDisabledBg
                     , Border.rounded 16
                     , Element.padding Ui.space16
                     , Element.spacing Ui.space12
@@ -306,14 +307,14 @@ enableDisableView model =
                     [ Element.el
                         [ Font.medium
                         , Ui.body
-                        , Font.color Ui.dangerFg
+                        , Font.color theme.dangerFg
                         ]
                         (Element.text "Danger Zone")
                     , if loadedUser.user.status == "active" then
-                        Ui.dangerButton "Disable User" DisableClicked
+                        Ui.dangerButton theme "Disable User" DisableClicked
 
                       else
-                        Ui.button "Enable User" EnableClicked
+                        Ui.button theme "Enable User" EnableClicked
                     ]
                 ]
             ]
@@ -332,14 +333,14 @@ currentPassword state =
             ""
 
 
-errorView : State -> List (Element msg)
-errorView state =
+errorView : Theme -> State -> List (Element msg)
+errorView theme state =
     case state of
         Ready _ (Invalid problem) ->
-            [ Ui.errorBanner (problemMessage problem) ]
+            [ Ui.errorBanner theme (problemMessage problem) ]
 
         Ready _ (ActionFailed message) ->
-            [ Ui.errorBanner message ]
+            [ Ui.errorBanner theme message ]
 
         _ ->
             []
@@ -352,15 +353,17 @@ problemMessage problem =
             "New password is required"
 
 
-userSummaryCard : User.User -> Element msg
-userSummaryCard user =
-    Ui.card
+userSummaryCard : Theme -> User.User -> Element msg
+userSummaryCard theme user =
+    Ui.card theme
         [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.sectionTitle user.username
-            , Ui.detailRow "Display Name"
+            [ Ui.sectionTitle theme user.username
+            , Ui.detailRow theme
+                "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
-            , Ui.detailRow "Status" (Page.Admin.StatusBadge.statusBadge user.status)
-            , Ui.detailRow "Created"
+            , Ui.detailRow theme "Status" (Page.Admin.StatusBadge.statusBadge theme user.status)
+            , Ui.detailRow theme
+                "Created"
                 (Element.el [ Ui.caption ] (Element.text user.createdAt))
             ]
         ]

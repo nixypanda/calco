@@ -15,11 +15,12 @@ import Html
 import Html.Events
 import Json.Decode as Decode
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
-completionDropdown : { onSelect : Completion -> msg } -> List Completion -> Element msg
-completionDropdown config options =
+completionDropdown : Theme -> { onSelect : Completion -> msg } -> List Completion -> Element msg
+completionDropdown theme config options =
     if List.isEmpty options then
         Element.none
 
@@ -31,26 +32,28 @@ completionDropdown config options =
             , Element.spacing Ui.space2
             , Element.padding Ui.space4
             , Border.rounded 12
-            , Background.color Ui.cardBg
-            , Ui.cardShadow
+            , Background.color theme.cardBg
+            , Ui.cardShadow theme
             ]
-            (List.map (completionRow config.onSelect) options)
+            (List.map (completionRow theme config.onSelect) options)
 
 
 searchInput :
-    { onChange : String -> msg
-    , text : String
-    , label : String
-    , completions : List Completion
-    , onTabComplete : msg
-    , onCompletionClick : Completion -> msg
-    }
+    Theme
+    ->
+        { onChange : String -> msg
+        , text : String
+        , label : String
+        , completions : List Completion
+        , onTabComplete : msg
+        , onCompletionClick : Completion -> msg
+        }
     -> Element msg
-searchInput config =
+searchInput theme config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
         [ Input.text
             [ Border.rounded 12
-            , Background.color Ui.inputFill
+            , Background.color theme.inputFill
             , Element.padding Ui.space12
             , Element.htmlAttribute (tabCompletionHandler config.onTabComplete config.completions)
             ]
@@ -59,7 +62,7 @@ searchInput config =
             , placeholder = Nothing
             , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text config.label)
             }
-        , completionDropdown { onSelect = config.onCompletionClick } config.completions
+        , completionDropdown theme { onSelect = config.onCompletionClick } config.completions
         ]
 
 
@@ -79,10 +82,11 @@ tabCompletionHandler completeMsg options =
 
 
 resultRow :
-    Device
+    Theme
+    -> Device
     -> { query : String, item : SearchResult, onSelect : String -> msg }
     -> Element msg
-resultRow device config =
+resultRow theme device config =
     let
         maybeCategoryTags : List (Element msg)
         maybeCategoryTags =
@@ -90,7 +94,7 @@ resultRow device config =
                 []
 
             else
-                [ categoryPills config.item.categories ]
+                [ categoryPills theme config.item.categories ]
 
         macroDot : Element msg
         macroDot =
@@ -108,7 +112,7 @@ resultRow device config =
                     (Element.text
                         (Ui.truncateWithEllipsis (Ui.truncationCap device) config.item.name)
                     )
-                , Ui.mutedCaption (metaText config.query config.item)
+                , Ui.mutedCaption theme (metaText config.query config.item)
                 ]
     in
     Input.button
@@ -130,8 +134,8 @@ completionDropdownHeight options =
     min 224 (8 + List.length options * 38)
 
 
-completionRow : (Completion -> msg) -> Completion -> Element msg
-completionRow onSelect completion =
+completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
+completionRow theme onSelect completion =
     Input.button
         [ Element.width Element.fill
         , Element.paddingXY 12 10
@@ -145,7 +149,7 @@ completionRow onSelect completion =
                     (Element.text (Search.completionLabel completion))
                 , case completion of
                     CategoryCompletion _ count ->
-                        Ui.badge (String.fromInt count)
+                        Ui.badge theme (String.fromInt count)
 
                     OperatorCompletion _ ->
                         Element.none
@@ -177,8 +181,8 @@ isNumeric value =
         && String.all Char.isDigit value
 
 
-categoryPills : List String -> Element msg
-categoryPills categories =
+categoryPills : Theme -> List String -> Element msg
+categoryPills theme categories =
     let
         pills : List String
         pills =
@@ -195,7 +199,7 @@ categoryPills categories =
             ]
             (pills
                 |> chunkPairs
-                |> List.map pillRow
+                |> List.map (pillRow theme)
             )
 
 
@@ -222,18 +226,18 @@ chunkPairs items =
             [ [ first ] ]
 
 
-pillRow : List String -> Element msg
-pillRow pills =
+pillRow : Theme -> List String -> Element msg
+pillRow theme pills =
     Element.row
         [ Element.spacing Ui.space4
         , Element.alignRight
         ]
-        (List.map categoryPill pills)
+        (List.map (categoryPill theme) pills)
 
 
-categoryPill : String -> Element msg
-categoryPill label =
-    Ui.chip
+categoryPill : Theme -> String -> Element msg
+categoryPill theme label =
+    Ui.chip theme
         { label = truncatePillLabel label
         , selected = False
         , onClick = Nothing

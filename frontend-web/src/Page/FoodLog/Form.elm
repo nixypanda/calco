@@ -21,6 +21,7 @@ import Element exposing (Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
+import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
 
@@ -156,16 +157,16 @@ createUpdateLogRequest model =
             }
 
 
-view : Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
-view food units model =
+view : Theme -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
+view theme food units model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ Ui.maybeErrorBanner model.error
-        , Ui.card
-            [ mealSlotDropdown model
-            , View.QuantityInput.dropdown
+        [ Ui.maybeErrorBanner theme model.error
+        , Ui.card theme
+            [ mealSlotDropdown theme model
+            , View.QuantityInput.dropdown theme
                 { amountLabel = "Amount"
                 , amount = model.amount
                 , onAmountChange = AmountChanged
@@ -176,14 +177,14 @@ view food units model =
                 , unitOpen = model.unitOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-            , Ui.input "Notes" model.notes NotesChanged
+            , Ui.input theme "Notes" model.notes NotesChanged
             ]
         ]
 
 
-mealSlotDropdown : Model -> Element Msg
-mealSlotDropdown model =
-    Ui.selectDropdown
+mealSlotDropdown : Theme -> Model -> Element Msg
+mealSlotDropdown theme model =
+    Ui.selectDropdown theme
         { label = "Meal"
         , selected = model.mealSlot
         , options =

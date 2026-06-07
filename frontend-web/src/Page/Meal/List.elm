@@ -17,6 +17,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
@@ -152,45 +153,45 @@ applyLoadedActionError message model =
             model
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
         [ case model of
             Loaded loaded ->
                 case loaded.action of
                     DeleteFailed message ->
-                        Ui.errorBanner message
+                        Ui.errorBanner theme message
 
                     _ ->
                         Element.none
 
             LoadFailed message ->
-                Ui.errorBanner message
+                Ui.errorBanner theme message
 
             Loading ->
                 Element.none
-        , bodyView device model
+        , bodyView theme device model
         ]
 
 
-bodyView : Device -> Model -> Element Msg
-bodyView device model =
+bodyView : Theme -> Device -> Model -> Element Msg
+bodyView theme device model =
     case model of
         Loaded loaded ->
-            Ui.listCard
-                { rows = List.map (mealRow device loaded.action) loaded.meals
-                , createButton = Ui.ghostButton "+ Create Meal" CreateMealClicked
+            Ui.listCard theme
+                { rows = List.map (mealRow theme device loaded.action) loaded.meals
+                , createButton = Ui.ghostButton theme "+ Create Meal" CreateMealClicked
                 }
 
         LoadFailed _ ->
             Element.none
 
         Loading ->
-            Ui.skeletonList 5
+            Ui.loading theme "Loading meals..."
 
 
-mealRow : Device -> ActionState -> Meal -> Element Msg
-mealRow device action meal =
+mealRow : Theme -> Device -> ActionState -> Meal -> Element Msg
+mealRow theme device action meal =
     let
         macroDot : List (Element Msg)
         macroDot =
@@ -203,14 +204,14 @@ mealRow device action meal =
     Ui.listRow
         { onSelect = OpenMealClicked meal.id
         , leading = macroDot
-        , title = Ui.truncatedHeader device meal.name
+        , title = Ui.truncatedHeader theme device meal.name
         , subtitle =
-            [ Ui.mutedBody (mealSummaryText meal)
-            , Ui.mutedParagraph (Maybe.withDefault "" meal.notes)
+            [ Ui.mutedBody theme (mealSummaryText meal)
+            , Ui.mutedParagraph theme (Maybe.withDefault "" meal.notes)
             ]
         , trailing =
-            [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
-            , Ui.dangerIconButton
+            [ Ui.iconButton theme { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
+            , Ui.dangerIconButton theme
                 { label = "×"
                 , title =
                     if action == Deleting meal.id then

@@ -26,6 +26,7 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Theme exposing (Mode(..), Theme)
 import View.Nutrients
 
 
@@ -267,58 +268,59 @@ dailyCalories summary =
     caloriesFrom summary
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        (dateCard model device
+        (dateCard theme model device
             :: (case model.diary of
                     Loading _ ->
-                        [ Ui.skeletonLoading ]
+                        [ Ui.skeletonLoading theme ]
 
                     Loaded date logs ->
                         if LocalDate.equals date model.currentDate then
-                            [ logGroupsView model logs device ]
+                            [ logGroupsView theme model logs device ]
 
                         else
-                            [ Ui.skeletonLoading ]
+                            [ Ui.skeletonLoading theme ]
 
                     Failed date message ->
                         if LocalDate.equals date model.currentDate then
-                            [ Ui.errorBanner message ]
+                            [ Ui.errorBanner theme message ]
 
                         else
-                            [ Ui.skeletonLoading ]
+                            [ Ui.skeletonLoading theme ]
                )
         )
 
 
-dateCard : Model -> Device -> Element Msg
-dateCard model _ =
+dateCard : Theme -> Model -> Device -> Element Msg
+dateCard theme model _ =
     let
         canGoNext : Bool
         canGoNext =
             LocalDate.compare model.currentDate model.today == LT
     in
-    Ui.card
+    Ui.card theme
         [ Element.row
             [ Element.width Element.fill
             , Element.spacing Ui.space12
             ]
-            [ Ui.iconButton { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
+            [ Ui.iconButton theme
+                { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
                 ]
-                (Ui.subsectionTitle (LocalDate.display model.currentDate))
+                (Ui.subsectionTitle theme (LocalDate.display model.currentDate))
             , if canGoNext then
-                Ui.iconButton { label = "→", title = "Next Day", onPress = NextDayClicked }
+                Ui.iconButton theme { label = "→", title = "Next Day", onPress = NextDayClicked }
 
               else
                 Input.button
                     [ Element.width (Element.px 40)
                     , Element.height (Element.px 40)
-                    , Background.color Ui.inputFill
-                    , Font.color Ui.mutedColor
+                    , Background.color theme.inputFill
+                    , Font.color theme.textMuted
                     , Font.center
                     , Border.rounded 999
                     ]
@@ -326,40 +328,40 @@ dateCard model _ =
                     , label = Element.text "→"
                     }
             ]
-        , Ui.hairline
+        , Ui.hairline theme
         , Element.column
             [ Element.width Element.fill
             , Element.paddingEach { top = 8, right = 0, bottom = 0, left = 0 }
             ]
-            [ totalsView (totalsFromLogs (loadedLogs model.currentDate model.diary)) ]
+            [ totalsView theme (totalsFromLogs (loadedLogs model.currentDate model.diary)) ]
         ]
 
 
-totalsView : List NutrientAmount -> Element Msg
-totalsView summary =
+totalsView : Theme -> List NutrientAmount -> Element Msg
+totalsView theme summary =
     Element.column [ Element.width Element.fill, Element.spacing 18 ]
-        [ Ui.macroBar
+        [ Ui.macroBar theme
             { label = "Calories"
             , value = dailyCalories summary
             , unit = "kcal"
             , color = Ui.primaryTeal
             , max = diaryDefaults.calorieGoal
             }
-        , Ui.macroBar
+        , Ui.macroBar theme
             { label = "Protein"
             , value = summaryAmount "PROTEIN_G" summary
             , unit = "g"
             , color = Ui.proteinColor
             , max = diaryDefaults.proteinGoal
             }
-        , Ui.macroBar
+        , Ui.macroBar theme
             { label = "Carbs"
             , value = summaryAmount "CARBS_G" summary
             , unit = "g"
             , color = Ui.carbsColor
             , max = diaryDefaults.carbsGoal
             }
-        , Ui.macroBar
+        , Ui.macroBar theme
             { label = "Fat"
             , value = summaryAmount "FAT_G" summary
             , unit = "g"
@@ -404,13 +406,13 @@ loadedLogs currentDate diary =
             []
 
 
-logGroupsView : Model -> List FoodLog -> Device -> Element Msg
-logGroupsView model logs device =
+logGroupsView : Theme -> Model -> List FoodLog -> Device -> Element Msg
+logGroupsView theme model logs device =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ slotView model logs Breakfast (MealSlot.label Breakfast) device
-        , slotView model logs Lunch (MealSlot.label Lunch) device
-        , slotView model logs Dinner (MealSlot.label Dinner) device
-        , slotView model logs Snack (MealSlot.label Snack) device
+        [ slotView theme model logs Breakfast (MealSlot.label Breakfast) device
+        , slotView theme model logs Lunch (MealSlot.label Lunch) device
+        , slotView theme model logs Dinner (MealSlot.label Dinner) device
+        , slotView theme model logs Snack (MealSlot.label Snack) device
         , let
             otherLogs : List FoodLog
             otherLogs =
@@ -420,12 +422,12 @@ logGroupsView model logs device =
             Element.none
 
           else
-            slotView model logs Other (MealSlot.label Other) device
+            slotView theme model logs Other (MealSlot.label Other) device
         ]
 
 
-slotView : Model -> List FoodLog -> MealSlot -> String -> Device -> Element Msg
-slotView model allLogs slot label device =
+slotView : Theme -> Model -> List FoodLog -> MealSlot -> String -> Device -> Element Msg
+slotView theme model allLogs slot label device =
     let
         logs : List FoodLog
         logs =
@@ -435,35 +437,44 @@ slotView model allLogs slot label device =
         totals =
             Nutrition.macroTotals logs
     in
-    mealSlotCard slot
-        (mealSlotHeader model allLogs slot label totals device)
-        (Ui.hairline
+    mealSlotCard theme
+        slot
+        (mealSlotHeader theme model allLogs slot label totals device)
+        (Ui.hairline theme
             :: (if List.isEmpty logs then
                     [ Element.el
                         [ Element.padding 14
-                        , Font.color Ui.mutedColor
+                        , Font.color theme.textMuted
                         , Element.centerX
                         ]
                         (Element.text "No items")
                     ]
 
                 else
-                    List.map (logRow device) logs
+                    List.map (logRow theme device) logs
                )
             ++ (case slot of
                     Other ->
                         []
 
                     _ ->
-                        [ Ui.hairline
-                        , Ui.ghostButton "+ Add Food" (AddFoodClicked slot)
+                        [ Ui.hairline theme
+                        , Ui.ghostButton theme "+ Add Food" (AddFoodClicked slot)
                         ]
                )
         )
 
 
-mealSlotHeader : Model -> List FoodLog -> MealSlot -> String -> MacroTotals -> Device -> Element Msg
-mealSlotHeader model allLogs slot label totals device =
+mealSlotHeader :
+    Theme
+    -> Model
+    -> List FoodLog
+    -> MealSlot
+    -> String
+    -> MacroTotals
+    -> Device
+    -> Element Msg
+mealSlotHeader theme model allLogs slot label totals device =
     let
         horizontalPadding : Int
         horizontalPadding =
@@ -481,13 +492,13 @@ mealSlotHeader model allLogs slot label totals device =
                 , Element.spacing Ui.space12
                 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-                    [ Ui.sectionTitle label
+                    [ Ui.sectionTitle theme label
                     , Input.button []
                         { onPress = Just MacroModeToggled
-                        , label = Ui.mutedCaption (macroSummary model.macroMode totals)
+                        , label = Ui.mutedCaption theme (macroSummary model.macroMode totals)
                         }
                     ]
-                , Ui.mutedCaption
+                , Ui.mutedCaption theme
                     (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal")
                 ]
     in
@@ -507,7 +518,7 @@ mealSlotHeader model allLogs slot label totals device =
                             , bottomRight = 0
                             }
                       , Element.clip
-                      , Element.inFront mealSlotFade
+                      , Element.inFront (mealSlotFade theme)
                       , Element.inFront
                             (Element.el
                                 [ Element.width Element.fill
@@ -533,37 +544,47 @@ mealSlotHeaderHeight =
     118
 
 
-mealSlotFade : Element msg
-mealSlotFade =
+mealSlotFade : Theme -> Element msg
+mealSlotFade theme =
+    let
+        gradient : String
+        gradient =
+            case theme.mode of
+                Light ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(255,255,255,0) 0%, "
+                        ++ "rgba(255,255,255,0) 55%, "
+                        ++ "rgba(255,255,255,0.48) 85%, "
+                        ++ "white 100%)"
+
+                Dark ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(0,0,0,0.25) 0%, "
+                        ++ "rgba(0,0,0,0.55) 45%, "
+                        ++ "rgba(0,0,0,0.85) 75%, "
+                        ++ Ui.toCssColor theme.cardBg
+                        ++ " 100%)"
+    in
     Element.el
         [ Element.width Element.fill
         , Element.height Element.fill
-        , Element.htmlAttribute
-            (Html.Attributes.style
-                "background-image"
-                ("linear-gradient(to bottom, "
-                    ++ "rgba(255,255,255,0) 0%, "
-                    ++ "rgba(255,255,255,0) 55%, "
-                    ++ "rgba(255,255,255,0.48) 85%, "
-                    ++ "white 100%)"
-                )
-            )
+        , Element.htmlAttribute (Html.Attributes.style "background-image" gradient)
         ]
         Element.none
 
 
-mealSlotCard : MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
-mealSlotCard slot header bodyChildren =
+mealSlotCard : Theme -> MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
+mealSlotCard theme slot header bodyChildren =
     case slot of
         Other ->
-            Ui.card (header :: bodyChildren)
+            Ui.card theme (header :: bodyChildren)
 
         _ ->
             Element.column
                 [ Element.width Element.fill
-                , Background.color Ui.cardBg
+                , Background.color theme.cardBg
                 , Border.rounded 20
-                , Ui.cardShadow
+                , Ui.cardShadow theme
                 , Element.spacing 0
                 ]
                 [ header
@@ -644,8 +665,8 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : Device -> FoodLog -> Element Msg
-logRow device log =
+logRow : Theme -> Device -> FoodLog -> Element Msg
+logRow theme device log =
     Input.button
         [ Element.width Element.fill
         , Element.padding 14
@@ -659,8 +680,8 @@ logRow device log =
                     (Element.text
                         (Ui.truncateWithEllipsis (Ui.truncationCap device) log.item.name)
                     )
-                , Ui.mutedCaption (log.quantity.amount ++ " " ++ log.quantity.unit)
-                , Ui.mutedCaption
+                , Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
+                , Ui.mutedCaption theme
                     (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
                 ]
         }

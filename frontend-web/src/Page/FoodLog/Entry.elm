@@ -30,6 +30,7 @@ import Lib.Date as LocalDate
 import Page.Food.Show
 import Page.FoodLog.Form as FoodLogForm
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
@@ -544,16 +545,16 @@ modelLogId model =
             failed.logId
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
         [ case pageError model of
             Just message ->
-                Ui.errorBanner message
+                Ui.errorBanner theme message
 
             Nothing ->
                 Element.none
-        , bodyView device model
+        , bodyView theme device model
         ]
 
 
@@ -570,21 +571,21 @@ pageError model =
             Just failed.error
 
 
-bodyView : Device -> Model -> Element Msg
-bodyView device model =
+bodyView : Theme -> Device -> Model -> Element Msg
+bodyView theme device model =
     case model of
         Loaded loaded ->
-            loadedView device loaded
+            loadedView theme device loaded
 
         LoadFailed _ ->
             Element.none
 
         Loading _ ->
-            Ui.skeletonCard
+            Ui.loading theme "Loading log..."
 
 
-loadedView : Device -> LoadedModel -> Element Msg
-loadedView device model =
+loadedView : Theme -> Device -> LoadedModel -> Element Msg
+loadedView theme device model =
     let
         nutrients : List Nutrition.NutrientAmount
         nutrients =
@@ -594,13 +595,17 @@ loadedView device model =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ itemHeader device model
+        [ itemHeader theme device model
         , Element.map FormMsg
-            (FoodLogForm.view (productDetail model.item) model.units model.form)
+            (FoodLogForm.view theme (productDetail model.item) model.units model.form)
         , Ui.cardActions
-            [ Ui.primarySubmitButton (model.request == Saving) "Save" "Saving..." SubmitClicked
+            [ Ui.primarySubmitButton theme
+                (model.request == Saving)
+                "Save"
+                "Saving..."
+                SubmitClicked
             ]
-        , View.Nutrients.nutritionCard device nutrients
+        , View.Nutrients.nutritionCard theme device nutrients
         ]
 
 
@@ -635,8 +640,8 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Device -> LoadedModel -> Element Msg
-itemHeader device model =
+itemHeader : Theme -> Device -> LoadedModel -> Element Msg
+itemHeader theme device model =
     let
         maybeFood : Maybe ProductDetail
         maybeFood =
@@ -646,7 +651,7 @@ itemHeader device model =
         editAction =
             case Maybe.andThen Page.Food.Show.customFoodEditRoute maybeFood of
                 Just _ ->
-                    [ Ui.iconButton
+                    [ Ui.iconButton theme
                         { label = "✎"
                         , title = "Edit food"
                         , onPress = EditCustomFoodClicked
@@ -658,7 +663,7 @@ itemHeader device model =
 
         deleteAction : List (Element Msg)
         deleteAction =
-            [ Ui.dangerIconButton
+            [ Ui.dangerIconButton theme
                 { label = "×"
                 , title =
                     if model.request == Deleting then
@@ -670,10 +675,11 @@ itemHeader device model =
                 }
             ]
     in
-    Ui.card
-        [ Ui.pageHeader device
+    Ui.card theme
+        [ Ui.pageHeader theme
+            device
             { leading = Just (View.Nutrients.macroDot model.log.nutrients)
-            , title = itemTitle device model.item
+            , title = itemTitle model.item
             , subtitle = Just (metaText maybeFood model.log)
             , actions = editAction ++ deleteAction
             }
@@ -684,37 +690,37 @@ itemHeader device model =
 
                 else
                     Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                        [ Ui.macroDotGhost, Ui.chips food.categories ]
+                        [ Ui.macroDotGhost, Ui.chips theme food.categories ]
 
             Nothing ->
                 Element.none
         ]
 
 
-itemTitle : Device -> LoadedItem -> Element Msg
-itemTitle device item =
+itemTitle : LoadedItem -> String
+itemTitle item =
     case item of
         ProductItem productState ->
             case productState of
                 DetailLoading _ ->
-                    Ui.skeletonPageTitle
+                    "Loading food..."
 
                 DetailLoaded food ->
-                    Ui.truncatedPageTitle device food.name
+                    food.name
 
                 DetailUnavailable fallback ->
-                    Ui.truncatedPageTitle device fallback.name
+                    fallback.name
 
         MealItem mealState ->
             case mealState of
                 DetailLoading _ ->
-                    Ui.skeletonPageTitle
+                    "Loading meal..."
 
                 DetailLoaded meal ->
-                    Ui.truncatedPageTitle device meal.name
+                    meal.name
 
                 DetailUnavailable fallback ->
-                    Ui.truncatedPageTitle device fallback.name
+                    fallback.name
 
 
 metaText : Maybe ProductDetail -> FoodLog -> String

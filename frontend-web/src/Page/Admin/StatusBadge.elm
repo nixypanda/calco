@@ -2,22 +2,23 @@ module Page.Admin.StatusBadge exposing (statusBadge)
 
 import Element exposing (Element)
 import Ui
+import Ui.Theme exposing (Theme)
 
 
-statusBadge : String -> Element msg
-statusBadge status =
+statusBadge : Theme -> String -> Element msg
+statusBadge theme status =
     Ui.coloredPill
         { label = status
         , bg =
             if status == "active" then
-                Ui.accentSoftGreen
+                theme.statusActiveBg
 
             else
-                Ui.accentSoftPink
+                theme.statusDisabledBg
         , fg =
             if status == "active" then
-                Ui.statusGreen
+                theme.statusGreen
 
             else
-                Ui.statusRed
+                theme.statusRed
         }

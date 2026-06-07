@@ -2,36 +2,25 @@ module Ui exposing
     ( accentDot
     , accentPink
     , accentSoftGreen
-    , accentSoftPink
     , accentYellow
     , badge
     , body
-    , borderGray
-    , brandBlue
-    , brandBlueSoft
     , button
     , caption
     , carbsColor
     , card
     , cardActions
-    , cardBg
     , cardShadow
     , chip
     , chipBackground
     , chipForeground
     , chips
     , coloredPill
-    , dangerBg
     , dangerButton
-    , dangerFg
     , dangerIconButton
-    , dangerSolid
-    , darkColor
     , defaultTruncationChars
     , detailRow
-    , divider
     , dotSeparated
-    , drawerSelectionBg
     , emptyState
     , errorBanner
     , fatColor
@@ -41,7 +30,6 @@ module Ui exposing
     , hairline
     , iconButton
     , input
-    , inputFill
     , isSmall
     , layout
     , linearProgress
@@ -55,7 +43,6 @@ module Ui exposing
     , maybeErrorBanner
     , mutedBody
     , mutedCaption
-    , mutedColor
     , mutedParagraph
     , pageContainer
     , pageHeader
@@ -67,11 +54,7 @@ module Ui exposing
     , section
     , sectionTitle
     , selectDropdown
-    , skeletonCard
-    , skeletonList
-    , skeletonListItemTitle
     , skeletonLoading
-    , skeletonPageTitle
     , space12
     , space16
     , space2
@@ -80,14 +63,11 @@ module Ui exposing
     , space8
     , statBlock
     , statBlockGroup
-    , statusGreen
-    , statusRed
     , subsectionTitle
     , tableHeader
-    , textMedium
+    , toCssColor
     , truncateWithEllipsis
     , truncatedHeader
-    , truncatedPageTitle
     , truncatedText
     , truncationCap
     )
@@ -103,211 +83,53 @@ import Html
 import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
+import Ui.Theme exposing (Theme)
 import View.Charts
 
 
 
--- Accent palette
+-- Accent palette (theme-independent macro accents)
 
 
-{-| Soft pink, used for protein and similar warm accents. Also the value
-behind `proteinColor`.
--}
 accentPink : Element.Color
 accentPink =
     Element.rgb255 255 138 170
 
 
-{-| Soft yellow accent, used for fat and warm schedule accents. Also the
-value behind `fatColor`.
--}
 accentYellow : Element.Color
 accentYellow =
     Element.rgb255 255 210 80
 
 
-{-| Soft pastel green for success states and the carbs bar fill.
--}
 accentSoftGreen : Element.Color
 accentSoftGreen =
     Element.rgb255 200 235 200
 
 
-{-| Soft pastel pink for the "danger zone" backgrounds in the Admin
-screens. Lighter than `dangerBg` so it can sit behind text.
--}
-accentSoftPink : Element.Color
-accentSoftPink =
-    Element.rgb255 255 200 210
-
-
-{-| The single primary blue. Used as the fill for primary buttons and the
-foreground for secondary accents (links, ghost buttons, focus rings,
-list-row leading stripes). White text reads cleanly on it.
--}
-brandBlue : Element.Color
-brandBlue =
-    Element.rgb255 75 145 207
-
-
-{-| Darker shade of `brandBlue` used for hover and pressed states.
--}
-brandBluePressed : Element.Color
-brandBluePressed =
-    Element.rgb255 60 125 185
-
-
-{-| Pale-blue tint, used as a hover background behind ghost / icon
-buttons so secondary interactives have a visible affordance without
-swapping foreground color.
--}
-brandBlueSoft : Element.Color
-brandBlueSoft =
-    Element.rgb255 232 242 250
-
-
-{-| Legacy mint. Being phased out — kept only so existing callers (chip
-selected state, accent dots in Diary / Nutrients) still compile while
-they migrate to `brandBlue`.
+{-| Legacy mint, kept for chip selected and accent dots.
 -}
 primaryTeal : Element.Color
 primaryTeal =
     Element.rgb255 94 224 213
 
 
-{-| Subtle hairline color, used for rare separators. Matches `borderGray`
-and `inputBorder` to keep the system aligned.
--}
-divider : Element.Color
-divider =
-    Element.rgb255 232 234 238
-
-
-{-| Light gray fill for inputs, dropdowns, chips, and icon buttons.
--}
-inputFill : Element.Color
-inputFill =
-    Element.rgb255 244 246 248
-
-
-{-| Primary text color, used for headings and body copy.
--}
-textPrimary : Element.Color
-textPrimary =
-    Element.rgb255 28 32 44
-
-
-{-| Muted secondary text.
--}
-textMuted : Element.Color
-textMuted =
-    Element.rgb255 120 124 140
-
-
-{-| Mid-weight text for subheadings.
--}
-textMedium : Element.Color
-textMedium =
-    Element.rgb255 64 70 84
-
-
-pageBg : Element.Color
-pageBg =
-    Element.rgb255 244 246 248
-
-
-cardBg : Element.Color
-cardBg =
-    Element.rgb255 255 255 255
-
-
-dangerBg : Element.Color
-dangerBg =
-    Element.rgb255 255 235 238
-
-
-{-| Foreground color for destructive text/buttons in the Admin "danger
-zone" headers.
--}
-dangerFg : Element.Color
-dangerFg =
-    Element.rgb255 200 60 80
-
-
-{-| Background color for the destructive button (see `dangerButton`).
--}
-dangerSolid : Element.Color
-dangerSolid =
-    Element.rgb255 255 107 122
-
-
-{-| Foreground color for the "active" status pill in the Admin views.
-Paired with `accentSoftGreen` as the background.
--}
-statusGreen : Element.Color
-statusGreen =
-    Element.rgb255 50 110 60
-
-
-{-| Foreground color for the "disabled" status pill in the Admin views.
-Paired with `accentSoftPink` as the background.
--}
-statusRed : Element.Color
-statusRed =
-    Element.rgb255 180 60 80
-
-
-{-| Blue-tinted selected-state background for navigation items in the side
-drawer.
--}
-drawerSelectionBg : Element.Color
-drawerSelectionBg =
-    Element.rgb255 232 242 250
-
-
-{-| Backwards-compatible alias for the pink protein accent.
--}
 proteinColor : Element.Color
 proteinColor =
     accentPink
 
 
-{-| Backwards-compatible: soft green for carbs.
--}
 carbsColor : Element.Color
 carbsColor =
     accentSoftGreen
 
 
-{-| Backwards-compatible: yellow for fat.
--}
 fatColor : Element.Color
 fatColor =
     accentYellow
 
 
-borderGray : Element.Color
-borderGray =
-    divider
-
-
-mutedColor : Element.Color
-mutedColor =
-    textMuted
-
-
-darkColor : Element.Color
-darkColor =
-    textPrimary
-
-
 
 -- Spacing scale
---
--- A 4px-based scale used for `Element.spacing`, `Element.padding`, and
--- `Element.paddingXY`. Stick to these values when adding new layout — only
--- reach for raw literals if the layout genuinely needs an off-scale value
--- (e.g., aligning to a 1px hairline or a known control height).
 
 
 space2 : Int
@@ -347,17 +169,6 @@ space24 =
 
 
 -- Typography
---
--- Semantic helpers are the primary API: pageTitle/sectionTitle/subsectionTitle
--- for headings, bodyText/mutedBody/mutedParagraph for body copy, captionText/
--- mutedCaption for small labels. Each bundles size + weight + color so callers
--- don't wire Font.bold and Font.color by hand.
---
--- The bare size attributes `body` and `caption` remain exported as primitives
--- for places (table cells, form labels, button labels) that need to compose
--- size with other attributes on a non-`Element.el` host (e.g. Input.button).
---
--- Scale: 28 / 22 / 17 / 14 / 12.
 
 
 body : Element.Attribute msg
@@ -385,64 +196,64 @@ sizeSubsectionTitle =
     Font.size 17
 
 
-pageTitle : String -> Element msg
-pageTitle text =
+pageTitle : Theme -> String -> Element msg
+pageTitle theme text =
     Element.el
         [ sizePageTitle
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , Region.heading 1
         ]
         (Element.text text)
 
 
-sectionTitle : String -> Element msg
-sectionTitle text =
+sectionTitle : Theme -> String -> Element msg
+sectionTitle theme text =
     Element.el
         [ sizeSectionTitle
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , Region.heading 2
         ]
         (Element.text text)
 
 
-subsectionTitle : String -> Element msg
-subsectionTitle text =
+subsectionTitle : Theme -> String -> Element msg
+subsectionTitle theme text =
     Element.el
         [ sizeSubsectionTitle
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , Region.heading 3
         ]
         (Element.text text)
 
 
-listItemTitle : String -> Element msg
-listItemTitle text =
+listItemTitle : Theme -> String -> Element msg
+listItemTitle theme text =
     Element.el
         [ body
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         ]
         (Element.text text)
 
 
-mutedCaption : String -> Element msg
-mutedCaption text =
+mutedCaption : Theme -> String -> Element msg
+mutedCaption theme text =
     Element.el
         [ caption
-        , Font.color textMuted
+        , Font.color theme.textMuted
         ]
         (Element.text text)
 
 
-tableHeader : String -> Element msg
-tableHeader text =
+tableHeader : Theme -> String -> Element msg
+tableHeader theme text =
     Element.el
         [ body
         , Font.bold
-        , Font.color textMuted
+        , Font.color theme.textMuted
         ]
         (Element.text text)
 
@@ -451,22 +262,20 @@ tableHeader text =
 -- Surfaces & layout
 
 
-{-| Soft drop shadow applied to cards and overlays.
--}
-cardShadow : Element.Attribute msg
-cardShadow =
+cardShadow : Theme -> Element.Attribute msg
+cardShadow theme =
     Element.htmlAttribute
-        (Html.Attributes.style "box-shadow" "0 4px 16px rgba(28, 32, 44, 0.06)")
+        (Html.Attributes.style "box-shadow" theme.cardShadow)
 
 
-layout : Element msg -> Element msg
-layout content =
+layout : Theme -> Element msg -> Element msg
+layout theme content =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
-        , Background.color pageBg
+        , Background.color theme.pageBg
         , Font.family [ Font.typeface "Inter", Font.sansSerif ]
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , body
         ]
         [ content ]
@@ -497,30 +306,16 @@ pageContainer device children =
         children
 
 
-{-| True when the device is classified as a phone by `Element.classifyDevice`
-(elm-ui's `shortSide < 600` rule). Use this as the single small-screen gate
-across the app so call sites stay readable. `Tablet`, `Desktop`, and
-`BigDesktop` all return `False`.
--}
 isSmall : Element.Device -> Bool
 isSmall device =
     device.class == Element.Phone
 
 
-{-| Default cap used by `truncatedText` when the caller doesn't supply one.
-40 chars matches the long-name truncation sites in the diary, meal, and food
-list views.
--}
 defaultTruncationChars : Int
 defaultTruncationChars =
     40
 
 
-{-| Single-line character cap used by `truncateWithEllipsis` call sites that
-should be tighter on phones. Defaults to `defaultTruncationChars` (40) on
-non-Phone devices; Phone gets 25 to keep long names from blowing past narrow
-viewports.
--}
 truncationCap : Element.Device -> Int
 truncationCap device =
     if isSmall device then
@@ -530,14 +325,6 @@ truncationCap device =
         defaultTruncationChars
 
 
-{-| Truncate a string to at most `maxChars` code points and append a single
-ellipsis character. Pairs with `Ui.truncatedText` for the rendered form. Pure
-Elm, no CSS, safe to use inside a flex row. The cap counts the ellipsis: a
-`maxChars` of 4 always returns a 4-character string.
-
-    Ui.truncateWithEllipsis 12 "Roasted Sweet Potato" --> "Roasted Swe..."
-
--}
 truncateWithEllipsis : Int -> String -> String
 truncateWithEllipsis maxChars string =
     let
@@ -552,14 +339,6 @@ truncateWithEllipsis maxChars string =
         String.left visible string ++ "..."
 
 
-{-| Render `string` as a single-line text element that fills its parent,
-clips overflow, and truncates to the device-aware cap. Use this for long
-product / meal / log names that would otherwise push the row wider than a
-phone viewport.
-
-    Ui.truncatedText device "Roasted Sweet Potato"
-
--}
 truncatedText : Element.Device -> String -> Element msg
 truncatedText device string =
     Element.el
@@ -569,35 +348,30 @@ truncatedText device string =
         (Element.text (truncateWithEllipsis (truncationCap device) string))
 
 
-card : List (Element msg) -> Element msg
-card children =
+card : Theme -> List (Element msg) -> Element msg
+card theme children =
     Element.column
         [ Element.width Element.fill
-        , Background.color cardBg
+        , Background.color theme.cardBg
         , Border.rounded 20
-        , cardShadow
+        , cardShadow theme
         , Element.padding space20
         , Element.spacing space12
         ]
         children
 
 
-{-| Canonical page-level header: optional leading element (e.g. macroDot),
-bold title (truncated for narrow viewports), optional muted subtitle below,
-and a right-aligned row of actions (typically `iconButton` / `dangerIconButton`).
-Renders as a bare row — no card wrapper — so the page's main content can
-flow directly beneath it.
--}
 pageHeader :
-    Element.Device
+    Theme
+    -> Element.Device
     ->
         { leading : Maybe (Element msg)
-        , title : Element msg
+        , title : String
         , subtitle : Maybe String
         , actions : List (Element msg)
         }
     -> Element msg
-pageHeader _ config =
+pageHeader theme device config =
     let
         leadingElement : Element msg
         leadingElement =
@@ -612,10 +386,10 @@ pageHeader _ config =
         titleColumn =
             Element.column
                 [ Element.width Element.fill, Element.spacing space4 ]
-                (config.title
+                (truncatedPageTitle theme device config.title
                     :: (case config.subtitle of
                             Just text ->
-                                [ mutedBody text ]
+                                [ mutedBody theme text ]
 
                             Nothing ->
                                 []
@@ -637,11 +411,6 @@ pageHeader _ config =
         [ leadingElement, titleColumn, actionsRow ]
 
 
-{-| A 4×24 transparent spacer matching the dimensions of `accentDot` /
-`View.Nutrients.macroDot`. Use as the leading element of a row that sits
-beneath a header which has a colored dot, so content aligns with where
-the header's title text begins.
--}
 macroDotGhost : Element msg
 macroDotGhost =
     Element.el
@@ -661,25 +430,21 @@ cardActions buttons =
         buttons
 
 
-{-| Canonical sectioned card. When `header` is present, a `hairline` sits
-between it and the `body`; when `footer` is present, a `hairline` sits
-between the `body` and the footer. Use this whenever a card carries a
-header, a footer, or both — it enforces the project-wide hairline rule
-in one place.
--}
 section :
-    { header : Maybe (Element msg)
-    , body : List (Element msg)
-    , footer : Maybe (Element msg)
-    }
+    Theme
+    ->
+        { header : Maybe (Element msg)
+        , body : List (Element msg)
+        , footer : Maybe (Element msg)
+        }
     -> Element msg
-section config =
+section theme config =
     let
         headerSlot : List (Element msg)
         headerSlot =
             case config.header of
                 Just el ->
-                    [ el, hairline ]
+                    [ el, hairline theme ]
 
                 Nothing ->
                     []
@@ -688,38 +453,30 @@ section config =
         footerSlot =
             case config.footer of
                 Just el ->
-                    [ hairline, el ]
+                    [ hairline theme, el ]
 
                 Nothing ->
                     []
     in
-    card (headerSlot ++ config.body ++ footerSlot)
+    card theme (headerSlot ++ config.body ++ footerSlot)
 
 
-{-| A card whose body is a title, a hairline, and then its content. Used for
-form sections in `Page.CustomFood.Form` so every section reads the same way.
-Convenience wrapper around `section` with only a string header.
--}
-formSection : String -> List (Element msg) -> Element msg
-formSection title content =
-    section
-        { header = Just (subsectionTitle title)
+formSection : Theme -> String -> List (Element msg) -> Element msg
+formSection theme title content =
+    section theme
+        { header = Just (subsectionTitle theme title)
         , body = content
         , footer = Nothing
         }
 
 
-{-| A card containing a vertical list of rows with a "+ Create X" ghost
-button pinned to the bottom. The create button is shown even when the row
-list is empty, which is the canonical empty state for the index pages.
--}
-listCard : { rows : List (Element msg), createButton : Element msg } -> Element msg
-listCard config =
-    section
+listCard : Theme -> { rows : List (Element msg), createButton : Element msg } -> Element msg
+listCard theme config =
+    section theme
         { header = Nothing
         , body =
             if List.isEmpty config.rows then
-                [ emptyListBody ]
+                [ emptyListBody theme ]
 
             else
                 config.rows
@@ -727,21 +484,15 @@ listCard config =
         }
 
 
-emptyListBody : Element msg
-emptyListBody =
+emptyListBody : Theme -> Element msg
+emptyListBody theme =
     Element.el
         [ Element.width Element.fill
         , Element.padding space16
         ]
-        (mutedParagraph "No items yet.")
+        (mutedParagraph theme "No items yet.")
 
 
-{-| A clickable list row with an optional leading element (macro dot,
-icon), a title + subtitle column in the middle, and optional trailing
-elements (action icons, badges). Clicking the title area fires `onSelect`;
-trailing items keep their own click handlers so destructive actions stay
-out of the row's primary tap target.
--}
 listRow :
     { onSelect : msg
     , leading : List (Element msg)
@@ -803,18 +554,18 @@ listRowLeading leading =
 -- States
 
 
-loading : String -> Element msg
-loading message =
+loading : Theme -> String -> Element msg
+loading theme message =
     Element.el
-        [ Font.color textMuted ]
+        [ Font.color theme.textMuted ]
         (Element.text message)
 
 
-emptyState : String -> Element msg
-emptyState message =
-    card
+emptyState : Theme -> String -> Element msg
+emptyState theme message =
+    card theme
         [ Element.paragraph
-            [ Font.color textMuted
+            [ Font.color theme.textMuted
             , Font.center
             , Element.padding space8
             ]
@@ -822,16 +573,16 @@ emptyState message =
         ]
 
 
-maybeErrorBanner : Maybe String -> Element msg
-maybeErrorBanner maybeError =
-    Maybe.withDefault Element.none (Maybe.map errorBanner maybeError)
+maybeErrorBanner : Theme -> Maybe String -> Element msg
+maybeErrorBanner theme maybeError =
+    Maybe.withDefault Element.none (Maybe.map (errorBanner theme) maybeError)
 
 
-errorBanner : String -> Element msg
-errorBanner message =
+errorBanner : Theme -> String -> Element msg
+errorBanner theme message =
     Element.el
-        [ Background.color dangerBg
-        , Font.color dangerFg
+        [ Background.color theme.dangerBg
+        , Font.color theme.dangerFg
         , Border.rounded 12
         , Element.padding space12
         , Element.width Element.fill
@@ -843,48 +594,41 @@ errorBanner message =
 -- Buttons
 
 
-button : String -> msg -> Element msg
-button label msg =
+button : Theme -> String -> msg -> Element msg
+button theme label msg =
     Input.button
-        [ Background.color brandBlue
+        [ Background.color theme.brandBlue
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
         , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
         , Font.medium
-        , Element.mouseOver [ Background.color brandBluePressed ]
+        , Element.mouseOver [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-{-| Full-width primary CTA, intended for use inside `cardActions` as a
-page's main submit/save button. Same fill as `button`, but `width fill`
-and slightly larger padding so it reads as the primary affordance.
--}
-primaryButton : String -> msg -> Element msg
-primaryButton label msg =
+primaryButton : Theme -> String -> msg -> Element msg
+primaryButton theme label msg =
     Input.button
-        [ Background.color brandBlue
+        [ Background.color theme.brandBlue
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
         , Element.width Element.fill
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
-        , Element.mouseOver [ Background.color brandBluePressed ]
+        , Element.mouseOver [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-{-| Full-width variant of `submitButton`. Use for a page's primary CTA when
-the button stands alone (no destructive icon paired beside it).
--}
-primarySubmitButton : Bool -> String -> String -> msg -> Element msg
-primarySubmitButton isSubmitting idleLabel submittingLabel msg =
-    primaryButton
+primarySubmitButton : Theme -> Bool -> String -> String -> msg -> Element msg
+primarySubmitButton theme isSubmitting idleLabel submittingLabel msg =
+    primaryButton theme
         (if isSubmitting then
             submittingLabel
 
@@ -894,32 +638,29 @@ primarySubmitButton isSubmitting idleLabel submittingLabel msg =
         msg
 
 
-dangerButton : String -> msg -> Element msg
-dangerButton label msg =
+dangerButton : Theme -> String -> msg -> Element msg
+dangerButton theme label msg =
     Input.button
-        [ Background.color dangerSolid
+        [ Background.color theme.dangerSolid
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
         , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
         , Font.medium
-        , Element.mouseOver [ Background.color dangerFg ]
+        , Element.mouseOver [ Background.color theme.dangerFg ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-{-| Transparent pill with brand-blue text. Used for "+ Add" affordances
-where the pill shape still applies but the action is secondary.
--}
-ghostButton : String -> msg -> Element msg
-ghostButton label msg =
+ghostButton : Theme -> String -> msg -> Element msg
+ghostButton theme label msg =
     Input.button
         [ Border.rounded 999
         , Element.paddingEach { top = 8, right = 14, bottom = 8, left = 14 }
-        , Font.color brandBlue
+        , Font.color theme.brandBlue
         , Font.medium
-        , Element.mouseOver [ Background.color brandBlueSoft ]
+        , Element.mouseOver [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg
         , label = Element.text label
@@ -930,44 +671,41 @@ ghostButton label msg =
 -- Inputs
 
 
-input : String -> String -> (String -> msg) -> Element msg
-input label value onChange =
+input : Theme -> String -> String -> (String -> msg) -> Element msg
+input theme label value onChange =
     Input.text
         [ Border.rounded 12
-        , Background.color inputFill
+        , Background.color theme.inputFill
         , Element.padding 10
         ]
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel label)
+        , label = Input.labelAbove [] (fieldLabel theme label)
         }
 
 
-passwordInput : String -> String -> (String -> msg) -> Element msg
-passwordInput label value onChange =
+passwordInput : Theme -> String -> String -> (String -> msg) -> Element msg
+passwordInput theme label value onChange =
     Input.currentPassword
         [ Border.rounded 12
-        , Background.color inputFill
+        , Background.color theme.inputFill
         , Element.padding 10
         ]
         { onChange = onChange
         , text = value
         , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel label)
+        , label = Input.labelAbove [] (fieldLabel theme label)
         , show = False
         }
 
 
-{-| Caption-sized, semibold label used above inputs, dropdowns, and other
-form controls. Visually reads as a small section header.
--}
-fieldLabel : String -> Element msg
-fieldLabel label_ =
+fieldLabel : Theme -> String -> Element msg
+fieldLabel theme label_ =
     Element.el
         [ caption
         , Font.medium
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         ]
         (Element.text label_)
 
@@ -976,38 +714,38 @@ fieldLabel label_ =
 -- Display
 
 
-mutedBody : String -> Element msg
-mutedBody text =
+mutedBody : Theme -> String -> Element msg
+mutedBody theme text =
     Element.el
-        [ Font.color textMuted
+        [ Font.color theme.textMuted
         , body
         ]
         (Element.text text)
 
 
-mutedParagraph : String -> Element msg
-mutedParagraph text =
+mutedParagraph : Theme -> String -> Element msg
+mutedParagraph theme text =
     Element.paragraph
-        [ Font.color textMuted
+        [ Font.color theme.textMuted
         , body
         ]
         [ Element.text text ]
 
 
-detailRow : String -> Element msg -> Element msg
-detailRow label_ value =
+detailRow : Theme -> String -> Element msg -> Element msg
+detailRow theme label_ value =
     Element.row [ Element.spacing space4 ]
-        [ Element.el [ Font.color textMedium, caption ]
+        [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (label_ ++ ":"))
         , value
         ]
 
 
-badge : String -> Element msg
-badge label_ =
+badge : Theme -> String -> Element msg
+badge theme label_ =
     Element.el
-        [ Background.color inputFill
-        , Font.color textPrimary
+        [ Background.color theme.inputFill
+        , Font.color theme.textPrimary
         , Border.rounded 999
         , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
         , caption
@@ -1017,15 +755,17 @@ badge label_ =
 
 
 selectDropdown :
-    { label : String
-    , selected : a
-    , options : List ( a, String )
-    , onChange : a -> msg
-    , isOpen : Bool
-    , onToggle : msg
-    }
+    Theme
+    ->
+        { label : String
+        , selected : a
+        , options : List ( a, String )
+        , onChange : a -> msg
+        , isOpen : Bool
+        , onToggle : msg
+        }
     -> Element msg
-selectDropdown config =
+selectDropdown theme config =
     let
         selectedLabel : String
         selectedLabel =
@@ -1047,17 +787,17 @@ selectDropdown config =
                 , Element.paddingXY 14 10
                 , Background.color
                     (if isSelected val then
-                        brandBlue
+                        theme.brandBlue
 
                      else
-                        cardBg
+                        theme.cardBg
                     )
                 , Font.color
                     (if isSelected val then
                         Element.rgb255 255 255 255
 
                      else
-                        textPrimary
+                        theme.textPrimary
                     )
                 ]
                 { onPress = Just (config.onChange val)
@@ -1069,8 +809,8 @@ selectDropdown config =
             Element.column
                 [ Element.width Element.fill
                 , Border.rounded 12
-                , Background.color cardBg
-                , cardShadow
+                , Background.color theme.cardBg
+                , cardShadow theme
                 , Element.moveDown 4
                 ]
                 (List.map renderOption config.options)
@@ -1084,16 +824,16 @@ selectDropdown config =
                 [ Element.width Element.fill ]
     in
     Element.column [ Element.width Element.fill, Element.spacing space4 ]
-        [ fieldLabel config.label
+        [ fieldLabel theme config.label
         , Element.el triggerAnchor
             (Input.button
                 [ Element.width Element.fill
                 , Border.rounded 12
-                , Background.color inputFill
+                , Background.color theme.inputFill
                 , Element.padding 10
                 , Border.width 1
-                , Border.color inputFill
-                , Element.mouseOver [ Border.color brandBlue ]
+                , Border.color theme.inputFill
+                , Element.mouseOver [ Border.color theme.brandBlue ]
                 ]
                 { onPress = Just config.onToggle
                 , label =
@@ -1103,10 +843,10 @@ selectDropdown config =
                             , body
                             , Font.color
                                 (if selectedLabel == "" then
-                                    textMuted
+                                    theme.textMuted
 
                                  else
-                                    textPrimary
+                                    theme.textPrimary
                                 )
                             ]
                             (Element.text
@@ -1144,14 +884,16 @@ macroColor m =
 
 
 macroBar :
-    { label : String
-    , value : Float
-    , unit : String
-    , color : Element.Color
-    , max : Float
-    }
+    Theme
+    ->
+        { label : String
+        , value : Float
+        , unit : String
+        , color : Element.Color
+        , max : Float
+        }
     -> Element msg
-macroBar config =
+macroBar theme config =
     let
         pct : Float
         pct =
@@ -1171,10 +913,12 @@ macroBar config =
     in
     Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ Element.row [ Element.width Element.fill ]
-            [ Element.el [ Font.bold, body, Font.color textPrimary ] (Element.text config.label)
+            [ Element.el
+                [ Font.bold, body, Font.color theme.textPrimary ]
+                (Element.text config.label)
             , Element.el
                 [ body
-                , Font.color textMuted
+                , Font.color theme.textMuted
                 , Element.alignRight
                 ]
                 (Element.text (String.fromInt (round config.value) ++ " " ++ config.unit))
@@ -1182,7 +926,7 @@ macroBar config =
         , Element.row
             [ Element.width Element.fill
             , Element.height (Element.px 10)
-            , Background.color inputFill
+            , Background.color theme.inputFill
             , Border.rounded 999
             , Element.clip
             ]
@@ -1198,150 +942,32 @@ macroBar config =
         ]
 
 
-skeletonLoading : Element msg
-skeletonLoading =
+skeletonLoading : Theme -> Element msg
+skeletonLoading theme =
     Element.column [ Element.width Element.fill, Element.spacing space12 ]
-        [ skeletonBar
-        , skeletonBar
-        , skeletonBar
+        [ skeletonBar theme
+        , skeletonBar theme
+        , skeletonBar theme
         ]
 
 
-skeletonBar : Element msg
-skeletonBar =
+skeletonBar : Theme -> Element msg
+skeletonBar theme =
     Element.el
         [ Element.width Element.fill
         , Element.height (Element.px 16)
-        , Background.color inputFill
+        , Background.color theme.inputFill
         , Border.rounded 8
         ]
         Element.none
 
 
-{-| Fixed-width skeleton bar, given as a fraction (0..1) of the parent
-width. Useful for title placeholders that shouldn't span the whole row.
--}
-skeletonBarFraction : Int -> Element msg
-skeletonBarFraction portion =
-    Element.row [ Element.width Element.fill ]
-        [ Element.el
-            [ Element.width (Element.fillPortion portion)
-            , Element.height (Element.px 16)
-            , Background.color inputFill
-            , Border.rounded 8
-            ]
-            Element.none
-        , Element.el [ Element.width (Element.fillPortion (10 - portion)) ] Element.none
-        ]
-
-
-{-| Page-level placeholder for a single-resource load: a card with a short
-title bar and two body bars. Drop in where a full page is mid-fetch.
--}
-skeletonCard : Element msg
-skeletonCard =
-    card
-        [ skeletonBarFraction 4
-        , Element.el [ Element.height (Element.px space4) ] Element.none
-        , skeletonBar
-        , skeletonBar
-        , skeletonBarFraction 7
-        ]
-
-
-{-| Single list-row placeholder: a leading circle and two stacked text
-bars, padded to match `listRow`.
--}
-skeletonRow : Element msg
-skeletonRow =
-    Element.row
-        [ Element.width Element.fill
-        , Element.padding space16
-        , Element.spacing space12
-        ]
-        [ Element.el
-            [ Element.width (Element.px 28)
-            , Element.height (Element.px 28)
-            , Background.color inputFill
-            , Border.rounded 999
-            ]
-            Element.none
-        , Element.column
-            [ Element.width Element.fill
-            , Element.spacing space8
-            , Element.alignTop
-            ]
-            [ skeletonBarFraction 5
-            , skeletonBarFraction 3
-            ]
-        ]
-
-
-{-| Inline placeholder sized to match `truncatedPageTitle` (height 34).
-Drop into `pageHeader`'s `title` slot while the title is mid-fetch.
--}
-skeletonPageTitle : Element msg
-skeletonPageTitle =
-    Element.el
-        [ Element.width (Element.maximum 240 Element.fill)
-        , Element.height (Element.px 34)
-        , Element.paddingXY 0 8
-        ]
-        (Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 18)
-            , Background.color inputFill
-            , Border.rounded 8
-            ]
-            Element.none
-        )
-
-
-{-| Inline placeholder sized to match `listItemTitle`'s bold body line.
-Drop in where a list-row title would normally appear.
--}
-skeletonListItemTitle : Element msg
-skeletonListItemTitle =
-    Element.el
-        [ Element.width (Element.maximum 180 Element.fill)
-        , Element.height (Element.px 20)
-        , Element.paddingXY 0 2
-        ]
-        (Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 16)
-            , Background.color inputFill
-            , Border.rounded 6
-            ]
-            Element.none
-        )
-
-
-{-| Page-level placeholder for a list of resources: N stacked `skeletonRow`s
-inside a card, separated by hairlines, matching the visual rhythm of
-`listCard`.
--}
-skeletonList : Int -> Element msg
-skeletonList count =
-    card
-        [ Element.column
-            [ Element.width Element.fill ]
-            (List.repeat count skeletonRow
-                |> List.intersperse hairline
-            )
-        ]
-
-
-
--- New components (see docs/visual-reskin.md §6)
-
-
-truncatedHeader : Device -> String -> Element msg
-truncatedHeader device heading =
+truncatedHeader : Theme -> Device -> String -> Element msg
+truncatedHeader theme device heading =
     Element.el
         [ sizeSectionTitle
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , Region.heading 2
         , Element.width Element.fill
         , Element.clip
@@ -1350,12 +976,12 @@ truncatedHeader device heading =
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
 
-truncatedPageTitle : Device -> String -> Element msg
-truncatedPageTitle device heading =
+truncatedPageTitle : Theme -> Device -> String -> Element msg
+truncatedPageTitle theme device heading =
     Element.el
         [ sizePageTitle
         , Font.bold
-        , Font.color textPrimary
+        , Font.color theme.textPrimary
         , Region.heading 1
         , Element.width Element.fill
         , Element.clip
@@ -1364,31 +990,20 @@ truncatedPageTitle device heading =
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
 
-{-| 40×40 circular icon button. The label is rendered as text glyphs
-(←, ☰, ✕, +, etc.). `title` is forwarded as both a tooltip and a
-semantic label for screen readers. Empty `label` is allowed and
-renders an invisible clickable circle, useful as a no-op leading
-placeholder.
-
-Background is `cardBg` (white) with a 1px `divider` border so the
-button has a defined edge whether it sits on the page background
-(`pageBg`) or inside a white card.
-
--}
-iconButton : { label : String, title : String, onPress : msg } -> Element msg
-iconButton config =
+iconButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
+iconButton theme config =
     Input.button
         [ Element.width (Element.px 40)
         , Element.height (Element.px 40)
-        , Background.color cardBg
-        , Font.color textPrimary
+        , Background.color theme.cardBg
+        , Font.color theme.textPrimary
         , Font.center
         , Border.rounded 999
         , Border.width 1
-        , Border.color divider
+        , Border.color theme.divider
         , Element.mouseOver
-            [ Background.color brandBlueSoft
-            , Border.color brandBlue
+            [ Background.color theme.brandBlueSoft
+            , Border.color theme.brandBlue
             ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
@@ -1397,27 +1012,21 @@ iconButton config =
         }
 
 
-{-| 40×40 circular icon button styled for destructive actions. Outlined
-at rest (transparent fill, danger-red icon and 1px border) so a row of
-list items doesn't shout. Flips to a solid danger fill on hover/focus
-when the action is about to be triggered. `title` doubles as the tooltip
-and the semantic label for screen readers.
--}
-dangerIconButton : { label : String, title : String, onPress : msg } -> Element msg
-dangerIconButton config =
+dangerIconButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
+dangerIconButton theme config =
     Input.button
         [ Element.width (Element.px 40)
         , Element.height (Element.px 40)
-        , Background.color cardBg
-        , Font.color dangerFg
+        , Background.color theme.cardBg
+        , Font.color theme.dangerFg
         , Font.center
         , Border.rounded 999
         , Border.width 1
-        , Border.color dangerFg
+        , Border.color theme.dangerFg
         , Element.mouseOver
-            [ Background.color dangerSolid
+            [ Background.color theme.dangerSolid
             , Font.color (Element.rgb255 255 255 255)
-            , Border.color dangerSolid
+            , Border.color theme.dangerSolid
             ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
@@ -1426,41 +1035,34 @@ dangerIconButton config =
         }
 
 
-{-| Background color used by `chip` for the selected vs. unselected state.
-Exposed so tests can assert the binding.
--}
-chipBackground : Bool -> Element.Color
-chipBackground selected =
+chipBackground : Theme -> Bool -> Element.Color
+chipBackground theme selected =
     if selected then
         primaryTeal
 
     else
-        inputFill
+        theme.inputFill
 
 
-{-| Foreground color used by `chip` for the selected vs. unselected state.
--}
-chipForeground : Bool -> Element.Color
-chipForeground selected =
+chipForeground : Theme -> Bool -> Element.Color
+chipForeground theme selected =
     if selected then
         Element.rgb255 255 255 255
 
     else
-        textPrimary
+        theme.textPrimary
 
 
-{-| Pill-shaped selector chip, 32px tall. Pass `Nothing` for `onClick` to
-render a non-interactive pill (use this for visual-only badges shaped
-like a chip).
--}
 chip :
-    { label : String
-    , selected : Bool
-    , onClick : Maybe msg
-    }
+    Theme
+    ->
+        { label : String
+        , selected : Bool
+        , onClick : Maybe msg
+        }
     -> Element msg
-chip config =
-    Element.html (chipHtml config)
+chip theme config =
+    Element.html (chipHtml theme config)
 
 
 toCssColor : Element.Color -> String
@@ -1480,15 +1082,15 @@ toCssColor color =
         ++ ")"
 
 
-{-| The centerY stuff with elm-ui is not working in this case. So, resorting to this shit
--}
 chipHtml :
-    { label : String
-    , selected : Bool
-    , onClick : Maybe msg
-    }
+    Theme
+    ->
+        { label : String
+        , selected : Bool
+        , onClick : Maybe msg
+        }
     -> Html.Html msg
-chipHtml config =
+chipHtml theme config =
     let
         baseStyles : List (Html.Attribute msg)
         baseStyles =
@@ -1498,8 +1100,10 @@ chipHtml config =
             , Html.Attributes.style "height" "22px"
             , Html.Attributes.style "padding" "0 12px"
             , Html.Attributes.style "border-radius" "999px"
-            , Html.Attributes.style "background-color" (toCssColor (chipBackground config.selected))
-            , Html.Attributes.style "color" (toCssColor (chipForeground config.selected))
+            , Html.Attributes.style "background-color"
+                (toCssColor (chipBackground theme config.selected))
+            , Html.Attributes.style "color"
+                (toCssColor (chipForeground theme config.selected))
             , Html.Attributes.style "font-size" "13px"
             , Html.Attributes.style "font-family" "inherit"
             , Html.Attributes.style "line-height" "1"
@@ -1523,8 +1127,8 @@ chipHtml config =
                 [ Html.text config.label ]
 
 
-chips : List String -> Element msg
-chips strings =
+chips : Theme -> List String -> Element msg
+chips theme strings =
     if List.isEmpty strings then
         Element.none
 
@@ -1538,15 +1142,13 @@ chips strings =
                 ]
                 (List.map
                     (\c ->
-                        chipHtml { label = c, selected = False, onClick = Nothing }
+                        chipHtml theme { label = c, selected = False, onClick = Nothing }
                     )
                     strings
                 )
             )
 
 
-{-| 24px-tall pastel pill, useful for status indicators.
--}
 coloredPill :
     { label : String
     , bg : Element.Color
@@ -1565,9 +1167,6 @@ coloredPill config =
         (Element.text config.label)
 
 
-{-| A solid-color stat block. 100px tall, ~120px wide, radius 24.
-Inside: big white value, white unit caption, white label caption.
--}
 statBlock :
     { value : String
     , unit : String
@@ -1603,8 +1202,6 @@ statBlock config =
         ]
 
 
-{-| Four stat blocks in a 2×2 grid with 12px spacing.
--}
 statBlockGroup : List (Element msg) -> Element msg
 statBlockGroup blocks =
     let
@@ -1624,23 +1221,22 @@ statBlockGroup blocks =
 
 
 linearProgress :
-    { value : Float
-    , max : Float
-    , color : Element.Color
-    }
+    Theme
+    ->
+        { value : Float
+        , max : Float
+        , color : Element.Color
+        }
     -> Element msg
-linearProgress config =
+linearProgress theme config =
     View.Charts.linearProgress
         { value = config.value
         , max = config.max
         , color = config.color
-        , trackColor = inputFill
+        , trackColor = theme.inputFill
         }
 
 
-{-| 4px × 24px rounded vertical bar used as a leading element on list
-rows (foods, meals, users) in place of image placeholders.
--}
 accentDot : Element.Color -> Element msg
 accentDot color =
     Element.el
@@ -1652,16 +1248,12 @@ accentDot color =
         Element.none
 
 
-{-| A 1px-tall horizontal hairline using the muted `divider` color. Used
-to separate regions within a card (e.g., the diary slot card's
-header / log rows / add-food sections) without adding visual weight.
--}
-hairline : Element msg
-hairline =
+hairline : Theme -> Element msg
+hairline theme =
     Element.el
         [ Element.width Element.fill
         , Element.height (Element.px 1)
-        , Background.color divider
+        , Background.color theme.divider
         ]
         Element.none
 

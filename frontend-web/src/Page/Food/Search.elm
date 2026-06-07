@@ -15,6 +15,7 @@ import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
 
@@ -175,22 +176,22 @@ update msg model =
             ( model, Cmd.none, Navigate CustomFoodCreate )
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        [ searchInputView model
-        , bodyView model device
+        [ searchInputView theme model
+        , bodyView theme model device
         ]
 
 
-searchInputView : Model -> Element Msg
-searchInputView model =
+searchInputView : Theme -> Model -> Element Msg
+searchInputView theme model =
     let
         options : List Completion
         options =
             Search.completions model.search.query model.search.categorySuggestions
     in
-    SearchView.searchInput
+    SearchView.searchInput theme
         { onChange = QueryChanged
         , text = model.search.query
         , label = "Search for a food"
@@ -200,33 +201,33 @@ searchInputView model =
         }
 
 
-bodyView : Model -> Device -> Element Msg
-bodyView model device =
+bodyView : Theme -> Model -> Device -> Element Msg
+bodyView theme model device =
     case model.results of
         NotAsked ->
-            Ui.emptyState "Search for a food to get started."
+            Ui.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Ui.loading "Searching foods..."
+            Ui.loading theme "Searching foods..."
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                [ Ui.errorBanner (Client.displayError error)
-                , Ui.emptyState "No foods found. Try a different search."
+                [ Ui.errorBanner theme (Client.displayError error)
+                , Ui.emptyState theme "No foods found. Try a different search."
                 ]
 
         Success items ->
             if List.isEmpty items then
                 Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                    [ Ui.emptyState "No foods found. Try a different search."
-                    , Ui.button "Create Custom Food" CreateCustomFoodClicked
+                    [ Ui.emptyState theme "No foods found. Try a different search."
+                    , Ui.button theme "Create Custom Food" CreateCustomFoodClicked
                     ]
 
             else
-                Ui.card
+                Ui.card theme
                     (List.map
                         (\item ->
-                            SearchView.resultRow
+                            SearchView.resultRow theme
                                 device
                                 { query = model.search.query
                                 , item = item

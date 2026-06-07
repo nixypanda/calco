@@ -16,6 +16,7 @@ import Data.Auth as Auth
 import Element exposing (Device, Element)
 import Lib.Text as Text
 import Page.Auth.CredentialCard
+import Ui.Theme exposing (Theme)
 
 
 
@@ -129,10 +130,11 @@ update msg model =
 -- VIEW
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Page.Auth.CredentialCard.credentialCard
         { device = device
+        , theme = theme
         , title = "Log In"
         , description = Nothing
         , username = model.form.username

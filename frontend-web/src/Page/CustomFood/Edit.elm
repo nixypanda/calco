@@ -24,6 +24,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.CustomFood.Form as Form
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 type Model
@@ -318,19 +319,20 @@ failure =
         }
 
 
-view : { model : Model, device : Device } -> Element Msg
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view config =
     Ui.pageContainer config.device
         [ bodyView config ]
 
 
-bodyView : { model : Model, device : Device } -> Element Msg
-bodyView { model, device } =
+bodyView : { model : Model, device : Device, theme : Theme } -> Element Msg
+bodyView { model, device, theme } =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
-                [ Element.map FormMsg (Form.view device loaded.nutrients loaded.units loaded.form)
-                , Ui.primarySubmitButton
+                [ Element.map FormMsg
+                    (Form.view theme device loaded.nutrients loaded.units loaded.form)
+                , Ui.primarySubmitButton theme
                     (Form.isSubmitting loaded.form.submit)
                     "Save Food"
                     "Saving..."
@@ -338,7 +340,7 @@ bodyView { model, device } =
                 ]
 
         LoadFailed message ->
-            Ui.errorBanner message
+            Ui.errorBanner theme message
 
         Loading _ ->
-            Ui.skeletonCard
+            Ui.loading theme "Loading food..."

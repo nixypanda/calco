@@ -17,6 +17,7 @@ import Data.User as User
 import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 
@@ -187,33 +188,33 @@ createUserPayload form =
 -- VIEW
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     let
         form : Form
         form =
             currentForm model.state
     in
     Ui.pageContainer device
-        (errorView model.state
-            ++ [ Ui.card
-                    [ Ui.input "Username" form.username UsernameChanged
-                    , Ui.input "Display Name" form.displayName DisplayNameChanged
-                    , Ui.passwordInput "Initial Password" form.initialPassword PasswordChanged
-                    , Ui.button "Save" Submitted
+        (errorView theme model.state
+            ++ [ Ui.card theme
+                    [ Ui.input theme "Username" form.username UsernameChanged
+                    , Ui.input theme "Display Name" form.displayName DisplayNameChanged
+                    , Ui.passwordInput theme "Initial Password" form.initialPassword PasswordChanged
+                    , Ui.button theme "Save" Submitted
                     ]
                ]
         )
 
 
-errorView : State -> List (Element msg)
-errorView state =
+errorView : Theme -> State -> List (Element msg)
+errorView theme state =
     case state of
         Invalid _ problem ->
-            [ Ui.errorBanner (problemMessage problem) ]
+            [ Ui.errorBanner theme (problemMessage problem) ]
 
         Failed _ message ->
-            [ Ui.errorBanner message ]
+            [ Ui.errorBanner theme message ]
 
         _ ->
             []

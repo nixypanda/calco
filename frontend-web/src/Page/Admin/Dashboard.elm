@@ -15,6 +15,7 @@ import Data.User as User
 import Element exposing (Device, Element)
 import Page.Admin.StatusBadge
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 
@@ -84,38 +85,38 @@ update msg model =
 -- VIEW
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        [ bodyView model
+        [ bodyView theme model
         ]
 
 
-bodyView : Model -> Element Msg
-bodyView model =
+bodyView : Theme -> Model -> Element Msg
+bodyView theme model =
     case model.state of
         Ready users ->
-            Ui.listCard
+            Ui.listCard theme
                 { rows =
                     List.map
-                        (\user -> userListRow { user = user, onSelect = NavigateEditUser })
+                        (\user -> userListRow theme { user = user, onSelect = NavigateEditUser })
                         users
-                , createButton = Ui.ghostButton "+ Create User" NavigateCreateUser
+                , createButton = Ui.ghostButton theme "+ Create User" NavigateCreateUser
                 }
 
         Loading ->
-            Ui.skeletonList 5
+            Ui.loading theme "Loading users..."
 
         LoadFailed error ->
-            Ui.errorBanner (Client.displayError error)
+            Ui.errorBanner theme (Client.displayError error)
 
 
-userListRow : { user : User.User, onSelect : String -> msg } -> Element msg
-userListRow config =
+userListRow : Theme -> { user : User.User, onSelect : String -> msg } -> Element msg
+userListRow theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Ui.sectionTitle config.user.username
-        , subtitle = [ Ui.mutedBody config.user.displayName ]
-        , trailing = [ Page.Admin.StatusBadge.statusBadge config.user.status ]
+        , title = Ui.sectionTitle theme config.user.username
+        , subtitle = [ Ui.mutedBody theme config.user.displayName ]
+        , trailing = [ Page.Admin.StatusBadge.statusBadge theme config.user.status ]
         }

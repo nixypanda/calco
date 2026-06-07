@@ -22,7 +22,13 @@ import Element
 import Expect
 import Test exposing (Test, describe, test)
 import Ui
+import Ui.Theme as Theme
 import View.Charts
+
+
+theme : Theme.Theme
+theme =
+    Theme.light
 
 
 {-| Discard any value and return a passing expectation. Used for smoke
@@ -52,9 +58,13 @@ chipBehavior : Test
 chipBehavior =
     describe "chip"
         [ test "uses inputFill background when not selected" <|
-            \_ -> Ui.chipBackground False |> Expect.equal (Element.rgb255 244 246 248)
+            \_ ->
+                Ui.chipBackground theme False
+                    |> Expect.equal theme.inputFill
         , test "uses primaryTeal background when selected" <|
-            \_ -> Ui.chipBackground True |> Expect.equal Ui.primaryTeal
+            \_ ->
+                Ui.chipBackground theme True
+                    |> Expect.equal Ui.primaryTeal
         ]
 
 
@@ -140,13 +150,20 @@ renderingSmoke : Test
 renderingSmoke =
     describe "new components (smoke)"
         [ test "iconButton does not crash on empty label" <|
-            \_ -> Ui.iconButton { label = "", title = "Empty", onPress = () } |> pass
+            \_ ->
+                Ui.iconButton theme { label = "", title = "Empty", onPress = () }
+                    |> pass
         , test "iconButton renders with a glyph" <|
-            \_ -> Ui.iconButton { label = "←", title = "Back", onPress = () } |> pass
+            \_ ->
+                Ui.iconButton theme { label = "←", title = "Back", onPress = () }
+                    |> pass
         , test "dangerIconButton renders with a glyph" <|
-            \_ -> Ui.dangerIconButton { label = "×", title = "Delete", onPress = () } |> pass
+            \_ ->
+                Ui.dangerIconButton theme
+                    { label = "×", title = "Delete", onPress = () }
+                    |> pass
         , test "fieldLabel renders with a label" <|
-            \_ -> Ui.fieldLabel "Amount" |> pass
+            \_ -> Ui.fieldLabel theme "Amount" |> pass
         , test "accentDot produces a value for any color" <|
             \_ -> Ui.accentDot Ui.accentPink |> pass
         , test "coloredPill uses the provided bg and fg" <|
@@ -180,11 +197,17 @@ renderingSmoke =
                     ]
                     |> pass
         , test "chip renders in the unselected state" <|
-            \_ -> Ui.chip { label = "Fruit", selected = False, onClick = Nothing } |> pass
+            \_ ->
+                Ui.chip theme { label = "Fruit", selected = False, onClick = Nothing }
+                    |> pass
         , test "chip renders in the selected state" <|
-            \_ -> Ui.chip { label = "Fruit", selected = True, onClick = Nothing } |> pass
+            \_ ->
+                Ui.chip theme { label = "Fruit", selected = True, onClick = Nothing }
+                    |> pass
         , test "chip renders interactive with Just msg" <|
-            \_ -> Ui.chip { label = "Fruit", selected = True, onClick = Just () } |> pass
+            \_ ->
+                Ui.chip theme { label = "Fruit", selected = True, onClick = Just () }
+                    |> pass
         , test "macroColor resolves Protein to accentPink" <|
             \_ ->
                 Ui.macroColor Data.Nutrition.Protein
@@ -209,18 +232,18 @@ chartSmoke =
     describe "View.Charts (smoke)"
         [ test "linearProgress renders with a non-zero value" <|
             \_ ->
-                Ui.linearProgress
+                Ui.linearProgress theme
                     { value = 75, max = 100, color = Ui.proteinColor }
                     |> pass
         , test "linearProgress renders with a zero max without crashing" <|
             \_ ->
-                Ui.linearProgress
+                Ui.linearProgress theme
                     { value = 10, max = 0, color = Ui.proteinColor }
                     |> pass
         , test "verticalBarChart renders a list of bars" <|
             \_ ->
                 View.Charts.verticalBarChart
-                    { baselineColor = Ui.divider }
+                    { baselineColor = theme.divider }
                     [ { label = "M", value = 10, color = Ui.accentPink }
                     , { label = "T", value = 20, color = Ui.accentYellow }
                     ]

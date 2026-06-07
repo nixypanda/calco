@@ -14,6 +14,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 type alias Model =
@@ -118,12 +119,13 @@ mapFormOutMsg maybeOutMsg =
             SessionExpired
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
-        [ Ui.maybeErrorBanner (Common.submitErrorMessage model.submit)
-        , Common.viewFormFields device FormMsg model
-        , Ui.primarySubmitButton (Common.isSubmitting model.submit)
+        [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
+        , Common.viewFormFields theme device FormMsg model
+        , Ui.primarySubmitButton theme
+            (Common.isSubmitting model.submit)
             "Create Meal"
             "Saving..."
             SubmitClicked

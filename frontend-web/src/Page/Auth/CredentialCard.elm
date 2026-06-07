@@ -3,10 +3,12 @@ module Page.Auth.CredentialCard exposing (credentialCard)
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
+import Ui.Theme exposing (Theme)
 
 
 credentialCard :
     { device : Device
+    , theme : Theme
     , title : String
     , description : Maybe String
     , username : String
@@ -22,6 +24,10 @@ credentialCard :
     -> Element msg
 credentialCard config =
     let
+        theme : Theme
+        theme =
+            config.theme
+
         outerPadding : Int
         outerPadding =
             if Ui.isSmall config.device then
@@ -36,15 +42,15 @@ credentialCard config =
         , Element.width (Element.fill |> Element.maximum 420)
         , Element.padding outerPadding
         ]
-        (Ui.card
-            ([ Ui.pageTitle "CalCo"
-             , Ui.subsectionTitle config.title
+        (Ui.card theme
+            ([ Ui.pageTitle theme "CalCo"
+             , Ui.subsectionTitle theme config.title
              ]
-                ++ descriptionView config.description
-                ++ [ Ui.input "Username" config.username config.onUsernameChanged
-                   , Ui.passwordInput "Password" config.password config.onPasswordChanged
-                   , Ui.maybeErrorBanner config.error
-                   , Ui.primarySubmitButton
+                ++ descriptionView theme config.description
+                ++ [ Ui.input theme "Username" config.username config.onUsernameChanged
+                   , Ui.passwordInput theme "Password" config.password config.onPasswordChanged
+                   , Ui.maybeErrorBanner theme config.error
+                   , Ui.primarySubmitButton theme
                         config.submitting
                         config.submitLabel
                         config.submittingLabel
@@ -54,13 +60,13 @@ credentialCard config =
         )
 
 
-descriptionView : Maybe String -> List (Element msg)
-descriptionView maybeDescription =
+descriptionView : Theme -> Maybe String -> List (Element msg)
+descriptionView theme maybeDescription =
     case maybeDescription of
         Just description ->
             [ Element.paragraph
                 [ Ui.body
-                , Font.color Ui.textMedium
+                , Font.color theme.textMedium
                 ]
                 [ Element.text description ]
             ]

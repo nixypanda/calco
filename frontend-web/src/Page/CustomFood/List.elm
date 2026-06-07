@@ -17,6 +17,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
@@ -152,45 +153,45 @@ applyLoadedActionError message model =
             model
 
 
-view : { model : Model, device : Device } -> Element Msg
-view { model, device } =
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
     Ui.pageContainer device
         [ case model of
             Loaded loaded ->
                 case loaded.action of
                     DeleteFailed message ->
-                        Ui.errorBanner message
+                        Ui.errorBanner theme message
 
                     _ ->
                         Element.none
 
             LoadFailed message ->
-                Ui.errorBanner message
+                Ui.errorBanner theme message
 
             Loading ->
                 Element.none
-        , bodyView device model
+        , bodyView theme device model
         ]
 
 
-bodyView : Device -> Model -> Element Msg
-bodyView device model =
+bodyView : Theme -> Device -> Model -> Element Msg
+bodyView theme device model =
     case model of
         Loaded loaded ->
-            Ui.listCard
-                { rows = List.map (foodRow device loaded.action) loaded.foods
-                , createButton = Ui.ghostButton "+ Create Food" CreateCustomFoodClicked
+            Ui.listCard theme
+                { rows = List.map (foodRow theme device loaded.action) loaded.foods
+                , createButton = Ui.ghostButton theme "+ Create Food" CreateCustomFoodClicked
                 }
 
         LoadFailed _ ->
             Element.none
 
         Loading ->
-            Ui.skeletonList 5
+            Ui.loading theme "Loading foods..."
 
 
-foodRow : Device -> ActionState -> ProductDetail -> Element Msg
-foodRow device action food =
+foodRow : Theme -> Device -> ActionState -> ProductDetail -> Element Msg
+foodRow theme device action food =
     let
         macroDot : Element Msg
         macroDot =
@@ -200,14 +201,14 @@ foodRow device action food =
     Ui.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
-        , title = Ui.truncatedHeader device food.name
+        , title = Ui.truncatedHeader theme device food.name
         , subtitle =
-            [ Ui.mutedBody (foodSummaryText food)
-            , Ui.chips food.categories
+            [ Ui.mutedBody theme (foodSummaryText food)
+            , Ui.chips theme food.categories
             ]
         , trailing =
-            [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditFoodClicked food.id }
-            , Ui.dangerIconButton
+            [ Ui.iconButton theme { label = "✎", title = "Edit", onPress = EditFoodClicked food.id }
+            , Ui.dangerIconButton theme
                 { label = "×"
                 , title =
                     if action == Deleting food.id then

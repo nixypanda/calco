@@ -38,6 +38,7 @@ import Element.Input as Input
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
 import Ui
+import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
 
@@ -133,7 +134,7 @@ type Msg
     | RemoveCategory String
     | AcceptCategorySuggestion String
     | CategorySuggestionsLoaded Int (Result Client.ApiError (List CategorySuggestion))
-    | NutrientCodeChanged Int String String
+    | NutrientCodeChanged Int String
     | ToggleNutrientCodeDropdown Int
     | NutrientAmountChanged Int String
     | AddNutrientRow
@@ -533,7 +534,13 @@ update msg formIn =
                     Err _ ->
                         ( form, Cmd.none, NoOutMsg )
 
-        NutrientCodeChanged index value unit ->
+        NutrientCodeChanged index value ->
+            let
+                unit : String
+                unit =
+                    Dict.get value form.nutrientCatalog
+                        |> Maybe.withDefault ""
+            in
             ( { form
                 | nutrients =
                     ListExtra.updateAt
@@ -683,31 +690,33 @@ addCategoryTag raw selected =
             selected
 
 
-view : Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
-view _ nutrients units form =
+view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
+view theme _ nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.maybeErrorBanner (submitErrorMessage form.submit)
-        , basicInfoCard form
-        , portionInfoCard form units
-        , nutrientsCard form nutrients
-        , servingsCard form units
+        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        , basicInfoCard theme form
+        , portionInfoCard theme form units
+        , nutrientsCard theme form nutrients
+        , servingsCard theme form units
         ]
 
 
-basicInfoCard : FormModel -> Element Msg
-basicInfoCard form =
-    Ui.formSection "Basic Info"
-        [ Ui.input "Name" form.name NameChanged
-        , Ui.input "Brand" form.brand BrandChanged
-        , categoryInputView (form.openDropdown == CategoryOpen) form.categoryInput
+basicInfoCard : Theme -> FormModel -> Element Msg
+basicInfoCard theme form =
+    Ui.formSection theme
+        "Basic Info"
+        [ Ui.input theme "Name" form.name NameChanged
+        , Ui.input theme "Brand" form.brand BrandChanged
+        , categoryInputView theme (form.openDropdown == CategoryOpen) form.categoryInput
         ]
 
 
-portionInfoCard : FormModel -> List UnitItem -> Element Msg
-portionInfoCard form units =
-    Ui.formSection "Portion Info"
-        [ Ui.input "Serving Size (g)" form.servingSizeG ServingSizeChanged
-        , View.QuantityInput.dropdown
+portionInfoCard : Theme -> FormModel -> List UnitItem -> Element Msg
+portionInfoCard theme form units =
+    Ui.formSection theme
+        "Portion Info"
+        [ Ui.input theme "Serving Size (g)" form.servingSizeG ServingSizeChanged
+        , View.QuantityInput.dropdown theme
             { amountLabel = "Default Quantity"
             , amount = form.defaultQuantity
             , onAmountChange = DefaultQuantityChanged
@@ -721,22 +730,22 @@ portionInfoCard form units =
         ]
 
 
-nutrientsCard : FormModel -> List NutrientItem -> Element Msg
-nutrientsCard form nutrients =
-    Ui.section
+nutrientsCard : Theme -> FormModel -> List NutrientItem -> Element Msg
+nutrientsCard theme form nutrients =
+    Ui.section theme
         { header =
             Just
                 (Element.column [ Element.spacing Ui.space8 ]
-                    [ Ui.subsectionTitle "Nutrients", addRowHint ]
+                    [ Ui.subsectionTitle theme "Nutrients", addRowHint theme ]
                 )
         , body =
             [ Element.column
                 [ Element.width Element.fill
                 , Element.spacing Ui.space8
                 ]
-                (List.indexedMap (nutrientRowView nutrients form.openDropdown) form.nutrients
-                    ++ [ Ui.hairline
-                       , Ui.ghostButton "+ Add Nutrient" AddNutrientRow
+                (List.indexedMap (nutrientRowView theme nutrients form.openDropdown) form.nutrients
+                    ++ [ Ui.hairline theme
+                       , Ui.ghostButton theme "+ Add Nutrient" AddNutrientRow
                        ]
                 )
             ]
@@ -744,58 +753,58 @@ nutrientsCard form nutrients =
         }
 
 
-servingsCard : FormModel -> List UnitItem -> Element Msg
-servingsCard form units =
-    Ui.section
-        { header = Just (Ui.subsectionTitle "Servings")
+servingsCard : Theme -> FormModel -> List UnitItem -> Element Msg
+servingsCard theme form units =
+    Ui.section theme
+        { header = Just (Ui.subsectionTitle theme "Servings")
         , body =
             [ Element.column
                 [ Element.width Element.fill
                 , Element.spacing Ui.space12
                 ]
                 (if List.isEmpty form.servings then
-                    [ Ui.mutedParagraph
+                    [ Ui.mutedParagraph theme
                         "Add a serving to define portions in cups, pieces, or other units."
                     ]
 
                  else
-                    List.indexedMap (servingRowView units form.openDropdown) form.servings
+                    List.indexedMap (servingRowView theme units form.openDropdown) form.servings
                 )
             ]
-        , footer = Just (Ui.ghostButton "+ Add Serving" AddServingRow)
+        , footer = Just (Ui.ghostButton theme "+ Add Serving" AddServingRow)
         }
 
 
-categoryInputView : Bool -> CategoryInput -> Element Msg
-categoryInputView open input =
+categoryInputView : Theme -> Bool -> CategoryInput -> Element Msg
+categoryInputView theme open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing Ui.space4 ]
-            [ Ui.fieldLabel "Categories"
-            , Ui.mutedCaption "Type and press Enter (or click Add) to tag this food."
+            [ Ui.fieldLabel theme "Categories"
+            , Ui.mutedCaption theme "Type and press Enter (or click Add) to tag this food."
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input "" input.query CategoryQueryChanged)
+                (Ui.input theme "" input.query CategoryQueryChanged)
             , Element.el
                 [ Element.paddingEach
                     { top = Ui.space4, left = Ui.space4, bottom = 0, right = 0 }
                 ]
-                (addCategoryButton input)
+                (addCategoryButton theme input)
             ]
-        , suggestionRowView open input
-        , chipRowView input.selected
+        , suggestionRowView theme open input
+        , chipRowView theme input.selected
         ]
 
 
-addCategoryButton : CategoryInput -> Element Msg
-addCategoryButton input =
-    Ui.iconButton { label = "+", title = "Edit", onPress = AddCategory input.query }
+addCategoryButton : Theme -> CategoryInput -> Element Msg
+addCategoryButton theme input =
+    Ui.iconButton theme { label = "+", title = "Edit", onPress = AddCategory input.query }
 
 
-chipRowView : List String -> Element Msg
-chipRowView tags =
+chipRowView : Theme -> List String -> Element Msg
+chipRowView theme tags =
     if List.isEmpty tags then
-        Ui.mutedCaption "No categories yet"
+        Ui.mutedCaption theme "No categories yet"
 
     else
         Element.wrappedRow
@@ -803,14 +812,14 @@ chipRowView tags =
             , Element.paddingXY 0 Ui.space4
             , Element.spacing 6
             ]
-            (List.map chipView tags)
+            (List.map (chipView theme) tags)
 
 
-chipView : String -> Element Msg
-chipView tag =
+chipView : Theme -> String -> Element Msg
+chipView theme tag =
     Element.row
-        [ Background.color (Ui.chipBackground False)
-        , Font.color (Ui.chipForeground False)
+        [ Background.color (Ui.chipBackground theme False)
+        , Font.color (Ui.chipForeground theme False)
         , Border.rounded 999
         , Element.paddingEach { top = 4, right = 4, bottom = 4, left = 10 }
         , Element.spacing 6
@@ -821,16 +830,16 @@ chipView tag =
         , Input.button
             [ Element.width (Element.px 18)
             , Element.height (Element.px 18)
-            , Background.color Ui.cardBg
-            , Font.color Ui.dangerFg
+            , Background.color theme.cardBg
+            , Font.color theme.dangerFg
             , Font.center
             , Border.rounded 999
             , Border.width 1
-            , Border.color Ui.dangerFg
+            , Border.color theme.dangerFg
             , Element.mouseOver
-                [ Background.color Ui.dangerSolid
+                [ Background.color theme.dangerSolid
                 , Font.color (Element.rgb255 255 255 255)
-                , Border.color Ui.dangerSolid
+                , Border.color theme.dangerSolid
                 ]
             ]
             { onPress = Just (RemoveCategory tag)
@@ -839,8 +848,8 @@ chipView tag =
         ]
 
 
-suggestionRowView : Bool -> CategoryInput -> Element Msg
-suggestionRowView open input =
+suggestionRowView : Theme -> Bool -> CategoryInput -> Element Msg
+suggestionRowView theme open input =
     let
         open_ : Bool
         open_ =
@@ -869,16 +878,16 @@ suggestionRowView open input =
             [ Element.width Element.fill
             , Element.spacing Ui.space4
             , Border.rounded 12
-            , Background.color Ui.cardBg
+            , Background.color theme.cardBg
             , Border.width 1
-            , Border.color Ui.borderGray
+            , Border.color theme.divider
             , Element.padding Ui.space8
             ]
-            (List.map suggestionPill matching)
+            (List.map (suggestionPill theme) matching)
 
 
-suggestionPill : CategorySuggestion -> Element Msg
-suggestionPill s =
+suggestionPill : Theme -> CategorySuggestion -> Element Msg
+suggestionPill theme s =
     Input.button
         [ Element.padding Ui.space4
         , Element.width Element.fill
@@ -890,41 +899,32 @@ suggestionPill s =
                 , Element.spacing Ui.space8
                 , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
                 ]
-                [ Ui.fieldLabel s.value
+                [ Ui.fieldLabel theme s.value
                 , Element.el [ Element.alignRight ]
-                    (Ui.mutedCaption (String.fromInt s.count ++ " uses"))
+                    (Ui.mutedCaption theme (String.fromInt s.count ++ " uses"))
                 ]
         }
 
 
-nutrientRowView : List NutrientItem -> OpenDropdown -> Int -> NutrientRow -> Element Msg
-nutrientRowView nutrients openDropdown index row =
+nutrientRowView : Theme -> List NutrientItem -> OpenDropdown -> Int -> NutrientRow -> Element Msg
+nutrientRowView theme nutrients openDropdown index row =
     Element.row
         [ Element.width Element.fill
         , Element.spacing Ui.space8
         ]
-        [ Ui.selectDropdown
+        [ Ui.selectDropdown theme
             { label = "Nutrient"
             , selected = row.code
             , options =
                 ( "", "Select nutrient..." )
                     :: List.map (\n -> ( n.code, n.name )) nutrients
-            , onChange =
-                \code ->
-                    NutrientCodeChanged index
-                        code
-                        (nutrients
-                            |> List.filter (\n -> n.code == code)
-                            |> List.head
-                            |> Maybe.map .unit
-                            |> Maybe.withDefault ""
-                        )
+            , onChange = NutrientCodeChanged index
             , isOpen = openDropdown == NutrientCodeOpen index
             , onToggle = ToggleNutrientCodeDropdown index
             }
-        , Ui.input "Amount" row.amountPer100g (NutrientAmountChanged index)
-        , unitLabelView row.unit
-        , rowActionButton
+        , Ui.input theme "Amount" row.amountPer100g (NutrientAmountChanged index)
+        , unitLabelView theme row.unit
+        , rowActionButton theme
             { label = "×"
             , title = "Remove"
             , onPress = RemoveNutrientRow index
@@ -937,14 +937,14 @@ column is always exactly 4 characters wide (left-padded with spaces) so the
 form keeps a tidy vertical rhythm: empty rows show "none", "g" becomes "g ",
 "mg" becomes "mg ", and "kcal" stays as "kcal".
 -}
-unitLabelView : String -> Element msg
-unitLabelView unit =
+unitLabelView : Theme -> String -> Element msg
+unitLabelView theme unit =
     Element.el
         [ Element.width (Element.px unitLabelWidth)
         , Element.alignRight
         , Element.paddingEach { top = Ui.space16, left = 0, bottom = 0, right = Ui.space4 }
         ]
-        (Ui.mutedCaption (padUnitLabel unit))
+        (Ui.mutedCaption theme (padUnitLabel unit))
 
 
 unitLabelWidth : Int
@@ -972,22 +972,22 @@ unitLabelMax =
     4
 
 
-servingRowView : List UnitItem -> OpenDropdown -> Int -> ServingRow -> Element Msg
-servingRowView units openDropdown index row =
+servingRowView : Theme -> List UnitItem -> OpenDropdown -> Int -> ServingRow -> Element Msg
+servingRowView theme units openDropdown index row =
     Element.column
         [ Element.width Element.fill
         , Element.spacing 6
         ]
-        [ Ui.input "Label" row.label (ServingLabelChanged index)
+        [ Ui.input theme "Label" row.label (ServingLabelChanged index)
         , Element.row
             [ Element.width Element.fill
             , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input "Qty" row.quantity (ServingQuantityChanged index))
+                (Ui.input theme "Qty" row.quantity (ServingQuantityChanged index))
             , Element.el
                 [ Element.width (Element.fill |> Element.maximum 160) ]
-                (Ui.selectDropdown
+                (Ui.selectDropdown theme
                     { label = "Unit"
                     , selected = row.unit
                     , options = unitOptions row.unit units
@@ -997,8 +997,8 @@ servingRowView units openDropdown index row =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.input "Grams" row.grams (ServingGramsChanged index))
-            , rowActionButton
+                (Ui.input theme "Grams" row.grams (ServingGramsChanged index))
+            , rowActionButton theme
                 { label = "×"
                 , title = "Remove"
                 , onPress = RemoveServingRow index
@@ -1007,13 +1007,13 @@ servingRowView units openDropdown index row =
         ]
 
 
-rowActionButton : { label : String, title : String, onPress : msg } -> Element msg
-rowActionButton config =
+rowActionButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
+rowActionButton theme config =
     Element.el
         [ Element.width (Element.px 40)
         , Element.paddingEach { top = 18, right = 0, bottom = 0, left = 0 }
         ]
-        (Ui.dangerIconButton config)
+        (Ui.dangerIconButton theme config)
 
 
 unitOptions : String -> List UnitItem -> List ( String, String )
@@ -1021,9 +1021,9 @@ unitOptions selected units =
     View.QuantityInput.unitOptions selected units
 
 
-addRowHint : Element msg
-addRowHint =
-    Ui.mutedCaption "Enter calories and macros (per 100g) to save."
+addRowHint : Theme -> Element msg
+addRowHint theme =
+    Ui.mutedCaption theme "Enter calories and macros (per 100g) to save."
 
 
 
