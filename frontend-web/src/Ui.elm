@@ -7,6 +7,7 @@ module Ui exposing
     , badge
     , body
     , borderGray
+    , brandBlue
     , button
     , caption
     , carbsColor
@@ -23,10 +24,10 @@ module Ui exposing
     , dangerButton
     , dangerFg
     , dangerIconButton
+    , dangerSolid
     , darkColor
     , defaultTruncationChars
     , detailRow
-    , display
     , divider
     , dotSeparated
     , drawerSelectionBg
@@ -37,9 +38,6 @@ module Ui exposing
     , formSection
     , ghostButton
     , hairline
-    , heading1
-    , heading2
-    , heading3
     , iconButton
     , input
     , inputFill
@@ -47,25 +45,31 @@ module Ui exposing
     , layout
     , linearProgress
     , listCard
+    , listItemTitle
     , listRow
     , loading
     , macroBar
     , macroColor
+    , macroDotGhost
     , maybeErrorBanner
+    , mutedBody
+    , mutedCaption
     , mutedColor
     , mutedParagraph
-    , mutedText
     , pageContainer
+    , pageHeader
+    , pageTitle
     , passwordInput
+    , primarySubmitButton
     , primaryTeal
     , proteinColor
-    , sectionHeader
+    , section
+    , sectionTitle
     , selectDropdown
     , skeletonLoading
     , space12
     , space16
     , space2
-    , space20
     , space24
     , space4
     , space8
@@ -73,7 +77,8 @@ module Ui exposing
     , statBlockGroup
     , statusGreen
     , statusRed
-    , submitButton
+    , subsectionTitle
+    , tableHeader
     , textMedium
     , truncateWithEllipsis
     , truncatedHeader
@@ -130,17 +135,38 @@ accentSoftPink =
     Element.rgb255 255 200 210
 
 
-{-| Mint primary. The pressed state is exposed as `primaryTealPressed` for
-callers that can wire hover/press attributes.
+{-| The single primary blue. Used as the fill for primary buttons and the
+foreground for secondary accents (links, ghost buttons, focus rings,
+list-row leading stripes). White text reads cleanly on it.
+-}
+brandBlue : Element.Color
+brandBlue =
+    Element.rgb255 75 145 207
+
+
+{-| Darker shade of `brandBlue` used for hover and pressed states.
+-}
+brandBluePressed : Element.Color
+brandBluePressed =
+    Element.rgb255 60 125 185
+
+
+{-| Pale-blue tint, used as a hover background behind ghost / icon
+buttons so secondary interactives have a visible affordance without
+swapping foreground color.
+-}
+brandBlueSoft : Element.Color
+brandBlueSoft =
+    Element.rgb255 232 242 250
+
+
+{-| Legacy mint. Being phased out — kept only so existing callers (chip
+selected state, accent dots in Diary / Nutrients) still compile while
+they migrate to `brandBlue`.
 -}
 primaryTeal : Element.Color
 primaryTeal =
     Element.rgb255 94 224 213
-
-
-primaryTealPressed : Element.Color
-primaryTealPressed =
-    Element.rgb255 70 200 190
 
 
 {-| Subtle hairline color, used for rare separators. Matches `borderGray`
@@ -225,12 +251,12 @@ statusRed =
     Element.rgb255 180 60 80
 
 
-{-| Lavender used as the selected-state background for navigation items in
-the side drawer.
+{-| Blue-tinted selected-state background for navigation items in the side
+drawer.
 -}
 drawerSelectionBg : Element.Color
 drawerSelectionBg =
-    Element.rgb255 238 232 255
+    Element.rgb255 232 242 250
 
 
 {-| Backwards-compatible alias for the pink protein accent.
@@ -315,26 +341,17 @@ space24 =
 
 
 -- Typography
-
-
-display : Element.Attribute msg
-display =
-    Font.size 32
-
-
-heading1 : Element.Attribute msg
-heading1 =
-    Font.size 22
-
-
-heading2 : Element.Attribute msg
-heading2 =
-    Font.size 20
-
-
-heading3 : Element.Attribute msg
-heading3 =
-    Font.size 18
+--
+-- Semantic helpers are the primary API: pageTitle/sectionTitle/subsectionTitle
+-- for headings, bodyText/mutedBody/mutedParagraph for body copy, captionText/
+-- mutedCaption for small labels. Each bundles size + weight + color so callers
+-- don't wire Font.bold and Font.color by hand.
+--
+-- The bare size attributes `body` and `caption` remain exported as primitives
+-- for places (table cells, form labels, button labels) that need to compose
+-- size with other attributes on a non-`Element.el` host (e.g. Input.button).
+--
+-- Scale: 28 / 22 / 17 / 14 / 12.
 
 
 body : Element.Attribute msg
@@ -344,22 +361,84 @@ body =
 
 caption : Element.Attribute msg
 caption =
-    Font.size 13
-
-
-small : Element.Attribute msg
-small =
     Font.size 12
 
 
-bold : Element.Attribute msg
-bold =
-    Font.bold
+sizePageTitle : Element.Attribute msg
+sizePageTitle =
+    Font.size 28
 
 
-medium : Element.Attribute msg
-medium =
-    Font.medium
+sizeSectionTitle : Element.Attribute msg
+sizeSectionTitle =
+    Font.size 22
+
+
+sizeSubsectionTitle : Element.Attribute msg
+sizeSubsectionTitle =
+    Font.size 17
+
+
+pageTitle : String -> Element msg
+pageTitle text =
+    Element.el
+        [ sizePageTitle
+        , Font.bold
+        , Font.color textPrimary
+        , Region.heading 1
+        ]
+        (Element.text text)
+
+
+sectionTitle : String -> Element msg
+sectionTitle text =
+    Element.el
+        [ sizeSectionTitle
+        , Font.bold
+        , Font.color textPrimary
+        , Region.heading 2
+        ]
+        (Element.text text)
+
+
+subsectionTitle : String -> Element msg
+subsectionTitle text =
+    Element.el
+        [ sizeSubsectionTitle
+        , Font.bold
+        , Font.color textPrimary
+        , Region.heading 3
+        ]
+        (Element.text text)
+
+
+listItemTitle : String -> Element msg
+listItemTitle text =
+    Element.el
+        [ body
+        , Font.bold
+        , Font.color textPrimary
+        ]
+        (Element.text text)
+
+
+mutedCaption : String -> Element msg
+mutedCaption text =
+    Element.el
+        [ caption
+        , Font.color textMuted
+        ]
+        (Element.text text)
+
+
+tableHeader : String -> Element msg
+tableHeader text =
+    Element.el
+        [ body
+        , Font.bold
+        , Font.color textMuted
+        ]
+        (Element.text text)
 
 
 
@@ -497,14 +576,73 @@ card children =
         children
 
 
-sectionHeader : String -> Element msg
-sectionHeader title =
-    Element.el
-        [ heading3
-        , bold
-        , Region.heading 2
+{-| Canonical page-level header: optional leading element (e.g. macroDot),
+bold title (truncated for narrow viewports), optional muted subtitle below,
+and a right-aligned row of actions (typically `iconButton` / `dangerIconButton`).
+Renders as a bare row — no card wrapper — so the page's main content can
+flow directly beneath it.
+-}
+pageHeader :
+    Element.Device
+    ->
+        { leading : Maybe (Element msg)
+        , title : String
+        , subtitle : Maybe String
+        , actions : List (Element msg)
+        }
+    -> Element msg
+pageHeader device config =
+    let
+        leadingElement : Element msg
+        leadingElement =
+            case config.leading of
+                Just el ->
+                    el
+
+                Nothing ->
+                    Element.none
+
+        titleColumn : Element msg
+        titleColumn =
+            Element.column
+                [ Element.width Element.fill, Element.spacing space4 ]
+                (truncatedPageTitle device config.title
+                    :: (case config.subtitle of
+                            Just text ->
+                                [ mutedBody text ]
+
+                            Nothing ->
+                                []
+                       )
+                )
+
+        actionsRow : Element msg
+        actionsRow =
+            if List.isEmpty config.actions then
+                Element.none
+
+            else
+                Element.row [ Element.spacing space8 ] config.actions
+    in
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.spacing space12
         ]
-        (Element.text title)
+        [ leadingElement, titleColumn, actionsRow ]
+
+
+{-| A 4×24 transparent spacer matching the dimensions of `accentDot` /
+`View.Nutrients.macroDot`. Use as the leading element of a row that sits
+beneath a header which has a colored dot, so content aligns with where
+the header's title text begins.
+-}
+macroDotGhost : Element msg
+macroDotGhost =
+    Element.el
+        [ Element.width (Element.px 4)
+        , Element.height (Element.px 24)
+        ]
+        Element.none
 
 
 cardActions : List (Element msg) -> Element msg
@@ -517,12 +655,52 @@ cardActions buttons =
         buttons
 
 
+{-| Canonical sectioned card. When `header` is present, a `hairline` sits
+between it and the `body`; when `footer` is present, a `hairline` sits
+between the `body` and the footer. Use this whenever a card carries a
+header, a footer, or both — it enforces the project-wide hairline rule
+in one place.
+-}
+section :
+    { header : Maybe (Element msg)
+    , body : List (Element msg)
+    , footer : Maybe (Element msg)
+    }
+    -> Element msg
+section config =
+    let
+        headerSlot : List (Element msg)
+        headerSlot =
+            case config.header of
+                Just el ->
+                    [ el, hairline ]
+
+                Nothing ->
+                    []
+
+        footerSlot : List (Element msg)
+        footerSlot =
+            case config.footer of
+                Just el ->
+                    [ hairline, el ]
+
+                Nothing ->
+                    []
+    in
+    card (headerSlot ++ config.body ++ footerSlot)
+
+
 {-| A card whose body is a title, a hairline, and then its content. Used for
 form sections in `Page.CustomFood.Form` so every section reads the same way.
+Convenience wrapper around `section` with only a string header.
 -}
 formSection : String -> List (Element msg) -> Element msg
 formSection title content =
-    card (sectionHeader title :: hairline :: content)
+    section
+        { header = Just (subsectionTitle title)
+        , body = content
+        , footer = Nothing
+        }
 
 
 {-| A card containing a vertical list of rows with a "+ Create X" ghost
@@ -531,7 +709,25 @@ list is empty, which is the canonical empty state for the index pages.
 -}
 listCard : { rows : List (Element msg), createButton : Element msg } -> Element msg
 listCard config =
-    card (config.rows ++ [ config.createButton ])
+    section
+        { header = Nothing
+        , body =
+            if List.isEmpty config.rows then
+                [ emptyListBody ]
+
+            else
+                config.rows
+        , footer = Just config.createButton
+        }
+
+
+emptyListBody : Element msg
+emptyListBody =
+    Element.el
+        [ Element.width Element.fill
+        , Element.padding space16
+        ]
+        (mutedParagraph "No items yet.")
 
 
 {-| A clickable list row with an optional leading element (macro dot,
@@ -559,19 +755,42 @@ listRow config =
             { onPress = Just config.onSelect
             , label =
                 Element.row [ Element.width Element.fill, Element.spacing space12 ]
-                    (config.leading
-                        ++ [ Element.column
-                                [ Element.width Element.fill, Element.spacing space4 ]
-                                (config.title :: config.subtitle)
-                           ]
-                    )
+                    [ listRowLeading config.leading
+                    , Element.column
+                        [ Element.width Element.fill
+                        , Element.spacing space4
+                        , Element.alignTop
+                        ]
+                        (config.title :: config.subtitle)
+                    ]
             }
         , if List.isEmpty config.trailing then
             Element.none
 
           else
-            Element.row [ Element.padding space8, Element.spacing space12 ] config.trailing
+            Element.row
+                [ Element.padding space8
+                , Element.spacing space12
+                , Element.alignTop
+                ]
+                config.trailing
         ]
+
+
+listRowLeading : List (Element msg) -> Element msg
+listRowLeading leading =
+    Element.el
+        [ Element.width (Element.px 12)
+        , Element.paddingEach { top = 2, right = 0, bottom = 0, left = 0 }
+        , Element.alignTop
+        ]
+        (case leading of
+            first :: _ ->
+                first
+
+            [] ->
+                Element.none
+        )
 
 
 
@@ -621,20 +840,45 @@ errorBanner message =
 button : String -> msg -> Element msg
 button label msg =
     Input.button
-        [ Background.color primaryTeal
+        [ Background.color brandBlue
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
         , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
         , Font.medium
+        , Element.mouseOver [ Background.color brandBluePressed ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-submitButton : Bool -> String -> String -> msg -> Element msg
-submitButton isSubmitting idleLabel submittingLabel msg =
-    button
+{-| Full-width primary CTA, intended for use inside `cardActions` as a
+page's main submit/save button. Same fill as `button`, but `width fill`
+and slightly larger padding so it reads as the primary affordance.
+-}
+primaryButton : String -> msg -> Element msg
+primaryButton label msg =
+    Input.button
+        [ Background.color brandBlue
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded 999
+        , Element.width Element.fill
+        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
+        , Font.medium
+        , Font.center
+        , Element.mouseOver [ Background.color brandBluePressed ]
+        ]
+        { onPress = Just msg
+        , label = Element.text label
+        }
+
+
+{-| Full-width variant of `submitButton`. Use for a page's primary CTA when
+the button stands alone (no destructive icon paired beside it).
+-}
+primarySubmitButton : Bool -> String -> String -> msg -> Element msg
+primarySubmitButton isSubmitting idleLabel submittingLabel msg =
+    primaryButton
         (if isSubmitting then
             submittingLabel
 
@@ -652,22 +896,24 @@ dangerButton label msg =
         , Border.rounded 999
         , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
         , Font.medium
+        , Element.mouseOver [ Background.color dangerFg ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-{-| Transparent pill with teal text. Used for "+ Add" affordances where
-the pill shape still applies but the action is secondary.
+{-| Transparent pill with brand-blue text. Used for "+ Add" affordances
+where the pill shape still applies but the action is secondary.
 -}
 ghostButton : String -> msg -> Element msg
 ghostButton label msg =
     Input.button
         [ Border.rounded 999
         , Element.paddingEach { top = 8, right = 14, bottom = 8, left = 14 }
-        , Font.color primaryTeal
+        , Font.color brandBlue
         , Font.medium
+        , Element.mouseOver [ Background.color brandBlueSoft ]
         ]
         { onPress = Just msg
         , label = Element.text label
@@ -714,7 +960,7 @@ fieldLabel : String -> Element msg
 fieldLabel label_ =
     Element.el
         [ caption
-        , medium
+        , Font.medium
         , Font.color textPrimary
         ]
         (Element.text label_)
@@ -724,8 +970,8 @@ fieldLabel label_ =
 -- Display
 
 
-mutedText : String -> Element msg
-mutedText text =
+mutedBody : String -> Element msg
+mutedBody text =
     Element.el
         [ Font.color textMuted
         , body
@@ -758,7 +1004,7 @@ badge label_ =
         , Font.color textPrimary
         , Border.rounded 999
         , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
-        , small
+        , caption
         , Font.medium
         ]
         (Element.text label_)
@@ -795,7 +1041,7 @@ selectDropdown config =
                 , Element.paddingXY 14 10
                 , Background.color
                     (if isSelected val then
-                        primaryTealPressed
+                        brandBlue
 
                      else
                         cardBg
@@ -839,6 +1085,9 @@ selectDropdown config =
                 , Border.rounded 12
                 , Background.color inputFill
                 , Element.padding 10
+                , Border.width 1
+                , Border.color inputFill
+                , Element.mouseOver [ Border.color brandBlue ]
                 ]
                 { onPress = Just config.onToggle
                 , label =
@@ -916,7 +1165,7 @@ macroBar config =
     in
     Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ Element.row [ Element.width Element.fill ]
-            [ Element.el [ bold, body, Font.color textPrimary ] (Element.text config.label)
+            [ Element.el [ Font.bold, body, Font.color textPrimary ] (Element.text config.label)
             , Element.el
                 [ body
                 , Font.color textMuted
@@ -970,11 +1219,27 @@ skeletonBar =
 truncatedHeader : Device -> String -> Element msg
 truncatedHeader device heading =
     Element.el
-        [ heading1
+        [ sizeSectionTitle
         , Font.bold
+        , Font.color textPrimary
+        , Region.heading 2
         , Element.width Element.fill
         , Element.clip
         , Element.height (Element.px 28)
+        ]
+        (Element.text (truncateWithEllipsis (truncationCap device) heading))
+
+
+truncatedPageTitle : Device -> String -> Element msg
+truncatedPageTitle device heading =
+    Element.el
+        [ sizePageTitle
+        , Font.bold
+        , Font.color textPrimary
+        , Region.heading 1
+        , Element.width Element.fill
+        , Element.clip
+        , Element.height (Element.px 34)
         ]
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
@@ -1001,6 +1266,10 @@ iconButton config =
         , Border.rounded 999
         , Border.width 1
         , Border.color divider
+        , Element.mouseOver
+            [ Background.color brandBlueSoft
+            , Border.color brandBlue
+            ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = Just config.onPress
@@ -1008,20 +1277,28 @@ iconButton config =
         }
 
 
-{-| 40×40 circular icon button styled for destructive actions. Mirrors
-`iconButton` but uses the solid danger palette (the same vibrant red
-as the legacy `dangerButton`). `title` doubles as the tooltip and the
-semantic label for screen readers.
+{-| 40×40 circular icon button styled for destructive actions. Outlined
+at rest (transparent fill, danger-red icon and 1px border) so a row of
+list items doesn't shout. Flips to a solid danger fill on hover/focus
+when the action is about to be triggered. `title` doubles as the tooltip
+and the semantic label for screen readers.
 -}
 dangerIconButton : { label : String, title : String, onPress : msg } -> Element msg
 dangerIconButton config =
     Input.button
         [ Element.width (Element.px 40)
         , Element.height (Element.px 40)
-        , Background.color dangerSolid
-        , Font.color (Element.rgb255 255 255 255)
+        , Background.color cardBg
+        , Font.color dangerFg
         , Font.center
         , Border.rounded 999
+        , Border.width 1
+        , Border.color dangerFg
+        , Element.mouseOver
+            [ Background.color dangerSolid
+            , Font.color (Element.rgb255 255 255 255)
+            , Border.color dangerSolid
+            ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = Just config.onPress
@@ -1132,8 +1409,20 @@ chips strings =
         Element.none
 
     else
-        Element.wrappedRow [ Element.spacing space4 ]
-            (List.map (\c -> chip { label = c, selected = False, onClick = Nothing }) strings)
+        Element.html
+            (Html.div
+                [ Html.Attributes.style "display" "flex"
+                , Html.Attributes.style "flex-wrap" "wrap"
+                , Html.Attributes.style "gap" "4px"
+                , Html.Attributes.style "width" "100%"
+                ]
+                (List.map
+                    (\c ->
+                        chipHtml { label = c, selected = False, onClick = Nothing }
+                    )
+                    strings
+                )
+            )
 
 
 {-| 24px-tall pastel pill, useful for status indicators.
@@ -1176,7 +1465,7 @@ statBlock config =
         , Element.spacing space2
         ]
         [ Element.el
-            [ Font.size 32
+            [ sizePageTitle
             , Font.bold
             , Font.color (Element.rgb255 255 255 255)
             ]

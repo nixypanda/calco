@@ -13,9 +13,8 @@ import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Device, Element)
-import Element.Font as Font
-import Ui
 import Page.Admin.StatusBadge
+import Ui
 
 
 
@@ -116,7 +115,7 @@ userListRow config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Element.el [ Font.bold ] (Element.text config.user.username)
-        , subtitle = [ Ui.mutedText config.user.displayName ]
+        , title = Ui.sectionTitle config.user.username
+        , subtitle = [ Ui.mutedBody config.user.displayName ]
         , trailing = [ Page.Admin.StatusBadge.statusBadge config.user.status ]
         }

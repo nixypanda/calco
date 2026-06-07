@@ -2,12 +2,10 @@ module View.Nutrients exposing
     ( NutritionInput
     , NutritionState(..)
     , defaultNutritionInput
-    , macroBreakdownCompact
-    , macroBreakdownView
     , macroDot
     , mapNutritionInput
     , nutrientLabel
-    , nutrientsTable
+    , nutritionCard
     , nutritionInput
     , preview
     )
@@ -233,13 +231,7 @@ preview device state =
                 Ui.loading "Loading nutrition..."
 
             NutritionLoaded _ nutrients ->
-                Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
-                    [ Ui.card
-                        [ Ui.sectionHeader "Macro Breakdown"
-                        , macroBreakdownView device nutrients
-                        ]
-                    , nutrientsTable nutrients
-                    ]
+                nutritionCard device nutrients
 
             NutritionFailed _ errMsg ->
                 Ui.errorBanner errMsg
@@ -304,19 +296,6 @@ macroBreakdownView device nutrients =
           else
             macroLegend portions
         ]
-
-
-{-| Compact variant of the macro breakdown. Renders only the stacked
-bar (no legend) at a slim 12px height. Intended for inline use on
-compact rows (e.g. each `componentView` row in `Page.Meal.Show`).
-
-Omit the call entirely (render `Element.none` instead) when the
-caller has no macro data, so empty rows stay compact.
-
--}
-macroBreakdownCompact : List NutrientAmount -> Element msg
-macroBreakdownCompact nutrients =
-    macroBarRow 12 (macroPortions nutrients)
 
 
 type alias MacroPortions =
@@ -419,64 +398,70 @@ legendDot color =
         Element.none
 
 
-nutrientsTable : List NutrientAmount -> Element msg
-nutrientsTable nutrients =
-    Ui.card
-        [ Element.table [ Element.width Element.fill ]
-            { data = nutrients
-            , columns =
-                [ { header =
+{-| The bare nutrient table (no card wrapper), used by `nutritionCard`
+to compose macro breakdown + table inside a single shared card.
+-}
+nutrientsTableInner : List NutrientAmount -> Element msg
+nutrientsTableInner nutrients =
+    Element.table [ Element.width Element.fill ]
+        { data = nutrients
+        , columns =
+            [ { header =
+                    Element.el [ Element.paddingXY 0 Ui.space8 ]
+                        (Ui.tableHeader "Nutrient")
+              , width = Element.fill
+              , view =
+                    \n ->
                         Element.el
-                            [ Font.bold
-                            , Ui.body
-                            , Font.color Ui.mutedColor
-                            , Element.paddingXY 0 Ui.space8
-                            ]
-                            (Element.text "Nutrient")
-                  , width = Element.fill
-                  , view =
-                        \n ->
-                            Element.el
-                                [ Ui.body, Element.paddingXY 0 Ui.space8 ]
-                                (Element.text (nutrientLabel n.code))
-                  }
-                , { header =
+                            [ Ui.body, Element.paddingXY 0 Ui.space8 ]
+                            (Element.text (nutrientLabel n.code))
+              }
+            , { header =
+                    Element.el
+                        [ Font.alignRight
+                        , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
+                        ]
+                        (Ui.tableHeader "Amount")
+              , width = Element.shrink
+              , view =
+                    \n ->
                         Element.el
-                            [ Font.bold
-                            , Ui.body
-                            , Font.color Ui.mutedColor
+                            [ Ui.body
                             , Font.alignRight
                             , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
                             ]
-                            (Element.text "Amount")
-                  , width = Element.shrink
-                  , view =
-                        \n ->
-                            Element.el
-                                [ Ui.body
-                                , Font.alignRight
-                                , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
-                                ]
-                                (Element.text (formatAmount n.amount))
-                  }
-                , { header =
+                            (Element.text (formatAmount n.amount))
+              }
+            , { header =
+                    Element.el
+                        [ Element.paddingEach { top = 8, bottom = 8, left = 0, right = 0 } ]
+                        (Ui.tableHeader "Unit")
+              , width = Element.shrink
+              , view =
+                    \n ->
                         Element.el
-                            [ Font.bold
-                            , Ui.body
-                            , Font.color Ui.mutedColor
-                            , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 0 }
-                            ]
-                            (Element.text "Unit")
-                  , width = Element.shrink
-                  , view =
-                        \n ->
-                            Element.el
-                                [ Ui.body, Element.paddingXY 0 Ui.space8 ]
-                                (Element.text n.unit)
-                  }
-                ]
-            }
-        ]
+                            [ Ui.body, Element.paddingXY 0 Ui.space8 ]
+                            (Element.text n.unit)
+              }
+            ]
+        }
+
+
+{-| Combined "Nutrition" card: macro breakdown across the top, a hairline,
+then the full nutrients table below — all inside a single card. Replaces
+the prior pattern of two stacked cards.
+-}
+nutritionCard : Device -> List NutrientAmount -> Element msg
+nutritionCard device nutrients =
+    Ui.section
+        { header = Just (Ui.subsectionTitle "Nutrition")
+        , body =
+            [ macroBreakdownView device nutrients
+            , Ui.hairline
+            , nutrientsTableInner nutrients
+            ]
+        , footer = Nothing
+        }
 
 
 formatAmount : String -> String

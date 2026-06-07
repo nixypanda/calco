@@ -1414,11 +1414,8 @@ topBarView model =
         , Element.el
             [ Element.width Element.fill
             , Element.clip
-            , Ui.heading3
-            , Font.bold
-            , Region.heading 1
             ]
-            (Element.text meta.title)
+            (Ui.subsectionTitle meta.title)
         , profileButton model
         ]
 
@@ -1589,7 +1586,7 @@ drawerView model =
         ]
         (Element.row [ Element.spacing Ui.space8 ]
             [ Ui.iconButton { label = "☰", title = "Close", onPress = DrawerClosed }
-            , Element.el [ Ui.heading2, Font.bold ] (Element.text "CalCo")
+            , Ui.sectionTitle "CalCo"
             ]
             :: Ui.hairline
             :: drawerItems model
@@ -1629,7 +1626,7 @@ drawerItem current label target =
             )
         , Font.color
             (if selected then
-                Ui.primaryTeal
+                Ui.brandBlue
 
              else
                 Ui.darkColor
@@ -1683,18 +1680,13 @@ primaryRoute route =
 
 profileMenuContent : Model -> List (Element.Element Msg)
 profileMenuContent model =
-    [ Element.el
-        [ Ui.caption
-        , Font.color Ui.mutedColor
-        ]
-        (Element.text
-            (case model.session of
-                Session.Authenticated identity ->
-                    "Signed in as " ++ identity.username
+    [ Ui.mutedCaption
+        (case model.session of
+            Session.Authenticated identity ->
+                "Signed in as " ++ identity.username
 
-                _ ->
-                    "Signed in"
-            )
+            _ ->
+                "Signed in"
         )
     , Ui.button "Logout" LogoutClicked
     ]

@@ -202,7 +202,7 @@ foodRow device action food =
         , leading = [ macroDot ]
         , title = Ui.truncatedHeader device food.name
         , subtitle =
-            [ Ui.mutedText (foodSummaryText food)
+            [ Ui.mutedBody (foodSummaryText food)
             , Ui.chips food.categories
             ]
         , trailing =

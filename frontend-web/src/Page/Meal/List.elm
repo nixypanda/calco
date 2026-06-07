@@ -205,7 +205,7 @@ mealRow device action meal =
         , leading = macroDot
         , title = Ui.truncatedHeader device meal.name
         , subtitle =
-            [ Ui.mutedText (mealSummaryText meal)
+            [ Ui.mutedBody (mealSummaryText meal)
             , Ui.mutedParagraph (Maybe.withDefault "" meal.notes)
             ]
         , trailing =

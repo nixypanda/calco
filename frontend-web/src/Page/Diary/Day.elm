@@ -308,34 +308,23 @@ dateCard model _ =
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
-                , Font.bold
-                , Ui.heading3
                 ]
-                (Element.text (LocalDate.display model.currentDate))
-            , Input.button
-                (List.concat
-                    [ [ Element.width (Element.px 40)
-                      , Element.height (Element.px 40)
-                      , Background.color Ui.inputFill
-                      , Font.color Ui.darkColor
-                      , Font.center
-                      , Border.rounded 999
-                      ]
-                    , if canGoNext then
-                        []
+                (Ui.subsectionTitle (LocalDate.display model.currentDate))
+            , if canGoNext then
+                Ui.iconButton { label = "→", title = "Next Day", onPress = NextDayClicked }
 
-                      else
-                        [ Font.color Ui.mutedColor ]
+              else
+                Input.button
+                    [ Element.width (Element.px 40)
+                    , Element.height (Element.px 40)
+                    , Background.color Ui.inputFill
+                    , Font.color Ui.mutedColor
+                    , Font.center
+                    , Border.rounded 999
                     ]
-                )
-                { onPress =
-                    if canGoNext then
-                        Just NextDayClicked
-
-                    else
-                        Nothing
-                , label = Element.text "→"
-                }
+                    { onPress = Nothing
+                    , label = Element.text "→"
+                    }
             ]
         , Ui.hairline
         , Element.column
@@ -492,19 +481,14 @@ mealSlotHeader model allLogs slot label totals device =
                 , Element.spacing Ui.space12
                 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-                    [ Element.el [ Font.bold ] (Element.text label)
-                    , Input.button [ Font.color Ui.mutedColor, Ui.caption ]
+                    [ Ui.sectionTitle label
+                    , Input.button []
                         { onPress = Just MacroModeToggled
-                        , label = Element.text (macroSummary model.macroMode totals)
+                        , label = Ui.mutedCaption (macroSummary model.macroMode totals)
                         }
                     ]
-                , Element.el
-                    [ Ui.caption
-                    , Font.color Ui.mutedColor
-                    ]
-                    (Element.text
-                        (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal")
-                    )
+                , Ui.mutedCaption
+                    (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal")
                 ]
     in
     case slot of
@@ -559,8 +543,8 @@ mealSlotFade =
                 "background-image"
                 ("linear-gradient(to bottom, "
                     ++ "rgba(255,255,255,0) 0%, "
-                    ++ "rgba(255,255,255,0) 46%, "
-                    ++ "rgba(255,255,255,0.48) 78%, "
+                    ++ "rgba(255,255,255,0) 55%, "
+                    ++ "rgba(255,255,255,0.48) 85%, "
                     ++ "white 100%)"
                 )
             )
@@ -675,13 +659,8 @@ logRow device log =
                     (Element.text
                         (Ui.truncateWithEllipsis (Ui.truncationCap device) log.item.name)
                     )
-                , Element.el
-                    [ Ui.caption, Font.color Ui.mutedColor ]
-                    (Element.text (log.quantity.amount ++ " " ++ log.quantity.unit))
-                , Element.el
-                    [ Ui.caption, Font.color Ui.mutedColor ]
-                    (Element.text
-                        (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
-                    )
+                , Ui.mutedCaption (log.quantity.amount ++ " " ++ log.quantity.unit)
+                , Ui.mutedCaption
+                    (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
                 ]
         }

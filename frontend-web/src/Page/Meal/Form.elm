@@ -350,21 +350,29 @@ viewFormFields :
     -> Element msg
 viewFormFields device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.input "Name" form.name (toMsg << NameChanged)
-        , Ui.input "Notes" form.notes (toMsg << NotesChanged)
-        , quantityTextInput device
-            { amountLabel = "Total Quantity"
-            , amount = form.totalQuantity
-            , onAmountChange = toMsg << TotalQuantityChanged
-            , unitLabel = "Total Unit"
-            , unit = form.totalUnit
-            , onUnitChange = toMsg << TotalUnitChanged
+        [ Ui.section
+            { header = Nothing
+            , body =
+                [ Ui.input "Name" form.name (toMsg << NameChanged)
+                , Ui.input "Notes" form.notes (toMsg << NotesChanged)
+                , quantityTextInput device
+                    { amountLabel = "Total Quantity"
+                    , amount = form.totalQuantity
+                    , onAmountChange = toMsg << TotalQuantityChanged
+                    , unitLabel = "Total Unit"
+                    , unit = form.totalUnit
+                    , onUnitChange = toMsg << TotalUnitChanged
+                    }
+                ]
+            , footer = Nothing
             }
-        , Ui.sectionHeader "Components"
-        , Element.column
-            [ Element.width Element.fill, Element.spacing 10 ]
-            (List.map (componentRowView device toMsg) form.components)
-        , Ui.ghostButton "+ Add Component" (toMsg AddComponentClicked)
+        , Ui.section
+            { header = Just (Ui.subsectionTitle "Components")
+            , body =
+                List.intersperse Ui.hairline
+                    (List.map (componentRowView device toMsg) form.components)
+            , footer = Just (Ui.ghostButton "+ Add Component" (toMsg AddComponentClicked))
+            }
         ]
 
 
@@ -622,7 +630,8 @@ removeRow rowId rows =
 
 componentRowView : Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
 componentRowView device toMsg row =
-    Ui.card
+    Element.column
+        [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ SearchView.searchInput
             { onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query

@@ -123,7 +123,7 @@ view { model, device } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner (Common.submitErrorMessage model.submit)
         , Common.viewFormFields device FormMsg model
-        , Ui.submitButton (Common.isSubmitting model.submit)
+        , Ui.primarySubmitButton (Common.isSubmitting model.submit)
             "Create Meal"
             "Saving..."
             SubmitClicked

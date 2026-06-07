@@ -245,6 +245,56 @@ tests =
                     |> List.head
                     |> Maybe.map .unit
                     |> Expect.equal (Just "g")
+        , test "NutrientsLoaded backfills blank unit for selected row" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+
+                    formWithCode : Form.FormModel
+                    formWithCode =
+                        { base
+                            | nutrients =
+                                [ { code = "PROTEIN_G"
+                                  , amountPer100g = "18"
+                                  , unit = ""
+                                  }
+                                ]
+                        }
+
+                    ( afterLoad, _, _ ) =
+                        Form.update (Form.NutrientsLoaded nutrientItems) formWithCode
+                in
+                afterLoad.nutrients
+                    |> List.head
+                    |> Maybe.map .unit
+                    |> Expect.equal (Just "g")
+        , test "NutrientsLoaded keeps existing populated unit" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+
+                    formWithUnit : Form.FormModel
+                    formWithUnit =
+                        { base
+                            | nutrients =
+                                [ { code = "PROTEIN_G"
+                                  , amountPer100g = "18"
+                                  , unit = "custom"
+                                  }
+                                ]
+                        }
+
+                    ( afterLoad, _, _ ) =
+                        Form.update (Form.NutrientsLoaded nutrientItems) formWithUnit
+                in
+                afterLoad.nutrients
+                    |> List.head
+                    |> Maybe.map .unit
+                    |> Expect.equal (Just "custom")
         , test "NutrientCodeChanged with unknown code clears unit" <|
             \_ ->
                 let
@@ -302,3 +352,18 @@ product =
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
+
+
+nutrientItems : List NutrientItem
+nutrientItems =
+    [ { code = "ENERGY_KCAL"
+      , name = "Energy"
+      , unit = "kcal"
+      , category = "energy"
+      }
+    , { code = "PROTEIN_G"
+      , name = "Protein"
+      , unit = "g"
+      , category = "macros"
+      }
+    ]

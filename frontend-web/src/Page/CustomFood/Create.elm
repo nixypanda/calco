@@ -12,8 +12,8 @@ import Api.Foods as Foods
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
 import Page.CustomFood.Form as Form
+import Ui
 
 
 
@@ -196,7 +196,7 @@ view { model, device } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner model.error
         , Element.map FormMsg (Form.view device model.nutrients model.units model.form)
-        , Ui.submitButton (Form.isSubmitting model.form.submit)
+        , Ui.primarySubmitButton (Form.isSubmitting model.form.submit)
             "Create Food"
             "Creating..."
             SubmitClicked

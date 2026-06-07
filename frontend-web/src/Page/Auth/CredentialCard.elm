@@ -2,7 +2,6 @@ module Page.Auth.CredentialCard exposing (credentialCard)
 
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Element.Region as Region
 import Ui
 
 
@@ -38,19 +37,14 @@ credentialCard config =
         , Element.padding outerPadding
         ]
         (Ui.card
-            ([ Element.el [ Ui.display, Font.bold, Region.heading 1 ] (Element.text "CalCo")
-             , Element.el
-                [ Ui.heading2
-                , Font.medium
-                , Font.color Ui.textMedium
-                ]
-                (Element.text config.title)
+            ([ Ui.pageTitle "CalCo"
+             , Ui.subsectionTitle config.title
              ]
                 ++ descriptionView config.description
                 ++ [ Ui.input "Username" config.username config.onUsernameChanged
                    , Ui.passwordInput "Password" config.password config.onPasswordChanged
                    , Ui.maybeErrorBanner config.error
-                   , Ui.submitButton
+                   , Ui.primarySubmitButton
                         config.submitting
                         config.submitLabel
                         config.submittingLabel

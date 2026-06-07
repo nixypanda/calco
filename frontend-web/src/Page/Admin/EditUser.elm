@@ -18,8 +18,8 @@ import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Ui
 import Page.Admin.StatusBadge
+import Ui
 
 
 
@@ -356,7 +356,7 @@ userSummaryCard : User.User -> Element msg
 userSummaryCard user =
     Ui.card
         [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
+            [ Ui.sectionTitle user.username
             , Ui.detailRow "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
             , Ui.detailRow "Status" (Page.Admin.StatusBadge.statusBadge user.status)

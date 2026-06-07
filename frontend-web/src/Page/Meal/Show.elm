@@ -480,7 +480,26 @@ failure =
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        [ headerView device model
+        [ Ui.section
+            { header = Just (headerView device model)
+            , body =
+                [ case model of
+                    Loaded loaded ->
+                        case loaded.meal.notes of
+                            Just notes ->
+                                Ui.mutedParagraph notes
+
+                            Nothing ->
+                                Element.none
+
+                    LoadFailed message ->
+                        Ui.errorBanner message
+
+                    Loading _ ->
+                        Ui.loading "Loading meal..."
+                ]
+            , footer = Nothing
+            }
         , case model of
             Loaded loaded ->
                 loadedView device loaded
@@ -497,43 +516,31 @@ headerView : Device -> Model -> Element Msg
 headerView device model =
     case model of
         Loaded loaded ->
-            Element.wrappedRow [ Element.width Element.fill, Element.spacing Ui.space16 ]
-                [ Ui.truncatedHeader device loaded.meal.name
-                , Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
-                , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
-                ]
+            Ui.pageHeader device
+                { leading =
+                    loaded.meal.nutritionSummary
+                        |> Maybe.map
+                            (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                , title = loaded.meal.name
+                , subtitle = Nothing
+                , actions =
+                    [ Ui.iconButton { label = "✎", title = "Edit", onPress = EditClicked }
+                    , Ui.dangerIconButton { label = "×", title = "Delete", onPress = DeleteClicked }
+                    ]
+                }
 
         _ ->
-            Element.el [ Ui.heading1, Font.bold ] (Element.text "Meal")
+            Ui.pageTitle "Meal"
 
 
 loadedView : Device -> LoadedModel -> Element Msg
 loadedView device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
-        [ case loaded.meal.notes of
-            Just notes ->
-                Ui.mutedParagraph notes
-
-            Nothing ->
-                Element.none
-        , case loaded.meal.nutritionSummary of
-            Just summary ->
-                let
-                    summaryNutrients : List Nutrition.NutrientAmount
-                    summaryNutrients =
-                        Nutrition.summaryToNutrients summary
-                in
-                Ui.card
-                    [ Ui.sectionHeader "Macro Breakdown"
-                    , View.Nutrients.macroBreakdownView device summaryNutrients
-                    ]
-
-            Nothing ->
-                Element.none
-        , Ui.sectionHeader "Components"
-        , Element.column
-            [ Element.width Element.fill, Element.spacing Ui.space8 ]
-            (List.map (componentView loaded) loaded.meal.components)
+        [ Ui.section
+            { header = Just (Ui.subsectionTitle "Components")
+            , body = List.map (componentView loaded) loaded.meal.components
+            , footer = Nothing
+            }
         , nutritionView device loaded
         , confirmDeleteView loaded
         ]
@@ -554,22 +561,13 @@ componentView loaded component =
                     )
                 |> Maybe.withDefault ""
 
-        macroDot : List (Element msg)
+        macroDot : Element msg
         macroDot =
-            Maybe.withDefault []
+            Maybe.withDefault Element.none
                 (Maybe.map
-                    (List.singleton << View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                    (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
                     component.nutritionSummary
                 )
-
-        compactBar : Element Msg
-        compactBar =
-            case component.nutritionSummary of
-                Just summary ->
-                    View.Nutrients.macroBreakdownCompact (Nutrition.summaryToNutrients summary)
-
-                Nothing ->
-                    Element.none
 
         quantityText : String
         quantityText =
@@ -578,26 +576,26 @@ componentView loaded component =
                 ++ component.quantity.unit
                 ++ summaryText
     in
-    Element.column
+    Element.row
         [ Element.width Element.fill
-        , Element.spacing Ui.space8
-        , Element.padding 14
-        , Background.color Ui.cardBg
-        , Border.rounded 16
-        , Ui.cardShadow
+        , Element.spacing Ui.space12
         ]
-        [ Element.row
-            [ Element.width Element.fill
-            , Element.spacing Ui.space12
+        [ Element.el
+            [ Element.width (Element.px 12)
+            , Element.paddingEach { top = 2, right = 0, bottom = 0, left = 0 }
+            , Element.alignTop
             ]
-            (macroDot
-                ++ [ Element.el [ Font.bold ] (Element.text (nameFor component.item.id loaded))
-                   , Element.el
-                        [ Font.color Ui.mutedColor ]
-                        (Element.text quantityText)
-                   ]
-            )
-        , compactBar
+            macroDot
+        , Element.column
+            [ Element.width Element.fill
+            , Element.spacing Ui.space4
+            , Element.alignTop
+            ]
+            [ Ui.listItemTitle (nameFor component.item.id loaded)
+            , Element.el
+                [ Font.color Ui.mutedColor ]
+                (Element.text quantityText)
+            ]
         ]
 
 
@@ -608,9 +606,8 @@ nutritionView device loaded =
         input =
             nutritionInput loaded.nutrition
     in
-    Element.column [ Element.width Element.fill, Element.spacing 10 ]
-        [ Ui.sectionHeader "Nutrition"
-        , Ui.card
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+        [ Ui.card
             [ View.QuantityInput.dropdown
                 { amountLabel = "Amount"
                 , amount = input.amount
@@ -651,7 +648,7 @@ confirmDeleteContent maybeError deleting =
         , Background.color Ui.dangerBg
         , Border.rounded 16
         ]
-        [ Element.el [ Font.bold ] (Element.text "Delete meal?")
+        [ Ui.sectionTitle "Delete meal?"
         , Ui.maybeErrorBanner maybeError
         , Element.row [ Element.spacing Ui.space8 ]
             [ Ui.button "Cancel" CancelDeleteClicked

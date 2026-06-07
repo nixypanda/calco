@@ -390,7 +390,7 @@ view { model, device } =
                 [ Ui.maybeErrorBanner (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields device FormMsg loaded.fields
                 , nutritionView device loaded
-                , Ui.submitButton (Common.isSubmitting loaded.fields.submit)
+                , Ui.primarySubmitButton (Common.isSubmitting loaded.fields.submit)
                     "Update Meal"
                     "Saving..."
                     SubmitClicked
@@ -399,7 +399,6 @@ view { model, device } =
 
 nutritionView : Device -> LoadedModel -> Element Msg
 nutritionView device loaded =
-    Element.column [ Element.width Element.fill, Element.spacing 10 ]
-        [ Ui.sectionHeader "Nutrition"
-        , View.Nutrients.preview device loaded.nutrition
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+        [ View.Nutrients.preview device loaded.nutrition
         ]

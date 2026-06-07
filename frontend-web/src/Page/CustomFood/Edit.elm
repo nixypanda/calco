@@ -22,8 +22,8 @@ import Api.Foods as Foods
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
 import Page.CustomFood.Form as Form
+import Ui
 
 
 type Model
@@ -328,9 +328,9 @@ bodyView : { model : Model, device : Device } -> Element Msg
 bodyView { model, device } =
     case model of
         Loaded loaded ->
-            Element.column [ Element.width Element.fill, Element.spacing 14 ]
+            Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
                 [ Element.map FormMsg (Form.view device loaded.nutrients loaded.units loaded.form)
-                , Ui.submitButton
+                , Ui.primarySubmitButton
                     (Form.isSubmitting loaded.form.submit)
                     "Save Food"
                     "Saving..."

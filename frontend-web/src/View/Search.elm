@@ -108,9 +108,7 @@ resultRow device config =
                     (Element.text
                         (Ui.truncateWithEllipsis (Ui.truncationCap device) config.item.name)
                     )
-                , Element.el
-                    [ Ui.caption, Font.color Ui.mutedColor ]
-                    (Element.text (metaText config.query config.item))
+                , Ui.mutedCaption (metaText config.query config.item)
                 ]
     in
     Input.button

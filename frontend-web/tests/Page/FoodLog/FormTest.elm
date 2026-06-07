@@ -7,8 +7,8 @@ import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
-import Test exposing (Test, describe, test)
 import Page.FoodLog.Form as FoodLogForm
+import Test exposing (Test, describe, test)
 
 
 tests : Test

@@ -7,8 +7,8 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
-import Page.Meal.Form as Common
 import Page.Meal.Edit as MealEdit
+import Page.Meal.Form as Common
 import Test exposing (Test, describe, test)
 import View.Nutrients exposing (NutritionState(..))
 

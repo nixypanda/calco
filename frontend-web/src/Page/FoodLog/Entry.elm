@@ -26,12 +26,10 @@ import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
 import Lib.Date as LocalDate
 import Page.Food.Show
-import Ui
 import Page.FoodLog.Form as FoodLogForm
+import Ui
 import View.Nutrients
 
 
@@ -600,23 +598,9 @@ loadedView device model =
         , Element.map FormMsg
             (FoodLogForm.view (productDetail model.item) model.units model.form)
         , Ui.cardActions
-            [ Ui.submitButton (model.request == Saving) "Save" "Saving..." SubmitClicked
-            , Ui.dangerIconButton
-                { label = "×"
-                , title =
-                    if model.request == Deleting then
-                        "Deleting..."
-
-                    else
-                        "Delete"
-                , onPress = DeleteClicked
-                }
+            [ Ui.primarySubmitButton (model.request == Saving) "Save" "Saving..." SubmitClicked
             ]
-        , Ui.card
-            [ Ui.sectionHeader "Macro Breakdown"
-            , View.Nutrients.macroBreakdownView device nutrients
-            ]
-        , View.Nutrients.nutrientsTable nutrients
+        , View.Nutrients.nutritionCard device nutrients
         ]
 
 
@@ -657,34 +641,53 @@ itemHeader device model =
         maybeFood : Maybe ProductDetail
         maybeFood =
             productDetail model.item
-    in
-    Element.row
-        [ Element.width Element.fill
-        , Element.padding Ui.space20
-        , Element.spacing Ui.space16
-        , Background.color Ui.cardBg
-        , Border.rounded 20
-        , Ui.cardShadow
-        ]
-        [ View.Nutrients.macroDot model.log.nutrients
-        , Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
-            [ Ui.truncatedHeader device (itemTitle model.item)
-            , Ui.mutedText (metaText maybeFood model.log)
-            , case maybeFood of
-                Just food ->
-                    Ui.chips food.categories
 
-                Nothing ->
-                    Element.none
-            , case
-                Maybe.andThen Page.Food.Show.customFoodEditRoute maybeFood
-              of
+        editAction : List (Element Msg)
+        editAction =
+            case Maybe.andThen Page.Food.Show.customFoodEditRoute maybeFood of
                 Just _ ->
-                    Ui.button "Edit food" EditCustomFoodClicked
+                    [ Ui.iconButton
+                        { label = "✎"
+                        , title = "Edit food"
+                        , onPress = EditCustomFoodClicked
+                        }
+                    ]
 
                 Nothing ->
-                    Element.none
+                    []
+
+        deleteAction : List (Element Msg)
+        deleteAction =
+            [ Ui.dangerIconButton
+                { label = "×"
+                , title =
+                    if model.request == Deleting then
+                        "Deleting..."
+
+                    else
+                        "Delete"
+                , onPress = DeleteClicked
+                }
             ]
+    in
+    Ui.card
+        [ Ui.pageHeader device
+            { leading = Just (View.Nutrients.macroDot model.log.nutrients)
+            , title = itemTitle model.item
+            , subtitle = Just (metaText maybeFood model.log)
+            , actions = editAction ++ deleteAction
+            }
+        , case maybeFood of
+            Just food ->
+                if List.isEmpty food.categories then
+                    Element.none
+
+                else
+                    Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                        [ Ui.macroDotGhost, Ui.chips food.categories ]
+
+            Nothing ->
+                Element.none
         ]
 
 

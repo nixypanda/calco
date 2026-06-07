@@ -21,10 +21,8 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
-import Ui
 import Page.FoodLog.Form as FoodLogForm
+import Ui
 import View.Nutrients
 
 
@@ -422,17 +420,13 @@ loadedView device loaded =
         [ foodHeader device food
         , Element.map FormMsg (FoodLogForm.view (Just food) loaded.units form)
         , Ui.cardActions
-            [ Ui.submitButton
+            [ Ui.primarySubmitButton
                 (loaded.request == Saving)
                 "Log Food"
                 "Logging..."
                 SubmitClicked
             ]
-        , Ui.card
-            [ Ui.sectionHeader "Macro Breakdown"
-            , View.Nutrients.macroBreakdownView device nutrients
-            ]
-        , View.Nutrients.nutrientsTable nutrients
+        , View.Nutrients.nutritionCard device nutrients
         ]
 
 
@@ -459,29 +453,40 @@ foodNutrientsPer100g food =
 
 foodHeader : Device -> ProductDetail -> Element Msg
 foodHeader device food =
-    Element.row
-        [ Element.width Element.fill
-        , Element.padding Ui.space20
-        , Element.spacing Ui.space16
-        , Background.color Ui.cardBg
-        , Border.rounded 20
-        , Ui.cardShadow
-        ]
-        [ View.Nutrients.macroDot
-            (food.nutrients
-                |> List.map (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
-            )
-        , Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
-            [ Ui.truncatedHeader device food.name
-            , Ui.mutedText (metaText food)
-            , Ui.chips food.categories
-            , case customFoodEditRoute food of
+    let
+        editAction : List (Element Msg)
+        editAction =
+            case customFoodEditRoute food of
                 Just _ ->
-                    Ui.button "Edit food" EditCustomFoodClicked
+                    [ Ui.iconButton
+                        { label = "✎"
+                        , title = "Edit food"
+                        , onPress = EditCustomFoodClicked
+                        }
+                    ]
 
                 Nothing ->
-                    Element.none
-            ]
+                    []
+
+        macroNutrients : List Nutrition.NutrientAmount
+        macroNutrients =
+            food.nutrients
+                |> List.map
+                    (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
+    in
+    Ui.card
+        [ Ui.pageHeader device
+            { leading = Just (View.Nutrients.macroDot macroNutrients)
+            , title = food.name
+            , subtitle = Just (metaText food)
+            , actions = editAction
+            }
+        , if List.isEmpty food.categories then
+            Element.none
+
+          else
+            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                [ Ui.macroDotGhost, Ui.chips food.categories ]
         ]
 
 
