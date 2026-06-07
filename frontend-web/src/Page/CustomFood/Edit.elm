@@ -4,7 +4,6 @@ module Page.CustomFood.Edit exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , SubmitState(..)
     , init
     , update
     , view
@@ -24,7 +23,7 @@ import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
-import View.CustomFoodForm as Form
+import Page.CustomFood.Form as Form
 
 
 type Model
@@ -46,14 +45,7 @@ type alias LoadedModel =
     , form : Form.FormModel
     , nutrients : List NutrientItem
     , units : List UnitItem
-    , submit : SubmitState
     }
-
-
-type SubmitState
-    = Editing
-    | Submitting
-    | Failed String
 
 
 type Msg
@@ -133,11 +125,7 @@ update msg model =
                         ( nextForm, subCmd, formOut ) =
                             Form.update subMsg loaded.form
                     in
-                    ( Loaded
-                        { loaded
-                            | form = nextForm
-                            , submit = Editing
-                        }
+                    ( Loaded { loaded | form = nextForm }
                     , Cmd.map FormMsg subCmd
                     , case formOut of
                         Form.NoOutMsg ->
@@ -180,7 +168,7 @@ update msg model =
         SaveCompleted result ->
             case model of
                 Loaded loaded ->
-                    if loaded.submit == Submitting then
+                    if Form.isSubmitting loaded.form.submit then
                         completeSave result model
 
                     else
@@ -194,38 +182,27 @@ submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
 submitLoaded loaded =
     case Form.toCreateFoodRequest loaded.form of
         Ok request ->
-            let
-                form : Form.FormModel
-                form =
-                    loaded.form
-            in
-            ( Loaded
-                { loaded
-                    | form = { form | submitting = True, error = Nothing }
-                    , submit = Submitting
-                }
+            ( Loaded { loaded | form = withSubmit Form.Submitting loaded.form }
             , Cmd.none
             , RequestUpdateFood loaded.productId request
             )
 
         Err validationError ->
-            let
-                form : Form.FormModel
-                form =
-                    loaded.form
-            in
             ( Loaded
                 { loaded
                     | form =
-                        { form
-                            | submitting = False
-                            , error = Just (validationMessage validationError)
-                        }
-                    , submit = Editing
+                        withSubmit
+                            (Form.SubmitFailed (validationMessage validationError))
+                            loaded.form
                 }
             , Cmd.none
             , NoOp
             )
+
+
+withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel
+withSubmit state form =
+    { form | submit = state }
 
 
 validationMessage : Form.ValidationError -> String
@@ -251,7 +228,7 @@ completeSave :
 completeSave result model =
     case result of
         Ok response ->
-            ( model, Cmd.none, Navigate (FoodDetail response.id Nothing) )
+            ( model, Cmd.none, Navigate (FoodShow response.id Nothing) )
 
         Err error ->
             ApiResult.failure
@@ -272,11 +249,7 @@ setLoadedFood food model =
             completeLoading { loading | food = Just food }
 
         Loaded loaded ->
-            Loaded
-                { loaded
-                    | form = Form.fromProductDetail food
-                    , submit = Editing
-                }
+            Loaded { loaded | form = Form.fromProductDetail food }
 
         LoadFailed _ ->
             model
@@ -317,7 +290,6 @@ completeLoading loading =
                 , form = Form.fromProductDetail food
                 , nutrients = nutrients
                 , units = units
-                , submit = Editing
                 }
 
         _ ->
@@ -328,15 +300,9 @@ applySubmitError : String -> Model -> Model
 applySubmitError message model =
     case model of
         Loaded loaded ->
-            let
-                form : Form.FormModel
-                form =
-                    loaded.form
-            in
             Loaded
                 { loaded
-                    | form = { form | submitting = False }
-                    , submit = Failed message
+                    | form = withSubmit (Form.SubmitFailed message) loaded.form
                 }
 
         _ ->
@@ -355,27 +321,7 @@ failure =
 view : { model : Model, device : Device } -> Element Msg
 view config =
     Ui.pageContainer config.device
-        [ errorView config.model
-        , bodyView config
-        ]
-
-
-errorView : Model -> Element Msg
-errorView model =
-    case model of
-        Loaded loaded ->
-            case loaded.submit of
-                Failed message ->
-                    Ui.errorBanner message
-
-                _ ->
-                    Element.none
-
-        LoadFailed message ->
-            Ui.errorBanner message
-
-        Loading _ ->
-            Element.none
+        [ bodyView config ]
 
 
 bodyView : { model : Model, device : Device } -> Element Msg
@@ -385,14 +331,14 @@ bodyView { model, device } =
             Element.column [ Element.width Element.fill, Element.spacing 14 ]
                 [ Element.map FormMsg (Form.view device loaded.nutrients loaded.units loaded.form)
                 , Ui.submitButton
-                    (loaded.submit == Submitting)
+                    (Form.isSubmitting loaded.form.submit)
                     "Save Food"
                     "Saving..."
                     SubmitClicked
                 ]
 
-        LoadFailed _ ->
-            Element.none
+        LoadFailed message ->
+            Ui.errorBanner message
 
         Loading _ ->
             Ui.loading "Loading food..."

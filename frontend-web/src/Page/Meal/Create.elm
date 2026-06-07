@@ -12,7 +12,7 @@ import Api.Meals exposing (CreateMealRequest, Meal)
 import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Common as Common
+import Page.Meal.Form as Common
 import Ui
 
 
@@ -55,26 +55,22 @@ update msg fields =
         SubmitClicked ->
             case Common.toMealRequest fields of
                 Ok request ->
-                    ( { fields | submitting = True, error = Nothing }
+                    ( { fields | submit = Common.Submitting }
                     , Cmd.none
                     , RequestCreateMeal request
                     )
 
                 Err Common.MealNameRequired ->
-                    ( { fields
-                        | error = Just "Name is required"
-                        , submitting = False
-                      }
+                    ( { fields | submit = Common.SubmitFailed "Name is required" }
                     , Cmd.none
                     , NoOp
                     )
 
                 Err Common.ComponentRequired ->
                     ( { fields
-                        | error =
-                            Just
+                        | submit =
+                            Common.SubmitFailed
                                 "At least one component with a selected product is required"
-                        , submitting = False
                       }
                     , Cmd.none
                     , NoOp
@@ -83,9 +79,9 @@ update msg fields =
         SaveCompleted result ->
             case result of
                 Ok meal ->
-                    ( { fields | submitting = False }
+                    ( { fields | submit = Common.Idle }
                     , Cmd.none
-                    , Navigate (MealDetail meal.id)
+                    , Navigate (MealShow meal.id)
                     )
 
                 Err error ->
@@ -94,10 +90,7 @@ update msg fields =
                         , sessionExpired = SessionExpired
                         , applyError =
                             \message current ->
-                                { current
-                                    | submitting = False
-                                    , error = Just message
-                                }
+                                { current | submit = Common.SubmitFailed message }
                         }
                         error
                         fields
@@ -128,9 +121,9 @@ mapFormOutMsg maybeOutMsg =
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
     Ui.pageContainer device
-        [ Ui.maybeErrorBanner model.error
+        [ Ui.maybeErrorBanner (Common.submitErrorMessage model.submit)
         , Common.viewFormFields device FormMsg model
-        , Ui.submitButton model.submitting
+        , Ui.submitButton (Common.isSubmitting model.submit)
             "Create Meal"
             "Saving..."
             SubmitClicked

@@ -24,11 +24,11 @@ resolveKnownSession : Session.Session -> Bool -> Route -> RouteDecision
 resolveKnownSession session adminExists route =
     if not adminExists then
         case route of
-            Setup ->
-                Render Setup
+            BootstrapSetup ->
+                Render BootstrapSetup
 
             _ ->
-                Navigate Setup
+                Navigate BootstrapSetup
 
     else if Session.isAdmin session then
         case route of
@@ -46,48 +46,48 @@ resolveKnownSession session adminExists route =
 
     else if not (Session.isAuthenticated session) then
         case route of
-            Login ->
-                Render Login
+            AuthLogin ->
+                Render AuthLogin
 
             _ ->
-                Navigate Login
+                Navigate AuthLogin
 
     else
         case route of
             Root ->
-                Navigate (Diary Nothing)
+                Navigate (DiaryDay Nothing)
 
             NotFound ->
                 Navigate Root
 
-            Setup ->
+            BootstrapSetup ->
                 Navigate Root
 
-            Login ->
+            AuthLogin ->
                 Navigate Root
 
             AdminDashboard ->
-                Navigate (Diary Nothing)
+                Navigate (DiaryDay Nothing)
 
             AdminCreateUser ->
-                Navigate (Diary Nothing)
+                Navigate (DiaryDay Nothing)
 
             AdminEditUser _ ->
-                Navigate (Diary Nothing)
+                Navigate (DiaryDay Nothing)
 
-            Diary _ ->
+            DiaryDay _ ->
                 Render route
 
-            FoodLogDetail _ ->
+            FoodLogEntry _ ->
                 Render route
 
             FoodSearch _ ->
                 Render route
 
-            FoodDetail _ _ ->
+            FoodShow _ _ ->
                 Render route
 
-            CustomFoods ->
+            CustomFoodList ->
                 Render route
 
             CustomFoodCreate ->
@@ -96,13 +96,13 @@ resolveKnownSession session adminExists route =
             CustomFoodEdit _ ->
                 Render route
 
-            Meals ->
+            MealList ->
                 Render route
 
             MealCreate ->
                 Render route
 
-            MealDetail _ ->
+            MealShow _ ->
                 Render route
 
             MealEdit _ ->

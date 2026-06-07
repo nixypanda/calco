@@ -19,7 +19,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Ui
-import View.Admin
+import Page.Admin.StatusBadge
 
 
 
@@ -359,7 +359,7 @@ userSummaryCard user =
             [ Element.el [ Font.bold, Ui.heading3 ] (Element.text user.username)
             , Ui.detailRow "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
-            , Ui.detailRow "Status" (View.Admin.statusBadge user.status)
+            , Ui.detailRow "Status" (Page.Admin.StatusBadge.statusBadge user.status)
             , Ui.detailRow "Created"
                 (Element.el [ Ui.caption ] (Element.text user.createdAt))
             ]

@@ -169,7 +169,7 @@ update msg model =
                             ( { model | results = Failure error }, Cmd.none, NoOp )
 
         ResultClicked id ->
-            ( model, Cmd.none, Navigate (FoodDetail id model.mealSlot) )
+            ( model, Cmd.none, Navigate (FoodShow id model.mealSlot) )
 
         CreateCustomFoodClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )

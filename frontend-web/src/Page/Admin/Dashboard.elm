@@ -15,7 +15,7 @@ import Data.User as User
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
-import View.Admin
+import Page.Admin.StatusBadge
 
 
 
@@ -118,5 +118,5 @@ userListRow config =
         , leading = []
         , title = Element.el [ Font.bold ] (Element.text config.user.username)
         , subtitle = [ Ui.mutedText config.user.displayName ]
-        , trailing = [ View.Admin.statusBadge config.user.status ]
+        , trailing = [ Page.Admin.StatusBadge.statusBadge config.user.status ]
         }

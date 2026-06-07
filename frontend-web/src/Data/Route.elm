@@ -12,21 +12,21 @@ import Url.Parser.Query as Query
 
 type Route
     = Root
-    | Setup
-    | Login
+    | BootstrapSetup
+    | AuthLogin
     | AdminDashboard
     | AdminCreateUser
     | AdminEditUser String
-    | Diary (Maybe String)
-    | FoodLogDetail String
+    | DiaryDay (Maybe String)
+    | FoodLogEntry String
     | FoodSearch (Maybe MealSlot)
-    | FoodDetail String (Maybe MealSlot)
-    | CustomFoods
+    | FoodShow String (Maybe MealSlot)
+    | CustomFoodList
     | CustomFoodCreate
     | CustomFoodEdit String
-    | Meals
+    | MealList
     | MealCreate
-    | MealDetail String
+    | MealShow String
     | MealEdit String
     | NotFound
 
@@ -41,22 +41,22 @@ routeParser : Parser (Route -> a) a
 routeParser =
     oneOf
         [ Parser.map Root top
-        , Parser.map Setup (s "setup")
-        , Parser.map Login (s "login")
+        , Parser.map BootstrapSetup (s "setup")
+        , Parser.map AuthLogin (s "login")
         , Parser.map AdminDashboard (s "admin")
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
         , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
-        , Parser.map Diary (s "home" <?> Query.string "date")
-        , Parser.map FoodLogDetail (s "logs" </> string)
+        , Parser.map DiaryDay (s "home" <?> Query.string "date")
+        , Parser.map FoodLogEntry (s "logs" </> string)
         , Parser.map FoodSearch (s "search" <?> mealSlotQuery)
-        , Parser.map CustomFoods (s "foods" </> s "custom")
+        , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
-        , Parser.map FoodDetail (s "foods" </> string <?> mealSlotQuery)
-        , Parser.map Meals (s "meals")
+        , Parser.map FoodShow (s "foods" </> string <?> mealSlotQuery)
+        , Parser.map MealList (s "meals")
         , Parser.map MealCreate (s "meals" </> s "new")
         , Parser.map MealEdit (s "meals" </> string </> s "edit")
-        , Parser.map MealDetail (s "meals" </> string)
+        , Parser.map MealShow (s "meals" </> string)
         ]
 
 
@@ -72,10 +72,10 @@ routeToPath route =
         Root ->
             "/"
 
-        Setup ->
+        BootstrapSetup ->
             "/setup"
 
-        Login ->
+        AuthLogin ->
             "/login"
 
         AdminDashboard ->
@@ -87,7 +87,7 @@ routeToPath route =
         AdminEditUser id ->
             "/admin/users/" ++ id ++ "/edit"
 
-        Diary maybeDate ->
+        DiaryDay maybeDate ->
             case maybeDate of
                 Just date ->
                     "/home?date=" ++ date
@@ -95,16 +95,16 @@ routeToPath route =
                 Nothing ->
                     "/home"
 
-        FoodLogDetail id ->
+        FoodLogEntry id ->
             "/logs/" ++ id
 
         FoodSearch maybeSlot ->
             withMealSlot "/search" maybeSlot
 
-        FoodDetail id maybeSlot ->
+        FoodShow id maybeSlot ->
             withMealSlot ("/foods/" ++ id) maybeSlot
 
-        CustomFoods ->
+        CustomFoodList ->
             "/foods/custom"
 
         CustomFoodCreate ->
@@ -113,13 +113,13 @@ routeToPath route =
         CustomFoodEdit id ->
             "/foods/custom/" ++ id ++ "/edit"
 
-        Meals ->
+        MealList ->
             "/meals"
 
         MealCreate ->
             "/meals/new"
 
-        MealDetail id ->
+        MealShow id ->
             "/meals/" ++ id
 
         MealEdit id ->

@@ -67,7 +67,6 @@ module Ui exposing
     , space2
     , space20
     , space24
-    , space32
     , space4
     , space8
     , statBlock
@@ -314,11 +313,6 @@ space24 =
     24
 
 
-space32 : Int
-space32 =
-    32
-
-
 
 -- Typography
 
@@ -524,7 +518,7 @@ cardActions buttons =
 
 
 {-| A card whose body is a title, a hairline, and then its content. Used for
-form sections in `View.CustomFoodForm` so every section reads the same way.
+form sections in `Page.CustomFood.Form` so every section reads the same way.
 -}
 formSection : String -> List (Element msg) -> Element msg
 formSection title content =

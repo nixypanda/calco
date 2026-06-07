@@ -14,11 +14,11 @@ tests =
         [ test "root redirects to setup when no admin exists" <|
             \_ ->
                 Access.resolveRoute Unauthenticated False Root
-                    |> Expect.equal (Navigate Setup)
+                    |> Expect.equal (Navigate BootstrapSetup)
         , test "root redirects to login when signed out and admin exists" <|
             \_ ->
                 Access.resolveRoute Unauthenticated True Root
-                    |> Expect.equal (Navigate Login)
+                    |> Expect.equal (Navigate AuthLogin)
         , test "root redirects to admin for admin identity" <|
             \_ ->
                 Access.resolveRoute admin True Root
@@ -26,11 +26,11 @@ tests =
         , test "root redirects to home for normal user" <|
             \_ ->
                 Access.resolveRoute normalUser True Root
-                    |> Expect.equal (Navigate (Diary Nothing))
+                    |> Expect.equal (Navigate (DiaryDay Nothing))
         , test "food routes reject signed-out users" <|
             \_ ->
                 Access.resolveRoute Unauthenticated True (FoodSearch Nothing)
-                    |> Expect.equal (Navigate Login)
+                    |> Expect.equal (Navigate AuthLogin)
         , test "food routes reject admins" <|
             \_ ->
                 Access.resolveRoute admin True (FoodSearch Nothing)
@@ -38,14 +38,14 @@ tests =
         , test "admin route rejects normal users" <|
             \_ ->
                 Access.resolveRoute normalUser True AdminDashboard
-                    |> Expect.equal (Navigate (Diary Nothing))
+                    |> Expect.equal (Navigate (DiaryDay Nothing))
         , test "Loading session holds for Root when admin exists" <|
             \_ ->
                 Access.resolveRoute Loading True Root
                     |> Expect.equal Hold
         , test "Loading session holds for Diary when admin exists" <|
             \_ ->
-                Access.resolveRoute Loading True (Diary Nothing)
+                Access.resolveRoute Loading True (DiaryDay Nothing)
                     |> Expect.equal Hold
         , test "Loading session holds when no admin exists" <|
             \_ ->

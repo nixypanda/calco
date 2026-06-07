@@ -15,7 +15,7 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Device, Element)
 import Lib.Text as Text
-import View.Auth
+import Page.Auth.CredentialCard
 
 
 
@@ -164,7 +164,7 @@ view { model, device } =
         form =
             currentForm model
     in
-    View.Auth.credentialCard
+    Page.Auth.CredentialCard.credentialCard
         { device = device
         , title = "First-Time Setup"
         , description = Just "Create the admin account to get started."

@@ -13,10 +13,11 @@ import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
 import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
+import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Common as Common
+import Page.Meal.Form as Common
 import Ui
 import View.Nutrients
     exposing
@@ -143,7 +144,7 @@ update msg model =
                         Ok request ->
                             ( Editing
                                 { loaded
-                                    | fields = setSubmitting loaded.fields True
+                                    | fields = withSubmit Common.Submitting loaded.fields
                                 }
                             , Cmd.none
                             , RequestUpdateMeal loaded.mealId request
@@ -152,7 +153,10 @@ update msg model =
                         Err Common.MealNameRequired ->
                             ( Editing
                                 { loaded
-                                    | fields = setError loaded.fields "Name is required"
+                                    | fields =
+                                        withSubmit
+                                            (Common.SubmitFailed "Name is required")
+                                            loaded.fields
                                 }
                             , Cmd.none
                             , NoOp
@@ -162,9 +166,9 @@ update msg model =
                             ( Editing
                                 { loaded
                                     | fields =
-                                        setError
+                                        withSubmit
+                                            (Common.SubmitFailed componentRequiredMessage)
                                             loaded.fields
-                                            componentRequiredMessage
                                 }
                             , Cmd.none
                             , NoOp
@@ -180,11 +184,11 @@ update msg model =
                         Ok meal ->
                             ( Editing
                                 { loaded
-                                    | fields = setSubmitting loaded.fields False
+                                    | fields = withSubmit Common.Idle loaded.fields
                                     , meal = meal
                                 }
                             , Cmd.none
-                            , Navigate (MealDetail meal.id)
+                            , Navigate (MealShow meal.id)
                             )
 
                         Err error ->
@@ -196,7 +200,10 @@ update msg model =
                                         , applyError =
                                             \message current ->
                                                 { current
-                                                    | fields = setSaveError current.fields message
+                                                    | fields =
+                                                        withSubmit
+                                                            (Common.SubmitFailed message)
+                                                            current.fields
                                                 }
                                         }
                                         error
@@ -211,19 +218,9 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-setSubmitting : Common.FormFields -> Bool -> Common.FormFields
-setSubmitting fields value =
-    { fields | submitting = value, error = Nothing }
-
-
-setError : Common.FormFields -> String -> Common.FormFields
-setError fields message =
-    { fields | error = Just message, submitting = False }
-
-
-setSaveError : Common.FormFields -> String -> Common.FormFields
-setSaveError fields message =
-    { fields | error = Just message, submitting = False }
+withSubmit : Common.SubmitState -> Common.FormFields -> Common.FormFields
+withSubmit state fields =
+    { fields | submit = state }
 
 
 componentRequiredMessage : String
@@ -330,8 +327,7 @@ editFormFromMeal meal =
     , productNames = ItemNameLookup.empty
     , nextRowId = List.length rows + 1
     , nextSearchToken = 1
-    , submitting = False
-    , error = Nothing
+    , submit = Common.Idle
     }
 
 
@@ -340,11 +336,12 @@ uniqueProductIds meal =
     meal.components
         |> List.filterMap
             (\component ->
-                if component.item.itemType == "product" then
-                    Just component.item.id
+                case component.item.itemType of
+                    ItemRef.Product ->
+                        Just component.item.id
 
-                else
-                    Nothing
+                    ItemRef.Meal ->
+                        Nothing
             )
         |> List.filter (String.trim >> String.isEmpty >> not)
         |> ItemNameLookup.uniqueProductIds
@@ -390,10 +387,10 @@ view { model, device } =
 
         Editing loaded ->
             Ui.pageContainer device
-                [ Ui.maybeErrorBanner loaded.fields.error
+                [ Ui.maybeErrorBanner (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields device FormMsg loaded.fields
                 , nutritionView device loaded
-                , Ui.submitButton loaded.fields.submitting
+                , Ui.submitButton (Common.isSubmitting loaded.fields.submit)
                     "Update Meal"
                     "Saving..."
                     SubmitClicked

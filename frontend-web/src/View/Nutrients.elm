@@ -308,7 +308,7 @@ macroBreakdownView device nutrients =
 
 {-| Compact variant of the macro breakdown. Renders only the stacked
 bar (no legend) at a slim 12px height. Intended for inline use on
-compact rows (e.g. each `componentView` row in `Page.Meal.Detail`).
+compact rows (e.g. each `componentView` row in `Page.Meal.Show`).
 
 Omit the call entirely (render `Element.none` instead) when the
 caller has no macro data, so empty rows stay compact.

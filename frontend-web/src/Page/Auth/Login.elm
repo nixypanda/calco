@@ -15,7 +15,7 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Element exposing (Device, Element)
 import Lib.Text as Text
-import View.Auth
+import Page.Auth.CredentialCard
 
 
 
@@ -89,6 +89,7 @@ loginPayload form =
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     let
+        form : Form
         form =
             model.form
     in
@@ -130,7 +131,7 @@ update msg model =
 
 view : { model : Model, device : Device } -> Element Msg
 view { model, device } =
-    View.Auth.credentialCard
+    Page.Auth.CredentialCard.credentialCard
         { device = device
         , title = "Log In"
         , description = Nothing

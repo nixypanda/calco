@@ -5,6 +5,7 @@ module Data.FoodLog exposing
     , listDecoder
     )
 
+import Data.ItemRef as ItemRef exposing (ItemType)
 import Data.Nutrition as Nutrition exposing (NutrientAmount, NutritionSummary)
 import Data.Quantity as Quantity exposing (Quantity)
 import Json.Decode as Decode exposing (Decoder)
@@ -26,7 +27,7 @@ type alias FoodLog =
 
 
 type alias LogItem =
-    { itemType : String
+    { itemType : ItemType
     , id : String
     , name : String
     , brand : Maybe String
@@ -64,7 +65,7 @@ dateFieldDecoder =
 logItemDecoder : Decoder LogItem
 logItemDecoder =
     Decode.map4 LogItem
-        (Decode.field "type" Decode.string)
+        (Decode.field "type" ItemRef.itemTypeDecoder)
         (Decode.field "id" Decode.string)
         (Decode.field "name" Decode.string)
         (Decode.oneOf

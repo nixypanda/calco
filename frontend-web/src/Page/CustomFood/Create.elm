@@ -13,7 +13,7 @@ import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
-import View.CustomFoodForm as Form
+import Page.CustomFood.Form as Form
 
 
 
@@ -119,29 +119,17 @@ update msg model =
         SubmitClicked ->
             case Form.toCreateFoodRequest model.form of
                 Ok request ->
-                    let
-                        form : Form.FormModel
-                        form =
-                            model.form
-
-                        nextForm : Form.FormModel
-                        nextForm =
-                            setSubmitting True { form | error = Nothing }
-                    in
-                    ( { model | form = nextForm, error = Nothing }
+                    ( { model | form = withSubmit Form.Submitting model.form, error = Nothing }
                     , Cmd.none
                     , RequestCreateFood request
                     )
 
                 Err validationError ->
-                    let
-                        form : Form.FormModel
-                        form =
-                            model.form
-                    in
                     ( { model
-                        | form = { form | error = Just (validationMessage validationError) }
-                        , error = Nothing
+                        | form =
+                            withSubmit
+                                (Form.SubmitFailed (validationMessage validationError))
+                                model.form
                       }
                     , Cmd.none
                     , NoOp
@@ -150,7 +138,7 @@ update msg model =
         SaveCompleted result ->
             case result of
                 Ok response ->
-                    ( model, Cmd.none, Navigate (FoodDetail response.id Nothing) )
+                    ( model, Cmd.none, Navigate (FoodShow response.id Nothing) )
 
                 Err error ->
                     ApiResult.failure
@@ -159,8 +147,10 @@ update msg model =
                         , applyError =
                             \message current ->
                                 { current
-                                    | form = setSubmitting False current.form
-                                    , error = Just message
+                                    | form =
+                                        withSubmit
+                                            (Form.SubmitFailed message)
+                                            current.form
                                 }
                         }
                         error
@@ -183,9 +173,9 @@ validationMessage err =
             "Serving grams must be a positive number (got: " ++ value ++ ")"
 
 
-setSubmitting : Bool -> Form.FormModel -> Form.FormModel
-setSubmitting submitting form =
-    { form | submitting = submitting }
+withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel
+withSubmit state form =
+    { form | submit = state }
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -206,5 +196,8 @@ view { model, device } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner model.error
         , Element.map FormMsg (Form.view device model.nutrients model.units model.form)
-        , Ui.submitButton model.form.submitting "Create Food" "Creating..." SubmitClicked
+        , Ui.submitButton (Form.isSubmitting model.form.submit)
+            "Create Food"
+            "Creating..."
+            SubmitClicked
         ]

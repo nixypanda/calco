@@ -8,7 +8,7 @@ module Data.ItemNameLookup exposing
     , uniqueProductIds
     )
 
-import Data.ItemRef exposing (ItemRef)
+import Data.ItemRef as ItemRef exposing (ItemRef, ItemType(..))
 import Dict exposing (Dict)
 import Lib.ListExtra as ListExtra
 
@@ -24,15 +24,15 @@ empty =
 
 productRef : String -> ItemRef
 productRef id =
-    { itemType = "product", id = id }
+    { itemType = Product, id = id }
 
 
-key : { a | itemType : String, id : String } -> String
+key : { a | itemType : ItemType, id : String } -> String
 key item =
-    item.itemType ++ ":" ++ item.id
+    ItemRef.itemTypeToString item.itemType ++ ":" ++ item.id
 
 
-insert : { a | itemType : String, id : String } -> String -> Names -> Names
+insert : { a | itemType : ItemType, id : String } -> String -> Names -> Names
 insert item name names =
     Dict.insert (key item) name names
 
@@ -42,7 +42,7 @@ insertProduct id name names =
     insert (productRef id) name names
 
 
-nameFor : String -> { a | itemType : String, id : String } -> Names -> String
+nameFor : String -> { a | itemType : ItemType, id : String } -> Names -> String
 nameFor fallback item names =
     Dict.get (key item) names
         |> Maybe.withDefault fallback
