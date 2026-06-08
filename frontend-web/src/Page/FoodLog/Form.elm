@@ -177,7 +177,7 @@ view theme food units model =
                 , unitOpen = model.unitOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-            , Ui.input theme "Notes" model.notes NotesChanged
+            , Ui.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
             ]
         ]
 

@@ -600,13 +600,39 @@ loadedView theme device model =
             (FoodLogForm.view theme (productDetail model.item) model.units model.form)
         , Ui.cardActions
             [ Ui.primarySubmitButton theme
-                (model.request == Saving)
-                "Save"
-                "Saving..."
-                SubmitClicked
+                { state = submitState model
+                , idleLabel = "Save"
+                , submittingLabel = "Saving..."
+                , onPress = SubmitClicked
+                }
             ]
         , View.Nutrients.nutritionCard theme device nutrients
         ]
+
+
+submitState : LoadedModel -> Ui.SubmitState
+submitState model =
+    if model.request == Saving then
+        Ui.Submitting
+
+    else if formHasChanges model.log model.form then
+        Ui.Idle
+
+    else
+        Ui.Disabled
+
+
+formHasChanges : FoodLog -> FoodLogForm.Model -> Bool
+formHasChanges log form =
+    let
+        original : FoodLogForm.Model
+        original =
+            FoodLogForm.initLogFormFromLog log
+    in
+    (form.amount /= original.amount)
+        || (form.unit /= original.unit)
+        || (form.mealSlot /= original.mealSlot)
+        || (form.notes /= original.notes)
 
 
 nutrientsForDisplay :

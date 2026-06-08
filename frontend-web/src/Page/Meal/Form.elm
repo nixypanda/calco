@@ -355,8 +355,8 @@ viewFormFields theme device toMsg form =
         [ Ui.section theme
             { header = Nothing
             , body =
-                [ Ui.input theme "Name" form.name (toMsg << NameChanged)
-                , Ui.input theme "Notes" form.notes (toMsg << NotesChanged)
+                [ Ui.input theme { label = "Name", value = form.name, onChange = toMsg << NameChanged }
+                , Ui.input theme { label = "Notes", value = form.notes, onChange = toMsg << NotesChanged }
                 , quantityTextInput theme
                     device
                     { amountLabel = "Total Quantity"
@@ -656,7 +656,13 @@ componentRowView theme device toMsg row =
                         [ Element.width Element.fill
                         , Element.spacing 0
                         ]
-                        (List.map (searchResultView theme device toMsg row.search.query row.rowId)
+                        (List.map
+                            (\result ->
+                                searchResultView theme
+                                    device
+                                    toMsg
+                                    { rowId = row.rowId, query = row.search.query, result = result }
+                            )
                             results
                         )
 
@@ -706,23 +712,28 @@ quantityTextInput theme device config =
         Element.row
     )
         [ Element.width Element.fill, Element.spacing Ui.space8 ]
-        [ Ui.input theme config.amountLabel config.amount config.onAmountChange
-        , Ui.input theme config.unitLabel config.unit config.onUnitChange
+        [ Ui.input theme { label = config.amountLabel, value = config.amount, onChange = config.onAmountChange }
+        , Ui.input theme { label = config.unitLabel, value = config.unit, onChange = config.onUnitChange }
         ]
+
+
+type alias RowHit =
+    { rowId : RowId
+    , query : String
+    , result : SearchResult
+    }
 
 
 searchResultView :
     Theme
     -> Device
     -> (FormFieldMsg -> msg)
-    -> String
-    -> RowId
-    -> SearchResult
+    -> RowHit
     -> Element msg
-searchResultView theme device toMsg query rowId result =
+searchResultView theme device toMsg hit =
     SearchView.resultRow theme
         device
-        { query = query
-        , item = result
-        , onSelect = \_ -> toMsg (SelectProduct rowId result)
+        { query = hit.query
+        , item = hit.result
+        , onSelect = \_ -> toMsg (SelectProduct hit.rowId hit.result)
         }

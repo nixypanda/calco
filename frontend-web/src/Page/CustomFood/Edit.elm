@@ -333,10 +333,11 @@ bodyView { model, device, theme } =
                 [ Element.map FormMsg
                     (Form.view theme device loaded.nutrients loaded.units loaded.form)
                 , Ui.primarySubmitButton theme
-                    (Form.isSubmitting loaded.form.submit)
-                    "Save Food"
-                    "Saving..."
-                    SubmitClicked
+                    { state = Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit)
+                    , idleLabel = "Save Food"
+                    , submittingLabel = "Saving..."
+                    , onPress = SubmitClicked
+                    }
                 ]
 
         LoadFailed message ->

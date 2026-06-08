@@ -125,8 +125,9 @@ view { model, device, theme } =
         [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
         , Ui.primarySubmitButton theme
-            (Common.isSubmitting model.submit)
-            "Create Meal"
-            "Saving..."
-            SubmitClicked
+            { state = Ui.submittingOrIdle (Common.isSubmitting model.submit)
+            , idleLabel = "Create Meal"
+            , submittingLabel = "Saving..."
+            , onPress = SubmitClicked
+            }
         ]

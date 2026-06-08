@@ -198,8 +198,9 @@ view { model, device, theme } =
         [ Ui.maybeErrorBanner theme model.error
         , Element.map FormMsg (Form.view theme device model.nutrients model.units model.form)
         , Ui.primarySubmitButton theme
-            (Form.isSubmitting model.form.submit)
-            "Create Food"
-            "Creating..."
-            SubmitClicked
+            { state = Ui.submittingOrIdle (Form.isSubmitting model.form.submit)
+            , idleLabel = "Create Food"
+            , submittingLabel = "Creating..."
+            , onPress = SubmitClicked
+            }
         ]

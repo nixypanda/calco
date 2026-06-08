@@ -1,19 +1,17 @@
-module Page.Admin.Dashboard exposing
-    ( Model
+module Page.Users.Dashboard exposing
+    ( Model(..)
     , Msg(..)
     , OutMsg(..)
-    , State(..)
     , init
     , update
     , view
     )
 
 import Api.Client as Client
-import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Device, Element)
-import Page.Admin.StatusBadge
+import Page.Users.StatusBadge
 import Ui
 import Ui.Theme exposing (Theme)
 
@@ -22,20 +20,15 @@ import Ui.Theme exposing (Theme)
 -- MODEL
 
 
-type alias Model =
-    { state : State
-    }
-
-
-type State
+type Model
     = Loading
     | LoadFailed Client.ApiError
-    | Ready (List User.User)
+    | Loaded (List User.User)
 
 
 init : ( Model, OutMsg )
 init =
-    ( { state = Loading }
+    ( Loading
     , RequestUsers
     )
 
@@ -63,16 +56,14 @@ update msg model =
         UsersLoaded result ->
             case result of
                 Ok users ->
-                    ( { model | state = Ready users }, Cmd.none, NoOp )
+                    ( Loaded users, Cmd.none, NoOp )
 
                 Err error ->
-                    ApiResult.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError = \_ current -> { current | state = LoadFailed error }
-                        }
-                        error
-                        model
+                    if Client.isUnauthorized error then
+                        ( model, Cmd.none, SessionExpired )
+
+                    else
+                        ( LoadFailed error, Cmd.none, NoOp )
 
         NavigateCreateUser ->
             ( model, Cmd.none, Navigate AdminCreateUser )
@@ -94,8 +85,8 @@ view { model, device, theme } =
 
 bodyView : Theme -> Model -> Element Msg
 bodyView theme model =
-    case model.state of
-        Ready users ->
+    case model of
+        Loaded users ->
             Ui.listCard theme
                 { rows =
                     List.map
@@ -118,5 +109,5 @@ userListRow theme config =
         , leading = []
         , title = Ui.sectionTitle theme config.user.username
         , subtitle = [ Ui.mutedBody theme config.user.displayName ]
-        , trailing = [ Page.Admin.StatusBadge.statusBadge theme config.user.status ]
+        , trailing = [ Page.Users.StatusBadge.statusBadge theme config.user.status ]
         }

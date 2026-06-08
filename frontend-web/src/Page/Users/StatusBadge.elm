@@ -1,4 +1,4 @@
-module Page.Admin.StatusBadge exposing (statusBadge)
+module Page.Users.StatusBadge exposing (statusBadge)
 
 import Element exposing (Element)
 import Ui

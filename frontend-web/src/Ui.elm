@@ -30,6 +30,7 @@ module Ui exposing
     , hairline
     , iconButton
     , input
+    , InputConfig
     , isSmall
     , layout
     , linearProgress
@@ -49,6 +50,7 @@ module Ui exposing
     , pageTitle
     , passwordInput
     , primarySubmitButton
+    , SubmitButtonConfig
     , primaryTeal
     , proteinColor
     , section
@@ -64,6 +66,8 @@ module Ui exposing
     , statBlock
     , statBlockGroup
     , subsectionTitle
+    , submittingOrIdle
+    , SubmitState(..)
     , tableHeader
     , toCssColor
     , truncateWithEllipsis
@@ -626,16 +630,73 @@ primaryButton theme label msg =
         }
 
 
-primarySubmitButton : Theme -> Bool -> String -> String -> msg -> Element msg
-primarySubmitButton theme isSubmitting idleLabel submittingLabel msg =
-    primaryButton theme
-        (if isSubmitting then
-            submittingLabel
+type SubmitState
+    = Idle
+    | Submitting
+    | Disabled
 
-         else
-            idleLabel
-        )
-        msg
+
+submittingOrIdle : Bool -> SubmitState
+submittingOrIdle isSubmitting =
+    if isSubmitting then
+        Submitting
+
+    else
+        Idle
+
+
+type alias SubmitButtonConfig msg =
+    { state : SubmitState
+    , idleLabel : String
+    , submittingLabel : String
+    , onPress : msg
+    }
+
+
+primarySubmitButton : Theme -> SubmitButtonConfig msg -> Element msg
+primarySubmitButton theme config =
+    let
+        label : String
+        label =
+            case config.state of
+                Submitting ->
+                    config.submittingLabel
+
+                _ ->
+                    config.idleLabel
+
+        active : Bool
+        active =
+            config.state == Idle
+    in
+    Input.button
+        [ Background.color
+            (if active then
+                theme.brandBlue
+
+             else
+                theme.statusDisabledBg
+            )
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded 999
+        , Element.width Element.fill
+        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
+        , Font.medium
+        , Font.center
+        , if active then
+            Element.mouseOver [ Background.color theme.brandBluePressed ]
+
+          else
+            Element.mouseOver []
+        ]
+        { onPress =
+            if active then
+                Just config.onPress
+
+            else
+                Nothing
+        , label = Element.text label
+        }
 
 
 dangerButton : Theme -> String -> msg -> Element msg
@@ -671,31 +732,38 @@ ghostButton theme label msg =
 -- Inputs
 
 
-input : Theme -> String -> String -> (String -> msg) -> Element msg
-input theme label value onChange =
+type alias InputConfig msg =
+    { label : String
+    , value : String
+    , onChange : String -> msg
+    }
+
+
+input : Theme -> InputConfig msg -> Element msg
+input theme config =
     Input.text
         [ Border.rounded 12
         , Background.color theme.inputFill
         , Element.padding 10
         ]
-        { onChange = onChange
-        , text = value
+        { onChange = config.onChange
+        , text = config.value
         , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel theme label)
+        , label = Input.labelAbove [] (fieldLabel theme config.label)
         }
 
 
-passwordInput : Theme -> String -> String -> (String -> msg) -> Element msg
-passwordInput theme label value onChange =
+passwordInput : Theme -> InputConfig msg -> Element msg
+passwordInput theme config =
     Input.currentPassword
         [ Border.rounded 12
         , Background.color theme.inputFill
         , Element.padding 10
         ]
-        { onChange = onChange
-        , text = value
+        { onChange = config.onChange
+        , text = config.value
         , placeholder = Nothing
-        , label = Input.labelAbove [] (fieldLabel theme label)
+        , label = Input.labelAbove [] (fieldLabel theme config.label)
         , show = False
         }
 

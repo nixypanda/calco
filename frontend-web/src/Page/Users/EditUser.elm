@@ -1,11 +1,11 @@
-module Page.Admin.EditUser exposing
+module Page.Users.EditUser exposing
     ( ActionState(..)
     , LoadedUser
     , Model
     , Msg(..)
     , OutMsg(..)
     , Problem(..)
-    , State(..)
+    , Status(..)
     , init
     , update
     , view
@@ -18,7 +18,7 @@ import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Page.Admin.StatusBadge
+import Page.Users.StatusBadge
 import Ui
 import Ui.Theme exposing (Theme)
 
@@ -29,14 +29,14 @@ import Ui.Theme exposing (Theme)
 
 type alias Model =
     { userId : String
-    , state : State
+    , status : Status
     }
 
 
-type State
+type Status
     = Loading
     | LoadFailed Client.ApiError
-    | Ready LoadedUser ActionState
+    | Loaded LoadedUser ActionState
 
 
 type alias LoadedUser =
@@ -61,7 +61,7 @@ type Problem
 init : String -> ( Model, OutMsg )
 init userId =
     ( { userId = userId
-      , state = Loading
+      , status = Loading
       }
     , RequestUser userId
     )
@@ -98,7 +98,7 @@ update msg model =
         UserLoaded result ->
             case result of
                 Ok user ->
-                    ( { model | state = Ready { user = user, password = "" } Idle }
+                    ( { model | status = Loaded { user = user, password = "" } Idle }
                     , Cmd.none
                     , NoOp
                     )
@@ -107,17 +107,17 @@ update msg model =
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \_ current -> { current | state = LoadFailed error }
+                        , applyError = \_ current -> { current | status = LoadFailed error }
                         }
                         error
                         model
 
         PasswordChanged password ->
-            case model.state of
-                Ready loadedUser actionState ->
+            case model.status of
+                Loaded loadedUser actionState ->
                     ( { model
-                        | state =
-                            Ready
+                        | status =
+                            Loaded
                                 { loadedUser | password = password }
                                 (actionStateAfterEdit actionState)
                       }
@@ -129,10 +129,10 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         ResetSubmitted ->
-            case model.state of
-                Ready loadedUser actionState ->
+            case model.status of
+                Loaded loadedUser actionState ->
                     if String.isEmpty loadedUser.password then
-                        ( { model | state = Ready loadedUser (Invalid NewPasswordRequired) }
+                        ( { model | status = Loaded loadedUser (Invalid NewPasswordRequired) }
                         , Cmd.none
                         , NoOp
                         )
@@ -141,7 +141,7 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | state = Ready loadedUser ResettingPassword }
+                        ( { model | status = Loaded loadedUser ResettingPassword }
                         , Cmd.none
                         , RequestResetPassword model.userId { newPassword = loadedUser.password }
                         )
@@ -153,16 +153,16 @@ update msg model =
             completePendingAction ResettingPassword
                 result
                 model
-                (\loadedUser -> Ready { loadedUser | password = "" } Idle)
+                (\loadedUser -> Loaded { loadedUser | password = "" } Idle)
 
         DisableClicked ->
-            case model.state of
-                Ready loadedUser actionState ->
+            case model.status of
+                Loaded loadedUser actionState ->
                     if isPending actionState then
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | state = Ready loadedUser DisablingUser }
+                        ( { model | status = Loaded loadedUser DisablingUser }
                         , Cmd.none
                         , RequestDisableUser model.userId
                         )
@@ -171,16 +171,16 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         DisableCompleted result ->
-            completePendingAction DisablingUser result model (\loadedUser -> Ready loadedUser Idle)
+            completePendingAction DisablingUser result model (\loadedUser -> Loaded loadedUser Idle)
 
         EnableClicked ->
-            case model.state of
-                Ready loadedUser actionState ->
+            case model.status of
+                Loaded loadedUser actionState ->
                     if isPending actionState then
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | state = Ready loadedUser EnablingUser }
+                        ( { model | status = Loaded loadedUser EnablingUser }
                         , Cmd.none
                         , RequestEnableUser model.userId
                         )
@@ -189,7 +189,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         EnableCompleted result ->
-            completePendingAction EnablingUser result model (\loadedUser -> Ready loadedUser Idle)
+            completePendingAction EnablingUser result model (\loadedUser -> Loaded loadedUser Idle)
 
 
 actionStateAfterEdit : ActionState -> ActionState
@@ -225,15 +225,15 @@ completePendingAction :
     ActionState
     -> Result Client.ApiError ()
     -> Model
-    -> (LoadedUser -> State)
+    -> (LoadedUser -> Status)
     -> ( Model, Cmd Msg, OutMsg )
-completePendingAction pendingAction result model successState =
-    case model.state of
-        Ready loadedUser actionState ->
+completePendingAction pendingAction result model successStatus =
+    case model.status of
+        Loaded loadedUser actionState ->
             if actionState == pendingAction then
                 case result of
                     Ok _ ->
-                        ( { model | state = successState loadedUser }, Cmd.none, UpdateSucceeded )
+                        ( { model | status = successStatus loadedUser }, Cmd.none, UpdateSucceeded )
 
                     Err error ->
                         ApiResult.failure
@@ -241,7 +241,7 @@ completePendingAction pendingAction result model successState =
                             , sessionExpired = SessionExpired
                             , applyError =
                                 \message current ->
-                                    { current | state = Ready loadedUser (ActionFailed message) }
+                                    { current | status = Loaded loadedUser (ActionFailed message) }
                             }
                             error
                             model
@@ -260,7 +260,7 @@ completePendingAction pendingAction result model successState =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
-        (errorView theme model.state
+        (errorView theme model.status
             ++ userInfoView theme model
             ++ resetPasswordView theme model
             ++ enableDisableView theme model
@@ -269,14 +269,14 @@ view { model, device, theme } =
 
 userInfoView : Theme -> Model -> List (Element Msg)
 userInfoView theme model =
-    case model.state of
+    case model.status of
         Loading ->
             [ Ui.loading theme "Loading user..." ]
 
         LoadFailed error ->
             [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
-        Ready loadedUser _ ->
+        Loaded loadedUser _ ->
             [ userSummaryCard theme loadedUser.user ]
 
 
@@ -285,7 +285,7 @@ resetPasswordView theme model =
     [ Ui.card theme
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.passwordInput theme "New password" (currentPassword model.state) PasswordChanged
+            [ Ui.passwordInput theme { label = "New password", value = currentPassword model.status, onChange = PasswordChanged }
             , Ui.button theme "Reset Password" ResetSubmitted
             ]
         ]
@@ -294,8 +294,8 @@ resetPasswordView theme model =
 
 enableDisableView : Theme -> Model -> List (Element Msg)
 enableDisableView theme model =
-    case model.state of
-        Ready loadedUser _ ->
+    case model.status of
+        Loaded loadedUser _ ->
             [ Ui.card theme
                 [ Element.column
                     [ Element.width Element.fill
@@ -323,23 +323,23 @@ enableDisableView theme model =
             []
 
 
-currentPassword : State -> String
-currentPassword state =
-    case state of
-        Ready loadedUser _ ->
+currentPassword : Status -> String
+currentPassword status =
+    case status of
+        Loaded loadedUser _ ->
             loadedUser.password
 
         _ ->
             ""
 
 
-errorView : Theme -> State -> List (Element msg)
-errorView theme state =
-    case state of
-        Ready _ (Invalid problem) ->
+errorView : Theme -> Status -> List (Element msg)
+errorView theme status =
+    case status of
+        Loaded _ (Invalid problem) ->
             [ Ui.errorBanner theme (problemMessage problem) ]
 
-        Ready _ (ActionFailed message) ->
+        Loaded _ (ActionFailed message) ->
             [ Ui.errorBanner theme message ]
 
         _ ->
@@ -361,7 +361,7 @@ userSummaryCard theme user =
             , Ui.detailRow theme
                 "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
-            , Ui.detailRow theme "Status" (Page.Admin.StatusBadge.statusBadge theme user.status)
+            , Ui.detailRow theme "Status" (Page.Users.StatusBadge.statusBadge theme user.status)
             , Ui.detailRow theme
                 "Created"
                 (Element.el [ Ui.caption ] (Element.text user.createdAt))

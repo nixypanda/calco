@@ -21,11 +21,6 @@ import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.Admin.BootstrapSetup as BootstrapSetup
-import Page.Admin.CreateUser as AdminCreateUser
-import Page.Admin.Dashboard as AdminDashboard
-import Page.Admin.EditUser as AdminEditUser
-import Page.Auth.Login as AuthLogin
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
@@ -38,6 +33,11 @@ import Page.Meal.Edit as MealEdit
 import Page.Meal.Form as MealForm
 import Page.Meal.List as MealList
 import Page.Meal.Show as MealShow
+import Page.Users.BootstrapSetup as BootstrapSetup
+import Page.Users.CreateUser as AdminCreateUser
+import Page.Users.Dashboard as AdminDashboard
+import Page.Users.EditUser as AdminEditUser
+import Page.Users.Login as AuthLogin
 import Session
 import Task
 import Time
@@ -60,7 +60,6 @@ type alias Model =
     , adminExists : Bool
     , pendingSession : Maybe (Result Client.ApiError Auth.LoginSession)
     , pendingBootstrap : Maybe (Result Client.ApiError Auth.BootstrapStatus)
-    , timeZone : Maybe Time.Zone
     , today : Maybe LocalDate
     , page : PageModel
     , drawerOpen : Bool
@@ -97,15 +96,13 @@ type Msg
     | UrlChanged Url
     | GotSession (Result Client.ApiError Auth.LoginSession)
     | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
-    | GotTimeZone Time.Zone
-    | GotNow Time.Posix
+    | GotLocalDate LocalDate
     | LogoutClicked
-    | LogoutCompleted (Result Client.ApiError ())
+    | LogoutCompleted
     | MenuClicked
     | DrawerClosed
     | ProfileClicked
-    | AppBackClicked Route
-    | AppNavigationClicked Route
+    | NavigateTo Route
     | WindowResized Int Int
     | GotLoginMsg AuthLogin.Msg
     | GotSetupMsg BootstrapSetup.Msg
@@ -169,7 +166,6 @@ init flags url key =
       , adminExists = True
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
-      , timeZone = Nothing
       , today = Nothing
       , page = LoadingPage
       , drawerOpen = False
@@ -185,9 +181,41 @@ init flags url key =
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
-        , Task.perform GotTimeZone Time.here
+        , Task.perform GotLocalDate
+            (Task.map2 LocalDate.fromPosix Time.here Time.now)
         ]
     )
+
+
+
+-- Generic page-lifting helpers. Each page's `update` returns
+-- (subModel, Cmd subMsg, outMsg) and its `init` returns (subModel, outMsg).
+-- These lift those into Main's Model / Msg, removing per-page boilerplate.
+
+
+stepPage :
+    (subModel -> PageModel)
+    -> (subMsg -> Msg)
+    -> (outMsg -> Model -> ( Model, Cmd Msg ))
+    -> ( subModel, Cmd subMsg, outMsg )
+    -> Model
+    -> ( Model, Cmd Msg )
+stepPage toPage toMsg applyOut ( newSubModel, subCmd, outMsg ) model =
+    let
+        ( finalModel, outCmd ) =
+            applyOut outMsg { model | page = toPage newSubModel }
+    in
+    ( finalModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ] )
+
+
+initPage :
+    (subModel -> PageModel)
+    -> (outMsg -> Model -> ( Model, Cmd Msg ))
+    -> ( subModel, outMsg )
+    -> Model
+    -> ( Model, Cmd Msg )
+initPage toPage applyOut ( subModel, outMsg ) model =
+    applyOut outMsg { model | page = toPage subModel }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -215,34 +243,16 @@ update msg model =
         GotBootstrapStatus result ->
             applyBootstrapProgress { model | pendingBootstrap = Just result }
 
-        GotTimeZone zone ->
-            ( { model | timeZone = Just zone }, Task.perform GotNow Time.now )
-
-        GotNow posix ->
-            case model.timeZone of
-                Just zone ->
-                    changeRouteTo
-                        model.route
-                        { model | today = Just (LocalDate.fromPosix zone posix) }
-
-                Nothing ->
-                    ( model, Cmd.none )
+        GotLocalDate today ->
+            changeRouteTo model.route { model | today = Just today }
 
         LogoutClicked ->
-            ( closeChrome model, Api.Auth.logout LogoutCompleted )
+            ( closeChrome model, Api.Auth.logout (\_ -> LogoutCompleted) )
 
-        LogoutCompleted result ->
-            let
-                nextModel : Model
-                nextModel =
-                    { model | session = Session.clear model.session }
-            in
-            case result of
-                Ok _ ->
-                    ( nextModel, Nav.replaceUrl model.key "/login" )
-
-                Err _ ->
-                    ( nextModel, Nav.replaceUrl model.key "/login" )
+        LogoutCompleted ->
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key "/login"
+            )
 
         MenuClicked ->
             ( { model | drawerOpen = not model.drawerOpen, profileOpen = False }, Cmd.none )
@@ -253,16 +263,11 @@ update msg model =
         ProfileClicked ->
             ( { model | profileOpen = not model.profileOpen, drawerOpen = False }, Cmd.none )
 
-        AppBackClicked route ->
-            ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        AppNavigationClicked route ->
+        NavigateTo route ->
             ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         WindowResized width height ->
-            ( { model
-                | device = Element.classifyDevice { width = width, height = height }
-              }
+            ( { model | device = Element.classifyDevice { width = width, height = height } }
             , Cmd.none
             )
 
@@ -272,194 +277,209 @@ update msg model =
                 nextMode =
                     Theme.toggle model.themeMode
             in
-            ( { model
-                | themeMode = nextMode
-                , theme = Theme.forMode nextMode
-              }
+            ( { model | themeMode = nextMode, theme = Theme.forMode nextMode }
             , persistThemeMode (Theme.modeToString nextMode)
             )
 
         GotLoginMsg subMsg ->
             case model.page of
-                LoginPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            AuthLogin.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = LoginPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applyLoginOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotLoginMsg subCmd, outCmd ]
-                    )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotDiaryMsg subMsg ->
-            case model.page of
-                DiaryPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            DiaryDay.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = DiaryPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applyDiaryOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotDiaryMsg subCmd, outCmd ]
-                    )
+                LoginPage sub ->
+                    stepPage LoginPage
+                        GotLoginMsg
+                        applyLoginOutMsg
+                        (AuthLogin.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotSetupMsg subMsg ->
             case model.page of
-                SetupPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            BootstrapSetup.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = SetupPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applySetupOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotSetupMsg subCmd, outCmd ]
-                    )
+                SetupPage sub ->
+                    stepPage SetupPage
+                        GotSetupMsg
+                        applySetupOutMsg
+                        (BootstrapSetup.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotAdminMsg subMsg ->
             case model.page of
-                AdminPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            AdminDashboard.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = AdminPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applyAdminOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotAdminMsg subCmd, outCmd ]
-                    )
+                AdminPage sub ->
+                    stepPage AdminPage
+                        GotAdminMsg
+                        applyAdminOutMsg
+                        (AdminDashboard.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotAdminCreateUserMsg subMsg ->
             case model.page of
-                AdminCreateUserPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            AdminCreateUser.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = AdminCreateUserPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applyAdminCreateUserOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotAdminCreateUserMsg subCmd, outCmd ]
-                    )
+                AdminCreateUserPage sub ->
+                    stepPage AdminCreateUserPage
+                        GotAdminCreateUserMsg
+                        applyAdminCreateUserOutMsg
+                        (AdminCreateUser.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotAdminEditUserMsg subMsg ->
             case model.page of
-                AdminEditUserPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            AdminEditUser.update subMsg subModel
+                AdminEditUserPage sub ->
+                    stepPage AdminEditUserPage
+                        GotAdminEditUserMsg
+                        applyAdminEditUserOutMsg
+                        (AdminEditUser.update subMsg sub)
+                        model
 
-                        nextModel : Model
-                        nextModel =
-                            { model | page = AdminEditUserPage newSubModel }
+                _ ->
+                    ( model, Cmd.none )
 
-                        ( finalModel, outCmd ) =
-                            applyAdminEditUserOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotAdminEditUserMsg subCmd, outCmd ]
-                    )
+        GotDiaryMsg subMsg ->
+            case model.page of
+                DiaryPage sub ->
+                    stepPage DiaryPage
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotFoodSearchMsg subMsg ->
             case model.page of
-                FoodSearchPage subModel ->
-                    let
-                        ( newSubModel, subCmd, outMsg ) =
-                            FoodSearch.update subMsg subModel
-
-                        nextModel : Model
-                        nextModel =
-                            { model | page = FoodSearchPage newSubModel }
-
-                        ( finalModel, outCmd ) =
-                            applyFoodSearchOutMsg outMsg nextModel
-                    in
-                    ( finalModel
-                    , Cmd.batch [ Cmd.map GotFoodSearchMsg subCmd, outCmd ]
-                    )
+                FoodSearchPage sub ->
+                    stepPage FoodSearchPage
+                        GotFoodSearchMsg
+                        applyFoodSearchOutMsg
+                        (FoodSearch.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
         GotFoodDetailMsg subMsg ->
-            updateFoodDetail subMsg model
+            stepFoodDetail subMsg model
 
         GotFoodLogDetailMsg subMsg ->
-            updateFoodLogDetail subMsg model
-
-        GotLocalContext context ->
             case model.page of
-                FoodDetailPage _ ->
-                    updateFoodDetail (FoodShow.LocalContextReceived context) model
+                FoodLogDetailPage sub ->
+                    stepPage FoodLogDetailPage
+                        GotFoodLogDetailMsg
+                        applyFoodLogDetailOutMsg
+                        (FoodLogEntry.update subMsg sub)
+                        model
 
                 _ ->
                     ( model, Cmd.none )
 
+        GotLocalContext context ->
+            stepFoodDetail (FoodShow.LocalContextReceived context) model
+
         GotCustomFoodCreateMsg subMsg ->
-            updateCustomFoodCreate subMsg model
+            case model.page of
+                CustomFoodCreatePage sub ->
+                    stepPage CustomFoodCreatePage
+                        GotCustomFoodCreateMsg
+                        applyCustomFoodCreateOutMsg
+                        (CustomFoodCreate.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotCustomFoodEditMsg subMsg ->
-            updateCustomFoodEdit subMsg model
+            case model.page of
+                CustomFoodEditPage sub ->
+                    stepPage CustomFoodEditPage
+                        GotCustomFoodEditMsg
+                        applyCustomFoodEditOutMsg
+                        (CustomFoodEdit.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotCustomFoodsMsg subMsg ->
-            updateCustomFoods subMsg model
+            case model.page of
+                CustomFoodsPage sub ->
+                    stepPage CustomFoodsPage
+                        GotCustomFoodsMsg
+                        applyCustomFoodsOutMsg
+                        (CustomFoodList.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotMealsMsg subMsg ->
-            updateMeals subMsg model
+            case model.page of
+                MealsPage sub ->
+                    stepPage MealsPage
+                        GotMealsMsg
+                        applyMealsOutMsg
+                        (MealList.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotMealCreateMsg subMsg ->
-            updateMealCreate subMsg model
+            case model.page of
+                MealCreatePage sub ->
+                    stepPage MealCreatePage
+                        GotMealCreateMsg
+                        applyMealCreateOutMsg
+                        (MealCreate.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotMealEditMsg subMsg ->
-            updateMealEdit subMsg model
+            case model.page of
+                MealEditPage sub ->
+                    stepPage MealEditPage
+                        GotMealEditMsg
+                        applyMealEditOutMsg
+                        (MealEdit.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotMealDetailMsg subMsg ->
-            updateMealDetail subMsg model
+            case model.page of
+                MealDetailPage sub ->
+                    stepPage MealDetailPage
+                        GotMealDetailMsg
+                        applyMealDetailOutMsg
+                        (MealShow.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+stepFoodDetail : FoodShow.Msg -> Model -> ( Model, Cmd Msg )
+stepFoodDetail subMsg model =
+    case model.page of
+        FoodDetailPage sub ->
+            stepPage FoodDetailPage
+                GotFoodDetailMsg
+                applyFoodDetailOutMsg
+                (FoodShow.update subMsg sub)
+                model
+
+        _ ->
+            ( model, Cmd.none )
 
 
 applyBootstrapProgress : Model -> ( Model, Cmd Msg )
@@ -510,49 +530,21 @@ loadPage route model =
             ( { model | page = SetupPage BootstrapSetup.init }, Cmd.none )
 
         AdminDashboard ->
-            let
-                ( adminModel, outMsg ) =
-                    AdminDashboard.init
-
-                ( nextModel, outCmd ) =
-                    applyAdminOutMsg outMsg { model | page = AdminPage adminModel }
-            in
-            ( nextModel, outCmd )
+            initPage AdminPage applyAdminOutMsg AdminDashboard.init model
 
         AdminCreateUser ->
-            let
-                ( createUserModel, outMsg ) =
-                    AdminCreateUser.init
-
-                ( nextModel, outCmd ) =
-                    applyAdminCreateUserOutMsg
-                        outMsg
-                        { model | page = AdminCreateUserPage createUserModel }
-            in
-            ( nextModel, outCmd )
+            ( { model | page = AdminCreateUserPage AdminCreateUser.init }, Cmd.none )
 
         AdminEditUser userId ->
-            let
-                ( editUserModel, outMsg ) =
-                    AdminEditUser.init userId
-
-                ( nextModel, outCmd ) =
-                    applyAdminEditUserOutMsg outMsg
-                        { model | page = AdminEditUserPage editUserModel }
-            in
-            ( nextModel, outCmd )
+            initPage AdminEditUserPage applyAdminEditUserOutMsg (AdminEditUser.init userId) model
 
         DiaryDay dateParam ->
             case model.today of
                 Just today ->
-                    let
-                        ( diaryModel, outMsg ) =
-                            DiaryDay.init { dateParam = dateParam, today = today }
-
-                        ( nextModel, outCmd ) =
-                            applyDiaryOutMsg outMsg { model | page = DiaryPage diaryModel }
-                    in
-                    ( nextModel, outCmd )
+                    initPage DiaryPage
+                        applyDiaryOutMsg
+                        (DiaryDay.init { dateParam = dateParam, today = today })
+                        model
 
                 Nothing ->
                     ( { model | page = LoadingPage }, Cmd.none )
@@ -561,100 +553,34 @@ loadPage route model =
             ( { model | page = FoodSearchPage (FoodSearch.init mealSlot) }, Cmd.none )
 
         FoodShow productId mealSlot ->
-            let
-                ( foodDetailModel, outMsg ) =
-                    FoodShow.init productId mealSlot
-
-                ( nextModel, outCmd ) =
-                    applyFoodDetailOutMsg outMsg { model | page = FoodDetailPage foodDetailModel }
-            in
-            ( nextModel, outCmd )
+            initPage FoodDetailPage applyFoodDetailOutMsg (FoodShow.init productId mealSlot) model
 
         FoodLogEntry logId ->
-            let
-                ( foodLogDetailModel, outMsg ) =
-                    FoodLogEntry.init logId
-
-                ( nextModel, outCmd ) =
-                    applyFoodLogDetailOutMsg
-                        outMsg
-                        { model | page = FoodLogDetailPage foodLogDetailModel }
-            in
-            ( nextModel, outCmd )
+            initPage FoodLogDetailPage applyFoodLogDetailOutMsg (FoodLogEntry.init logId) model
 
         CustomFoodCreate ->
-            let
-                ( pageModel, outMsg ) =
-                    CustomFoodCreate.init
-
-                ( nextModel, outCmd ) =
-                    applyCustomFoodCreateOutMsg
-                        outMsg
-                        { model | page = CustomFoodCreatePage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage CustomFoodCreatePage applyCustomFoodCreateOutMsg CustomFoodCreate.init model
 
         CustomFoodEdit productId ->
-            let
-                ( pageModel, outMsg ) =
-                    CustomFoodEdit.init productId
-
-                ( nextModel, outCmd ) =
-                    applyCustomFoodEditOutMsg outMsg { model | page = CustomFoodEditPage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage CustomFoodEditPage
+                applyCustomFoodEditOutMsg
+                (CustomFoodEdit.init productId)
+                model
 
         CustomFoodList ->
-            let
-                ( pageModel, outMsg ) =
-                    CustomFoodList.init
-
-                ( nextModel, outCmd ) =
-                    applyCustomFoodsOutMsg
-                        outMsg
-                        { model | page = CustomFoodsPage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage CustomFoodsPage applyCustomFoodsOutMsg CustomFoodList.init model
 
         MealList ->
-            let
-                ( pageModel, outMsg ) =
-                    MealList.init
-
-                ( nextModel, outCmd ) =
-                    applyMealsOutMsg outMsg { model | page = MealsPage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage MealsPage applyMealsOutMsg MealList.init model
 
         MealCreate ->
-            let
-                ( pageModel, outMsg ) =
-                    MealCreate.init
-
-                ( nextModel, outCmd ) =
-                    applyMealCreateOutMsg outMsg { model | page = MealCreatePage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage MealCreatePage applyMealCreateOutMsg MealCreate.init model
 
         MealEdit mealId ->
-            let
-                ( pageModel, outMsg ) =
-                    MealEdit.init mealId
-
-                ( nextModel, outCmd ) =
-                    applyMealEditOutMsg outMsg { model | page = MealEditPage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage MealEditPage applyMealEditOutMsg (MealEdit.init mealId) model
 
         MealShow mealId ->
-            let
-                ( pageModel, outMsg ) =
-                    MealShow.init mealId
-
-                ( nextModel, outCmd ) =
-                    applyMealDetailOutMsg outMsg { model | page = MealDetailPage pageModel }
-            in
-            ( nextModel, outCmd )
+            initPage MealDetailPage applyMealDetailOutMsg (MealShow.init mealId) model
 
         _ ->
             ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
@@ -813,29 +739,6 @@ applyFoodSearchOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateFoodDetail : FoodShow.Msg -> Model -> ( Model, Cmd Msg )
-updateFoodDetail subMsg model =
-    case model.page of
-        FoodDetailPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    FoodShow.update subMsg subModel
-
-                nextModel : Model
-                nextModel =
-                    { model | page = FoodDetailPage newSubModel }
-
-                ( finalModel, outCmd ) =
-                    applyFoodDetailOutMsg outMsg nextModel
-            in
-            ( finalModel
-            , Cmd.batch [ Cmd.map GotFoodDetailMsg subCmd, outCmd ]
-            )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyFoodDetailOutMsg : FoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
 applyFoodDetailOutMsg outMsg model =
     case outMsg of
@@ -861,29 +764,6 @@ applyFoodDetailOutMsg outMsg model =
 
         FoodShow.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
-
-
-updateFoodLogDetail : FoodLogEntry.Msg -> Model -> ( Model, Cmd Msg )
-updateFoodLogDetail subMsg model =
-    case model.page of
-        FoodLogDetailPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    FoodLogEntry.update subMsg subModel
-
-                nextModel : Model
-                nextModel =
-                    { model | page = FoodLogDetailPage newSubModel }
-
-                ( finalModel, outCmd ) =
-                    applyFoodLogDetailOutMsg outMsg nextModel
-            in
-            ( finalModel
-            , Cmd.batch [ Cmd.map GotFoodLogDetailMsg subCmd, outCmd ]
-            )
-
-        _ ->
-            ( model, Cmd.none )
 
 
 applyFoodLogDetailOutMsg : FoodLogEntry.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -936,25 +816,6 @@ applyFoodLogDetailOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateCustomFoodCreate : CustomFoodCreate.Msg -> Model -> ( Model, Cmd Msg )
-updateCustomFoodCreate subMsg model =
-    case model.page of
-        CustomFoodCreatePage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    CustomFoodCreate.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyCustomFoodCreateOutMsg
-                        outMsg
-                        { model | page = CustomFoodCreatePage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodCreateMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyCustomFoodCreateOutMsg : CustomFoodCreate.OutMsg -> Model -> ( Model, Cmd Msg )
 applyCustomFoodCreateOutMsg outMsg model =
     case outMsg of
@@ -989,25 +850,6 @@ applyCustomFoodCreateOutMsg outMsg model =
 
         CustomFoodCreate.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
-
-
-updateCustomFoodEdit : CustomFoodEdit.Msg -> Model -> ( Model, Cmd Msg )
-updateCustomFoodEdit subMsg model =
-    case model.page of
-        CustomFoodEditPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    CustomFoodEdit.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyCustomFoodEditOutMsg
-                        outMsg
-                        { model | page = CustomFoodEditPage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodEditMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
 
 
 applyCustomFoodEditOutMsg : CustomFoodEdit.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1049,23 +891,6 @@ applyCustomFoodEditOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateCustomFoods : CustomFoodList.Msg -> Model -> ( Model, Cmd Msg )
-updateCustomFoods subMsg model =
-    case model.page of
-        CustomFoodsPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    CustomFoodList.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyCustomFoodsOutMsg outMsg { model | page = CustomFoodsPage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotCustomFoodsMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyCustomFoodsOutMsg : CustomFoodList.OutMsg -> Model -> ( Model, Cmd Msg )
 applyCustomFoodsOutMsg outMsg model =
     case outMsg of
@@ -1091,23 +916,6 @@ applyCustomFoodsOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateMeals : MealList.Msg -> Model -> ( Model, Cmd Msg )
-updateMeals subMsg model =
-    case model.page of
-        MealsPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    MealList.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyMealsOutMsg outMsg { model | page = MealsPage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotMealsMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyMealsOutMsg : MealList.OutMsg -> Model -> ( Model, Cmd Msg )
 applyMealsOutMsg outMsg model =
     case outMsg of
@@ -1125,23 +933,6 @@ applyMealsOutMsg outMsg model =
 
         MealList.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
-
-
-updateMealCreate : MealCreate.Msg -> Model -> ( Model, Cmd Msg )
-updateMealCreate subMsg model =
-    case model.page of
-        MealCreatePage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    MealCreate.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyMealCreateOutMsg outMsg { model | page = MealCreatePage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotMealCreateMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
 
 
 applyMealCreateOutMsg : MealCreate.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1166,23 +957,6 @@ applyMealCreateOutMsg outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateMealEdit : MealEdit.Msg -> Model -> ( Model, Cmd Msg )
-updateMealEdit subMsg model =
-    case model.page of
-        MealEditPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    MealEdit.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyMealEditOutMsg outMsg { model | page = MealEditPage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotMealEditMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyMealEditOutMsg : MealEdit.OutMsg -> Model -> ( Model, Cmd Msg )
 applyMealEditOutMsg outMsg model =
     case outMsg of
@@ -1200,9 +974,7 @@ applyMealEditOutMsg outMsg model =
             , Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded)
                 , Api.Meals.getMealNutrients
-                    mealId
-                    "100"
-                    defaultCode
+                    { mealId = mealId, amount = "100", unit = defaultCode }
                     (GotMealEditMsg << MealEdit.NutrientPreviewLoaded)
                 ]
             )
@@ -1282,23 +1054,6 @@ applyMealFormOutMsg { toPageMsg } outMsg model =
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
-updateMealDetail : MealShow.Msg -> Model -> ( Model, Cmd Msg )
-updateMealDetail subMsg model =
-    case model.page of
-        MealDetailPage subModel ->
-            let
-                ( newSubModel, subCmd, outMsg ) =
-                    MealShow.update subMsg subModel
-
-                ( finalModel, outCmd ) =
-                    applyMealDetailOutMsg outMsg { model | page = MealDetailPage newSubModel }
-            in
-            ( finalModel, Cmd.batch [ Cmd.map GotMealDetailMsg subCmd, outCmd ] )
-
-        _ ->
-            ( model, Cmd.none )
-
-
 applyMealDetailOutMsg : MealShow.OutMsg -> Model -> ( Model, Cmd Msg )
 applyMealDetailOutMsg outMsg model =
     case outMsg of
@@ -1311,9 +1066,7 @@ applyMealDetailOutMsg outMsg model =
                 [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded)
                 , Api.Foods.listUnits (GotMealDetailMsg << MealShow.UnitsLoaded)
                 , Api.Meals.getMealNutrients
-                    mealId
-                    "100"
-                    defaultCode
+                    { mealId = mealId, amount = "100", unit = defaultCode }
                     (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
                 ]
             )
@@ -1321,9 +1074,7 @@ applyMealDetailOutMsg outMsg model =
         MealShow.RequestNutrientPreview mealId amount unit ->
             ( model
             , Api.Meals.getMealNutrients
-                mealId
-                amount
-                unit
+                { mealId = mealId, amount = amount, unit = unit }
                 (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
             )
 
@@ -1455,7 +1206,7 @@ leadingButton theme leading =
             Ui.iconButton theme { label = "☰", title = "Menu", onPress = MenuClicked }
 
         GoBack route ->
-            Ui.iconButton theme { label = "←", title = "Back", onPress = AppBackClicked route }
+            Ui.iconButton theme { label = "←", title = "Back", onPress = NavigateTo route }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -1661,7 +1412,7 @@ drawerItem theme current label target =
             )
         , Font.medium
         ]
-        { onPress = Just (AppNavigationClicked target)
+        { onPress = Just (NavigateTo target)
         , label = Element.text label
         }
 

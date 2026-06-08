@@ -1,22 +1,22 @@
-module Page.Admin.EditUserTest exposing (tests)
+module Page.Users.EditUserTest exposing (tests)
 
 import Api.Client as Client
 import Data.User as User
 import Expect
-import Page.Admin.EditUser as EditUser
+import Page.Users.EditUser as EditUser
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Admin.EditUser"
+    describe "Page.Users.EditUser"
         [ test "init starts with user loading and emits RequestUser" <|
             \_ ->
                 let
                     ( model, outMsg ) =
                         EditUser.init "u1"
                 in
-                ( model.state, outMsg )
+                ( model.status, outMsg )
                     |> Expect.equal ( EditUser.Loading, EditUser.RequestUser "u1" )
         , test "init stores userId" <|
             \_ ->
@@ -29,8 +29,8 @@ tests =
                 initialModel
                     |> EditUser.update (EditUser.UserLoaded (Ok user))
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (EditUser.Ready { user = user, password = "" } EditUser.Idle)
+                    |> .status
+                    |> Expect.equal (EditUser.Loaded { user = user, password = "" } EditUser.Idle)
         , test "UserLoaded unauthorized emits SessionExpired" <|
             \_ ->
                 initialModel
@@ -48,7 +48,7 @@ tests =
                             (Err (Client.BadStatus 500 "boom" "Failed"))
                         )
                     |> firstOfThree
-                    |> .state
+                    |> .status
                     |> Expect.equal (EditUser.LoadFailed (Client.BadStatus 500 "boom" "Failed"))
         , test "PasswordChanged updates password" <|
             \_ ->
@@ -166,24 +166,24 @@ initialModel =
 
 readyModel : EditUser.Model
 readyModel =
-    { initialModel | state = EditUser.Ready { user = user, password = "" } EditUser.Idle }
+    { initialModel | status = EditUser.Loaded { user = user, password = "" } EditUser.Idle }
 
 
 disabledReadyModel : EditUser.Model
 disabledReadyModel =
-    { initialModel | state = EditUser.Ready { user = disabledUser, password = "" } EditUser.Idle }
+    { initialModel | status = EditUser.Loaded { user = disabledUser, password = "" } EditUser.Idle }
 
 
 readyModelWithPassword : String -> EditUser.Model
 readyModelWithPassword password =
-    { initialModel | state = EditUser.Ready { user = user, password = password } EditUser.Idle }
+    { initialModel | status = EditUser.Loaded { user = user, password = password } EditUser.Idle }
 
 
 resettingModel : EditUser.Model
 resettingModel =
     { initialModel
-        | state =
-            EditUser.Ready
+        | status =
+            EditUser.Loaded
                 { user = user, password = "old" }
                 EditUser.ResettingPassword
     }
@@ -192,8 +192,8 @@ resettingModel =
 disablingModel : EditUser.Model
 disablingModel =
     { initialModel
-        | state =
-            EditUser.Ready
+        | status =
+            EditUser.Loaded
                 { user = user, password = "" }
                 EditUser.DisablingUser
     }
@@ -202,8 +202,8 @@ disablingModel =
 enablingModel : EditUser.Model
 enablingModel =
     { initialModel
-        | state =
-            EditUser.Ready
+        | status =
+            EditUser.Loaded
                 { user = disabledUser, password = "" }
                 EditUser.EnablingUser
     }
@@ -236,8 +236,8 @@ thirdOfThree ( _, _, third ) =
 
 passwordFromState : EditUser.Model -> String
 passwordFromState model =
-    case model.state of
-        EditUser.Ready loadedUser _ ->
+    case model.status of
+        EditUser.Loaded loadedUser _ ->
             loadedUser.password
 
         _ ->
@@ -246,8 +246,8 @@ passwordFromState model =
 
 actionStateFromState : EditUser.Model -> Maybe EditUser.ActionState
 actionStateFromState model =
-    case model.state of
-        EditUser.Ready _ actionState ->
+    case model.status of
+        EditUser.Loaded _ actionState ->
             Just actionState
 
         _ ->

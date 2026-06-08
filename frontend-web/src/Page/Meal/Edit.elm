@@ -392,10 +392,11 @@ view { model, device, theme } =
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme device loaded
                 , Ui.primarySubmitButton theme
-                    (Common.isSubmitting loaded.fields.submit)
-                    "Update Meal"
-                    "Saving..."
-                    SubmitClicked
+                    { state = Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit)
+                    , idleLabel = "Update Meal"
+                    , submittingLabel = "Saving..."
+                    , onPress = SubmitClicked
+                    }
                 ]
 
 

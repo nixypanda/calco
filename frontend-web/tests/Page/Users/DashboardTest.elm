@@ -1,21 +1,20 @@
-module Page.Admin.DashboardTest exposing (tests)
+module Page.Users.DashboardTest exposing (tests)
 
 import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Expect
-import Page.Admin.Dashboard as Admin
+import Page.Users.Dashboard as Admin
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Admin.Dashboard"
+    describe "Page.Users.Dashboard"
         [ test "init starts with users loading" <|
             \_ ->
                 Admin.init
                     |> Tuple.first
-                    |> .state
                     |> Expect.equal Admin.Loading
         , test "init requests users" <|
             \_ ->
@@ -27,14 +26,12 @@ tests =
                 initialModel
                     |> Admin.update (Admin.UsersLoaded (Ok [ user ]))
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (Admin.Ready [ user ])
+                    |> Expect.equal (Admin.Loaded [ user ])
         , test "user load failure stores error" <|
             \_ ->
                 initialModel
                     |> Admin.update (Admin.UsersLoaded (Err Client.NetworkError))
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal (Admin.LoadFailed Client.NetworkError)
         , test "NavigateEditUser navigates to AdminEditUser" <|
             \_ ->

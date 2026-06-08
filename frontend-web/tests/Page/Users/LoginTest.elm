@@ -1,9 +1,10 @@
-module Page.Auth.LoginTest exposing (tests)
+module Page.Users.LoginTest exposing (tests)
 
 import Api.Client as Client
 import Expect
-import Page.Admin.BootstrapSetup as BootstrapSetup
-import Page.Auth.Login as AuthLogin
+import Page.Users.BootstrapSetup as BootstrapSetup
+import Page.Users.CredentialForm as CredentialForm
+import Page.Users.Login as AuthLogin
 import Test exposing (Test, describe, test)
 
 
@@ -21,74 +22,80 @@ tests =
         , test "login payload rejects missing username" <|
             \_ ->
                 AuthLogin.loginPayload { username = " ", password = "secret" }
-                    |> Expect.equal (Err AuthLogin.UsernameRequired)
+                    |> Expect.equal (Err "Username is required")
         , test "login rejects missing password" <|
             \_ ->
                 AuthLogin.loginPayload { username = "alice", password = "" }
-                    |> Expect.equal (Err AuthLogin.PasswordRequired)
+                    |> Expect.equal (Err "Password is required")
         , test "login submit moves valid form into submitting state" <|
             \_ ->
-                { state = AuthLogin.Editing, form = { username = " alice ", password = "secret" } }
-                    |> AuthLogin.update AuthLogin.Submitted
+                CredentialForm.Editing { username = " alice ", password = "secret" }
+                    |> AuthLogin.update (AuthLogin.FormMsg CredentialForm.Submitted)
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal AuthLogin.Submitting
+                    |> Expect.equal
+                        (CredentialForm.Submitting { username = " alice ", password = "secret" })
         , test "login submit emits trimmed request" <|
             \_ ->
-                { state = AuthLogin.Editing, form = { username = " alice ", password = "secret" } }
-                    |> AuthLogin.update AuthLogin.Submitted
+                CredentialForm.Editing { username = " alice ", password = "secret" }
+                    |> AuthLogin.update (AuthLogin.FormMsg CredentialForm.Submitted)
                     |> thirdOfThree
                     |> Expect.equal
                         (AuthLogin.RequestLogin { username = "alice", password = "secret" })
-        , test "login submit stores typed validation problem" <|
+        , test "login submit stores validation message" <|
             \_ ->
-                { state = AuthLogin.Editing, form = { username = "", password = "secret" } }
-                    |> AuthLogin.update AuthLogin.Submitted
+                CredentialForm.Editing { username = "", password = "secret" }
+                    |> AuthLogin.update (AuthLogin.FormMsg CredentialForm.Submitted)
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (AuthLogin.Invalid AuthLogin.UsernameRequired)
+                    |> Expect.equal
+                        (CredentialForm.Invalid
+                            { username = "", password = "secret" }
+                            "Username is required"
+                        )
         , test "login field edit clears invalid state" <|
             \_ ->
-                { state = AuthLogin.Invalid AuthLogin.UsernameRequired
-                , form = { username = "", password = "secret" }
-                }
-                    |> AuthLogin.update (AuthLogin.UsernameChanged "alice")
+                CredentialForm.Invalid
+                    { username = "", password = "secret" }
+                    "Username is required"
+                    |> AuthLogin.update (AuthLogin.FormMsg (CredentialForm.UsernameChanged "alice"))
                     |> firstOfThree
                     |> Expect.equal
-                        { state = AuthLogin.Editing
-                        , form = { username = "alice", password = "secret" }
-                        }
+                        (CredentialForm.Editing { username = "alice", password = "secret" })
         , test "login field edit clears failed state" <|
             \_ ->
-                { state = AuthLogin.Failed "Invalid credentials"
-                , form = { username = "alice", password = "wrong" }
-                }
-                    |> AuthLogin.update (AuthLogin.PasswordChanged "secret")
+                CredentialForm.Failed
+                    { username = "alice", password = "wrong" }
+                    "Invalid credentials"
+                    |> AuthLogin.update
+                        (AuthLogin.FormMsg (CredentialForm.PasswordChanged "secret"))
                     |> firstOfThree
                     |> Expect.equal
-                        { state = AuthLogin.Editing
-                        , form = { username = "alice", password = "secret" }
-                        }
+                        (CredentialForm.Editing { username = "alice", password = "secret" })
         , test "login failed completion stores api error with form" <|
             \_ ->
-                { state = AuthLogin.Submitting, form = { username = "alice", password = "wrong" } }
+                CredentialForm.Submitting { username = "alice", password = "wrong" }
                     |> AuthLogin.update
                         (AuthLogin.LoginCompleted
                             (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
                         )
                     |> firstOfThree
-                    |> .state
-                    |> Expect.equal (AuthLogin.Failed "unauthorized: Unauthorized")
+                    |> Expect.equal
+                        (CredentialForm.Failed
+                            { username = "alice", password = "wrong" }
+                            "unauthorized: Unauthorized"
+                        )
         , test "login completion is ignored when not submitting" <|
             \_ ->
-                { state = AuthLogin.Editing, form = { username = "alice", password = "secret" } }
+                CredentialForm.Editing { username = "alice", password = "secret" }
                     |> AuthLogin.update (AuthLogin.LoginCompleted (Err Client.NetworkError))
-                    |> resultSummary
-                    |> Expect.equal ( AuthLogin.Editing, AuthLogin.NoOp )
+                    |> firstAndThird
+                    |> Expect.equal
+                        ( CredentialForm.Editing { username = "alice", password = "secret" }
+                        , AuthLogin.NoOp
+                        )
         , test "setup rejects short password" <|
             \_ ->
                 BootstrapSetup.validateBootstrapAdmin { username = "admin", password = "short" }
-                    |> Expect.equal (Err BootstrapSetup.PasswordTooShort)
+                    |> Expect.equal (Err "Password must be at least 8 characters")
         , test "setup trims username" <|
             \_ ->
                 BootstrapSetup.validateBootstrapAdmin
@@ -97,25 +104,20 @@ tests =
         , test "setup rejects missing username" <|
             \_ ->
                 BootstrapSetup.validateBootstrapAdmin { username = " ", password = "long-enough" }
-                    |> Expect.equal (Err BootstrapSetup.UsernameRequired)
+                    |> Expect.equal (Err "Username is required")
         , test "setup submit moves valid form into submitting state" <|
             \_ ->
-                { state =
-                    BootstrapSetup.Editing { username = " admin ", password = "long-enough" }
-                }
-                    |> BootstrapSetup.update BootstrapSetup.Submitted
+                CredentialForm.Editing { username = " admin ", password = "long-enough" }
+                    |> BootstrapSetup.update (BootstrapSetup.FormMsg CredentialForm.Submitted)
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
-                        (BootstrapSetup.Submitting
+                        (CredentialForm.Submitting
                             { username = " admin ", password = "long-enough" }
                         )
         , test "setup submit emits trimmed request" <|
             \_ ->
-                { state =
-                    BootstrapSetup.Editing { username = " admin ", password = "long-enough" }
-                }
-                    |> BootstrapSetup.update BootstrapSetup.Submitted
+                CredentialForm.Editing { username = " admin ", password = "long-enough" }
+                    |> BootstrapSetup.update (BootstrapSetup.FormMsg CredentialForm.Submitted)
                     |> thirdOfThree
                     |> Expect.equal
                         (BootstrapSetup.RequestCreateAdmin
@@ -123,42 +125,35 @@ tests =
                         )
         , test "setup field edit clears failed state" <|
             \_ ->
-                { state =
-                    BootstrapSetup.Failed
-                        { username = "admin", password = "too-short" }
-                        "Bad setup"
-                }
-                    |> BootstrapSetup.update (BootstrapSetup.PasswordChanged "long-enough")
+                CredentialForm.Failed
+                    { username = "admin", password = "too-short" }
+                    "Bad setup"
+                    |> BootstrapSetup.update
+                        (BootstrapSetup.FormMsg (CredentialForm.PasswordChanged "long-enough"))
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
-                        (BootstrapSetup.Editing
+                        (CredentialForm.Editing
                             { username = "admin", password = "long-enough" }
                         )
         , test "setup failed completion stores api error with form" <|
             \_ ->
-                { state =
-                    BootstrapSetup.Submitting { username = "admin", password = "long-enough" }
-                }
+                CredentialForm.Submitting { username = "admin", password = "long-enough" }
                     |> BootstrapSetup.update
                         (BootstrapSetup.CreateAdminCompleted (Err Client.NetworkError))
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
-                        (BootstrapSetup.Failed
+                        (CredentialForm.Failed
                             { username = "admin", password = "long-enough" }
                             "Network error"
                         )
         , test "setup completion is ignored when not submitting" <|
             \_ ->
-                { state =
-                    BootstrapSetup.Editing { username = "admin", password = "long-enough" }
-                }
+                CredentialForm.Editing { username = "admin", password = "long-enough" }
                     |> BootstrapSetup.update
                         (BootstrapSetup.CreateAdminCompleted (Err Client.NetworkError))
-                    |> setupResultSummary
+                    |> firstAndThird
                     |> Expect.equal
-                        ( BootstrapSetup.Editing { username = "admin", password = "long-enough" }
+                        ( CredentialForm.Editing { username = "admin", password = "long-enough" }
                         , BootstrapSetup.NoOp
                         )
         ]
@@ -174,15 +169,6 @@ thirdOfThree ( _, _, c ) =
     c
 
 
-resultSummary :
-    ( AuthLogin.Model, Cmd AuthLogin.Msg, AuthLogin.OutMsg )
-    -> ( AuthLogin.State, AuthLogin.OutMsg )
-resultSummary ( model, _, outMsg ) =
-    ( model.state, outMsg )
-
-
-setupResultSummary :
-    ( BootstrapSetup.Model, Cmd BootstrapSetup.Msg, BootstrapSetup.OutMsg )
-    -> ( BootstrapSetup.State, BootstrapSetup.OutMsg )
-setupResultSummary ( model, _, outMsg ) =
-    ( model.state, outMsg )
+firstAndThird : ( a, b, c ) -> ( a, c )
+firstAndThird ( a, _, c ) =
+    ( a, c )

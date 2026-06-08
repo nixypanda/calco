@@ -705,8 +705,8 @@ basicInfoCard : Theme -> FormModel -> Element Msg
 basicInfoCard theme form =
     Ui.formSection theme
         "Basic Info"
-        [ Ui.input theme "Name" form.name NameChanged
-        , Ui.input theme "Brand" form.brand BrandChanged
+        [ Ui.input theme { label = "Name", value = form.name, onChange = NameChanged }
+        , Ui.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
         , categoryInputView theme (form.openDropdown == CategoryOpen) form.categoryInput
         ]
 
@@ -715,7 +715,7 @@ portionInfoCard : Theme -> FormModel -> List UnitItem -> Element Msg
 portionInfoCard theme form units =
     Ui.formSection theme
         "Portion Info"
-        [ Ui.input theme "Serving Size (g)" form.servingSizeG ServingSizeChanged
+        [ Ui.input theme { label = "Serving Size (g)", value = form.servingSizeG, onChange = ServingSizeChanged }
         , View.QuantityInput.dropdown theme
             { amountLabel = "Default Quantity"
             , amount = form.defaultQuantity
@@ -784,7 +784,7 @@ categoryInputView theme open input =
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input theme "" input.query CategoryQueryChanged)
+                (Ui.input theme { label = "", value = input.query, onChange = CategoryQueryChanged })
             , Element.el
                 [ Element.paddingEach
                     { top = Ui.space4, left = Ui.space4, bottom = 0, right = 0 }
@@ -922,7 +922,7 @@ nutrientRowView theme nutrients openDropdown index row =
             , isOpen = openDropdown == NutrientCodeOpen index
             , onToggle = ToggleNutrientCodeDropdown index
             }
-        , Ui.input theme "Amount" row.amountPer100g (NutrientAmountChanged index)
+        , Ui.input theme { label = "Amount", value = row.amountPer100g, onChange = NutrientAmountChanged index }
         , unitLabelView theme row.unit
         , rowActionButton theme
             { label = "×"
@@ -978,13 +978,13 @@ servingRowView theme units openDropdown index row =
         [ Element.width Element.fill
         , Element.spacing 6
         ]
-        [ Ui.input theme "Label" row.label (ServingLabelChanged index)
+        [ Ui.input theme { label = "Label", value = row.label, onChange = ServingLabelChanged index }
         , Element.row
             [ Element.width Element.fill
             , Element.spacing Ui.space8
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input theme "Qty" row.quantity (ServingQuantityChanged index))
+                (Ui.input theme { label = "Qty", value = row.quantity, onChange = ServingQuantityChanged index })
             , Element.el
                 [ Element.width (Element.fill |> Element.maximum 160) ]
                 (Ui.selectDropdown theme
@@ -997,7 +997,7 @@ servingRowView theme units openDropdown index row =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.input theme "Grams" row.grams (ServingGramsChanged index))
+                (Ui.input theme { label = "Grams", value = row.grams, onChange = ServingGramsChanged index })
             , rowActionButton theme
                 { label = "×"
                 , title = "Remove"

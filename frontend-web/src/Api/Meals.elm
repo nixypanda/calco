@@ -5,6 +5,7 @@ module Api.Meals exposing
     , MealComponent
     , MealListResponse
     , MealName
+    , MealNutrientsQuery
     , MealNutritionResponse
     , createMeal
     , deleteMeal
@@ -127,18 +128,23 @@ deleteMeal id toMsg =
         toMsg
 
 
+type alias MealNutrientsQuery =
+    { mealId : String
+    , amount : String
+    , unit : String
+    }
+
+
 getMealNutrients :
-    String
-    -> String
-    -> String
+    MealNutrientsQuery
     -> (Result Client.ApiError MealNutritionResponse -> msg)
     -> Cmd msg
-getMealNutrients id amount unit toMsg =
+getMealNutrients query toMsg =
     Client.get
         (Builder.absolute
-            [ "api", "meals", id, "nutrients" ]
-            [ Builder.string "amount" amount
-            , Builder.string "unit" unit
+            [ "api", "meals", query.mealId, "nutrients" ]
+            [ Builder.string "amount" query.amount
+            , Builder.string "unit" query.unit
             ]
         )
         mealNutritionDecoder

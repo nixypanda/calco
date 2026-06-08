@@ -1,37 +1,26 @@
-module Page.Admin.CreateUserTest exposing (tests)
+module Page.Users.CreateUserTest exposing (tests)
 
 import Api.Client as Client
 import Data.Auth as Auth
 import Expect
-import Page.Admin.CreateUser as CreateUser
+import Page.Users.CreateUser as CreateUser
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Admin.CreateUser"
+    describe "Page.Users.CreateUser"
         [ test "init creates empty form with no error" <|
             \_ ->
                 CreateUser.init
-                    |> Tuple.first
-                    |> .state
-                    |> Expect.equal
-                        (CreateUser.Editing emptyForm)
-        , test "init emits NoOp" <|
-            \_ ->
-                CreateUser.init
-                    |> Tuple.second
-                    |> Expect.equal CreateUser.NoOp
+                    |> Expect.equal (CreateUser.Editing emptyForm)
         , test "Submitted trims username and display name and emits RequestCreateUser" <|
             \_ ->
-                { initialModel
-                    | state =
-                        CreateUser.Editing
-                            { username = " alice "
-                            , displayName = " Alice "
-                            , initialPassword = "secret"
-                            }
-                }
+                CreateUser.Editing
+                    { username = " alice "
+                    , displayName = " Alice "
+                    , initialPassword = "secret"
+                    }
                     |> CreateUser.update CreateUser.Submitted
                     |> thirdOfThree
                     |> Expect.equal
@@ -43,17 +32,13 @@ tests =
                         )
         , test "Submitted rejects empty username" <|
             \_ ->
-                { initialModel
-                    | state =
-                        CreateUser.Editing
-                            { username = ""
-                            , displayName = "Alice"
-                            , initialPassword = "secret"
-                            }
-                }
+                CreateUser.Editing
+                    { username = ""
+                    , displayName = "Alice"
+                    , initialPassword = "secret"
+                    }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
                         (CreateUser.Invalid
                             { username = ""
@@ -64,17 +49,13 @@ tests =
                         )
         , test "Submitted rejects empty display name" <|
             \_ ->
-                { initialModel
-                    | state =
-                        CreateUser.Editing
-                            { username = "alice"
-                            , displayName = ""
-                            , initialPassword = "secret"
-                            }
-                }
+                CreateUser.Editing
+                    { username = "alice"
+                    , displayName = ""
+                    , initialPassword = "secret"
+                    }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
                         (CreateUser.Invalid
                             { username = "alice"
@@ -85,17 +66,13 @@ tests =
                         )
         , test "Submitted rejects empty password" <|
             \_ ->
-                { initialModel
-                    | state =
-                        CreateUser.Editing
-                            { username = "alice"
-                            , displayName = "Alice"
-                            , initialPassword = ""
-                            }
-                }
+                CreateUser.Editing
+                    { username = "alice"
+                    , displayName = "Alice"
+                    , initialPassword = ""
+                    }
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
                         (CreateUser.Invalid
                             { username = "alice"
@@ -106,18 +83,14 @@ tests =
                         )
         , test "Submitted moves valid data into submitting state" <|
             \_ ->
-                { initialModel
-                    | state =
-                        CreateUser.Invalid
-                            { username = "alice"
-                            , displayName = "Alice"
-                            , initialPassword = "secret"
-                            }
-                            CreateUser.UsernameRequired
-                }
+                CreateUser.Invalid
+                    { username = "alice"
+                    , displayName = "Alice"
+                    , initialPassword = "secret"
+                    }
+                    CreateUser.UsernameRequired
                     |> CreateUser.update CreateUser.Submitted
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal
                         (CreateUser.Submitting
                             { username = "alice"
@@ -148,21 +121,19 @@ tests =
                             (Err (Client.BadStatus 400 "bad" "Bad request"))
                         )
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal (CreateUser.Failed emptyForm "bad: Bad request")
         , test "field changes update form correctly" <|
             \_ ->
                 initialModel
                     |> CreateUser.update (CreateUser.UsernameChanged "bob")
                     |> firstOfThree
-                    |> .state
                     |> Expect.equal (CreateUser.Editing { emptyForm | username = "bob" })
         ]
 
 
 initialModel : CreateUser.Model
 initialModel =
-    CreateUser.init |> Tuple.first
+    CreateUser.init
 
 
 emptyForm : CreateUser.Form

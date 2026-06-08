@@ -1,10 +1,9 @@
-module Page.Admin.CreateUser exposing
+module Page.Users.CreateUser exposing
     ( Form
-    , Model
+    , Model(..)
     , Msg(..)
     , OutMsg(..)
     , Problem(..)
-    , State(..)
     , init
     , update
     , view
@@ -31,12 +30,7 @@ type alias Form =
     }
 
 
-type alias Model =
-    { state : State
-    }
-
-
-type State
+type Model
     = Editing Form
     | Invalid Form Problem
     | Submitting Form
@@ -50,11 +44,9 @@ type Problem
     | InitialPasswordRequired
 
 
-init : ( Model, OutMsg )
+init : Model
 init =
-    ( { state = Editing emptyForm }
-    , NoOp
-    )
+    Editing emptyForm
 
 
 emptyForm : Form
@@ -88,65 +80,65 @@ update msg model =
             let
                 form : Form
                 form =
-                    currentForm model.state
+                    currentForm model
             in
-            ( { model | state = Editing { form | username = username } }, Cmd.none, NoOp )
+            ( Editing { form | username = username }, Cmd.none, NoOp )
 
         DisplayNameChanged displayName ->
             let
                 form : Form
                 form =
-                    currentForm model.state
+                    currentForm model
             in
-            ( { model | state = Editing { form | displayName = displayName } }, Cmd.none, NoOp )
+            ( Editing { form | displayName = displayName }, Cmd.none, NoOp )
 
         PasswordChanged password ->
             let
                 form : Form
                 form =
-                    currentForm model.state
+                    currentForm model
             in
-            ( { model | state = Editing { form | initialPassword = password } }, Cmd.none, NoOp )
+            ( Editing { form | initialPassword = password }, Cmd.none, NoOp )
 
         Submitted ->
             let
                 form : Form
                 form =
-                    currentForm model.state
+                    currentForm model
             in
             case createUserPayload form of
                 Ok request ->
-                    ( { model | state = Submitting form }
+                    ( Submitting form
                     , Cmd.none
                     , RequestCreateUser request
                     )
 
                 Err problem ->
-                    ( { model | state = Invalid form problem }, Cmd.none, NoOp )
+                    ( Invalid form problem, Cmd.none, NoOp )
 
         Completed result ->
             case result of
                 Ok _ ->
-                    ( { model | state = Succeeded }, Cmd.none, CreateSucceeded )
+                    ( Succeeded, Cmd.none, CreateSucceeded )
 
                 Err error ->
                     let
                         form : Form
                         form =
-                            currentForm model.state
+                            currentForm model
                     in
                     ApiResult.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \message current -> { current | state = Failed form message }
+                        , applyError = \message _ -> Failed form message
                         }
                         error
                         model
 
 
-currentForm : State -> Form
-currentForm state =
-    case state of
+currentForm : Model -> Form
+currentForm model =
+    case model of
         Editing form ->
             form
 
@@ -193,23 +185,23 @@ view { model, device, theme } =
     let
         form : Form
         form =
-            currentForm model.state
+            currentForm model
     in
     Ui.pageContainer device
-        (errorView theme model.state
+        (errorView theme model
             ++ [ Ui.card theme
-                    [ Ui.input theme "Username" form.username UsernameChanged
-                    , Ui.input theme "Display Name" form.displayName DisplayNameChanged
-                    , Ui.passwordInput theme "Initial Password" form.initialPassword PasswordChanged
+                    [ Ui.input theme { label = "Username", value = form.username, onChange = UsernameChanged }
+                    , Ui.input theme { label = "Display Name", value = form.displayName, onChange = DisplayNameChanged }
+                    , Ui.passwordInput theme { label = "Initial Password", value = form.initialPassword, onChange = PasswordChanged }
                     , Ui.button theme "Save" Submitted
                     ]
                ]
         )
 
 
-errorView : Theme -> State -> List (Element msg)
-errorView theme state =
-    case state of
+errorView : Theme -> Model -> List (Element msg)
+errorView theme model =
+    case model of
         Invalid _ problem ->
             [ Ui.errorBanner theme (problemMessage problem) ]
 

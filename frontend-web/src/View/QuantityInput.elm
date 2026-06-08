@@ -23,7 +23,7 @@ dropdown :
     -> Element msg
 dropdown theme config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ Ui.input theme config.amountLabel config.amount config.onAmountChange
+        [ Ui.input theme { label = config.amountLabel, value = config.amount, onChange = config.onAmountChange }
         , Ui.selectDropdown theme
             { label = config.unitLabel
             , selected = config.unit

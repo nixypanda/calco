@@ -422,10 +422,11 @@ loadedView theme device loaded =
         , Element.map FormMsg (FoodLogForm.view theme (Just food) loaded.units form)
         , Ui.cardActions
             [ Ui.primarySubmitButton theme
-                (loaded.request == Saving)
-                "Log Food"
-                "Logging..."
-                SubmitClicked
+                { state = Ui.submittingOrIdle (loaded.request == Saving)
+                , idleLabel = "Log Food"
+                , submittingLabel = "Logging..."
+                , onPress = SubmitClicked
+                }
             ]
         , View.Nutrients.nutritionCard theme device nutrients
         ]

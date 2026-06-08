@@ -278,7 +278,7 @@ view { model, device, theme } =
 
                     Loaded date logs ->
                         if LocalDate.equals date model.currentDate then
-                            [ logGroupsView theme model logs device ]
+                            [ logGroupsView theme device model logs ]
 
                         else
                             [ Ui.skeletonLoading theme ]
@@ -406,42 +406,48 @@ loadedLogs currentDate diary =
             []
 
 
-logGroupsView : Theme -> Model -> List FoodLog -> Device -> Element Msg
-logGroupsView theme model logs device =
+type alias SlotSection =
+    { slot : MealSlot
+    , logs : List FoodLog
+    }
+
+
+logGroupsView : Theme -> Device -> Model -> List FoodLog -> Element Msg
+logGroupsView theme device model logs =
+    let
+        section : MealSlot -> SlotSection
+        section slot =
+            { slot = slot, logs = logsForSlot slot logs }
+
+        otherSection : SlotSection
+        otherSection =
+            section Other
+    in
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
-        [ slotView theme model logs Breakfast (MealSlot.label Breakfast) device
-        , slotView theme model logs Lunch (MealSlot.label Lunch) device
-        , slotView theme model logs Dinner (MealSlot.label Dinner) device
-        , slotView theme model logs Snack (MealSlot.label Snack) device
-        , let
-            otherLogs : List FoodLog
-            otherLogs =
-                logsForSlot Other logs
-          in
-          if List.isEmpty otherLogs then
+        [ slotView theme device model.macroMode (section Breakfast)
+        , slotView theme device model.macroMode (section Lunch)
+        , slotView theme device model.macroMode (section Dinner)
+        , slotView theme device model.macroMode (section Snack)
+        , if List.isEmpty otherSection.logs then
             Element.none
 
           else
-            slotView theme model logs Other (MealSlot.label Other) device
+            slotView theme device model.macroMode otherSection
         ]
 
 
-slotView : Theme -> Model -> List FoodLog -> MealSlot -> String -> Device -> Element Msg
-slotView theme model allLogs slot label device =
+slotView : Theme -> Device -> MacroMode -> SlotSection -> Element Msg
+slotView theme device macroMode section =
     let
-        logs : List FoodLog
-        logs =
-            logsForSlot slot allLogs
-
         totals : MacroTotals
         totals =
-            Nutrition.macroTotals logs
+            Nutrition.macroTotals section.logs
     in
     mealSlotCard theme
-        slot
-        (mealSlotHeader theme model allLogs slot label totals device)
+        section.slot
+        (mealSlotHeader theme device macroMode section totals)
         (Ui.hairline theme
-            :: (if List.isEmpty logs then
+            :: (if List.isEmpty section.logs then
                     [ Element.el
                         [ Element.padding 14
                         , Font.color theme.textMuted
@@ -451,15 +457,15 @@ slotView theme model allLogs slot label device =
                     ]
 
                 else
-                    List.map (logRow theme device) logs
+                    List.map (logRow theme device) section.logs
                )
-            ++ (case slot of
+            ++ (case section.slot of
                     Other ->
                         []
 
                     _ ->
                         [ Ui.hairline theme
-                        , Ui.ghostButton theme "+ Add Food" (AddFoodClicked slot)
+                        , Ui.ghostButton theme "+ Add Food" (AddFoodClicked section.slot)
                         ]
                )
         )
@@ -467,14 +473,12 @@ slotView theme model allLogs slot label device =
 
 mealSlotHeader :
     Theme
-    -> Model
-    -> List FoodLog
-    -> MealSlot
-    -> String
-    -> MacroTotals
     -> Device
+    -> MacroMode
+    -> SlotSection
+    -> MacroTotals
     -> Element Msg
-mealSlotHeader theme model allLogs slot label totals device =
+mealSlotHeader theme device macroMode section totals =
     let
         horizontalPadding : Int
         horizontalPadding =
@@ -484,6 +488,12 @@ mealSlotHeader theme model allLogs slot label totals device =
             else
                 34
 
+        sectionKcal : Float
+        sectionKcal =
+            section.logs
+                |> List.map (.nutrients >> caloriesFrom)
+                |> List.sum
+
         headerContent : Element Msg
         headerContent =
             Element.row
@@ -492,17 +502,17 @@ mealSlotHeader theme model allLogs slot label totals device =
                 , Element.spacing Ui.space12
                 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-                    [ Ui.sectionTitle theme label
+                    [ Ui.sectionTitle theme (MealSlot.label section.slot)
                     , Input.button []
                         { onPress = Just MacroModeToggled
-                        , label = Ui.mutedCaption theme (macroSummary model.macroMode totals)
+                        , label = Ui.mutedCaption theme (macroSummary macroMode totals)
                         }
                     ]
                 , Ui.mutedCaption theme
-                    (String.fromInt (round (slotCalories slot allLogs)) ++ " kcal")
+                    (String.fromInt (round sectionKcal) ++ " kcal")
                 ]
     in
-    case slot of
+    case section.slot of
         Other ->
             headerContent
 
@@ -533,7 +543,7 @@ mealSlotHeader theme model allLogs slot label totals device =
                                 headerContent
                             )
                       ]
-                    , mealSlotBackground slot
+                    , mealSlotBackground section.slot
                     ]
                 )
                 Element.none
