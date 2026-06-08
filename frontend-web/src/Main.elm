@@ -20,6 +20,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
+import Html
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -1111,7 +1112,10 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "CalCo"
     , body =
-        [ Element.layoutWith
+        [ Html.node "style"
+            []
+            [ Html.text (":root { background: " ++ Ui.toCssColor model.theme.pageBg ++ "; }") ]
+        , Element.layoutWith
             { options =
                 [ Element.focusStyle
                     { borderColor = Nothing
