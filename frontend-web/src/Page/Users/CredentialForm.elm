@@ -132,8 +132,16 @@ view config { model, device, theme } =
              , Ui.subsectionTitle theme config.title
              ]
                 ++ descriptionView theme config.description
-                ++ [ Ui.input theme { label = "Username", value = form.username, onChange = UsernameChanged }
-                   , Ui.passwordInput theme { label = "Password", value = form.password, onChange = PasswordChanged }
+                ++ [ Ui.input theme
+                        { label = "Username"
+                        , value = form.username
+                        , onChange = UsernameChanged
+                        }
+                   , Ui.passwordInput theme
+                        { label = "Password"
+                        , value = form.password
+                        , onChange = PasswordChanged
+                        }
                    , Ui.maybeErrorBanner theme (errorMessage model)
                    , Ui.primarySubmitButton theme
                         { state = Ui.submittingOrIdle (isSubmitting model)

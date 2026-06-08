@@ -12,7 +12,6 @@ module Page.Diary.Day exposing
     )
 
 import Api.Client as Client
-import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
@@ -153,7 +152,7 @@ update msg model =
 
 failure : LocalDate -> Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure requestDate =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError = \message model -> { model | diary = Failed requestDate message }

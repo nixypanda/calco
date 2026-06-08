@@ -9,7 +9,6 @@ module Page.Meal.Create exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal)
-import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
@@ -86,7 +85,7 @@ update msg fields =
                     )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError =

@@ -20,7 +20,6 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
 import Api.Meals exposing (MealName)
-import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition as Nutrition
@@ -178,7 +177,7 @@ update msg model =
                     ( updateLoadedLog log model, Cmd.none, NoOp )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \message current -> applyLoadedError message current
@@ -207,7 +206,7 @@ update msg model =
                     ( model, Cmd.none, Navigate (DiaryDay Nothing) )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \message current -> applyLoadedDeleteError message current
@@ -524,7 +523,7 @@ itemResolutionOutMsg log =
 
 loadFailure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 loadFailure =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError =

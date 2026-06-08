@@ -11,7 +11,6 @@ import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User as User
 import Element exposing (Device, Element)
-import Page.Users.StatusBadge
 import Ui
 import Ui.Theme exposing (Theme)
 
@@ -109,5 +108,5 @@ userListRow theme config =
         , leading = []
         , title = Ui.sectionTitle theme config.user.username
         , subtitle = [ Ui.mutedBody theme config.user.displayName ]
-        , trailing = [ Page.Users.StatusBadge.statusBadge theme config.user.status ]
+        , trailing = [ Ui.statusBadge theme config.user.status ]
         }

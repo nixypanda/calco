@@ -11,7 +11,6 @@ module Page.Meal.Edit exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
-import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
@@ -113,7 +112,7 @@ update msg model =
                     )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \message _ -> EditLoadFailed message
@@ -130,7 +129,7 @@ update msg model =
                     )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \message current -> applyNutritionError message current
@@ -195,7 +194,7 @@ update msg model =
                         Err error ->
                             let
                                 ( newLoaded, _, outMsg ) =
-                                    ApiResult.failure
+                                    Client.failure
                                         { noOp = NoOp
                                         , sessionExpired = SessionExpired
                                         , applyError =

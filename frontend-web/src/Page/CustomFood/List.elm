@@ -12,7 +12,6 @@ module Page.CustomFood.List exposing
 
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail)
-import Api.Result as ApiResult
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
@@ -111,7 +110,7 @@ update msg model =
                                 )
 
                             Err error ->
-                                ApiResult.failure
+                                Client.failure
                                     { noOp = NoOp
                                     , sessionExpired = SessionExpired
                                     , applyError =
@@ -136,7 +135,7 @@ update msg model =
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message

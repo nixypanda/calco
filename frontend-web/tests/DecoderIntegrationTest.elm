@@ -5,7 +5,7 @@ import Api.Logs as Logs
 import Data.Auth as Auth
 import Data.FoodLog as FoodLog
 import Data.ItemRef as ItemRef
-import Data.Quantity as Quantity
+import Data.Nutrition as Nutrition
 import Data.User as User
 import Expect
 import Json.Decode as Decode
@@ -34,7 +34,8 @@ tests =
                     |> Expect.equal "{\"username\":\"alice\",\"password\":\"secret\"}"
         , test "decodes quantity" <|
             \_ ->
-                Decode.decodeString Quantity.decoder "{ \"amount\": \"1.5\", \"unit\": \"g\" }"
+                Decode.decodeString Nutrition.quantityDecoder
+                    "{ \"amount\": \"1.5\", \"unit\": \"g\" }"
                     |> Expect.equal (Ok { amount = "1.5", unit = "g" })
         , test "decodes item ref" <|
             \_ ->

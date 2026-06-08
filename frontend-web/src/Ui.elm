@@ -1,5 +1,8 @@
 module Ui exposing
-    ( accentDot
+    ( InputConfig
+    , SubmitButtonConfig
+    , SubmitState(..)
+    , accentDot
     , accentPink
     , accentSoftGreen
     , accentYellow
@@ -30,7 +33,6 @@ module Ui exposing
     , hairline
     , iconButton
     , input
-    , InputConfig
     , isSmall
     , layout
     , linearProgress
@@ -50,7 +52,6 @@ module Ui exposing
     , pageTitle
     , passwordInput
     , primarySubmitButton
-    , SubmitButtonConfig
     , primaryTeal
     , proteinColor
     , section
@@ -65,9 +66,9 @@ module Ui exposing
     , space8
     , statBlock
     , statBlockGroup
-    , subsectionTitle
+    , statusBadge
     , submittingOrIdle
-    , SubmitState(..)
+    , subsectionTitle
     , tableHeader
     , toCssColor
     , truncateWithEllipsis
@@ -606,23 +607,6 @@ button theme label msg =
         , Border.rounded 999
         , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
         , Font.medium
-        , Element.mouseOver [ Background.color theme.brandBluePressed ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-primaryButton : Theme -> String -> msg -> Element msg
-primaryButton theme label msg =
-    Input.button
-        [ Background.color theme.brandBlue
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
-        , Element.width Element.fill
-        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
-        , Font.medium
-        , Font.center
         , Element.mouseOver [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
@@ -1233,6 +1217,25 @@ coloredPill config =
         , Font.medium
         ]
         (Element.text config.label)
+
+
+statusBadge : Theme -> String -> Element msg
+statusBadge theme status =
+    coloredPill
+        { label = status
+        , bg =
+            if status == "active" then
+                theme.statusActiveBg
+
+            else
+                theme.statusDisabledBg
+        , fg =
+            if status == "active" then
+                theme.statusGreen
+
+            else
+                theme.statusRed
+        }
 
 
 statBlock :

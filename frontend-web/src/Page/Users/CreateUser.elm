@@ -10,7 +10,6 @@ module Page.Users.CreateUser exposing
     )
 
 import Api.Client as Client
-import Api.Result as ApiResult
 import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Device, Element)
@@ -127,7 +126,7 @@ update msg model =
                         form =
                             currentForm model
                     in
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \message _ -> Failed form message
@@ -190,9 +189,21 @@ view { model, device, theme } =
     Ui.pageContainer device
         (errorView theme model
             ++ [ Ui.card theme
-                    [ Ui.input theme { label = "Username", value = form.username, onChange = UsernameChanged }
-                    , Ui.input theme { label = "Display Name", value = form.displayName, onChange = DisplayNameChanged }
-                    , Ui.passwordInput theme { label = "Initial Password", value = form.initialPassword, onChange = PasswordChanged }
+                    [ Ui.input theme
+                        { label = "Username"
+                        , value = form.username
+                        , onChange = UsernameChanged
+                        }
+                    , Ui.input theme
+                        { label = "Display Name"
+                        , value = form.displayName
+                        , onChange = DisplayNameChanged
+                        }
+                    , Ui.passwordInput theme
+                        { label = "Initial Password"
+                        , value = form.initialPassword
+                        , onChange = PasswordChanged
+                        }
                     , Ui.button theme "Save" Submitted
                     ]
                ]

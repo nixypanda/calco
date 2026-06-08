@@ -13,7 +13,7 @@ module Api.Logs exposing
 import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef exposing (ItemRef)
-import Data.Quantity as Quantity exposing (Quantity)
+import Data.Nutrition as Nutrition
 import Json.Encode as Encode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Json as Json
@@ -25,14 +25,14 @@ type alias CreateLogRequest =
     , deviceTimezone : Maybe String
     , mealSlot : Maybe String
     , item : ItemRef
-    , quantity : Quantity
+    , quantity : Nutrition.Quantity
     , notes : Maybe String
     }
 
 
 type alias UpdateLogRequest =
     { mealSlot : Maybe String
-    , quantity : Quantity
+    , quantity : Nutrition.Quantity
     , notes : Maybe String
     }
 
@@ -94,7 +94,7 @@ createLogRequestEncoder request =
 updateLogRequestEncoder : UpdateLogRequest -> Encode.Value
 updateLogRequestEncoder request =
     Encode.object
-        [ ( "quantity", Quantity.encoder request.quantity )
+        [ ( "quantity", Nutrition.quantityEncoder request.quantity )
         , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
         , ( "notes", Json.maybe Encode.string request.notes )
         ]
@@ -104,7 +104,7 @@ baseLogFields : CreateLogRequest -> List ( String, Encode.Value )
 baseLogFields request =
     [ ( "log_date", Encode.string (LocalDate.format request.logDate) )
     , ( "item", ItemRef.encoder request.item )
-    , ( "quantity", Quantity.encoder request.quantity )
+    , ( "quantity", Nutrition.quantityEncoder request.quantity )
     , ( "notes", Json.maybe Encode.string request.notes )
     ]
 

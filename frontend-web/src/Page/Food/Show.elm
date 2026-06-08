@@ -15,7 +15,6 @@ module Page.Food.Show exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest)
-import Api.Result as ApiResult
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
@@ -181,7 +180,7 @@ update msg model =
                                 ( model, Cmd.none, Navigate (DiaryDay Nothing) )
 
                             Err error ->
-                                ApiResult.failure
+                                Client.failure
                                     { noOp = NoOp
                                     , sessionExpired = SessionExpired
                                     , applyError =
@@ -329,7 +328,7 @@ completeLoading loading =
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message

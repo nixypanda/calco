@@ -4,8 +4,7 @@ import Api.Client as Client
 import Data.FoodLog exposing (FoodLog, LogItem)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
-import Data.Quantity exposing (Quantity)
+import Data.Nutrition as Nutrition exposing (NutrientAmount, Quantity)
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)

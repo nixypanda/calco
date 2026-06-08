@@ -15,8 +15,7 @@ import Api.Logs exposing (CreateLogRequest, UpdateLogRequest)
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
-import Data.Nutrition exposing (defaultCode)
-import Data.Quantity exposing (Quantity)
+import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text

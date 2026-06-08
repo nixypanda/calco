@@ -14,7 +14,6 @@ module Page.Meal.Show exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Meals as MealsApi exposing (Meal, MealNutritionResponse)
-import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (defaultCode)
@@ -245,7 +244,7 @@ update msg model =
                                 ( model, Cmd.none, Navigate MealList )
 
                             Err error ->
-                                ApiResult.failure
+                                Client.failure
                                     { noOp = NoOp
                                     , sessionExpired = SessionExpired
                                     , applyError =
@@ -428,7 +427,7 @@ applyNutritionResult result model =
             )
 
         Err error ->
-            ApiResult.failure
+            Client.failure
                 { noOp = NoOp
                 , sessionExpired = SessionExpired
                 , applyError =
@@ -471,7 +470,7 @@ fallbackUnits =
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message

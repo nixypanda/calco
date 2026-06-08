@@ -12,13 +12,11 @@ module Page.Users.EditUser exposing
     )
 
 import Api.Client as Client
-import Api.Result as ApiResult
 import Data.User as User
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Page.Users.StatusBadge
 import Ui
 import Ui.Theme exposing (Theme)
 
@@ -104,7 +102,7 @@ update msg model =
                     )
 
                 Err error ->
-                    ApiResult.failure
+                    Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
                         , applyError = \_ current -> { current | status = LoadFailed error }
@@ -236,7 +234,7 @@ completePendingAction pendingAction result model successStatus =
                         ( { model | status = successStatus loadedUser }, Cmd.none, UpdateSucceeded )
 
                     Err error ->
-                        ApiResult.failure
+                        Client.failure
                             { noOp = NoOp
                             , sessionExpired = SessionExpired
                             , applyError =
@@ -285,7 +283,11 @@ resetPasswordView theme model =
     [ Ui.card theme
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.passwordInput theme { label = "New password", value = currentPassword model.status, onChange = PasswordChanged }
+            [ Ui.passwordInput theme
+                { label = "New password"
+                , value = currentPassword model.status
+                , onChange = PasswordChanged
+                }
             , Ui.button theme "Reset Password" ResetSubmitted
             ]
         ]
@@ -361,7 +363,7 @@ userSummaryCard theme user =
             , Ui.detailRow theme
                 "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))
-            , Ui.detailRow theme "Status" (Page.Users.StatusBadge.statusBadge theme user.status)
+            , Ui.detailRow theme "Status" (Ui.statusBadge theme user.status)
             , Ui.detailRow theme
                 "Created"
                 (Element.el [ Ui.caption ] (Element.text user.createdAt))

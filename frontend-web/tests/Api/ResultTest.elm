@@ -1,7 +1,6 @@
 module Api.ResultTest exposing (tests)
 
 import Api.Client as Client
-import Api.Result as ApiResult
 import Expect
 import Test exposing (Test, describe, test)
 
@@ -21,12 +20,12 @@ tests =
     describe "Api.Result"
         [ test "non-unauthorized failures apply display error and return NoOp" <|
             \_ ->
-                ApiResult.failure config Client.NetworkError emptyModel
+                Client.failure config Client.NetworkError emptyModel
                     |> resultSummary
                     |> Expect.equal ( Just "Network error", NoOp )
         , test "unauthorized failures apply display error and return SessionExpired" <|
             \_ ->
-                ApiResult.failure config
+                Client.failure config
                     (Client.BadStatus 401 "unauthorized" "Sign in again")
                     emptyModel
                     |> resultSummary

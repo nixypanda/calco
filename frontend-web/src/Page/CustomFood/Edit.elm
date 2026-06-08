@@ -19,7 +19,6 @@ import Api.Foods as Foods
         , ProductDetail
         , UnitItem
         )
-import Api.Result as ApiResult
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.CustomFood.Form as Form
@@ -232,7 +231,7 @@ completeSave result model =
             ( model, Cmd.none, Navigate (FoodShow response.id Nothing) )
 
         Err error ->
-            ApiResult.failure
+            Client.failure
                 { noOp = NoOp
                 , sessionExpired = SessionExpired
                 , applyError =
@@ -312,7 +311,7 @@ applySubmitError message model =
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
 failure =
-    ApiResult.failure
+    Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message

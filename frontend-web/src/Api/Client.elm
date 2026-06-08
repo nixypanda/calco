@@ -2,6 +2,7 @@ module Api.Client exposing
     ( ApiError(..)
     , delete
     , displayError
+    , failure
     , get
     , isUnauthorized
     , post
@@ -149,3 +150,27 @@ displayError error =
 
         BadBody message ->
             "Unexpected response: " ++ message
+
+
+failure :
+    { noOp : outMsg
+    , sessionExpired : outMsg
+    , applyError : String -> model -> model
+    }
+    -> ApiError
+    -> model
+    -> ( model, Cmd msg, outMsg )
+failure config error model =
+    let
+        updatedModel : model
+        updatedModel =
+            config.applyError (displayError error) model
+    in
+    ( updatedModel
+    , Cmd.none
+    , if isUnauthorized error then
+        config.sessionExpired
+
+      else
+        config.noOp
+    )

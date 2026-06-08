@@ -4,6 +4,7 @@ module Data.Nutrition exposing
     , NutrientAmount
     , NutritionSummary
     , Per100gNutrient
+    , Quantity
     , Serving
     , decoder
     , defaultCode
@@ -12,6 +13,8 @@ module Data.Nutrition exposing
     , macroTotals
     , nutrientAmount
     , nutrientsForQuantity
+    , quantityDecoder
+    , quantityEncoder
     , safeAmount
     , scalePer100g
     , scaledSnapshotForQuantity
@@ -22,6 +25,7 @@ module Data.Nutrition exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Json.Encode as Encode
 
 
 type alias NutrientAmount =
@@ -345,3 +349,24 @@ gramsFromServing amount serving =
 
     else
         Nothing
+
+
+type alias Quantity =
+    { amount : String
+    , unit : String
+    }
+
+
+quantityDecoder : Decoder Quantity
+quantityDecoder =
+    Decode.map2 Quantity
+        (Decode.field "amount" Decode.string)
+        (Decode.field "unit" Decode.string)
+
+
+quantityEncoder : Quantity -> Encode.Value
+quantityEncoder quantity =
+    Encode.object
+        [ ( "amount", Encode.string quantity.amount )
+        , ( "unit", Encode.string quantity.unit )
+        ]

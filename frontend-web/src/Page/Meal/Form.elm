@@ -29,7 +29,6 @@ import Api.Meals
         ( CreateMealComponentRequest
         , CreateMealRequest
         )
-import Api.Result as ApiResult
 import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition exposing (defaultCode)
@@ -235,7 +234,7 @@ updateFormField msg form =
                 Err error ->
                     let
                         ( nextForm, _, signal ) =
-                            ApiResult.failure
+                            Client.failure
                                 { noOp = Nothing
                                 , sessionExpired = Just FormSessionExpired
                                 , applyError =
@@ -272,7 +271,7 @@ updateFormField msg form =
                 Err error ->
                     let
                         ( nextForm, _, signal ) =
-                            ApiResult.failure
+                            Client.failure
                                 { noOp = Nothing
                                 , sessionExpired = Just FormSessionExpired
                                 , applyError =
@@ -355,8 +354,16 @@ viewFormFields theme device toMsg form =
         [ Ui.section theme
             { header = Nothing
             , body =
-                [ Ui.input theme { label = "Name", value = form.name, onChange = toMsg << NameChanged }
-                , Ui.input theme { label = "Notes", value = form.notes, onChange = toMsg << NotesChanged }
+                [ Ui.input theme
+                    { label = "Name"
+                    , value = form.name
+                    , onChange = toMsg << NameChanged
+                    }
+                , Ui.input theme
+                    { label = "Notes"
+                    , value = form.notes
+                    , onChange = toMsg << NotesChanged
+                    }
                 , quantityTextInput theme
                     device
                     { amountLabel = "Total Quantity"
@@ -712,8 +719,16 @@ quantityTextInput theme device config =
         Element.row
     )
         [ Element.width Element.fill, Element.spacing Ui.space8 ]
-        [ Ui.input theme { label = config.amountLabel, value = config.amount, onChange = config.onAmountChange }
-        , Ui.input theme { label = config.unitLabel, value = config.unit, onChange = config.onUnitChange }
+        [ Ui.input theme
+            { label = config.amountLabel
+            , value = config.amount
+            , onChange = config.onAmountChange
+            }
+        , Ui.input theme
+            { label = config.unitLabel
+            , value = config.unit
+            , onChange = config.onUnitChange
+            }
         ]
 
 
