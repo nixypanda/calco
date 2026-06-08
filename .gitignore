@@ -32,6 +32,7 @@ data/
 # Python cache
 __pycache__/
 *.pyc
+**/*.egg-info
 
 **/apps/*.csv
 **/apps/*.md

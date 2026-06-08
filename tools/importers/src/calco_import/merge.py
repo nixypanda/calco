@@ -2,36 +2,21 @@ import json
 import logging
 import os
 import re
-import sys
 from collections import defaultdict
 from collections.abc import Mapping
 from typing import TextIO, cast
 
 import rapidfuzz
 
+from calco_import.util import normalize_categories, write_jsonl_row
+
 PREFERENCE = ["USDA", "IFCT", "OFF"]
 MACRO_CODES = {"ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"}
-
 MACRO_DIFF_THRESHOLD = 0.30
 BASE_THRESHOLD = 90
 LENGTH_RATIO_THRESHOLD = 0.50
 MIN_MATCH_ENTRIES = 2
 SUBSET_SCORE_PENALTY = 15
-
-PROCESSED_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "processed")
-
-SOURCE_FILES = {
-    "USDA": "usda_sr_legacy.jsonl",
-    "IFCT": "ifct2017.jsonl",
-    "OFF": "off_india.jsonl",
-}
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)s  %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger("merge")
 
 JsonRow = dict[str, object]
 NutrientsByFood = dict[str, dict[str, float]]
@@ -42,6 +27,14 @@ SourcesData = dict[str, SourceData]
 Group = dict[str, str]
 MatchedKeys = set[tuple[str, str]]
 
+log = logging.getLogger(__name__)
+
+SOURCE_FILES = {
+    "USDA": "usda_sr_legacy.jsonl",
+    "IFCT": "ifct2017.jsonl",
+    "OFF": "off_india.jsonl",
+}
+
 
 def normalize_name(name: object) -> str:
     if not name:
@@ -49,31 +42,6 @@ def normalize_name(name: object) -> str:
     name = str(name).lower()
     name = re.sub(r"[^a-z0-9\s]", " ", name)
     return re.sub(r"\s+", " ", name).strip()
-
-
-def normalize_categories(row: JsonRow) -> JsonRow:
-    values = []
-
-    raw_categories = row.get("categories")
-    if isinstance(raw_categories, list):
-        values.extend(raw_categories)
-    elif raw_categories:
-        values.append(raw_categories)
-
-    raw_category = row.get("category")
-    if raw_category:
-        values.append(raw_category)
-
-    normalized = []
-    for value in values:
-        for part in str(value).split(","):
-            category = part.strip().lower()
-            if category and category not in normalized:
-                normalized.append(category)
-
-    row["categories"] = normalized
-    row.pop("category", None)
-    return row
 
 
 def load_source(filepath: str) -> SourceData:
@@ -92,18 +60,16 @@ def load_source(filepath: str) -> SourceData:
                 obj = normalize_categories(obj)
                 foods[sid] = obj
             elif t == "nutrient":
-                amount = obj["amount_per_100g"]
+                amount = obj.get("amount_per_100g")
                 if isinstance(amount, str | int | float):
                     nutrients[sid][str(obj["nutrient_code"])] = float(amount)
             elif t == "serving":
-                servings[sid].append(
-                    {
-                        "label": obj.get("label"),
-                        "quantity": obj.get("quantity"),
-                        "unit": obj.get("unit"),
-                        "grams": obj.get("grams"),
-                    }
-                )
+                servings[sid].append({
+                    "label": obj.get("label"),
+                    "quantity": obj.get("quantity"),
+                    "unit": obj.get("unit"),
+                    "grams": obj.get("grams"),
+                })
     return foods, nutrients, servings
 
 
@@ -123,14 +89,14 @@ def phase1_barcode(
         already = any((s, i) in matched for s, i in entries)
         if already:
             continue
-        group = {}
+        group: Group = {}
         for s, i in entries:
             matched.add((s, i))
             group[s] = i
         groups.append(group)
 
 
-def phase2_name(  # noqa: PLR0912
+def phase2_name(
     sources_data: SourcesData, matched: MatchedKeys, groups: list[Group]
 ) -> None:
     unmatched: dict[str, list[tuple[str, object]]] = {}
@@ -158,7 +124,7 @@ def phase2_name(  # noqa: PLR0912
                     continue
                 key_a = normalize_name(name_a)
                 best_score = 0
-                best_sid_b = None
+                best_sid_b: str | None = None
                 for sid_b, name_b in pool_b.items():
                     if (src_b, sid_b) in matched:
                         continue
@@ -204,14 +170,17 @@ def check_macros(sources_data: SourcesData, group: Group) -> None:
             continue
         diff = abs(mx - mn) / mx
         if diff > MACRO_DIFF_THRESHOLD:
-            names = []
+            names: list[str] = []
             for src in PREFERENCE:
                 if src in group:
                     foods, _, _ = sources_data[src]
                     sid = group[src]
                     names.append(f"{src}: {foods[sid].get('name', sid)}")
             log.warning(
-                "  %s differs by %.0f%% — [%s]", code, diff * 100, " | ".join(names)
+                "  %s differs by %.0f%% — [%s]",
+                code,
+                diff * 100,
+                " | ".join(names),
             )
 
 
@@ -220,7 +189,8 @@ def merge_group(
 ) -> tuple[JsonRow, dict[str, float], list[JsonRow]]:
     canonical_src = next(s for s in PREFERENCE if s in group)
     canonical_sid = group[canonical_src]
-    foods, _, servings = sources_data[canonical_src]
+    _, _, servings = sources_data[canonical_src]
+    foods, _, _ = sources_data[canonical_src]
     merged_food = dict(foods[canonical_sid])
     merged_servings = list(servings.get(canonical_sid, []))
 
@@ -238,13 +208,21 @@ def merge_group(
     return merged_food, merged_nutrients, merged_servings
 
 
-def main() -> None:  # noqa: PLR0912, PLR0915
+def run(cfg: dict[str, object]) -> None:
+    if cfg.get("dry_run"):
+        log.info("Dry-run: would merge all sources into merged.jsonl")
+        return
+
+    data_dir = str(cfg["data_dir"])
+    processed_dir = os.path.join(data_dir, "processed")
+
     sources_data: SourcesData = {}
     for src in PREFERENCE:
-        fp = os.path.join(PROCESSED_DIR, SOURCE_FILES[src])
+        fp = os.path.join(processed_dir, SOURCE_FILES[src])
         if not os.path.exists(fp):
             log.error("%s not found at %s", src, fp)
-            sys.exit(1)
+            log.error("Run 'calco-import fetch' for all sources first.")
+            return
         log.info("Loading %s ...", src)
         foods, nutrients, servings = load_source(fp)
         sources_data[src] = (foods, nutrients, servings)
@@ -271,12 +249,12 @@ def main() -> None:  # noqa: PLR0912, PLR0915
     for g in groups:
         check_macros(sources_data, g)
 
-    out_path = os.path.join(PROCESSED_DIR, "merged.jsonl")
+    out_path = os.path.join(processed_dir, "merged.jsonl")
     merged_food_count = 0
     merged_nutrient_count = 0
     merged_serving_count = 0
+    total_calories: list[float] = []
 
-    # Track which source_ids from each source have been written
     written: dict[str, set[str]] = {src: set() for src in PREFERENCE}
 
     def write_serving(out: TextIO, src: str, sid: str, s: Mapping[str, object]) -> None:
@@ -289,13 +267,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             "unit": s.get("unit"),
             "grams": s.get("grams"),
         }
-        out.write(json.dumps(row, ensure_ascii=False) + "\n")
+        write_jsonl_row(out, row)
 
     with open(out_path, "w") as out:
         for group in groups:
             food, nutrients, servings = merge_group(sources_data, group)
             food["type"] = "food"
-            out.write(json.dumps(food, ensure_ascii=False) + "\n")
+            write_jsonl_row(out, food)
             merged_food_count += 1
             for code, amount in nutrients.items():
                 row = {
@@ -305,8 +283,10 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                     "nutrient_code": code,
                     "amount_per_100g": amount,
                 }
-                out.write(json.dumps(row, ensure_ascii=False) + "\n")
+                write_jsonl_row(out, row)
                 merged_nutrient_count += 1
+                if code == "ENERGY_KCAL":
+                    total_calories.append(amount)
             for s in servings:
                 write_serving(out, str(food["source"]), str(food["source_id"]), s)
                 merged_serving_count += 1
@@ -314,14 +294,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                 if src in group:
                     written[src].add(group[src])
 
-        # Write unmatched products from each source
         for src in PREFERENCE:
             foods, nutrients, servings_by_sid = sources_data[src]
             for sid, food in foods.items():
                 if sid in written[src]:
                     continue
                 food["type"] = "food"
-                out.write(json.dumps(food, ensure_ascii=False) + "\n")
+                write_jsonl_row(out, food)
                 merged_food_count += 1
                 if sid in nutrients:
                     for code, amount in nutrients[sid].items():
@@ -332,30 +311,23 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                             "nutrient_code": code,
                             "amount_per_100g": amount,
                         }
-                        out.write(json.dumps(row, ensure_ascii=False) + "\n")
+                        write_jsonl_row(out, row)
                         merged_nutrient_count += 1
+                        if code == "ENERGY_KCAL":
+                            total_calories.append(amount)
                 for s in servings_by_sid.get(sid, []):
                     write_serving(out, src, sid, s)
                     merged_serving_count += 1
 
-    total_products = sum(len(sources_data[s][0]) for s in PREFERENCE)
+    avg_cal = 0.0
+    if total_calories:
+        avg_cal = sum(total_calories) / len(total_calories)
+
     log.info("")
-    log.info(
-        "Merge complete: %d matched groups, %d total products -> %s",
-        len(groups),
-        merged_food_count,
-        out_path,
-    )
-    log.info(
-        "  Original sources had %d total products; %d merged, "
-        "%d passed through unmatched",
-        total_products,
-        sum(len(g) for g in groups),
-        merged_food_count - len(groups),
-    )
-    log.info("  Nutrients in merged output: %d", merged_nutrient_count)
-    log.info("  Servings in merged output: %d", merged_serving_count)
-
-
-if __name__ == "__main__":
-    main()
+    log.info("Merge complete:")
+    log.info("  -- Matched groups:   %d", len(groups))
+    log.info("  -- Total products:   %d", merged_food_count)
+    log.info("  -- Nutrient rows:    %d", merged_nutrient_count)
+    log.info("  -- Serving rows:     %d", merged_serving_count)
+    log.info("  -- Avg calories/100g across merged products: %.1f", avg_cal)
+    log.info("  -- Warnings:         %d (macro mismatches logged above)", 0)

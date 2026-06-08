@@ -106,6 +106,18 @@ build: backend-build frontend-web-build
 test: backend-test frontend-web-test
 
 # ──────────────────────────────────────────────
+# Import tools
+# ──────────────────────────────────────────────
+
+# Lint and type-check import tools
+importers-check:
+    cd tools/importers && uv run ruff check src/ && uv run ty check src/
+
+# Dry-run fetch for IFCT (no download needed) to verify CLI works
+importers-dry-run:
+    cd tools/importers && CALCO_DATA_DIR=/tmp/calco-import-dry-run uv run python -m calco_import --dry-run fetch ifct
+
+# ──────────────────────────────────────────────
 # Misc
 # ──────────────────────────────────────────────
 
