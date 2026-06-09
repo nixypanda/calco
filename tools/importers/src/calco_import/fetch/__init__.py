@@ -1,7 +1,11 @@
 import os
 
 MAPPING_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "nutrient_mapping",
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "..",
+    "nutrient_mapping",
 )
 
 from calco_import.fetch.ifct import fetch_ifct  # noqa: E402

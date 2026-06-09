@@ -124,9 +124,7 @@ def _build_off_serving_row(
     serving_grams = parse_amount(row[indices.serving_qty])
     if serving_grams is None or serving_grams <= 0:
         return None
-    serving_label = (
-        row[indices.serving_size].strip()[:80] or "serving"
-    )
+    serving_label = row[indices.serving_size].strip()[:80] or "serving"
     return {
         "type": "serving",
         "source": "OFF",
@@ -229,8 +227,7 @@ def fetch_off(data_dir: str) -> None:
 
     elapsed = time.time() - start
     log.info(
-        "OFF India: kept %d products, "
-        "%d nutrients, %d servings -> %s (%.1fs)",
+        "OFF India: kept %d products, %d nutrients, %d servings -> %s (%.1fs)",
         total_kept,
         total_nutrients,
         total_servings,

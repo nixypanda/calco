@@ -74,10 +74,7 @@ def _build_serving_rows(food: dict, fdc_id: str) -> Iterator[dict]:
     for portion in food.get("foodPortions", []):
         gram_weight = parse_amount(portion.get("gramWeight"))
         amount = parse_amount(portion.get("amount"))
-        if (
-            gram_weight is None or amount is None
-            or gram_weight <= 0 or amount <= 0
-        ):
+        if gram_weight is None or amount is None or gram_weight <= 0 or amount <= 0:
             continue
         measure_unit = portion.get("measureUnit") or {}
         raw_unit = (
@@ -89,11 +86,7 @@ def _build_serving_rows(food: dict, fdc_id: str) -> Iterator[dict]:
         unit = (raw_unit or "serving").strip()
         if not unit or unit.lower() == "undetermined":
             unit = "serving"
-        label = (
-            portion.get("portionDescription")
-            or portion.get("modifier")
-            or unit
-        )
+        label = portion.get("portionDescription") or portion.get("modifier") or unit
         label = (label or "serving").strip()[:80] or "serving"
         key = (label, unit)
         if key in seen:

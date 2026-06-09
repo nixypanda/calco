@@ -104,8 +104,8 @@ def find_name_matches(
     Find cross-source food matches by fuzzy name comparison.
 
     Performance notes (was ~400s, now ~14s):
-    - Originally ran nested Python loops over all candidate_a × pool_b
-      pairs (~26M comparisons), calling normalize_name 2-3× per pair.
+    - Originally ran nested Python loops over all candidate_a x pool_b
+      pairs (~26M comparisons), calling normalize_name 2-3x per pair.
     - Fix: pre-compute normalize_name once per food upfront, then use
       rapidfuzz.process.extract() to push the inner loop into C with
       early score_cutoff termination. Only survivors get the token_set_ratio
@@ -115,7 +115,7 @@ def find_name_matches(
     order = preference or PREFERENCE
     matched = _matched_keys(existing_groups)
 
-    # Pre-normalize once per food instead of 2-3× per comparison
+    # Pre-normalize once per food instead of 2-3x per comparison
     unmatched: dict[str, list[tuple[str, str]]] = {}
     for src in order:
         foods, _, _ = sources_data[src]
@@ -131,13 +131,9 @@ def find_name_matches(
     for i, src_a in enumerate(order):
         for src_b in order[i + 1 :]:
             candidates_a = [
-                (s, n) for s, n in unmatched[src_a]
-                if (src_a, s) not in matched
+                (s, n) for s, n in unmatched[src_a] if (src_a, s) not in matched
             ]
-            pool_b = {
-                s: n for s, n in unmatched[src_b]
-                if (src_b, s) not in matched
-            }
+            pool_b = {s: n for s, n in unmatched[src_b] if (src_b, s) not in matched}
             if not candidates_a or not pool_b:
                 continue
 
@@ -152,7 +148,8 @@ def find_name_matches(
             all_matches: list[list[tuple[str, float, int]]] = []
             for q in names_a:
                 matches = rapidfuzz.process.extract(
-                    q, names_b,
+                    q,
+                    names_b,
                     scorer=rapidfuzz.fuzz.token_sort_ratio,
                     score_cutoff=BASE_THRESHOLD,
                     limit=len(names_b),
@@ -205,7 +202,8 @@ def find_name_matches(
 
 
 def check_macros(
-    sources_data: SourcesData, group: Group,
+    sources_data: SourcesData,
+    group: Group,
     preference: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     order = preference or PREFERENCE
@@ -240,7 +238,8 @@ def check_macros(
 
 
 def merge_group(
-    sources_data: SourcesData, group: Group,
+    sources_data: SourcesData,
+    group: Group,
     preference: list[str] | None = None,
 ) -> tuple[JsonRow, dict[str, float], list[JsonRow]]:
     order = preference or PREFERENCE
@@ -266,7 +265,8 @@ def merge_group(
 
 
 def build_merged_rows(
-    sources_data: SourcesData, groups: list[Group],
+    sources_data: SourcesData,
+    groups: list[Group],
     preference: list[str] | None = None,
 ) -> list[JsonRow]:
     order = preference or PREFERENCE
@@ -358,7 +358,10 @@ def run(cfg: dict[str, object]) -> None:
         sources_data[src] = (foods, nutrients, servings)
         log.info(
             "  %s: %d foods, %d with nutrients, %d with servings",
-            src, len(foods), len(nutrients), len(servings),
+            src,
+            len(foods),
+            len(nutrients),
+            len(servings),
         )
 
     log.info("Phase 1: barcode matching ...")
@@ -370,7 +373,8 @@ def run(cfg: dict[str, object]) -> None:
     for src in PREFERENCE:
         foods, _, _ = sources_data[src]
         n_unmatched = sum(
-            1 for sid in foods
+            1
+            for sid in foods
             if (src, sid) not in barcode_matched and foods[sid].get("name")
         )
         log.info("  %s: %d unmatched after barcode phase", src, n_unmatched)

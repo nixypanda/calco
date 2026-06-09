@@ -12,8 +12,7 @@ from calco_import.util import parse_amount, write_jsonl_row
 log = logging.getLogger(__name__)
 
 INDB_XLSX_URL = (
-    "https://www.anuvaad.org.in/wp-content/uploads/2020/07/"
-    "Anuvaad_INDB_2024.11.xlsx"
+    "https://www.anuvaad.org.in/wp-content/uploads/2020/07/Anuvaad_INDB_2024.11.xlsx"
 )
 INDB_XLSX_FILENAME = "Anuvaad_INDB_2024.11.xlsx"
 INDB_PROCESSED_FILENAME = "indb_2024.jsonl"
@@ -76,17 +75,11 @@ def _build_indb_serving_row(
 ) -> dict | None:
     energy_idx = col_index.get("energy_kcal")
     serving_energy_idx = col_index.get("unit_serving_energy_kcal")
-    energy_per_100g = parse_amount(
-        row[energy_idx] if energy_idx is not None else None
-    )
+    energy_per_100g = parse_amount(row[energy_idx] if energy_idx is not None else None)
     energy_per_serving = parse_amount(
         row[serving_energy_idx] if serving_energy_idx is not None else None
     )
-    if (
-        energy_per_100g is None
-        or energy_per_100g <= 0
-        or energy_per_serving is None
-    ):
+    if energy_per_100g is None or energy_per_100g <= 0 or energy_per_serving is None:
         return None
     serving_grams = round(energy_per_serving / energy_per_100g * 100, 2)
     if serving_grams <= 0:

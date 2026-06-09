@@ -41,7 +41,9 @@ def cli(
         help="Data directory for raw/processed files",
     ),
     dry_run: bool = typer.Option(
-        False, "--dry-run", help="Skip upload, show what would be sent",
+        False,
+        "--dry-run",
+        help="Skip upload, show what would be sent",
     ),
 ) -> None:
     """CalCo dataset import tool."""

@@ -201,7 +201,12 @@ def upload(cfg: dict[str, object], dataset: str | None = None) -> None:
 
     log.info("Uploading foods (%d rows, batch=%d) ...", len(foods), FOODS_BATCH_SIZE)
     foods_accepted, foods_rejected = batch_upload(
-        api_url, headers, job_id, foods, "foods", FOODS_BATCH_SIZE,
+        api_url,
+        headers,
+        job_id,
+        foods,
+        "foods",
+        FOODS_BATCH_SIZE,
     )
     log.info("Foods done: accepted=%d rejected=%d", foods_accepted, foods_rejected)
 
@@ -211,7 +216,12 @@ def upload(cfg: dict[str, object], dataset: str | None = None) -> None:
         NUTRIENTS_BATCH_SIZE,
     )
     nut_accepted, nut_rejected = batch_upload(
-        api_url, headers, job_id, nutrients, "nutrients", NUTRIENTS_BATCH_SIZE,
+        api_url,
+        headers,
+        job_id,
+        nutrients,
+        "nutrients",
+        NUTRIENTS_BATCH_SIZE,
     )
     log.info("Nutrients done: accepted=%d rejected=%d", nut_accepted, nut_rejected)
 
@@ -224,10 +234,17 @@ def upload(cfg: dict[str, object], dataset: str | None = None) -> None:
             SERVINGS_BATCH_SIZE,
         )
         serv_accepted, serv_rejected = batch_upload(
-            api_url, headers, job_id, servings, "servings", SERVINGS_BATCH_SIZE,
+            api_url,
+            headers,
+            job_id,
+            servings,
+            "servings",
+            SERVINGS_BATCH_SIZE,
         )
         log.info(
-            "Servings done: accepted=%d rejected=%d", serv_accepted, serv_rejected,
+            "Servings done: accepted=%d rejected=%d",
+            serv_accepted,
+            serv_rejected,
         )
 
     result = commit_job(api_url, headers, job_id)

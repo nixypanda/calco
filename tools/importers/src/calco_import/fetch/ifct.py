@@ -63,7 +63,9 @@ def _build_ifct_food_row(
 
 
 def _build_ifct_nutrient_rows(
-    row: dict, code: str, nutrient_map: dict,
+    row: dict,
+    code: str,
+    nutrient_map: dict,
 ) -> Iterator[dict]:
     for ifct_code, calco_code in nutrient_map.items():
         v = parse_amount(row.get(ifct_code))
