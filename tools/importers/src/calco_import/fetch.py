@@ -1,9 +1,10 @@
 import csv
-import gzip
 import json
 import logging
 import os
 import re
+import shlex
+import subprocess
 import sys
 import time
 import zipfile
@@ -23,14 +24,16 @@ USDA_ZIP_URL = (
     "https://fdc.nal.usda.gov/fdc-datasets/"
     "FoodData_Central_sr_legacy_food_json_2018-04.zip"
 )
-OFF_GZ_URL = "https://static.openfoodfacts.org/data/off_products.csv.gz"
+OFF_GZ_URL = (
+    "https://openfoodfacts-ds.s3.eu-west-3.amazonaws.com/"
+    "en.openfoodfacts.org.products.csv.gz"
+)
 REQUIRED_OFF_FIELDS = [
     "energy-kcal_100g",
     "proteins_100g",
     "carbohydrates_100g",
     "fat_100g",
 ]
-SCAN_LOG_INTERVAL = 500_000
 
 IFCT_CSV_FILENAME = "ifct2017_compositions.csv"
 FOOD_GROUP_MAP: dict[str, str] = {
@@ -64,7 +67,9 @@ def download_file(url: str, dest: str) -> None:
         log.info("File already exists at %s, skipping download", dest)
         return
     log.info("Downloading %s ...", url)
-    resp = requests.get(url, stream=True, timeout=300)
+    resp = requests.get(url, stream=True, timeout=300, headers={
+        "User-Agent": "CalCo/1.0",
+    })
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
     with (
@@ -230,20 +235,6 @@ def fetch_usda(cfg: dict[str, object]) -> None:
     )
 
 
-def countries_contain_india(countries_str: str | None) -> bool:
-    if not countries_str:
-        return False
-    return "india" in countries_str.lower()
-
-
-def passes_off_filter(row: dict[str, str | None]) -> bool:
-    for field in REQUIRED_OFF_FIELDS:
-        v = parse_amount(row.get(field))
-        if v is None or v <= 0:
-            return False
-    return True
-
-
 def scale_off_code(code: str) -> float:
     if code.endswith("_MG"):
         return 1000.0
@@ -259,6 +250,20 @@ def categories_from_csv(value: str | None) -> list[str]:
         if normalized and normalized not in cats:
             cats.append(normalized)
     return cats
+
+
+def _keep_off_row(
+    row: list[str],
+    idx_countries: int,
+    required_indices: list[int],
+) -> bool:
+    if not row[idx_countries] or "india" not in row[idx_countries].lower():
+        return False
+    for idx in required_indices:
+        v = parse_amount(row[idx])
+        if v is None or v <= 0:
+            return False
+    return True
 
 
 def fetch_off(cfg: dict[str, object]) -> None:
@@ -282,32 +287,51 @@ def fetch_off(cfg: dict[str, object]) -> None:
     if not os.path.exists(gz_path):
         download_file(OFF_GZ_URL, gz_path)
 
+    # Pre-filter with zcat+grep instead of iterating all 4.5M rows in Python
+    # csv.reader (~150s). grep processes the full file at C speed, Python only
+    # touches ~28K matching rows (~20s total).
+    pipe_cmd = (
+        f"zcat {shlex.quote(gz_path)}"
+        ' | { read -r header; echo "$header"; grep -i india; }'
+    )
+
+    proc = subprocess.Popen(
+        ["bash", "-c", pipe_cmd],
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+
     csv.field_size_limit(sys.maxsize)
+    reader = csv.reader(proc.stdout, delimiter="\t")
+    header = next(reader)
+
+    idx_countries = header.index("countries_en")
+    idx_code = header.index("code")
+    idx_product = header.index("product_name")
+    idx_brands = header.index("brands")
+    idx_categories = header.index("categories")
+    idx_serving_qty = header.index("serving_quantity")
+    idx_serving_size = header.index("serving_size")
+
+    required_indices = [header.index(f) for f in REQUIRED_OFF_FIELDS]
+    nutrient_indices = {
+        calco_code: header.index(csv_field)
+        for csv_field, calco_code in nutrient_map.items()
+    }
 
     start = time.time()
-    total_scanned = 0
     total_kept = 0
     total_nutrients = 0
     total_servings = 0
 
-    with (
-        gzip.open(gz_path, "rt", encoding="utf-8", errors="replace") as gz_f,
-        open(out_path, "w") as out,
-    ):
-        reader = csv.DictReader(gz_f, delimiter="\t")
-
+    with open(out_path, "w") as out:
         for row in reader:
-            total_scanned += 1
-
-            if not countries_contain_india(row.get("countries_en", "")):
-                continue
-            if not passes_off_filter(row):
+            if not _keep_off_row(row, idx_countries, required_indices):
                 continue
 
-            code = row.get("code", "").strip()
+            code = row[idx_code].strip()
             if not code:
                 continue
-
             source_id = code
             barcode = code
 
@@ -316,18 +340,18 @@ def fetch_off(cfg: dict[str, object]) -> None:
                 "source": "OFF",
                 "source_id": source_id,
                 "barcode": barcode,
-                "name": row.get("product_name", "").strip() or None,
-                "brand": row.get("brands", "").strip() or None,
-                "categories": categories_from_csv(row.get("categories", "")),
+                "name": row[idx_product].strip() or None,
+                "brand": row[idx_brands].strip() or None,
+                "categories": categories_from_csv(row[idx_categories]),
                 "serving_size_g": None,
             }
             write_jsonl_row(out, food_row)
             total_kept += 1
 
-            serving_grams = parse_amount(row.get("serving_quantity"))
+            serving_grams = parse_amount(row[idx_serving_qty])
             if serving_grams is not None and serving_grams > 0:
                 serving_label = (
-                    (row.get("serving_size") or "").strip()[:80] or "serving"
+                    row[idx_serving_size].strip()[:80] or "serving"
                 )
                 serving_row = {
                     "type": "serving",
@@ -341,8 +365,8 @@ def fetch_off(cfg: dict[str, object]) -> None:
                 write_jsonl_row(out, serving_row)
                 total_servings += 1
 
-            for csv_field, calco_code in nutrient_map.items():
-                v = parse_amount(row.get(csv_field))
+            for calco_code, col_idx in nutrient_indices.items():
+                v = parse_amount(row[col_idx])
                 if v is None:
                     continue
                 amount = round(v * scale_off_code(calco_code), 6)
@@ -356,18 +380,15 @@ def fetch_off(cfg: dict[str, object]) -> None:
                 write_jsonl_row(out, nutrient_row)
                 total_nutrients += 1
 
-            if total_scanned % SCAN_LOG_INTERVAL == 0:
-                log.info(
-                    "Scanned %d rows, kept %d products...",
-                    total_scanned,
-                    total_kept,
-                )
+    proc.stdout.close()
+    ret = proc.wait()
+    if ret not in (0, 1):
+        log.warning("OFF filtering pipeline exited with code %d", ret)
 
     elapsed = time.time() - start
     log.info(
-        "OFF India: scanned %d, kept %d products, "
+        "OFF India: kept %d products, "
         "%d nutrients, %d servings -> %s (%.1fs)",
-        total_scanned,
         total_kept,
         total_nutrients,
         total_servings,
