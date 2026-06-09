@@ -12,6 +12,14 @@ def write_jsonl_row(out: TextIO, row: Mapping[str, object]) -> None:
     out.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def normalize_name(name: object) -> str:
+    if not name:
+        return ""
+    name = str(name).lower()
+    name = re.sub(r"[^a-z0-9\s]", " ", name)
+    return re.sub(r"\s+", " ", name).strip()
+
+
 def normalize_categories(row: JsonRow) -> JsonRow:
     values: list[object] = []
     raw_categories = row.get("categories")

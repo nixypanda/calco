@@ -1,14 +1,12 @@
 import json
 import logging
 import os
-import re
 from collections import defaultdict
-from collections.abc import Mapping
-from typing import TextIO, cast
+from typing import cast
 
 import rapidfuzz
 
-from calco_import.util import normalize_categories, write_jsonl_row
+from calco_import.util import normalize_categories, normalize_name, write_jsonl_row
 
 PREFERENCE = ["USDA", "IFCT", "INDB", "OFF"]
 MACRO_CODES = {"ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"}
@@ -35,14 +33,6 @@ SOURCE_FILES = {
     "IFCT": "ifct2017.jsonl",
     "OFF": "off_india.jsonl",
 }
-
-
-def normalize_name(name: object) -> str:
-    if not name:
-        return ""
-    name = str(name).lower()
-    name = re.sub(r"[^a-z0-9\s]", " ", name)
-    return re.sub(r"\s+", " ", name).strip()
 
 
 def load_source(filepath: str) -> SourceData:
@@ -76,34 +66,45 @@ def load_source(filepath: str) -> SourceData:
     return foods, nutrients, servings
 
 
-def phase1_barcode(
-    sources_data: SourcesData, matched: MatchedKeys, groups: list[Group]
-) -> None:
+def find_barcode_matches(
+    sources_data: SourcesData,
+    preference: list[str] | None = None,
+) -> list[Group]:
+    order = preference or PREFERENCE
     bcode_map: dict[object, list[tuple[str, str]]] = defaultdict(list)
-    for src in PREFERENCE:
+    for src in order:
         foods, _, _ = sources_data[src]
         for sid, f in foods.items():
             bc = f.get("barcode")
             if bc:
                 bcode_map[bc].append((src, sid))
+
+    groups: list[Group] = []
     for entries in bcode_map.values():
         if len(entries) < MIN_MATCH_ENTRIES:
             continue
-        already = any((s, i) in matched for s, i in entries)
-        if already:
-            continue
         group: Group = {}
         for s, i in entries:
-            matched.add((s, i))
             group[s] = i
         groups.append(group)
 
+    return groups
 
-def phase2_name(
-    sources_data: SourcesData, matched: MatchedKeys, groups: list[Group]
-) -> None:
+
+def _matched_keys(groups: list[Group]) -> MatchedKeys:
+    return {(s, i) for g in groups for s, i in g.items()}
+
+
+def find_name_matches(
+    sources_data: SourcesData,
+    existing_groups: list[Group],
+    preference: list[str] | None = None,
+) -> list[Group]:
+    order = preference or PREFERENCE
+    matched = _matched_keys(existing_groups)
+
     unmatched: dict[str, list[tuple[str, object]]] = {}
-    for src in PREFERENCE:
+    for src in order:
         foods, _, _ = sources_data[src]
         lst = [
             (sid, foods[sid].get("name", ""))
@@ -111,10 +112,11 @@ def phase2_name(
             if (src, sid) not in matched and foods[sid].get("name")
         ]
         unmatched[src] = lst
-        log.info("  %s: %d unmatched after barcode phase", src, len(lst))
 
-    for i, src_a in enumerate(PREFERENCE):
-        for src_b in PREFERENCE[i + 1 :]:
+    new_groups: list[Group] = []
+
+    for i, src_a in enumerate(order):
+        for src_b in order[i + 1 :]:
             candidates_a = [
                 (s, n) for s, n in unmatched[src_a] if (src_a, s) not in matched
             ]
@@ -122,6 +124,7 @@ def phase2_name(
             if not candidates_a or not pool_b:
                 continue
 
+            claimed_b: set[str] = set()
             for sid_a, name_a in candidates_a:
                 if (src_a, sid_a) in matched:
                     continue
@@ -129,7 +132,7 @@ def phase2_name(
                 best_score = 0
                 best_sid_b: str | None = None
                 for sid_b, name_b in pool_b.items():
-                    if (src_b, sid_b) in matched:
+                    if (src_b, sid_b) in matched or sid_b in claimed_b:
                         continue
                     score = rapidfuzz.fuzz.token_sort_ratio(
                         key_a, normalize_name(name_b)
@@ -151,14 +154,21 @@ def phase2_name(
                 if best_score >= BASE_THRESHOLD and best_sid_b:
                     matched.add((src_a, sid_a))
                     matched.add((src_b, best_sid_b))
-                    groups.append({src_a: sid_a, src_b: best_sid_b})
-                    del pool_b[best_sid_b]
+                    claimed_b.add(best_sid_b)
+                    new_groups.append({src_a: sid_a, src_b: best_sid_b})
+
+    return new_groups
 
 
-def check_macros(sources_data: SourcesData, group: Group) -> None:
+def check_macros(
+    sources_data: SourcesData, group: Group,
+    preference: list[str] | None = None,
+) -> list[tuple[str, str]]:
+    order = preference or PREFERENCE
+    warnings: list[tuple[str, str]] = []
     for code in MACRO_CODES:
         vals: dict[str, float] = {}
-        for src in PREFERENCE:
+        for src in order:
             if src not in group:
                 continue
             _, nutrients, _ = sources_data[src]
@@ -174,23 +184,23 @@ def check_macros(sources_data: SourcesData, group: Group) -> None:
         diff = abs(mx - mn) / mx
         if diff > MACRO_DIFF_THRESHOLD:
             names: list[str] = []
-            for src in PREFERENCE:
+            for src in order:
                 if src in group:
                     foods, _, _ = sources_data[src]
                     sid = group[src]
                     names.append(f"{src}: {foods[sid].get('name', sid)}")
-            log.warning(
-                "  %s differs by %.0f%% — [%s]",
-                code,
-                diff * 100,
-                " | ".join(names),
+            warnings.append(
+                (code, f"  {code} differs by {diff * 100:.0f}% — [{' | '.join(names)}]")
             )
+    return warnings
 
 
 def merge_group(
-    sources_data: SourcesData, group: Group
+    sources_data: SourcesData, group: Group,
+    preference: list[str] | None = None,
 ) -> tuple[JsonRow, dict[str, float], list[JsonRow]]:
-    canonical_src = next(s for s in PREFERENCE if s in group)
+    order = preference or PREFERENCE
+    canonical_src = next(s for s in order if s in group)
     canonical_sid = group[canonical_src]
     _, _, servings = sources_data[canonical_src]
     foods, _, _ = sources_data[canonical_src]
@@ -198,7 +208,7 @@ def merge_group(
     merged_servings = list(servings.get(canonical_sid, []))
 
     merged_nutrients: dict[str, float] = {}
-    for src in PREFERENCE:
+    for src in order:
         if src not in group:
             continue
         _, nutrients, _ = sources_data[src]
@@ -209,6 +219,79 @@ def merge_group(
                     merged_nutrients[code] = amount
 
     return merged_food, merged_nutrients, merged_servings
+
+
+def build_merged_rows(
+    sources_data: SourcesData, groups: list[Group],
+    preference: list[str] | None = None,
+) -> list[JsonRow]:
+    order = preference or PREFERENCE
+    rows: list[JsonRow] = []
+    written: dict[str, set[str]] = {src: set() for src in order}
+
+    for group in groups:
+        food, nutrients, servings = merge_group(sources_data, group)
+        food["type"] = "food"
+        rows.append(food)
+        for code, amount in nutrients.items():
+            rows.append(
+                {
+                    "type": "nutrient",
+                    "source": food["source"],
+                    "source_id": food["source_id"],
+                    "nutrient_code": code,
+                    "amount_per_100g": amount,
+                }
+            )
+            rows.extend(
+                {
+                    "type": "serving",
+                    "source": food["source"],
+                    "source_id": food["source_id"],
+                    "label": s.get("label"),
+                    "quantity": s.get("quantity"),
+                    "unit": s.get("unit"),
+                    "grams": s.get("grams"),
+                }
+                for s in servings
+            )
+            for src in order:
+                if src in group:
+                    written[src].add(group[src])
+
+    for src in order:
+        foods, nutrients_by_sid, servings_by_sid = sources_data[src]
+        for sid, food in foods.items():
+            if sid in written[src]:
+                continue
+            food_row = dict(food)
+            food_row["type"] = "food"
+            rows.append(food_row)
+            if sid in nutrients_by_sid:
+                rows.extend(
+                    {
+                        "type": "nutrient",
+                        "source": src,
+                        "source_id": sid,
+                        "nutrient_code": code,
+                        "amount_per_100g": amount,
+                    }
+                    for code, amount in nutrients_by_sid[sid].items()
+                )
+            rows.extend(
+                {
+                    "type": "serving",
+                    "source": src,
+                    "source_id": sid,
+                    "label": s.get("label"),
+                    "quantity": s.get("quantity"),
+                    "unit": s.get("unit"),
+                    "grams": s.get("grams"),
+                }
+                for s in servings_by_sid.get(sid, [])
+            )
+
+    return rows
 
 
 def run(cfg: dict[str, object]) -> None:
@@ -231,106 +314,52 @@ def run(cfg: dict[str, object]) -> None:
         sources_data[src] = (foods, nutrients, servings)
         log.info(
             "  %s: %d foods, %d with nutrients, %d with servings",
-            src,
-            len(foods),
-            len(nutrients),
-            len(servings),
+            src, len(foods), len(nutrients), len(servings),
         )
 
-    matched: MatchedKeys = set()
-    groups: list[Group] = []
-
     log.info("Phase 1: barcode matching ...")
-    phase1_barcode(sources_data, matched, groups)
-    log.info("  %d groups from barcode", len(groups))
+    barcode_groups = find_barcode_matches(sources_data)
+    log.info("  %d groups from barcode", len(barcode_groups))
 
     log.info("Phase 2: name similarity matching ...")
-    phase2_name(sources_data, matched, groups)
-    log.info("  %d total matched groups", len(groups))
+    barcode_matched = _matched_keys(barcode_groups)
+    for src in PREFERENCE:
+        foods, _, _ = sources_data[src]
+        n_unmatched = sum(
+            1 for sid in foods
+            if (src, sid) not in barcode_matched and foods[sid].get("name")
+        )
+        log.info("  %s: %d unmatched after barcode phase", src, n_unmatched)
+    name_groups = find_name_matches(sources_data, barcode_groups)
+    all_groups = barcode_groups + name_groups
+    log.info("  %d total matched groups", len(all_groups))
 
     log.info("Checking macro consistency across matched groups ...")
-    for g in groups:
-        check_macros(sources_data, g)
+    for group in all_groups:
+        for _code, message in check_macros(sources_data, group):
+            log.warning(message)
+
+    rows = build_merged_rows(sources_data, all_groups)
 
     out_path = os.path.join(processed_dir, "merged.jsonl")
-    merged_food_count = 0
-    merged_nutrient_count = 0
-    merged_serving_count = 0
-    total_calories: list[float] = []
-
-    written: dict[str, set[str]] = {src: set() for src in PREFERENCE}
-
-    def write_serving(out: TextIO, src: str, sid: str, s: Mapping[str, object]) -> None:
-        row = {
-            "type": "serving",
-            "source": src,
-            "source_id": sid,
-            "label": s.get("label"),
-            "quantity": s.get("quantity"),
-            "unit": s.get("unit"),
-            "grams": s.get("grams"),
-        }
-        write_jsonl_row(out, row)
-
     with open(out_path, "w") as out:
-        for group in groups:
-            food, nutrients, servings = merge_group(sources_data, group)
-            food["type"] = "food"
-            write_jsonl_row(out, food)
-            merged_food_count += 1
-            for code, amount in nutrients.items():
-                row = {
-                    "type": "nutrient",
-                    "source": food["source"],
-                    "source_id": food["source_id"],
-                    "nutrient_code": code,
-                    "amount_per_100g": amount,
-                }
-                write_jsonl_row(out, row)
-                merged_nutrient_count += 1
-                if code == "ENERGY_KCAL":
-                    total_calories.append(amount)
-            for s in servings:
-                write_serving(out, str(food["source"]), str(food["source_id"]), s)
-                merged_serving_count += 1
-            for src in PREFERENCE:
-                if src in group:
-                    written[src].add(group[src])
+        for row in rows:
+            write_jsonl_row(out, row)
 
-        for src in PREFERENCE:
-            foods, nutrients, servings_by_sid = sources_data[src]
-            for sid, food in foods.items():
-                if sid in written[src]:
-                    continue
-                food["type"] = "food"
-                write_jsonl_row(out, food)
-                merged_food_count += 1
-                if sid in nutrients:
-                    for code, amount in nutrients[sid].items():
-                        row = {
-                            "type": "nutrient",
-                            "source": src,
-                            "source_id": sid,
-                            "nutrient_code": code,
-                            "amount_per_100g": amount,
-                        }
-                        write_jsonl_row(out, row)
-                        merged_nutrient_count += 1
-                        if code == "ENERGY_KCAL":
-                            total_calories.append(amount)
-                for s in servings_by_sid.get(sid, []):
-                    write_serving(out, src, sid, s)
-                    merged_serving_count += 1
-
-    avg_cal = 0.0
-    if total_calories:
-        avg_cal = sum(total_calories) / len(total_calories)
+    food_count = sum(1 for r in rows if r.get("type") == "food")
+    nutrient_count = sum(1 for r in rows if r.get("type") == "nutrient")
+    serving_count = sum(1 for r in rows if r.get("type") == "serving")
+    total_calories = [
+        cast("float", r["amount_per_100g"])
+        for r in rows
+        if r.get("type") == "nutrient" and r.get("nutrient_code") == "ENERGY_KCAL"
+    ]
+    avg_cal = sum(total_calories) / len(total_calories) if total_calories else 0.0
 
     log.info("")
     log.info("Merge complete:")
-    log.info("  -- Matched groups:   %d", len(groups))
-    log.info("  -- Total products:   %d", merged_food_count)
-    log.info("  -- Nutrient rows:    %d", merged_nutrient_count)
-    log.info("  -- Serving rows:     %d", merged_serving_count)
+    log.info("  -- Matched groups:   %d", len(all_groups))
+    log.info("  -- Total products:   %d", food_count)
+    log.info("  -- Nutrient rows:    %d", nutrient_count)
+    log.info("  -- Serving rows:     %d", serving_count)
     log.info("  -- Avg calories/100g across merged products: %.1f", avg_cal)
-    log.info("  -- Warnings:         %d (macro mismatches logged above)", 0)
