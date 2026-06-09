@@ -96,6 +96,7 @@ pub enum Source {
     Off,
     Usda,
     Ifct,
+    Indb,
 }
 
 impl Source {
@@ -105,6 +106,7 @@ impl Source {
             Source::Off => "OFF",
             Source::Usda => "USDA",
             Source::Ifct => "IFCT",
+            Source::Indb => "INDB",
         }
     }
 }
@@ -118,6 +120,7 @@ impl FromStr for Source {
             "OFF" => Ok(Source::Off),
             "USDA" => Ok(Source::Usda),
             "IFCT" => Ok(Source::Ifct),
+            "INDB" => Ok(Source::Indb),
             _ => Err(format!("invalid source: {s}")),
         }
     }

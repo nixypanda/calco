@@ -77,7 +77,9 @@ def _require_token(cfg: Config) -> None:
 @app.command()
 def fetch(
     ctx: typer.Context,
-    dataset: str = typer.Argument(help="Dataset to fetch (usda, off, ifct)"),
+    dataset: str = typer.Argument(
+        help="Dataset to fetch (usda, off, ifct, indb)",
+    ),
 ) -> None:
     """Download raw data and convert to normalized JSONL."""
     fetch_mod.dispatch(ctx.obj, dataset)
@@ -92,7 +94,9 @@ def merge(ctx: typer.Context) -> None:
 @app.command()
 def upload(
     ctx: typer.Context,
-    dataset: str = typer.Argument(help="Dataset to upload (usda, off, ifct, merged)"),
+    dataset: str = typer.Argument(
+        help="Dataset to upload (usda, off, ifct, indb, merged)",
+    ),
 ) -> None:
     """Upload processed JSONL to the backend API."""
     _require_token(ctx.obj)
@@ -102,7 +106,9 @@ def upload(
 @app.command("import")
 def import_cmd(
     ctx: typer.Context,
-    dataset: str = typer.Argument(help="Dataset to import (usda, off, ifct, merged)"),
+    dataset: str = typer.Argument(
+        help="Dataset to import (usda, off, ifct, indb, merged)",
+    ),
 ) -> None:
     """Fetch + upload (full pipeline for a dataset)."""
     _require_token(ctx.obj)
@@ -111,6 +117,7 @@ def import_cmd(
         fetch_mod.dispatch(ctx.obj, "usda")
         fetch_mod.dispatch(ctx.obj, "off")
         fetch_mod.dispatch(ctx.obj, "ifct")
+        fetch_mod.dispatch(ctx.obj, "indb")
         merge_mod.run(ctx.obj)
         pipeline.upload(ctx.obj, "merged")
     else:

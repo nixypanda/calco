@@ -496,6 +496,42 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_commit_job_success_indb() {
+        let services = make_services_with_result(ImportCommitResult {
+            products_created: 2,
+            products_updated: 0,
+            nutrients_inserted: 4,
+            servings_inserted: 0,
+            errors_logged: 0,
+        });
+        let job = make_pending_job(&services, "INDB").await;
+
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "INDB".into(),
+                    source_id: "ASC001".into(),
+                    barcode: None,
+                    name: "Hot tea (Garam Chai)".into(),
+                    brand: None,
+                    categories: vec![],
+                    serving_size_g: None,
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let result = services.commit_job(job.id).await.unwrap();
+        assert_eq!(result.products_created, 2);
+        assert_eq!(result.products_updated, 0);
+        assert_eq!(result.nutrients_inserted, 4);
+        assert_eq!(result.errors_logged, 0);
+    }
+
+    #[tokio::test]
     async fn test_commit_fails_when_no_foods_staged() {
         let services = make_services();
         let job = make_pending_job(&services, "USDA").await;

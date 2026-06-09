@@ -225,11 +225,12 @@ impl ImportRepository for PostgresImportRepository {
                    INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence, created_at, updated_at)
                    SELECT p.id, n.id, sn.amount_per_100g, sn.source,
                           CASE sn.source
-                              WHEN 'USDA' THEN 'approved'
-                              WHEN 'IFCT' THEN 'approved'
-                              WHEN 'OFF' THEN 'derived'
-                              ELSE 'unknown'
-                          END,
+                               WHEN 'USDA' THEN 'approved'
+                               WHEN 'IFCT' THEN 'approved'
+                               WHEN 'INDB' THEN 'approved'
+                               WHEN 'OFF' THEN 'derived'
+                               ELSE 'unknown'
+                           END,
                           NOW(), NOW()
                    FROM staging_product_nutrients sn
                    JOIN products p ON p.source = sn.source AND p.source_id = sn.source_id

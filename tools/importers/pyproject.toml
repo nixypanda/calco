@@ -3,7 +3,14 @@ name = "calco-importers"
 version = "0.1.0"
 description = "Data import pipeline for CalCo nutrition database"
 requires-python = ">=3.12"
-dependencies = ["requests>=2.31", "rapidfuzz>=3.0", "typer>=0.15", "tenacity>=9.0", "tqdm>=4.66"]
+dependencies = [
+    "requests>=2.31",
+    "rapidfuzz>=3.0",
+    "typer>=0.15",
+    "tenacity>=9.0",
+    "tqdm>=4.66",
+    "openpyxl>=3.1.5",
+]
 
 [tool.uv]
 package = true

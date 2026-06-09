@@ -29,6 +29,7 @@ SOURCE_LABELS = {
     "usda": "USDA",
     "off": "OFF",
     "ifct": "IFCT",
+    "indb": "INDB",
     "merged": "MERGED",
 }
 
@@ -36,6 +37,7 @@ SOURCE_FILES = {
     "usda": "usda_sr_legacy.jsonl",
     "off": "off_india.jsonl",
     "ifct": "ifct2017.jsonl",
+    "indb": "indb_2024.jsonl",
     "merged": "merged.jsonl",
 }
 

@@ -37,6 +37,9 @@ Examples currently dropped:
   `*_serving` nutrient variants.
 - **IFCT**: any column not listed in `nutrient_mapping/ifct2017_codes.json`
   (scientific name, edible portion, refuse, water content, regional names).
+- **INDB**: any column not listed in `nutrient_mapping/indb_codes.json`
+  (copper, selenium, chromium, manganese, molybdenum, thiamine, riboflavin,
+  niacin, pantothenic acid, biotin, folic acid, vitamins K1/K2, carotenoids).
 
 Recovery is by re-running the converters against the raw archives in
 `data/raw/`, so no data is permanently lost — but adding any of these to the

@@ -9,6 +9,7 @@ import sys
 import time
 import zipfile
 
+import openpyxl
 import requests
 import tqdm
 
@@ -34,6 +35,13 @@ REQUIRED_OFF_FIELDS = [
     "carbohydrates_100g",
     "fat_100g",
 ]
+
+INDB_XLSX_URL = (
+    "https://www.anuvaad.org.in/wp-content/uploads/2020/07/"
+    "Anuvaad_INDB_2024.11.xlsx"
+)
+INDB_XLSX_FILENAME = "Anuvaad_INDB_2024.11.xlsx"
+INDB_PROCESSED_FILENAME = "indb_2024.jsonl"
 
 IFCT_CSV_FILENAME = "ifct2017_compositions.csv"
 FOOD_GROUP_MAP: dict[str, str] = {
@@ -486,6 +494,139 @@ def fetch_ifct(cfg: dict[str, object]) -> None:
     )
 
 
+def fetch_indb(cfg: dict[str, object]) -> None:
+    if cfg.get("dry_run"):
+        log.info("Dry-run: would fetch INDB from %s", INDB_XLSX_URL)
+        return
+
+    data_dir = str(cfg["data_dir"])
+    raw_dir = os.path.join(data_dir, "raw")
+    processed_dir = os.path.join(data_dir, "processed")
+    xlsx_path = os.path.join(raw_dir, INDB_XLSX_FILENAME)
+    out_path = os.path.join(processed_dir, INDB_PROCESSED_FILENAME)
+
+    os.makedirs(raw_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
+
+    download_file(INDB_XLSX_URL, xlsx_path)
+
+    mapping_path = os.path.join(MAPPING_DIR, "indb_codes.json")
+    with open(mapping_path) as f:
+        nutrient_map = json.load(f)
+
+    start = time.time()
+    total_foods = 0
+    total_nutrients = 0
+    total_servings = 0
+
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True)
+    ws = wb["Sheet1"]
+    rows_iter = ws.iter_rows(values_only=True)
+    headers: list[str] = [str(h) if h is not None else "" for h in next(rows_iter)]
+    col_index = {name: i for i, name in enumerate(headers)}
+
+    with open(out_path, "w") as out:
+        for row in rows_iter:
+            if row[0] is None or str(row[0]).strip() == "":
+                continue
+
+            source_id = str(row[col_index["food_code"]]).strip()
+            name = str(row[col_index["food_name"]] or "").strip()
+            if not source_id or not name:
+                continue
+
+            food_row = {
+                "type": "food",
+                "source": "INDB",
+                "source_id": source_id,
+                "name": name,
+                "brand": None,
+                "categories": [],
+                "serving_size_g": None,
+            }
+            write_jsonl_row(out, food_row)
+            total_foods += 1
+
+            for map_key, map_value in nutrient_map.items():
+                if isinstance(map_value, dict):
+                    calco_code = map_value["code"]
+                    if map_value.get("combine"):
+                        parts = map_key.split("+")
+                        total = 0.0
+                        found_any = False
+                        for part in parts:
+                            v = parse_amount(row[col_index.get(part)])
+                            if v is not None:
+                                total += v
+                                found_any = True
+                        if not found_any:
+                            continue
+                        amount = round(total, 6)
+                    else:
+                        scale = map_value.get("scale", 1.0)
+                        v = parse_amount(row[col_index.get(map_key)])
+                        if v is None:
+                            continue
+                        amount = round(v * scale, 6)
+                else:
+                    calco_code = map_value
+                    v = parse_amount(row[col_index.get(map_key)])
+                    if v is None:
+                        continue
+                    amount = v
+
+                nutrient_row = {
+                    "type": "nutrient",
+                    "source": "INDB",
+                    "source_id": source_id,
+                    "nutrient_code": calco_code,
+                    "amount_per_100g": amount,
+                }
+                write_jsonl_row(out, nutrient_row)
+                total_nutrients += 1
+
+            energy_per_100g = parse_amount(row[col_index.get("energy_kcal")])
+            energy_per_serving = parse_amount(
+                row[col_index.get("unit_serving_energy_kcal")]
+            )
+            serving_grams: float | None = None
+            if (
+                energy_per_100g is not None
+                and energy_per_100g > 0
+                and energy_per_serving is not None
+            ):
+                serving_grams = round(energy_per_serving / energy_per_100g * 100, 2)
+
+            serving_unit = str(
+                row[col_index.get("servings_unit")] or "serving"
+            ).strip()
+
+            if serving_grams is not None and serving_grams > 0:
+                serving_row = {
+                    "type": "serving",
+                    "source": "INDB",
+                    "source_id": source_id,
+                    "label": serving_unit,
+                    "quantity": 1.0,
+                    "unit": "serving",
+                    "grams": serving_grams,
+                }
+                write_jsonl_row(out, serving_row)
+                total_servings += 1
+
+    wb.close()
+
+    elapsed = time.time() - start
+    log.info(
+        "INDB 2024: %d foods, %d nutrients, %d servings -> %s (%.1fs)",
+        total_foods,
+        total_nutrients,
+        total_servings,
+        out_path,
+        elapsed,
+    )
+
+
 def dispatch(cfg: dict[str, object], dataset: str) -> None:
     if dataset == "usda":
         fetch_usda(cfg)
@@ -493,3 +634,5 @@ def dispatch(cfg: dict[str, object], dataset: str) -> None:
         fetch_off(cfg)
     elif dataset == "ifct":
         fetch_ifct(cfg)
+    elif dataset == "indb":
+        fetch_indb(cfg)

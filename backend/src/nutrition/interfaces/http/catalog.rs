@@ -49,6 +49,7 @@ pub enum SourceDto {
     Off,
     Usda,
     Ifct,
+    Indb,
 }
 
 impl From<Source> for SourceDto {
@@ -58,6 +59,7 @@ impl From<Source> for SourceDto {
             Source::Off => SourceDto::Off,
             Source::Usda => SourceDto::Usda,
             Source::Ifct => SourceDto::Ifct,
+            Source::Indb => SourceDto::Indb,
         }
     }
 }

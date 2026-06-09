@@ -10,7 +10,7 @@ import rapidfuzz
 
 from calco_import.util import normalize_categories, write_jsonl_row
 
-PREFERENCE = ["USDA", "IFCT", "OFF"]
+PREFERENCE = ["USDA", "INDB", "IFCT", "OFF"]
 MACRO_CODES = {"ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"}
 MACRO_DIFF_THRESHOLD = 0.30
 BASE_THRESHOLD = 90
@@ -31,6 +31,7 @@ log = logging.getLogger(__name__)
 
 SOURCE_FILES = {
     "USDA": "usda_sr_legacy.jsonl",
+    "INDB": "indb_2024.jsonl",
     "IFCT": "ifct2017.jsonl",
     "OFF": "off_india.jsonl",
 }

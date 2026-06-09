@@ -47,6 +47,7 @@ The frontend currently implements auth, admin user management, diary, food searc
 - [x] As an admin, I want Open Food Facts data converted into the generic import format so that packaged foods and barcodes are available.
 - [x] As an admin, I want USDA data converted into the generic import format so that base ingredients are available.
 - [x] As an admin, I want IFCT data converted into the generic import format so that Indian food composition data is available.
+- [x] As an admin, I want INDB data converted into the generic import format so that Indian recipe composition data is available.
 - [x] As an admin, I want products from different data sources matched by name similarity before import so that the same food is not duplicated in the catalog.
 - [x] As an admin, I want barcode-based dedup between sources so that packaged foods from OFF are merged with other sources where they share a barcode.
 - [x] As an admin, I want macro consistency checks on matched products so that false matches are surfaced before they reach the catalog.

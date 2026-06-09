@@ -20,7 +20,7 @@ import behavior.
   model. Adding fields such as ingredients or allergens is a backend schema and
   domain change, not a converter-only flag.
 - Backend catalog import rows should use uppercase source codes such as `OFF`,
-  `USDA`, and `IFCT`.
+  `USDA`, `IFCT`, and `INDB`.
 - Import scripts should prefer existing CalCo APIs over direct database writes.
 
 ## MyFitnessPal Importer Rules

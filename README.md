@@ -20,7 +20,7 @@ Implemented:
 - Food logs with nutrient snapshots and daily summaries
 - Meal/recipe CRUD and meal logging
 - Responsive web frontend for daily tracking
-- CLI import pipeline for USDA SR Legacy, Open Food Facts India, and IFCT 2017 data
+- CLI import pipeline for USDA SR Legacy, Open Food Facts India, IFCT 2017, and INDB 2024 data
 
 Not the goal right now:
 
