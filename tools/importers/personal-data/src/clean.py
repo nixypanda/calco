@@ -20,6 +20,7 @@ from steps import (
     scale_values,
     flag_pseudo_grams,
     check_macro_calories,
+    fix_macro_mismatches,
     deduplicate,
     resolve_serving_modes,
 )
@@ -30,6 +31,7 @@ STEPS = [
     ("scale_values", scale_values),
     ("flag_pseudo_grams", flag_pseudo_grams),
     ("check_macro_calories", check_macro_calories),
+    ("fix_macro_mismatches", fix_macro_mismatches),
     ("deduplicate", deduplicate),
     ("resolve_serving_modes", resolve_serving_modes),
 ]
