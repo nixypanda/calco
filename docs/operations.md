@@ -126,15 +126,12 @@ The current migration set is a squashed baseline. `just backend-migrate` uses `s
 
 ## Import Operations
 
-Imports are run from CLI tooling in `tools/importers`.
+Imports are run from CLI tooling in two locations:
 
-Typical shape:
+- **Data sources** (`tools/importers/data-sources/`) — public food datasets via the catalog import API.
+- **Personal data** (`tools/importers/personal-data/`) — user data from other apps via user-facing APIs.
 
-```text
-convert source data -> optionally merge sources -> import_pipeline.py -> backend import API
-```
-
-See [imports.md](imports.md).
+See [imports.md](imports.md) for full workflows.
 
 ## Backup Notes
 

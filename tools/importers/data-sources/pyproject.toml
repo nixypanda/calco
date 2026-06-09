@@ -1,0 +1,70 @@
+[project]
+name = "calco-data-sources"
+version = "0.1.0"
+description = "Catalog dataset import pipeline for CalCo nutrition database (USDA, IFCT, INDB, OFF)"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31",
+    "rapidfuzz>=3.0",
+    "typer>=0.15",
+    "tenacity>=9.0",
+    "tqdm>=4.66",
+    "openpyxl>=3.1.5",
+]
+
+[tool.uv]
+package = true
+
+[project.scripts]
+calco-import = "calco_import.cli:main"
+
+[dependency-groups]
+dev = ["ruff>=0.15.12", "ty>=0.0.35"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+
+
+select = [
+    "ANN",
+    "B",
+    "C4",
+    "E",
+    "EM",
+    "F",
+    "G",
+    "I",
+    "ICN",
+    "INP",
+    "LOG",
+    "PIE",
+    "PL",
+    "PT",
+    "RET",
+    "RSE",
+    "RUF",
+    "SIM",
+    "T10",
+    "TID",
+    "UP",
+    "W",
+    "YTT",
+    "BLE",
+    "N",
+    "PERF",
+    "SLF",
+    "TCH",
+    "ARG",
+    "ERA",
+    "FURB",
+]
+
+[tool.ty.environment]
+python-version = "3.12"
+root = ["."]
+
+[tool.ty.src]
+include = ["**/*.py"]

@@ -11,8 +11,10 @@ Rust axum backend
   -> sqlx
 PostgreSQL
 
-tools/importers
+importers/data-sources/
   -> import API
+importers/personal-data/
+  -> user-facing APIs (foods, logs, meals)
 ```
 
 Database migrations live in `backend/migrations` and are applied explicitly with `sqlx-cli`.
@@ -82,7 +84,7 @@ The key data-integrity invariant is historical stability: `FoodLog` stores calcu
 
 Imports are an anti-corruption/staging layer around external food datasets.
 
-`ImportJob` owns staged products, nutrients, servings, and row-level errors. Staged rows become catalog data only when an import is committed. Imports translate at the seam (their own `ImportError`, their own DTOs) and are intentionally operated from CLI scripts in `tools/importers`, not from browser UI.
+`ImportJob` owns staged products, nutrients, servings, and row-level errors. Staged rows become catalog data only when an import is committed. Imports translate at the seam (their own `ImportError`, their own DTOs) and are intentionally operated from CLI scripts in `tools/importers/data-sources`, not from browser UI.
 
 ## Transaction And Consistency Decisions
 

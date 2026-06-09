@@ -15,9 +15,16 @@ root `AGENTS.md` and the relevant docs in `../docs/` before changing tools.
 
 ## Import Tools
 
-Food import tooling lives under `importers/`. Read `importers/AGENTS.md`,
-`../docs/imports.md`, and `importers/README.md` before changing importer
-behavior.
+Import tooling lives under `importers/` in two subdirectories:
+
+- **`importers/data-sources/`** — catalog dataset pipeline (USDA, IFCT, INDB,
+  OFF). Produces normalized JSONL for the backend import API.
+- **`importers/personal-data/`** — user personal data import from other apps
+  (MyFitnessPal, etc.). Creates private foods and diary entries via
+  user-facing APIs.
+
+Read `importers/data-sources/AGENTS.md` or `importers/personal-data/AGENTS.md`
+and `../docs/imports.md` before changing import behavior.
 
 ## Checks
 
@@ -28,6 +35,6 @@ just test
 just build
 ```
 
-For importer-specific Python checks, run them from `tools/importers` as
-documented in `importers/AGENTS.md`.
+For importer-specific Python checks, see the individual `AGENTS.md` files in
+each subdirectory under `importers/`.
 

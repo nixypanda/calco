@@ -1,19 +1,18 @@
-# CalCo Importer Tools
+# CalCo Personal Data Import Tools
 
-This folder contains Python import/conversion tools for CalCo. The existing
-dataset importers convert public food datasets into normalized catalog rows.
-`mfp_import.py` is different: it imports a user's MyFitnessPal privacy export
-into that user's private CalCo foods and diary history.
+This folder contains tools for importing a user's personal data from other
+apps into CalCo (custom foods, food logs, meals). Currently supports
+MyFitnessPal via `mfp_import.py`.
 
 ## MyFitnessPal Importer
 
 Script:
 
 ```bash
-python3 tools/importers/mfp_import.py <command>
+python3 tools/importers/personal-data/mfp_import.py <command>
 ```
 
-Default input/output paths are under `tools/importers/apps/`:
+Default input/output paths are under `tools/importers/personal-data/apps/`:
 
 ```text
 mfp-data.csv                 # source MyFitnessPal privacy export CSV
@@ -30,7 +29,7 @@ The importer intentionally processes only `item_type=Foods` for v1.
 
 Keep `mfp-data.csv` as the original raw export. Any row-level corrections needed
 for this import should be made in `mfp-data-working-cleaned.csv`, then commands
-should be run with `--input importers/apps/mfp-data-working-cleaned.csv`.
+should be run with `--input tools/importers/personal-data/apps/mfp-data-working-cleaned.csv`.
 `mfp-food-review.csv` is the active reviewed file and may be edited in place.
 
 ## Workflow
@@ -40,14 +39,14 @@ should be run with `--input importers/apps/mfp-data-working-cleaned.csv`.
 Generate a review CSV:
 
 ```bash
-cd tools
-python3 importers/mfp_import.py food-dry-run
+cd tools/importers/personal-data
+python3 mfp_import.py food-dry-run
 ```
 
 Optional API-backed matching:
 
 ```bash
-python3 importers/mfp_import.py food-dry-run \
+python3 mfp_import.py food-dry-run \
   --api-url http://localhost:3001/api \
   --session-token <calco_session>
 ```
@@ -116,9 +115,9 @@ product-specific `cup` serving alias for cup history rows.
 Create/match the approved foods and write the resolved map:
 
 ```bash
-python3 importers/mfp_import.py food-commit \
-  --input importers/apps/mfp-data-working-cleaned.csv \
-  --review importers/apps/mfp-food-review.csv \
+python3 mfp_import.py food-commit \
+  --input apps/mfp-data-working-cleaned.csv \
+  --review apps/mfp-food-review.csv \
   --session-token <calco_session>
 ```
 
@@ -148,8 +147,8 @@ approved MFP food key to exactly one CalCo product id.
 Import the MFP food diary rows:
 
 ```bash
-python3 importers/mfp_import.py history-import \
-  --input importers/apps/mfp-data-working-cleaned.csv \
+python3 mfp_import.py history-import \
+  --input apps/mfp-data-working-cleaned.csv \
   --session-token <calco_session>
 ```
 
@@ -218,18 +217,6 @@ vitamin_c_pct_daily_value
 
 Percent daily value columns are ignored because CalCo stores nutrient amounts in
 actual units, not percentages.
-
-## Verification Done
-
-These commands passed locally:
-
-```bash
-cd tools/importers
-nix develop ../.. --command uv run ruff check .
-nix develop ../.. --command uv run ty check .
-nix develop ../.. --command uv run python -m unittest discover -s . -p 'test_*.py'
-python3 mfp_import.py food-dry-run --output /private/tmp/mfp-food-review.csv
-```
 
 ## Notes For Future Agents
 

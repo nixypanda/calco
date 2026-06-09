@@ -31,7 +31,7 @@ so there is no fallback either.
 Examples currently dropped:
 
 - **USDA SR**: `scientificName`, `ndbNumber`, source-specific metadata, and
-  fields not emitted by `tools/importers/convert_usda_sr.py`.
+  fields not emitted by the converter (`importers/data-sources/src/calco_import/fetch/usda.py`).
 - **OFF**: `ingredients_text`, `allergens`, `additives_tags`, `nova_group`,
   `nutriscore_grade`, `ecoscore_grade`, `labels`, `packaging`, image URLs,
   `*_serving` nutrient variants.

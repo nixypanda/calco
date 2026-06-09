@@ -1,22 +1,15 @@
 [project]
-name = "calco-importers"
+name = "calco-personal-data-import"
 version = "0.1.0"
-description = "Data import pipeline for CalCo nutrition database"
+description = "Personal data import tools for CalCo (MyFitnessPal, etc.)"
 requires-python = ">=3.12"
 dependencies = [
     "requests>=2.31",
     "rapidfuzz>=3.0",
-    "typer>=0.15",
-    "tenacity>=9.0",
-    "tqdm>=4.66",
-    "openpyxl>=3.1.5",
 ]
 
 [tool.uv]
 package = true
-
-[project.scripts]
-calco-import = "calco_import.cli:main"
 
 [dependency-groups]
 dev = ["ruff>=0.15.12", "ty>=0.0.35"]

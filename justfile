@@ -106,16 +106,28 @@ build: backend-build frontend-web-build
 test: backend-test frontend-web-test
 
 # ──────────────────────────────────────────────
-# Import tools
+# Data sources import pipeline
 # ──────────────────────────────────────────────
 
-# Lint and type-check import tools
-importers-check:
-    cd tools/importers && uv run ruff check src/ && uv run ty check src/
+# Lint and type-check data sources import tools
+data-sources-check:
+    cd tools/importers/data-sources && uv run ruff check src/ && uv run ty check src/
 
 # Dry-run fetch for IFCT and INDB to verify CLI works
-importers-dry-run:
-    cd tools/importers && CALCO_DATA_DIR=/tmp/calco-import-dry-run uv run python -m calco_import --dry-run fetch ifct && CALCO_DATA_DIR=/tmp/calco-import-dry-run uv run python -m calco_import --dry-run fetch indb
+data-sources-dry-run:
+    cd tools/importers/data-sources && CALCO_DATA_DIR=/tmp/calco-import-dry-run uv run python -m calco_import --dry-run fetch ifct && CALCO_DATA_DIR=/tmp/calco-import-dry-run uv run python -m calco_import --dry-run fetch indb
+
+# ──────────────────────────────────────────────
+# Personal data import tools
+# ──────────────────────────────────────────────
+
+# Lint and type-check personal data import tools
+personal-data-check:
+    cd tools/importers/personal-data && uv run ruff check . && uv run ty check .
+
+# Run personal data import tests
+personal-data-test:
+    cd tools/importers/personal-data && uv run python -m unittest discover -s . -p 'test_*.py'
 
 # ──────────────────────────────────────────────
 # Misc
