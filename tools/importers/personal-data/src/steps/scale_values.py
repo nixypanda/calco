@@ -10,7 +10,10 @@ from steps import load_csv, parse_serving, write_csv
 
 
 def _fmt(d: Decimal) -> str:
-    return str(d).rstrip("0").rstrip(".")
+    s = str(d)
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
 
 
 def run(input_path: str | Path, output_path: str | Path) -> dict:

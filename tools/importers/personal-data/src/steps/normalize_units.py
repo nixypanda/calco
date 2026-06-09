@@ -50,6 +50,13 @@ def _clean(unit: str) -> str:
     return u.strip()
 
 
+def _fmt(d: Decimal) -> str:
+    s = str(d)
+    if "." in s:
+        s = s.rstrip("0").rstrip(".")
+    return s
+
+
 def normalize(unit: str, value: str) -> tuple[str, str | None]:
     u = _clean(unit)
     if not u or u in ('"', "'", "1"):
@@ -58,7 +65,7 @@ def normalize(unit: str, value: str) -> tuple[str, str | None]:
     ul = u.lower()
 
     if KG_RE.match(ul):
-        scaled = str(Decimal(value) * KG_FACTOR).rstrip("0").rstrip(".")
+        scaled = _fmt(Decimal(value) * KG_FACTOR)
         return ("g", scaled)
 
     if ul in OR_ANNOTATIONS:
