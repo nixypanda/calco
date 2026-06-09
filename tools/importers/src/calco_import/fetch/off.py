@@ -169,6 +169,11 @@ def fetch_off(data_dir: str) -> None:
     if not os.path.exists(gz_path):
         download_file(OFF_GZ_URL, gz_path)
 
+    # Use zcat + grep instead of Python's csv.DictReader or csv.reader on the
+    # raw gz. The full OFF dump is 1.2 GB compressed; reading it entirely into
+    # Python would be slow. zcat streams decompressed data through grep which
+    # filters to India rows in C before Python ever sees them. A minimal
+    # csv.reader then parses only the filtered ~6k India rows (~2 MB).
     pipe_cmd = (
         f"zcat {shlex.quote(gz_path)}"
         ' | { read -r header; echo "$header"; grep -i india; }'
