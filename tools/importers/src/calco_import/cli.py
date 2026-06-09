@@ -5,9 +5,9 @@ from typing import TypedDict
 
 import typer
 
-from calco_import import fetch as fetch_mod
 from calco_import import merge as merge_mod
 from calco_import import pipeline
+from calco_import.fetch import dispatch as fetch_dispatch
 
 log = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ def fetch(
     ),
 ) -> None:
     """Download raw data and convert to normalized JSONL."""
-    fetch_mod.dispatch(ctx.obj, dataset)
+    fetch_dispatch(ctx.obj["data_dir"], dataset)
 
 
 @app.command()
@@ -114,14 +114,14 @@ def import_cmd(
     _require_token(ctx.obj)
 
     if dataset == "merged":
-        fetch_mod.dispatch(ctx.obj, "usda")
-        fetch_mod.dispatch(ctx.obj, "off")
-        fetch_mod.dispatch(ctx.obj, "ifct")
-        fetch_mod.dispatch(ctx.obj, "indb")
+        fetch_dispatch(ctx.obj["data_dir"], "usda")
+        fetch_dispatch(ctx.obj["data_dir"], "off")
+        fetch_dispatch(ctx.obj["data_dir"], "ifct")
+        fetch_dispatch(ctx.obj["data_dir"], "indb")
         merge_mod.run(ctx.obj)
         pipeline.upload(ctx.obj, "merged")
     else:
-        fetch_mod.dispatch(ctx.obj, dataset)
+        fetch_dispatch(ctx.obj["data_dir"], dataset)
         pipeline.upload(ctx.obj)
 
 

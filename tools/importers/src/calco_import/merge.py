@@ -10,7 +10,7 @@ import rapidfuzz
 
 from calco_import.util import normalize_categories, write_jsonl_row
 
-PREFERENCE = ["USDA", "INDB", "IFCT", "OFF"]
+PREFERENCE = ["USDA", "IFCT", "INDB", "OFF"]
 MACRO_CODES = {"ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"}
 MACRO_DIFF_THRESHOLD = 0.30
 BASE_THRESHOLD = 90
@@ -65,12 +65,14 @@ def load_source(filepath: str) -> SourceData:
                 if isinstance(amount, str | int | float):
                     nutrients[sid][str(obj["nutrient_code"])] = float(amount)
             elif t == "serving":
-                servings[sid].append({
-                    "label": obj.get("label"),
-                    "quantity": obj.get("quantity"),
-                    "unit": obj.get("unit"),
-                    "grams": obj.get("grams"),
-                })
+                servings[sid].append(
+                    {
+                        "label": obj.get("label"),
+                        "quantity": obj.get("quantity"),
+                        "unit": obj.get("unit"),
+                        "grams": obj.get("grams"),
+                    }
+                )
     return foods, nutrients, servings
 
 

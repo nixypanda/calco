@@ -25,6 +25,9 @@ dev = ["ruff>=0.15.12", "ty>=0.0.35"]
 target-version = "py312"
 
 [tool.ruff.lint]
+ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0915"]
+
+
 select = [
     "ANN",
     "B",
