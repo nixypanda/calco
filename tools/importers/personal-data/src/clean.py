@@ -23,6 +23,7 @@ from steps import (
     fix_macro_mismatches,
     deduplicate,
     resolve_serving_modes,
+    canonicalize_food_descriptions,
 )
 
 STEPS = [
@@ -32,8 +33,9 @@ STEPS = [
     ("flag_pseudo_grams", flag_pseudo_grams),
     ("check_macro_calories", check_macro_calories),
     ("fix_macro_mismatches", fix_macro_mismatches),
-    ("deduplicate", deduplicate),
     ("resolve_serving_modes", resolve_serving_modes),
+    ("deduplicate", deduplicate),
+    ("canonicalize_food_descriptions", canonicalize_food_descriptions),
 ]
 
 def main():

@@ -1,33 +1,31 @@
 # Personal Data Import Agent Instructions
 
-This directory contains tools for importing user personal data from other
-apps into CalCo. Also read `../../AGENTS.md`, `../../docs/imports.md`, and
-`README.md` before changing import behavior.
+This directory contains tools for cleaning and preparing personal nutrition
+data for import into CalCo. Also read `../../AGENTS.md`,
+`../../docs/imports.md`, and `README.md` before changing import behavior.
 
 ## Shape
 
 - Python 3.12 project managed with `uv`.
-- Standalone scripts (one per source app) using CalCo user-facing APIs.
-- `mfp_import.py` imports a user's MyFitnessPal privacy export into that
-  user's private CalCo foods and diary history.
+- The maintained workflow is a step-based CSV cleaning pipeline under `src/`.
+- The main generated artifacts live under `data/`.
+- Legacy `mfp_import.py` and `apps/` artifacts are preserved but are not part
+  of the active workflow.
 
 ## Import Boundaries
 
 - Imports are CLI workflows, not browser UI.
-- Scripts should prefer existing CalCo APIs over direct database writes.
-- Each importer should create private (`user_private`) products with a
-  consistent source marker in categories (e.g. `mfp-import`).
+- The workflow is CLI-driven, not browser UI.
+- Keep transformations explicit and reproducible as numbered pipeline steps.
+- Review state should live in pipeline-owned CSVs under `data/`, not in
+  legacy `apps/` files.
 
-## MyFitnessPal Importer Rules
+## Active Pipeline Outputs
 
-- Do not edit `apps/mfp-data.csv`; it is the preserved raw privacy export.
-- Use `apps/mfp-data-working-cleaned.csv` for import-specific row corrections.
-- `mfp-food-review.csv` is the editable review gate for food commits.
-- `mfp-food-map.json` is the source of truth for history import after food
-  commit. Do not make history import search the catalog again.
-- Do not switch history import to direct nutrient snapshot insertion without a
-  product/design decision.
-- The MFP export can contain personal account fields. Avoid logging or
+- `src/clean.py` produces `data/step-0...step-8` outputs.
+- `generate_serving_review.py` produces `data/step-9-out-serving-review.csv`.
+- `step-9-out-serving-review.csv` is the maintained manual review contract.
+- The raw MFP export can contain personal account fields. Avoid logging or
   documenting those values.
 
 ## Checks
@@ -37,11 +35,12 @@ Run from this directory:
 ```bash
 nix develop ../../.. --command uv run ruff check .
 nix develop ../../.. --command uv run ty check .
-nix develop ../../.. --command uv run python -m unittest discover -s . -p 'test_*.py'
+nix develop ../../.. --command uv run python -m unittest discover -s src -p 'test_*.py'
 ```
 
 Useful smoke test:
 
 ```bash
-python3 mfp_import.py food-dry-run --output /private/tmp/mfp-food-review.csv
+python3 src/clean.py --data-dir data
+python3 generate_serving_review.py
 ```

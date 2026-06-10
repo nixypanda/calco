@@ -1,232 +1,73 @@
 # CalCo Personal Data Import Tools
 
-This folder contains tools for importing a user's personal data from other
-apps into CalCo (custom foods, food logs, meals). Currently supports
-MyFitnessPal via `mfp_import.py`.
+This directory now centers on the structured MFP cleaning pipeline under `src/`
+and the generated review artifacts under `data/`.
 
-## MyFitnessPal Importer
+Legacy artifacts such as `mfp_import.py` and `apps/` are preserved for
+reference only and are not part of the maintained workflow.
 
-Script:
+## Current Workflow
+
+Run the cleaning pipeline:
 
 ```bash
-python3 tools/importers/personal-data/mfp_import.py <command>
+cd tools/importers/personal-data/src
+python3 clean.py --data-dir ../data
 ```
 
-Default input/output paths are under `tools/importers/personal-data/apps/`:
+This produces:
 
-```text
-mfp-data.csv                 # source MyFitnessPal privacy export CSV
-mfp-data-working-cleaned.csv # cleaned import copy; leave mfp-data.csv untouched
-mfp-food-review.csv          # generated/editable food review CSV
-mfp-food-map.json            # committed mapping from MFP food keys to CalCo product ids
-mfp-history-mismatches.csv   # history import nutrient mismatch report
-```
+- `data/step-0-out-merge_fixed_serving.csv`
+- `data/step-1-out-normalize_units.csv`
+- `data/step-2-out-scale_values.csv`
+- `data/step-3-out-flag_pseudo_grams.csv`
+- `data/step-3-review-pseudo-grams.csv`
+- `data/step-4-out-check_macro_calories.csv`
+- `data/step-4-review-macro-mismatch.csv`
+- `data/step-5-out-fix_macro_mismatches.csv`
+- `data/step-5-corrections.csv`
+- `data/step-6-out-resolve_serving_modes.csv`
+- `data/step-6-review-serving-modes.csv`
+- `data/step-7-out-deduplicate.csv`
+- `data/step-8-out-canonicalize_food_descriptions.csv`
 
-The source CSV currently used here is a MyFitnessPal data-access/privacy export,
-not the Premium three-file ZIP. It has a title row, then a CSV header row, and
-contains `Foods`, `Daily Nutrition Totals`, `Exercise`, and `Measurement` rows.
-The importer intentionally processes only `item_type=Foods` for v1.
-
-Keep `mfp-data.csv` as the original raw export. Any row-level corrections needed
-for this import should be made in `mfp-data-working-cleaned.csv`, then commands
-should be run with `--input tools/importers/personal-data/apps/mfp-data-working-cleaned.csv`.
-`mfp-food-review.csv` is the active reviewed file and may be edited in place.
-
-## Workflow
-
-### 1. Food Dry Run
-
-Generate a review CSV:
+Then generate the serving review:
 
 ```bash
 cd tools/importers/personal-data
-python3 mfp_import.py food-dry-run
+python3 generate_serving_review.py
 ```
 
-Optional API-backed matching:
+This writes `data/step-9-out-serving-review.csv`.
+
+## Serving Review Output
+
+`step-9-out-serving-review.csv` contains one row per distinct food with:
+
+- `serving_mode`: `mass`, `volume`, or `serving_unit`
+- `reference_basis`: `per_100g`, `per_100ml`, or `per_serving`
+- `reference_*` nutrient columns on that basis
+- `example_value`, `example_unit`, `example_serving`
+- `current_serving_grams`
+- `corrected_serving_grams`
+- `notes`
+
+Rerunning `generate_serving_review.py` preserves existing values already entered
+in `current_serving_grams`, `corrected_serving_grams`, and `notes`.
+
+## Checks
+
+Run from this directory:
 
 ```bash
-python3 mfp_import.py food-dry-run \
-  --api-url http://localhost:3001/api \
-  --session-token <calco_session>
+python3 -m unittest discover -s src -p 'test_*.py'
 ```
 
-Without `--session-token`, dry-run still works and marks foods for `create`.
-With a session token, it searches existing CalCo foods and suggests conservative
-`match` rows when the name and energy look compatible.
-
-Dry-run groups repeated rows by normalized MFP food description. After reviewed
-cleanup, the current cleaned CSV has 273 approved candidate foods covering 3,584
-importable `Foods` rows. One zero-value food row is intentionally skipped.
-
-### 2. User Edits Review CSV
-
-Edit `mfp-food-review.csv` before committing.
-
-Important columns:
-
-```text
-mfp_food_key          stable key for this normalized MFP food description
-description           representative MFP food name
-row_count             number of MFP history rows grouped into this food
-observed_units        unit frequencies seen in history
-observed_quantities   common quantity/unit patterns
-suggested_action      match, create, or skip
-approved              yes/no gate used by food-commit
-matched_product_id    required when suggested_action=match
-canonical_name        name used when creating a private CalCo food
-serving_mode          mass, serving_unit, or manual
-serving_unit          product-specific serving unit, when needed
-serving_grams         grams for 1 serving_unit, when known
-notes                 free-form review notes
-```
-
-Review defaults are deliberately conservative:
-
-- Foods with only mass units like `g` are usually `serving_mode=mass`.
-- Foods with serving units like `piece` or `scoop` are usually
-  `serving_mode=serving_unit`.
-- Mixed mass/non-mass units are marked `serving_mode=manual` and
-  `approved=no`.
-- Suspicious mass rows with very high inferred kcal/100g are marked
-  `approved=no`; this catches MFP rows where `gm` appears to mean a serving, not
-  a literal gram.
-
-Before commit, every row to import must have:
-
-- `approved=yes`
-- `suggested_action=match` with `matched_product_id`, or
-  `suggested_action=create`
-- `serving_mode` changed away from `manual`
-
-For mixed-unit foods, one practical review pattern is:
-
-```text
-serving_mode=mass
-serving_unit=cup
-serving_grams=200
-```
-
-That creates a mass-based food for gram history rows and also adds a
-product-specific `cup` serving alias for cup history rows.
-
-### 3. Food Commit
-
-Create/match the approved foods and write the resolved map:
+If you are using the repo dev environment, the fuller checks from `AGENTS.md`
+still apply:
 
 ```bash
-python3 mfp_import.py food-commit \
-  --input apps/mfp-data-working-cleaned.csv \
-  --review apps/mfp-food-review.csv \
-  --session-token <calco_session>
+nix develop ../../.. --command uv run ruff check .
+nix develop ../../.. --command uv run ty check .
+nix develop ../../.. --command uv run python -m unittest discover -s src -p 'test_*.py'
 ```
-
-Food commit uses existing CalCo APIs:
-
-```text
-GET  /api/foods/search
-GET  /api/foods/{id}
-POST /api/foods/custom
-```
-
-Rows marked `match` validate that the target product exists. Rows marked
-`create` create a private custom food with:
-
-```text
-brand = MyFitnessPal
-categories = ["mfp-import"]
-source = USER
-visibility = user_private
-```
-
-The output `mfp-food-map.json` is the contract for history import. It maps each
-approved MFP food key to exactly one CalCo product id.
-
-### 4. History Import
-
-Import the MFP food diary rows:
-
-```bash
-python3 mfp_import.py history-import \
-  --input apps/mfp-data-working-cleaned.csv \
-  --session-token <calco_session>
-```
-
-History import uses only `mfp-food-map.json`; it does not search the catalog
-again. Rows without an approved food map entry are skipped.
-
-History import creates normal CalCo logs through:
-
-```text
-POST /api/logs
-GET  /api/logs?from=YYYY-MM-DD&to=YYYY-MM-DD
-```
-
-Diary behavior:
-
-- `logged_at` is set to `<date>T12:00:00Z`.
-- `meal_slot` is `null`, so the current Diary UI shows these under `Other`.
-- Log quantity/unit comes from the original MFP row and the resolved food map.
-- Notes include a stable `mfp_row=<fingerprint>` marker.
-
-Duplicate behavior:
-
-- Before importing a date, the importer lists existing logs for that date.
-- If a log already contains the same `mfp_row=<fingerprint>`, the row is skipped.
-- This makes rerunning `history-import` safe for already imported rows.
-
-Nutrition behavior:
-
-- History uses normal CalCo product calculation by calling `POST /api/logs`.
-- The importer compares the created CalCo nutrient snapshots against the
-  original MFP row totals.
-- Differences beyond tolerance are written to `mfp-history-mismatches.csv`.
-- Current tolerances are 5 kcal for energy and 2 units for other nutrients.
-
-## Supported Nutrients
-
-Mapped MFP columns:
-
-```text
-calories                     -> ENERGY_KCAL
-fat_g                        -> FAT_G
-saturated_fat_g              -> SATURATED_FAT_G
-trans_fat_g                  -> TRANS_FAT_G
-polyunsaturated_fat_g        -> POLYUNSATURATED_FAT_G
-monounsaturated_fat_g        -> MONOUNSATURATED_FAT_G
-cholesterol_mg               -> CHOLESTEROL_MG
-sodium_mg                    -> SODIUM_MG
-carbs_g                      -> CARBS_G
-fiber_g                      -> FIBER_G
-sugar_g                      -> SUGAR_G
-protein_g                    -> PROTEIN_G
-calcium_mg                   -> CALCIUM_MG
-potassium_mg                 -> POTASSIUM_MG
-```
-
-Ignored for v1:
-
-```text
-added_sugar_g
-sugar_alcohols_g
-vitamin_d_pct_daily_value
-iron_pct_daily_value
-vitamin_a_pct_daily_value
-vitamin_c_pct_daily_value
-```
-
-Percent daily value columns are ignored because CalCo stores nutrient amounts in
-actual units, not percentages.
-
-## Notes For Future Agents
-
-- The importer intentionally lives in tooling and avoids backend schema changes.
-- Do not make history import search the catalog; the food map is the source of
-  truth after food commit.
-- Do not edit `mfp-data.csv`; it is the preserved raw export. Use
-  `mfp-data-working-cleaned.csv` for import-specific row corrections.
-- Do not switch history import to direct snapshot insertion without revisiting
-  the product goal. The current design prioritizes reusable foods and search,
-  while still reporting nutrition mismatches.
-- The current MFP export contains personal account fields. Avoid logging or
-  documenting those values.
