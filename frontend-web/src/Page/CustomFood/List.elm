@@ -179,7 +179,7 @@ bodyView theme device model =
         Loaded loaded ->
             Ui.listCard theme
                 { rows = List.map (foodRow theme device loaded.action) loaded.foods
-                , createButton = Ui.ghostButton theme "+ Create Food" CreateCustomFoodClicked
+                , footer = Just (Ui.ghostButton theme "+ Create Food" CreateCustomFoodClicked)
                 }
 
         LoadFailed _ ->
@@ -200,7 +200,7 @@ foodRow theme device action food =
     Ui.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
-        , title = Ui.truncatedHeader theme device food.name
+        , title = Ui.truncatedListItemTitle theme device food.name
         , subtitle =
             [ Ui.mutedBody theme (foodSummaryText food)
             , Ui.chips theme food.categories

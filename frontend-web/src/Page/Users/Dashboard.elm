@@ -91,7 +91,7 @@ bodyView theme model =
                     List.map
                         (\user -> userListRow theme { user = user, onSelect = NavigateEditUser })
                         users
-                , createButton = Ui.ghostButton theme "+ Create User" NavigateCreateUser
+                , footer = Just (Ui.ghostButton theme "+ Create User" NavigateCreateUser)
                 }
 
         Loading ->

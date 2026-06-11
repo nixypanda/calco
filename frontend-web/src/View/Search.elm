@@ -108,10 +108,7 @@ resultRow theme device config =
                 , Element.spacing Ui.space4
                 , Element.clip
                 ]
-                [ Element.el [ Font.medium ]
-                    (Element.text
-                        (Ui.truncateWithEllipsis (Ui.truncationCap device) config.item.name)
-                    )
+                [ Ui.truncatedListItemTitle theme device config.item.name
                 , Ui.mutedCaption theme (metaText config.query config.item)
                 ]
     in

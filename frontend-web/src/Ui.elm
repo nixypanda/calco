@@ -74,6 +74,7 @@ module Ui exposing
     , toCssColor
     , truncateWithEllipsis
     , truncatedHeader
+    , truncatedListItemTitle
     , truncatedText
     , truncationCap
     )
@@ -243,6 +244,20 @@ listItemTitle theme child =
         , Font.color theme.textPrimary
         ]
         child
+
+
+truncatedListItemTitle : Theme -> Device -> String -> Element msg
+truncatedListItemTitle theme device name =
+    Element.el
+        [ Element.width Element.fill ]
+        (listItemTitle theme
+            (Element.el
+                [ Element.width Element.fill
+                , Element.clip
+                ]
+                (Element.text (truncateWithEllipsis (truncationCap device) name))
+            )
+        )
 
 
 mutedCaption : Theme -> String -> Element msg
@@ -475,7 +490,7 @@ formSection theme title content =
         }
 
 
-listCard : Theme -> { rows : List (Element msg), createButton : Element msg } -> Element msg
+listCard : Theme -> { rows : List (Element msg), footer : Maybe (Element msg) } -> Element msg
 listCard theme config =
     section theme
         { header = Nothing
@@ -485,7 +500,7 @@ listCard theme config =
 
             else
                 List.intersperse (hairline theme) config.rows
-        , footer = Just config.createButton
+        , footer = config.footer
         }
 
 

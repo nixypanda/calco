@@ -684,11 +684,7 @@ logRow theme device log =
         , label =
             Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
                 [ View.Nutrients.macroDot log.nutrients
-                , Element.el
-                    [ Element.width Element.fill, Font.medium, Element.clip ]
-                    (Element.text
-                        (Ui.truncateWithEllipsis (Ui.truncationCap device) log.item.name)
-                    )
+                , Ui.truncatedListItemTitle theme device log.item.name
                 , Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
                 , Ui.mutedCaption theme
                     (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")

@@ -224,15 +224,17 @@ bodyView theme model device =
                     ]
 
             else
-                Ui.card theme
-                    (List.map
-                        (\item ->
-                            SearchView.resultRow theme
-                                device
-                                { query = model.search.query
-                                , item = item
-                                , onSelect = ResultClicked
-                                }
-                        )
-                        items
-                    )
+                Ui.listCard theme
+                    { rows =
+                        List.map
+                            (\item ->
+                                SearchView.resultRow theme
+                                    device
+                                    { query = model.search.query
+                                    , item = item
+                                    , onSelect = ResultClicked
+                                    }
+                            )
+                            items
+                    , footer = Nothing
+                    }
