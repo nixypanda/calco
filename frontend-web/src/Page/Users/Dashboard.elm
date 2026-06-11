@@ -95,7 +95,7 @@ bodyView theme model =
                 }
 
         Loading ->
-            Ui.loading theme "Loading users..."
+            Ui.skeletonLoading theme
 
         LoadFailed error ->
             Ui.errorBanner theme (Client.displayError error)

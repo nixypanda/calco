@@ -304,9 +304,16 @@ nextProductNameRequest completedId loaded =
         |> Maybe.withDefault NoOp
 
 
-nameFor : String -> LoadedModel -> String
-nameFor id loaded =
-    ItemNameLookup.nameFor "Loading..." (ItemNameLookup.productRef id) loaded.productNames
+componentNameView : Theme -> LoadedModel -> String -> Element Msg
+componentNameView theme loaded id =
+    if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
+        Ui.listItemTitle theme
+            (Element.text
+                (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
+            )
+
+    else
+        Ui.skeletonBar theme
 
 
 requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
@@ -496,7 +503,7 @@ view { model, device, theme } =
                         Ui.errorBanner theme message
 
                     Loading _ ->
-                        Ui.loading theme "Loading meal..."
+                        Ui.skeletonLoading theme
                 ]
             , footer = Nothing
             }
@@ -508,7 +515,7 @@ view { model, device, theme } =
                 Ui.errorBanner theme message
 
             Loading _ ->
-                Ui.loading theme "Loading meal..."
+                Ui.skeletonLoading theme
         ]
 
 
@@ -517,12 +524,11 @@ headerView theme device model =
     case model of
         Loaded loaded ->
             Ui.pageHeader theme
-                device
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
                             (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
-                , title = loaded.meal.name
+                , title = Ui.truncatedHeader theme device loaded.meal.name
                 , subtitle = Nothing
                 , actions =
                     [ Ui.iconButton theme
@@ -594,7 +600,7 @@ componentView theme loaded component =
             , Element.spacing Ui.space4
             , Element.alignTop
             ]
-            [ Ui.listItemTitle theme (nameFor component.item.id loaded)
+            [ componentNameView theme loaded component.item.id
             , Element.el
                 [ Font.color theme.textMuted ]
                 (Element.text quantityText)

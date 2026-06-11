@@ -395,7 +395,7 @@ bodyView theme device model =
             Element.none
 
         Loading _ ->
-            Ui.loading theme "Loading food..."
+            Ui.skeletonLoading theme
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -477,9 +477,8 @@ foodHeader theme device food =
     in
     Ui.card theme
         [ Ui.pageHeader theme
-            device
             { leading = Just (View.Nutrients.macroDot macroNutrients)
-            , title = food.name
+            , title = Ui.truncatedHeader theme device food.name
             , subtitle = Just (metaText food)
             , actions = editAction
             }

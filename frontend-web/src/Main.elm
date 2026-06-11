@@ -1501,7 +1501,7 @@ pageView model =
             || model.pendingBootstrap
             == Nothing
     then
-        Element.el [ Element.centerX, Element.centerY ] (Ui.loading model.theme "Loading...")
+        Ui.skeletonLoading model.theme
 
     else
         let
@@ -1519,7 +1519,7 @@ pageView model =
         in
         case model.page of
             LoadingPage ->
-                Element.el [ Element.centerX, Element.centerY ] (Ui.loading theme "Loading...")
+                Ui.skeletonLoading theme
 
             LoginPage loginModel ->
                 Element.map GotLoginMsg (AuthLogin.view (props loginModel))

@@ -269,7 +269,7 @@ userInfoView : Theme -> Model -> List (Element Msg)
 userInfoView theme model =
     case model.status of
         Loading ->
-            [ Ui.loading theme "Loading user..." ]
+            [ Ui.skeletonLoading theme ]
 
         LoadFailed error ->
             [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]

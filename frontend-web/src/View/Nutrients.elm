@@ -224,12 +224,27 @@ titleCase word =
             word
 
 
+skeletonPreview : Theme -> Element msg
+skeletonPreview theme =
+    Ui.section theme
+        { header = Just (Ui.skeletonBar theme)
+        , body =
+            [ Ui.skeletonBar theme
+            , Ui.hairline theme
+            , Ui.skeletonBar theme
+            , Ui.skeletonBar theme
+            , Ui.skeletonBar theme
+            ]
+        , footer = Nothing
+        }
+
+
 preview : Theme -> Device -> NutritionState -> Element msg
 preview theme device state =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
         [ case state of
             NutritionLoading _ ->
-                Ui.loading theme "Loading nutrition..."
+                skeletonPreview theme
 
             NutritionLoaded _ nutrients ->
                 nutritionCard theme device nutrients

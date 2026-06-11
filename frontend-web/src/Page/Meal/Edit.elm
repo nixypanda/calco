@@ -380,7 +380,7 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ Ui.loading theme "Loading meal..." ]
+            Ui.pageContainer device [ Ui.skeletonLoading theme ]
 
         EditLoadFailed message ->
             Ui.pageContainer device [ Ui.errorBanner theme message ]

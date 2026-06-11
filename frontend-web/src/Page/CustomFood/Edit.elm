@@ -343,4 +343,4 @@ bodyView { model, device, theme } =
             Ui.errorBanner theme message
 
         Loading _ ->
-            Ui.loading theme "Loading food..."
+            Ui.skeletonLoading theme

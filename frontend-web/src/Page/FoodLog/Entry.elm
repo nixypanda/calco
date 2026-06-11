@@ -580,7 +580,7 @@ bodyView theme device model =
             Element.none
 
         Loading _ ->
-            Ui.loading theme "Loading log..."
+            Ui.skeletonLoading theme
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -702,9 +702,8 @@ itemHeader theme device model =
     in
     Ui.card theme
         [ Ui.pageHeader theme
-            device
             { leading = Just (View.Nutrients.macroDot model.log.nutrients)
-            , title = itemTitle model.item
+            , title = itemTitle theme device model.item
             , subtitle = Just (metaText maybeFood model.log)
             , actions = editAction ++ deleteAction
             }
@@ -722,30 +721,30 @@ itemHeader theme device model =
         ]
 
 
-itemTitle : LoadedItem -> String
-itemTitle item =
+itemTitle : Theme -> Device -> LoadedItem -> Element msg
+itemTitle theme device item =
     case item of
         ProductItem productState ->
             case productState of
                 DetailLoading _ ->
-                    "Loading food..."
+                    Ui.skeletonBar theme
 
                 DetailLoaded food ->
-                    food.name
+                    Ui.truncatedHeader theme device food.name
 
                 DetailUnavailable fallback ->
-                    fallback.name
+                    Element.text fallback.name
 
         MealItem mealState ->
             case mealState of
                 DetailLoading _ ->
-                    "Loading meal..."
+                    Ui.skeletonBar theme
 
                 DetailLoaded meal ->
-                    meal.name
+                    Ui.truncatedHeader theme device meal.name
 
                 DetailUnavailable fallback ->
-                    fallback.name
+                    Element.text fallback.name
 
 
 metaText : Maybe ProductDetail -> FoodLog -> String

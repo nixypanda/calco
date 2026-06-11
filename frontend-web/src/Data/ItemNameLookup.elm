@@ -2,6 +2,7 @@ module Data.ItemNameLookup exposing
     ( Names
     , empty
     , insertProduct
+    , isLoaded
     , nameFor
     , nextMissingProductId
     , productRef

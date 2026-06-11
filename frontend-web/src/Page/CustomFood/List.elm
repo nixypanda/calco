@@ -186,7 +186,7 @@ bodyView theme device model =
             Element.none
 
         Loading ->
-            Ui.loading theme "Loading foods..."
+            Ui.skeletonLoading theme
 
 
 foodRow : Theme -> Device -> ActionState -> ProductDetail -> Element Msg

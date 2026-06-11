@@ -208,7 +208,7 @@ bodyView theme model device =
             Ui.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Ui.loading theme "Searching foods..."
+            Ui.card theme [ Ui.skeletonLoading theme ]
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]

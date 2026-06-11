@@ -57,6 +57,7 @@ module Ui exposing
     , section
     , sectionTitle
     , selectDropdown
+    , skeletonBar
     , skeletonLoading
     , space12
     , space16
@@ -234,14 +235,14 @@ subsectionTitle theme text =
         (Element.text text)
 
 
-listItemTitle : Theme -> String -> Element msg
-listItemTitle theme text =
+listItemTitle : Theme -> Element msg -> Element msg
+listItemTitle theme child =
     Element.el
         [ body
         , Font.bold
         , Font.color theme.textPrimary
         ]
-        (Element.text text)
+        child
 
 
 mutedCaption : Theme -> String -> Element msg
@@ -368,15 +369,14 @@ card theme children =
 
 pageHeader :
     Theme
-    -> Element.Device
     ->
         { leading : Maybe (Element msg)
-        , title : String
+        , title : Element msg
         , subtitle : Maybe String
         , actions : List (Element msg)
         }
     -> Element msg
-pageHeader theme device config =
+pageHeader theme config =
     let
         leadingElement : Element msg
         leadingElement =
@@ -391,7 +391,7 @@ pageHeader theme device config =
         titleColumn =
             Element.column
                 [ Element.width Element.fill, Element.spacing space4 ]
-                (truncatedPageTitle theme device config.title
+                (config.title
                     :: (case config.subtitle of
                             Just text ->
                                 [ mutedBody theme text ]
@@ -484,7 +484,7 @@ listCard theme config =
                 [ emptyListBody theme ]
 
             else
-                config.rows
+                List.intersperse (hairline theme) config.rows
         , footer = Just config.createButton
         }
 
@@ -1024,20 +1024,6 @@ truncatedHeader theme device heading =
         , Element.width Element.fill
         , Element.clip
         , Element.height (Element.px 28)
-        ]
-        (Element.text (truncateWithEllipsis (truncationCap device) heading))
-
-
-truncatedPageTitle : Theme -> Device -> String -> Element msg
-truncatedPageTitle theme device heading =
-    Element.el
-        [ sizePageTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 1
-        , Element.width Element.fill
-        , Element.clip
-        , Element.height (Element.px 34)
         ]
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
