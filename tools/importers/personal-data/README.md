@@ -59,12 +59,23 @@ Current review artifacts produced during matching work:
   - manually approved macro-close matches
 - `data/existing_food_matches-merged.jsonl` — JSONL companion for the merged CSV
 
-Next, use that review CSV to:
+Current matcher handoff:
 
-- match foods against existing DB foods
-- create JSONL for foods that do not have a safe existing match
-- write final DB food IDs and canonical names back into the CSV
-- use the finalized CSV as the reference contract for historical log import
+- Start from `docs/step-10-matcher-handoff.md`
+- Treat `data/step-10-out-food-match-review-merged.csv` as the source of truth
+  for accepted existing-food matches
+- Do not overwrite the merged CSV blindly; generate a fresh review output and
+  merge only accepted additions
+
+Current finalized review state:
+
+- `57` rows are matched to existing foods
+- `225` rows were created as custom foods via `POST /api/foods/custom`
+- all `282` rows now have `final_food_id`
+- all `282` rows are marked `ready_for_log_import=true`
+
+Next, use that finalized review CSV as the reference contract for historical
+log import.
 
 ## Serving Review Output
 
@@ -119,25 +130,91 @@ Keep separate machine-readable artifacts for the automated stages:
 This keeps the CSV human-reviewable while giving downstream scripts stable
 inputs.
 
+Generate custom-food creation payloads:
+
+```bash
+cd tools/importers/personal-data
+python3 generate_foods_to_create.py --selection all-unmatched
+```
+
+This writes `data/foods_to_create.jsonl` from
+`data/step-10-out-food-match-review-merged.csv`.
+
+Create unmatched foods through the user-facing custom-food API:
+
+```bash
+cd tools/importers/personal-data
+.venv/bin/python create_foods.py \
+  --api-url http://127.0.0.1:3001 \
+  --visibility private \
+  --session-token <calco_session_cookie_value>
+```
+
+Notes:
+
+- the current backend dev default is `127.0.0.1:3001`
+- this script makes one `POST /api/foods/custom` call per unmatched food
+- it writes `created_food_id`, `final_food_id`, `final_action`, and
+  `ready_for_log_import` back into
+  `data/step-10-out-food-match-review-merged.csv`
+- for custom-food compatibility, the script backfills any missing required
+  macro nutrient codes (`ENERGY_KCAL`, `PROTEIN_G`, `CARBS_G`, `FAT_G`) with
+  `0`
+
 ## Current Step-10 Status
 
 The current working review surface is:
 
 - `data/step-10-out-food-match-review-merged.csv`
 
-This file includes:
+This file now includes:
 
-- `18` matcher auto-matches
-- `25` manually approved macro-close matches
-- `43` total matched rows
+- `57` matched-existing rows
+- `225` created-new rows
+- `282` finalized rows total
+
+Recent manual/catalog follow-up has also added:
+
+- barcode-backed `Ferrero Rocher`
+- manual brand/variant mapping for `KitKat Share & Snap`
+- manual Whole Truth mapping for `Double Cocoa`
 
 The original matcher-only outputs are still preserved in:
 
 - `data/step-10-out-food-match-review.csv`
 - `data/existing_food_matches.jsonl`
 
-The merged files should be treated as the current base for downstream
-unmatched-food creation work unless a later review supersedes them.
+The merged CSV should now be treated as the finalized source of truth for food
+ID mapping unless a later review supersedes it.
+
+## Current Creation Policy
+
+The user set the following working decisions for downstream creation:
+
+- do not spend more time searching external sources for branded products
+- use `data/step-10-out-food-match-review-merged.csv` as the review surface
+- create custom foods for every row that still does not have a `matched_food_id`
+- `Apple` is already matched in the merged CSV/JSONL and should not be emitted
+  in `foods_to_create.jsonl`
+- do not overwrite the merged CSV blindly while doing this downstream work
+
+`generate_foods_to_create.py` supports:
+
+- `--selection approved-policy`
+  - emits only the previously approved branded/raw-basic buckets
+- `--selection all-unmatched`
+  - emits every unresolved row in the merged CSV
+
+Current working output:
+
+- `data/foods_to_create.jsonl`
+  - generated with `--selection all-unmatched`
+  - contains `225` records, matching the `225` unmatched rows that were then
+    created as custom foods
+- `data/step-10-out-food-match-review-merged.csv`
+  - now has `225` populated `created_food_id` values
+  - now has `282` populated `final_food_id` values
+  - now has `282` rows marked `ready_for_log_import=true`
 
 ## Checks
 

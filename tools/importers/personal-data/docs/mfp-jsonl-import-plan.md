@@ -165,7 +165,11 @@ matches.
 
 ### Step 13: `generate_foods_to_create.py` — Build JSONL for unmatched foods
 
-**Input:** `data/step-10-out-food-match-review.csv`
+**Input:** finalized step-10 review CSV
+
+Preferred current input:
+
+- `data/step-10-out-food-match-review-merged.csv`
 
 **Output:** `data/foods_to_create.jsonl`
 
@@ -175,6 +179,18 @@ basis, corrected serving grams, and provenance back to the source description.
 
 This file is the stable creation input and should be idempotent across reruns.
 
+Recommended CLI:
+
+```bash
+python3 generate_foods_to_create.py --selection all-unmatched
+```
+
+Selection modes:
+
+- `approved-policy` — emit only the explicit approved-policy custom-food set
+- `all-unmatched` — emit every row whose `matched_food_id` is still empty in
+  the finalized review CSV
+
 ---
 
 ### Step 14: `create_foods.py` — Create unmatched foods in the DB
@@ -183,10 +199,40 @@ This file is the stable creation input and should be idempotent across reruns.
 
 **Output:**
 - DB food records
-- updated `data/step-10-out-food-match-review.csv`
+- updated `data/step-10-out-food-match-review-merged.csv`
 
 Create the unmatched foods in the DB, then write the returned IDs and final
 canonical names back into the CSV.
+
+#### Current implemented behavior
+
+The maintained script is now:
+
+- `create_foods.py`
+
+The current practical mode is:
+
+- use the user-facing custom-food API only
+- call `POST /api/foods/custom` once per row in `data/foods_to_create.jsonl`
+- authenticate with a `calco_session` cookie value
+- target the running backend at `http://127.0.0.1:3001` in the current local
+  dev setup
+
+For compatibility with the custom-food API, the script backfills any missing
+required macro nutrient codes with `0`:
+
+- `ENERGY_KCAL`
+- `PROTEIN_G`
+- `CARBS_G`
+- `FAT_G`
+
+The latest completed run created `225` custom foods and updated
+`data/step-10-out-food-match-review-merged.csv` so that:
+
+- `57` rows are `matched_existing`
+- `225` rows are `created_new`
+- all `282` rows have `final_food_id`
+- all `282` rows have `ready_for_log_import=true`
 
 After this step, the CSV should carry final reference columns such as:
 
@@ -315,6 +361,10 @@ For each distinct food:
   payload only if the DB ID has not already been written back into the CSV.
 - Otherwise: skip.
 
+In the current repo state, this step is effectively superseded by
+`create_foods.py`, which already writes the created IDs back into
+`data/step-10-out-food-match-review-merged.csv`.
+
 Writes `mfp-food-map.json` mapping `description → { product_id, name,
 serving_mode }`.
 
@@ -363,6 +413,7 @@ tools/importers/personal-data/
 │   ├── existing_food_matches-merged.jsonl          (merged JSONL)
 │   ├── step-10-match-report.md                     (matcher summary)
 │   ├── step-10-macro-close-report.md               (manual review slice)
+│   ├── foods_to_create.jsonl                       (custom-food creation input)
 │   ├── step-11-out-serving-corrected.csv           (future step)
 │   ├── step-12-foods.jsonl                         (future step)
 │   ├── mfp-food-map.json                           (future step)
@@ -372,6 +423,7 @@ tools/importers/personal-data/
 │   └── step-10-matcher-handoff.md
 ├── generate_serving_review.py                     (step 9)
 ├── generate_food_match_review.py                  (step 11)
+├── create_foods.py                                (step 14)
 ├── apply_serving_review.py                        (future step)
 ├── csv_to_jsonl.py                                (future step)
 ├── upload_foods.py                                (future step)

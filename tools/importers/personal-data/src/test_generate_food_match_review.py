@@ -93,6 +93,13 @@ class FakeRepo:
                 candidates.append(candidate)
         return candidates
 
+    def find_global_product_by_barcode(self, barcode: str) -> ProductCandidate | None:
+        for candidates in self.mapping.values():
+            for candidate in candidates:
+                if candidate.id == barcode:
+                    return candidate
+        return None
+
 
 def _candidate(
     *,
@@ -143,6 +150,7 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         repo: FakeRepo,
         *,
         existing_rows: list[dict[str, str]] | None = None,
+        barcode_hints: dict[str, str] | None = None,
     ) -> dict[str, str | int]:
         self.input_path = _write_csv(rows)
         self.output_path = _temp_path(".csv")
@@ -158,6 +166,7 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
             existing_review_path=self.existing_path,
             matches_jsonl_path=self.jsonl_path,
             repo=repo,
+            barcode_hints=barcode_hints,
         )
 
     def _read_csv(self) -> list[dict[str, str]]:
@@ -360,10 +369,56 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         assert rows[0]["matched_food_id"] == ""
         assert rows[0]["match_notes"].startswith("top candidates: Rice")
 
+    def test_matches_from_barcode_hint(self) -> None:
+        ferrero = _candidate(
+            product_id="8000500126936",
+            name="Ferrero Rocher",
+            energy="584",
+            protein="8",
+            carbs="48",
+            fat="40",
+        )
+        repo = FakeRepo(
+            {
+                "Ferrero Rocher": [ferrero],
+            },
+        )
+        result = self._run(
+            [
+                _base_row(
+                    description="Ferrero Rocher",
+                    reference_basis="per_serving",
+                    reference_calories="75.6",
+                    reference_protein_g="1",
+                    reference_carbs_g="5.9",
+                    reference_fat_g="5.3",
+                    example_serving="2.0 pieces",
+                    current_serving_grams="",
+                ),
+            ],
+            repo,
+            barcode_hints={"Ferrero Rocher": "8000500126936"},
+        )
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "8000500126936"
+        assert rows[0]["matched_food_name"] == "Ferrero Rocher"
+        assert rows[0]["match_basis"] == "barcode lookup"
+        assert "8000500126936" in rows[0]["match_notes"]
+
     def test_search_terms_include_aliases(self) -> None:
         terms = _search_terms("Bhindi (Okra)")
         assert "okra" in terms
         assert any("okra" in term for term in terms)
+
+    def test_search_terms_include_step_10_aliases(self) -> None:
+        assert "whey protein" in _search_terms("Whey")
+        roti_terms = _search_terms("Roti")
+        assert "chapati" in roti_terms
+        assert "phulka" in roti_terms
+        assert "flatbread" in roti_terms
+        brest_terms = _search_terms("Brest")
+        assert "chicken breast" in brest_terms
 
     def test_preserves_existing_manual_match(self) -> None:
         repo = FakeRepo({})
@@ -385,6 +440,255 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
 
     def test_normalize_description_is_stable(self) -> None:
         assert _normalize_description("AS Protein Bread (48 gms)") == "as protein bread"
+
+    def test_matches_egg_white_with_tiny_zeroish_macro_drift(self) -> None:
+        repo = FakeRepo(
+            {
+                "Egg White": [
+                    _candidate(
+                        product_id="egg-white-1",
+                        name="Egg, white, raw, fresh",
+                        energy="52",
+                        protein="10.9",
+                        carbs="0.7",
+                        fat="0.2",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Egg White",
+            serving_mode="serving_unit",
+            reference_basis="per_serving",
+            reference_calories="17",
+            reference_protein_g="3.6",
+            reference_carbs_g="0.2",
+            reference_fat_g="0.1",
+            corrected_serving_grams="33",
+            example_unit="serving",
+            example_serving="1.0 egg white",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "egg-white-1"
+
+    def test_matches_banana_with_wider_protein_tolerance(self) -> None:
+        repo = FakeRepo(
+            {
+                "Banana": [
+                    _candidate(
+                        product_id="banana-1",
+                        name="Bananas, raw",
+                        energy="89",
+                        protein="1.1",
+                        carbs="22.8",
+                        fat="0.3",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Banana",
+            serving_mode="serving_unit",
+            reference_basis="per_serving",
+            reference_calories="114.5",
+            reference_protein_g="0.9",
+            reference_carbs_g="26.8",
+            reference_fat_g="0.3",
+            corrected_serving_grams="118",
+            example_unit="serving",
+            example_serving='1.0 medium (7" to 7-7/8" long)',
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "banana-1"
+
+    def test_matches_apple_by_name_token_when_macros_are_close(self) -> None:
+        repo = FakeRepo(
+            {
+                "Apple": [
+                    _candidate(
+                        product_id="apple-1",
+                        name="Apple, raw, with skin",
+                        energy="52",
+                        protein="0.3",
+                        carbs="13.8",
+                        fat="0.2",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Apple",
+            serving_mode="serving_unit",
+            reference_basis="per_serving",
+            reference_calories="95",
+            reference_protein_g="0.5",
+            reference_carbs_g="25.1",
+            reference_fat_g="0.3",
+            corrected_serving_grams="182",
+            example_unit="serving",
+            example_serving="1.0 medium",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "apple-1"
+        assert rows[0]["match_basis"] == "apple name token + macro agreement"
+
+    def test_does_not_match_apple_when_macros_are_not_close(self) -> None:
+        repo = FakeRepo(
+            {
+                "Apple": [
+                    _candidate(
+                        product_id="apple-1",
+                        name="Apple Pie Filling",
+                        energy="120",
+                        protein="0.5",
+                        carbs="30",
+                        fat="2",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Apple",
+            serving_mode="serving_unit",
+            reference_basis="per_serving",
+            reference_calories="95",
+            reference_protein_g="0.5",
+            reference_carbs_g="25.1",
+            reference_fat_g="0.3",
+            corrected_serving_grams="182",
+            example_unit="serving",
+            example_serving="1.0 medium",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 0
+        assert rows[0]["matched_food_id"] == ""
+
+    def test_matches_greek_yogurt_natural_with_dairy_tolerance(self) -> None:
+        repo = FakeRepo(
+            {
+                "Greek Yogurt, Natural": [
+                    _candidate(
+                        product_id="greek-1",
+                        name="Greek Yogurt Natural",
+                        energy="76",
+                        protein="9.3",
+                        carbs="5.2",
+                        fat="2",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Greek Yogurt, Natural",
+            reference_basis="per_100g",
+            reference_calories="71.4",
+            reference_protein_g="8.2",
+            reference_carbs_g="3.9",
+            reference_fat_g="2.6",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "greek-1"
+
+    def test_matches_exact_liquid_name_with_wider_almond_milk_tolerance(self) -> None:
+        repo = FakeRepo(
+            {
+                "Almond Milk, Plain": [
+                    _candidate(
+                        product_id="almond-milk-1",
+                        name="Almond Milk",
+                        energy="33",
+                        protein="1.3",
+                        carbs="0.7",
+                        fat="2.8",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Almond Milk, Plain",
+            serving_mode="volume",
+            reference_basis="per_100ml",
+            reference_calories="47.2",
+            reference_protein_g="2",
+            reference_carbs_g="1.1",
+            reference_fat_g="3.9",
+            corrected_serving_grams="250",
+            example_unit="ml",
+            example_serving="250.0 ml",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "almond-milk-1"
+
+    def test_matches_whey_protein_with_alias_and_supplement_tolerance(self) -> None:
+        repo = FakeRepo(
+            {
+                "whey protein": [
+                    _candidate(
+                        product_id="whey-1",
+                        name="Whey Protein",
+                        energy="394.3",
+                        protein="80",
+                        carbs="8.3",
+                        fat="4.9",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Whey",
+            serving_mode="serving_unit",
+            reference_basis="per_serving",
+            reference_calories="120",
+            reference_protein_g="24",
+            reference_carbs_g="3",
+            reference_fat_g="1",
+            corrected_serving_grams="30",
+            example_unit="serving",
+            example_serving="1.0 scoop",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "whey-1"
+
+    def test_matches_brest_via_breast_alias(self) -> None:
+        repo = FakeRepo(
+            {
+                "chicken breast": [
+                    _candidate(
+                        product_id="breast-1",
+                        name="Chicken breast, cooked",
+                        energy="195",
+                        protein="29.5",
+                        carbs="0",
+                        fat="7.7",
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Brest",
+            reference_basis="per_100g",
+            reference_calories="195",
+            reference_protein_g="29.5",
+            reference_carbs_g="0",
+            reference_fat_g="7.7",
+        )
+        result = self._run([row], repo)
+        rows = self._read_csv()
+        assert result["auto_matched"] == 1
+        assert rows[0]["matched_food_id"] == "breast-1"
 
 
 if __name__ == "__main__":

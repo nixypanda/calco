@@ -2,12 +2,23 @@
 
 Date: 2026-06-11
 
+## Start Here
+
+The next bot should start from this document and treat
+`data/step-10-out-food-match-review-merged.csv` as the current source of truth
+for final food ID mapping.
+
+Do not regenerate or overwrite that merged CSV blindly. If matcher logic is
+improved and rerun, write a fresh review output first, compare the delta
+against the merged CSV, and merge only newly accepted additions.
+
 ## Current Artifacts
 
 Primary working files:
 
 - `data/step-10-out-food-match-review-merged.csv`
 - `data/existing_food_matches-merged.jsonl`
+- `data/foods_to_create.jsonl`
 
 Supporting reports:
 
@@ -44,74 +55,97 @@ Matcher implementation and tests:
 8. Wrote merged outputs:
    - `step-10-out-food-match-review-merged.csv`
    - `existing_food_matches-merged.jsonl`
+9. Improved matcher normalization, alias expansion, and category-aware
+   tolerances for the step-10 follow-up foods.
+10. Reran the matcher into fresh review outputs:
+   - `step-10-out-food-match-review-rerun.csv`
+   - `existing_food_matches-rerun.jsonl`
+11. Merged additional conservative approvals from the rerun review, including:
+   - `Almond Milk, Plain`
+   - `Banana`
+   - `Egg White`
+   - `Egg white`
+   - `Greek Yogurt, Natural`
+   - `Amul High Protein Blueberry Shake`
+   - `Eggs`
+   - `Maggi 2 Minute Noodles`
+   - `Nutella`
+   - `Oats`
+12. Generated `data/foods_to_create.jsonl` from the merged review CSV with
+    `--selection all-unmatched`.
+13. Created all remaining unmatched foods via `POST /api/foods/custom` against
+    the running backend at `http://127.0.0.1:3001`.
+14. Wrote returned custom-food IDs back into
+    `data/step-10-out-food-match-review-merged.csv` as:
+    - `created_food_id`
+    - `created_food_name`
+    - `final_food_id`
+    - `final_food_name`
+    - `final_action`
+    - `ready_for_log_import`
 
 ## Current Match Counts
 
-- matcher-only auto-matches: `18`
-- merged manual approvals added: `25`
-- total matched rows in merged CSV: `43`
+- matcher-only auto-matches: `23`
+- merged/manual follow-up matches now present in working CSV: `33`
+- total matched rows in merged CSV: `57`
 
-## High-Row-Count Foods Still Missing Matches
+## Current Finalization Counts
 
-Out of the top 20 by `row_count`, `13` remain unmatched. The user explicitly
-expects these to have matches and asked for a follow-up plan:
+- matched-existing rows: `57`
+- created-new rows: `225`
+- total finalized rows: `282`
+- rows with `ready_for_log_import=true`: `282`
 
-- `Whey`
-- `Roti`
-- `Egg White`
-- `Greek Yogurt, Natural`
-- `Brest` (intended: chicken breast)
-- `Banana`
-- `Bread`
-- `Almond Milk, Plain`
-- `Paneer`
-- `multi-protein bread`
+## Current Decision Rules
 
-## Next-Iteration Matcher Plan
+The user set the following working rules for unresolved step-10 rows before the
+creation run:
 
-### 1. Fix normalization and alias gaps
+1. Do not spend more time searching for branded products in external sources.
+2. Use `data/step-10-out-food-match-review-merged.csv` as the source of truth
+   for which rows are already matched.
+3. If a row still has no `matched_food_id`, include it in
+   `foods_to_create.jsonl`.
+4. `Apple` is already matched in the merged CSV/JSONL and should therefore not
+   appear in `foods_to_create.jsonl`.
+5. Do not overwrite the merged CSV blindly during downstream creation work.
 
-- map `brest -> breast`
-- normalize `egg white` / `egg whites`
-- normalize `Greek Yogurt, Natural` and `Greek Yogurt Natural`
-- treat punctuation in exact-name liquids as non-distinguishing
-- add search aliases for `roti -> chapati/phulka/flatbread`
-- add search aliases for `paneer <-> panner`
+## Current Foods-To-Create Status
 
-### 2. Add category-aware tolerance rules
+The maintained generator is now:
 
-- `Egg White`: allow tiny absolute fat/carb drift near zero
-- `Banana`: allow wider protein tolerance when kcal/carbs/fat are already close
-- `Greek Yogurt, Natural`: allow slightly wider dairy carb/fat tolerance
-- `Almond Milk, Plain`: allow wider liquid tolerance for exact-name matches only
-- `Whey`: supplement rule where exact/near-exact name plus close
-  kcal/protein/carbs can survive modest fat mismatch
+- `generate_foods_to_create.py`
+- `src/steps/generate_foods_to_create.py`
+- `src/test_generate_foods_to_create.py`
 
-### 3. Improve candidate retrieval
+Generator modes:
 
-- `Roti`: expand search with `chapati`, `phulka`, `flatbread`
-- `Paneer`: expand search for branded and misspelled variants
-- `Whey`: search `whey protein`, `protein powder`
-- `Brest`: search chicken-breast candidates after typo normalization
-- `multi-protein bread`: search `protein bread`, `high protein bread`,
-  `multigrain bread`
+- `--selection approved-policy`
+  - emits only the earlier explicitly approved branded/raw-basic custom-food
+    buckets
+- `--selection all-unmatched`
+  - emits every unresolved row in the merged CSV
 
-### 4. Investigate suspicious reference shapes
+Current working output:
 
-- `multi-protein bread` may have inflated per-100g values
-- verify whether this is a real nutrition profile or an upstream serving /
-  aggregation issue before forcing a match
+- `data/foods_to_create.jsonl`
+  - generated from `data/step-10-out-food-match-review-merged.csv`
+  - generated with `--selection all-unmatched`
+  - contains `225` records, equal to the unmatched-row count used for custom
+    food creation
 
-### 5. Validation
+## Current State
 
-- add explicit unit tests for these ten foods
-- rerun matcher against local Postgres
-- review only the newly promoted matches
-- if accepted, merge them into the working merged CSV/JSONL
+Custom-food creation is complete. There are currently no unresolved rows in the
+merged review CSV.
+
+Future matcher work is optional and should only happen if catalog reuse quality
+needs improvement before a later re-import or cleanup pass.
 
 ## Recommended Working Rule For The Next Bot
 
 Use `data/step-10-out-food-match-review-merged.csv` as the current source of
-truth for accepted existing-food matches. Do not overwrite it blindly. If the
-matcher is improved and rerun, write a new review output first, compare the
-delta, and then merge only the accepted additions.
+truth for historical log import. Do not overwrite it blindly. If matcher logic
+is improved and rerun later, write a new review output first, compare the delta
+against the finalized merged CSV, and merge only explicitly accepted changes.
