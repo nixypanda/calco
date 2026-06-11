@@ -117,6 +117,7 @@ class GenerateServingReviewTests(unittest.TestCase):
             "example_serving": "1.0 egg",
             "current_serving_grams": "50",
             "corrected_serving_grams": "52",
+            "confidence": "high",
             "notes": "reviewed",
         }]
         self._run([
@@ -125,6 +126,7 @@ class GenerateServingReviewTests(unittest.TestCase):
         out = self._read_output()
         self.assertEqual(out[0]["current_serving_grams"], "50")
         self.assertEqual(out[0]["corrected_serving_grams"], "52")
+        self.assertEqual(out[0]["confidence"], "high")
         self.assertEqual(out[0]["notes"], "reviewed")
 
 

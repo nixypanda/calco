@@ -9,16 +9,15 @@ data for import into CalCo. Also read `../../AGENTS.md`,
 - Python 3.12 project managed with `uv`.
 - The maintained workflow is a step-based CSV cleaning pipeline under `src/`.
 - The main generated artifacts live under `data/`.
-- Legacy `mfp_import.py` and `apps/` artifacts are preserved but are not part
-  of the active workflow.
+- There is no maintained legacy importer path here; use the step-based
+  pipeline under `src/` and the review artifacts under `data/`.
 
 ## Import Boundaries
 
 - Imports are CLI workflows, not browser UI.
 - The workflow is CLI-driven, not browser UI.
 - Keep transformations explicit and reproducible as numbered pipeline steps.
-- Review state should live in pipeline-owned CSVs under `data/`, not in
-  legacy `apps/` files.
+- Review state should live in pipeline-owned CSVs under `data/`.
 
 ## Active Pipeline Outputs
 

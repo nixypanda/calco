@@ -61,6 +61,7 @@ def load_existing_review(review_path: str | Path) -> dict[str, dict[str, str]]:
                 "serving_mode": row.get("serving_mode", "").strip(),
                 "current_serving_grams": row.get("current_serving_grams", "").strip(),
                 "corrected_serving_grams": row.get("corrected_serving_grams", "").strip(),
+                "confidence": row.get("confidence", "").strip(),
                 "notes": row.get("notes", "").strip(),
             }
     return result
@@ -110,6 +111,7 @@ def run(
         "example_serving",
         "current_serving_grams",
         "corrected_serving_grams",
+        "confidence",
         "notes",
     ]
 
@@ -188,6 +190,7 @@ def run(
             "example_serving": _modal(serving_strs),
             "current_serving_grams": current_serving_grams,
             "corrected_serving_grams": existing_row.get("corrected_serving_grams", ""),
+            "confidence": existing_row.get("confidence", ""),
             "notes": existing_row.get("notes", ""),
         })
 

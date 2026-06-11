@@ -25,7 +25,9 @@ All steps generate CSVs following the existing pipeline convention
 **Output:** `data/step-9-out-serving-review.csv`
 
 Generate a CSV with one row per distinct food showing the reference nutrient
-basis and the current gram assumption used for downstream conversion.
+basis and the current gram assumption used for downstream conversion. This CSV
+becomes the central review artifact for food matching, creation, and historical
+log import.
 
 Reruns preserve any existing edits already present in
 `data/step-9-out-serving-review.csv`.
@@ -47,6 +49,7 @@ Reruns preserve any existing edits already present in
 | `example_serving` | Representative `serving` from the CSV |
 | `current_serving_grams` | Pipeline default or preserved prior review value |
 | `corrected_serving_grams` | Reviewer-entered override |
+| `confidence` | Confidence in the serving-to-grams estimate |
 | `notes` | Reviewer notes |
 
 #### Algorithm
@@ -79,13 +82,134 @@ with ambiguous serving modes.
 
 ---
 
-### Step 11: `apply_serving_review.py` — Apply corrected servings
+### Step 11: `generate_food_match_review.py` — Match reviewed foods to existing DB foods
+
+**Input:** `data/step-9-out-serving-review.csv`
+
+**Output:**
+- `data/step-10-out-food-match-review.csv`
+- `data/existing_food_matches.jsonl`
+- optional review-merged outputs after manual approval:
+  - `data/step-10-out-food-match-review-merged.csv`
+  - `data/existing_food_matches-merged.jsonl`
+
+Search the CalCo DB for existing foods that are a very good match for the
+reviewed foods. The purpose is to reuse an existing DB food only when both the
+name and the nutrition profile are compatible.
+
+#### Match acceptance rules
+
+1. Exact or strongly normalized name match.
+2. Compatible nutrient profile on the same basis.
+3. Compatible serving semantics for the corrected serving-grams model.
+4. If any of the above are weak or ambiguous, do not auto-reuse the DB food.
+
+#### Output schema
+
+`step-10-out-food-match-review.csv` should extend the reviewed serving CSV with:
+
+| Column | Description |
+|---|---|
+| `matched_food_id` | Existing DB food ID if accepted |
+| `matched_food_name` | Existing DB canonical name |
+| `match_confidence` | Confidence in the DB match |
+| `match_basis` | Why the match was accepted |
+| `match_notes` | Manual notes on edge cases |
+
+`existing_food_matches.jsonl` should contain one machine-readable record per
+accepted existing-food match so downstream steps can run deterministically.
+
+#### Current implemented behavior
+
+The implemented matcher currently:
+
+1. queries the local CalCo Postgres catalog directly via `psql`
+2. searches global products only
+3. compares `per_serving` foods on a derived per-100g basis using reviewed
+   serving grams
+4. writes top candidate diagnostics into `match_notes` for unmatched rows
+5. supports a later manual merge step for nutrition-close approvals
+
+#### Important constraint
+
+Do not match by name alone. A food is only reusable when name and nutrition are
+both close enough.
+
+---
+
+### Step 12: Manual review — Approve or reject DB food matches
+
+**Input:** `data/step-10-out-food-match-review.csv`
+
+**Output:** `data/step-10-out-food-match-review.csv` (edited in place)
+
+The reviewer confirms which foods safely map to an existing DB food. Rejected
+or unresolved rows move to the creation path.
+
+#### Current practical workflow
+
+In the current repo state, review can happen in two layers:
+
+1. Review matcher auto-accepts and unmatched diagnostics in
+   `step-10-out-food-match-review.csv`.
+2. Review `step-10-macro-close-report.md` for weak-name but nutrition-close
+   candidates and write approved rows into:
+   - `step-10-out-food-match-review-merged.csv`
+   - `existing_food_matches-merged.jsonl`
+
+The merged CSV is the better starting point for downstream unmatched-food
+creation, because it includes both automated and manually approved existing-food
+matches.
+
+---
+
+### Step 13: `generate_foods_to_create.py` — Build JSONL for unmatched foods
+
+**Input:** `data/step-10-out-food-match-review.csv`
+
+**Output:** `data/foods_to_create.jsonl`
+
+For rows without an accepted existing DB food match, emit canonical food
+creation payloads. Each record should include the canonical name, nutrient
+basis, corrected serving grams, and provenance back to the source description.
+
+This file is the stable creation input and should be idempotent across reruns.
+
+---
+
+### Step 14: `create_foods.py` — Create unmatched foods in the DB
+
+**Input:** `data/foods_to_create.jsonl`
+
+**Output:**
+- DB food records
+- updated `data/step-10-out-food-match-review.csv`
+
+Create the unmatched foods in the DB, then write the returned IDs and final
+canonical names back into the CSV.
+
+After this step, the CSV should carry final reference columns such as:
+
+| Column | Description |
+|---|---|
+| `created_food_id` | Newly created DB food ID |
+| `created_food_name` | Newly created canonical DB food name |
+| `final_food_id` | Final DB food ID to use for logs |
+| `final_food_name` | Final DB food name to use for logs |
+| `final_action` | `matched_existing` or `created_new` |
+| `ready_for_log_import` | Whether the row is finalized |
+
+The final CSV becomes the source-of-truth contract for historical log import.
+
+---
+
+### Step 15: `apply_serving_review.py` — Apply corrected servings
 
 **Input:**
 - `data/step-8-out-canonicalize_food_descriptions.csv`
-- `data/step-9-out-serving-review.csv`
+- finalized reviewed CSV with corrected servings and final food IDs
 
-**Output:** `data/step-10-out-serving-corrected.csv`
+**Output:** `data/step-11-out-serving-corrected.csv`
 
 Apply the corrected `serving_grams` to the original CSV rows.
 
@@ -105,62 +229,18 @@ a `serving_grams` column for downstream use.
 
 ---
 
-### Step 12: `generate_match_review.py` — Search for pre-existing foods
-
-**Input:** `data/step-10-out-serving-corrected.csv`
-
-**Output:** `data/step-11-out-match-review.csv`
-
-For each distinct food, search the CalCo catalog via
-`GET /api/foods/search?q=<name>`. If a close match is found, suggest
-using the existing product instead of creating a custom food.
-
-#### Matching criteria
-
-1. Fuzzy name score ≥ 92 (`token_set_ratio`).
-2. Energy compatibility: `|example_cals_per_100g - matched_cals_per_100g| <= 30`.
-
-#### Output schema
-
-| Column | Description |
-|---|---|
-| `description` | Distinct food name |
-| `serving_mode` | `mass`, `serving_unit`, or `manual` |
-| `row_count` | Number of CSV rows for this food |
-| `example_calories` | Representative calories from the row |
-| `serving_grams` | Corrected serving grams from step 10 |
-| `suggested_action` | `match` if a good match found, `create` otherwise |
-| `matched_product_id` | CalCo product UUID if matched |
-| `matched_product_name` | CalCo product name if matched |
-| `match_score` | Fuzzy match score (0–100) |
-| `approved` | Empty — user fills in `yes` or `no` |
-| `notes` | Empty — user adds notes |
-
----
-
-### Step 13: Manual review — User approves matches
-
-**Input:** `data/step-11-out-match-review.csv`
-
-**Output:** `data/step-11-out-match-review.csv` (edited in place)
-
-User sets `approved` for each row:
-- `yes` + `suggested_action = match` → use existing product, skip creation
-- `yes` + `suggested_action = create` → create custom food
-- `no` → skip this food entirely
-
----
-
-### Step 14: `csv_to_jsonl.py` — Convert to JSONL
+### Step 16: `csv_to_jsonl.py` — Convert unmatched foods to JSONL
 
 **Input:**
-- `data/step-10-out-serving-corrected.csv` (source data with serving grams)
-- `data/step-11-out-match-review.csv` (match decisions)
+- `data/step-11-out-serving-corrected.csv`
+- finalized reviewed CSV
 
-**Output:** `data/step-13-foods.jsonl`
+**Output:** `data/step-12-foods.jsonl`
 
 One JSON line per unique food description, shaped as a
-`POST /api/foods/custom` payload. Skips foods where `approved = no`.
+`POST /api/foods/custom` payload. In the current plan, this is only needed for
+the unmatched-food creation path and should be equivalent to
+`foods_to_create.jsonl` or be generated directly from it.
 
 ```json
 {
@@ -186,11 +266,9 @@ One JSON line per unique food description, shaped as a
 
 1. Read the serving-corrected CSV; filter `item_type = "Foods"`.
 2. Group rows by `description`.
-3. For each group, look up the match review decision.
-4. If `approved = no` → skip.
-5. If `approved = yes` and `suggested_action = match` → don't emit JSONL
-   (will be handled by product ID reference later).
-6. If `approved = yes` and `suggested_action = create`:
+3. For each group, look up the final CSV decision.
+4. If `final_action = matched_existing` → don't emit JSONL.
+5. If `final_action = created_new`:
    - Pick a representative row.
    - Compute per-100g nutrients:
      - **Mass mode:** `per_100g = nutrient_amount × 100 / value`
@@ -222,35 +300,34 @@ Unsupported columns (`added_sugar_g`, `sugar_alcohols_g`,
 
 ---
 
-### Step 14: `upload_foods.py` — Upload to CalCo
+### Step 17: `upload_foods.py` — Upload created foods to CalCo
 
 **Input:**
-- `data/step-13-foods.jsonl`
-- `data/step-11-out-match-review.csv` (for match lookups)
+- `data/step-12-foods.jsonl`
+- finalized reviewed CSV
 
 **Output:** `data/mfp-food-map.json`
 
 For each distinct food:
-- If `approved = yes` and `suggested_action = match`: record `product_id`
-  from the review CSV in the food map (no API call).
-- If `approved = yes` and `suggested_action = create`: call
-  `POST /api/foods/custom` with the JSONL payload, record returned
-  `product_id` in the food map.
-- If `approved = no`: skip.
+- If `final_action = matched_existing`: record `final_food_id` from the review
+  CSV in the food map without creating a new food.
+- If `final_action = created_new`: call `POST /api/foods/custom` with the JSONL
+  payload only if the DB ID has not already been written back into the CSV.
+- Otherwise: skip.
 
 Writes `mfp-food-map.json` mapping `description → { product_id, name,
 serving_mode }`.
 
 ---
 
-### Step 15: `import_history.py` — Import diary logs
+### Step 18: `import_history.py` — Import diary logs
 
 **Input:**
 - `data/step-8-out-canonicalize_food_descriptions.csv` (original rows)
-- `data/mfp-food-map.json` (product lookup)
+- finalized reviewed CSV or `data/mfp-food-map.json`
 
 For each CSV row where `item_type == "Foods"`:
-1. Look up `product_id` by `description` in the food map.
+1. Look up the final DB food ID by `description`.
 2. If not found → skip (log warning).
 3. Compute fingerprint:
    `sha256(date + description + value + unit + nutrients)`.
@@ -280,19 +357,25 @@ tools/importers/personal-data/
 ├── data/
 │   ├── step-8-out-canonicalize_food_descriptions.csv (input)
 │   ├── step-9-out-serving-review.csv                (step 9, then edited by user)
-│   ├── step-10-out-serving-corrected.csv      (step 10)
-│   ├── step-11-out-match-review.csv          (step 11, then edited by user)
-│   ├── step-13-foods.jsonl                   (step 13)
-│   ├── mfp-food-map.json                     (step 14)
-│   └── mfp-history-mismatches.csv            (step 15)
+│   ├── step-10-out-food-match-review.csv           (matcher output)
+│   ├── step-10-out-food-match-review-merged.csv    (matcher + manual approvals)
+│   ├── existing_food_matches.jsonl                 (matcher JSONL)
+│   ├── existing_food_matches-merged.jsonl          (merged JSONL)
+│   ├── step-10-match-report.md                     (matcher summary)
+│   ├── step-10-macro-close-report.md               (manual review slice)
+│   ├── step-11-out-serving-corrected.csv           (future step)
+│   ├── step-12-foods.jsonl                         (future step)
+│   ├── mfp-food-map.json                           (future step)
+│   └── mfp-history-mismatches.csv                  (future step)
 ├── docs/
-│   └── mfp-jsonl-import-plan.md
-├── csv_to_jsonl.py                           (step 13)
-├── generate_serving_review.py                (step 8)
-├── apply_serving_review.py                   (step 10)
-├── generate_match_review.py                  (step 11)
-├── upload_foods.py                           (step 14)
-└── import_history.py                         (step 15)
+│   ├── mfp-jsonl-import-plan.md
+│   └── step-10-matcher-handoff.md
+├── generate_serving_review.py                     (step 9)
+├── generate_food_match_review.py                  (step 11)
+├── apply_serving_review.py                        (future step)
+├── csv_to_jsonl.py                                (future step)
+├── upload_foods.py                                (future step)
+└── import_history.py                              (future step)
 ```
 
 ## Dependencies

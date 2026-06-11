@@ -230,4 +230,4 @@ That review file is the handoff for later JSONL/import tooling:
 
 1. food descriptions are already canonicalized
 2. serving mode is explicit (`mass`, `volume`, `serving_unit`)
-3. review edits live with the pipeline output instead of legacy `apps/` files
+3. review edits live with the pipeline output under `../data`
