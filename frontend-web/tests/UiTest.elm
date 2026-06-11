@@ -208,6 +208,16 @@ renderingSmoke =
             \_ ->
                 Ui.chip theme { label = "Fruit", selected = True, onClick = Just () }
                     |> pass
+        , test "toggleSwitch renders in the active state" <|
+            \_ ->
+                Ui.toggleSwitch theme
+                    { isActive = True, onToggle = () }
+                    |> pass
+        , test "toggleSwitch renders in the inactive state" <|
+            \_ ->
+                Ui.toggleSwitch theme
+                    { isActive = False, onToggle = () }
+                    |> pass
         , test "macroColor resolves Protein to accentPink" <|
             \_ ->
                 Ui.macroColor Data.Nutrition.Protein

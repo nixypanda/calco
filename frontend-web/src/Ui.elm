@@ -72,6 +72,7 @@ module Ui exposing
     , subsectionTitle
     , tableHeader
     , toCssColor
+    , toggleSwitch
     , truncateWithEllipsis
     , truncatedHeader
     , truncatedListItemTitle
@@ -1306,6 +1307,51 @@ linearProgress theme config =
         , max = config.max
         , color = config.color
         , trackColor = theme.inputFill
+        }
+
+
+toggleSwitch : Theme -> { isActive : Bool, onToggle : msg } -> Element msg
+toggleSwitch theme config =
+    let
+        thumb : Element msg
+        thumb =
+            Element.el
+                [ Element.width (Element.px 20)
+                , Element.height (Element.px 20)
+                , Background.color (Element.rgb255 255 255 255)
+                , Border.rounded 999
+                ]
+                Element.none
+
+        spacer : Element msg
+        spacer =
+            Element.el [ Element.width Element.fill ] Element.none
+    in
+    Input.button
+        [ Element.width (Element.px 44)
+        , Element.height (Element.px 24)
+        , Border.rounded 999
+        , Background.color
+            (if config.isActive then
+                theme.brandBlue
+
+             else
+                theme.inputFill
+            )
+        , Element.padding 2
+        ]
+        { onPress = Just config.onToggle
+        , label =
+            Element.row
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                ]
+                (if config.isActive then
+                    [ spacer, thumb ]
+
+                 else
+                    [ thumb, spacer ]
+                )
         }
 
 

@@ -1140,25 +1140,14 @@ appFrame model =
          ]
             ++ drawerOverlay model
         )
-        (if showsAppChrome model then
-            [ topBarView model
-            , Element.el
-                [ Element.width Element.fill
-                , Element.height Element.fill
-                , Region.mainContent
-                ]
-                (pageView model)
+        [ topBarView model
+        , Element.el
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            , Region.mainContent
             ]
-
-         else
-            [ Element.el
-                [ Element.width Element.fill
-                , Element.height Element.fill
-                , Region.mainContent
-                ]
-                (pageView model)
-            ]
-        )
+            (pageView model)
+        ]
 
 
 showsAppChrome : Model -> Bool
@@ -1181,6 +1170,10 @@ showsAppChrome model =
 topBarView : Model -> Element.Element Msg
 topBarView model =
     let
+        chromeShown : Bool
+        chromeShown =
+            showsAppChrome model
+
         meta : ScreenMeta
         meta =
             screenMeta model.route
@@ -1193,14 +1186,32 @@ topBarView model =
         , Background.color model.theme.cardBg
         , Font.color model.theme.textPrimary
         ]
-        [ leadingButton model.theme meta.leading
-        , Element.el
-            [ Element.width Element.fill
-            , Element.clip
+        (if chromeShown then
+            [ leadingButton model.theme meta.leading
+            , Element.el
+                [ Element.width Element.fill
+                , Element.clip
+                ]
+                (Ui.subsectionTitle model.theme meta.title)
+            , Element.el
+                [ Element.paddingEach { top = 0, right = 8, bottom = 0, left = 0 } ]
+                (themeToggle model)
+            , profileButton model
             ]
-            (Ui.subsectionTitle model.theme meta.title)
-        , profileButton model
-        ]
+
+         else
+            [ Element.el [ Element.width Element.fill ] Element.none
+            , themeToggle model
+            ]
+        )
+
+
+themeToggle : Model -> Element.Element Msg
+themeToggle model =
+    Ui.toggleSwitch model.theme
+        { isActive = model.themeMode == Theme.Dark
+        , onToggle = ThemeToggleClicked
+        }
 
 
 leadingButton : Theme -> LeadingAction -> Element.Element Msg
@@ -1463,16 +1474,6 @@ primaryRoute route =
 
 profileMenuContent : Model -> List (Element.Element Msg)
 profileMenuContent model =
-    let
-        toggleLabel : String
-        toggleLabel =
-            case model.themeMode of
-                Theme.Light ->
-                    "Switch to Dark"
-
-                Theme.Dark ->
-                    "Switch to Light"
-    in
     [ Ui.mutedCaption model.theme
         (case model.session of
             Session.Authenticated identity ->
@@ -1481,7 +1482,6 @@ profileMenuContent model =
             _ ->
                 "Signed in"
         )
-    , Ui.ghostButton model.theme toggleLabel ThemeToggleClicked
     , Ui.button model.theme "Logout" LogoutClicked
     ]
 
