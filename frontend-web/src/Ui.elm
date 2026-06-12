@@ -29,6 +29,7 @@ module Ui exposing
     , fatColor
     , fieldLabel
     , formSection
+    , fullWidthGhostButton
     , ghostButton
     , hairline
     , iconButton
@@ -737,6 +738,21 @@ ghostButton device theme label msg =
     Input.button
         [ Border.rounded 999
         , Element.paddingEach { top = 10, right = 16, bottom = 10, left = 16 }
+        , Font.color theme.brandBlue
+        , Font.medium
+        , hoverEffect device [ Background.color theme.brandBlueSoft ]
+        ]
+        { onPress = Just msg
+        , label = Element.text label
+        }
+
+
+fullWidthGhostButton : Device -> Theme -> String -> msg -> Element msg
+fullWidthGhostButton device theme label msg =
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingEach { top = 14, right = 16, bottom = 14, left = 16 }
+        , Border.rounded 999
         , Font.color theme.brandBlue
         , Font.medium
         , hoverEffect device [ Background.color theme.brandBlueSoft ]

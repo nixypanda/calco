@@ -311,7 +311,7 @@ dateCard theme model device =
                 [ Element.width Element.fill
                 , Font.center
                 ]
-                (Ui.subsectionTitle theme device (LocalDate.display model.currentDate))
+                (Ui.sectionTitle theme device (LocalDate.display model.currentDate))
             , if canGoNext then
                 Ui.iconButton device
                     theme
@@ -467,7 +467,7 @@ slotView theme device macroMode section =
 
                     _ ->
                         [ Ui.hairline theme
-                        , Ui.ghostButton device theme "+ Add Food" (AddFoodClicked section.slot)
+                        , Ui.fullWidthGhostButton device theme "+ Add Food" (AddFoodClicked section.slot)
                         ]
                )
         )
