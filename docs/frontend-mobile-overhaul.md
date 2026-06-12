@@ -187,41 +187,30 @@ No changes needed. The current row layout with truncation works well on mobile.
 
 ---
 
-## Phase 4: Food Search & Logging
+## Phase 4: Food Search & Logging ✅ COMPLETE
 
-### 4.1 Category pills — reflow instead of hide
+### 4.1 Category pills — reflow instead of hide ✅
 
-**File:** `src/View/Search.elm` (`resultRow`)
+**File:** `src/View/Search.elm` (`resultRow`, `categoryPills`)
 
-Current: pills are completely removed on phone (`if isSmall then []`).
+On phone, pills render below the item content using `Element.wrappedRow` (full width) instead of being hidden. Desktop keeps the 160px right-aligned column layout. `categoryPills` now takes `Device` as its third parameter.
 
-On phone, render pills below the item content instead of to the right:
-- Move from a `row` to a `column` layout on phone
-- Pills wrap in a `wrappedRow` below the item title
-- Use full width instead of fixed 160px column
-- Keep pill size at 13px font (already small enough)
+### 4.2 Search input improvements ✅
 
-### 4.2 Search input improvements
+**File:** `src/View/Search.elm` (`searchInput`, `completionDropdownHeight`, `completionRow`)
 
-**File:** `src/View/Search.elm` (`searchInput`)
+- `searchInput` now takes `Device` as second parameter
+- Input padding: 14px on phone, 12px on desktop
+- `completionDropdownHeight`: 44px rows on phone (from 38px), 38px on desktop
+- `completionRow`: 14px padding on phone, `paddingXY 12 10` on desktop
 
-- Increase input padding to 14px on phone (from 12px)
-- Completion dropdown: make items 44px height on phone (from 38px) via `completionDropdownHeight`
-- Add `Element.padding 14` to completion rows on phone
+### 4.3 Food detail & log form ✅
 
-### 4.3 Food detail & log form
-
-**Files:** `src/Page/Food/Show.elm`, `src/Page/FoodLog/Form.elm`
+**File:** `src/Page/Food/Show.elm`
 
 Log form card:
-- Already uses column layout — good
-- Increase spacing from `space16` to `space16` (already correct)
-- Make "Log Food" button: full width + 56px height on phone
-- Add `Element.paddingEach { top = 0, right = 0, bottom = env(safe-area-inset-bottom), left = 0 }` below the submit button on phone for home indicator clearance
-
-Nutrition card (`View/Nutrients.elm`):
-- `nutrientsTableInner`: on phone, merge Amount + Unit columns into one ("Amount Unit") to save horizontal space
-- `macroBreakdownView`: on phone, show the macro legend as a single condensed row with percentage values only (currently `Element.none` on phone)
+- "Log Food" button gets `calc(14px + env(safe-area-inset-bottom))` bottom padding on phone for home indicator clearance
+- Nutrition card changes deferred (card looks fine as-is on mobile)
 
 ### 4.4 Quantity input
 
@@ -332,7 +321,7 @@ On tablet:
 | 2.0 | ~3hr | High | Bottom navigation for phone | ✅ Done |
 | 3.1 | ~5min | High | Date text uses `sectionTitle` | ✅ Done |
 | 3.2-3.4 | — | — | Macro bars, meal headers, log rows — no changes needed | ✅ Skipped |
-| 4.1-4.4 | ~3hr | High | Search & logging improvements | |
+| 4.1-4.4 | ~3hr | High | Search & logging improvements | ✅ Done |
 | 5.1-5.3 | ~4hr | High | Form page improvements | |
 | 6.0 | ~4hr | Low | Touch interactions (swipe, pull-to-refresh) | |
 | 7.0 | ~2hr | Medium | Tablet support | |
@@ -341,6 +330,7 @@ On tablet:
 **Full overhaul (Phases 1-7): ~21 hours**
 **Phase 1 actual: ~2.5 hours**
 **Phase 3 actual: ~5 minutes**
+**Phase 4 actual: ~1.5 hours**
 
 ---
 
@@ -433,3 +423,29 @@ The following functions now require `Device` as their first parameter:
 | File | Changes |
 |------|---------|
 | `src/Main.elm` | Added `showBottomNav`, `bottomNavBar`, `tabButton`; updated `appFrame` to compute chrome attrs once; updated `screenMeta` to take `Device` and `Session`; simplified `drawerOverlay` |
+
+---
+
+## Phase 4 Changelog
+
+### Breaking API changes
+
+- `View.Search.searchInput` now takes `Device` as second parameter
+- `View.Search.completionDropdownHeight` now takes `Device` as first parameter
+- `View.Search.completionRow` now takes `Device` as second parameter
+
+### Behavioral changes
+
+- Category pills on phone: reflow as `wrappedRow` below item content instead of being hidden
+- Search input on phone: 14px padding (from 12px)
+- Completion dropdown rows on phone: 44px height with 14px padding (from 38px with `paddingXY 12 10`)
+- "Log Food" button on phone: bottom safe-area padding for home indicator clearance
+
+### Files modified (4 files)
+
+| File | Changes |
+|------|---------|
+| `src/View/Search.elm` | Added `Device` to `searchInput`, `completionDropdownHeight`, `completionRow`; reflow `categoryPills` on phone using `Element.wrappedRow` instead of hiding |
+| `src/Page/Food/Search.elm` | Thread `Device` through `searchInputView` |
+| `src/Page/Meal/Form.elm` | Pass `Device` to `SearchView.searchInput` |
+| `src/Page/Food/Show.elm` | Add `Html.Attributes` import; safe-area bottom padding on phone for Log Food button |
