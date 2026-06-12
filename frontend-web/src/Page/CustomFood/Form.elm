@@ -791,7 +791,7 @@ categoryInputView theme device open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing Ui.space4 ]
             [ Ui.fieldLabel theme "Categories"
-            , Ui.mutedCaption theme "Type and press Enter (or click Add) to tag this food."
+            , Ui.mutedCaption theme "Enter (or click Add) to tag this food."
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
@@ -808,7 +808,7 @@ categoryInputView theme device open input =
                 (addCategoryButton theme device input)
             ]
         , suggestionRowView theme open input
-        , chipRowView theme input.selected
+        , chipRowView theme device input.selected
         ]
 
 
@@ -817,8 +817,8 @@ addCategoryButton theme device input =
     Ui.iconButton device theme { label = "+", title = "Edit", onPress = AddCategory input.query }
 
 
-chipRowView : Theme -> List String -> Element Msg
-chipRowView theme tags =
+chipRowView : Theme -> Device -> List String -> Element Msg
+chipRowView theme device tags =
     if List.isEmpty tags then
         Ui.mutedCaption theme "No categories yet"
 
@@ -828,11 +828,20 @@ chipRowView theme tags =
             , Element.paddingXY 0 Ui.space4
             , Element.spacing 6
             ]
-            (List.map (chipView theme) tags)
+            (List.map (chipView theme device) tags)
 
 
-chipView : Theme -> String -> Element Msg
-chipView theme tag =
+chipView : Theme -> Device -> String -> Element Msg
+chipView theme device tag =
+    let
+        removeSize : Int
+        removeSize =
+            if Ui.isSmall device then
+                28
+
+            else
+                18
+    in
     Element.row
         [ Background.color (Ui.chipBackground theme False)
         , Font.color (Ui.chipForeground theme False)
@@ -844,15 +853,15 @@ chipView theme tag =
         ]
         [ Element.text tag
         , Input.button
-            [ Element.width (Element.px 18)
-            , Element.height (Element.px 18)
+            [ Element.width (Element.px removeSize)
+            , Element.height (Element.px removeSize)
             , Background.color theme.cardBg
             , Font.color theme.dangerFg
             , Font.center
             , Border.rounded 999
             , Border.width 1
             , Border.color theme.dangerFg
-            , Element.mouseOver
+            , Ui.hoverEffect device
                 [ Background.color theme.dangerSolid
                 , Font.color (Element.rgb255 255 255 255)
                 , Border.color theme.dangerSolid
@@ -1066,7 +1075,7 @@ rowActionButton :
     -> Element msg
 rowActionButton theme device config =
     Element.el
-        [ Element.width (Element.px 40)
+        [ Element.width (Element.px 44)
         , Element.paddingEach { top = 18, right = 0, bottom = 0, left = 0 }
         ]
         (Ui.dangerIconButton device theme config)

@@ -32,6 +32,7 @@ module Ui exposing
     , fullWidthGhostButton
     , ghostButton
     , hairline
+    , hoverEffect
     , iconButton
     , input
     , isSmall
@@ -699,6 +700,7 @@ primarySubmitButton device theme config =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
         , Element.width Element.fill
+        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center

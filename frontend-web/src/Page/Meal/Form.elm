@@ -382,7 +382,12 @@ viewFormFields theme device toMsg form =
                 List.intersperse (Ui.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
             , footer =
-                Just (Ui.ghostButton device theme "+ Add Component" (toMsg AddComponentClicked))
+                Just
+                    (Ui.fullWidthGhostButton device
+                        theme
+                        "+ Add Component"
+                        (toMsg AddComponentClicked)
+                    )
             }
         ]
 

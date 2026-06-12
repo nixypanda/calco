@@ -220,7 +220,7 @@ Already uses `Element.column` on phone. No changes needed.
 
 ---
 
-## Phase 5: Custom Food & Meal CRUD Forms
+## Phase 5: Custom Food & Meal CRUD Forms ✅ COMPLETE
 
 ### 5.1 Custom Food form
 
@@ -238,10 +238,10 @@ Serving row (`servingRowView`):
 
 Category input:
 - Already has `wrappedRow` for chips. Good.
-- Make "+" add button (iconButton) ensure 44×44 target size
+- Make "+" add button (iconButton) ensure 44×44 target size ✅
 
 Submit button:
-- Full width, 56px height on phone
+- Full width, 56px height on phone ✅
 
 ### 5.2 Meal form
 
@@ -249,21 +249,36 @@ Submit button:
 
 Component row (`componentRowView`):
 - Search input + results + qty row + remove button — already stacks vertically
-- Search results items: ensure 44px touch targets
-- Remove button: ensure 44×44
+- Search results items: ensure 44px touch targets ✅
+- Remove button: ensure 44×44 ✅
 
 Quantity text input (`quantityTextInput`):
 - Already switches to `Element.column` on phone. Keep this.
 
 "+ Add Component" button:
-- Full width, taller on phone
+- Full width ✅
 
 ### 5.3 Generic form patterns
 
 Throughout all form pages:
-- All `Ui.section` / `formSection` cards: reduce internal padding from 20px to 16px on phone
-- All submit/primary buttons: `width fill` + 56px height on phone
-- All error banners: ensure they wrap text properly on narrow screens
+- All submit/primary buttons: `width fill` + 56px height on phone ✅
+- All error banners: ensure they wrap text properly on narrow screens ✅
+
+### 5.4 Touch-friendly remove buttons
+
+Category chip remove button:
+- 28×28 on phone (from 18×18) ✅
+- Uses `hoverEffect` for touch-safe feedback ✅
+
+Row action buttons (nutrient/serving remove):
+- 44px width for minimum tap target ✅
+
+### Deferred
+
+- Nutrient row vertical stacking on phone (deferred to Phase 6+)
+- Serving row qty/unit/grams vertical stacking on phone (deferred to Phase 6+)
+- Form section card padding reduction on phone (deferred when needed)
+- Swipe-to-remove on nutrient/serving rows (Phase 6+)
 
 ---
 
@@ -322,7 +337,7 @@ On tablet:
 | 3.1 | ~5min | High | Date text uses `sectionTitle` | ✅ Done |
 | 3.2-3.4 | — | — | Macro bars, meal headers, log rows — no changes needed | ✅ Skipped |
 | 4.1-4.4 | ~3hr | High | Search & logging improvements | ✅ Done |
-| 5.1-5.3 | ~4hr | High | Form page improvements | |
+| 5.1-5.3 | ~1.5hr | High | Form page improvements | ✅ Done |
 | 6.0 | ~4hr | Low | Touch interactions (swipe, pull-to-refresh) | |
 | 7.0 | ~2hr | Medium | Tablet support | |
 
@@ -331,6 +346,7 @@ On tablet:
 **Phase 1 actual: ~2.5 hours**
 **Phase 3 actual: ~5 minutes**
 **Phase 4 actual: ~1.5 hours**
+**Phase 5 actual: ~1.5 hours**
 
 ---
 
@@ -449,3 +465,32 @@ The following functions now require `Device` as their first parameter:
 | `src/Page/Food/Search.elm` | Thread `Device` through `searchInputView` |
 | `src/Page/Meal/Form.elm` | Pass `Device` to `SearchView.searchInput` |
 | `src/Page/Food/Show.elm` | Add `Html.Attributes` import; safe-area bottom padding on phone for Log Food button |
+
+---
+
+## Phase 5 Changelog
+
+### Breaking API changes
+
+- `chipView` now takes `Device` as second parameter (internal to `Page.CustomFood.Form`)
+- `chipRowView` now takes `Device` as second parameter (internal to `Page.CustomFood.Form`)
+
+### New functions
+
+- `hoverEffect` exposed from `Ui` module
+
+### Behavioral changes
+
+- All primary submit buttons (Create Food, Save Food, Create Meal, Update Meal): 56px height on phone (from auto)
+- Category chip remove button: 28×28 on phone (from 18×18)
+- Row action buttons (nutrient/serving remove): 44px width (from 40px)
+- "+ Add Component" button in meal form: full width on all devices (was not full width)
+- Chip remove buttons use `hoverEffect` for touch-safe feedback
+
+### Files modified (3 files)
+
+| File | Changes |
+|------|---------|
+| `src/Ui.elm` | Exposed `hoverEffect`; added 56px height on phone to `primarySubmitButton` |
+| `src/Page/CustomFood/Form.elm` | `chipView`/`chipRowView` now take `Device`; remove button 28×28 on phone; `rowActionButton` 44px width; `hoverEffect` instead of `mouseOver` |
+| `src/Page/Meal/Form.elm` | "+ Add Component" uses `fullWidthGhostButton` |
