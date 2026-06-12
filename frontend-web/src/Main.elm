@@ -26,6 +26,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
+import Page.CustomFood.Show as CustomFoodShow
 import Page.Diary.Day as DiaryDay
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
@@ -85,6 +86,7 @@ type PageModel
     | FoodLogDetailPage FoodLogEntry.Model
     | CustomFoodCreatePage CustomFoodCreate.Model
     | CustomFoodEditPage CustomFoodEdit.Model
+    | CustomFoodShowPage CustomFoodShow.Model
     | CustomFoodsPage CustomFoodList.Model
     | MealsPage MealList.Model
     | MealCreatePage MealCreate.Model
@@ -117,6 +119,7 @@ type Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
     | GotCustomFoodCreateMsg CustomFoodCreate.Msg
     | GotCustomFoodEditMsg CustomFoodEdit.Msg
+    | GotCustomFoodShowMsg CustomFoodShow.Msg
     | GotCustomFoodsMsg CustomFoodList.Msg
     | GotMealsMsg MealList.Msg
     | GotMealCreateMsg MealCreate.Msg
@@ -421,6 +424,18 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotCustomFoodShowMsg subMsg ->
+            case model.page of
+                CustomFoodShowPage sub ->
+                    stepPage CustomFoodShowPage
+                        GotCustomFoodShowMsg
+                        applyCustomFoodShowOutMsg
+                        (CustomFoodShow.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
+
         GotMealsMsg subMsg ->
             case model.page of
                 MealsPage sub ->
@@ -567,6 +582,12 @@ loadPage route model =
             initPage CustomFoodEditPage
                 applyCustomFoodEditOutMsg
                 (CustomFoodEdit.init productId)
+                model
+
+        CustomFoodShow productId ->
+            initPage CustomFoodShowPage
+                applyCustomFoodShowOutMsg
+                (CustomFoodShow.init productId)
                 model
 
         CustomFoodList ->
@@ -904,17 +925,40 @@ applyCustomFoodsOutMsg outMsg model =
             , Api.Foods.listCustomFoods (GotCustomFoodsMsg << CustomFoodList.FoodsLoaded)
             )
 
-        CustomFoodList.RequestDeleteFood foodId ->
-            ( model
-            , Api.Foods.deleteCustomFood
-                foodId
-                (GotCustomFoodsMsg << CustomFoodList.DeleteCompleted foodId)
-            )
-
         CustomFoodList.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodList.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+applyCustomFoodShowOutMsg : CustomFoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
+applyCustomFoodShowOutMsg outMsg model =
+    case outMsg of
+        CustomFoodShow.NoOp ->
+            ( model, Cmd.none )
+
+        CustomFoodShow.RequestInitialData productId ->
+            ( model
+            , Cmd.batch
+                [ Api.Foods.getFoodDetail productId
+                    (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded)
+                , Api.Foods.listUnits
+                    (GotCustomFoodShowMsg << CustomFoodShow.UnitsLoaded)
+                ]
+            )
+
+        CustomFoodShow.RequestDeleteCustomFood productId ->
+            ( model
+            , Api.Foods.deleteCustomFood
+                productId
+                (GotCustomFoodShowMsg << CustomFoodShow.DeleteCompleted)
+            )
+
+        CustomFoodShow.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        CustomFoodShow.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -926,9 +970,6 @@ applyMealsOutMsg outMsg model =
 
         MealList.RequestMeals ->
             ( model, Api.Meals.listMeals (GotMealsMsg << MealList.MealsLoaded) )
-
-        MealList.RequestDeleteMeal mealId ->
-            ( model, Api.Meals.deleteMeal mealId (GotMealsMsg << MealList.DeleteCompleted mealId) )
 
         MealList.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
@@ -1433,6 +1474,9 @@ screenMeta device session route =
         CustomFoodEdit _ ->
             { title = "Edit Food", leading = GoBack CustomFoodList }
 
+        CustomFoodShow _ ->
+            { title = "Food", leading = GoBack CustomFoodList }
+
         CustomFoodList ->
             { title = "My Foods"
             , leading =
@@ -1576,6 +1620,9 @@ primaryRoute route =
         CustomFoodEdit _ ->
             CustomFoodList
 
+        CustomFoodShow _ ->
+            CustomFoodList
+
         AdminCreateUser ->
             AdminDashboard
 
@@ -1686,6 +1733,9 @@ pageView model =
 
             CustomFoodEditPage customFoodEditModel ->
                 Element.map GotCustomFoodEditMsg (CustomFoodEdit.view (props customFoodEditModel))
+
+            CustomFoodShowPage customFoodShowModel ->
+                Element.map GotCustomFoodShowMsg (CustomFoodShow.view (props customFoodShowModel))
 
             CustomFoodsPage customFoodsModel ->
                 Element.map GotCustomFoodsMsg (CustomFoodList.view (props customFoodsModel))

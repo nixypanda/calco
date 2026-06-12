@@ -26,7 +26,6 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
-import Page.Food.Show
 import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.Theme exposing (Theme)
@@ -218,7 +217,7 @@ update msg model =
             case model of
                 Loaded loaded ->
                     case
-                        Maybe.andThen Page.Food.Show.customFoodEditRoute
+                        Maybe.andThen customFoodEditRoute
                             (productDetail loaded.item)
                     of
                         Just route ->
@@ -675,7 +674,7 @@ itemHeader theme device model =
 
         editAction : List (Element Msg)
         editAction =
-            case Maybe.andThen Page.Food.Show.customFoodEditRoute maybeFood of
+            case Maybe.andThen customFoodEditRoute maybeFood of
                 Just _ ->
                     [ Ui.iconButton device
                         theme
@@ -762,3 +761,12 @@ metaText maybeFood log =
 
         Nothing ->
             "Logged " ++ LocalDate.display log.logDate
+
+
+customFoodEditRoute : ProductDetail -> Maybe Route
+customFoodEditRoute food =
+    if food.source == "USER" then
+        Just (CustomFoodEdit food.id)
+
+    else
+        Nothing

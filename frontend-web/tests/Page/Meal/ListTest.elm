@@ -79,8 +79,8 @@ third ( _, _, value ) =
 mealsOf : MealList.Model -> Maybe (List Meal)
 mealsOf model =
     case model of
-        MealList.Loaded loaded ->
-            Just loaded.meals
+        MealList.Loaded meals ->
+            Just meals
 
         _ ->
             Nothing
@@ -92,13 +92,8 @@ errorOf model =
         MealList.LoadFailed message ->
             Just message
 
-        MealList.Loaded { action } ->
-            case action of
-                MealList.DeleteFailed message ->
-                    Just message
-
-                _ ->
-                    Nothing
+        MealList.Loaded _ ->
+            Nothing
 
         MealList.Loading ->
             Nothing

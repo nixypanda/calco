@@ -5,7 +5,6 @@ module Page.Food.Show exposing
     , Msg(..)
     , OutMsg(..)
     , RequestState(..)
-    , customFoodEditRoute
     , foodNutrientsForDisplay
     , init
     , update
@@ -64,7 +63,6 @@ type Msg
     | SubmitClicked
     | LocalContextReceived { date : String, timezone : String }
     | LogCompleted (Result Client.ApiError FoodLog)
-    | EditCustomFoodClicked
 
 
 type OutMsg
@@ -192,19 +190,6 @@ update msg model =
 
                     else
                         ( model, Cmd.none, NoOp )
-
-                _ ->
-                    ( model, Cmd.none, NoOp )
-
-        EditCustomFoodClicked ->
-            case model of
-                Loaded loaded ->
-                    case customFoodEditRoute loaded.food of
-                        Just route ->
-                            ( model, Cmd.none, Navigate route )
-
-                        Nothing ->
-                            ( model, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -355,15 +340,6 @@ applyLoadedError message model =
             model
 
 
-customFoodEditRoute : ProductDetail -> Maybe Route
-customFoodEditRoute food =
-    if food.source == "USER" then
-        Just (CustomFoodEdit food.id)
-
-    else
-        Nothing
-
-
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
@@ -456,21 +432,6 @@ foodNutrientsPer100g food =
 foodHeader : Theme -> Device -> ProductDetail -> Element Msg
 foodHeader theme device food =
     let
-        editAction : List (Element Msg)
-        editAction =
-            case customFoodEditRoute food of
-                Just _ ->
-                    [ Ui.iconButton device
-                        theme
-                        { label = "✎"
-                        , title = "Edit food"
-                        , onPress = EditCustomFoodClicked
-                        }
-                    ]
-
-                Nothing ->
-                    []
-
         macroNutrients : List Nutrition.NutrientAmount
         macroNutrients =
             food.nutrients
@@ -482,7 +443,7 @@ foodHeader theme device food =
             { leading = Just (View.Nutrients.macroDot macroNutrients)
             , title = Ui.truncatedHeader theme device food.name
             , subtitle = Just (metaText food)
-            , actions = editAction
+            , actions = []
             }
         , if List.isEmpty food.categories then
             Element.none

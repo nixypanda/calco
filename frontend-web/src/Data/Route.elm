@@ -24,6 +24,7 @@ type Route
     | CustomFoodList
     | CustomFoodCreate
     | CustomFoodEdit String
+    | CustomFoodShow String
     | MealList
     | MealCreate
     | MealShow String
@@ -52,6 +53,7 @@ routeParser =
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
+        , Parser.map CustomFoodShow (s "foods" </> s "custom" </> string)
         , Parser.map FoodShow (s "foods" </> string <?> mealSlotQuery)
         , Parser.map MealList (s "meals")
         , Parser.map MealCreate (s "meals" </> s "new")
@@ -112,6 +114,9 @@ routeToPath route =
 
         CustomFoodEdit id ->
             "/foods/custom/" ++ id ++ "/edit"
+
+        CustomFoodShow id ->
+            "/foods/custom/" ++ id
 
         MealList ->
             "/meals"

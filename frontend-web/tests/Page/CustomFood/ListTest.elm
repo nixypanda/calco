@@ -39,23 +39,7 @@ tests =
                     (CustomFoodList.OpenFoodClicked "food-1")
                     (Tuple.first CustomFoodList.init)
                     |> third
-                    |> Expect.equal (CustomFoodList.Navigate (FoodShow "food-1" Nothing))
-        , test "edit food navigates to custom food edit" <|
-            \_ ->
-                CustomFoodList.update
-                    (CustomFoodList.EditFoodClicked "food-1")
-                    (Tuple.first CustomFoodList.init)
-                    |> third
-                    |> Expect.equal (CustomFoodList.Navigate (CustomFoodEdit "food-1"))
-        , test "delete food requests delete" <|
-            \_ ->
-                CustomFoodList.update
-                    (CustomFoodList.FoodsLoaded (Ok { items = [ food ] }))
-                    (Tuple.first CustomFoodList.init)
-                    |> first
-                    |> CustomFoodList.update (CustomFoodList.DeleteFoodClicked "food-1")
-                    |> third
-                    |> Expect.equal (CustomFoodList.RequestDeleteFood "food-1")
+                    |> Expect.equal (CustomFoodList.Navigate (CustomFoodShow "food-1"))
         , test "create food navigates to custom food create" <|
             \_ ->
                 CustomFoodList.update
@@ -68,24 +52,6 @@ tests =
                 CustomFoodList.update CustomFoodList.BackClicked (Tuple.first CustomFoodList.init)
                     |> third
                     |> Expect.equal (CustomFoodList.Navigate (DiaryDay Nothing))
-        , test "delete success removes the food" <|
-            \_ ->
-                let
-                    ( loaded, _, _ ) =
-                        CustomFoodList.update
-                            (CustomFoodList.FoodsLoaded (Ok { items = [ food, otherFood ] }))
-                            (Tuple.first CustomFoodList.init)
-
-                    ( deleting, _, _ ) =
-                        CustomFoodList.update (CustomFoodList.DeleteFoodClicked "food-1") loaded
-
-                    ( afterDelete, _, _ ) =
-                        CustomFoodList.update
-                            (CustomFoodList.DeleteCompleted "food-1" (Ok ()))
-                            deleting
-                in
-                foodsOf afterDelete
-                    |> Expect.equal (Just [ otherFood ])
         , test "food summary omits brand and kcal when missing" <|
             \_ ->
                 CustomFoodList.foodSummaryText food
@@ -123,8 +89,8 @@ third ( _, _, value ) =
 foodsOf : CustomFoodList.Model -> Maybe (List ProductDetail)
 foodsOf model =
     case model of
-        CustomFoodList.Loaded loaded ->
-            Just loaded.foods
+        CustomFoodList.Loaded foods ->
+            Just foods
 
         _ ->
             Nothing
@@ -136,13 +102,8 @@ errorOf model =
         CustomFoodList.LoadFailed message ->
             Just message
 
-        CustomFoodList.Loaded { action } ->
-            case action of
-                CustomFoodList.DeleteFailed message ->
-                    Just message
-
-                _ ->
-                    Nothing
+        CustomFoodList.Loaded _ ->
+            Nothing
 
         CustomFoodList.Loading ->
             Nothing
@@ -166,8 +127,3 @@ food =
     , servings = []
     , allowedUnits = []
     }
-
-
-otherFood : ProductDetail
-otherFood =
-    { food | id = "food-2", name = "Curd" }

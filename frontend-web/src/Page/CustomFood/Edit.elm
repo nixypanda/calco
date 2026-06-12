@@ -228,7 +228,7 @@ completeSave :
 completeSave result model =
     case result of
         Ok response ->
-            ( model, Cmd.none, Navigate (FoodShow response.id Nothing) )
+            ( model, Cmd.none, Navigate (CustomFoodShow response.id) )
 
         Err error ->
             Client.failure

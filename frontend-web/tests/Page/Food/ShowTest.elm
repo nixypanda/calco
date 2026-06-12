@@ -37,14 +37,6 @@ tests =
                     |> first
                     |> unitsOf
                     |> Expect.equal (Just [ gram ])
-        , test "custom food source USER exposes edit path" <|
-            \_ ->
-                FoodShow.customFoodEditRoute { food | source = "USER" }
-                    |> Expect.equal (Just (CustomFoodEdit "food-1"))
-        , test "global food sources do not expose edit path" <|
-            \_ ->
-                FoodShow.customFoodEditRoute { food | source = "USDA" }
-                    |> Expect.equal Nothing
         , test "display nutrients follow the current form quantity" <|
             \_ ->
                 FoodShow.foodNutrientsForDisplay foodWithNutrition form

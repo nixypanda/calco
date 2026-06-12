@@ -1,7 +1,5 @@
 module Page.Meal.List exposing
-    ( ActionState(..)
-    , LoadedModel
-    , Model(..)
+    ( Model(..)
     , Msg(..)
     , OutMsg(..)
     , init
@@ -23,27 +21,12 @@ import View.Nutrients
 type Model
     = Loading
     | LoadFailed String
-    | Loaded LoadedModel
-
-
-type alias LoadedModel =
-    { meals : List Meal
-    , action : ActionState
-    }
-
-
-type ActionState
-    = Idle
-    | Deleting String
-    | DeleteFailed String
+    | Loaded (List Meal)
 
 
 type Msg
     = MealsLoaded (Result Client.ApiError MealsApi.MealListResponse)
     | OpenMealClicked String
-    | EditMealClicked String
-    | DeleteMealClicked String
-    | DeleteCompleted String (Result Client.ApiError ())
     | CreateMealClicked
     | BackClicked
 
@@ -51,7 +34,6 @@ type Msg
 type OutMsg
     = NoOp
     | RequestMeals
-    | RequestDeleteMeal String
     | Navigate Route
     | SessionExpired
 
@@ -67,64 +49,13 @@ update msg model =
         MealsLoaded result ->
             case result of
                 Ok response ->
-                    ( Loaded { meals = response.items, action = Idle }, Cmd.none, NoOp )
+                    ( Loaded response.items, Cmd.none, NoOp )
 
                 Err error ->
                     failure error model
 
         OpenMealClicked id ->
             ( model, Cmd.none, Navigate (MealShow id) )
-
-        EditMealClicked id ->
-            ( model, Cmd.none, Navigate (MealEdit id) )
-
-        DeleteMealClicked id ->
-            case model of
-                Loaded loaded ->
-                    case loaded.action of
-                        Deleting _ ->
-                            ( model, Cmd.none, NoOp )
-
-                        _ ->
-                            ( Loaded { loaded | action = Deleting id }
-                            , Cmd.none
-                            , RequestDeleteMeal id
-                            )
-
-                _ ->
-                    ( model, Cmd.none, NoOp )
-
-        DeleteCompleted id result ->
-            case model of
-                Loaded loaded ->
-                    if loaded.action == Deleting id then
-                        case result of
-                            Ok _ ->
-                                ( Loaded
-                                    { loaded
-                                        | meals = List.filter (\meal -> meal.id /= id) loaded.meals
-                                        , action = Idle
-                                    }
-                                , Cmd.none
-                                , NoOp
-                                )
-
-                            Err error ->
-                                Client.failure
-                                    { noOp = NoOp
-                                    , sessionExpired = SessionExpired
-                                    , applyError =
-                                        \message current ->
-                                            applyLoadedActionError message current
-                                    }
-                                    error
-                                    model
-
-                    else
-                        ( model, Cmd.none, NoOp )
-
-                _ ->
-                    ( model, Cmd.none, NoOp )
 
         CreateMealClicked ->
             ( model, Cmd.none, Navigate MealCreate )
@@ -142,27 +73,12 @@ failure =
         }
 
 
-applyLoadedActionError : String -> Model -> Model
-applyLoadedActionError message model =
-    case model of
-        Loaded loaded ->
-            Loaded { loaded | action = DeleteFailed message }
-
-        _ ->
-            model
-
-
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         [ case model of
-            Loaded loaded ->
-                case loaded.action of
-                    DeleteFailed message ->
-                        Ui.errorBanner theme message
-
-                    _ ->
-                        Element.none
+            Loaded _ ->
+                Element.none
 
             LoadFailed message ->
                 Ui.errorBanner theme message
@@ -176,9 +92,9 @@ view { model, device, theme } =
 bodyView : Theme -> Device -> Model -> Element Msg
 bodyView theme device model =
     case model of
-        Loaded loaded ->
+        Loaded meals ->
             Ui.listCard theme
-                { rows = List.map (mealRow theme device loaded.action) loaded.meals
+                { rows = List.map (mealRow theme device) meals
                 , footer = Just (Ui.ghostButton device theme "+ Create Meal" CreateMealClicked)
                 }
 
@@ -189,8 +105,8 @@ bodyView theme device model =
             Ui.skeletonLoading theme
 
 
-mealRow : Theme -> Device -> ActionState -> Meal -> Element Msg
-mealRow theme device action meal =
+mealRow : Theme -> Device -> Meal -> Element Msg
+mealRow theme device meal =
     let
         macroDot : List (Element Msg)
         macroDot =
@@ -208,22 +124,7 @@ mealRow theme device action meal =
             [ Ui.mutedBody theme (mealSummaryText meal)
             , Ui.mutedParagraph theme (Maybe.withDefault "" meal.notes)
             ]
-        , trailing =
-            [ Ui.iconButton device
-                theme
-                { label = "✎", title = "Edit", onPress = EditMealClicked meal.id }
-            , Ui.dangerIconButton device
-                theme
-                { label = "×"
-                , title =
-                    if action == Deleting meal.id then
-                        "Deleting..."
-
-                    else
-                        "Delete"
-                , onPress = DeleteMealClicked meal.id
-                }
-            ]
+        , trailing = []
         }
 
 
