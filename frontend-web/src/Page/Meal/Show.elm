@@ -531,27 +531,29 @@ headerView theme device model =
                 , title = Ui.truncatedHeader theme device loaded.meal.name
                 , subtitle = Nothing
                 , actions =
-                    [ Ui.iconButton theme
+                    [ Ui.iconButton device
+                        theme
                         { label = "✎", title = "Edit", onPress = EditClicked }
-                    , Ui.dangerIconButton theme
+                    , Ui.dangerIconButton device
+                        theme
                         { label = "×", title = "Delete", onPress = DeleteClicked }
                     ]
                 }
 
         _ ->
-            Ui.pageTitle theme "Meal"
+            Ui.pageTitle theme device "Meal"
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ Ui.section theme
-            { header = Just (Ui.subsectionTitle theme "Components")
+            { header = Just (Ui.subsectionTitle theme device "Components")
             , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
             }
         , nutritionView theme device loaded
-        , confirmDeleteView theme loaded
+        , confirmDeleteView theme device loaded
         ]
 
 
@@ -618,6 +620,7 @@ nutritionView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.card theme
             [ View.QuantityInput.dropdown theme
+                device
                 { amountLabel = "Amount"
                 , amount = input.amount
                 , onAmountChange = AmountChanged
@@ -633,35 +636,36 @@ nutritionView theme device loaded =
         ]
 
 
-confirmDeleteView : Theme -> LoadedModel -> Element Msg
-confirmDeleteView theme loaded =
+confirmDeleteView : Theme -> Device -> LoadedModel -> Element Msg
+confirmDeleteView theme device loaded =
     case loaded.delete of
         DeleteConfirming ->
-            confirmDeleteContent theme Nothing False
+            confirmDeleteContent theme device Nothing False
 
         Deleting ->
-            confirmDeleteContent theme Nothing True
+            confirmDeleteContent theme device Nothing True
 
         DeleteFailed message ->
-            confirmDeleteContent theme (Just message) False
+            confirmDeleteContent theme device (Just message) False
 
         DeleteIdle ->
             Element.none
 
 
-confirmDeleteContent : Theme -> Maybe String -> Bool -> Element Msg
-confirmDeleteContent theme maybeError deleting =
+confirmDeleteContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
+confirmDeleteContent theme device maybeError deleting =
     Element.column
         [ Element.spacing Ui.space8
         , Element.padding Ui.space12
         , Background.color theme.dangerBg
         , Border.rounded 16
         ]
-        [ Ui.sectionTitle theme "Delete meal?"
+        [ Ui.sectionTitle theme device "Delete meal?"
         , Ui.maybeErrorBanner theme maybeError
         , Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.button theme "Cancel" CancelDeleteClicked
-            , Ui.dangerButton theme
+            [ Ui.button device theme "Cancel" CancelDeleteClicked
+            , Ui.dangerButton device
+                theme
                 (if deleting then
                     "Deleting..."
 

@@ -220,7 +220,7 @@ bodyView theme model device =
             if List.isEmpty items then
                 Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
                     [ Ui.emptyState theme "No foods found. Try a different search."
-                    , Ui.button theme "Create Custom Food" CreateCustomFoodClicked
+                    , Ui.button device theme "Create Custom Food" CreateCustomFoodClicked
                     ]
 
             else

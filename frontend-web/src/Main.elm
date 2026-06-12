@@ -1187,12 +1187,12 @@ topBarView model =
         , Font.color model.theme.textPrimary
         ]
         (if chromeShown then
-            [ leadingButton model.theme meta.leading
+            [ leadingButton model.device model.theme meta.leading
             , Element.el
                 [ Element.width Element.fill
                 , Element.clip
                 ]
-                (Ui.subsectionTitle model.theme meta.title)
+                (Ui.subsectionTitle model.theme model.device meta.title)
             , Element.el
                 [ Element.paddingEach { top = 0, right = 8, bottom = 0, left = 0 } ]
                 (themeToggle model)
@@ -1214,14 +1214,14 @@ themeToggle model =
         }
 
 
-leadingButton : Theme -> LeadingAction -> Element.Element Msg
-leadingButton theme leading =
+leadingButton : Element.Device -> Theme -> LeadingAction -> Element.Element Msg
+leadingButton device theme leading =
     case leading of
         OpenMenu ->
-            Ui.iconButton theme { label = "☰", title = "Menu", onPress = MenuClicked }
+            Ui.iconButton device theme { label = "☰", title = "Menu", onPress = MenuClicked }
 
         GoBack route ->
-            Ui.iconButton theme { label = "←", title = "Back", onPress = NavigateTo route }
+            Ui.iconButton device theme { label = "←", title = "Back", onPress = NavigateTo route }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -1241,7 +1241,10 @@ profileButton model =
     in
     Element.el
         (profileMenuAnchor model)
-        (Ui.iconButton model.theme { label = letter, title = "Profile", onPress = ProfileClicked })
+        (Ui.iconButton model.device
+            model.theme
+            { label = letter, title = "Profile", onPress = ProfileClicked }
+        )
 
 
 profileMenuAnchor : Model -> List (Element.Attribute Msg)
@@ -1379,8 +1382,10 @@ drawerView model =
         , Region.navigation
         ]
         (Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.iconButton model.theme { label = "☰", title = "Close", onPress = DrawerClosed }
-            , Ui.sectionTitle model.theme "CalCo"
+            [ Ui.iconButton model.device
+                model.theme
+                { label = "☰", title = "Close", onPress = DrawerClosed }
+            , Ui.sectionTitle model.theme model.device "CalCo"
             ]
             :: Ui.hairline model.theme
             :: drawerItems model
@@ -1482,7 +1487,7 @@ profileMenuContent model =
             _ ->
                 "Signed in"
         )
-    , Ui.button model.theme "Logout" LogoutClicked
+    , Ui.button model.device model.theme "Logout" LogoutClicked
     ]
 
 

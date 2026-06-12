@@ -151,15 +151,16 @@ renderingSmoke =
     describe "new components (smoke)"
         [ test "iconButton does not crash on empty label" <|
             \_ ->
-                Ui.iconButton theme { label = "", title = "Empty", onPress = () }
+                Ui.iconButton phone theme { label = "", title = "Empty", onPress = () }
                     |> pass
         , test "iconButton renders with a glyph" <|
             \_ ->
-                Ui.iconButton theme { label = "←", title = "Back", onPress = () }
+                Ui.iconButton phone theme { label = "←", title = "Back", onPress = () }
                     |> pass
         , test "dangerIconButton renders with a glyph" <|
             \_ ->
-                Ui.dangerIconButton theme
+                Ui.dangerIconButton phone
+                    theme
                     { label = "×", title = "Delete", onPress = () }
                     |> pass
         , test "fieldLabel renders with a label" <|

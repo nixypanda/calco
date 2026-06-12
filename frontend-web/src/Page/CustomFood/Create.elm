@@ -196,7 +196,8 @@ view { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme model.error
         , Element.map FormMsg (Form.view theme device model.nutrients model.units model.form)
-        , Ui.primarySubmitButton theme
+        , Ui.primarySubmitButton device
+            theme
             { state = Ui.submittingOrIdle (Form.isSubmitting model.form.submit)
             , idleLabel = "Create Food"
             , submittingLabel = "Creating..."

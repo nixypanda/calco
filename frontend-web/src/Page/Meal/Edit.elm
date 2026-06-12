@@ -390,7 +390,8 @@ view { model, device, theme } =
                 [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme device loaded
-                , Ui.primarySubmitButton theme
+                , Ui.primarySubmitButton device
+                    theme
                     { state = Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit)
                     , idleLabel = "Update Meal"
                     , submittingLabel = "Saving..."

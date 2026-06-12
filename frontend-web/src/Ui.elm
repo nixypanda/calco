@@ -204,10 +204,10 @@ sizeSubsectionTitle =
     Font.size 17
 
 
-pageTitle : Theme -> String -> Element msg
-pageTitle theme text =
+pageTitle : Theme -> Device -> String -> Element msg
+pageTitle theme device text =
     Element.el
-        [ sizePageTitle
+        [ onPhone device (Font.size 24) sizePageTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 1
@@ -215,10 +215,10 @@ pageTitle theme text =
         (Element.text text)
 
 
-sectionTitle : Theme -> String -> Element msg
-sectionTitle theme text =
+sectionTitle : Theme -> Device -> String -> Element msg
+sectionTitle theme device text =
     Element.el
-        [ sizeSectionTitle
+        [ onPhone device (Font.size 18) sizeSectionTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 2
@@ -226,10 +226,10 @@ sectionTitle theme text =
         (Element.text text)
 
 
-subsectionTitle : Theme -> String -> Element msg
-subsectionTitle theme text =
+subsectionTitle : Theme -> Device -> String -> Element msg
+subsectionTitle theme device text =
     Element.el
-        [ sizeSubsectionTitle
+        [ onPhone device (Font.size 15) sizeSubsectionTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 3
@@ -331,6 +331,24 @@ pageContainer device children =
 isSmall : Element.Device -> Bool
 isSmall device =
     device.class == Element.Phone
+
+
+onPhone : Element.Device -> a -> a -> a
+onPhone device phoneValue desktopValue =
+    if isSmall device then
+        phoneValue
+
+    else
+        desktopValue
+
+
+hoverEffect : Element.Device -> List Element.Decoration -> Element.Attribute msg
+hoverEffect device attrs =
+    if isSmall device then
+        Element.mouseOver []
+
+    else
+        Element.mouseOver attrs
 
 
 defaultTruncationChars : Int
@@ -482,10 +500,10 @@ section theme config =
     card theme (headerSlot ++ config.body ++ footerSlot)
 
 
-formSection : Theme -> String -> List (Element msg) -> Element msg
-formSection theme title content =
+formSection : Theme -> Device -> String -> List (Element msg) -> Element msg
+formSection theme device title content =
     section theme
-        { header = Just (subsectionTitle theme title)
+        { header = Just (subsectionTitle theme device title)
         , body = content
         , footer = Nothing
         }
@@ -615,15 +633,15 @@ errorBanner theme message =
 -- Buttons
 
 
-button : Theme -> String -> msg -> Element msg
-button theme label msg =
+button : Device -> Theme -> String -> msg -> Element msg
+button device theme label msg =
     Input.button
         [ Background.color theme.brandBlue
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
-        , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
+        , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
-        , Element.mouseOver [ Background.color theme.brandBluePressed ]
+        , hoverEffect device [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
         , label = Element.text label
@@ -653,8 +671,8 @@ type alias SubmitButtonConfig msg =
     }
 
 
-primarySubmitButton : Theme -> SubmitButtonConfig msg -> Element msg
-primarySubmitButton theme config =
+primarySubmitButton : Device -> Theme -> SubmitButtonConfig msg -> Element msg
+primarySubmitButton device theme config =
     let
         label : String
         label =
@@ -684,10 +702,10 @@ primarySubmitButton theme config =
         , Font.medium
         , Font.center
         , if active then
-            Element.mouseOver [ Background.color theme.brandBluePressed ]
+            hoverEffect device [ Background.color theme.brandBluePressed ]
 
           else
-            Element.mouseOver []
+            hoverEffect device []
         ]
         { onPress =
             if active then
@@ -699,29 +717,29 @@ primarySubmitButton theme config =
         }
 
 
-dangerButton : Theme -> String -> msg -> Element msg
-dangerButton theme label msg =
+dangerButton : Device -> Theme -> String -> msg -> Element msg
+dangerButton device theme label msg =
     Input.button
         [ Background.color theme.dangerSolid
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
-        , Element.paddingEach { top = 12, right = 18, bottom = 12, left = 18 }
+        , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
-        , Element.mouseOver [ Background.color theme.dangerFg ]
+        , hoverEffect device [ Background.color theme.dangerFg ]
         ]
         { onPress = Just msg
         , label = Element.text label
         }
 
 
-ghostButton : Theme -> String -> msg -> Element msg
-ghostButton theme label msg =
+ghostButton : Device -> Theme -> String -> msg -> Element msg
+ghostButton device theme label msg =
     Input.button
         [ Border.rounded 999
-        , Element.paddingEach { top = 8, right = 14, bottom = 8, left = 14 }
+        , Element.paddingEach { top = 10, right = 16, bottom = 10, left = 16 }
         , Font.color theme.brandBlue
         , Font.medium
-        , Element.mouseOver [ Background.color theme.brandBlueSoft ]
+        , hoverEffect device [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg
         , label = Element.text label
@@ -823,7 +841,8 @@ badge theme label_ =
 
 
 selectDropdown :
-    Theme
+    Device
+    -> Theme
     ->
         { label : String
         , selected : a
@@ -833,7 +852,7 @@ selectDropdown :
         , onToggle : msg
         }
     -> Element msg
-selectDropdown theme config =
+selectDropdown device theme config =
     let
         selectedLabel : String
         selectedLabel =
@@ -852,7 +871,7 @@ selectDropdown theme config =
         renderOption ( val, lbl ) =
             Input.button
                 [ Element.width Element.fill
-                , Element.paddingXY 14 10
+                , Element.paddingXY 14 12
                 , Background.color
                     (if isSelected val then
                         theme.brandBlue
@@ -901,7 +920,7 @@ selectDropdown theme config =
                 , Element.padding 10
                 , Border.width 1
                 , Border.color theme.inputFill
-                , Element.mouseOver [ Border.color theme.brandBlue ]
+                , hoverEffect device [ Border.color theme.brandBlue ]
                 ]
                 { onPress = Just config.onToggle
                 , label =
@@ -1044,18 +1063,18 @@ truncatedHeader theme device heading =
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
 
-iconButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
-iconButton theme config =
+iconButton : Device -> Theme -> { label : String, title : String, onPress : msg } -> Element msg
+iconButton device theme config =
     Input.button
-        [ Element.width (Element.px 40)
-        , Element.height (Element.px 40)
+        [ Element.width (Element.px 44)
+        , Element.height (Element.px 44)
         , Background.color theme.cardBg
         , Font.color theme.textPrimary
         , Font.center
         , Border.rounded 999
         , Border.width 1
         , Border.color theme.divider
-        , Element.mouseOver
+        , hoverEffect device
             [ Background.color theme.brandBlueSoft
             , Border.color theme.brandBlue
             ]
@@ -1066,18 +1085,22 @@ iconButton theme config =
         }
 
 
-dangerIconButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
-dangerIconButton theme config =
+dangerIconButton :
+    Device
+    -> Theme
+    -> { label : String, title : String, onPress : msg }
+    -> Element msg
+dangerIconButton device theme config =
     Input.button
-        [ Element.width (Element.px 40)
-        , Element.height (Element.px 40)
+        [ Element.width (Element.px 44)
+        , Element.height (Element.px 44)
         , Background.color theme.cardBg
         , Font.color theme.dangerFg
         , Font.center
         , Border.rounded 999
         , Border.width 1
         , Border.color theme.dangerFg
-        , Element.mouseOver
+        , hoverEffect device
             [ Background.color theme.dangerSolid
             , Font.color (Element.rgb255 255 255 255)
             , Border.color theme.dangerSolid

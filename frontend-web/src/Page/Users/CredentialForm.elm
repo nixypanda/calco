@@ -128,8 +128,8 @@ view config { model, device, theme } =
         , Element.padding outerPadding
         ]
         (Ui.card theme
-            ([ Ui.pageTitle theme "CalCo"
-             , Ui.subsectionTitle theme config.title
+            ([ Ui.pageTitle theme device "CalCo"
+             , Ui.subsectionTitle theme device config.title
              ]
                 ++ descriptionView theme config.description
                 ++ [ Ui.input theme
@@ -143,7 +143,8 @@ view config { model, device, theme } =
                         , onChange = PasswordChanged
                         }
                    , Ui.maybeErrorBanner theme (errorMessage model)
-                   , Ui.primarySubmitButton theme
+                   , Ui.primarySubmitButton device
+                        theme
                         { state = Ui.submittingOrIdle (isSubmitting model)
                         , idleLabel = config.submitLabel
                         , submittingLabel = config.submittingLabel

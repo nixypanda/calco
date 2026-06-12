@@ -2,13 +2,14 @@ module View.QuantityInput exposing (dropdown, unitOptions)
 
 import Api.Foods exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
 
 
 dropdown :
     Theme
+    -> Device
     ->
         { amountLabel : String
         , amount : String
@@ -21,14 +22,15 @@ dropdown :
         , onUnitToggle : msg
         }
     -> Element msg
-dropdown theme config =
+dropdown theme device config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.input theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange
             }
-        , Ui.selectDropdown theme
+        , Ui.selectDropdown device
+            theme
             { label = config.unitLabel
             , selected = config.unit
             , options = unitOptions config.unit config.units

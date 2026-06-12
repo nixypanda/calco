@@ -259,14 +259,14 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         (errorView theme model.status
-            ++ userInfoView theme model
-            ++ resetPasswordView theme model
-            ++ enableDisableView theme model
+            ++ userInfoView device theme model
+            ++ resetPasswordView device theme model
+            ++ enableDisableView device theme model
         )
 
 
-userInfoView : Theme -> Model -> List (Element Msg)
-userInfoView theme model =
+userInfoView : Device -> Theme -> Model -> List (Element Msg)
+userInfoView device theme model =
     case model.status of
         Loading ->
             [ Ui.skeletonLoading theme ]
@@ -275,11 +275,11 @@ userInfoView theme model =
             [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Loaded loadedUser _ ->
-            [ userSummaryCard theme loadedUser.user ]
+            [ userSummaryCard device theme loadedUser.user ]
 
 
-resetPasswordView : Theme -> Model -> List (Element Msg)
-resetPasswordView theme model =
+resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
+resetPasswordView device theme model =
     [ Ui.card theme
         [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
@@ -288,14 +288,14 @@ resetPasswordView theme model =
                 , value = currentPassword model.status
                 , onChange = PasswordChanged
                 }
-            , Ui.button theme "Reset Password" ResetSubmitted
+            , Ui.button device theme "Reset Password" ResetSubmitted
             ]
         ]
     ]
 
 
-enableDisableView : Theme -> Model -> List (Element Msg)
-enableDisableView theme model =
+enableDisableView : Device -> Theme -> Model -> List (Element Msg)
+enableDisableView device theme model =
     case model.status of
         Loaded loadedUser _ ->
             [ Ui.card theme
@@ -313,10 +313,10 @@ enableDisableView theme model =
                         ]
                         (Element.text "Danger Zone")
                     , if loadedUser.user.status == "active" then
-                        Ui.dangerButton theme "Disable User" DisableClicked
+                        Ui.dangerButton device theme "Disable User" DisableClicked
 
                       else
-                        Ui.button theme "Enable User" EnableClicked
+                        Ui.button device theme "Enable User" EnableClicked
                     ]
                 ]
             ]
@@ -355,11 +355,11 @@ problemMessage problem =
             "New password is required"
 
 
-userSummaryCard : Theme -> User.User -> Element msg
-userSummaryCard theme user =
+userSummaryCard : Device -> Theme -> User.User -> Element msg
+userSummaryCard device theme user =
     Ui.card theme
         [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.sectionTitle theme user.username
+            [ Ui.sectionTitle theme device user.username
             , Ui.detailRow theme
                 "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))

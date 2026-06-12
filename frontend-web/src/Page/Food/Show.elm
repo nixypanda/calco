@@ -418,9 +418,10 @@ loadedView theme device loaded =
         , Element.spacing Ui.space16
         ]
         [ foodHeader theme device food
-        , Element.map FormMsg (FoodLogForm.view theme (Just food) loaded.units form)
+        , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , Ui.cardActions
-            [ Ui.primarySubmitButton theme
+            [ Ui.primarySubmitButton device
+                theme
                 { state = Ui.submittingOrIdle (loaded.request == Saving)
                 , idleLabel = "Log Food"
                 , submittingLabel = "Logging..."
@@ -459,7 +460,8 @@ foodHeader theme device food =
         editAction =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ Ui.iconButton theme
+                    [ Ui.iconButton device
+                        theme
                         { label = "✎"
                         , title = "Edit food"
                         , onPress = EditCustomFoodClicked

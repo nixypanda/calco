@@ -123,7 +123,8 @@ view { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
-        , Ui.primarySubmitButton theme
+        , Ui.primarySubmitButton device
+            theme
             { state = Ui.submittingOrIdle (Common.isSubmitting model.submit)
             , idleLabel = "Create Meal"
             , submittingLabel = "Saving..."

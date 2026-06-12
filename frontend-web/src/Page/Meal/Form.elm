@@ -377,11 +377,12 @@ viewFormFields theme device toMsg form =
             , footer = Nothing
             }
         , Ui.section theme
-            { header = Just (Ui.subsectionTitle theme "Components")
+            { header = Just (Ui.subsectionTitle theme device "Components")
             , body =
                 List.intersperse (Ui.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
-            , footer = Just (Ui.ghostButton theme "+ Add Component" (toMsg AddComponentClicked))
+            , footer =
+                Just (Ui.ghostButton device theme "+ Add Component" (toMsg AddComponentClicked))
             }
         ]
 
@@ -689,7 +690,8 @@ componentRowView theme device toMsg row =
                 , onUnitChange = toMsg << ComponentUnitChanged row.rowId
                 }
             , Element.el [ Element.centerY ]
-                (Ui.dangerIconButton theme
+                (Ui.dangerIconButton device
+                    theme
                     { label = "×"
                     , title = "Remove"
                     , onPress = toMsg (RemoveComponentClicked row.rowId)

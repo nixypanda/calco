@@ -179,7 +179,8 @@ bodyView theme device model =
         Loaded loaded ->
             Ui.listCard theme
                 { rows = List.map (foodRow theme device loaded.action) loaded.foods
-                , footer = Just (Ui.ghostButton theme "+ Create Food" CreateCustomFoodClicked)
+                , footer =
+                    Just (Ui.ghostButton device theme "+ Create Food" CreateCustomFoodClicked)
                 }
 
         LoadFailed _ ->
@@ -206,8 +207,11 @@ foodRow theme device action food =
             , Ui.chips theme food.categories
             ]
         , trailing =
-            [ Ui.iconButton theme { label = "✎", title = "Edit", onPress = EditFoodClicked food.id }
-            , Ui.dangerIconButton theme
+            [ Ui.iconButton device
+                theme
+                { label = "✎", title = "Edit", onPress = EditFoodClicked food.id }
+            , Ui.dangerIconButton device
+                theme
                 { label = "×"
                 , title =
                     if action == Deleting food.id then

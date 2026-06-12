@@ -691,29 +691,31 @@ addCategoryTag raw selected =
 
 
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
-view theme _ nutrients units form =
+view theme device nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
-        , basicInfoCard theme form
-        , portionInfoCard theme form units
-        , nutrientsCard theme form nutrients
-        , servingsCard theme form units
+        , basicInfoCard theme device form
+        , portionInfoCard theme device form units
+        , nutrientsCard theme device form nutrients
+        , servingsCard theme device form units
         ]
 
 
-basicInfoCard : Theme -> FormModel -> Element Msg
-basicInfoCard theme form =
+basicInfoCard : Theme -> Device -> FormModel -> Element Msg
+basicInfoCard theme device form =
     Ui.formSection theme
+        device
         "Basic Info"
         [ Ui.input theme { label = "Name", value = form.name, onChange = NameChanged }
         , Ui.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
-        , categoryInputView theme (form.openDropdown == CategoryOpen) form.categoryInput
+        , categoryInputView theme device (form.openDropdown == CategoryOpen) form.categoryInput
         ]
 
 
-portionInfoCard : Theme -> FormModel -> List UnitItem -> Element Msg
-portionInfoCard theme form units =
+portionInfoCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
+portionInfoCard theme device form units =
     Ui.formSection theme
+        device
         "Portion Info"
         [ Ui.input theme
             { label = "Serving Size (g)"
@@ -721,6 +723,7 @@ portionInfoCard theme form units =
             , onChange = ServingSizeChanged
             }
         , View.QuantityInput.dropdown theme
+            device
             { amountLabel = "Default Quantity"
             , amount = form.defaultQuantity
             , onAmountChange = DefaultQuantityChanged
@@ -734,22 +737,24 @@ portionInfoCard theme form units =
         ]
 
 
-nutrientsCard : Theme -> FormModel -> List NutrientItem -> Element Msg
-nutrientsCard theme form nutrients =
+nutrientsCard : Theme -> Device -> FormModel -> List NutrientItem -> Element Msg
+nutrientsCard theme device form nutrients =
     Ui.section theme
         { header =
             Just
                 (Element.column [ Element.spacing Ui.space8 ]
-                    [ Ui.subsectionTitle theme "Nutrients", addRowHint theme ]
+                    [ Ui.subsectionTitle theme device "Nutrients", addRowHint theme ]
                 )
         , body =
             [ Element.column
                 [ Element.width Element.fill
                 , Element.spacing Ui.space8
                 ]
-                (List.indexedMap (nutrientRowView theme nutrients form.openDropdown) form.nutrients
+                (List.indexedMap
+                    (nutrientRowView theme device nutrients form.openDropdown)
+                    form.nutrients
                     ++ [ Ui.hairline theme
-                       , Ui.ghostButton theme "+ Add Nutrient" AddNutrientRow
+                       , Ui.ghostButton device theme "+ Add Nutrient" AddNutrientRow
                        ]
                 )
             ]
@@ -757,10 +762,10 @@ nutrientsCard theme form nutrients =
         }
 
 
-servingsCard : Theme -> FormModel -> List UnitItem -> Element Msg
-servingsCard theme form units =
+servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
+servingsCard theme device form units =
     Ui.section theme
-        { header = Just (Ui.subsectionTitle theme "Servings")
+        { header = Just (Ui.subsectionTitle theme device "Servings")
         , body =
             [ Element.column
                 [ Element.width Element.fill
@@ -772,15 +777,17 @@ servingsCard theme form units =
                     ]
 
                  else
-                    List.indexedMap (servingRowView theme units form.openDropdown) form.servings
+                    List.indexedMap
+                        (servingRowView theme device units form.openDropdown)
+                        form.servings
                 )
             ]
-        , footer = Just (Ui.ghostButton theme "+ Add Serving" AddServingRow)
+        , footer = Just (Ui.ghostButton device theme "+ Add Serving" AddServingRow)
         }
 
 
-categoryInputView : Theme -> Bool -> CategoryInput -> Element Msg
-categoryInputView theme open input =
+categoryInputView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
+categoryInputView theme device open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing Ui.space4 ]
             [ Ui.fieldLabel theme "Categories"
@@ -798,16 +805,16 @@ categoryInputView theme open input =
                 [ Element.paddingEach
                     { top = Ui.space4, left = Ui.space4, bottom = 0, right = 0 }
                 ]
-                (addCategoryButton theme input)
+                (addCategoryButton theme device input)
             ]
         , suggestionRowView theme open input
         , chipRowView theme input.selected
         ]
 
 
-addCategoryButton : Theme -> CategoryInput -> Element Msg
-addCategoryButton theme input =
-    Ui.iconButton theme { label = "+", title = "Edit", onPress = AddCategory input.query }
+addCategoryButton : Theme -> Device -> CategoryInput -> Element Msg
+addCategoryButton theme device input =
+    Ui.iconButton device theme { label = "+", title = "Edit", onPress = AddCategory input.query }
 
 
 chipRowView : Theme -> List String -> Element Msg
@@ -915,13 +922,21 @@ suggestionPill theme s =
         }
 
 
-nutrientRowView : Theme -> List NutrientItem -> OpenDropdown -> Int -> NutrientRow -> Element Msg
-nutrientRowView theme nutrients openDropdown index row =
+nutrientRowView :
+    Theme
+    -> Device
+    -> List NutrientItem
+    -> OpenDropdown
+    -> Int
+    -> NutrientRow
+    -> Element Msg
+nutrientRowView theme device nutrients openDropdown index row =
     Element.row
         [ Element.width Element.fill
         , Element.spacing Ui.space8
         ]
-        [ Ui.selectDropdown theme
+        [ Ui.selectDropdown device
+            theme
             { label = "Nutrient"
             , selected = row.code
             , options =
@@ -938,6 +953,7 @@ nutrientRowView theme nutrients openDropdown index row =
             }
         , unitLabelView theme row.unit
         , rowActionButton theme
+            device
             { label = "×"
             , title = "Remove"
             , onPress = RemoveNutrientRow index
@@ -985,8 +1001,15 @@ unitLabelMax =
     4
 
 
-servingRowView : Theme -> List UnitItem -> OpenDropdown -> Int -> ServingRow -> Element Msg
-servingRowView theme units openDropdown index row =
+servingRowView :
+    Theme
+    -> Device
+    -> List UnitItem
+    -> OpenDropdown
+    -> Int
+    -> ServingRow
+    -> Element Msg
+servingRowView theme device units openDropdown index row =
     Element.column
         [ Element.width Element.fill
         , Element.spacing 6
@@ -1009,7 +1032,8 @@ servingRowView theme units openDropdown index row =
                 )
             , Element.el
                 [ Element.width (Element.fill |> Element.maximum 160) ]
-                (Ui.selectDropdown theme
+                (Ui.selectDropdown device
+                    theme
                     { label = "Unit"
                     , selected = row.unit
                     , options = unitOptions row.unit units
@@ -1026,6 +1050,7 @@ servingRowView theme units openDropdown index row =
                     }
                 )
             , rowActionButton theme
+                device
                 { label = "×"
                 , title = "Remove"
                 , onPress = RemoveServingRow index
@@ -1034,13 +1059,17 @@ servingRowView theme units openDropdown index row =
         ]
 
 
-rowActionButton : Theme -> { label : String, title : String, onPress : msg } -> Element msg
-rowActionButton theme config =
+rowActionButton :
+    Theme
+    -> Device
+    -> { label : String, title : String, onPress : msg }
+    -> Element msg
+rowActionButton theme device config =
     Element.el
         [ Element.width (Element.px 40)
         , Element.paddingEach { top = 18, right = 0, bottom = 0, left = 0 }
         ]
-        (Ui.dangerIconButton theme config)
+        (Ui.dangerIconButton device theme config)
 
 
 unitOptions : String -> List UnitItem -> List ( String, String )

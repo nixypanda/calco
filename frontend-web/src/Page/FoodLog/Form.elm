@@ -16,7 +16,7 @@ import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (Quantity, defaultCode)
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
@@ -156,16 +156,17 @@ createUpdateLogRequest model =
             }
 
 
-view : Theme -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
-view theme food units model =
+view : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
+view theme device food units model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
         [ Ui.maybeErrorBanner theme model.error
         , Ui.card theme
-            [ mealSlotDropdown theme model
+            [ mealSlotDropdown theme device model
             , View.QuantityInput.dropdown theme
+                device
                 { amountLabel = "Amount"
                 , amount = model.amount
                 , onAmountChange = AmountChanged
@@ -181,9 +182,10 @@ view theme food units model =
         ]
 
 
-mealSlotDropdown : Theme -> Model -> Element Msg
-mealSlotDropdown theme model =
-    Ui.selectDropdown theme
+mealSlotDropdown : Theme -> Device -> Model -> Element Msg
+mealSlotDropdown theme device model =
+    Ui.selectDropdown device
+        theme
         { label = "Meal"
         , selected = model.mealSlot
         , options =

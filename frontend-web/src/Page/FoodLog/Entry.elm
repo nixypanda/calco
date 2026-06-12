@@ -596,9 +596,10 @@ loadedView theme device model =
         ]
         [ itemHeader theme device model
         , Element.map FormMsg
-            (FoodLogForm.view theme (productDetail model.item) model.units model.form)
+            (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
         , Ui.cardActions
-            [ Ui.primarySubmitButton theme
+            [ Ui.primarySubmitButton device
+                theme
                 { state = submitState model
                 , idleLabel = "Save"
                 , submittingLabel = "Saving..."
@@ -676,7 +677,8 @@ itemHeader theme device model =
         editAction =
             case Maybe.andThen Page.Food.Show.customFoodEditRoute maybeFood of
                 Just _ ->
-                    [ Ui.iconButton theme
+                    [ Ui.iconButton device
+                        theme
                         { label = "✎"
                         , title = "Edit food"
                         , onPress = EditCustomFoodClicked
@@ -688,7 +690,8 @@ itemHeader theme device model =
 
         deleteAction : List (Element Msg)
         deleteAction =
-            [ Ui.dangerIconButton theme
+            [ Ui.dangerIconButton device
+                theme
                 { label = "×"
                 , title =
                     if model.request == Deleting then

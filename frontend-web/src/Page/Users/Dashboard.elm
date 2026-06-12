@@ -78,20 +78,24 @@ update msg model =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
-        [ bodyView theme model
+        [ bodyView device theme model
         ]
 
 
-bodyView : Theme -> Model -> Element Msg
-bodyView theme model =
+bodyView : Device -> Theme -> Model -> Element Msg
+bodyView device theme model =
     case model of
         Loaded users ->
             Ui.listCard theme
                 { rows =
                     List.map
-                        (\user -> userListRow theme { user = user, onSelect = NavigateEditUser })
+                        (\user ->
+                            userListRow device
+                                theme
+                                { user = user, onSelect = NavigateEditUser }
+                        )
                         users
-                , footer = Just (Ui.ghostButton theme "+ Create User" NavigateCreateUser)
+                , footer = Just (Ui.ghostButton device theme "+ Create User" NavigateCreateUser)
                 }
 
         Loading ->
@@ -101,12 +105,12 @@ bodyView theme model =
             Ui.errorBanner theme (Client.displayError error)
 
 
-userListRow : Theme -> { user : User.User, onSelect : String -> msg } -> Element msg
-userListRow theme config =
+userListRow : Device -> Theme -> { user : User.User, onSelect : String -> msg } -> Element msg
+userListRow device theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Ui.sectionTitle theme config.user.username
+        , title = Ui.sectionTitle theme device config.user.username
         , subtitle = [ Ui.mutedBody theme config.user.displayName ]
         , trailing = [ Ui.statusBadge theme config.user.status ]
         }

@@ -204,7 +204,7 @@ view { model, device, theme } =
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
-                    , Ui.button theme "Save" Submitted
+                    , Ui.button device theme "Save" Submitted
                     ]
                ]
         )

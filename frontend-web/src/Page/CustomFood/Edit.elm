@@ -331,7 +331,8 @@ bodyView { model, device, theme } =
             Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
                 [ Element.map FormMsg
                     (Form.view theme device loaded.nutrients loaded.units loaded.form)
-                , Ui.primarySubmitButton theme
+                , Ui.primarySubmitButton device
+                    theme
                     { state = Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit)
                     , idleLabel = "Save Food"
                     , submittingLabel = "Saving..."

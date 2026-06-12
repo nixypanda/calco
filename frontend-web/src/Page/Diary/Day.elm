@@ -293,7 +293,7 @@ view { model, device, theme } =
 
 
 dateCard : Theme -> Model -> Device -> Element Msg
-dateCard theme model _ =
+dateCard theme model device =
     let
         canGoNext : Bool
         canGoNext =
@@ -304,15 +304,18 @@ dateCard theme model _ =
             [ Element.width Element.fill
             , Element.spacing Ui.space12
             ]
-            [ Ui.iconButton theme
+            [ Ui.iconButton device
+                theme
                 { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
                 ]
-                (Ui.subsectionTitle theme (LocalDate.display model.currentDate))
+                (Ui.subsectionTitle theme device (LocalDate.display model.currentDate))
             , if canGoNext then
-                Ui.iconButton theme { label = "→", title = "Next Day", onPress = NextDayClicked }
+                Ui.iconButton device
+                    theme
+                    { label = "→", title = "Next Day", onPress = NextDayClicked }
 
               else
                 Input.button
@@ -464,7 +467,7 @@ slotView theme device macroMode section =
 
                     _ ->
                         [ Ui.hairline theme
-                        , Ui.ghostButton theme "+ Add Food" (AddFoodClicked section.slot)
+                        , Ui.ghostButton device theme "+ Add Food" (AddFoodClicked section.slot)
                         ]
                )
         )
@@ -501,7 +504,7 @@ mealSlotHeader theme device macroMode section totals =
                 , Element.spacing Ui.space12
                 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-                    [ Ui.sectionTitle theme (MealSlot.label section.slot)
+                    [ Ui.sectionTitle theme device (MealSlot.label section.slot)
                     , Input.button []
                         { onPress = Just MacroModeToggled
                         , label = Ui.mutedCaption theme (macroSummary macroMode totals)
