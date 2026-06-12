@@ -21,6 +21,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
 import Html
+import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -1134,20 +1135,113 @@ view model =
 
 appFrame : Model -> Element.Element Msg
 appFrame model =
-    Element.column
-        ([ Element.width Element.fill
-         , Element.height Element.fill
-         ]
-            ++ drawerOverlay model
-        )
-        [ topBarView model
-        , Element.el
+    let
+        useBottomNav : Bool
+        useBottomNav =
+            showBottomNav model
+
+        chromeAttrs : List (Element.Attribute Msg)
+        chromeAttrs =
+            if useBottomNav then
+                [ Element.inFront (bottomNavBar model) ]
+
+            else
+                drawerOverlay model
+
+        pageAttrs : List (Element.Attribute Msg)
+        pageAttrs =
             [ Element.width Element.fill
             , Element.height Element.fill
             , Region.mainContent
             ]
-            (pageView model)
+                ++ (if useBottomNav then
+                        [ Element.paddingEach { bottom = 56, top = 0, left = 0, right = 0 } ]
+
+                    else
+                        []
+                   )
+    in
+    Element.column
+        ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
+        [ topBarView model
+        , Element.el pageAttrs (pageView model)
         ]
+
+
+showBottomNav : Model -> Bool
+showBottomNav model =
+    Ui.isSmall model.device
+        && showsAppChrome model
+        && not (Session.isAdmin model.session)
+
+
+bottomNavBar : Model -> Element.Element Msg
+bottomNavBar model =
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px 56)
+        , Background.color model.theme.cardBg
+        , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+        , Border.color model.theme.divider
+        , Region.navigation
+        , Element.htmlAttribute (Html.Attributes.style "position" "fixed")
+        , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
+        , Element.htmlAttribute (Html.Attributes.style "left" "0")
+        , Element.htmlAttribute (Html.Attributes.style "right" "0")
+        , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
+        ]
+        [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
+        , tabButton model "🔍︎" "Search" (FoodSearch Nothing)
+        , tabButton model "◉" "Foods" CustomFoodList
+        , tabButton model "🍽" "Meals" MealList
+        ]
+
+
+tabButton : Model -> String -> String -> Route -> Element.Element Msg
+tabButton model icon label target =
+    let
+        active : Bool
+        active =
+            primaryRoute model.route == primaryRoute target
+    in
+    Input.button
+        [ Element.width (Element.fillPortion 1)
+        , Element.height Element.fill
+        , Font.color
+            (if active then
+                model.theme.brandBlue
+
+             else
+                model.theme.textMuted
+            )
+        , Border.widthEach
+            { top =
+                if active then
+                    2
+
+                else
+                    0
+            , bottom = 0
+            , left = 0
+            , right = 0
+            }
+        , Border.color model.theme.brandBlue
+        ]
+        { onPress = Just (NavigateTo target)
+        , label =
+            Element.column
+                [ Element.centerX
+                , Element.centerY
+                , Element.spacing 2
+                ]
+                [ Element.el [ Element.centerX ] (Element.text icon)
+                , Element.el
+                    [ Element.centerX
+                    , Font.size 11
+                    ]
+                    (Element.text label)
+                ]
+        }
 
 
 showsAppChrome : Model -> Bool
@@ -1176,7 +1270,7 @@ topBarView model =
 
         meta : ScreenMeta
         meta =
-            screenMeta model.route
+            screenMeta model.device model.session model.route
     in
     Element.row
         [ Element.width Element.fill
@@ -1279,14 +1373,33 @@ initial value =
         |> Maybe.withDefault "?"
 
 
-screenMeta : Route -> ScreenMeta
-screenMeta route =
+screenMeta : Element.Device -> Session.Session -> Route -> ScreenMeta
+screenMeta device session route =
+    let
+        phoneNonAdmin : Bool
+        phoneNonAdmin =
+            Ui.isSmall device && not (Session.isAdmin session)
+    in
     case route of
         Root ->
-            { title = "Diary", leading = OpenMenu }
+            { title = "Diary"
+            , leading =
+                if phoneNonAdmin then
+                    NoLeadingAction
+
+                else
+                    OpenMenu
+            }
 
         DiaryDay _ ->
-            { title = "Diary", leading = OpenMenu }
+            { title = "Diary"
+            , leading =
+                if phoneNonAdmin then
+                    NoLeadingAction
+
+                else
+                    OpenMenu
+            }
 
         AdminDashboard ->
             { title = "Admin", leading = OpenMenu }
@@ -1321,10 +1434,24 @@ screenMeta route =
             { title = "Edit Food", leading = GoBack CustomFoodList }
 
         CustomFoodList ->
-            { title = "My Foods", leading = GoBack (DiaryDay Nothing) }
+            { title = "My Foods"
+            , leading =
+                if phoneNonAdmin then
+                    NoLeadingAction
+
+                else
+                    GoBack (DiaryDay Nothing)
+            }
 
         MealList ->
-            { title = "My Meals", leading = GoBack (DiaryDay Nothing) }
+            { title = "My Meals"
+            , leading =
+                if phoneNonAdmin then
+                    NoLeadingAction
+
+                else
+                    GoBack (DiaryDay Nothing)
+            }
 
         MealCreate ->
             { title = "Create Meal", leading = GoBack MealList }
