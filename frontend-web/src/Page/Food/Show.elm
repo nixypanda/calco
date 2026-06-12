@@ -19,6 +19,7 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import Html.Attributes
 import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.Theme exposing (Theme)
@@ -404,6 +405,19 @@ loadedView theme device loaded =
                 , onPress = SubmitClicked
                 }
             ]
+            |> (\actions ->
+                    if Ui.isSmall device then
+                        Element.el
+                            [ Element.htmlAttribute
+                                (Html.Attributes.style "padding-bottom"
+                                    "calc(14px + env(safe-area-inset-bottom))"
+                                )
+                            ]
+                            actions
+
+                    else
+                        actions
+               )
         , View.Nutrients.nutritionCard theme device nutrients
         ]
 

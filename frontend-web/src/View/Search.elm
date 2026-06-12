@@ -19,15 +19,20 @@ import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
-completionDropdown : Theme -> { onSelect : Completion -> msg } -> List Completion -> Element msg
-completionDropdown theme config options =
+completionDropdown :
+    Theme
+    -> Device
+    -> { onSelect : Completion -> msg }
+    -> List Completion
+    -> Element msg
+completionDropdown theme device config options =
     if List.isEmpty options then
         Element.none
 
     else
         Element.column
             [ Element.width Element.fill
-            , Element.height (Element.px (completionDropdownHeight options))
+            , Element.height (Element.px (completionDropdownHeight device options))
             , Element.scrollbarY
             , Element.spacing Ui.space2
             , Element.padding Ui.space4
@@ -35,11 +40,12 @@ completionDropdown theme config options =
             , Background.color theme.cardBg
             , Ui.cardShadow theme
             ]
-            (List.map (completionRow theme config.onSelect) options)
+            (List.map (completionRow theme device config.onSelect) options)
 
 
 searchInput :
     Theme
+    -> Device
     ->
         { onChange : String -> msg
         , text : String
@@ -49,7 +55,7 @@ searchInput :
         , onCompletionClick : Completion -> msg
         }
     -> Element msg
-searchInput theme config =
+searchInput theme device config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
         [ Input.text
             [ Border.rounded 12
@@ -62,7 +68,7 @@ searchInput theme config =
             , placeholder = Nothing
             , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text config.label)
             }
-        , completionDropdown theme { onSelect = config.onCompletionClick } config.completions
+        , completionDropdown theme device { onSelect = config.onCompletionClick } config.completions
         ]
 
 
@@ -88,14 +94,6 @@ resultRow :
     -> Element msg
 resultRow theme device config =
     let
-        maybeCategoryTags : List (Element msg)
-        maybeCategoryTags =
-            if Ui.isSmall device then
-                []
-
-            else
-                [ categoryPills theme config.item.categories ]
-
         macroDot : Element msg
         macroDot =
             View.Nutrients.macroDot
@@ -106,36 +104,61 @@ resultRow theme device config =
             Element.column
                 [ Element.width Element.fill
                 , Element.spacing Ui.space4
-                , Element.clip
                 ]
                 [ Ui.truncatedListItemTitle theme device config.item.name
                 , Ui.mutedCaption theme (metaText config.query config.item)
                 ]
+
+        categoryTags : Element msg
+        categoryTags =
+            categoryPills theme device config.item.categories
+
+        content : Element msg
+        content =
+            if Ui.isSmall device then
+                Element.column
+                    [ Element.width Element.fill
+                    , Element.spacing Ui.space12
+                    ]
+                    [ Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                        [ macroDot, searchItem ]
+                    , categoryTags
+                    ]
+
+            else
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing Ui.space12
+                    ]
+                    [ macroDot, searchItem, categoryTags ]
     in
     Input.button
         [ Element.width Element.fill
         , Element.padding Ui.space16
         ]
         { onPress = Just (config.onSelect config.item.id)
-        , label =
-            Element.row
-                [ Element.width Element.fill
-                , Element.spacing Ui.space12
-                ]
-                ([ macroDot, searchItem ] ++ maybeCategoryTags)
+        , label = content
         }
 
 
-completionDropdownHeight : List Completion -> Int
-completionDropdownHeight options =
-    min 224 (8 + List.length options * 38)
+completionDropdownHeight : Device -> List Completion -> Int
+completionDropdownHeight device options =
+    if Ui.isSmall device then
+        min 264 (8 + List.length options * 44)
+
+    else
+        min 224 (8 + List.length options * 38)
 
 
-completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
-completionRow theme onSelect completion =
+completionRow : Theme -> Device -> (Completion -> msg) -> Completion -> Element msg
+completionRow theme device onSelect completion =
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY 12 10
+        , if Ui.isSmall device then
+            Element.padding 14
+
+          else
+            Element.paddingXY 12 10
         , Border.rounded 999
         ]
         { onPress = Just (onSelect completion)
@@ -178,8 +201,8 @@ isNumeric value =
         && String.all Char.isDigit value
 
 
-categoryPills : Theme -> List String -> Element msg
-categoryPills theme categories =
+categoryPills : Theme -> Device -> List String -> Element msg
+categoryPills theme device categories =
     let
         pills : List String
         pills =
@@ -187,6 +210,13 @@ categoryPills theme categories =
     in
     if List.isEmpty pills then
         Element.none
+
+    else if Ui.isSmall device then
+        Element.wrappedRow
+            [ Element.width Element.fill
+            , Element.spacing Ui.space4
+            ]
+            (List.map (categoryPill theme) pills)
 
     else
         Element.column

@@ -179,19 +179,20 @@ update msg model =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
-        [ searchInputView theme model
+        [ searchInputView theme device model
         , bodyView theme model device
         ]
 
 
-searchInputView : Theme -> Model -> Element Msg
-searchInputView theme model =
+searchInputView : Theme -> Device -> Model -> Element Msg
+searchInputView theme device model =
     let
         options : List Completion
         options =
             Search.completions model.search.query model.search.categorySuggestions
     in
     SearchView.searchInput theme
+        device
         { onChange = QueryChanged
         , text = model.search.query
         , label = "Search for a food"

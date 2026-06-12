@@ -644,6 +644,7 @@ componentRowView theme device toMsg row =
     Element.column
         [ Element.width Element.fill, Element.spacing Ui.space12 ]
         [ SearchView.searchInput theme
+            device
             { onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query
             , label = "Search Product"

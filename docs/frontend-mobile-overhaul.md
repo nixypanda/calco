@@ -113,39 +113,52 @@ Title wrappers (`pageTitle`, `sectionTitle`, `subsectionTitle`) now accept `Devi
 
 ---
 
-## Phase 2: Navigation (bottom tab bar on phone)
+## Phase 2: Navigation (bottom tab bar on phone) ✅ COMPLETE
 
-### 2.1 Bottom navigation for Phone
+### 2.1 Bottom navigation for Phone ✅
 
 **File:** `src/Main.elm`
 
-Replace/supplement hamburger drawer with a bottom tab bar when `isSmall` is true.
+Replace hamburger drawer with a fixed bottom tab bar on phone for non-admin users. The drawer is fully disabled on phone for non-admins — the bottom bar is a complete replacement.
 
 Tabs (matching current drawer items):
-1. Diary (house icon or "Diary" text)
-2. Search Foods (magnifying glass or "Search" text)
-3. My Foods (fork/knife or "Foods" text)
-4. My Meals (plate or "Meals" text)
+1. Diary (`⌂` icon)
+2. Search Foods (`🔍︎` icon)
+3. My Foods (`◉` icon)
+4. My Meals (`🍽` icon)
 
 Structure in `appFrame`:
 
 ```
 Element.column [fill, fill]
   topBarView (58px)
-  pageView (fill remaining)
-  bottomNavBar (only on phone, ~56px)
+  pageView (fill remaining, 56px bottom padding when nav visible)
+  bottomNavBar (fixed, inFront, ~56px)
 ```
 
-The hamburger drawer remains accessible from the top bar on phone for profile/logout/admin, but primary navigation moves to the bottom bar.
+The `appFrame` function computes `useBottomNav` once and uses it to:
+- Switch between bottom nav (`Element.inFront`) and drawer overlay (`drawerOverlay`)
+- Add 56px bottom padding to page content
 
-### 2.2 Bottom nav bar styling
+Admin users keep the drawer on all devices. Login/bootstrap pages show no chrome.
 
-- Fixed 56px height
+### 2.2 Bottom nav bar styling ✅
+
+- Fixed 56px height, `position: fixed; bottom: 0; z-index: 10`
 - 4 equal-width columns using `Element.row` + `fillPortion 1`
-- Each column: icon (unicode char) + 12px label below
-- Active tab: `brandBlue` color + bottom accent line (2px)
+- Each column: icon (unicode char) + 11px label below
+- Active tab: `brandBlue` color + 2px top accent line
 - Inactive tabs: `textMuted` color
-- Uses `Input.button` for tap handling
+- Uses `Input.button` with `NavigateTo` message
+- Active detection reuses existing `primaryRoute` function
+
+### 2.3 Top bar adjustments ✅
+
+`screenMeta` now takes `Device` and `Session` parameters. On phone for non-admin users, primary routes (`DiaryDay`, `FoodSearch`, `CustomFoodList`, `MealList`, `Root`) return `NoLeadingAction` instead of `OpenMenu`, removing the hamburger button. Sub-pages keep `GoBack` arrows. Profile/logout remains accessible via the existing `profileButton` dropdown in the top bar.
+
+### 2.4 Drawer disabled on phone for non-admins ✅
+
+`drawerOverlay` no longer checks `showBottomNav` — it just checks `drawerOpen && showsAppChrome`. The mutual exclusion is handled entirely in `appFrame` via the `useBottomNav` flag.
 
 ---
 
@@ -157,39 +170,20 @@ The hamburger drawer remains accessible from the top bar on phone for profile/lo
 
 Current: `← Date →` row with 40px icon buttons and centered date text.
 
-Changes on phone:
-- Increase icon buttons to 44×44 (handled by Phase 1.2)
-- Increase date text font from `sizeSubsectionTitle` (17px) to `sizeSectionTitle` on phone
-- Reduce horizontal padding in date card from 12px to match `pageContainer` phone padding
+Changes (all screen sizes):
+- Always use `Ui.sectionTitle` for the date text (18px phone / 22px desktop), replacing `Ui.subsectionTitle`
 
 ### 3.2 Macro bar density
 
-Current: 4 stacked `macroBar` components (calories, protein, carbs, fat), each showing label, value, and a 10px progress bar.
-
-On phone, condense to show only 2 rows:
-- Row 1: Calories (with progress bar)
-- Row 2: Protein / Carbs / Fat in a 3-column row with value only (no bar)
-
-This reduces vertical scroll while keeping key data visible.
+No changes needed. The 4 stacked macro bars look fine on mobile as-is.
 
 ### 3.3 Meal slot cards
 
-Current: 118px header with background image, fade gradient, and content overlaid.
-
-On phone:
-- Reduce `mealSlotHeaderHeight` from 118px to 80px
-- Move kcal label into the same row as section title (currently on the right of the row — keep this)
-- Keep the background image but crop tighter
-- Increase "+ Add Food" button padding from ghostButton default to ensure ≥ 44px height
+No changes needed. The 118px header height is required for the background image. The `+ Add Food` ghostButton already has ≥44px tap targets from Phase 1.2.
 
 ### 3.4 Log entry rows
 
-Current: `Input.button` with `row` containing macroDot + truncated name + quantity caption + kcal caption.
-
-On phone:
-- Change to `wrappedRow` or use `column` for the content area if the row overflows
-- Increase padding from 14px to 16px
-- Show quantity and kcal on a second line below the food name
+No changes needed. The current row layout with truncation works well on mobile.
 
 ---
 
@@ -335,16 +329,18 @@ On tablet:
 | 1.3 | ~30min | Medium | Add Device-aware helpers | ✅ Done |
 | 1.4 | ~30min | Medium | Safe area padding | ✅ Done |
 | 1.5 | ~1hr | Medium | Responsive font sizing | ✅ Done |
-| 2.0 | ~3hr | High | Bottom navigation for phone | |
-| 3.1-3.4 | ~3hr | High | Diary page improvements | |
+| 2.0 | ~3hr | High | Bottom navigation for phone | ✅ Done |
+| 3.1 | ~5min | High | Date text uses `sectionTitle` | ✅ Done |
+| 3.2-3.4 | — | — | Macro bars, meal headers, log rows — no changes needed | ✅ Skipped |
 | 4.1-4.4 | ~3hr | High | Search & logging improvements | |
 | 5.1-5.3 | ~4hr | High | Form page improvements | |
 | 6.0 | ~4hr | Low | Touch interactions (swipe, pull-to-refresh) | |
 | 7.0 | ~2hr | Medium | Tablet support | |
 
-**Core overhaul (Phases 1-5): ~18 hours**
-**Full overhaul (Phases 1-7): ~24 hours**
+**Core overhaul (Phases 1-5): ~15 hours**
+**Full overhaul (Phases 1-7): ~21 hours**
 **Phase 1 actual: ~2.5 hours**
+**Phase 3 actual: ~5 minutes**
 
 ---
 
@@ -410,3 +406,30 @@ The following functions now require `Device` as their first parameter:
 | `src/View/Nutrients.elm` | Pass `device` to `Ui.subsectionTitle` |
 | `src/View/QuantityInput.elm` | Added `Device` import, added `Device` param to `dropdown` |
 | `tests/UiTest.elm` | Pass `phone` to `Ui.iconButton`, `Ui.dangerIconButton` |
+
+---
+
+## Phase 2 Changelog
+
+### Breaking API changes
+
+- `screenMeta` now takes `Device` and `Session` as first two parameters (internal to `Main.elm`, not a public API)
+
+### New functions
+
+- `showBottomNav : Model -> Bool` — returns `True` when on phone, chrome is shown, and user is not admin
+- `bottomNavBar : Model -> Element Msg` — renders the fixed bottom tab bar
+- `tabButton : Model -> String -> String -> Route -> Element Msg` — renders a single tab in the bottom bar
+
+### Behavioral changes
+
+- On phone for non-admin users: bottom nav bar is shown, drawer is disabled, hamburger button is removed from primary pages
+- Admin users: no bottom nav, drawer remains as-is on all devices
+- Login/bootstrap pages: no chrome shown (unchanged)
+- Profile/logout: still accessible via `profileButton` dropdown in top bar
+
+### Files modified (1 file)
+
+| File | Changes |
+|------|---------|
+| `src/Main.elm` | Added `showBottomNav`, `bottomNavBar`, `tabButton`; updated `appFrame` to compute chrome attrs once; updated `screenMeta` to take `Device` and `Session`; simplified `drawerOverlay` |
