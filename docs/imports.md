@@ -186,46 +186,15 @@ datasets (`usda`, `ifct`, `indb`, `off`) before and after any converter change.
 
 ## Personal Data Import (MyFitnessPal)
 
-The MyFitnessPal importer lives at `tools/importers/personal-data/mfp_import.py`.
-See `tools/importers/personal-data/README.md` for the full workflow.
+The maintained MyFitnessPal workflow lives at
+`tools/importers/personal-data/` and currently covers:
 
-### Quick reference
+- cleaning the raw export into reviewable pipeline CSVs
+- generating `data/step-9-out-serving-review.csv` for manual review
 
-```bash
-# Dry run (generate review CSV)
-cd tools/importers/personal-data
-python3 mfp_import.py food-dry-run
-
-# Commit reviewed foods
-python3 mfp_import.py food-commit \
-  --input apps/mfp-data-working-cleaned.csv \
-  --review apps/mfp-food-review.csv \
-  --session-token <token>
-
-# Import diary history
-python3 mfp_import.py history-import \
-  --input apps/mfp-data-working-cleaned.csv \
-  --session-token <token>
-```
-
-### API endpoints used
-
-```text
-GET  /api/foods/search
-GET  /api/foods/{id}
-POST /api/foods/custom
-POST /api/logs
-GET  /api/logs?from=YYYY-MM-DD&to=YYYY-MM-DD
-```
-
-### Data flow
-
-1. **Food dry-run** groups MFP rows by normalized description, suggests
-   `match`/`create`/`skip`.
-2. **User edits** review CSV: sets `approved=yes` and picks actions.
-3. **Food commit** creates/matches foods via API, writes `mfp-food-map.json`.
-4. **History import** uses the food map to create food log entries, reports
-   nutrient mismatches.
+See `tools/importers/personal-data/README.md` for the active workflow and
+`tools/importers/personal-data/docs/mfp-jsonl-import-plan.md` for the planned
+post-review import steps.
 
 ## Data Loss Tradeoff
 
