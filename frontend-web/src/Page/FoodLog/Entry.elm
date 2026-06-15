@@ -107,7 +107,6 @@ type Msg
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
-    | EditCustomFoodClicked
 
 
 type OutMsg
@@ -272,23 +271,6 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none, NoOp )
-
-        EditCustomFoodClicked ->
-            case model of
-                Loaded loaded ->
-                    case
-                        Maybe.andThen customFoodEditRoute
-                            (productDetail loaded.item)
-                    of
-                        Just route ->
-                            ( model, Cmd.none, Navigate route )
-
-                        Nothing ->
-                            ( model, Cmd.none, NoOp )
-
-                _ ->
-                    ( model, Cmd.none, NoOp )
-
 
 submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
 submitLoaded loaded =
@@ -818,56 +800,33 @@ metaText maybeFood log =
 
 detailActionsView : Theme -> Device -> LoadedModel -> Element Msg
 detailActionsView theme device model =
-    let
-        maybeFood : Maybe ProductDetail
-        maybeFood =
-            productDetail model.item
-    in
     Element.column
         [ Element.width Element.fill
         , Element.spacing Ui.space12
         ]
-        (let
-            primaryActions : List (Element Msg)
-            primaryActions =
-                [ Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing Ui.space12
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spacing Ui.space12
+            ]
+            [ Element.el [ Element.width Element.fill ]
+                (Ui.primarySubmitButton device
+                    theme
+                    { state = submitState model
+                    , idleLabel = "Save"
+                    , submittingLabel = "Saving..."
+                    , onPress = SubmitClicked
+                    }
+                )
+            , Element.el [ Element.width Element.fill ]
+                (Ui.bottomActionButtons device theme
+                    [ { label = "Delete Log"
+                      , onPress = DeleteClicked
+                      , tone = Ui.DangerAction
+                      }
                     ]
-                    [ Element.el [ Element.width Element.fill ]
-                        (Ui.primarySubmitButton device
-                            theme
-                            { state = submitState model
-                            , idleLabel = "Save"
-                            , submittingLabel = "Saving..."
-                            , onPress = SubmitClicked
-                            }
-                        )
-                    , Element.el [ Element.width Element.fill ]
-                        (Ui.bottomActionButtons device theme
-                            [ { label = "Delete Log"
-                              , onPress = DeleteClicked
-                              , tone = Ui.DangerAction
-                              }
-                            ]
-                        )
-                    ]
-                ]
-         in
-         case Maybe.andThen customFoodEditRoute maybeFood of
-            Just _ ->
-                primaryActions
-                    ++ [ Ui.bottomActionButtons device theme
-                            [ { label = "Edit Food"
-                              , onPress = EditCustomFoodClicked
-                              , tone = Ui.PrimaryAction
-                              }
-                            ]
-                       ]
-
-            Nothing ->
-                primaryActions
-        )
+                )
+            ]
+        ]
 
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
@@ -908,12 +867,3 @@ deleteModalContent theme device maybeError deleting =
                 ]
         , onBackgroundPress = Just CancelDeleteClicked
         }
-
-
-customFoodEditRoute : ProductDetail -> Maybe Route
-customFoodEditRoute food =
-    if food.source == "USER" then
-        Just (CustomFoodEdit food.id)
-
-    else
-        Nothing

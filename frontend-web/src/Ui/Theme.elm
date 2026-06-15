@@ -28,6 +28,7 @@ type alias Theme =
     , brandBlue : Color
     , brandBluePressed : Color
     , brandBlueSoft : Color
+    , brandBlueDisabled : Color
     , dangerBg : Color
     , dangerFg : Color
     , dangerSolid : Color
@@ -53,6 +54,7 @@ light =
     , brandBlue = rgb255 75 145 207
     , brandBluePressed = rgb255 60 125 185
     , brandBlueSoft = rgb255 232 242 250
+    , brandBlueDisabled = rgb255 131 170 207
     , dangerBg = rgb255 255 235 238
     , dangerFg = rgb255 200 60 80
     , dangerSolid = rgb255 255 107 122
@@ -78,6 +80,7 @@ dark =
     , brandBlue = rgb255 96 165 227
     , brandBluePressed = rgb255 120 185 240
     , brandBlueSoft = rgb255 36 56 80
+    , brandBlueDisabled = rgb255 70 108 145
     , dangerBg = rgb255 60 28 34
     , dangerFg = rgb255 255 138 152
     , dangerSolid = rgb255 220 80 100

@@ -703,7 +703,7 @@ primarySubmitButton device theme config =
                 theme.brandBlue
 
              else
-                theme.statusDisabledBg
+                theme.brandBlueDisabled
             )
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded 999
