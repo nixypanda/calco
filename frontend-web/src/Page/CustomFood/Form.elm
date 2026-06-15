@@ -12,11 +12,11 @@ module Page.CustomFood.Form exposing
     , emptyForm
     , fromProductDetail
     , isSubmitting
-    , withNutrientCatalog
-    , unitGhostText
     , toCreateFoodRequest
+    , unitGhostText
     , update
     , view
+    , withNutrientCatalog
     )
 
 import Api.Client as Client

@@ -17,7 +17,8 @@ tests =
                     |> Tuple.first
                     |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded (Ok food))
                     |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
+                    |> CustomFoodEdit.update
+                        (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
                     |> first
                     |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
@@ -32,7 +33,8 @@ tests =
             \_ ->
                 CustomFoodEdit.init "food-1"
                     |> Tuple.first
-                    |> CustomFoodEdit.update (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
+                    |> CustomFoodEdit.update
+                        (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
                     |> first
                     |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first

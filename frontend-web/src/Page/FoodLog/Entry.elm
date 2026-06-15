@@ -272,6 +272,7 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+
 submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
 submitLoaded loaded =
     case FoodLogForm.createUpdateLogRequest loaded.form of
@@ -818,7 +819,8 @@ detailActionsView theme device model =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.bottomActionButtons device theme
+                (Ui.bottomActionButtons device
+                    theme
                     [ { label = "Delete Log"
                       , onPress = DeleteClicked
                       , tone = Ui.DangerAction

@@ -87,7 +87,7 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodShow.RequestCreateLog
-                            { logDate = date "2026-06-04"
+                            { logDate = sampleDateFromString "2026-06-04"
                             , deviceTimezone = Just "Asia/Kolkata"
                             , mealSlot = Just "lunch"
                             , item = { itemType = ItemRef.Product, id = "food-1" }
