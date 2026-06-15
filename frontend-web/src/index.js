@@ -1,3 +1,4 @@
+import "./main.css";
 import { Elm } from "./Main.elm";
 
 const stored = localStorage.getItem("themeMode") || "light";

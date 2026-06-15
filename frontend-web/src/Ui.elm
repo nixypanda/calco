@@ -290,9 +290,8 @@ tableHeader theme text =
 
 
 cardShadow : Theme -> Element.Attribute msg
-cardShadow theme =
-    Element.htmlAttribute
-        (Html.Attributes.style "box-shadow" theme.cardShadow)
+cardShadow _ =
+    uiClass "ui-card-shadow"
 
 
 layout : Theme -> Element msg -> Element msg
@@ -304,6 +303,33 @@ layout theme content =
         , Font.family [ Font.typeface "Inter", Font.sansSerif ]
         , Font.color theme.textPrimary
         , body
+        , uiClass "ui-theme-root"
+        -- CSS owns shared rules; Elm only publishes the active theme tokens.
+        , Element.htmlAttribute (Html.Attributes.style "--ui-page-bg" (toCssColor theme.pageBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-card-bg" (toCssColor theme.cardBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-text-primary" (toCssColor theme.textPrimary))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-text-muted" (toCssColor theme.textMuted))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-text-medium" (toCssColor theme.textMedium))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-divider" (toCssColor theme.divider))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-input-fill" (toCssColor theme.inputFill))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-brand-blue" (toCssColor theme.brandBlue))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-brand-blue-pressed" (toCssColor theme.brandBluePressed))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-brand-blue-soft" (toCssColor theme.brandBlueSoft))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-brand-blue-disabled" (toCssColor theme.brandBlueDisabled))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-danger-bg" (toCssColor theme.dangerBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-danger-fg" (toCssColor theme.dangerFg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-danger-solid" (toCssColor theme.dangerSolid))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-drawer-selection-bg" (toCssColor theme.drawerSelectionBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-status-green" (toCssColor theme.statusGreen))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-status-red" (toCssColor theme.statusRed))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-status-active-bg" (toCssColor theme.statusActiveBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-status-disabled-bg" (toCssColor theme.statusDisabledBg))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-card-shadow" theme.cardShadow)
+        , Element.htmlAttribute (Html.Attributes.style "--ui-chip-bg" (toCssColor theme.inputFill))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-chip-fg" (toCssColor theme.textPrimary))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-chip-selected-bg" (toCssColor primaryTeal))
+        , Element.htmlAttribute (Html.Attributes.style "--ui-chip-selected-fg" "rgba(255, 255, 255, 1)")
+        , Element.htmlAttribute (Html.Attributes.style "--ui-focus-ring" (toCssColor primaryTeal))
         ]
         [ content ]
 
@@ -356,6 +382,11 @@ hoverEffect device attrs =
         Element.mouseOver attrs
 
 
+uiClass : String -> Element.Attribute msg
+uiClass className =
+    Element.htmlAttribute (Html.Attributes.class className)
+
+
 defaultTruncationChars : Int
 defaultTruncationChars =
     40
@@ -400,6 +431,7 @@ card theme children =
         , Background.color theme.cardBg
         , Border.rounded 20
         , cardShadow theme
+        , uiClass "ui-surface"
         , Element.padding space20
         , Element.spacing space12
         ]
@@ -552,7 +584,9 @@ listRow config =
         , Element.spacing space12
         ]
         [ Input.button
-            [ Element.width Element.fill ]
+            [ Element.width Element.fill
+            , uiClass "ui-motion ui-pressable"
+            ]
             { onPress = Just config.onSelect
             , label =
                 Element.row [ Element.width Element.fill, Element.spacing space12 ]
@@ -646,6 +680,7 @@ button device theme label msg =
         , Border.rounded 999
         , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
@@ -712,6 +747,7 @@ primarySubmitButton device theme config =
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
+        , uiClass "ui-motion ui-pressable"
         , if active then
             hoverEffect device [ Background.color theme.brandBluePressed ]
 
@@ -784,6 +820,7 @@ dangerButton device theme label msg =
         , Border.rounded 999
         , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.dangerFg ]
         ]
         { onPress = Just msg
@@ -802,6 +839,7 @@ primaryActionButton device theme label msg =
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.brandBluePressed ]
         ]
         { onPress = Just msg
@@ -820,6 +858,7 @@ fullWidthDangerButton device theme label msg =
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.dangerFg ]
         ]
         { onPress = Just msg
@@ -834,6 +873,7 @@ ghostButton device theme label msg =
         , Element.paddingEach { top = 10, right = 16, bottom = 10, left = 16 }
         , Font.color theme.brandBlue
         , Font.medium
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg
@@ -849,6 +889,7 @@ fullWidthGhostButton device theme label msg =
         , Border.rounded 999
         , Font.color theme.brandBlue
         , Font.medium
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg
@@ -873,6 +914,7 @@ input theme config =
         [ Border.rounded 12
         , Background.color theme.inputFill
         , Element.padding 10
+        , uiClass "ui-motion"
         ]
         { onChange = config.onChange
         , text = config.value
@@ -887,6 +929,7 @@ passwordInput theme config =
         [ Border.rounded 12
         , Background.color theme.inputFill
         , Element.padding 10
+        , uiClass "ui-motion"
         ]
         { onChange = config.onChange
         , text = config.value
@@ -947,6 +990,7 @@ modalOverlay theme device config =
                 , Element.centerY
                 , Element.width (Element.fill |> Element.maximum 480)
                 , Element.padding 16
+                , uiClass "ui-modal-card"
                 ]
                 (card theme
                     (sectionTitle theme device config.title
@@ -964,6 +1008,7 @@ modalOverlay theme device config =
             [ Element.width Element.fill
             , Element.height Element.fill
             , Background.color (Element.rgba255 0 0 0 0.28)
+            , uiClass "ui-modal-backdrop"
             ]
             { onPress = config.onBackgroundPress
             , label = Element.none
@@ -1073,6 +1118,7 @@ selectDropdown device theme config =
                 , Element.padding 10
                 , Border.width 1
                 , Border.color theme.inputFill
+                , uiClass "ui-motion"
                 , hoverEffect device [ Border.color theme.brandBlue ]
                 ]
                 { onPress = Just config.onToggle
@@ -1198,6 +1244,7 @@ skeletonBar theme =
         , Element.height (Element.px 16)
         , Background.color theme.inputFill
         , Border.rounded 8
+        , uiClass "ui-skeleton"
         ]
         Element.none
 
@@ -1227,6 +1274,7 @@ iconButton device theme config =
         , Border.rounded 999
         , Border.width 1
         , Border.color theme.divider
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device
             [ Background.color theme.brandBlueSoft
             , Border.color theme.brandBlue
@@ -1253,6 +1301,7 @@ dangerIconButton device theme config =
         , Border.rounded 999
         , Border.width 1
         , Border.color theme.dangerFg
+        , uiClass "ui-motion ui-pressable"
         , hoverEffect device
             [ Background.color theme.dangerSolid
             , Font.color (Element.rgb255 255 255 255)
@@ -1320,35 +1369,28 @@ chipHtml :
         , onClick : Maybe msg
         }
     -> Html.Html msg
-chipHtml theme config =
+chipHtml _ config =
     let
+        chipClass : String
+        chipClass =
+            "ui-chip ui-motion ui-pressable"
+                ++ (if config.selected then
+                        " ui-chip-selected"
+
+                    else
+                        ""
+                   )
+
         baseStyles : List (Html.Attribute msg)
         baseStyles =
-            [ Html.Attributes.style "display" "inline-flex"
-            , Html.Attributes.style "align-items" "center"
-            , Html.Attributes.style "justify-content" "center"
-            , Html.Attributes.style "height" "22px"
-            , Html.Attributes.style "padding" "0 12px"
-            , Html.Attributes.style "border-radius" "999px"
-            , Html.Attributes.style "background-color"
-                (toCssColor (chipBackground theme config.selected))
-            , Html.Attributes.style "color"
-                (toCssColor (chipForeground theme config.selected))
-            , Html.Attributes.style "font-size" "13px"
-            , Html.Attributes.style "font-family" "inherit"
-            , Html.Attributes.style "line-height" "1"
-            , Html.Attributes.style "white-space" "nowrap"
-            ]
+            [ Html.Attributes.class chipClass ]
     in
     case config.onClick of
         Just msg ->
             Html.button
-                (List.append baseStyles
-                    [ Html.Attributes.style "border" "none"
-                    , Html.Attributes.style "cursor" "pointer"
-                    , Html.Events.onClick msg
-                    ]
-                )
+                [ Html.Attributes.class (chipClass ++ " ui-chip-button ui-hover-brighten")
+                , Html.Events.onClick msg
+                ]
                 [ Html.text config.label ]
 
         Nothing ->
@@ -1365,11 +1407,7 @@ chips theme strings =
     else
         Element.html
             (Html.div
-                [ Html.Attributes.style "display" "flex"
-                , Html.Attributes.style "flex-wrap" "wrap"
-                , Html.Attributes.style "gap" "4px"
-                , Html.Attributes.style "width" "100%"
-                ]
+                [ Html.Attributes.class "ui-chip-group" ]
                 (List.map
                     (\c ->
                         chipHtml theme { label = c, selected = False, onClick = Nothing }
@@ -1488,21 +1526,6 @@ linearProgress theme config =
 
 toggleSwitch : Theme -> { isActive : Bool, onToggle : msg } -> Element msg
 toggleSwitch theme config =
-    let
-        thumb : Element msg
-        thumb =
-            Element.el
-                [ Element.width (Element.px 20)
-                , Element.height (Element.px 20)
-                , Background.color (Element.rgb255 255 255 255)
-                , Border.rounded 999
-                ]
-                Element.none
-
-        spacer : Element msg
-        spacer =
-            Element.el [ Element.width Element.fill ] Element.none
-    in
     Input.button
         [ Element.width (Element.px 44)
         , Element.height (Element.px 24)
@@ -1515,19 +1538,23 @@ toggleSwitch theme config =
                 theme.inputFill
             )
         , Element.padding 2
+        , uiClass
+            ("ui-toggle-track ui-motion ui-pressable"
+                ++ (if config.isActive then
+                        " ui-toggle-on"
+
+                    else
+                        ""
+                   )
+            )
         ]
         { onPress = Just config.onToggle
         , label =
-            Element.row
+            Element.el
                 [ Element.width Element.fill
                 , Element.height Element.fill
                 ]
-                (if config.isActive then
-                    [ spacer, thumb ]
-
-                 else
-                    [ thumb, spacer ]
-                )
+                (Element.html (Html.span [ Html.Attributes.class "ui-toggle-thumb" ] []))
         }
 
 

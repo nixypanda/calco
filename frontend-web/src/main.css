@@ -1,0 +1,215 @@
+/* Document shell
+   These rules style the browser-owned page chrome outside elm-ui's component tree. */
+:root {
+  /* Document-level defaults belong in CSS so the HTML shell stays minimal. */
+  color: #1c202c;
+  background: #f4f6f8;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+}
+
+body {
+  /* Safe-area padding is a browser concern, not page/component state. */
+  margin: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #f4f6f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  /* Consistent keyboard focus belongs in one global rule. */
+  outline: 2px solid var(--ui-focus-ring, #5ee0d5);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* App shell
+   Shared viewport-level chrome that is easier to keep stable as CSS utilities. */
+.app-bottom-nav {
+  /* App-shell positioning is shared chrome, so keep it out of inline Elm styles. */
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+}
+
+.ui-card-shadow {
+  /* Shared visual tokens come from Elm via CSS variables and are consumed here. */
+  box-shadow: var(--ui-card-shadow);
+}
+
+/* Shared motion
+   These classes are attached by Elm primitives and centralize transitions/animations. */
+/* Motion classes stay in CSS because transitions, keyframes, and media queries are
+   much easier to reason about here than as generated Elm style strings. */
+.ui-motion {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.ui-surface {
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.ui-pressable {
+  transform: translateY(0);
+}
+
+.ui-modal-backdrop {
+  animation: ui-fade-in 160ms ease-out;
+}
+
+.ui-modal-card {
+  animation: ui-modal-in 180ms ease-out;
+}
+
+.ui-skeleton {
+  position: relative;
+  overflow: hidden;
+}
+
+.ui-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.28) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: ui-shimmer 1.5s ease-in-out infinite;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .ui-hover-brighten:hover {
+    filter: brightness(0.98);
+  }
+}
+
+.ui-pressable:active {
+  transform: translateY(0) scale(0.99);
+}
+
+/* HTML widgets
+   These support Element.html-based controls whose static structure is better expressed in CSS. */
+.ui-chip-group {
+  /* Chips render through Element.html, so CSS is the cleanest home for their box model. */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: 100%;
+}
+
+.ui-chip {
+  /* Static chip structure is centralized here; Elm only picks semantic classes/state. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background-color: var(--ui-chip-bg);
+  color: var(--ui-chip-fg);
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ui-chip-selected {
+  background-color: var(--ui-chip-selected-bg);
+  color: var(--ui-chip-selected-fg);
+}
+
+.ui-chip-button {
+  cursor: pointer;
+  border: none;
+}
+
+/* Toggle switch
+   The theme switch needs a real thumb element so CSS can animate translation smoothly. */
+.ui-toggle-track {
+  position: relative;
+  border: none;
+}
+
+.ui-toggle-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 1);
+  transition: transform 180ms ease;
+}
+
+.ui-toggle-on .ui-toggle-thumb {
+  transform: translateX(20px);
+}
+
+/* Shared keyframes
+   Animation definitions stay here so components only opt in via class names. */
+@keyframes ui-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ui-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Motion accessibility
+   Shared motion should respect reduced-motion preferences in one place. */
+@media (prefers-reduced-motion: reduce) {
+  .ui-motion,
+  .ui-surface,
+  .ui-modal-backdrop,
+  .ui-modal-card,
+  .ui-skeleton::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

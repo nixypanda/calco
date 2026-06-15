@@ -20,7 +20,6 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
-import Html
 import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
@@ -1154,10 +1153,7 @@ view : Model -> Browser.Document Msg
 view model =
     { title = "CalCo"
     , body =
-        [ Html.node "style"
-            []
-            [ Html.text (":root { background: " ++ Ui.toCssColor model.theme.pageBg ++ "; }") ]
-        , Element.layoutWith
+        [ Element.layoutWith
             { options =
                 [ Element.focusStyle
                     { borderColor = Nothing
@@ -1225,11 +1221,7 @@ bottomNavBar model =
         , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
         , Border.color model.theme.divider
         , Region.navigation
-        , Element.htmlAttribute (Html.Attributes.style "position" "fixed")
-        , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
-        , Element.htmlAttribute (Html.Attributes.style "left" "0")
-        , Element.htmlAttribute (Html.Attributes.style "right" "0")
-        , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
+        , Element.htmlAttribute (Html.Attributes.class "app-bottom-nav")
         ]
         [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
         , tabButton model "🔍︎" "Search" (FoodSearch Nothing)
