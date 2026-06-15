@@ -95,12 +95,12 @@ update msg model =
                 Ok response ->
                     case model of
                         Loaded loaded ->
-                            let
-                                ( nextForm, subCmd, _ ) =
-                                    Form.update (Form.NutrientsLoaded response.items) loaded.form
-                            in
-                            ( Loaded { loaded | form = nextForm, nutrients = response.items }
-                            , Cmd.map FormMsg subCmd
+                            ( Loaded
+                                { loaded
+                                    | form = Form.withNutrientCatalog response.items loaded.form
+                                    , nutrients = response.items
+                                }
+                            , Cmd.none
                             , NoOp
                             )
 
@@ -249,7 +249,12 @@ setLoadedFood food model =
             completeLoading { loading | food = Just food }
 
         Loaded loaded ->
-            Loaded { loaded | form = Form.fromProductDetail food }
+            Loaded
+                { loaded
+                    | form =
+                        Form.fromProductDetail food
+                            |> Form.withNutrientCatalog loaded.nutrients
+                }
 
         LoadFailed _ ->
             model
@@ -262,7 +267,11 @@ setLoadedNutrients nutrients model =
             completeLoading { loading | nutrients = Just nutrients }
 
         Loaded loaded ->
-            Loaded { loaded | nutrients = nutrients }
+            Loaded
+                { loaded
+                    | nutrients = nutrients
+                    , form = Form.withNutrientCatalog nutrients loaded.form
+                }
 
         LoadFailed _ ->
             model
@@ -287,7 +296,9 @@ completeLoading loading =
         ( Just food, Just nutrients, Just units ) ->
             Loaded
                 { productId = loading.productId
-                , form = Form.fromProductDetail food
+                , form =
+                    Form.fromProductDetail food
+                        |> Form.withNutrientCatalog nutrients
                 , nutrients = nutrients
                 , units = units
                 }

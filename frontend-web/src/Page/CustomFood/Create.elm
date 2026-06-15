@@ -63,16 +63,12 @@ update msg model =
         NutrientsLoaded result ->
             case result of
                 Ok response ->
-                    let
-                        ( nextForm, subCmd, _ ) =
-                            Form.update (Form.NutrientsLoaded response.items) model.form
-                    in
                     ( { model
                         | nutrients = response.items
-                        , form = nextForm
+                        , form = Form.withNutrientCatalog response.items model.form
                         , error = Nothing
                       }
-                    , Cmd.map FormMsg subCmd
+                    , Cmd.none
                     , NoOp
                     )
 

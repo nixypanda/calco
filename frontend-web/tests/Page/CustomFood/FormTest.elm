@@ -307,18 +307,14 @@ tests =
                     |> List.head
                     |> Maybe.map .unit
                     |> Expect.equal (Just "")
-        , test "padUnitLabel fills 4-char column with 'none' for empty" <|
+        , test "unitGhostText uses placeholder when unit is empty" <|
             \_ ->
-                Form.padUnitLabel ""
-                    |> Expect.equal "none"
-        , test "padUnitLabel left-pads short units" <|
+                Form.unitGhostText ""
+                    |> Expect.equal "unit"
+        , test "unitGhostText keeps known unit inline" <|
             \_ ->
-                Form.padUnitLabel "g"
-                    |> Expect.equal "g   "
-        , test "padUnitLabel keeps 4-char units as-is" <|
-            \_ ->
-                Form.padUnitLabel "kcal"
-                    |> Expect.equal "kcal"
+                Form.unitGhostText "g"
+                    |> Expect.equal "g"
         ]
 
 

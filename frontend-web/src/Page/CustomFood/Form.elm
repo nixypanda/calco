@@ -12,7 +12,8 @@ module Page.CustomFood.Form exposing
     , emptyForm
     , fromProductDetail
     , isSubmitting
-    , padUnitLabel
+    , withNutrientCatalog
+    , unitGhostText
     , toCreateFoodRequest
     , update
     , view
@@ -230,6 +231,22 @@ fromProductDetail food =
     }
 
 
+withNutrientCatalog : List NutrientItem -> FormModel -> FormModel
+withNutrientCatalog items form =
+    let
+        catalog : Dict String String
+        catalog =
+            List.foldl
+                (\item acc -> Dict.insert item.code item.unit acc)
+                form.nutrientCatalog
+                items
+    in
+    { form
+        | nutrientCatalog = catalog
+        , nutrients = backfillNutrientUnits catalog form.nutrients
+    }
+
+
 toCreateFoodRequest : FormModel -> Result ValidationError CreateFoodRequest
 toCreateFoodRequest form =
     let
@@ -415,18 +432,7 @@ update msg formIn =
             )
 
         NutrientsLoaded items ->
-            let
-                catalog : Dict String String
-                catalog =
-                    List.foldl
-                        (\item acc -> Dict.insert item.code item.unit acc)
-                        form.nutrientCatalog
-                        items
-            in
-            ( { form
-                | nutrientCatalog = catalog
-                , nutrients = backfillNutrientUnits catalog form.nutrients
-              }
+            ( withNutrientCatalog items form
             , Cmd.none
             , NoOutMsg
             )
@@ -937,74 +943,107 @@ nutrientRowView :
     -> NutrientRow
     -> Element Msg
 nutrientRowView theme device nutrients openDropdown index row =
-    Element.row
+    let
+        selector : Element Msg
+        selector =
+            Ui.selectDropdown device
+                theme
+                { label = "Nutrient"
+                , selected = row.code
+                , options =
+                    ( "", "Select nutrient..." )
+                        :: List.map (\n -> ( n.code, n.name )) nutrients
+                , onChange = NutrientCodeChanged index
+                , isOpen = openDropdown == NutrientCodeOpen index
+                , onToggle = ToggleNutrientCodeDropdown index
+                }
+
+        removeButton : Element Msg
+        removeButton =
+            rowActionButton theme
+                device
+                { label = "×"
+                , title = "Remove"
+                , onPress = RemoveNutrientRow index
+                }
+    in
+    if Ui.isSmall device then
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing Ui.space8
+            ]
+            [ selector
+            , Element.row
+                [ Element.width Element.fill
+                , Element.spacing Ui.space8
+                ]
+                [ amountInputWithUnit theme index row
+                , removeButton
+                ]
+            ]
+
+    else
+        Element.row
+            [ Element.width Element.fill
+            , Element.spacing Ui.space8
+            ]
+            [ selector
+            , amountInputWithUnit theme index row
+            , removeButton
+            ]
+
+
+amountInputWithUnit : Theme -> Int -> NutrientRow -> Element Msg
+amountInputWithUnit theme index row =
+    Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space8
+        , Element.spacing Ui.space4
         ]
-        [ Ui.selectDropdown device
-            theme
-            { label = "Nutrient"
-            , selected = row.code
-            , options =
-                ( "", "Select nutrient..." )
-                    :: List.map (\n -> ( n.code, n.name )) nutrients
-            , onChange = NutrientCodeChanged index
-            , isOpen = openDropdown == NutrientCodeOpen index
-            , onToggle = ToggleNutrientCodeDropdown index
-            }
-        , Ui.input theme
-            { label = "Amount"
-            , value = row.amountPer100g
-            , onChange = NutrientAmountChanged index
-            }
-        , unitLabelView theme row.unit
-        , rowActionButton theme
-            device
-            { label = "×"
-            , title = "Remove"
-            , onPress = RemoveNutrientRow index
-            }
+        [ Ui.fieldLabel theme "Amount"
+        , Element.el
+            [ Element.width Element.fill
+            , Element.inFront
+                (Element.el
+                    [ Element.alignRight
+                    , Element.centerY
+                    , Element.paddingEach { top = 0, right = 12, bottom = 0, left = 0 }
+                    , Font.color theme.textMuted
+                    , Ui.body
+                    ]
+                    (Element.text (unitGhostText row.unit))
+                )
+            ]
+            (Input.text
+                [ Border.rounded 12
+                , Background.color theme.inputFill
+                , Element.width Element.fill
+                , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
+                ]
+                { onChange = NutrientAmountChanged index
+                , text = row.amountPer100g
+                , placeholder = Nothing
+                , label = Input.labelHidden "Amount"
+                }
+            )
         ]
 
 
-{-| Read-only label that displays the unit a given nutrient uses. The label
-column is always exactly 4 characters wide (left-padded with spaces) so the
-form keeps a tidy vertical rhythm: empty rows show "none", "g" becomes "g ",
-"mg" becomes "mg ", and "kcal" stays as "kcal".
+{-| Muted unit text shown inside the amount input. Empty units fall back to a
+neutral placeholder so the field still communicates that the suffix depends on
+the selected nutrient.
 -}
-unitLabelView : Theme -> String -> Element msg
-unitLabelView theme unit =
-    Element.el
-        [ Element.width (Element.px unitLabelWidth)
-        , Element.alignRight
-        , Element.paddingEach { top = Ui.space16, left = 0, bottom = 0, right = Ui.space4 }
-        ]
-        (Ui.mutedCaption theme (padUnitLabel unit))
-
-
-unitLabelWidth : Int
-unitLabelWidth =
-    32
-
-
-padUnitLabel : String -> String
-padUnitLabel unit =
+unitGhostText : String -> String
+unitGhostText unit =
     let
         display : String
         display =
             if String.isEmpty (String.trim unit) then
-                "none"
+                "unit"
 
             else
                 unit
     in
-    String.left unitLabelMax display
-        |> String.padRight unitLabelMax ' '
-
-
-unitLabelMax : Int
-unitLabelMax =
-    4
+    display
 
 
 servingRowView :
