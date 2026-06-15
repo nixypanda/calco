@@ -143,14 +143,27 @@ tests =
                             , error = Just "Network error"
                             }
                         )
+        , test "delete click opens confirmation state" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
+                    |> first
+                    |> deleteStateOf
+                    |> Expect.equal (Just FoodLogEntry.DeleteConfirming)
+        , test "delete confirm requests log deletion" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
+                    |> first
+                    |> FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked
+                    |> third
+                    |> Expect.equal (FoodLogEntry.RequestDeleteLog "log-1")
         , test "delete success navigates home" <|
             \_ ->
                 FoodLogEntry.update
                     (FoodLogEntry.DeleteCompleted (Ok ()))
-                    loadedModel
+                    deletingModel
                     |> third
                     |> Expect.equal (FoodLogEntry.Navigate (DiaryDay Nothing))
-        , test "delete failure keeps page open and stores error" <|
+        , test "delete failure keeps modal open and stores error" <|
             \_ ->
                 FoodLogEntry.update
                     (FoodLogEntry.DeleteCompleted (Err Client.NetworkError))
@@ -161,7 +174,7 @@ tests =
                         (Just
                             { logId = "log-1"
                             , request = FoodLogEntry.Idle
-                            , error = Just "Network error"
+                            , delete = FoodLogEntry.DeleteFailed "Network error"
                             }
                         )
         ]
@@ -188,6 +201,7 @@ loadedModel =
         , form = form
         , error = Nothing
         , request = FoodLogEntry.Idle
+        , delete = FoodLogEntry.DeleteIdle
         }
 
 
@@ -203,6 +217,7 @@ savingModel =
         , form = { form | amount = "4", submitting = True }
         , error = Nothing
         , request = FoodLogEntry.Saving
+        , delete = FoodLogEntry.DeleteIdle
         }
 
 
@@ -218,6 +233,7 @@ deletingModel =
         , form = form
         , error = Nothing
         , request = FoodLogEntry.Deleting
+        , delete = FoodLogEntry.DeleteConfirming
         }
 
 
@@ -231,6 +247,7 @@ mealLoadedModel =
         , form = FoodLogForm.initLogFormFromLog mealLog
         , error = Nothing
         , request = FoodLogEntry.Idle
+        , delete = FoodLogEntry.DeleteIdle
         }
 
 
@@ -462,7 +479,7 @@ loadedDeleteFailureSummary :
         Maybe
             { logId : String
             , request : FoodLogEntry.RequestState
-            , error : Maybe String
+            , delete : FoodLogEntry.DeleteState
             }
 loadedDeleteFailureSummary model =
     case model of
@@ -470,8 +487,18 @@ loadedDeleteFailureSummary model =
             Just
                 { logId = loaded.log.id
                 , request = loaded.request
-                , error = loaded.error
+                , delete = loaded.delete
                 }
+
+        _ ->
+            Nothing
+
+
+deleteStateOf : FoodLogEntry.Model -> Maybe FoodLogEntry.DeleteState
+deleteStateOf model =
+    case model of
+        FoodLogEntry.Loaded loaded ->
+            Just loaded.delete
 
         _ ->
             Nothing

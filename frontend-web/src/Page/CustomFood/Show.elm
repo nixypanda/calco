@@ -15,8 +15,6 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
 import Ui
 import Ui.Theme exposing (Theme)
 import View.Nutrients
@@ -237,15 +235,37 @@ applyDeleteError message model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ case model of
-            LoadFailed message ->
-                Ui.errorBanner theme message
+    Element.el
+        ([ Element.width Element.fill
+         , Element.height Element.fill
+         ]
+            ++ modalOverlayAttrs theme device model
+        )
+        (Ui.pageContainer device
+            [ case model of
+                LoadFailed message ->
+                    Ui.errorBanner theme message
 
-            _ ->
-                Element.none
-        , bodyView theme device model
-        ]
+                _ ->
+                    Element.none
+            , bodyView theme device model
+            ]
+        )
+
+
+modalOverlayAttrs : Theme -> Device -> Model -> List (Element.Attribute Msg)
+modalOverlayAttrs theme device model =
+    case model of
+        Loaded loaded ->
+            case deleteModalView theme device loaded of
+                Just modal ->
+                    [ Element.inFront modal ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
 
 
 bodyView : Theme -> Device -> Model -> Element Msg
@@ -278,7 +298,7 @@ loadedView theme device loaded =
         ]
         [ foodHeader theme device food
         , View.Nutrients.nutritionCard theme device nutrients
-        , confirmDeleteView theme device loaded
+        , bottomActionsView theme device food
         ]
 
 
@@ -297,27 +317,6 @@ foodNutrientsPer100g food =
 foodHeader : Theme -> Device -> ProductDetail -> Element Msg
 foodHeader theme device food =
     let
-        editAction : List (Element Msg)
-        editAction =
-            case customFoodEditRoute food of
-                Just _ ->
-                    [ Ui.iconButton device
-                        theme
-                        { label = "✎"
-                        , title = "Edit food"
-                        , onPress = EditClicked
-                        }
-                    , Ui.dangerIconButton device
-                        theme
-                        { label = "×"
-                        , title = "Delete food"
-                        , onPress = DeleteClicked
-                        }
-                    ]
-
-                Nothing ->
-                    []
-
         macroNutrients : List Nutrition.NutrientAmount
         macroNutrients =
             food.nutrients
@@ -329,7 +328,7 @@ foodHeader theme device food =
             { leading = Just (View.Nutrients.macroDot macroNutrients)
             , title = Ui.truncatedHeader theme device food.name
             , subtitle = Just (metaText food)
-            , actions = editAction
+            , actions = []
             }
         , if List.isEmpty food.categories then
             Element.none
@@ -348,45 +347,64 @@ metaText food =
         |> Ui.dotSeparated
 
 
-confirmDeleteView : Theme -> Device -> LoadedModel -> Element Msg
-confirmDeleteView theme device loaded =
+bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
+bottomActionsView theme device food =
+    let
+        actions : List { label : String, onPress : Msg, tone : Ui.BottomActionTone }
+        actions =
+            case customFoodEditRoute food of
+                Just _ ->
+                    [ { label = "Edit Food", onPress = EditClicked, tone = Ui.PrimaryAction }
+                    , { label = "Delete Food", onPress = DeleteClicked, tone = Ui.DangerAction }
+                    ]
+
+                Nothing ->
+                    []
+    in
+    Ui.bottomActionButtons device theme actions
+
+
+deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme device loaded =
     case loaded.delete of
         DeleteConfirming ->
-            confirmDeleteContent theme device Nothing False
+            Just (deleteModalContent theme device Nothing False)
 
         Deleting ->
-            confirmDeleteContent theme device Nothing True
+            Just (deleteModalContent theme device Nothing True)
 
         DeleteFailed message ->
-            confirmDeleteContent theme device (Just message) False
+            Just (deleteModalContent theme device (Just message) False)
 
         DeleteIdle ->
-            Element.none
+            Nothing
 
 
-confirmDeleteContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
-confirmDeleteContent theme device maybeError deleting =
-    Element.column
-        [ Element.spacing Ui.space8
-        , Element.padding Ui.space12
-        , Background.color theme.dangerBg
-        , Border.rounded 16
-        ]
-        [ Ui.sectionTitle theme device "Delete food?"
-        , Ui.maybeErrorBanner theme maybeError
-        , Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.button device theme "Cancel" CancelDeleteClicked
-            , Ui.dangerButton device
-                theme
-                (if deleting then
-                    "Deleting..."
-
-                 else
-                    "Confirm Delete"
-                )
-                ConfirmDeleteClicked
+deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
+deleteModalContent theme device maybeError deleting =
+    Ui.modalOverlay theme
+        device
+        { title = "Delete food?"
+        , body =
+            [ Ui.mutedParagraph theme "This will permanently remove the custom food."
+            , Ui.maybeErrorBanner theme maybeError
             ]
-        ]
+        , actions =
+            Ui.bottomActionButtons device
+                theme
+                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
+                , { label =
+                        if deleting then
+                            "Deleting..."
+
+                        else
+                            "Confirm Delete"
+                  , onPress = ConfirmDeleteClicked
+                  , tone = Ui.DangerAction
+                  }
+                ]
+        , onBackgroundPress = Just CancelDeleteClicked
+        }
 
 
 customFoodEditRoute : ProductDetail -> Maybe Route

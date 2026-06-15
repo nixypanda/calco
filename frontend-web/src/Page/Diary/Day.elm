@@ -467,7 +467,11 @@ slotView theme device macroMode section =
 
                     _ ->
                         [ Ui.hairline theme
-                        , Ui.fullWidthGhostButton device theme "+ Add Food" (AddFoodClicked section.slot)
+                        , Ui.fullWidthGhostButton
+                            device
+                            theme
+                            "+ Add Food"
+                            (AddFoodClicked section.slot)
                         ]
                )
         )

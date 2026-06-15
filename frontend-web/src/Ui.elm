@@ -1,5 +1,6 @@
 module Ui exposing
-    ( InputConfig
+    ( BottomActionTone(..)
+    , InputConfig
     , SubmitButtonConfig
     , SubmitState(..)
     , accentDot
@@ -8,6 +9,7 @@ module Ui exposing
     , accentYellow
     , badge
     , body
+    , bottomActionButtons
     , button
     , caption
     , carbsColor
@@ -46,6 +48,7 @@ module Ui exposing
     , macroColor
     , macroDotGhost
     , maybeErrorBanner
+    , modalOverlay
     , mutedBody
     , mutedCaption
     , mutedParagraph
@@ -656,6 +659,11 @@ type SubmitState
     | Disabled
 
 
+type BottomActionTone
+    = PrimaryAction
+    | DangerAction
+
+
 submittingOrIdle : Bool -> SubmitState
 submittingOrIdle isSubmitting =
     if isSubmitting then
@@ -720,6 +728,54 @@ primarySubmitButton device theme config =
         }
 
 
+bottomActionButtons :
+    Device
+    -> Theme
+    -> List { label : String, onPress : msg, tone : BottomActionTone }
+    -> Element msg
+bottomActionButtons device theme buttons =
+    let
+        buttonView : { label : String, onPress : msg, tone : BottomActionTone } -> Element msg
+        buttonView config =
+            Element.el [ Element.width Element.fill ]
+                (case config.tone of
+                    PrimaryAction ->
+                        primaryActionButton device theme config.label config.onPress
+
+                    DangerAction ->
+                        fullWidthDangerButton device theme config.label config.onPress
+                )
+
+        buttonElements : List (Element msg)
+        buttonElements =
+            List.map buttonView buttons
+    in
+    case buttonElements of
+        [] ->
+            Element.none
+
+        [ onlyButton ] ->
+            Element.column
+                [ Element.width Element.fill
+                , Element.spacing space12
+                ]
+                [ onlyButton ]
+
+        [ firstButton, secondButton ] ->
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing space12
+                ]
+                [ firstButton, secondButton ]
+
+        _ ->
+            Element.column
+                [ Element.width Element.fill
+                , Element.spacing space12
+                ]
+                buttonElements
+
+
 dangerButton : Device -> Theme -> String -> msg -> Element msg
 dangerButton device theme label msg =
     Input.button
@@ -728,6 +784,42 @@ dangerButton device theme label msg =
         , Border.rounded 999
         , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
+        , hoverEffect device [ Background.color theme.dangerFg ]
+        ]
+        { onPress = Just msg
+        , label = Element.text label
+        }
+
+
+primaryActionButton : Device -> Theme -> String -> msg -> Element msg
+primaryActionButton device theme label msg =
+    Input.button
+        [ Background.color theme.brandBlue
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded 999
+        , Element.width Element.fill
+        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
+        , Font.medium
+        , Font.center
+        , hoverEffect device [ Background.color theme.brandBluePressed ]
+        ]
+        { onPress = Just msg
+        , label = Element.text label
+        }
+
+
+fullWidthDangerButton : Device -> Theme -> String -> msg -> Element msg
+fullWidthDangerButton device theme label msg =
+    Input.button
+        [ Background.color theme.dangerSolid
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded 999
+        , Element.width Element.fill
+        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
+        , Font.medium
+        , Font.center
         , hoverEffect device [ Background.color theme.dangerFg ]
         ]
         { onPress = Just msg
@@ -834,6 +926,49 @@ mutedParagraph theme text =
         , body
         ]
         [ Element.text text ]
+
+
+modalOverlay :
+    Theme
+    -> Device
+    ->
+        { title : String
+        , body : List (Element msg)
+        , actions : Element msg
+        , onBackgroundPress : Maybe msg
+        }
+    -> Element msg
+modalOverlay theme device config =
+    let
+        modalCard : Element msg
+        modalCard =
+            Element.el
+                [ Element.centerX
+                , Element.centerY
+                , Element.width (Element.fill |> Element.maximum 480)
+                , Element.padding 16
+                ]
+                (card theme
+                    (sectionTitle theme device config.title
+                        :: config.body
+                        ++ [ config.actions ]
+                    )
+                )
+    in
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.inFront modalCard
+        ]
+        (Input.button
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            , Background.color (Element.rgba255 0 0 0 0.28)
+            ]
+            { onPress = config.onBackgroundPress
+            , label = Element.none
+            }
+        )
 
 
 detailRow : Theme -> String -> Element msg -> Element msg

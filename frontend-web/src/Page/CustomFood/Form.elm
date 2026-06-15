@@ -753,12 +753,9 @@ nutrientsCard theme device form nutrients =
                 (List.indexedMap
                     (nutrientRowView theme device nutrients form.openDropdown)
                     form.nutrients
-                    ++ [ Ui.hairline theme
-                       , Ui.ghostButton device theme "+ Add Nutrient" AddNutrientRow
-                       ]
                 )
             ]
-        , footer = Nothing
+        , footer = Just (Ui.fullWidthGhostButton device theme "+ Add Nutrient" AddNutrientRow)
         }
 
 
@@ -782,7 +779,7 @@ servingsCard theme device form units =
                         form.servings
                 )
             ]
-        , footer = Just (Ui.ghostButton device theme "+ Add Serving" AddServingRow)
+        , footer = Just (Ui.fullWidthGhostButton device theme "+ Add Serving" AddServingRow)
         }
 
 

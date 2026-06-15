@@ -19,8 +19,6 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Ui
 import Ui.Theme exposing (Theme)
@@ -486,37 +484,59 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ Ui.section theme
-            { header = Just (headerView theme device model)
-            , body =
-                [ case model of
-                    Loaded loaded ->
-                        case loaded.meal.notes of
-                            Just notes ->
-                                Ui.mutedParagraph theme notes
+    Element.el
+        ([ Element.width Element.fill
+         , Element.height Element.fill
+         ]
+            ++ modalOverlayAttrs theme device model
+        )
+        (Ui.pageContainer device
+            [ Ui.section theme
+                { header = Just (headerView theme device model)
+                , body =
+                    [ case model of
+                        Loaded loaded ->
+                            case loaded.meal.notes of
+                                Just notes ->
+                                    Ui.mutedParagraph theme notes
 
-                            Nothing ->
-                                Element.none
+                                Nothing ->
+                                    Element.none
 
-                    LoadFailed message ->
-                        Ui.errorBanner theme message
+                        LoadFailed message ->
+                            Ui.errorBanner theme message
 
-                    Loading _ ->
-                        Ui.skeletonLoading theme
-                ]
-            , footer = Nothing
-            }
-        , case model of
-            Loaded loaded ->
-                loadedView theme device loaded
+                        Loading _ ->
+                            Ui.skeletonLoading theme
+                    ]
+                , footer = Nothing
+                }
+            , case model of
+                Loaded loaded ->
+                    loadedView theme device loaded
 
-            LoadFailed message ->
-                Ui.errorBanner theme message
+                LoadFailed message ->
+                    Ui.errorBanner theme message
 
-            Loading _ ->
-                Ui.skeletonLoading theme
-        ]
+                Loading _ ->
+                    Ui.skeletonLoading theme
+            ]
+        )
+
+
+modalOverlayAttrs : Theme -> Device -> Model -> List (Element.Attribute Msg)
+modalOverlayAttrs theme device model =
+    case model of
+        Loaded loaded ->
+            case deleteModalView theme device loaded of
+                Just modal ->
+                    [ Element.inFront modal ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
 
 
 headerView : Theme -> Device -> Model -> Element Msg
@@ -530,14 +550,7 @@ headerView theme device model =
                             (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
                 , title = Ui.truncatedHeader theme device loaded.meal.name
                 , subtitle = Nothing
-                , actions =
-                    [ Ui.iconButton device
-                        theme
-                        { label = "✎", title = "Edit", onPress = EditClicked }
-                    , Ui.dangerIconButton device
-                        theme
-                        { label = "×", title = "Delete", onPress = DeleteClicked }
-                    ]
+                , actions = []
                 }
 
         _ ->
@@ -553,7 +566,7 @@ loadedView theme device loaded =
             , footer = Nothing
             }
         , nutritionView theme device loaded
-        , confirmDeleteView theme device loaded
+        , bottomActionsView theme device
         ]
 
 
@@ -636,42 +649,53 @@ nutritionView theme device loaded =
         ]
 
 
-confirmDeleteView : Theme -> Device -> LoadedModel -> Element Msg
-confirmDeleteView theme device loaded =
+bottomActionsView : Theme -> Device -> Element Msg
+bottomActionsView theme device =
+    Ui.bottomActionButtons device
+        theme
+        [ { label = "Edit Meal", onPress = EditClicked, tone = Ui.PrimaryAction }
+        , { label = "Delete Meal", onPress = DeleteClicked, tone = Ui.DangerAction }
+        ]
+
+
+deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme device loaded =
     case loaded.delete of
         DeleteConfirming ->
-            confirmDeleteContent theme device Nothing False
+            Just (deleteModalContent theme device Nothing False)
 
         Deleting ->
-            confirmDeleteContent theme device Nothing True
+            Just (deleteModalContent theme device Nothing True)
 
         DeleteFailed message ->
-            confirmDeleteContent theme device (Just message) False
+            Just (deleteModalContent theme device (Just message) False)
 
         DeleteIdle ->
-            Element.none
+            Nothing
 
 
-confirmDeleteContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
-confirmDeleteContent theme device maybeError deleting =
-    Element.column
-        [ Element.spacing Ui.space8
-        , Element.padding Ui.space12
-        , Background.color theme.dangerBg
-        , Border.rounded 16
-        ]
-        [ Ui.sectionTitle theme device "Delete meal?"
-        , Ui.maybeErrorBanner theme maybeError
-        , Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.button device theme "Cancel" CancelDeleteClicked
-            , Ui.dangerButton device
-                theme
-                (if deleting then
-                    "Deleting..."
-
-                 else
-                    "Confirm Delete"
-                )
-                ConfirmDeleteClicked
+deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
+deleteModalContent theme device maybeError deleting =
+    Ui.modalOverlay theme
+        device
+        { title = "Delete meal?"
+        , body =
+            [ Ui.mutedParagraph theme "This will permanently remove the meal."
+            , Ui.maybeErrorBanner theme maybeError
             ]
-        ]
+        , actions =
+            Ui.bottomActionButtons device
+                theme
+                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
+                , { label =
+                        if deleting then
+                            "Deleting..."
+
+                        else
+                            "Confirm Delete"
+                  , onPress = ConfirmDeleteClicked
+                  , tone = Ui.DangerAction
+                  }
+                ]
+        , onBackgroundPress = Just CancelDeleteClicked
+        }

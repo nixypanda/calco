@@ -1,5 +1,6 @@
 module Page.FoodLog.Entry exposing
-    ( ItemDetail(..)
+    ( DeleteState(..)
+    , ItemDetail(..)
     , LoadFailedModel
     , LoadedItem(..)
     , LoadedModel
@@ -53,6 +54,7 @@ type alias LoadedModel =
     , form : FoodLogForm.Model
     , error : Maybe String
     , request : RequestState
+    , delete : DeleteState
     }
 
 
@@ -81,6 +83,12 @@ type RequestState
     | Deleting
 
 
+type DeleteState
+    = DeleteIdle
+    | DeleteConfirming
+    | DeleteFailed String
+
+
 type alias LoadFailedModel =
     { logId : String
     , error : String
@@ -96,6 +104,8 @@ type Msg
     | SubmitClicked
     | UpdateCompleted (Result Client.ApiError FoodLog)
     | DeleteClicked
+    | CancelDeleteClicked
+    | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
     | EditCustomFoodClicked
 
@@ -188,10 +198,49 @@ update msg model =
             case model of
                 Loaded loaded ->
                     if loaded.request == Idle then
-                        ( Loaded { loaded | request = Deleting, error = Nothing }
-                        , Cmd.none
-                        , RequestDeleteLog loaded.logId
-                        )
+                        ( Loaded { loaded | delete = DeleteConfirming }, Cmd.none, NoOp )
+
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        CancelDeleteClicked ->
+            case model of
+                Loaded loaded ->
+                    ( Loaded { loaded | delete = DeleteIdle }, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        ConfirmDeleteClicked ->
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Idle then
+                        case loaded.delete of
+                            DeleteConfirming ->
+                                ( Loaded
+                                    { loaded
+                                        | request = Deleting
+                                        , error = Nothing
+                                    }
+                                , Cmd.none
+                                , RequestDeleteLog loaded.logId
+                                )
+
+                            DeleteFailed _ ->
+                                ( Loaded
+                                    { loaded
+                                        | request = Deleting
+                                        , error = Nothing
+                                    }
+                                , Cmd.none
+                                , RequestDeleteLog loaded.logId
+                                )
+
+                            DeleteIdle ->
+                                ( model, Cmd.none, NoOp )
 
                     else
                         ( model, Cmd.none, NoOp )
@@ -200,18 +249,29 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         DeleteCompleted result ->
-            case result of
-                Ok _ ->
-                    ( model, Cmd.none, Navigate (DiaryDay Nothing) )
+            case model of
+                Loaded loaded ->
+                    if loaded.request == Deleting then
+                        case result of
+                            Ok _ ->
+                                ( model, Cmd.none, Navigate (DiaryDay Nothing) )
 
-                Err error ->
-                    Client.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError = \message current -> applyLoadedDeleteError message current
-                        }
-                        error
-                        model
+                            Err error ->
+                                Client.failure
+                                    { noOp = NoOp
+                                    , sessionExpired = SessionExpired
+                                    , applyError =
+                                        \message current ->
+                                            applyLoadedDeleteError message current
+                                    }
+                                    error
+                                    model
+
+                    else
+                        ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         EditCustomFoodClicked ->
             case model of
@@ -293,6 +353,7 @@ setLoadedLog log model =
                     , form = FoodLogForm.initLogFormFromLog log
                     , error = Nothing
                     , request = Idle
+                    , delete = DeleteIdle
                 }
 
         LoadFailed _ ->
@@ -306,7 +367,7 @@ setLoadedUnits units model =
             completeLoading { loading | units = Just units }
 
         Loaded loaded ->
-            Loaded { loaded | units = units, error = Nothing }
+            Loaded { loaded | units = units, error = Nothing, delete = DeleteIdle }
 
         LoadFailed _ ->
             model
@@ -324,6 +385,7 @@ completeLoading loading =
                 , form = FoodLogForm.initLogFormFromLog log
                 , error = Nothing
                 , request = Idle
+                , delete = DeleteIdle
                 }
 
         _ ->
@@ -341,6 +403,7 @@ updateLoadedLog log model =
                     , form = FoodLogForm.initLogFormFromLog log
                     , error = Nothing
                     , request = Idle
+                    , delete = DeleteIdle
                 }
 
         _ ->
@@ -494,6 +557,7 @@ applyLoadedError message model =
                     | form = nextForm
                     , error = Just message
                     , request = Idle
+                    , delete = DeleteIdle
                 }
 
         _ ->
@@ -504,7 +568,7 @@ applyLoadedDeleteError : String -> Model -> Model
 applyLoadedDeleteError message model =
     case model of
         Loaded loaded ->
-            Loaded { loaded | request = Idle, error = Just message }
+            Loaded { loaded | request = Idle, delete = DeleteFailed message }
 
         _ ->
             model
@@ -545,15 +609,37 @@ modelLogId model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ case pageError model of
-            Just message ->
-                Ui.errorBanner theme message
+    Element.el
+        ([ Element.width Element.fill
+         , Element.height Element.fill
+         ]
+            ++ modalOverlayAttrs theme device model
+        )
+        (Ui.pageContainer device
+            [ case pageError model of
+                Just message ->
+                    Ui.errorBanner theme message
 
-            Nothing ->
-                Element.none
-        , bodyView theme device model
-        ]
+                Nothing ->
+                    Element.none
+            , bodyView theme device model
+            ]
+        )
+
+
+modalOverlayAttrs : Theme -> Device -> Model -> List (Element.Attribute Msg)
+modalOverlayAttrs theme device model =
+    case model of
+        Loaded loaded ->
+            case deleteModalView theme device loaded of
+                Just modal ->
+                    [ Element.inFront modal ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
 
 
 pageError : Model -> Maybe String
@@ -563,7 +649,12 @@ pageError model =
             Nothing
 
         Loaded loaded ->
-            loaded.error
+            case loaded.delete of
+                DeleteIdle ->
+                    loaded.error
+
+                _ ->
+                    Nothing
 
         LoadFailed failed ->
             Just failed.error
@@ -596,15 +687,7 @@ loadedView theme device model =
         [ itemHeader theme device model
         , Element.map FormMsg
             (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
-        , Ui.cardActions
-            [ Ui.primarySubmitButton device
-                theme
-                { state = submitState model
-                , idleLabel = "Save"
-                , submittingLabel = "Saving..."
-                , onPress = SubmitClicked
-                }
-            ]
+        , detailActionsView theme device model
         , View.Nutrients.nutritionCard theme device nutrients
         ]
 
@@ -671,43 +754,13 @@ itemHeader theme device model =
         maybeFood : Maybe ProductDetail
         maybeFood =
             productDetail model.item
-
-        editAction : List (Element Msg)
-        editAction =
-            case Maybe.andThen customFoodEditRoute maybeFood of
-                Just _ ->
-                    [ Ui.iconButton device
-                        theme
-                        { label = "✎"
-                        , title = "Edit food"
-                        , onPress = EditCustomFoodClicked
-                        }
-                    ]
-
-                Nothing ->
-                    []
-
-        deleteAction : List (Element Msg)
-        deleteAction =
-            [ Ui.dangerIconButton device
-                theme
-                { label = "×"
-                , title =
-                    if model.request == Deleting then
-                        "Deleting..."
-
-                    else
-                        "Delete"
-                , onPress = DeleteClicked
-                }
-            ]
     in
     Ui.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot model.log.nutrients)
             , title = itemTitle theme device model.item
             , subtitle = Just (metaText maybeFood model.log)
-            , actions = editAction ++ deleteAction
+            , actions = []
             }
         , case maybeFood of
             Just food ->
@@ -761,6 +814,100 @@ metaText maybeFood log =
 
         Nothing ->
             "Logged " ++ LocalDate.display log.logDate
+
+
+detailActionsView : Theme -> Device -> LoadedModel -> Element Msg
+detailActionsView theme device model =
+    let
+        maybeFood : Maybe ProductDetail
+        maybeFood =
+            productDetail model.item
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing Ui.space12
+        ]
+        (let
+            primaryActions : List (Element Msg)
+            primaryActions =
+                [ Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing Ui.space12
+                    ]
+                    [ Element.el [ Element.width Element.fill ]
+                        (Ui.primarySubmitButton device
+                            theme
+                            { state = submitState model
+                            , idleLabel = "Save"
+                            , submittingLabel = "Saving..."
+                            , onPress = SubmitClicked
+                            }
+                        )
+                    , Element.el [ Element.width Element.fill ]
+                        (Ui.bottomActionButtons device theme
+                            [ { label = "Delete Log"
+                              , onPress = DeleteClicked
+                              , tone = Ui.DangerAction
+                              }
+                            ]
+                        )
+                    ]
+                ]
+         in
+         case Maybe.andThen customFoodEditRoute maybeFood of
+            Just _ ->
+                primaryActions
+                    ++ [ Ui.bottomActionButtons device theme
+                            [ { label = "Edit Food"
+                              , onPress = EditCustomFoodClicked
+                              , tone = Ui.PrimaryAction
+                              }
+                            ]
+                       ]
+
+            Nothing ->
+                primaryActions
+        )
+
+
+deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme device loaded =
+    case loaded.delete of
+        DeleteConfirming ->
+            Just (deleteModalContent theme device Nothing (loaded.request == Deleting))
+
+        DeleteFailed message ->
+            Just (deleteModalContent theme device (Just message) False)
+
+        DeleteIdle ->
+            Nothing
+
+
+deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
+deleteModalContent theme device maybeError deleting =
+    Ui.modalOverlay theme
+        device
+        { title = "Delete log?"
+        , body =
+            [ Ui.mutedParagraph theme "This will permanently remove the log entry."
+            , Ui.maybeErrorBanner theme maybeError
+            ]
+        , actions =
+            Ui.bottomActionButtons device
+                theme
+                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
+                , { label =
+                        if deleting then
+                            "Deleting..."
+
+                        else
+                            "Confirm Delete"
+                  , onPress = ConfirmDeleteClicked
+                  , tone = Ui.DangerAction
+                  }
+                ]
+        , onBackgroundPress = Just CancelDeleteClicked
+        }
 
 
 customFoodEditRoute : ProductDetail -> Maybe Route
