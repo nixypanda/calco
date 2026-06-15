@@ -168,7 +168,23 @@ tests =
                 \_ ->
                     DiaryDay.update (DiaryDay.AddFoodClicked Lunch) emptyModel
                         |> third
-                        |> Expect.equal (DiaryDay.Navigate (FoodSearch (Just Lunch)))
+                        |> Expect.equal
+                            (DiaryDay.Navigate
+                                (FoodSearch (Just "2026-05-30") (Just Lunch))
+                            )
+            , test "add-food action should preserve selected diary date in navigation" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.AddFoodClicked Lunch)
+                        { emptyModel
+                            | currentDate = yesterday
+                            , diary = DiaryDay.Loaded yesterday []
+                        }
+                        |> third
+                        |> Expect.equal
+                            (DiaryDay.Navigate
+                                (FoodSearch (Just "2026-05-29") (Just Lunch))
+                            )
             , test "log row click navigates to log detail" <|
                 \_ ->
                     DiaryDay.update (DiaryDay.LogClicked "log-1") emptyModel

@@ -19,8 +19,8 @@ type Route
     | AdminEditUser String
     | DiaryDay (Maybe String)
     | FoodLogEntry String
-    | FoodSearch (Maybe MealSlot)
-    | FoodShow String (Maybe MealSlot)
+    | FoodSearch (Maybe String) (Maybe MealSlot)
+    | FoodShow String (Maybe String) (Maybe MealSlot)
     | CustomFoodList
     | CustomFoodCreate
     | CustomFoodEdit String
@@ -49,12 +49,12 @@ routeParser =
         , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
         , Parser.map DiaryDay (s "home" <?> Query.string "date")
         , Parser.map FoodLogEntry (s "logs" </> string)
-        , Parser.map FoodSearch (s "search" <?> mealSlotQuery)
+        , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
         , Parser.map CustomFoodShow (s "foods" </> s "custom" </> string)
-        , Parser.map FoodShow (s "foods" </> string <?> mealSlotQuery)
+        , Parser.map FoodShow (s "foods" </> string <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map MealList (s "meals")
         , Parser.map MealCreate (s "meals" </> s "new")
         , Parser.map MealEdit (s "meals" </> string </> s "edit")
@@ -100,11 +100,11 @@ routeToPath route =
         FoodLogEntry id ->
             "/logs/" ++ id
 
-        FoodSearch maybeSlot ->
-            withMealSlot "/search" maybeSlot
+        FoodSearch maybeDate maybeSlot ->
+            withFoodContext "/search" maybeDate maybeSlot
 
-        FoodShow id maybeSlot ->
-            withMealSlot ("/foods/" ++ id) maybeSlot
+        FoodShow id maybeDate maybeSlot ->
+            withFoodContext ("/foods/" ++ id) maybeDate maybeSlot
 
         CustomFoodList ->
             "/foods/custom"
@@ -134,11 +134,18 @@ routeToPath route =
             "/"
 
 
-withMealSlot : String -> Maybe MealSlot -> String
-withMealSlot path maybeSlot =
-    case maybeSlot of
-        Just slot ->
-            path ++ "?meal_slot=" ++ MealSlot.toString slot
+withFoodContext : String -> Maybe String -> Maybe MealSlot -> String
+withFoodContext path maybeDate maybeSlot =
+    let
+        params : List String
+        params =
+            List.filterMap identity
+                [ Maybe.map (\date -> "date=" ++ date) maybeDate
+                , Maybe.map (\slot -> "meal_slot=" ++ MealSlot.toString slot) maybeSlot
+                ]
+    in
+    if List.isEmpty params then
+        path
 
-        Nothing ->
-            path
+    else
+        path ++ "?" ++ String.join "&" params

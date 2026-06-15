@@ -81,10 +81,10 @@ resolveKnownSession session adminExists route =
             FoodLogEntry _ ->
                 Render route
 
-            FoodSearch _ ->
+            FoodSearch _ _ ->
                 Render route
 
-            FoodShow _ _ ->
+            FoodShow _ _ _ ->
                 Render route
 
             CustomFoodList ->

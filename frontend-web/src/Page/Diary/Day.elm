@@ -141,7 +141,10 @@ update msg model =
             ( { model | macroMode = toggleMacroMode model.macroMode }, Cmd.none, NoOp )
 
         AddFoodClicked slot ->
-            ( model, Cmd.none, Navigate (FoodSearch (Just slot)) )
+            ( model
+            , Cmd.none
+            , Navigate (FoodSearch (Just (LocalDate.format model.currentDate)) (Just slot))
+            )
 
         LogClicked id ->
             ( model, Cmd.none, Navigate (FoodLogEntry id) )

@@ -29,11 +29,11 @@ tests =
                     |> Expect.equal (Navigate (DiaryDay Nothing))
         , test "food routes reject signed-out users" <|
             \_ ->
-                Access.resolveRoute Unauthenticated True (FoodSearch Nothing)
+                Access.resolveRoute Unauthenticated True (FoodSearch Nothing Nothing)
                     |> Expect.equal (Navigate AuthLogin)
         , test "food routes reject admins" <|
             \_ ->
-                Access.resolveRoute admin True (FoodSearch Nothing)
+                Access.resolveRoute admin True (FoodSearch Nothing Nothing)
                     |> Expect.equal (Navigate AdminDashboard)
         , test "admin route rejects normal users" <|
             \_ ->

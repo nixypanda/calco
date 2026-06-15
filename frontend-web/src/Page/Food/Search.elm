@@ -22,6 +22,7 @@ import View.Search as SearchView
 type alias Model =
     { search : QueryState
     , results : Loadable Client.ApiError (List Foods.SearchResult)
+    , date : Maybe String
     , mealSlot : Maybe MealSlot
     }
 
@@ -45,10 +46,11 @@ type OutMsg
     | SessionExpired
 
 
-init : Maybe MealSlot -> Model
-init mealSlot =
+init : Maybe String -> Maybe MealSlot -> Model
+init date mealSlot =
     { search = Search.empty
     , results = NotAsked
+    , date = date
     , mealSlot = mealSlot
     }
 
@@ -170,7 +172,7 @@ update msg model =
                             ( { model | results = Failure error }, Cmd.none, NoOp )
 
         ResultClicked id ->
-            ( model, Cmd.none, Navigate (FoodShow id model.mealSlot) )
+            ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot) )
 
         CreateCustomFoodClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )

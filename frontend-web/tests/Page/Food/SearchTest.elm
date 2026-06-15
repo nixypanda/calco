@@ -181,9 +181,15 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.ResultClicked "food-1")
-                    { emptyModel | mealSlot = Just Lunch }
+                    { emptyModel
+                        | date = Just "2026-05-29"
+                        , mealSlot = Just Lunch
+                    }
                     |> third
-                    |> Expect.equal (FoodSearch.Navigate (FoodShow "food-1" (Just Lunch)))
+                    |> Expect.equal
+                        (FoodSearch.Navigate
+                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch))
+                        )
         , test "create custom food navigates to custom food create" <|
             \_ ->
                 FoodSearch.update FoodSearch.CreateCustomFoodClicked emptyModel
@@ -194,7 +200,7 @@ tests =
 
 emptyModel : FoodSearch.Model
 emptyModel =
-    FoodSearch.init Nothing
+    FoodSearch.init Nothing Nothing
 
 
 loadedModel : FoodSearch.Model

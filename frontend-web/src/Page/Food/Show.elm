@@ -34,6 +34,7 @@ type Model
 
 type alias LoadingModel =
     { productId : String
+    , logDate : Maybe String
     , mealSlot : Maybe MealSlot
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
@@ -42,6 +43,7 @@ type alias LoadingModel =
 
 type alias LoadedModel =
     { productId : String
+    , logDate : Maybe String
     , mealSlot : Maybe MealSlot
     , food : ProductDetail
     , units : List UnitItem
@@ -75,10 +77,11 @@ type OutMsg
     | SessionExpired
 
 
-init : String -> Maybe MealSlot -> ( Model, OutMsg )
-init productId mealSlot =
+init : String -> Maybe String -> Maybe MealSlot -> ( Model, OutMsg )
+init productId logDate mealSlot =
     ( Loading
         { productId = productId
+        , logDate = logDate
         , mealSlot = mealSlot
         , food = Nothing
         , units = Nothing
@@ -176,7 +179,7 @@ update msg model =
                     if loaded.request == Saving then
                         case result of
                             Ok _ ->
-                                ( model, Cmd.none, Navigate (DiaryDay Nothing) )
+                                ( model, Cmd.none, Navigate (DiaryDay loaded.logDate) )
 
                             Err error ->
                                 Client.failure
@@ -201,8 +204,13 @@ createLogFromLocalContext :
     -> LoadedModel
     -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
+    let
+        logDate : String
+        logDate =
+            Maybe.withDefault context.date loaded.logDate
+    in
     case
-        FoodLogForm.createProductLogRequest context.date
+        FoodLogForm.createProductLogRequest logDate
             (Just context.timezone)
             loaded.productId
             loaded.form
@@ -300,6 +308,7 @@ completeLoading loading =
         ( Just food, Just units ) ->
             Loaded
                 { productId = loading.productId
+                , logDate = loading.logDate
                 , mealSlot = loading.mealSlot
                 , food = food
                 , units = units

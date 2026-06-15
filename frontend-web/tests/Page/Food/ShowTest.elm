@@ -19,7 +19,10 @@ tests =
     describe "Page.Food.Show"
         [ test "init requests food detail and units" <|
             \_ ->
-                FoodShow.init "food-1" (Just Lunch)
+                FoodShow.init
+                    "food-1"
+                    (Just "2026-05-29")
+                    (Just Lunch)
                     |> Tuple.second
                     |> Expect.equal (FoodShow.RequestInitialData "food-1")
         , test "food load success initializes the log form" <|
@@ -52,7 +55,7 @@ tests =
                 FoodShow.update FoodShow.SubmitClicked loadedModel
                     |> third
                     |> Expect.equal FoodShow.RequestLocalContext
-        , test "local context creates log request" <|
+        , test "local context uses selected diary date for log request" <|
             \_ ->
                 FoodShow.update
                     (FoodShow.LocalContextReceived
@@ -72,7 +75,27 @@ tests =
                             , notes = Nothing
                             }
                         )
-        , test "local context with bad date reports a validation error" <|
+        , test "local context without selected diary date falls back to device date" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LocalContextReceived
+                        { date = "2026-06-04"
+                        , timezone = "Asia/Kolkata"
+                        }
+                    )
+                    contextReadyWithoutDateModel
+                    |> third
+                    |> Expect.equal
+                        (FoodShow.RequestCreateLog
+                            { logDate = date "2026-06-04"
+                            , deviceTimezone = Just "Asia/Kolkata"
+                            , mealSlot = Just "lunch"
+                            , item = { itemType = ItemRef.Product, id = "food-1" }
+                            , quantity = { amount = "2", unit = "serving" }
+                            , notes = Nothing
+                            }
+                        )
+        , test "bad device date fails when no diary date is selected" <|
             \_ ->
                 let
                     ( model, _, outMsg ) =
@@ -82,7 +105,7 @@ tests =
                                 , timezone = "Asia/Kolkata"
                                 }
                             )
-                            contextReadyModel
+                            contextReadyWithoutDateModel
 
                     formError : Maybe String
                     formError =
@@ -96,11 +119,11 @@ tests =
                         ( FoodShow.NoOp
                         , Just "Could not read device date."
                         )
-        , test "log success navigates home" <|
+        , test "log success navigates back to selected diary day" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
                     |> third
-                    |> Expect.equal (FoodShow.Navigate (DiaryDay Nothing))
+                    |> Expect.equal (FoodShow.Navigate (DiaryDay (Just "2026-05-29")))
         , test "log failure keeps form state and stores error" <|
             \_ ->
                 let
@@ -120,6 +143,7 @@ emptyModel : FoodShow.Model
 emptyModel =
     FoodShow.Loading
         { productId = "food-1"
+        , logDate = Just "2026-05-29"
         , mealSlot = Just Lunch
         , food = Nothing
         , units = Nothing
@@ -130,6 +154,7 @@ loadedModel : FoodShow.Model
 loadedModel =
     FoodShow.Loaded
         { productId = "food-1"
+        , logDate = Just "2026-05-29"
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
@@ -143,6 +168,21 @@ contextReadyModel : FoodShow.Model
 contextReadyModel =
     FoodShow.Loaded
         { productId = "food-1"
+        , logDate = Just "2026-05-29"
+        , mealSlot = Just Lunch
+        , food = food
+        , units = [ gram ]
+        , form = form
+        , error = Nothing
+        , request = FoodShow.RequestingLocalContext
+        }
+
+
+contextReadyWithoutDateModel : FoodShow.Model
+contextReadyWithoutDateModel =
+    FoodShow.Loaded
+        { productId = "food-1"
+        , logDate = Nothing
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
@@ -156,6 +196,7 @@ savingModel : FoodShow.Model
 savingModel =
     FoodShow.Loaded
         { productId = "food-1"
+        , logDate = Just "2026-05-29"
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
@@ -268,7 +309,7 @@ log =
 
 sampleDate : LocalDate
 sampleDate =
-    sampleDateFromString "2026-06-04"
+    sampleDateFromString "2026-05-29"
 
 
 sampleDateFromString : String -> LocalDate

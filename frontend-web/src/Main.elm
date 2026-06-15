@@ -565,11 +565,15 @@ loadPage route model =
                 Nothing ->
                     ( { model | page = LoadingPage }, Cmd.none )
 
-        FoodSearch mealSlot ->
-            ( { model | page = FoodSearchPage (FoodSearch.init mealSlot) }, Cmd.none )
+        FoodSearch dateParam mealSlot ->
+            ( { model | page = FoodSearchPage (FoodSearch.init dateParam mealSlot) }, Cmd.none )
 
-        FoodShow productId mealSlot ->
-            initPage FoodDetailPage applyFoodDetailOutMsg (FoodShow.init productId mealSlot) model
+        FoodShow productId dateParam mealSlot ->
+            initPage
+                FoodDetailPage
+                applyFoodDetailOutMsg
+                (FoodShow.init productId dateParam mealSlot)
+                model
 
         FoodLogEntry logId ->
             initPage FoodLogDetailPage applyFoodLogDetailOutMsg (FoodLogEntry.init logId) model
@@ -1224,7 +1228,7 @@ bottomNavBar model =
         , Element.htmlAttribute (Html.Attributes.class "app-bottom-nav")
         ]
         [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
-        , tabButton model "🔍︎" "Search" (FoodSearch Nothing)
+        , tabButton model "🔍︎" "Search" (FoodSearch Nothing Nothing)
         , tabButton model "◉" "Foods" CustomFoodList
         , tabButton model "🍽" "Meals" MealList
         ]
@@ -1443,7 +1447,7 @@ screenMeta device session route =
         AdminEditUser _ ->
             { title = "Edit User", leading = GoBack AdminDashboard }
 
-        FoodSearch maybeSlot ->
+        FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
                     Just slot ->
@@ -1451,11 +1455,11 @@ screenMeta device session route =
 
                     Nothing ->
                         "Search Foods"
-            , leading = GoBack (DiaryDay Nothing)
+            , leading = GoBack (DiaryDay maybeDate)
             }
 
-        FoodShow _ maybeSlot ->
-            { title = "Log Food", leading = GoBack (FoodSearch maybeSlot) }
+        FoodShow _ maybeDate maybeSlot ->
+            { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
         FoodLogEntry _ ->
             { title = "Edit Log", leading = GoBack (DiaryDay Nothing) }
@@ -1562,7 +1566,7 @@ drawerItems model =
 
     else
         [ drawerItem model.theme model.route "Diary" (DiaryDay Nothing)
-        , drawerItem model.theme model.route "Search Foods" (FoodSearch Nothing)
+        , drawerItem model.theme model.route "Search Foods" (FoodSearch Nothing Nothing)
         , drawerItem model.theme model.route "My Foods" CustomFoodList
         , drawerItem model.theme model.route "My Meals" MealList
         ]
@@ -1603,8 +1607,8 @@ drawerItem theme current label target =
 primaryRoute : Route -> Route
 primaryRoute route =
     case route of
-        FoodShow _ _ ->
-            FoodSearch Nothing
+        FoodShow _ maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
 
         CustomFoodCreate ->
             CustomFoodList
@@ -1636,8 +1640,8 @@ primaryRoute route =
         DiaryDay _ ->
             DiaryDay Nothing
 
-        FoodSearch _ ->
-            FoodSearch Nothing
+        FoodSearch maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
 
         other ->
             other
