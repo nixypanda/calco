@@ -1,5 +1,7 @@
 module Page.Diary.Day exposing
     ( DiaryState(..)
+    , LoadedState
+    , LoadingState
     , MacroMode(..)
     , Model
     , Msg(..)
@@ -13,6 +15,7 @@ module Page.Diary.Day exposing
 
 import Api.Client as Client
 import Data.FoodLog exposing (FoodLog)
+import Data.Goals exposing (GoalSnapshot, GoalTargets)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -35,9 +38,23 @@ type MacroMode
 
 
 type DiaryState
-    = Loading LocalDate
-    | Loaded LocalDate (List FoodLog)
+    = Loading LoadingState
+    | Loaded LoadedState
     | Failed LocalDate String
+
+
+type alias LoadingState =
+    { date : LocalDate
+    , logs : Maybe (List FoodLog)
+    , goal : Maybe GoalSnapshot
+    }
+
+
+type alias LoadedState =
+    { date : LocalDate
+    , logs : List FoodLog
+    , goal : GoalSnapshot
+    }
 
 
 type alias Model =
@@ -51,6 +68,7 @@ type alias Model =
 type Msg
     = LoadStarted
     | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
     | PreviousDayClicked
     | NextDayClicked
     | MacroModeToggled
@@ -78,7 +96,7 @@ init args =
     in
     ( { currentDate = currentDate
       , today = args.today
-      , diary = Loading currentDate
+      , diary = loadingState currentDate
       , macroMode = Grams
       }
     , RequestDiaryData currentDate
@@ -90,15 +108,15 @@ update msg model =
     case msg of
         LoadStarted ->
             case model.diary of
-                Loading date ->
-                    if LocalDate.equals date model.currentDate then
+                Loading loading ->
+                    if LocalDate.equals loading.date model.currentDate then
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | diary = Loading model.currentDate }, Cmd.none, NoOp )
+                        ( { model | diary = loadingState model.currentDate }, Cmd.none, NoOp )
 
                 _ ->
-                    ( { model | diary = Loading model.currentDate }, Cmd.none, NoOp )
+                    ( { model | diary = loadingState model.currentDate }, Cmd.none, NoOp )
 
         LogsLoaded requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
@@ -107,10 +125,19 @@ update msg model =
             else
                 case result of
                     Ok logs ->
-                        ( { model | diary = Loaded requestDate (logsForDate requestDate logs) }
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( { model | diary = applyLogsLoaded requestDate logs model.diary }, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure requestDate error model
+
+        GoalLoaded requestDate result ->
+            if not (LocalDate.equals requestDate model.currentDate) then
+                ( model, Cmd.none, NoOp )
+
+            else
+                case result of
+                    Ok snapshot ->
+                        ( { model | diary = applyGoalLoaded requestDate snapshot model.diary }, Cmd.none, NoOp )
 
                     Err error ->
                         failure requestDate error model
@@ -121,7 +148,7 @@ update msg model =
                 previous =
                     LocalDate.addDays -1 model.currentDate
             in
-            ( { model | currentDate = previous, diary = Loading previous }
+            ( { model | currentDate = previous, diary = loadingState previous }
             , Cmd.none
             , Navigate (DiaryDay (Just (LocalDate.format previous)))
             )
@@ -129,7 +156,7 @@ update msg model =
         NextDayClicked ->
             case LocalDate.nextOnOrBefore model.today model.currentDate of
                 Just next ->
-                    ( { model | currentDate = next, diary = Loading next }
+                    ( { model | currentDate = next, diary = loadingState next }
                     , Cmd.none
                     , Navigate (DiaryDay (Just (LocalDate.format next)))
                     )
@@ -160,6 +187,78 @@ failure requestDate =
         , sessionExpired = SessionExpired
         , applyError = \message model -> { model | diary = Failed requestDate message }
         }
+
+
+loadingState : LocalDate -> DiaryState
+loadingState date =
+    Loading
+        { date = date
+        , logs = Nothing
+        , goal = Nothing
+        }
+
+
+applyLogsLoaded : LocalDate -> List FoodLog -> DiaryState -> DiaryState
+applyLogsLoaded requestDate logs diary =
+    let
+        filteredLogs : List FoodLog
+        filteredLogs =
+            logsForDate requestDate logs
+    in
+    case diary of
+        Loading loading ->
+            toLoadedOrLoading
+                { loading | date = requestDate, logs = Just filteredLogs }
+
+        Loaded loaded ->
+            toLoadedOrLoading
+                { date = requestDate
+                , logs = Just filteredLogs
+                , goal = Just loaded.goal
+                }
+
+        Failed _ _ ->
+            toLoadedOrLoading
+                { date = requestDate
+                , logs = Just filteredLogs
+                , goal = Nothing
+                }
+
+
+applyGoalLoaded : LocalDate -> GoalSnapshot -> DiaryState -> DiaryState
+applyGoalLoaded requestDate snapshot diary =
+    case diary of
+        Loading loading ->
+            toLoadedOrLoading
+                { loading | date = requestDate, goal = Just snapshot }
+
+        Loaded loaded ->
+            toLoadedOrLoading
+                { date = requestDate
+                , logs = Just loaded.logs
+                , goal = Just snapshot
+                }
+
+        Failed _ _ ->
+            toLoadedOrLoading
+                { date = requestDate
+                , logs = Nothing
+                , goal = Just snapshot
+                }
+
+
+toLoadedOrLoading : LoadingState -> DiaryState
+toLoadedOrLoading loading =
+    case ( loading.logs, loading.goal ) of
+        ( Just logs, Just goal ) ->
+            Loaded
+                { date = loading.date
+                , logs = logs
+                , goal = goal
+                }
+
+        _ ->
+            Loading loading
 
 
 logsForDate : LocalDate -> List FoodLog -> List FoodLog
@@ -278,9 +377,14 @@ view { model, device, theme } =
                     Loading _ ->
                         [ Ui.skeletonLoading theme ]
 
-                    Loaded date logs ->
+                    Loaded loaded ->
+                        let
+                            date : LocalDate
+                            date =
+                                loaded.date
+                        in
                         if LocalDate.equals date model.currentDate then
-                            [ logGroupsView theme device model logs ]
+                            [ logGroupsView theme device model loaded.logs ]
 
                         else
                             [ Ui.skeletonLoading theme ]
@@ -338,40 +442,49 @@ dateCard theme model device =
             [ Element.width Element.fill
             , Element.paddingEach { top = 8, right = 0, bottom = 0, left = 0 }
             ]
-            [ totalsView theme (totalsFromLogs (loadedLogs model.currentDate model.diary)) ]
+            [ case loadedGoalTargets model.currentDate model.diary of
+                Just targets ->
+                    totalsView
+                        theme
+                        targets
+                        (totalsFromLogs (loadedLogs model.currentDate model.diary))
+
+                Nothing ->
+                    Ui.loading theme "Loading goals..."
+              ]
         ]
 
 
-totalsView : Theme -> List NutrientAmount -> Element Msg
-totalsView theme summary =
+totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
+totalsView theme targets summary =
     Element.column [ Element.width Element.fill, Element.spacing 18 ]
         [ Ui.macroBar theme
             { label = "Calories"
             , value = dailyCalories summary
             , unit = "kcal"
             , color = Ui.primaryTeal
-            , max = diaryDefaults.calorieGoal
+            , max = targets.calorieTarget
             }
         , Ui.macroBar theme
             { label = "Protein"
             , value = summaryAmount "PROTEIN_G" summary
             , unit = "g"
             , color = Ui.proteinColor
-            , max = diaryDefaults.proteinGoal
+            , max = targets.proteinTargetG
             }
         , Ui.macroBar theme
             { label = "Carbs"
             , value = summaryAmount "CARBS_G" summary
             , unit = "g"
             , color = Ui.carbsColor
-            , max = diaryDefaults.carbsGoal
+            , max = targets.carbsTargetG
             }
         , Ui.macroBar theme
             { label = "Fat"
             , value = summaryAmount "FAT_G" summary
             , unit = "g"
             , color = Ui.fatColor
-            , max = diaryDefaults.fatGoal
+            , max = targets.fatTargetG
             }
         ]
 
@@ -383,32 +496,32 @@ summaryAmount code summary =
         |> Maybe.withDefault 0
 
 
-diaryDefaults :
-    { calorieGoal : Float
-    , proteinGoal : Float
-    , carbsGoal : Float
-    , fatGoal : Float
-    }
-diaryDefaults =
-    { calorieGoal = 2000
-    , proteinGoal = 150
-    , carbsGoal = 250
-    , fatGoal = 65
-    }
-
-
 loadedLogs : LocalDate -> DiaryState -> List FoodLog
 loadedLogs currentDate diary =
     case diary of
-        Loaded loadedDate logs ->
-            if LocalDate.equals loadedDate currentDate then
-                logs
+        Loaded loaded ->
+            if LocalDate.equals loaded.date currentDate then
+                loaded.logs
 
             else
                 []
 
         _ ->
             []
+
+
+loadedGoalTargets : LocalDate -> DiaryState -> Maybe GoalTargets
+loadedGoalTargets currentDate diary =
+    case diary of
+        Loaded loaded ->
+            if LocalDate.equals loaded.date currentDate then
+                Just loaded.goal.targets
+
+            else
+                Nothing
+
+        _ ->
+            Nothing
 
 
 type alias SlotSection =

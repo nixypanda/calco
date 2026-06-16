@@ -22,18 +22,22 @@ use crate::import::domain::ImportRepository;
 use crate::import::infrastructure::postgres::PostgresImportRepository;
 use crate::import::interfaces::http::import_routes;
 use crate::nutrition::application::food_log::FoodLogServices;
+use crate::nutrition::application::goal_target::GoalTargetServices;
 use crate::nutrition::application::meal::MealServices;
 use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::nutrition::domain::food_log::FoodLogRepository;
+use crate::nutrition::domain::goal_target::GoalTargetRepository;
 use crate::nutrition::domain::meal::MealRepository;
 use crate::nutrition::domain::units::UnitConverter;
 use crate::nutrition::infrastructure::postgres::catalog::{
     PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
 };
 use crate::nutrition::infrastructure::postgres::food_log::PostgresFoodLogRepository;
+use crate::nutrition::infrastructure::postgres::goal_target::PostgresGoalTargetRepository;
 use crate::nutrition::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::nutrition::interfaces::http::catalog::catalog_routes;
 use crate::nutrition::interfaces::http::food_log::food_log_routes;
+use crate::nutrition::interfaces::http::goal_target::goal_target_routes;
 use crate::nutrition::interfaces::http::meal::meal_routes;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -50,9 +54,11 @@ pub struct AppState {
     pub unit_converter: Arc<UnitConverter>,
     pub food_log_repo: Arc<dyn FoodLogRepository>,
     pub meal_repo: Arc<dyn MealRepository>,
+    pub goal_target_repo: Arc<dyn GoalTargetRepository>,
     pub import_repo: Arc<dyn ImportRepository>,
     pub food_log_services: FoodLogServices,
     pub meal_services: MealServices,
+    pub goal_target_services: GoalTargetServices,
     pub import_services: ImportServices,
 }
 
@@ -90,6 +96,8 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let food_log_repo =
         Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
     let meal_repo = Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
+    let goal_target_repo = Arc::new(PostgresGoalTargetRepository::new(pool.clone()))
+        as Arc<dyn GoalTargetRepository>;
 
     let food_log_services = FoodLogServices::new(
         food_log_repo.clone(),
@@ -103,6 +111,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         product_repo.clone(),
         unit_converter.clone(),
     );
+    let goal_target_services = GoalTargetServices::new(goal_target_repo.clone());
 
     let import_repo =
         Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
@@ -119,9 +128,11 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         unit_converter,
         food_log_repo,
         meal_repo,
+        goal_target_repo,
         import_repo,
         food_log_services,
         meal_services,
+        goal_target_services,
         import_services,
     })
 }
@@ -137,6 +148,7 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
         .merge(catalog_routes(auth_state.clone()))
         .merge(food_log_routes(auth_state.clone()))
         .merge(meal_routes(auth_state.clone()))
+        .merge(goal_target_routes(auth_state.clone()))
         .merge(import_routes(auth_state));
 
     Ok(Router::new().nest("/api", api).layer(cors))

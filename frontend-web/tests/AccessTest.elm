@@ -39,6 +39,18 @@ tests =
             \_ ->
                 Access.resolveRoute normalUser True AdminDashboard
                     |> Expect.equal (Navigate (DiaryDay Nothing))
+        , test "goal settings route allows authenticated users" <|
+            \_ ->
+                Access.resolveRoute normalUser True GoalSettings
+                    |> Expect.equal (Render GoalSettings)
+        , test "goal settings route rejects signed-out users" <|
+            \_ ->
+                Access.resolveRoute Unauthenticated True GoalSettings
+                    |> Expect.equal (Navigate AuthLogin)
+        , test "goal settings route rejects admins" <|
+            \_ ->
+                Access.resolveRoute admin True GoalSettings
+                    |> Expect.equal (Navigate AdminDashboard)
         , test "Loading session holds for Root when admin exists" <|
             \_ ->
                 Access.resolveRoute Loading True Root

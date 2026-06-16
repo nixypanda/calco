@@ -15,6 +15,7 @@ tests =
         , parses "/admin" AdminDashboard
         , parses "/home" (DiaryDay Nothing)
         , parses "/home?date=2026-06-04" (DiaryDay (Just "2026-06-04"))
+        , parses "/settings/goals" GoalSettings
         , parses "/logs/abc" (FoodLogEntry "abc")
         , parses "/search" (FoodSearch Nothing Nothing)
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))

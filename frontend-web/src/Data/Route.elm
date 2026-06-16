@@ -18,6 +18,7 @@ type Route
     | AdminCreateUser
     | AdminEditUser String
     | DiaryDay (Maybe String)
+    | GoalSettings
     | FoodLogEntry String
     | FoodSearch (Maybe String) (Maybe MealSlot)
     | FoodShow String (Maybe String) (Maybe MealSlot)
@@ -48,6 +49,7 @@ routeParser =
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
         , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
         , Parser.map DiaryDay (s "home" <?> Query.string "date")
+        , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map FoodLogEntry (s "logs" </> string)
         , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
@@ -96,6 +98,9 @@ routeToPath route =
 
                 Nothing ->
                     "/home"
+
+        GoalSettings ->
+            "/settings/goals"
 
         FoodLogEntry id ->
             "/logs/" ++ id

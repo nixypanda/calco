@@ -1,0 +1,327 @@
+module Page.Goals.Settings exposing
+    ( LoadedModel
+    , Model(..)
+    , Msg(..)
+    , OutMsg(..)
+    , RequestState(..)
+    , init
+    , update
+    , view
+    )
+
+import Api.Client as Client
+import Api.Goals exposing (SaveGoalRequest)
+import Data.Goals exposing (GoalSnapshot, GoalSource(..), GoalTargets)
+import Element exposing (Device, Element)
+import Lib.Date as LocalDate exposing (LocalDate)
+import Ui
+import Ui.Theme exposing (Theme)
+
+
+type Model
+    = Loading
+    | Ready LoadedModel
+    | Failed String
+
+
+type alias LoadedModel =
+    { today : LocalDate
+    , snapshot : GoalSnapshot
+    , calorieTarget : String
+    , proteinTargetG : String
+    , carbsTargetG : String
+    , fatTargetG : String
+    , formError : Maybe String
+    , requestError : Maybe String
+    , requestState : RequestState
+    }
+
+
+type RequestState
+    = Idle
+    | WaitingForLocalContext
+    | Saving
+
+
+type Msg
+    = GoalLoaded (Result Client.ApiError GoalSnapshot)
+    | CalorieTargetChanged String
+    | ProteinTargetChanged String
+    | CarbsTargetChanged String
+    | FatTargetChanged String
+    | SaveClicked
+    | LocalContextReceived { date : String, timezone : String }
+    | SaveCompleted (Result Client.ApiError GoalSnapshot)
+
+
+type OutMsg
+    = NoOp
+    | RequestGoal LocalDate
+    | RequestLocalContext
+    | RequestSaveGoal SaveGoalRequest
+    | SessionExpired
+
+
+init : LocalDate -> ( Model, OutMsg )
+init today =
+    ( Loading, RequestGoal today )
+
+
+update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
+update msg model =
+    case msg of
+        GoalLoaded result ->
+            case result of
+                Ok snapshot ->
+                    ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
+
+                Err error ->
+                    case model of
+                        Loading ->
+                            Client.failure
+                                { noOp = NoOp
+                                , sessionExpired = SessionExpired
+                                , applyError = \message _ -> Failed message
+                                }
+                                error
+                                model
+
+                        Ready loaded ->
+                            Client.failure
+                                { noOp = NoOp
+                                , sessionExpired = SessionExpired
+                                , applyError =
+                                    \message _ ->
+                                        Ready { loaded | requestError = Just message }
+                                }
+                                error
+                                model
+
+                        Failed _ ->
+                            ( model, Cmd.none, NoOp )
+
+        CalorieTargetChanged value ->
+            updateField (\loaded -> { loaded | calorieTarget = value }) model
+
+        ProteinTargetChanged value ->
+            updateField (\loaded -> { loaded | proteinTargetG = value }) model
+
+        CarbsTargetChanged value ->
+            updateField (\loaded -> { loaded | carbsTargetG = value }) model
+
+        FatTargetChanged value ->
+            updateField (\loaded -> { loaded | fatTargetG = value }) model
+
+        SaveClicked ->
+            case model of
+                Ready loaded ->
+                    case validate loaded of
+                        Ok _ ->
+                            ( Ready
+                                { loaded
+                                    | formError = Nothing
+                                    , requestError = Nothing
+                                    , requestState = WaitingForLocalContext
+                                }
+                            , Cmd.none
+                            , RequestLocalContext
+                            )
+
+                        Err message ->
+                            ( Ready { loaded | formError = Just message }, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        LocalContextReceived context ->
+            case model of
+                Ready loaded ->
+                    if loaded.requestState /= WaitingForLocalContext then
+                        ( model, Cmd.none, NoOp )
+
+                    else
+                        case validate loaded of
+                            Ok targets ->
+                                ( Ready { loaded | requestState = Saving }
+                                , Cmd.none
+                                , RequestSaveGoal
+                                    { localDate = context.date
+                                    , deviceTimezone = context.timezone
+                                    , targets = targets
+                                    }
+                                )
+
+                            Err message ->
+                                ( Ready
+                                    { loaded
+                                        | formError = Just message
+                                        , requestState = Idle
+                                    }
+                                , Cmd.none
+                                , NoOp
+                                )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        SaveCompleted result ->
+            case model of
+                Ready loaded ->
+                    if loaded.requestState /= Saving then
+                        ( model, Cmd.none, NoOp )
+
+                    else
+                        case result of
+                            Ok snapshot ->
+                                ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
+
+                            Err error ->
+                                Client.failure
+                                    { noOp = NoOp
+                                    , sessionExpired = SessionExpired
+                                    , applyError =
+                                        \message _ ->
+                                            Ready
+                                                { loaded
+                                                    | requestError = Just message
+                                                    , requestState = Idle
+                                                }
+                                    }
+                                    error
+                                    model
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+
+updateField : (LoadedModel -> LoadedModel) -> Model -> ( Model, Cmd Msg, OutMsg )
+updateField transform model =
+    case model of
+        Ready loaded ->
+            ( Ready
+                (transform
+                    { loaded
+                        | formError = Nothing
+                        , requestError = Nothing
+                        , requestState = Idle
+                    }
+                )
+            , Cmd.none
+            , NoOp
+            )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
+validate : LoadedModel -> Result String GoalTargets
+validate loaded =
+    let
+        maybeTargets : Maybe GoalTargets
+        maybeTargets =
+            Maybe.map4 GoalTargets
+                (String.toFloat loaded.calorieTarget)
+                (String.toFloat loaded.proteinTargetG)
+                (String.toFloat loaded.carbsTargetG)
+                (String.toFloat loaded.fatTargetG)
+    in
+    case maybeTargets of
+        Just targets ->
+            if targets.calorieTarget <= 0 then
+                Err "Calories must be greater than 0."
+
+            else if targets.proteinTargetG < 0 || targets.carbsTargetG < 0 || targets.fatTargetG < 0 then
+                Err "Protein, carbs, and fat must be 0 or greater."
+
+            else if
+                abs
+                    (targets.calorieTarget
+                        - ((targets.proteinTargetG * 4) + (targets.carbsTargetG * 4) + (targets.fatTargetG * 9))
+                    )
+                    > 0.0001
+            then
+                Err "Calories must equal protein*4 + carbs*4 + fat*9."
+
+            else
+                Ok targets
+
+        _ ->
+            Err "Enter valid numbers for all goal fields."
+
+
+loadedModelFor : GoalSnapshot -> LoadedModel
+loadedModelFor snapshot =
+    { today = snapshot.requestedDate
+    , snapshot = snapshot
+    , calorieTarget = String.fromFloat snapshot.targets.calorieTarget
+    , proteinTargetG = String.fromFloat snapshot.targets.proteinTargetG
+    , carbsTargetG = String.fromFloat snapshot.targets.carbsTargetG
+    , fatTargetG = String.fromFloat snapshot.targets.fatTargetG
+    , formError = Nothing
+    , requestError = Nothing
+    , requestState = Idle
+    }
+
+
+view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view { model, device, theme } =
+    Ui.pageContainer device
+        (case model of
+            Loading ->
+                [ Ui.skeletonLoading theme ]
+
+            Failed message ->
+                [ Ui.errorBanner theme message ]
+
+            Ready loaded ->
+                [ Ui.maybeErrorBanner theme loaded.requestError
+                , Ui.card theme
+                    [ Ui.sectionTitle theme device "Daily Targets"
+                    , Ui.mutedParagraph theme (statusMessage loaded.snapshot)
+                    , Ui.input theme
+                        { label = "Calories"
+                        , value = loaded.calorieTarget
+                        , onChange = CalorieTargetChanged
+                        }
+                    , Ui.input theme
+                        { label = "Protein (g)"
+                        , value = loaded.proteinTargetG
+                        , onChange = ProteinTargetChanged
+                        }
+                    , Ui.input theme
+                        { label = "Carbs (g)"
+                        , value = loaded.carbsTargetG
+                        , onChange = CarbsTargetChanged
+                        }
+                    , Ui.input theme
+                        { label = "Fat (g)"
+                        , value = loaded.fatTargetG
+                        , onChange = FatTargetChanged
+                        }
+                    , Ui.maybeErrorBanner theme loaded.formError
+                    ]
+                , Ui.primarySubmitButton device
+                    theme
+                    { state = Ui.submittingOrIdle (loaded.requestState == Saving)
+                    , idleLabel = "Save Goals"
+                    , submittingLabel = "Saving..."
+                    , onPress = SaveClicked
+                    }
+                ]
+        )
+
+
+statusMessage : GoalSnapshot -> String
+statusMessage snapshot =
+    case ( snapshot.source, snapshot.effectiveFrom ) of
+        ( Default, Nothing ) ->
+            "Using backend defaults for this date."
+
+        ( Saved, Just effectiveFrom ) ->
+            "Saved goals effective from " ++ LocalDate.display effectiveFrom ++ "."
+
+        ( Saved, Nothing ) ->
+            "Saved goals are active."
+
+        ( Default, Just effectiveFrom ) ->
+            "Using backend defaults after " ++ LocalDate.display effectiveFrom ++ "."

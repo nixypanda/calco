@@ -5,6 +5,7 @@ import Api.Admin
 import Api.Auth
 import Api.Client as Client
 import Api.Foods
+import Api.Goals
 import Api.Logs
 import Api.Meals
 import Browser
@@ -31,6 +32,7 @@ import Page.Diary.Day as DiaryDay
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
 import Page.FoodLog.Entry as FoodLogEntry
+import Page.Goals.Settings as GoalsSettings
 import Page.Meal.Create as MealCreate
 import Page.Meal.Edit as MealEdit
 import Page.Meal.Form as MealForm
@@ -81,6 +83,7 @@ type PageModel
     | AdminCreateUserPage AdminCreateUser.Model
     | AdminEditUserPage AdminEditUser.Model
     | DiaryPage DiaryDay.Model
+    | GoalsSettingsPage GoalsSettings.Model
     | FoodSearchPage FoodSearch.Model
     | FoodDetailPage FoodShow.Model
     | FoodLogDetailPage FoodLogEntry.Model
@@ -114,6 +117,7 @@ type Msg
     | GotAdminCreateUserMsg AdminCreateUser.Msg
     | GotAdminEditUserMsg AdminEditUser.Msg
     | GotDiaryMsg DiaryDay.Msg
+    | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodShow.Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
@@ -358,6 +362,18 @@ update msg model =
                 _ ->
                     ( model, Cmd.none )
 
+        GotGoalsSettingsMsg subMsg ->
+            case model.page of
+                GoalsSettingsPage sub ->
+                    stepPage GoalsSettingsPage
+                        GotGoalsSettingsMsg
+                        applyGoalsSettingsOutMsg
+                        (GoalsSettings.update subMsg sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
+
         GotFoodSearchMsg subMsg ->
             case model.page of
                 FoodSearchPage sub ->
@@ -386,7 +402,19 @@ update msg model =
                     ( model, Cmd.none )
 
         GotLocalContext context ->
-            stepFoodDetail (FoodShow.LocalContextReceived context) model
+            case model.page of
+                FoodDetailPage _ ->
+                    stepFoodDetail (FoodShow.LocalContextReceived context) model
+
+                GoalsSettingsPage sub ->
+                    stepPage GoalsSettingsPage
+                        GotGoalsSettingsMsg
+                        applyGoalsSettingsOutMsg
+                        (GoalsSettings.update (GoalsSettings.LocalContextReceived context) sub)
+                        model
+
+                _ ->
+                    ( model, Cmd.none )
 
         GotCustomFoodCreateMsg subMsg ->
             case model.page of
@@ -566,6 +594,17 @@ loadPage route model =
                 Nothing ->
                     ( { model | page = LoadingPage }, Cmd.none )
 
+        GoalSettings ->
+            case model.today of
+                Just today ->
+                    initPage GoalsSettingsPage
+                        applyGoalsSettingsOutMsg
+                        (GoalsSettings.init today)
+                        model
+
+                Nothing ->
+                    ( { model | page = LoadingPage }, Cmd.none )
+
         FoodSearch dateParam mealSlot ->
             ( { model | page = FoodSearchPage (FoodSearch.init dateParam mealSlot) }, Cmd.none )
 
@@ -729,13 +768,40 @@ applyDiaryOutMsg outMsg model =
 
         DiaryDay.RequestDiaryData date ->
             ( model
-            , Cmd.map GotDiaryMsg (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
+            , Cmd.batch
+                [ Cmd.map GotDiaryMsg (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
+                , Cmd.map GotDiaryMsg (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
+                ]
             )
 
         DiaryDay.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         DiaryDay.SessionExpired ->
+            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+
+
+applyGoalsSettingsOutMsg : GoalsSettings.OutMsg -> Model -> ( Model, Cmd Msg )
+applyGoalsSettingsOutMsg outMsg model =
+    case outMsg of
+        GoalsSettings.NoOp ->
+            ( model, Cmd.none )
+
+        GoalsSettings.RequestGoal date ->
+            ( model
+            , Api.Goals.getGoal date (GotGoalsSettingsMsg << GoalsSettings.GoalLoaded)
+            )
+
+        GoalsSettings.RequestLocalContext ->
+            ( model, requestLocalContext () )
+
+        GoalsSettings.RequestSaveGoal request ->
+            ( model
+            , Api.Goals.saveGoal request
+                (GotGoalsSettingsMsg << GoalsSettings.SaveCompleted)
+            )
+
+        GoalsSettings.SessionExpired ->
             ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
 
 
@@ -1458,6 +1524,9 @@ screenMeta device session route =
         AdminEditUser _ ->
             { title = "Edit User", leading = GoBack AdminDashboard }
 
+        GoalSettings ->
+            { title = "Goals", leading = GoBack (DiaryDay Nothing) }
+
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
@@ -1668,6 +1737,7 @@ profileMenuContent model =
             _ ->
                 "Signed in"
         )
+    , Ui.ghostButton model.device model.theme "Goals" (NavigateTo GoalSettings)
     , Ui.button model.device model.theme "Logout" LogoutClicked
     ]
 
@@ -1724,6 +1794,9 @@ pageView model =
 
             DiaryPage diaryModel ->
                 Element.map GotDiaryMsg (DiaryDay.view (props diaryModel))
+
+            GoalsSettingsPage goalsSettingsModel ->
+                Element.map GotGoalsSettingsMsg (GoalsSettings.view (props goalsSettingsModel))
 
             FoodSearchPage foodSearchModel ->
                 Element.map GotFoodSearchMsg (FoodSearch.view (props foodSearchModel))

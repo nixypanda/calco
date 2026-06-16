@@ -78,6 +78,9 @@ resolveKnownSession session adminExists route =
             DiaryDay _ ->
                 Render route
 
+            GoalSettings ->
+                Render route
+
             FoodLogEntry _ ->
                 Render route
 

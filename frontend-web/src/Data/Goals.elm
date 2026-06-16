@@ -1,0 +1,96 @@
+module Data.Goals exposing
+    ( GoalSnapshot
+    , GoalSource(..)
+    , GoalTargets
+    , decoder
+    )
+
+import Json.Decode as Decode exposing (Decoder)
+import Lib.Date as LocalDate exposing (LocalDate)
+
+
+type GoalSource
+    = Default
+    | Saved
+
+
+type alias GoalTargets =
+    { calorieTarget : Float
+    , proteinTargetG : Float
+    , carbsTargetG : Float
+    , fatTargetG : Float
+    }
+
+
+type alias GoalSnapshot =
+    { requestedDate : LocalDate
+    , effectiveFrom : Maybe LocalDate
+    , source : GoalSource
+    , targets : GoalTargets
+    }
+
+
+decoder : Decoder GoalSnapshot
+decoder =
+    Decode.map4 GoalSnapshot
+        (Decode.field "requested_date" dateDecoder)
+        (Decode.field "effective_from" (Decode.nullable dateDecoder))
+        (Decode.field "source" sourceDecoder)
+        targetsDecoder
+
+
+targetsDecoder : Decoder GoalTargets
+targetsDecoder =
+    Decode.map4 GoalTargets
+        (Decode.field "calorie_target" decimalStringDecoder)
+        (Decode.field "protein_target_g" decimalStringDecoder)
+        (Decode.field "carbs_target_g" decimalStringDecoder)
+        (Decode.field "fat_target_g" decimalStringDecoder)
+
+
+sourceDecoder : Decoder GoalSource
+sourceDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\value ->
+                case value of
+                    "default" ->
+                        Decode.succeed Default
+
+                    "saved" ->
+                        Decode.succeed Saved
+
+                    _ ->
+                        Decode.fail ("Invalid goal source: " ++ value)
+            )
+
+
+dateDecoder : Decoder LocalDate
+dateDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\raw ->
+                case LocalDate.fromString raw of
+                    Just date ->
+                        Decode.succeed date
+
+                    Nothing ->
+                        Decode.fail ("Invalid local date: " ++ raw)
+            )
+
+
+decimalStringDecoder : Decoder Float
+decimalStringDecoder =
+    Decode.oneOf
+        [ Decode.float
+        , Decode.string
+            |> Decode.andThen
+                (\raw ->
+                    case String.toFloat raw of
+                        Just value ->
+                            Decode.succeed value
+
+                        Nothing ->
+                            Decode.fail ("Invalid decimal string: " ++ raw)
+                )
+        ]

@@ -2,6 +2,7 @@ module Page.Diary.DayTest exposing (tests)
 
 import Api.Client as Client
 import Data.FoodLog exposing (FoodLog, LogItem)
+import Data.Goals exposing (GoalSource(..), GoalSnapshot)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount, Quantity)
@@ -84,8 +85,11 @@ tests =
                         { emptyModel | diary = DiaryDay.Failed today "old" }
                         |> first
                         |> .diary
-                        |> Expect.equal (DiaryDay.Loading today)
-            , test "load success stores logs" <|
+                        |> Expect.equal
+                            (DiaryDay.Loading
+                                { date = today, logs = Nothing, goal = Nothing }
+                            )
+            , test "diary stays loading until goals also load" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
@@ -93,22 +97,62 @@ tests =
                     in
                     ( model.diary, outMsg )
                         |> Expect.equal
-                            ( DiaryDay.Loaded today [ lunchLog ]
+                            ( DiaryDay.Loading
+                                { date = today
+                                , logs = Just [ lunchLog ]
+                                , goal = Nothing
+                                }
+                            , DiaryDay.NoOp
+                            )
+            , test "goal success completes load when logs already arrived" <|
+                \_ ->
+                    let
+                        afterLogs : DiaryDay.Model
+                        afterLogs =
+                            DiaryDay.update (DiaryDay.LogsLoaded today (Ok [ lunchLog ])) emptyModel
+                                |> first
+
+                        ( model, _, outMsg ) =
+                            DiaryDay.update (DiaryDay.GoalLoaded today (Ok goalSnapshot)) afterLogs
+                    in
+                    ( model.diary, outMsg )
+                        |> Expect.equal
+                            ( DiaryDay.Loaded
+                                { date = today
+                                , logs = [ lunchLog ]
+                                , goal = goalSnapshot
+                                }
                             , DiaryDay.NoOp
                             )
             , test "load success filters logs that do not match the selected date" <|
                 \_ ->
+                    let
+                        withGoal : DiaryDay.Model
+                        withGoal =
+                            DiaryDay.update (DiaryDay.GoalLoaded today (Ok goalSnapshot)) emptyModel
+                                |> first
+                    in
                     DiaryDay.update
                         (DiaryDay.LogsLoaded today (Ok [ lunchLog, yesterdayLunchLog ]))
-                        emptyModel
+                        withGoal
                         |> first
                         |> .diary
-                        |> Expect.equal (DiaryDay.Loaded today [ lunchLog ])
+                        |> Expect.equal
+                            (DiaryDay.Loaded
+                                { date = today
+                                , logs = [ lunchLog ]
+                                , goal = goalSnapshot
+                                }
+                            )
             , test "load failure stores an error" <|
                 \_ ->
                     DiaryDay.update
                         (DiaryDay.LogsLoaded today (Err Client.NetworkError))
-                        { emptyModel | diary = DiaryDay.Loading today }
+                        { emptyModel
+                            | diary =
+                                DiaryDay.Loading
+                                    { date = today, logs = Nothing, goal = Nothing }
+                        }
                         |> first
                         |> .diary
                         |> Expect.equal (DiaryDay.Failed today "Network error")
@@ -178,7 +222,12 @@ tests =
                         (DiaryDay.AddFoodClicked Lunch)
                         { emptyModel
                             | currentDate = yesterday
-                            , diary = DiaryDay.Loaded yesterday []
+                            , diary =
+                                DiaryDay.Loaded
+                                    { date = yesterday
+                                    , logs = []
+                                    , goal = yesterdayGoalSnapshot
+                                    }
                         }
                         |> third
                         |> Expect.equal
@@ -209,8 +258,41 @@ emptyModel : DiaryDay.Model
 emptyModel =
     { currentDate = date "2026-05-30"
     , today = today
-    , diary = DiaryDay.Loaded today []
+    , diary =
+        DiaryDay.Loading
+            { date = today
+            , logs = Nothing
+            , goal = Nothing
+            }
     , macroMode = DiaryDay.Grams
+    }
+
+
+goalSnapshot : GoalSnapshot
+goalSnapshot =
+    { requestedDate = today
+    , effectiveFrom = Nothing
+    , source = Default
+    , targets =
+        { calorieTarget = 2100
+        , proteinTargetG = 150
+        , carbsTargetG = 240
+        , fatTargetG = 60
+        }
+    }
+
+
+yesterdayGoalSnapshot : GoalSnapshot
+yesterdayGoalSnapshot =
+    { requestedDate = yesterday
+    , effectiveFrom = Just yesterday
+    , source = Saved
+    , targets =
+        { calorieTarget = 2290
+        , proteinTargetG = 160
+        , carbsTargetG = 255
+        , fatTargetG = 70
+        }
     }
 
 
