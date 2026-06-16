@@ -24,6 +24,7 @@ Database migrations live in `backend/migrations` and are applied explicitly with
 CalCo is a simple food tracker:
 
 - Track foods and meals for a selected day.
+- Compare daily intake against saved calorie and macro goals.
 - Preserve historical logs with nutrient snapshots.
 - Keep account recovery simple through an admin identity.
 - Run catalog imports from CLI scripts.
@@ -64,11 +65,12 @@ Admin identities are for account recovery and import operations. They do not own
 
 ### Nutrition
 
-Nutrition is one bounded context with three aggregate roots:
+Nutrition is one bounded context with four aggregate roots:
 
 - `Product` (catalog): owns `ProductNutrient` and `ProductServing` as child values. Imported global foods and user-private custom foods share this model via `source`, `source_id`, `visibility`, and `user_id`.
 - `Meal`: user-owned. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
 - `FoodLog`: user-owned. Records timestamp, meal slot, logged item, quantity, notes, and nutrient snapshots. `LoggedItem` supports `Product(ProductId)` and `Meal(MealId)`.
+- `GoalTarget`: user-owned. Stores calorie and macro targets effective from a local date, so diary views can resolve the latest saved target for any selected day while falling back to defaults if no saved row exists.
 
 These aggregates share one error type (`NutritionError`) and depend on each other directly via repositories — they are not separate contexts. The shared ubiquitous language ("nutrient", "quantity", "unit"), shared lifecycle, and lack of concept translation at the seams motivated unifying them.
 
@@ -91,6 +93,7 @@ Imports are an anti-corruption/staging layer around external food datasets.
 - Product create/update replaces nutrients and servings atomically.
 - Food log create/update writes the log and nutrient snapshots together.
 - Meal create/update replaces components atomically.
+- Goal target save upserts the current local day's version for a user.
 - Import commit is a batch database transaction that upserts products, nutrients, and servings.
 - Summary reads aggregate `food_log_nutrients`, never live catalog nutrients.
 
@@ -108,6 +111,7 @@ Major route groups:
 - `/nutrients`
 - `/units`
 - `/logs`
+- `/goal`
 - `/meals`
 - `/imports`
 

@@ -46,7 +46,11 @@ backend-build:
 
 # Run backend tests
 backend-test:
-    cargo test --manifest-path backend/Cargo.toml
+    cargo nextest run --manifest-path backend/Cargo.toml
+
+# Run backend coverage
+backend-coverage:
+    cargo llvm-cov nextest --manifest-path backend/Cargo.toml
 
 # Run backend migrations
 backend-migrate:

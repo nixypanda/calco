@@ -109,23 +109,23 @@ calco-import <command> <dataset> [options]
 
 Commands:
 
-| Command | Description |
-|---------|-------------|
-| `fetch`  | Download raw data + convert to normalized JSONL. |
+| Command  | Description                                           |
+| -------- | ----------------------------------------------------- |
+| `fetch`  | Download raw data + convert to normalized JSONL.      |
 | `merge`  | Deduplicate all fetched datasets into `merged.jsonl`. |
-| `upload` | Upload a processed JSONL file to the backend API. |
-| `import` | `fetch` + `upload` (full pipeline for a dataset). |
+| `upload` | Upload a processed JSONL file to the backend API.     |
+| `import` | `fetch` + `upload` (full pipeline for a dataset).     |
 
 Datasets: `usda`, `off`, `ifct`, `indb`, `merged`
 
 Options:
 
-| Flag | Env var | Default |
-|------|---------|---------|
-| `--api-url` | `CALCO_API_URL` | `http://localhost:3001` |
-| `--session-token` | `CALCO_SESSION_TOKEN` | Prompts interactively |
-| `--data-dir` | `CALCO_DATA_DIR` | `./data` |
-| `--dry-run` | — | Skip upload |
+| Flag              | Env var               | Default                 |
+| ----------------- | --------------------- | ----------------------- |
+| `--api-url`       | `CALCO_API_URL`       | `http://localhost:3001` |
+| `--session-token` | `CALCO_SESSION_TOKEN` | Prompts interactively   |
+| `--data-dir`      | `CALCO_DATA_DIR`      | `./data`                |
+| `--dry-run`       | —                     | Skip upload             |
 
 ### Examples
 

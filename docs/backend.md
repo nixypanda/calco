@@ -23,18 +23,22 @@ backend/src/
       error.rs           # NutritionError
       units.rs           # UnitConverter
       catalog.rs
+      goal_target.rs
       meal.rs
       food_log.rs
     application/
+      goal_target.rs
       meal.rs
       food_log.rs        # catalog has no application service; handlers call repos directly
     infrastructure/postgres/
       catalog.rs
+      goal_target.rs
       meal.rs
       food_log.rs
     interfaces/http/
       mod.rs             # NutritionError -> IntoResponse, error_response, internal_error
       catalog.rs
+      goal_target.rs
       meal.rs
       food_log.rs
 ```
@@ -127,6 +131,7 @@ Current aggregate roots:
 - `Product` for catalog foods.
 - `FoodLog` for logged entries and nutrient snapshots.
 - `Meal` for reusable user-defined meals.
+- `GoalTarget` for user calorie and macro targets effective from a local date.
 - `ImportJob` for staging and committing external catalog data.
 
 Owned child values:
@@ -254,6 +259,28 @@ GET    /meals/{id}/nutrients?quantity=&unit=
 
 Meal requests are aggregate-shaped. There are no standalone meal-component mutation routes.
 
+### Goals
+
+```text
+GET /goal?date=YYYY-MM-DD
+PUT /goal
+```
+
+`GET /goal` resolves the target snapshot effective for the requested local date.
+
+`PUT /goal` saves the current day's target values using:
+
+```text
+local_date
+device_timezone
+calorie_target
+protein_target_g
+carbs_target_g
+fat_target_g
+```
+
+The backend validates that `local_date` matches today's date in `device_timezone` and that calories equal `protein*4 + carbs*4 + fat*9`.
+
 ### Imports
 
 Admin-only:
@@ -288,6 +315,7 @@ Important tables:
 - Catalog: `products`, `product_nutrients`, `product_servings`, `nutrients`, `units`
 - Logs: `food_logs`, `food_log_nutrients`
 - Meals: `meals`, `meal_components`
+- Goals: `goal_target_versions`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
 Search uses PostgreSQL full-text search and trigram indexes.

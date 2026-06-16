@@ -16,12 +16,12 @@ frontend-web/
     Ui.elm
   tests/
   index.html
-  dev-server.mjs
+  vite.config.js
 ```
 
 It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
 
-The initial React/Vite frontend has been removed. All frontend work lives in `frontend-web/`.
+The legacy React frontend has been removed. The current Elm app is built and served with Vite, and all frontend work lives in `frontend-web/`.
 
 ## Architecture
 
@@ -172,7 +172,7 @@ type ApiError = BadUrl String | Timeout | NetworkError | BadStatus Int String St
 - Elm calls the `requestLocalContext` port.
 - JavaScript replies through `localContextReceived` with a `{ date, timezone }` record where `date` is the local `YYYY-MM-DD` (from `toLocaleDateString('en-CA')`) and `timezone` is the resolved IANA zone (from `Intl.DateTimeFormat().resolvedOptions().timeZone`).
 
-`frontend-web/dev-server.mjs` serves static frontend files and proxies `/api/*` to the backend. Defaults:
+Vite serves the frontend and proxies `/api/*` to the backend during local development. Defaults:
 
 ```text
 frontend-web dev server: http://localhost:1234
@@ -182,7 +182,7 @@ API target: http://localhost:3001
 Override with:
 
 ```bash
-PORT=1235 API_TARGET=http://localhost:3001 node dev-server.mjs
+cd frontend-web && PORT=1235 API_TARGET=http://localhost:3001 npm run dev
 ```
 
 ## Routes
@@ -193,15 +193,21 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /setup
 /login
 /admin
+/admin/users/new
+/admin/users/:id/edit
 /home
 /home?date=YYYY-MM-DD
+/settings/goals
 /logs/:id
 /search
+/search?date=YYYY-MM-DD
 /search?meal_slot=:slot
 /foods/:id
+/foods/:id?date=YYYY-MM-DD
 /foods/:id?meal_slot=:slot
 /foods/custom
 /foods/custom/new
+/foods/custom/:id
 /foods/custom/:id/edit
 /meals
 /meals/new
@@ -223,46 +229,56 @@ Route access is enforced in `frontend-web/src/Access.elm` and coordinated from `
 
 ### Auth
 
-- `Page.Admin.BootstrapSetup`
-- `Page.Auth.Login`
-- `Page.Admin.Dashboard`
+- `Page.Users.BootstrapSetup`
+- `Page.Users.Login`
+- `Page.Users.Dashboard`
+- `Page.Users.CreateUser`
+- `Page.Users.EditUser`
 
 The first-run flow creates a bootstrap admin. Admins create and manage normal user accounts.
 
 ### Diary
 
-`Page.Diary.Index` is the main authenticated user screen.
+`Page.Diary.Day` is the main authenticated user screen.
 
 It provides:
 
 - Selected-day navigation.
 - Calorie and macro summary.
+- Goal-aware calorie and macro progress against the effective target for the selected day.
 - Meal-slot grouped logs.
 - Add-food actions per meal slot.
 - App navigation drawer and profile/logout menu.
 
 Users can inspect previous days with the diary date selector. A separate history/trends screen is out of scope.
 
+### Goals
+
+`Page.Goals.Settings` lets an authenticated user view and save calorie and macro targets for the current local day.
+
 ### Foods
 
 - `Page.Food.Search`
-- `Page.Food.Detail`
-- `Page.CustomFood.Index`
+- `Page.Food.Show`
+- `Page.CustomFood.List`
 - `Page.CustomFood.Create`
+- `Page.CustomFood.Show`
 - `Page.CustomFood.Edit`
 
 Custom foods use the same catalog model as imported/global foods, scoped by user ownership.
 
 ### Logs
 
-`Page.FoodLog.Detail` supports viewing, editing quantity/unit/meal slot/notes, and deleting a log.
+`Page.FoodLog.Entry` supports viewing, editing quantity/unit/meal slot/notes, and deleting a log.
 
 Editing logged timestamp or swapping the selected item is intentionally not required for current scope.
 
 ### Meals
 
-- `Page.Meal.Index`
-- `Page.Meal.Detail`
+- `Page.Meal.List`
+- `Page.Meal.Show`
+- `Page.Meal.Create`
+- `Page.Meal.Edit`
 - `Page.Meal.Form`
 
 Meal forms edit components inside the aggregate. There are no independent component screens.
@@ -274,6 +290,7 @@ API modules live in `frontend-web/src/Api/`:
 - `Auth.elm`
 - `Admin.elm`
 - `Foods.elm`
+- `Goals.elm`
 - `Logs.elm`
 - `Meals.elm`
 - `Client.elm`

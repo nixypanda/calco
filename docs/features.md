@@ -10,7 +10,7 @@ Current implementation covers the core food diary plus meals/recipes, admin impo
 Search/select food -> log quantity -> snapshot nutrients -> review daily totals
 ```
 
-The frontend currently implements auth, admin user management, diary, food search/detail, custom food create/edit, log detail/edit, meals, and responsive layouts. The product goal is a simple food tracker, not an analytics or trend platform.
+The frontend currently implements auth, admin user management, diary, goal settings, food search/detail, custom food create/edit/show, log detail/edit, meals, and responsive layouts. The product goal is a simple food tracker, not an analytics or trend platform.
 
 ## MVP User Stories
 
@@ -28,6 +28,7 @@ The frontend currently implements auth, admin user management, diary, food searc
 - [x] As a user, I want to delete a food log so that I can remove accidental entries.
 - [x] As a user, I want to view logs for a previous day so that I can review what I ate historically.
 - [x] As a user, I want to view nutrient totals for a selected day so that I can compare daily intake over time.
+- [x] As a user, I want to set calorie and macro goals so that I can compare intake against targets.
 - [x] As a user, I want the app to work well on my phone so that I can log food quickly throughout the day.
 - [x] As a user, I want a simple login/session so that my food logs and custom foods are private to me.
 
@@ -59,7 +60,6 @@ The frontend currently implements auth, admin user management, diary, food searc
 
 ## Later User Stories
 
-- [ ] As a user, I want to set calorie and macro goals so that I can compare intake against targets.
 - [x] As a user, I want to track micronutrients so that I can understand vitamins and minerals in my diet. Nutrients are modeled generically and logged/summarized from snapshots; a dedicated micronutrient dashboard is still not present.
 - [ ] As a user, I want to scan a barcode with my phone camera so that I can find packaged foods faster.
 - [ ] As a user, I want recent foods and today's logs cached offline so that brief network loss does not stop logging.
@@ -76,6 +76,7 @@ These notes capture endpoint choices surfaced during feature mapping.
 - Food detail uses `GET /foods/{id}` and includes product nutrients and servings. Do not add separate public `GET /foods/{id}/nutrients` or `GET /foods/{id}/servings` endpoints unless partial loading becomes necessary.
 - Log history uses `GET /logs?from=YYYY-MM-DD&to=YYYY-MM-DD`. Use the same date for `from` and `to` for a single-day view. Do not add a separate `GET /logs/day/{date}` endpoint.
 - Nutrition summaries use `GET /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...`. Use the same date for `from` and `to` for daily totals. Omit `codes` to return all tracked nutrients.
+- Goal targets use `GET /goal?date=YYYY-MM-DD` to resolve the effective targets for a selected day and `PUT /goal` to create or overwrite the current day's saved targets.
 - Meals use aggregate-shaped endpoints: `POST /meals`, `GET /meals`, `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, and `GET /meals/{id}/nutrients?quantity=&unit=`.
 - Food logs accept `item.type` values of `product` and `meal`.
 - Import APIs are admin-only and include staging endpoints for foods, nutrients, and servings.

@@ -44,7 +44,7 @@ tests/
 ## Runtime
 
 - `index.html` loads the compiled Elm bundle from `dist/main.js`.
-- `dev-server.mjs` serves the frontend and proxies `/api/*` to the backend.
+- Vite serves the frontend and proxies `/api/*` to the backend during local development.
 - Defaults:
 
 ```text
@@ -77,4 +77,3 @@ Build and run:
 just frontend-web-build
 just frontend-web-dev
 ```
-

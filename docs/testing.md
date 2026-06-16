@@ -16,6 +16,7 @@ Integration tests cover the HTTP lifecycle of each entity end-to-end:
 ```text
 tests/product_lifecycle.rs   custom-food CRUD + search + auth required
 tests/diary_lifecycle.rs     food log CRUD + summary
+tests/goal_lifecycle.rs      goal defaults + save/overwrite flow
 tests/meal_lifecycle.rs      meal CRUD + /meals/{id}/nutrients
 tests/cross_entity.rs        product -> meal -> log -> summary wiring
 tests/import_lifecycle.rs    admin import flow + error path
