@@ -29,26 +29,34 @@ Not the goal right now:
 - Offline/service-worker behavior
 - Native mobile app
 
+## Command Runner
+
+This is a Nix-based project. Run repository `just` recipes through the dev shell:
+
+```bash
+nix develop -c just <recipe>
+```
+
 ## Quick Start
 
 Start PostgreSQL:
 
 ```bash
-just up
-just db-wait
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
+nix develop -c just up
+nix develop -c just db-wait
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
 ```
 
 Run the backend:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-dev
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-dev
 ```
 
 Run the frontend:
 
 ```bash
-just frontend-web-dev
+nix develop -c just frontend-web-dev
 ```
 
 The backend listens on port `3001` by default. The Elm frontend dev server listens on port `1234`.
@@ -58,10 +66,10 @@ The backend listens on port `3001` by default. The Elm frontend dev server liste
 Reliable current checks:
 
 ```bash
-just test
-just backend-test
-just frontend-web-test
-just frontend-web-build
+nix develop -c just test
+nix develop -c just backend-test
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-build
 ```
 
 ## Documentation

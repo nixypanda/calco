@@ -42,8 +42,8 @@ DATABASE_URL=postgres://calco:calco@localhost:5432/calco
 Bring it up with:
 
 ```bash
-just up
-just db-wait
+nix develop -c just up
+nix develop -c just db-wait
 ```
 
 ## Running
@@ -69,7 +69,7 @@ RUST_LOG=info cargo test --test diary_lifecycle -- --nocapture
 Elm frontend tests:
 
 ```bash
-just frontend-web-test
+nix develop -c just frontend-web-test
 ```
 
 Or directly:

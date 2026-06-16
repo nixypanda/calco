@@ -356,7 +356,7 @@ frontend-web/tests
 Run:
 
 ```bash
-just frontend-web-test
+nix develop -c just frontend-web-test
 ```
 
 Or directly:
@@ -369,7 +369,7 @@ elm-test
 Build:
 
 ```bash
-just frontend-web-build
+nix develop -c just frontend-web-build
 ```
 
 Or directly:
@@ -383,11 +383,11 @@ elm make src/Main.elm --output=dist/main.js
 Useful frontend-web checks:
 
 ```bash
-just frontend-web-format
-just frontend-web-review
-just frontend-web-line-length
-just frontend-web-test
-just frontend-web-build
+nix develop -c just frontend-web-format
+nix develop -c just frontend-web-review
+nix develop -c just frontend-web-line-length
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-build
 ```
 
 No browser e2e suite is configured at the moment.

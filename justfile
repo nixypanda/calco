@@ -1,6 +1,6 @@
 # CalCo — Command runner
 #
-# Usage: just <command>
+# Usage: nix develop -c just <command>
 # See https://github.com/casey/just
 
 # ──────────────────────────────────────────────

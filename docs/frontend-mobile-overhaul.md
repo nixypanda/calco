@@ -355,10 +355,10 @@ On tablet:
 Before committing changes, run from the repository root:
 
 ```bash
-just frontend-web-line-length
-just frontend-web-review
-just frontend-web-test
-just frontend-web-format
+nix develop -c just frontend-web-line-length
+nix develop -c just frontend-web-review
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-format
 ```
 
 All existing tests should pass. No new tests are strictly required for UI-only changes, but any new `Device`-aware logic in `Ui.elm` helpers should be tested.

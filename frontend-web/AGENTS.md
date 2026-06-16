@@ -57,10 +57,10 @@ backend API:  http://localhost:3001
 Before committing frontend changes, run these from the repository root:
 
 ```bash
-just frontend-web-line-length
-just frontend-web-review
-just frontend-web-test
-just frontend-web-format
+nix develop -c just frontend-web-line-length
+nix develop -c just frontend-web-review
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-format
 ```
 
 Direct commands:
@@ -74,6 +74,6 @@ cd frontend-web && elm-format --yes src tests
 Build and run:
 
 ```bash
-just frontend-web-build
-just frontend-web-dev
+nix develop -c just frontend-web-build
+nix develop -c just frontend-web-dev
 ```

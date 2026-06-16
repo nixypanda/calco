@@ -306,7 +306,7 @@ backend/migrations
 Run migrations explicitly with:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
 ```
 
 Important tables:
@@ -395,7 +395,7 @@ cd backend && cargo test
 or:
 
 ```bash
-just backend-test
+nix develop -c just backend-test
 ```
 
 See [testing.md](testing.md) for the integration test harness, nextest, and coverage workflow.

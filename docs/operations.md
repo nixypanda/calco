@@ -1,30 +1,33 @@
 # Operations
 
+This is a Nix-based project. Run repository `just` recipes through the dev
+shell with `nix develop -c just ...`.
+
 ## Local Services
 
 Start PostgreSQL:
 
 ```bash
-just up
-just db-wait
+nix develop -c just up
+nix develop -c just db-wait
 ```
 
 Stop PostgreSQL:
 
 ```bash
-just down
+nix develop -c just down
 ```
 
 Reset PostgreSQL data:
 
 ```bash
-just db-reset
+nix develop -c just db-reset
 ```
 
 Open psql:
 
 ```bash
-just db-shell
+nix develop -c just db-shell
 ```
 
 ## Backend
@@ -49,20 +52,20 @@ CORS_ALLOWED_ORIGINS=http://localhost:1234
 Run:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-dev
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-dev
 ```
 
 Build:
 
 ```bash
-just backend-build
+nix develop -c just backend-build
 ```
 
 Test:
 
 ```bash
-just backend-test
+nix develop -c just backend-test
 ```
 
 See [testing.md](testing.md) for integration tests, nextest, and coverage.
@@ -74,7 +77,7 @@ The active frontend is the Elm app in `frontend-web/`.
 Run:
 
 ```bash
-just frontend-web-dev
+nix develop -c just frontend-web-dev
 ```
 
 By default this serves `http://localhost:1234` and proxies `/api/*` to `http://localhost:3001`.
@@ -82,30 +85,30 @@ By default this serves `http://localhost:1234` and proxies `/api/*` to `http://l
 Build:
 
 ```bash
-just frontend-web-build
+nix develop -c just frontend-web-build
 ```
 
 Test:
 
 ```bash
-just frontend-web-test
+nix develop -c just frontend-web-test
 ```
 
 Format and review:
 
 ```bash
-just frontend-web-format
-just frontend-web-review
-just frontend-web-line-length
+nix develop -c just frontend-web-format
+nix develop -c just frontend-web-review
+nix develop -c just frontend-web-line-length
 ```
 
 Use these checks:
 
 ```bash
-just test
-just backend-test
-just frontend-web-test
-just frontend-web-build
+nix develop -c just test
+nix develop -c just backend-test
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-build
 ```
 
 ## Database Migrations
@@ -119,10 +122,13 @@ backend/migrations
 Run migrations separately from app startup:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just backend-migrate
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
 ```
 
-The current migration set is a squashed baseline. `just backend-migrate` uses `sqlx migrate run --ignore-missing` and the baseline SQL is written to tolerate local databases that already have the previous embedded schema, so running it records the new baseline without recreating existing tables.
+The current migration set is a squashed baseline. `nix develop -c just backend-migrate`
+uses `sqlx migrate run --ignore-missing` and the baseline SQL is written to
+tolerate local databases that already have the previous embedded schema, so
+running it records the new baseline without recreating existing tables.
 
 ## Import Operations
 
