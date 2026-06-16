@@ -375,30 +375,19 @@ dailyCalories summary =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
+    let
+        logs : List FoodLog
+        logs =
+            diaryLogs model.currentDate model.diary
+    in
     Ui.pageContainer device
         (dateCard theme model device
-            :: (case model.diary of
-                    Loading _ ->
-                        [ Ui.skeletonLoading theme ]
+            :: (case activeDiaryError model.currentDate model.diary of
+                    Just message ->
+                        [ Ui.errorBanner theme message ]
 
-                    Loaded loaded ->
-                        let
-                            date : LocalDate
-                            date =
-                                loaded.date
-                        in
-                        if LocalDate.equals date model.currentDate then
-                            [ logGroupsView theme device model loaded.logs ]
-
-                        else
-                            [ Ui.skeletonLoading theme ]
-
-                    Failed date message ->
-                        if LocalDate.equals date model.currentDate then
-                            [ Ui.errorBanner theme message ]
-
-                        else
-                            [ Ui.skeletonLoading theme ]
+                    Nothing ->
+                        [ logGroupsView theme device model logs ]
                )
         )
 
@@ -409,6 +398,10 @@ dateCard theme model device =
         canGoNext : Bool
         canGoNext =
             LocalDate.compare model.currentDate model.today == LT
+
+        logs : List FoodLog
+        logs =
+            diaryLogs model.currentDate model.diary
     in
     Ui.card theme
         [ Element.row
@@ -438,13 +431,10 @@ dateCard theme model device =
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
-                    totalsView
-                        theme
-                        targets
-                        (totalsFromLogs (loadedLogs model.currentDate model.diary))
+                    totalsView theme targets (totalsFromLogs logs)
 
                 Nothing ->
-                    Ui.loading theme "Loading goals..."
+                    totalsView theme loadingGoalTargets (totalsFromLogs logs)
             ]
         ]
 
@@ -490,12 +480,19 @@ summaryAmount code summary =
         |> Maybe.withDefault 0
 
 
-loadedLogs : LocalDate -> DiaryState -> List FoodLog
-loadedLogs currentDate diary =
+diaryLogs : LocalDate -> DiaryState -> List FoodLog
+diaryLogs currentDate diary =
     case diary of
         Loaded loaded ->
             if LocalDate.equals loaded.date currentDate then
                 loaded.logs
+
+            else
+                []
+
+        Loading loading ->
+            if LocalDate.equals loading.date currentDate then
+                Maybe.withDefault [] loading.logs
 
             else
                 []
@@ -510,6 +507,36 @@ loadedGoalTargets currentDate diary =
         Loaded loaded ->
             if LocalDate.equals loaded.date currentDate then
                 Just loaded.goal.targets
+
+            else
+                Nothing
+
+        Loading loading ->
+            if LocalDate.equals loading.date currentDate then
+                Maybe.map .targets loading.goal
+
+            else
+                Nothing
+
+        _ ->
+            Nothing
+
+
+loadingGoalTargets : GoalTargets
+loadingGoalTargets =
+    { calorieTarget = 0
+    , proteinTargetG = 0
+    , carbsTargetG = 0
+    , fatTargetG = 0
+    }
+
+
+activeDiaryError : LocalDate -> DiaryState -> Maybe String
+activeDiaryError currentDate diary =
+    case diary of
+        Failed date message ->
+            if LocalDate.equals date currentDate then
+                Just message
 
             else
                 Nothing
