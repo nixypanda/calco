@@ -362,7 +362,7 @@ macroBarRow theme height portions =
         [ Element.width Element.fill
         , Element.height (Element.px height)
         , Background.color theme.divider
-        , Border.rounded 999
+        , Border.rounded Ui.radiusPill
         , Element.clip
         ]
         [ barSegment Ui.proteinColor portions.proteinPct
@@ -409,7 +409,7 @@ legendDot color =
         [ Element.width (Element.px 10)
         , Element.height (Element.px 10)
         , Background.color color
-        , Border.rounded 999
+        , Border.rounded Ui.radiusPill
         ]
         Element.none
 
@@ -435,7 +435,8 @@ nutrientsTableInner theme nutrients =
             , { header =
                     Element.el
                         [ Font.alignRight
-                        , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
+                        , Element.paddingEach
+                            { top = Ui.space8, bottom = Ui.space8, left = 0, right = Ui.space8 }
                         ]
                         (Ui.tableHeader theme "Amount")
               , width = Element.shrink
@@ -444,13 +445,16 @@ nutrientsTableInner theme nutrients =
                         Element.el
                             [ Ui.body
                             , Font.alignRight
-                            , Element.paddingEach { top = 8, bottom = 8, left = 0, right = 8 }
+                            , Element.paddingEach
+                                { top = Ui.space8, bottom = Ui.space8, left = 0, right = Ui.space8 }
                             ]
                             (Element.text (formatAmount n.amount))
               }
             , { header =
                     Element.el
-                        [ Element.paddingEach { top = 8, bottom = 8, left = 0, right = 0 } ]
+                        [ Element.paddingEach
+                            { top = Ui.space8, bottom = Ui.space8, left = 0, right = 0 }
+                        ]
                         (Ui.tableHeader theme "Unit")
               , width = Element.shrink
               , view =

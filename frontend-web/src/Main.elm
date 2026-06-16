@@ -17,12 +17,9 @@ import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element
 import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
-import Element.Input as Input
 import Element.Region as Region
 import Html
-import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -1254,6 +1251,10 @@ view model =
 appFrame : Model -> Element.Element Msg
 appFrame model =
     let
+        bottomNavClearance : Int
+        bottomNavClearance =
+            56
+
         useBottomNav : Bool
         useBottomNav =
             showBottomNav model
@@ -1273,7 +1274,9 @@ appFrame model =
             , Region.mainContent
             ]
                 ++ (if useBottomNav then
-                        [ Element.paddingEach { bottom = 56, top = 0, left = 0, right = 0 } ]
+                        [ Element.paddingEach
+                            { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
+                        ]
 
                     else
                         []
@@ -1295,15 +1298,7 @@ showBottomNav model =
 
 bottomNavBar : Model -> Element.Element Msg
 bottomNavBar model =
-    Element.row
-        [ Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Background.color model.theme.cardBg
-        , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
-        , Border.color model.theme.divider
-        , Region.navigation
-        , Element.htmlAttribute (Html.Attributes.class "app-bottom-nav")
-        ]
+    Ui.bottomNavBar model.theme
         [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
         , tabButton model "🔍︎" "Search" (FoodSearch Nothing Nothing)
         , tabButton model "◉" "Foods" CustomFoodList
@@ -1318,43 +1313,11 @@ tabButton model icon label target =
         active =
             primaryRoute model.route == primaryRoute target
     in
-    Input.button
-        [ Element.width (Element.fillPortion 1)
-        , Element.height Element.fill
-        , Font.color
-            (if active then
-                model.theme.brandBlue
-
-             else
-                model.theme.textMuted
-            )
-        , Border.widthEach
-            { top =
-                if active then
-                    2
-
-                else
-                    0
-            , bottom = 0
-            , left = 0
-            , right = 0
-            }
-        , Border.color model.theme.brandBlue
-        ]
-        { onPress = Just (NavigateTo target)
-        , label =
-            Element.column
-                [ Element.centerX
-                , Element.centerY
-                , Element.spacing 2
-                ]
-                [ Element.el [ Element.centerX ] (Element.text icon)
-                , Element.el
-                    [ Element.centerX
-                    , Font.size 11
-                    ]
-                    (Element.text label)
-                ]
+    Ui.bottomNavTab model.theme
+        { icon = icon
+        , label = label
+        , active = active
+        , onPress = NavigateTo target
         }
 
 
@@ -1402,7 +1365,7 @@ topBarView model =
                 ]
                 (Ui.subsectionTitle model.theme model.device meta.title)
             , Element.el
-                [ Element.paddingEach { top = 0, right = 8, bottom = 0, left = 0 } ]
+                [ Element.paddingEach { top = 0, right = Ui.space8, bottom = 0, left = 0 } ]
                 (themeToggle model)
             , profileButton model
             ]
@@ -1466,17 +1429,10 @@ profileMenuAnchor model =
 
 profileMenu : Model -> Element.Element Msg
 profileMenu model =
-    Element.column
-        [ Element.alignRight
-        , Element.moveDown 4
-        , Element.width (Element.px 240)
-        , Element.padding Ui.space12
-        , Element.spacing 10
-        , Background.color model.theme.cardBg
-        , Border.rounded 20
-        , Ui.cardShadow model.theme
-        ]
-        (profileMenuContent model)
+    Ui.menuCard model.theme
+        { width = 240
+        , children = profileMenuContent model
+        }
 
 
 initial : String -> String
@@ -1601,14 +1557,7 @@ drawerOverlay model =
                 , Element.height Element.fill
                 ]
                 [ drawerView model
-                , Input.button
-                    [ Element.width Element.fill
-                    , Element.height Element.fill
-                    , Background.color (Element.rgba255 0 0 0 0.28)
-                    ]
-                    { onPress = Just DrawerClosed
-                    , label = Element.none
-                    }
+                , Ui.scrimOverlay (Just DrawerClosed)
                 ]
             )
         ]
@@ -1619,15 +1568,7 @@ drawerOverlay model =
 
 drawerView : Model -> Element.Element Msg
 drawerView model =
-    Element.column
-        [ Element.width (Element.fill |> Element.maximum 320)
-        , Element.height Element.fill
-        , Element.paddingXY 16 9
-        , Element.spacing Ui.space12
-        , Background.color model.theme.cardBg
-        , Ui.cardShadow model.theme
-        , Region.navigation
-        ]
+    Ui.drawerPanel model.theme
         (Element.row [ Element.spacing Ui.space8 ]
             [ Ui.iconButton model.device
                 model.theme
@@ -1659,28 +1600,10 @@ drawerItem theme current label target =
         selected =
             primaryRoute current == primaryRoute target
     in
-    Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY 16 14
-        , Border.rounded 12
-        , Background.color
-            (if selected then
-                theme.drawerSelectionBg
-
-             else
-                theme.cardBg
-            )
-        , Font.color
-            (if selected then
-                theme.brandBlue
-
-             else
-                theme.textPrimary
-            )
-        , Font.medium
-        ]
-        { onPress = Just (NavigateTo target)
-        , label = Element.text label
+    Ui.drawerItem theme
+        { label = label
+        , selected = selected
+        , onPress = NavigateTo target
         }
 
 

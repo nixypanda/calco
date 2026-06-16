@@ -606,7 +606,7 @@ componentView theme loaded component =
         ]
         [ Element.el
             [ Element.width (Element.px 12)
-            , Element.paddingEach { top = 2, right = 0, bottom = 0, left = 0 }
+            , Element.paddingEach { top = Ui.space2, right = 0, bottom = 0, left = 0 }
             , Element.alignTop
             ]
             macroDot

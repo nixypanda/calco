@@ -14,8 +14,6 @@ module Page.Users.EditUser exposing
 import Api.Client as Client
 import Data.User as User
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Ui
 import Ui.Theme exposing (Theme)
@@ -299,25 +297,16 @@ enableDisableView device theme model =
     case model.status of
         Loaded loadedUser _ ->
             [ Ui.card theme
-                [ Element.column
-                    [ Element.width Element.fill
-                    , Background.color theme.statusDisabledBg
-                    , Border.rounded 16
-                    , Element.padding Ui.space16
-                    , Element.spacing Ui.space12
-                    ]
-                    [ Element.el
-                        [ Font.medium
-                        , Ui.body
-                        , Font.color theme.dangerFg
-                        ]
-                        (Element.text "Danger Zone")
-                    , if loadedUser.user.status == "active" then
-                        Ui.dangerButton device theme "Disable User" DisableClicked
+                [ Ui.dangerPanel theme
+                    { title = "Danger Zone"
+                    , body =
+                        [ if loadedUser.user.status == "active" then
+                            Ui.dangerButton device theme "Disable User" DisableClicked
 
-                      else
-                        Ui.button device theme "Enable User" EnableClicked
-                    ]
+                          else
+                            Ui.button device theme "Enable User" EnableClicked
+                        ]
+                    }
                 ]
             ]
 

@@ -12,6 +12,7 @@ callers can use either path.
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
+import Ui
 
 
 {-| A 10px-tall pill progress bar. Both the track color and the fill color
@@ -47,14 +48,14 @@ linearProgress config =
         [ Element.width Element.fill
         , Element.height (Element.px 10)
         , Background.color config.trackColor
-        , Border.rounded 999
+        , Border.rounded Ui.radiusPill
         , Element.clip
         ]
         [ Element.el
             [ Element.width (Element.fillPortion filled)
             , Element.height Element.fill
             , Background.color config.color
-            , Border.rounded 999
+            , Border.rounded Ui.radiusPill
             ]
             Element.none
         , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
@@ -99,11 +100,11 @@ verticalBarChart config bars =
                 [ Element.width (Element.px barWidth)
                 , Element.height (Element.px (max 4 (round bar.value)))
                 , Background.color bar.color
-                , Border.rounded 4
+                , Border.rounded Ui.radiusTight
                 ]
                 Element.none
     in
-    Element.column [ Element.spacing 6 ]
+    Element.column [ Element.spacing Ui.space8 ]
         [ Element.row [ Element.spacing barGap ]
             (List.map barElement bars)
         , baseline

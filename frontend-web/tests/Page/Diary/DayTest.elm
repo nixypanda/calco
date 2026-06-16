@@ -2,7 +2,7 @@ module Page.Diary.DayTest exposing (tests)
 
 import Api.Client as Client
 import Data.FoodLog exposing (FoodLog, LogItem)
-import Data.Goals exposing (GoalSource(..), GoalSnapshot)
+import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (NutrientAmount, Quantity)

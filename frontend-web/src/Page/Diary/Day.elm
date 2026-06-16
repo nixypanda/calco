@@ -20,8 +20,6 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
@@ -125,7 +123,10 @@ update msg model =
             else
                 case result of
                     Ok logs ->
-                        ( { model | diary = applyLogsLoaded requestDate logs model.diary }, Cmd.none, NoOp )
+                        ( { model | diary = applyLogsLoaded requestDate logs model.diary }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     Err error ->
                         failure requestDate error model
@@ -137,7 +138,10 @@ update msg model =
             else
                 case result of
                     Ok snapshot ->
-                        ( { model | diary = applyGoalLoaded requestDate snapshot model.diary }, Cmd.none, NoOp )
+                        ( { model | diary = applyGoalLoaded requestDate snapshot model.diary }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     Err error ->
                         failure requestDate error model
@@ -425,22 +429,12 @@ dateCard theme model device =
                     { label = "→", title = "Next Day", onPress = NextDayClicked }
 
               else
-                Input.button
-                    [ Element.width (Element.px 40)
-                    , Element.height (Element.px 40)
-                    , Background.color theme.inputFill
-                    , Font.color theme.textMuted
-                    , Font.center
-                    , Border.rounded 999
-                    ]
-                    { onPress = Nothing
-                    , label = Element.text "→"
-                    }
+                Ui.disabledIconButton theme { label = "→" }
             ]
         , Ui.hairline theme
         , Element.column
             [ Element.width Element.fill
-            , Element.paddingEach { top = 8, right = 0, bottom = 0, left = 0 }
+            , Element.paddingEach { top = Ui.space8, right = 0, bottom = 0, left = 0 }
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
@@ -451,13 +445,13 @@ dateCard theme model device =
 
                 Nothing ->
                     Ui.loading theme "Loading goals..."
-              ]
+            ]
         ]
 
 
 totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
 totalsView theme targets summary =
-    Element.column [ Element.width Element.fill, Element.spacing 18 ]
+    Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ Ui.macroBar theme
             { label = "Calories"
             , value = dailyCalories summary
@@ -562,12 +556,13 @@ slotView theme device macroMode section =
             Nutrition.macroTotals section.logs
     in
     mealSlotCard theme
-        section.slot
-        (mealSlotHeader theme device macroMode section totals)
+                device
+                section.slot
+                (mealSlotHeader theme device macroMode section totals)
         (Ui.hairline theme
             :: (if List.isEmpty section.logs then
                     [ Element.el
-                        [ Element.padding 14
+                        [ Element.padding Ui.space12
                         , Font.color theme.textMuted
                         , Element.centerX
                         ]
@@ -602,14 +597,6 @@ mealSlotHeader :
     -> Element Msg
 mealSlotHeader theme device macroMode section totals =
     let
-        horizontalPadding : Int
-        horizontalPadding =
-            if Ui.isSmall device then
-                16
-
-            else
-                34
-
         sectionKcal : Float
         sectionKcal =
             section.logs
@@ -620,7 +607,7 @@ mealSlotHeader theme device macroMode section totals =
         headerContent =
             Element.row
                 [ Element.width Element.fill
-                , Element.padding 14
+                , Element.padding Ui.space12
                 , Element.spacing Ui.space12
                 ]
                 [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
@@ -634,41 +621,7 @@ mealSlotHeader theme device macroMode section totals =
                     (String.fromInt (round sectionKcal) ++ " kcal")
                 ]
     in
-    case section.slot of
-        Other ->
-            headerContent
-
-        _ ->
-            Element.el
-                (List.concat
-                    [ [ Element.width Element.fill
-                      , Element.height (Element.px mealSlotHeaderHeight)
-                      , Border.roundEach
-                            { topLeft = 20
-                            , topRight = 20
-                            , bottomLeft = 0
-                            , bottomRight = 0
-                            }
-                      , Element.clip
-                      , Element.inFront (mealSlotFade theme)
-                      , Element.inFront
-                            (Element.el
-                                [ Element.width Element.fill
-                                , Element.height Element.fill
-                                , Element.paddingEach
-                                    { top = 38
-                                    , right = horizontalPadding
-                                    , bottom = 20
-                                    , left = horizontalPadding
-                                    }
-                                ]
-                                headerContent
-                            )
-                      ]
-                    , mealSlotBackground section.slot
-                    ]
-                )
-                Element.none
+    headerContent
 
 
 mealSlotHeaderHeight : Int
@@ -705,28 +658,38 @@ mealSlotFade theme =
         Element.none
 
 
-mealSlotCard : Theme -> MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
-mealSlotCard theme slot header bodyChildren =
+mealSlotCard : Theme -> Device -> MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
+mealSlotCard theme device slot header bodyChildren =
     case slot of
         Other ->
             Ui.card theme (header :: bodyChildren)
 
         _ ->
-            Element.column
-                [ Element.width Element.fill
-                , Background.color theme.cardBg
-                , Border.rounded 20
-                , Ui.cardShadow theme
-                , Element.spacing 0
-                ]
-                [ header
-                , Element.column
-                    [ Element.width Element.fill
-                    , Element.paddingEach { top = 0, right = 20, bottom = 20, left = 20 }
-                    , Element.spacing Ui.space12
-                    ]
-                    bodyChildren
-                ]
+            Ui.heroCard theme
+                { header = header
+                , body = bodyChildren
+                , mediaHeader =
+                    Just
+                        { height = mealSlotHeaderHeight
+                        , backgroundAttrs = mealSlotBackground slot
+                        , fade = Just (mealSlotFade theme)
+                        , contentPadding =
+                            { top = 38
+                            , right = mealSlotHorizontalPadding device
+                            , bottom = 20
+                            , left = mealSlotHorizontalPadding device
+                            }
+                        }
+                }
+
+
+mealSlotHorizontalPadding : Device -> Int
+mealSlotHorizontalPadding device =
+    if Ui.isSmall device then
+        16
+
+    else
+        34
 
 
 mealSlotBackground : MealSlot -> List (Element.Attribute msg)
@@ -801,7 +764,7 @@ logRow : Theme -> Device -> FoodLog -> Element Msg
 logRow theme device log =
     Input.button
         [ Element.width Element.fill
-        , Element.padding 14
+        , Element.padding Ui.space12
         ]
         { onPress = Just (LogClicked log.id)
         , label =

@@ -7,9 +7,6 @@ import Api.Foods exposing (SearchResult)
 import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
 import Element.Input as Input
 import Html
 import Html.Events
@@ -30,17 +27,10 @@ completionDropdown theme device config options =
         Element.none
 
     else
-        Element.column
-            [ Element.width Element.fill
-            , Element.height (Element.px (completionDropdownHeight device options))
-            , Element.scrollbarY
-            , Element.spacing Ui.space2
-            , Element.padding Ui.space4
-            , Border.rounded 12
-            , Background.color theme.cardBg
-            , Ui.cardShadow theme
-            ]
-            (List.map (completionRow theme device config.onSelect) options)
+        Ui.completionDropdown theme
+            { height = completionDropdownHeight device options
+            , rows = List.map (completionRow theme device config.onSelect) options
+            }
 
 
 searchInput :
@@ -57,16 +47,14 @@ searchInput :
     -> Element msg
 searchInput theme device config =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-        [ Input.text
-            [ Border.rounded 12
-            , Background.color theme.inputFill
-            , Element.padding Ui.space12
-            , Element.htmlAttribute (tabCompletionHandler config.onTabComplete config.completions)
-            ]
+        [ Ui.searchInput theme
             { onChange = config.onChange
             , text = config.text
-            , placeholder = Nothing
-            , label = Input.labelAbove [ Ui.body, Font.medium ] (Element.text config.label)
+            , label = config.label
+            , extraAttrs =
+                [ Element.htmlAttribute
+                    (tabCompletionHandler config.onTabComplete config.completions)
+                ]
             }
         , completionDropdown theme device { onSelect = config.onCompletionClick } config.completions
         ]
@@ -152,28 +140,16 @@ completionDropdownHeight device options =
 
 completionRow : Theme -> Device -> (Completion -> msg) -> Completion -> Element msg
 completionRow theme device onSelect completion =
-    Input.button
-        [ Element.width Element.fill
-        , if Ui.isSmall device then
-            Element.padding 14
+    Ui.completionRow device
+        { label = Search.completionLabel completion
+        , trailing =
+            case completion of
+                CategoryCompletion _ count ->
+                    Just (Ui.badge theme (String.fromInt count))
 
-          else
-            Element.paddingXY 12 10
-        , Border.rounded 999
-        ]
-        { onPress = Just (onSelect completion)
-        , label =
-            Element.row [ Element.width Element.fill, Element.spacing Ui.space8 ]
-                [ Element.el
-                    [ Element.width Element.fill, Font.medium ]
-                    (Element.text (Search.completionLabel completion))
-                , case completion of
-                    CategoryCompletion _ count ->
-                        Ui.badge theme (String.fromInt count)
-
-                    OperatorCompletion _ ->
-                        Element.none
-                ]
+                OperatorCompletion _ ->
+                    Nothing
+        , onPress = onSelect completion
         }
 
 

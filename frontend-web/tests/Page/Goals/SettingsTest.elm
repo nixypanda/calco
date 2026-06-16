@@ -1,7 +1,7 @@
 module Page.Goals.SettingsTest exposing (tests)
 
 import Api.Client as Client
-import Data.Goals exposing (GoalSource(..), GoalSnapshot)
+import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Goals.Settings as GoalsSettings

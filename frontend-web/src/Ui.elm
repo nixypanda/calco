@@ -10,22 +10,28 @@ module Ui exposing
     , badge
     , body
     , bottomActionButtons
+    , bottomNavBar
+    , bottomNavTab
     , button
     , caption
     , carbsColor
     , card
     , cardActions
-    , cardShadow
     , chip
     , chipBackground
-    , chipForeground
     , chips
     , coloredPill
+    , completionDropdown
+    , completionRow
     , dangerButton
     , dangerIconButton
+    , dangerPanel
     , defaultTruncationChars
     , detailRow
+    , disabledIconButton
     , dotSeparated
+    , drawerItem
+    , drawerPanel
     , emptyState
     , errorBanner
     , fatColor
@@ -34,9 +40,10 @@ module Ui exposing
     , fullWidthGhostButton
     , ghostButton
     , hairline
-    , hoverEffect
+    , heroCard
     , iconButton
     , input
+    , inputWithSuffix
     , isSmall
     , layout
     , linearProgress
@@ -48,6 +55,7 @@ module Ui exposing
     , macroColor
     , macroDotGhost
     , maybeErrorBanner
+    , menuCard
     , modalOverlay
     , mutedBody
     , mutedCaption
@@ -59,6 +67,17 @@ module Ui exposing
     , primarySubmitButton
     , primaryTeal
     , proteinColor
+    , radiusCard
+    , radiusControl
+    , radiusHairline
+    , radiusHero
+    , radiusPanel
+    , radiusPill
+    , radiusSmall
+    , radiusTight
+    , removableChip
+    , scrimOverlay
+    , searchInput
     , section
     , sectionTitle
     , selectDropdown
@@ -66,6 +85,7 @@ module Ui exposing
     , skeletonLoading
     , space12
     , space16
+    , space20
     , space2
     , space24
     , space4
@@ -75,6 +95,7 @@ module Ui exposing
     , statusBadge
     , submittingOrIdle
     , subsectionTitle
+    , suggestionList
     , tableHeader
     , toCssColor
     , toggleSwitch
@@ -97,7 +118,6 @@ import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
 import Ui.Theme exposing (Theme)
-import View.Charts
 
 
 
@@ -178,6 +198,50 @@ space20 =
 space24 : Int
 space24 =
     24
+
+
+
+-- Border radius scale
+
+
+radiusHairline : Int
+radiusHairline =
+    2
+
+
+radiusTight : Int
+radiusTight =
+    4
+
+
+radiusSmall : Int
+radiusSmall =
+    8
+
+
+radiusControl : Int
+radiusControl =
+    12
+
+
+radiusPanel : Int
+radiusPanel =
+    16
+
+
+radiusCard : Int
+radiusCard =
+    20
+
+
+radiusHero : Int
+radiusHero =
+    24
+
+
+radiusPill : Int
+radiusPill =
+    999
 
 
 
@@ -447,13 +511,89 @@ card theme children =
     Element.column
         [ Element.width Element.fill
         , Background.color theme.cardBg
-        , Border.rounded 20
+        , Border.rounded radiusCard
         , cardShadow theme
         , uiClass "ui-surface"
         , Element.padding space20
         , Element.spacing space12
         ]
         children
+
+
+heroCard :
+    Theme
+    ->
+        { header : Element msg
+        , body : List (Element msg)
+        , mediaHeader :
+            Maybe
+                { height : Int
+                , backgroundAttrs : List (Element.Attribute msg)
+                , fade : Maybe (Element msg)
+                , contentPadding :
+                    { top : Int
+                    , right : Int
+                    , bottom : Int
+                    , left : Int
+                    }
+                }
+        }
+    -> Element msg
+heroCard theme config =
+    let
+        headerElement : Element msg
+        headerElement =
+            case config.mediaHeader of
+                Just media ->
+                    Element.el
+                        ([ Element.width Element.fill
+                         , Element.height (Element.px media.height)
+                         , Border.roundEach
+                            { topLeft = radiusCard
+                            , topRight = radiusCard
+                            , bottomLeft = 0
+                            , bottomRight = 0
+                            }
+                         , Element.clip
+                         ]
+                            ++ (case media.fade of
+                                    Just fade ->
+                                        [ Element.inFront fade ]
+
+                                    Nothing ->
+                                        []
+                               )
+                            ++ [ Element.inFront
+                                    (Element.el
+                                        [ Element.width Element.fill
+                                        , Element.height Element.fill
+                                        , Element.paddingEach media.contentPadding
+                                        ]
+                                        config.header
+                                    )
+                               ]
+                            ++ media.backgroundAttrs
+                        )
+                        Element.none
+
+                Nothing ->
+                    config.header
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Background.color theme.cardBg
+        , Border.rounded radiusCard
+        , cardShadow theme
+        , Element.spacing 0
+        ]
+        [ headerElement
+        , Element.column
+            [ Element.width Element.fill
+            , Element.paddingEach { top = 0, right = space20, bottom = space20, left = space20 }
+            , Element.spacing space12
+            ]
+            config.body
+        ]
 
 
 pageHeader :
@@ -634,7 +774,7 @@ listRowLeading : List (Element msg) -> Element msg
 listRowLeading leading =
     Element.el
         [ Element.width (Element.px 12)
-        , Element.paddingEach { top = 2, right = 0, bottom = 0, left = 0 }
+        , Element.paddingEach { top = space2, right = 0, bottom = 0, left = 0 }
         , Element.alignTop
         ]
         (case leading of
@@ -679,11 +819,33 @@ errorBanner theme message =
     Element.el
         [ Background.color theme.dangerBg
         , Font.color theme.dangerFg
-        , Border.rounded 12
+        , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill
         ]
         (Element.text message)
+
+
+dangerPanel :
+    Theme
+    -> { title : String, body : List (Element msg) }
+    -> Element msg
+dangerPanel theme config =
+    Element.column
+        [ Element.width Element.fill
+        , Background.color theme.statusDisabledBg
+        , Border.rounded radiusPanel
+        , Element.padding space16
+        , Element.spacing space12
+        ]
+        (Element.el
+            [ Font.medium
+            , body
+            , Font.color theme.dangerFg
+            ]
+            (Element.text config.title)
+            :: config.body
+        )
 
 
 
@@ -695,7 +857,7 @@ button device theme label msg =
     Input.button
         [ Background.color theme.brandBlue
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
         , uiClass "ui-motion ui-pressable"
@@ -759,7 +921,7 @@ primarySubmitButton device theme config =
                 theme.brandBlueDisabled
             )
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.width Element.fill
         , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
@@ -835,7 +997,7 @@ dangerButton device theme label msg =
     Input.button
         [ Background.color theme.dangerSolid
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
         , Font.medium
         , uiClass "ui-motion ui-pressable"
@@ -851,7 +1013,7 @@ primaryActionButton device theme label msg =
     Input.button
         [ Background.color theme.brandBlue
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.width Element.fill
         , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
@@ -870,7 +1032,7 @@ fullWidthDangerButton device theme label msg =
     Input.button
         [ Background.color theme.dangerSolid
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.width Element.fill
         , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
@@ -887,7 +1049,7 @@ fullWidthDangerButton device theme label msg =
 ghostButton : Device -> Theme -> String -> msg -> Element msg
 ghostButton device theme label msg =
     Input.button
-        [ Border.rounded 999
+        [ Border.rounded radiusPill
         , Element.paddingEach { top = 10, right = 16, bottom = 10, left = 16 }
         , Font.color theme.brandBlue
         , Font.medium
@@ -904,7 +1066,7 @@ fullWidthGhostButton device theme label msg =
     Input.button
         [ Element.width Element.fill
         , Element.paddingEach { top = 14, right = 16, bottom = 14, left = 16 }
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Font.color theme.brandBlue
         , Font.medium
         , uiClass "ui-motion ui-pressable"
@@ -912,6 +1074,65 @@ fullWidthGhostButton device theme label msg =
         ]
         { onPress = Just msg
         , label = Element.text label
+        }
+
+
+bottomNavBar : Theme -> List (Element msg) -> Element msg
+bottomNavBar theme items =
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px 56)
+        , Background.color theme.cardBg
+        , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
+        , Border.color theme.divider
+        , Region.navigation
+        , Element.htmlAttribute (Html.Attributes.class "app-bottom-nav")
+        ]
+        items
+
+
+bottomNavTab :
+    Theme
+    -> { icon : String, label : String, active : Bool, onPress : msg }
+    -> Element msg
+bottomNavTab theme config =
+    Input.button
+        [ Element.width (Element.fillPortion 1)
+        , Element.height Element.fill
+        , Font.color
+            (if config.active then
+                theme.brandBlue
+
+             else
+                theme.textMuted
+            )
+        , Border.widthEach
+            { top =
+                if config.active then
+                    2
+
+                else
+                    0
+            , bottom = 0
+            , left = 0
+            , right = 0
+            }
+        , Border.color theme.brandBlue
+        ]
+        { onPress = Just config.onPress
+        , label =
+            Element.column
+                [ Element.centerX
+                , Element.centerY
+                , Element.spacing 2
+                ]
+                [ Element.el [ Element.centerX ] (Element.text config.icon)
+                , Element.el
+                    [ Element.centerX
+                    , Font.size 11
+                    ]
+                    (Element.text config.label)
+                ]
         }
 
 
@@ -929,7 +1150,7 @@ type alias InputConfig msg =
 input : Theme -> InputConfig msg -> Element msg
 input theme config =
     Input.text
-        [ Border.rounded 12
+        [ Border.rounded radiusControl
         , Background.color theme.inputFill
         , Element.padding 10
         , uiClass "ui-motion"
@@ -941,10 +1162,35 @@ input theme config =
         }
 
 
+searchInput :
+    Theme
+    ->
+        { label : String
+        , text : String
+        , onChange : String -> msg
+        , extraAttrs : List (Element.Attribute msg)
+        }
+    -> Element msg
+searchInput theme config =
+    Input.text
+        ([ Border.rounded radiusControl
+         , Background.color theme.inputFill
+         , Element.padding space12
+         , uiClass "ui-motion"
+         ]
+            ++ config.extraAttrs
+        )
+        { onChange = config.onChange
+        , text = config.text
+        , placeholder = Nothing
+        , label = Input.labelAbove [ body, Font.medium ] (Element.text config.label)
+        }
+
+
 passwordInput : Theme -> InputConfig msg -> Element msg
 passwordInput theme config =
     Input.currentPassword
-        [ Border.rounded 12
+        [ Border.rounded radiusControl
         , Background.color theme.inputFill
         , Element.padding 10
         , uiClass "ui-motion"
@@ -965,6 +1211,50 @@ fieldLabel theme label_ =
         , Font.color theme.textPrimary
         ]
         (Element.text label_)
+
+
+inputWithSuffix :
+    Theme
+    ->
+        { label : String
+        , text : String
+        , suffix : String
+        , onChange : String -> msg
+        }
+    -> Element msg
+inputWithSuffix theme config =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        ]
+        [ fieldLabel theme config.label
+        , Element.el
+            [ Element.width Element.fill
+            , Element.inFront
+                (Element.el
+                    [ Element.alignRight
+                    , Element.centerY
+                    , Element.paddingEach { top = 0, right = 12, bottom = 0, left = 0 }
+                    , Font.color theme.textMuted
+                    , body
+                    ]
+                    (Element.text config.suffix)
+                )
+            ]
+            (Input.text
+                [ Border.rounded radiusControl
+                , Background.color theme.inputFill
+                , Element.width Element.fill
+                , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
+                , uiClass "ui-motion"
+                ]
+                { onChange = config.onChange
+                , text = config.text
+                , placeholder = Nothing
+                , label = Input.labelHidden config.label
+                }
+            )
+        ]
 
 
 
@@ -1034,6 +1324,18 @@ modalOverlay theme device config =
         )
 
 
+scrimOverlay : Maybe msg -> Element msg
+scrimOverlay onPress =
+    Input.button
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Background.color (Element.rgba255 0 0 0 0.28)
+        ]
+        { onPress = onPress
+        , label = Element.none
+        }
+
+
 detailRow : Theme -> String -> Element msg -> Element msg
 detailRow theme label_ value =
     Element.row [ Element.spacing space4 ]
@@ -1048,12 +1350,143 @@ badge theme label_ =
     Element.el
         [ Background.color theme.inputFill
         , Font.color theme.textPrimary
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
         , caption
         , Font.medium
         ]
         (Element.text label_)
+
+
+menuCard :
+    Theme
+    -> { width : Int, children : List (Element msg) }
+    -> Element msg
+menuCard theme config =
+    Element.column
+        [ Element.alignRight
+        , Element.moveDown 4
+        , Element.width (Element.px config.width)
+        , Element.padding space12
+        , Element.spacing 10
+        , Background.color theme.cardBg
+        , Border.rounded radiusCard
+        , cardShadow theme
+        ]
+        config.children
+
+
+drawerPanel : Theme -> List (Element msg) -> Element msg
+drawerPanel theme children =
+    Element.column
+        [ Element.width (Element.fill |> Element.maximum 320)
+        , Element.height Element.fill
+        , Element.paddingXY 16 9
+        , Element.spacing space12
+        , Background.color theme.cardBg
+        , cardShadow theme
+        , Region.navigation
+        ]
+        children
+
+
+drawerItem :
+    Theme
+    -> { label : String, selected : Bool, onPress : msg }
+    -> Element msg
+drawerItem theme config =
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingXY 16 14
+        , Border.rounded radiusControl
+        , Background.color
+            (if config.selected then
+                theme.drawerSelectionBg
+
+             else
+                theme.cardBg
+            )
+        , Font.color
+            (if config.selected then
+                theme.brandBlue
+
+             else
+                theme.textPrimary
+            )
+        , Font.medium
+        ]
+        { onPress = Just config.onPress
+        , label = Element.text config.label
+        }
+
+
+completionDropdown :
+    Theme
+    -> { height : Int, rows : List (Element msg) }
+    -> Element msg
+completionDropdown theme config =
+    if List.isEmpty config.rows then
+        Element.none
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.height (Element.px config.height)
+            , Element.scrollbarY
+            , Element.spacing space2
+            , Element.padding space4
+            , Border.rounded radiusControl
+            , Background.color theme.cardBg
+            , cardShadow theme
+            ]
+            config.rows
+
+
+completionRow :
+    Device
+    ->
+        { label : String
+        , trailing : Maybe (Element msg)
+        , onPress : msg
+        }
+    -> Element msg
+completionRow device config =
+    Input.button
+        [ Element.width Element.fill
+        , if isSmall device then
+            Element.padding space12
+
+          else
+            Element.paddingXY 12 10
+        , Border.rounded radiusPill
+        ]
+        { onPress = Just config.onPress
+        , label =
+            Element.row [ Element.width Element.fill, Element.spacing space8 ]
+                [ Element.el
+                    [ Element.width Element.fill, Font.medium ]
+                    (Element.text config.label)
+                , Maybe.withDefault Element.none config.trailing
+                ]
+        }
+
+
+suggestionList : Theme -> List (Element msg) -> Element msg
+suggestionList theme items =
+    if List.isEmpty items then
+        Element.none
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing space4
+            , Border.rounded radiusControl
+            , Background.color theme.cardBg
+            , Border.width 1
+            , Border.color theme.divider
+            , Element.padding space8
+            ]
+            items
 
 
 selectDropdown :
@@ -1087,7 +1520,7 @@ selectDropdown device theme config =
         renderOption ( val, lbl ) =
             Input.button
                 [ Element.width Element.fill
-                , Element.paddingXY 14 12
+                , Element.paddingXY space16 space12
                 , Background.color
                     (if isSelected val then
                         theme.brandBlue
@@ -1111,7 +1544,7 @@ selectDropdown device theme config =
         optionsElement =
             Element.column
                 [ Element.width Element.fill
-                , Border.rounded 12
+                , Border.rounded radiusControl
                 , Background.color theme.cardBg
                 , cardShadow theme
                 , Element.moveDown 4
@@ -1131,9 +1564,9 @@ selectDropdown device theme config =
         , Element.el triggerAnchor
             (Input.button
                 [ Element.width Element.fill
-                , Border.rounded 12
+                , Border.rounded radiusControl
                 , Background.color theme.inputFill
-                , Element.padding 10
+                , Element.padding space12
                 , Border.width 1
                 , Border.color theme.inputFill
                 , uiClass "ui-motion"
@@ -1231,14 +1664,14 @@ macroBar theme config =
             [ Element.width Element.fill
             , Element.height (Element.px 10)
             , Background.color theme.inputFill
-            , Border.rounded 999
+            , Border.rounded radiusPill
             , Element.clip
             ]
             [ Element.el
                 [ Element.width (Element.fillPortion filled)
                 , Element.height Element.fill
                 , Background.color config.color
-                , Border.rounded 999
+                , Border.rounded radiusPill
                 ]
                 Element.none
             , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
@@ -1261,7 +1694,7 @@ skeletonBar theme =
         [ Element.width Element.fill
         , Element.height (Element.px 16)
         , Background.color theme.inputFill
-        , Border.rounded 8
+        , Border.rounded radiusSmall
         , uiClass "ui-skeleton"
         ]
         Element.none
@@ -1289,7 +1722,7 @@ iconButton device theme config =
         , Background.color theme.cardBg
         , Font.color theme.textPrimary
         , Font.center
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Border.width 1
         , Border.color theme.divider
         , uiClass "ui-motion ui-pressable"
@@ -1316,7 +1749,7 @@ dangerIconButton device theme config =
         , Background.color theme.cardBg
         , Font.color theme.dangerFg
         , Font.center
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Border.width 1
         , Border.color theme.dangerFg
         , uiClass "ui-motion ui-pressable"
@@ -1328,6 +1761,21 @@ dangerIconButton device theme config =
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = Just config.onPress
+        , label = Element.text config.label
+        }
+
+
+disabledIconButton : Theme -> { label : String } -> Element msg
+disabledIconButton theme config =
+    Input.button
+        [ Element.width (Element.px 40)
+        , Element.height (Element.px 40)
+        , Background.color theme.inputFill
+        , Font.color theme.textMuted
+        , Font.center
+        , Border.rounded radiusPill
+        ]
+        { onPress = Nothing
         , label = Element.text config.label
         }
 
@@ -1360,6 +1808,52 @@ chip :
     -> Element msg
 chip theme config =
     Element.html (chipHtml theme config)
+
+
+removableChip :
+    Device
+    -> Theme
+    -> { label : String, onRemove : msg }
+    -> Element msg
+removableChip device theme config =
+    let
+        removeSize : Int
+        removeSize =
+            if isSmall device then
+                28
+
+            else
+                18
+    in
+    Element.row
+        [ Background.color (chipBackground theme False)
+        , Font.color (chipForeground theme False)
+        , Border.rounded radiusPill
+        , Element.paddingEach { top = 4, right = 4, bottom = 4, left = 10 }
+        , Element.spacing space8
+        , caption
+        , Font.medium
+        ]
+        [ Element.text config.label
+        , Input.button
+            [ Element.width (Element.px removeSize)
+            , Element.height (Element.px removeSize)
+            , Background.color theme.cardBg
+            , Font.color theme.dangerFg
+            , Font.center
+            , Border.rounded radiusPill
+            , Border.width 1
+            , Border.color theme.dangerFg
+            , hoverEffect device
+                [ Background.color theme.dangerSolid
+                , Font.color (Element.rgb255 255 255 255)
+                , Border.color theme.dangerSolid
+                ]
+            ]
+            { onPress = Just config.onRemove
+            , label = Element.text "×"
+            }
+        ]
 
 
 toCssColor : Element.Color -> String
@@ -1445,7 +1939,7 @@ coloredPill config =
     Element.el
         [ Background.color config.bg
         , Font.color config.fg
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Element.paddingEach { top = 4, right = 10, bottom = 4, left = 10 }
         , caption
         , Font.medium
@@ -1484,7 +1978,7 @@ statBlock config =
         [ Element.width (Element.fill |> Element.maximum 120)
         , Element.height (Element.px 100)
         , Background.color config.color
-        , Border.rounded 24
+        , Border.rounded radiusHero
         , Element.paddingEach { top = 12, right = 12, bottom = 12, left = 12 }
         , Element.spacing space2
         ]
@@ -1534,12 +2028,39 @@ linearProgress :
         }
     -> Element msg
 linearProgress theme config =
-    View.Charts.linearProgress
-        { value = config.value
-        , max = config.max
-        , color = config.color
-        , trackColor = theme.inputFill
-        }
+    let
+        pct : Float
+        pct =
+            if config.max > 0 then
+                min 1.0 (config.value / config.max)
+
+            else
+                0
+
+        filled : Int
+        filled =
+            max 0 (round (pct * 100))
+
+        remaining : Int
+        remaining =
+            max 0 (100 - filled)
+    in
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px 10)
+        , Background.color theme.inputFill
+        , Border.rounded radiusPill
+        , Element.clip
+        ]
+        [ Element.el
+            [ Element.width (Element.fillPortion filled)
+            , Element.height Element.fill
+            , Background.color config.color
+            , Border.rounded radiusPill
+            ]
+            Element.none
+        , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
+        ]
 
 
 toggleSwitch : Theme -> { isActive : Bool, onToggle : msg } -> Element msg
@@ -1547,7 +2068,7 @@ toggleSwitch theme config =
     Input.button
         [ Element.width (Element.px 44)
         , Element.height (Element.px 24)
-        , Border.rounded 999
+        , Border.rounded radiusPill
         , Background.color
             (if config.isActive then
                 theme.brandBlue
@@ -1555,7 +2076,7 @@ toggleSwitch theme config =
              else
                 theme.inputFill
             )
-        , Element.padding 2
+        , Element.padding space2
         , uiClass
             ("ui-toggle-track ui-motion ui-pressable"
                 ++ (if config.isActive then
@@ -1582,7 +2103,7 @@ accentDot color =
         [ Element.width (Element.px 4)
         , Element.height (Element.px 24)
         , Background.color color
-        , Border.rounded 2
+        , Border.rounded radiusHairline
         ]
         Element.none
 

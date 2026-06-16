@@ -318,23 +318,21 @@ Current visual language:
 
 - `elm-ui` layout primitives, not CSS utility classes.
 - Inter/system sans typography.
-- Warm off-white page background `#f7f7f4`.
-- White cards with 8px radius, 1px gray border, 16px padding, and 12px internal spacing.
-- Teal primary action color `#116466`.
-- Red danger action color `#dc2626`.
+- Light theme page background `#f4f6f8`.
+- White cards with 20px radius, 20px padding, and 12px internal spacing.
+- Primary action color `#4b91cf` in light mode.
+- Danger action color `#ff6b7a` in light mode.
 - Muted gray text for captions and secondary content.
 - Macro colors: protein pink/red, carbs green, fat amber.
 
 Typography tokens in `Ui.elm` are intentionally restrained:
 
 ```text
-display  32px
-heading1 22px
-heading2 20px
-heading3 18px
+page     28px desktop / 24px phone
+section  22px desktop / 18px phone
+subhead  17px desktop / 15px phone
 body     14px
-caption  13px
-small    12px
+caption  12px
 ```
 
 Control conventions:

@@ -32,9 +32,6 @@ import Api.Foods
 import Data.Nutrition exposing (defaultCode)
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
 import Element.Input as Input
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
@@ -829,51 +826,18 @@ chipRowView theme device tags =
         Element.wrappedRow
             [ Element.width Element.fill
             , Element.paddingXY 0 Ui.space4
-            , Element.spacing 6
+            , Element.spacing Ui.space8
             ]
             (List.map (chipView theme device) tags)
 
 
 chipView : Theme -> Device -> String -> Element Msg
 chipView theme device tag =
-    let
-        removeSize : Int
-        removeSize =
-            if Ui.isSmall device then
-                28
-
-            else
-                18
-    in
-    Element.row
-        [ Background.color (Ui.chipBackground theme False)
-        , Font.color (Ui.chipForeground theme False)
-        , Border.rounded 999
-        , Element.paddingEach { top = 4, right = 4, bottom = 4, left = 10 }
-        , Element.spacing 6
-        , Ui.caption
-        , Font.medium
-        ]
-        [ Element.text tag
-        , Input.button
-            [ Element.width (Element.px removeSize)
-            , Element.height (Element.px removeSize)
-            , Background.color theme.cardBg
-            , Font.color theme.dangerFg
-            , Font.center
-            , Border.rounded 999
-            , Border.width 1
-            , Border.color theme.dangerFg
-            , Ui.hoverEffect device
-                [ Background.color theme.dangerSolid
-                , Font.color (Element.rgb255 255 255 255)
-                , Border.color theme.dangerSolid
-                ]
-            ]
-            { onPress = Just (RemoveCategory tag)
-            , label = Element.text "×"
-            }
-        ]
+    Ui.removableChip device
+        theme
+        { label = tag
+        , onRemove = RemoveCategory tag
+        }
 
 
 suggestionRowView : Theme -> Bool -> CategoryInput -> Element Msg
@@ -902,16 +866,7 @@ suggestionRowView theme open input =
         Element.none
 
     else
-        Element.column
-            [ Element.width Element.fill
-            , Element.spacing Ui.space4
-            , Border.rounded 12
-            , Background.color theme.cardBg
-            , Border.width 1
-            , Border.color theme.divider
-            , Element.padding Ui.space8
-            ]
-            (List.map (suggestionPill theme) matching)
+        Ui.suggestionList theme (List.map (suggestionPill theme) matching)
 
 
 suggestionPill : Theme -> CategorySuggestion -> Element Msg
@@ -995,37 +950,12 @@ nutrientRowView theme device nutrients openDropdown index row =
 
 amountInputWithUnit : Theme -> Int -> NutrientRow -> Element Msg
 amountInputWithUnit theme index row =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing Ui.space4
-        ]
-        [ Ui.fieldLabel theme "Amount"
-        , Element.el
-            [ Element.width Element.fill
-            , Element.inFront
-                (Element.el
-                    [ Element.alignRight
-                    , Element.centerY
-                    , Element.paddingEach { top = 0, right = 12, bottom = 0, left = 0 }
-                    , Font.color theme.textMuted
-                    , Ui.body
-                    ]
-                    (Element.text (unitGhostText row.unit))
-                )
-            ]
-            (Input.text
-                [ Border.rounded 12
-                , Background.color theme.inputFill
-                , Element.width Element.fill
-                , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
-                ]
-                { onChange = NutrientAmountChanged index
-                , text = row.amountPer100g
-                , placeholder = Nothing
-                , label = Input.labelHidden "Amount"
-                }
-            )
-        ]
+    Ui.inputWithSuffix theme
+        { label = "Amount"
+        , text = row.amountPer100g
+        , suffix = unitGhostText row.unit
+        , onChange = NutrientAmountChanged index
+        }
 
 
 {-| Muted unit text shown inside the amount input. Empty units fall back to a
@@ -1057,7 +987,7 @@ servingRowView :
 servingRowView theme device units openDropdown index row =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 6
+        , Element.spacing Ui.space8
         ]
         [ Ui.input theme
             { label = "Label"
@@ -1112,7 +1042,7 @@ rowActionButton :
 rowActionButton theme device config =
     Element.el
         [ Element.width (Element.px 44)
-        , Element.paddingEach { top = 18, right = 0, bottom = 0, left = 0 }
+        , Element.paddingEach { top = Ui.space16, right = 0, bottom = 0, left = 0 }
         ]
         (Ui.dangerIconButton device theme config)
 
