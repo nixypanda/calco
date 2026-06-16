@@ -2,15 +2,15 @@ module Api.Admin exposing (createUser, disableUser, enableUser, getUser, listUse
 
 import Api.Client as Client
 import Data.Auth as Auth
-import Data.User as User
+import Data.User as User exposing (User)
 
 
-listUsers : (Result Client.ApiError (List User.User) -> msg) -> Cmd msg
+listUsers : (Result Client.ApiError (List User) -> msg) -> Cmd msg
 listUsers toMsg =
     Client.get "/api/admin/users" User.listUsersDecoder toMsg
 
 
-getUser : String -> (Result Client.ApiError User.User -> msg) -> Cmd msg
+getUser : String -> (Result Client.ApiError User -> msg) -> Cmd msg
 getUser userId toMsg =
     Client.get ("/api/admin/users/" ++ userId) User.userDecoder toMsg
 

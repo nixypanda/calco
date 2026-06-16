@@ -1,11 +1,10 @@
-module View.Charts exposing (linearProgress, verticalBarChart)
+module View.Charts exposing (verticalBarChart)
 
 {-| Chart-style visual primitives.
 
 This module hosts rendering helpers that lean on visualisation concepts
-(progress bars, bar charts) so `Ui` can stay focused on layout primitives
-without growing into a kitchen sink. `Ui` re-exports `linearProgress` so
-callers can use either path.
+(bar charts for now) so `Ui` can stay focused on layout primitives
+without growing into a kitchen sink.
 
 -}
 
@@ -13,53 +12,6 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Ui
-
-
-{-| A 10px-tall pill progress bar. Both the track color and the fill color
-are provided by the caller so this module stays independent of `Ui`'s
-color tokens (avoids a circular import).
--}
-linearProgress :
-    { value : Float
-    , max : Float
-    , color : Element.Color
-    , trackColor : Element.Color
-    }
-    -> Element msg
-linearProgress config =
-    let
-        pct : Float
-        pct =
-            if config.max > 0 then
-                min 1.0 (config.value / config.max)
-
-            else
-                0
-
-        filled : Int
-        filled =
-            max 0 (round (pct * 100))
-
-        remaining : Int
-        remaining =
-            max 0 (100 - filled)
-    in
-    Element.row
-        [ Element.width Element.fill
-        , Element.height (Element.px 10)
-        , Background.color config.trackColor
-        , Border.rounded Ui.radiusPill
-        , Element.clip
-        ]
-        [ Element.el
-            [ Element.width (Element.fillPortion filled)
-            , Element.height Element.fill
-            , Background.color config.color
-            , Border.rounded Ui.radiusPill
-            ]
-            Element.none
-        , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
-        ]
 
 
 {-| A stub vertical bar chart. Renders 5–7 colored bars above a thin

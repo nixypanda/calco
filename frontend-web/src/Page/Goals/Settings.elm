@@ -230,13 +230,23 @@ validate loaded =
             if targets.calorieTarget <= 0 then
                 Err "Calories must be greater than 0."
 
-            else if targets.proteinTargetG < 0 || targets.carbsTargetG < 0 || targets.fatTargetG < 0 then
+            else if
+                targets.proteinTargetG
+                    < 0
+                    || targets.carbsTargetG
+                    < 0
+                    || targets.fatTargetG
+                    < 0
+            then
                 Err "Protein, carbs, and fat must be 0 or greater."
 
             else if
                 abs
                     (targets.calorieTarget
-                        - ((targets.proteinTargetG * 4) + (targets.carbsTargetG * 4) + (targets.fatTargetG * 9))
+                        - ((targets.proteinTargetG * 4)
+                            + (targets.carbsTargetG * 4)
+                            + (targets.fatTargetG * 9)
+                          )
                     )
                     > 0.0001
             then

@@ -67,13 +67,7 @@ module Ui exposing
     , primarySubmitButton
     , primaryTeal
     , proteinColor
-    , radiusCard
-    , radiusControl
-    , radiusHairline
-    , radiusHero
-    , radiusPanel
     , radiusPill
-    , radiusSmall
     , radiusTight
     , removableChip
     , scrimOverlay
@@ -85,7 +79,6 @@ module Ui exposing
     , skeletonLoading
     , space12
     , space16
-    , space20
     , space2
     , space24
     , space4
@@ -113,7 +106,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
-import Html
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
@@ -416,7 +409,7 @@ layout theme content =
         [ content ]
 
 
-pageContainer : Element.Device -> List (Element msg) -> Element msg
+pageContainer : Device -> List (Element msg) -> Element msg
 pageContainer device children =
     let
         horizontalPadding : Int
@@ -441,12 +434,12 @@ pageContainer device children =
         children
 
 
-isSmall : Element.Device -> Bool
+isSmall : Device -> Bool
 isSmall device =
     device.class == Element.Phone
 
 
-onPhone : Element.Device -> a -> a -> a
+onPhone : Device -> a -> a -> a
 onPhone device phoneValue desktopValue =
     if isSmall device then
         phoneValue
@@ -455,7 +448,7 @@ onPhone device phoneValue desktopValue =
         desktopValue
 
 
-hoverEffect : Element.Device -> List Element.Decoration -> Element.Attribute msg
+hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg
 hoverEffect device attrs =
     if isSmall device then
         Element.mouseOver []
@@ -474,7 +467,7 @@ defaultTruncationChars =
     40
 
 
-truncationCap : Element.Device -> Int
+truncationCap : Device -> Int
 truncationCap device =
     if isSmall device then
         25
@@ -497,7 +490,7 @@ truncateWithEllipsis maxChars string =
         String.left visible string ++ "..."
 
 
-truncatedText : Element.Device -> String -> Element msg
+truncatedText : Device -> String -> Element msg
 truncatedText device string =
     Element.el
         [ Element.width Element.fill
@@ -1204,13 +1197,13 @@ passwordInput theme config =
 
 
 fieldLabel : Theme -> String -> Element msg
-fieldLabel theme label_ =
+fieldLabel theme label =
     Element.el
         [ caption
         , Font.medium
         , Font.color theme.textPrimary
         ]
-        (Element.text label_)
+        (Element.text label)
 
 
 inputWithSuffix :
@@ -1337,16 +1330,16 @@ scrimOverlay onPress =
 
 
 detailRow : Theme -> String -> Element msg -> Element msg
-detailRow theme label_ value =
+detailRow theme label value =
     Element.row [ Element.spacing space4 ]
         [ Element.el [ Font.color theme.textMedium, caption ]
-            (Element.text (label_ ++ ":"))
+            (Element.text (label ++ ":"))
         , value
         ]
 
 
 badge : Theme -> String -> Element msg
-badge theme label_ =
+badge theme label =
     Element.el
         [ Background.color theme.inputFill
         , Font.color theme.textPrimary
@@ -1355,7 +1348,7 @@ badge theme label_ =
         , caption
         , Font.medium
         ]
-        (Element.text label_)
+        (Element.text label)
 
 
 menuCard :
@@ -1880,7 +1873,7 @@ chipHtml :
         , selected : Bool
         , onClick : Maybe msg
         }
-    -> Html.Html msg
+    -> Html msg
 chipHtml _ config =
     let
         chipClass : String

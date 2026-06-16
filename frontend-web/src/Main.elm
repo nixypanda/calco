@@ -15,7 +15,7 @@ import Data.Auth as Auth
 import Data.MealSlot as MealSlot
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Element
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Font as Font
 import Element.Region as Region
@@ -40,7 +40,7 @@ import Page.Users.CreateUser as AdminCreateUser
 import Page.Users.Dashboard as AdminDashboard
 import Page.Users.EditUser as AdminEditUser
 import Page.Users.Login as AuthLogin
-import Session
+import Session exposing (Session)
 import Task
 import Time
 import Ui
@@ -58,7 +58,7 @@ type alias Flags =
 type alias Model =
     { key : Nav.Key
     , route : Route
-    , session : Session.Session
+    , session : Session
     , adminExists : Bool
     , pendingSession : Maybe (Result Client.ApiError Auth.LoginSession)
     , pendingBootstrap : Maybe (Result Client.ApiError Auth.BootstrapStatus)
@@ -529,7 +529,7 @@ applyBootstrapProgress model =
     case ( model.pendingSession, model.pendingBootstrap ) of
         ( Just sessionResult, Just bootstrapResult ) ->
             let
-                nextSession : Session.Session
+                nextSession : Session
                 nextSession =
                     Session.applyAuthResult sessionResult model.session
 
@@ -660,7 +660,7 @@ applyLoginOutMsg outMsg model =
 
         AuthLogin.LoginSucceeded loginSession ->
             let
-                nextSession : Session.Session
+                nextSession : Session
                 nextSession =
                     Session.applyAuthResult (Ok loginSession) model.session
             in
@@ -680,7 +680,7 @@ applySetupOutMsg outMsg model =
 
         BootstrapSetup.CreateAdminSucceeded loginSession ->
             let
-                nextSession : Session.Session
+                nextSession : Session
                 nextSession =
                     Session.applyAuthResult (Ok loginSession) model.session
             in
@@ -1248,7 +1248,7 @@ view model =
     }
 
 
-appFrame : Model -> Element.Element Msg
+appFrame : Model -> Element Msg
 appFrame model =
     let
         bottomNavClearance : Int
@@ -1296,7 +1296,7 @@ showBottomNav model =
         && not (Session.isAdmin model.session)
 
 
-bottomNavBar : Model -> Element.Element Msg
+bottomNavBar : Model -> Element Msg
 bottomNavBar model =
     Ui.bottomNavBar model.theme
         [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
@@ -1306,7 +1306,7 @@ bottomNavBar model =
         ]
 
 
-tabButton : Model -> String -> String -> Route -> Element.Element Msg
+tabButton : Model -> String -> String -> Route -> Element Msg
 tabButton model icon label target =
     let
         active : Bool
@@ -1338,7 +1338,7 @@ showsAppChrome model =
            )
 
 
-topBarView : Model -> Element.Element Msg
+topBarView : Model -> Element Msg
 topBarView model =
     let
         chromeShown : Bool
@@ -1377,7 +1377,7 @@ topBarView model =
         )
 
 
-themeToggle : Model -> Element.Element Msg
+themeToggle : Model -> Element Msg
 themeToggle model =
     Ui.toggleSwitch model.theme
         { isActive = model.themeMode == Theme.Dark
@@ -1385,7 +1385,7 @@ themeToggle model =
         }
 
 
-leadingButton : Element.Device -> Theme -> LeadingAction -> Element.Element Msg
+leadingButton : Element.Device -> Theme -> LeadingAction -> Element Msg
 leadingButton device theme leading =
     case leading of
         OpenMenu ->
@@ -1398,7 +1398,7 @@ leadingButton device theme leading =
             Element.el [ Element.width (Element.px 40) ] Element.none
 
 
-profileButton : Model -> Element.Element Msg
+profileButton : Model -> Element Msg
 profileButton model =
     let
         letter : String
@@ -1427,7 +1427,7 @@ profileMenuAnchor model =
         []
 
 
-profileMenu : Model -> Element.Element Msg
+profileMenu : Model -> Element Msg
 profileMenu model =
     Ui.menuCard model.theme
         { width = 240
@@ -1443,7 +1443,7 @@ initial value =
         |> Maybe.withDefault "?"
 
 
-screenMeta : Element.Device -> Session.Session -> Route -> ScreenMeta
+screenMeta : Element.Device -> Session -> Route -> ScreenMeta
 screenMeta device session route =
     let
         phoneNonAdmin : Bool
@@ -1566,7 +1566,7 @@ drawerOverlay model =
         []
 
 
-drawerView : Model -> Element.Element Msg
+drawerView : Model -> Element Msg
 drawerView model =
     Ui.drawerPanel model.theme
         (Element.row [ Element.spacing Ui.space8 ]
@@ -1580,7 +1580,7 @@ drawerView model =
         )
 
 
-drawerItems : Model -> List (Element.Element Msg)
+drawerItems : Model -> List (Element Msg)
 drawerItems model =
     if Session.isAdmin model.session then
         [ drawerItem model.theme model.route "Admin" AdminDashboard ]
@@ -1593,7 +1593,7 @@ drawerItems model =
         ]
 
 
-drawerItem : Theme -> Route -> String -> Route -> Element.Element Msg
+drawerItem : Theme -> Route -> String -> Route -> Element Msg
 drawerItem theme current label target =
     let
         selected : Bool
@@ -1650,7 +1650,7 @@ primaryRoute route =
             other
 
 
-profileMenuContent : Model -> List (Element.Element Msg)
+profileMenuContent : Model -> List (Element Msg)
 profileMenuContent model =
     [ Ui.mutedCaption model.theme
         (case model.session of
@@ -1670,7 +1670,7 @@ closeChrome model =
     { model | drawerOpen = False, profileOpen = False }
 
 
-pageView : Model -> Element.Element Msg
+pageView : Model -> Element Msg
 pageView model =
     if
         model.session

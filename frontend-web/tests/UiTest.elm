@@ -22,11 +22,11 @@ import Element
 import Expect
 import Test exposing (Test, describe, test)
 import Ui
-import Ui.Theme as Theme
+import Ui.Theme as Theme exposing (Theme)
 import View.Charts
 
 
-theme : Theme.Theme
+theme : Theme
 theme =
     Theme.light
 

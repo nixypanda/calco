@@ -36,7 +36,7 @@ tests =
         ]
 
 
-parses : String -> Data.Route.Route -> Test
+parses : String -> Route -> Test
 parses path expected =
     test path <|
         \_ ->

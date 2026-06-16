@@ -583,9 +583,9 @@ slotView theme device macroMode section =
             Nutrition.macroTotals section.logs
     in
     mealSlotCard theme
-                device
-                section.slot
-                (mealSlotHeader theme device macroMode section totals)
+        device
+        section.slot
+        (mealSlotHeader theme device macroMode section totals)
         (Ui.hairline theme
             :: (if List.isEmpty section.logs then
                     [ Element.el
@@ -629,26 +629,22 @@ mealSlotHeader theme device macroMode section totals =
             section.logs
                 |> List.map (.nutrients >> caloriesFrom)
                 |> List.sum
-
-        headerContent : Element Msg
-        headerContent =
-            Element.row
-                [ Element.width Element.fill
-                , Element.padding Ui.space12
-                , Element.spacing Ui.space12
-                ]
-                [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-                    [ Ui.sectionTitle theme device (MealSlot.label section.slot)
-                    , Input.button []
-                        { onPress = Just MacroModeToggled
-                        , label = Ui.mutedCaption theme (macroSummary macroMode totals)
-                        }
-                    ]
-                , Ui.mutedCaption theme
-                    (String.fromInt (round sectionKcal) ++ " kcal")
-                ]
     in
-    headerContent
+    Element.row
+        [ Element.width Element.fill
+        , Element.padding Ui.space12
+        , Element.spacing Ui.space12
+        ]
+        [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
+            [ Ui.sectionTitle theme device (MealSlot.label section.slot)
+            , Input.button []
+                { onPress = Just MacroModeToggled
+                , label = Ui.mutedCaption theme (macroSummary macroMode totals)
+                }
+            ]
+        , Ui.mutedCaption theme
+            (String.fromInt (round sectionKcal) ++ " kcal")
+        ]
 
 
 mealSlotHeaderHeight : Int

@@ -215,11 +215,7 @@ updateFormField msg form =
             )
 
         ComponentSearchChanged rowId query ->
-            let
-                ( nextForm, cmd, outMsg ) =
-                    onComponentSearchChanged rowId query form
-            in
-            ( nextForm, cmd, outMsg )
+            onComponentSearchChanged rowId query form
 
         ComponentSearchCompleted rowId token result ->
             case result of

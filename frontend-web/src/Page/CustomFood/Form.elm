@@ -964,16 +964,11 @@ the selected nutrient.
 -}
 unitGhostText : String -> String
 unitGhostText unit =
-    let
-        display : String
-        display =
-            if String.isEmpty (String.trim unit) then
-                "unit"
+    if String.isEmpty (String.trim unit) then
+        "unit"
 
-            else
-                unit
-    in
-    display
+    else
+        unit
 
 
 servingRowView :

@@ -1,7 +1,7 @@
 module Page.Users.EditUserTest exposing (tests)
 
 import Api.Client as Client
-import Data.User as User
+import Data.User exposing (User)
 import Expect
 import Page.Users.EditUser as EditUser
 import Test exposing (Test, describe, test)
@@ -209,7 +209,7 @@ enablingModel =
     }
 
 
-user : User.User
+user : User
 user =
     { id = "u1"
     , username = "alice"
@@ -219,7 +219,7 @@ user =
     }
 
 
-disabledUser : User.User
+disabledUser : User
 disabledUser =
     { user | status = "disabled" }
 

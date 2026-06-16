@@ -2,7 +2,7 @@ module Page.Users.DashboardTest exposing (tests)
 
 import Api.Client as Client
 import Data.Route exposing (Route(..))
-import Data.User as User
+import Data.User exposing (User)
 import Expect
 import Page.Users.Dashboard as Admin
 import Test exposing (Test, describe, test)
@@ -53,7 +53,7 @@ initialModel =
     Admin.init |> Tuple.first
 
 
-user : User.User
+user : User
 user =
     { id = "u1"
     , username = "alice"

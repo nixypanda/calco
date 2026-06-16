@@ -9,7 +9,7 @@ module Page.Users.Dashboard exposing
 
 import Api.Client as Client
 import Data.Route exposing (Route(..))
-import Data.User as User
+import Data.User exposing (User)
 import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
@@ -22,7 +22,7 @@ import Ui.Theme exposing (Theme)
 type Model
     = Loading
     | LoadFailed Client.ApiError
-    | Loaded (List User.User)
+    | Loaded (List User)
 
 
 init : ( Model, OutMsg )
@@ -37,7 +37,7 @@ init =
 
 
 type Msg
-    = UsersLoaded (Result Client.ApiError (List User.User))
+    = UsersLoaded (Result Client.ApiError (List User))
     | NavigateCreateUser
     | NavigateEditUser String
 
@@ -105,7 +105,7 @@ bodyView device theme model =
             Ui.errorBanner theme (Client.displayError error)
 
 
-userListRow : Device -> Theme -> { user : User.User, onSelect : String -> msg } -> Element msg
+userListRow : Device -> Theme -> { user : User, onSelect : String -> msg } -> Element msg
 userListRow device theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id

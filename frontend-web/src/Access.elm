@@ -1,7 +1,7 @@
 module Access exposing (RouteDecision(..), resolveRoute)
 
 import Data.Route exposing (Route(..))
-import Session
+import Session exposing (Session)
 
 
 type RouteDecision
@@ -10,7 +10,7 @@ type RouteDecision
     | Hold
 
 
-resolveRoute : Session.Session -> Bool -> Route -> RouteDecision
+resolveRoute : Session -> Bool -> Route -> RouteDecision
 resolveRoute session adminExists route =
     case session of
         Session.Loading ->
@@ -20,7 +20,7 @@ resolveRoute session adminExists route =
             resolveKnownSession session adminExists route
 
 
-resolveKnownSession : Session.Session -> Bool -> Route -> RouteDecision
+resolveKnownSession : Session -> Bool -> Route -> RouteDecision
 resolveKnownSession session adminExists route =
     if not adminExists then
         case route of

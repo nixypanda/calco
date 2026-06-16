@@ -18,7 +18,9 @@ tests =
                     |> Expect.equal (GoalsSettings.RequestGoal today)
         , test "goal load success populates the form" <|
             \_ ->
-                GoalsSettings.update (GoalsSettings.GoalLoaded (Ok savedSnapshot)) GoalsSettings.Loading
+                GoalsSettings.update
+                    (GoalsSettings.GoalLoaded (Ok savedSnapshot))
+                    GoalsSettings.Loading
                     |> first
                     |> fields
                     |> Expect.equal (Just [ "2290", "160", "255", "70" ])

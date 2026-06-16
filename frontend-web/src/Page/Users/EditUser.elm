@@ -12,7 +12,7 @@ module Page.Users.EditUser exposing
     )
 
 import Api.Client as Client
-import Data.User as User
+import Data.User as User exposing (User)
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
@@ -36,7 +36,7 @@ type Status
 
 
 type alias LoadedUser =
-    { user : User.User
+    { user : User
     , password : String
     }
 
@@ -68,7 +68,7 @@ init userId =
 
 
 type Msg
-    = UserLoaded (Result Client.ApiError User.User)
+    = UserLoaded (Result Client.ApiError User)
     | PasswordChanged String
     | ResetSubmitted
     | ResetCompleted (Result Client.ApiError ())
@@ -344,7 +344,7 @@ problemMessage problem =
             "New password is required"
 
 
-userSummaryCard : Device -> Theme -> User.User -> Element msg
+userSummaryCard : Device -> Theme -> User -> Element msg
 userSummaryCard device theme user =
     Ui.card theme
         [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
