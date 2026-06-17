@@ -804,31 +804,18 @@ logRow theme device log =
         ]
         { onPress = Just (LogClicked log.id)
         , label =
-            if Ui.isSmall device then
-                Element.wrappedRow
+            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                [ View.Nutrients.macroDot theme log.nutrients
+                , Element.el
                     [ Element.width Element.fill
-                    , Element.spacing Ui.space12
+                    , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
                     ]
-                    [ View.Nutrients.macroDot theme log.nutrients
-                    , Ui.wrappedListItemTitle theme log.item.name
-                    , Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
+                    (Ui.truncatedListItemTitle theme device log.item.name)
+                , Element.row
+                    [ Element.alignRight, Element.spacing Ui.space12 ]
+                    [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Ui.mutedCaption theme
                         (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
                     ]
-
-            else
-                Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                    [ View.Nutrients.macroDot theme log.nutrients
-                    , Element.el
-                        [ Element.width Element.fill
-                        , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
-                        ]
-                        (Ui.truncatedListItemTitle theme device log.item.name)
-                    , Element.row
-                        [ Element.alignRight, Element.spacing Ui.space12 ]
-                        [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
-                        , Ui.mutedCaption theme
-                            (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
-                        ]
-                    ]
+                ]
         }
