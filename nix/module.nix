@@ -1,9 +1,19 @@
 { self }:
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.calco;
-  inherit (lib) mkEnableOption mkOption mkIf types;
+  inherit (lib)
+    mkEnableOption
+    mkOption
+    mkIf
+    types
+    ;
 in
 {
   options.services.calco = {
@@ -95,7 +105,10 @@ in
 
     systemd.services.calco-backend = {
       description = "CalCo backend (axum)";
-      after = [ "calco-migrate.service" "network.target" ];
+      after = [
+        "calco-migrate.service"
+        "network.target"
+      ];
       requires = [ "calco-migrate.service" ];
       wantedBy = [ "multi-user.target" ];
 
@@ -126,7 +139,11 @@ in
         RestrictNamespaces = true;
         LockPersonality = true;
         MemoryDenyWriteExecute = true;
-        RestrictAddressFamilies = [ "AF_UNIX" "AF_INET" "AF_INET6" ];
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
         SystemCallArchitectures = "native";
       };
     };

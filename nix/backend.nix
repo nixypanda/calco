@@ -1,4 +1,9 @@
-{ lib, rustPlatform, pkg-config, openssl }:
+{
+  lib,
+  rustPlatform,
+  pkg-config,
+  openssl,
+}:
 
 rustPlatform.buildRustPackage {
   pname = "calco-backend";
@@ -6,8 +11,11 @@ rustPlatform.buildRustPackage {
 
   src = lib.cleanSourceWith {
     src = ../backend;
-    filter = name: type:
-      let base = baseNameOf name; in
+    filter =
+      name: type:
+      let
+        base = baseNameOf name;
+      in
       !(builtins.elem base [ "target" ]);
   };
 

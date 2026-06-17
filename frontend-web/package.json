@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "version:write": "node -e \"let h='release';try{h=require('child_process').execSync('git rev-parse --short HEAD').toString().trim()}catch(e){}require('fs').writeFileSync('public/version.json',JSON.stringify({version:h}))\"",
+    "prebuild": "npm run version:write",
+    "predev": "npm run version:write",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

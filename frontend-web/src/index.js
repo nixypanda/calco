@@ -21,3 +21,7 @@ app.ports.requestLocalContext.subscribe(() => {
 app.ports.persistThemeMode.subscribe((mode) => {
     localStorage.setItem("themeMode", mode);
 });
+
+app.ports.reloadPage.subscribe(() => {
+    location.reload();
+});

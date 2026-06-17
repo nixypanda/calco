@@ -1,4 +1,11 @@
-{ lib, stdenv, buildNpmPackage, elmPackages, nodejs_22 }:
+{
+  lib,
+  stdenv,
+  buildNpmPackage,
+  elmPackages,
+  nodejs_22,
+  git,
+}:
 
 buildNpmPackage {
   pname = "calco-frontend-web";
@@ -6,9 +13,16 @@ buildNpmPackage {
 
   src = lib.cleanSourceWith {
     src = ../frontend-web;
-    filter = name: type:
-      let base = baseNameOf name; in
-      !(builtins.elem base [ "node_modules" "dist" "elm-stuff" ]);
+    filter =
+      name: type:
+      let
+        base = baseNameOf name;
+      in
+      !(builtins.elem base [
+        "node_modules"
+        "dist"
+        "elm-stuff"
+      ]);
   };
 
   npmDepsHash = "sha256-r8nQlU7455FEgJvhbGY2N2bFZyiXLtwOCMt6qWSxdiU=";
@@ -16,6 +30,7 @@ buildNpmPackage {
   nativeBuildInputs = [
     elmPackages.elm
     nodejs_22
+    git
   ];
 
   # Elm needs its package registry cache; fetchElmDeps wires it up offline.

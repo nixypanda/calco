@@ -23,6 +23,7 @@ import Element.Input as Input
 import Element.Region as Region
 import Html
 import Html.Attributes
+import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -73,6 +74,8 @@ type alias Model =
     , device : Element.Device
     , themeMode : Mode
     , theme : Theme
+    , currentVersion : Maybe String
+    , updateAvailable : Bool
     }
 
 
@@ -132,6 +135,10 @@ type Msg
     | GotMealDetailMsg MealShow.Msg
     | GotLocalContext { date : String, timezone : String }
     | ThemeToggleClicked
+    | GotVersionCheck (Result Client.ApiError String)
+    | ReloadPageClicked
+    | CheckForUpdate
+    | NoOp
 
 
 port requestLocalContext : () -> Cmd msg
@@ -141,6 +148,9 @@ port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub
 
 
 port persistThemeMode : String -> Cmd msg
+
+
+port reloadPage : () -> Cmd msg
 
 
 main : Program Flags Model Msg
@@ -160,6 +170,15 @@ subscriptions _ =
     Sub.batch
         [ localContextReceived GotLocalContext
         , Browser.Events.onResize WindowResized
+        , Browser.Events.onVisibilityChange
+            (\visibility ->
+                case visibility of
+                    Browser.Events.Visible ->
+                        CheckForUpdate
+
+                    Browser.Events.Hidden ->
+                        NoOp
+            )
         ]
 
 
@@ -187,12 +206,15 @@ init flags url key =
                 }
       , themeMode = themeMode
       , theme = Theme.forMode themeMode
+      , currentVersion = Nothing
+      , updateAvailable = False
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
         , Task.perform GotLocalDate
             (Task.map2 LocalDate.fromPosix Time.here Time.now)
+        , fetchVersion
         ]
     )
 
@@ -290,6 +312,38 @@ update msg model =
             ( { model | themeMode = nextMode, theme = Theme.forMode nextMode }
             , persistThemeMode (Theme.modeToString nextMode)
             )
+
+        GotVersionCheck result ->
+            case result of
+                Ok version ->
+                    let
+                        isNew : Bool
+                        isNew =
+                            case model.currentVersion of
+                                Nothing ->
+                                    False
+
+                                Just current ->
+                                    current /= version
+                    in
+                    ( { model
+                        | currentVersion = Just version
+                        , updateAvailable = isNew && model.currentVersion /= Nothing
+                      }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( model, Cmd.none )
+
+        ReloadPageClicked ->
+            ( model, reloadPage () )
+
+        CheckForUpdate ->
+            ( model, fetchVersion )
+
+        NoOp ->
+            ( model, Cmd.none )
 
         GotLoginMsg subMsg ->
             case model.page of
@@ -1334,7 +1388,12 @@ appFrame model =
     in
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        [ topBarView model
+        [ if model.updateAvailable then
+            updateBanner model
+
+          else
+            Element.none
+        , topBarView model
         , Element.el pageAttrs (pageView model)
         ]
 
@@ -1777,6 +1836,32 @@ closeChrome model =
     { model | drawerOpen = False, profileOpen = False }
 
 
+updateBanner : Model -> Element Msg
+updateBanner model =
+    Input.button
+        [ Element.width Element.fill
+        , Element.paddingXY Ui.space16 Ui.space12
+        , Background.color model.theme.brandBlueSoft
+        , Font.color model.theme.brandBlue
+        , Font.size 15
+        ]
+        { onPress = Just ReloadPageClicked
+        , label =
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing Ui.space8
+                ]
+                [ Element.el [ Element.centerY ] (Element.text "New version available")
+                , Element.el
+                    [ Element.alignRight
+                    , Element.centerY
+                    , Font.bold
+                    ]
+                    (Element.text "Tap to refresh")
+                ]
+        }
+
+
 pageView : Model -> Element Msg
 pageView model =
     if
@@ -1864,3 +1949,17 @@ pageView model =
 
             PlaceholderPage message ->
                 Element.el [ Element.padding Ui.space24 ] (Element.text message)
+
+
+
+-- Version check
+
+
+fetchVersion : Cmd Msg
+fetchVersion =
+    Client.get "/version.json" versionDecoder GotVersionCheck
+
+
+versionDecoder : Decode.Decoder String
+versionDecoder =
+    Decode.field "version" Decode.string
