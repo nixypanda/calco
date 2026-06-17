@@ -12,7 +12,6 @@ module Ui exposing
     , bottomActionButtons
     , bottomNavBar
     , bottomNavTab
-    , button
     , caption
     , card
     , chip
@@ -33,7 +32,6 @@ module Ui exposing
     , formSection
     , fullWidthDangerButton
     , fullWidthGhostButton
-    , ghostButton
     , hairline
     , heroCard
     , iconButton
@@ -735,22 +733,6 @@ errorBanner theme message =
 -- Buttons
 
 
-button : Device -> Theme -> String -> msg -> Element msg
-button device theme label msg =
-    Input.button
-        [ Background.color theme.brandBlue
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
-        , Font.medium
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBluePressed ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
 type SubmitState
     = Idle
     | Submitting
@@ -911,21 +893,6 @@ fullWidthDangerButton device theme label msg =
         , Font.center
         , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.dangerFg ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-ghostButton : Device -> Theme -> String -> msg -> Element msg
-ghostButton device theme label msg =
-    Input.button
-        [ Border.rounded radiusPill
-        , Element.paddingEach { top = 10, right = 16, bottom = 10, left = 16 }
-        , Font.color theme.brandBlue
-        , Font.medium
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg
         , label = Element.text label

@@ -610,7 +610,7 @@ slotView theme device macroMode section =
                     ]
 
                 else
-                    List.map (logRow theme device) section.logs
+                    List.map (logRow theme) section.logs
                )
             ++ (case section.slot of
                     Other ->
@@ -796,8 +796,8 @@ macroSummary mode totals =
                 ++ "%"
 
 
-logRow : Theme -> Device -> FoodLog -> Element Msg
-logRow theme device log =
+logRow : Theme -> FoodLog -> Element Msg
+logRow theme log =
     Input.button
         [ Element.width Element.fill
         , Element.padding Ui.space12
@@ -810,7 +810,7 @@ logRow theme device log =
                     [ Element.width Element.fill
                     , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
                     ]
-                    (Ui.truncatedListItemTitle theme device log.item.name)
+                    (Ui.wrappedListItemTitle theme log.item.name)
                 , Element.row
                     [ Element.alignRight, Element.spacing Ui.space12 ]
                     [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
