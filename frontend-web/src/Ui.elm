@@ -1281,9 +1281,31 @@ drawerPanel theme children =
 
 drawerItem :
     Theme
-    -> { label : String, selected : Bool, onPress : msg }
+    -> { icon : Maybe Icon, label : String, selected : Bool, onPress : msg }
     -> Element msg
 drawerItem theme config =
+    let
+        itemColor : Element.Color
+        itemColor =
+            if config.selected then
+                theme.brandBlue
+
+            else
+                theme.textPrimary
+
+        iconEl : Element msg
+        iconEl =
+            case config.icon of
+                Just icon ->
+                    Icon.view
+                        { icon = icon
+                        , size = 20
+                        , color = itemColor
+                        }
+
+                Nothing ->
+                    Element.none
+    in
     Input.button
         [ Element.width Element.fill
         , Element.paddingXY 16 14
@@ -1295,17 +1317,18 @@ drawerItem theme config =
              else
                 theme.cardBg
             )
-        , Font.color
-            (if config.selected then
-                theme.brandBlue
-
-             else
-                theme.textPrimary
-            )
+        , Font.color itemColor
         , Font.medium
         ]
         { onPress = Just config.onPress
-        , label = Element.text config.label
+        , label =
+            Element.row
+                [ Element.spacing 12
+                , Element.centerY
+                ]
+                [ iconEl
+                , Element.text config.label
+                ]
         }
 
 

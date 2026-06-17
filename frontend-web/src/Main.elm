@@ -1650,25 +1650,42 @@ drawerView model =
 drawerItems : Model -> List (Element Msg)
 drawerItems model =
     if Session.isAdmin model.session then
-        [ drawerItem model.theme model.route "Admin" AdminDashboard ]
+        [ drawerItem model.theme model.route Nothing "Admin" AdminDashboard ]
 
     else
-        [ drawerItem model.theme model.route "Diary" (DiaryDay Nothing)
-        , drawerItem model.theme model.route "Search Foods" (FoodSearch Nothing Nothing)
-        , drawerItem model.theme model.route "My Foods" CustomFoodList
-        , drawerItem model.theme model.route "My Meals" MealList
+        [ drawerItem model.theme
+            model.route
+            (Just Icon.Home)
+            "Diary"
+            (DiaryDay Nothing)
+        , drawerItem model.theme
+            model.route
+            (Just Icon.Search)
+            "Search Foods"
+            (FoodSearch Nothing Nothing)
+        , drawerItem model.theme
+            model.route
+            (Just Icon.Box)
+            "My Foods"
+            CustomFoodList
+        , drawerItem model.theme
+            model.route
+            (Just Icon.Utensils)
+            "My Meals"
+            MealList
         ]
 
 
-drawerItem : Theme -> Route -> String -> Route -> Element Msg
-drawerItem theme current label target =
+drawerItem : Theme -> Route -> Maybe Icon -> String -> Route -> Element Msg
+drawerItem theme current icon label target =
     let
         selected : Bool
         selected =
             primaryRoute current == primaryRoute target
     in
     Ui.drawerItem theme
-        { label = label
+        { icon = icon
+        , label = label
         , selected = selected
         , onPress = NavigateTo target
         }
