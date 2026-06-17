@@ -76,6 +76,7 @@ type alias Model =
     , theme : Theme
     , currentVersion : Maybe String
     , updateAvailable : Bool
+    , versionError : Maybe String
     }
 
 
@@ -136,6 +137,7 @@ type Msg
     | GotLocalContext { date : String, timezone : String }
     | ThemeToggleClicked
     | GotVersionCheck (Result Client.ApiError String)
+    | GotVersionCheckTime Time.Posix
     | ReloadPageClicked
     | CheckForUpdate
     | NoOp
@@ -208,13 +210,14 @@ init flags url key =
       , theme = Theme.forMode themeMode
       , currentVersion = Nothing
       , updateAvailable = False
+      , versionError = Nothing
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
         , Task.perform GotLocalDate
             (Task.map2 LocalDate.fromPosix Time.here Time.now)
-        , fetchVersion
+        , Task.perform GotVersionCheckTime Time.now
         ]
     )
 
@@ -329,18 +332,24 @@ update msg model =
                     ( { model
                         | currentVersion = Just version
                         , updateAvailable = isNew && model.currentVersion /= Nothing
+                        , versionError = Nothing
                       }
                     , Cmd.none
                     )
 
-                Err _ ->
-                    ( model, Cmd.none )
+                Err error ->
+                    ( { model | versionError = Just (Client.displayError error) }
+                    , Cmd.none
+                    )
 
         ReloadPageClicked ->
             ( model, reloadPage () )
 
         CheckForUpdate ->
-            ( model, fetchVersion )
+            ( model, Task.perform GotVersionCheckTime Time.now )
+
+        GotVersionCheckTime posix ->
+            ( model, fetchVersion (Time.posixToMillis posix) )
 
         NoOp ->
             ( model, Cmd.none )
@@ -1388,14 +1397,15 @@ appFrame model =
     in
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        [ topBarView model
-        , if model.updateAvailable then
-            updateBanner model
+        (topBarView model
+            :: (if model.updateAvailable then
+                    [ updateBanner model ]
 
-          else
-            Element.none
-        , Element.el pageAttrs (pageView model)
-        ]
+                else
+                    []
+               )
+            ++ [ Element.el pageAttrs (pageView model) ]
+        )
 
 
 showBottomNav : Model -> Bool
@@ -1955,9 +1965,12 @@ pageView model =
 -- Version check
 
 
-fetchVersion : Cmd Msg
-fetchVersion =
-    Client.get "/version.json" versionDecoder GotVersionCheck
+fetchVersion : Int -> Cmd Msg
+fetchVersion timestamp =
+    Client.get
+        ("/version.json?v=" ++ String.fromInt timestamp)
+        versionDecoder
+        GotVersionCheck
 
 
 versionDecoder : Decode.Decoder String
