@@ -104,42 +104,24 @@ deviceHelpers =
             \_ -> Ui.isSmall desktop |> Expect.equal False
         , test "isSmall is False for BigDesktop" <|
             \_ -> Ui.isSmall bigDesktop |> Expect.equal False
-        , test "truncationCap returns the tighter Phone cap" <|
-            \_ -> Ui.truncationCap phone |> Expect.equal 25
-        , test "truncationCap returns the default for Tablet" <|
-            \_ -> Ui.truncationCap tablet |> Expect.equal Ui.defaultTruncationChars
-        , test "truncationCap returns the default for Desktop" <|
-            \_ -> Ui.truncationCap desktop |> Expect.equal Ui.defaultTruncationChars
-        , test "defaultTruncationChars is 40" <|
-            \_ -> Ui.defaultTruncationChars |> Expect.equal 40
         ]
 
 
 truncationHelpers : Test
 truncationHelpers =
     describe "truncation helpers"
-        [ test "truncateWithEllipsis returns the string unchanged when short enough" <|
-            \_ ->
-                Ui.truncateWithEllipsis 12 "Apple"
-                    |> Expect.equal "Apple"
-        , test "truncateWithEllipsis appends a single ellipsis and caps the total length" <|
-            \_ ->
-                Ui.truncateWithEllipsis 8 "Roasted Sweet Potato"
-                    |> Expect.equal "Roast..."
-        , test "truncateWithEllipsis caps the visible prefix at maxChars - 3" <|
-            \_ ->
-                Ui.truncateWithEllipsis 8 "Hello World"
-                    |> Expect.equal "Hello..."
-        , test "truncateWithEllipsis still truncates when maxChars is very small" <|
-            \_ ->
-                Ui.truncateWithEllipsis 2 "Hello"
-                    |> Expect.equal "..."
-        , test "truncatedText renders without crashing on a phone-sized string" <|
+        [ test "truncatedText renders without crashing on a phone-sized string" <|
             \_ -> Ui.truncatedText phone "Roasted Sweet Potato" |> pass
         , test "truncatedText renders without crashing on a desktop-sized string" <|
             \_ -> Ui.truncatedText desktop "Roasted Sweet Potato" |> pass
         , test "truncatedText renders an empty string" <|
             \_ -> Ui.truncatedText phone "" |> pass
+        , test "truncatedHeader renders a long heading on phone" <|
+            \_ -> Ui.truncatedHeader theme phone "Roasted Sweet Potato With Cumin Yogurt" |> pass
+        , test "truncatedListItemTitle renders a long label on phone" <|
+            \_ ->
+                Ui.truncatedListItemTitle theme phone "Roasted Sweet Potato With Cumin Yogurt"
+                    |> pass
         ]
 
 

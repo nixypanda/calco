@@ -106,7 +106,7 @@ bodyView theme device model =
 
 
 mealRow : Theme -> Device -> Meal -> Element Msg
-mealRow theme device meal =
+mealRow theme _ meal =
     let
         macroDot : List (Element Msg)
         macroDot =
@@ -119,7 +119,7 @@ mealRow theme device meal =
     Ui.listRow
         { onSelect = OpenMealClicked meal.id
         , leading = macroDot
-        , title = Ui.truncatedListItemTitle theme device meal.name
+        , title = Ui.wrappedListItemTitle theme meal.name
         , subtitle =
             [ Ui.mutedBody theme (mealSummaryText meal)
             , Ui.mutedParagraph theme (Maybe.withDefault "" meal.notes)

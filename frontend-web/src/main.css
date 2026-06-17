@@ -138,6 +138,21 @@ body {
   border: none;
 }
 
+.ui-text-ellipsis {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-text-wrap {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* Toggle switch
    The theme switch needs a real thumb element so CSS can animate translation smoothly. */
 .ui-toggle-track {

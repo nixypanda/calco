@@ -26,7 +26,6 @@ module Ui exposing
     , dangerButton
     , dangerIconButton
     , dangerPanel
-    , defaultTruncationChars
     , detailRow
     , disabledIconButton
     , dotSeparated
@@ -92,11 +91,10 @@ module Ui exposing
     , tableHeader
     , toCssColor
     , toggleSwitch
-    , truncateWithEllipsis
     , truncatedHeader
     , truncatedListItemTitle
     , truncatedText
-    , truncationCap
+    , wrappedListItemTitle
     )
 
 import Data.Nutrition
@@ -311,16 +309,28 @@ listItemTitle theme child =
 
 
 truncatedListItemTitle : Theme -> Device -> String -> Element msg
-truncatedListItemTitle theme device name =
+truncatedListItemTitle theme _ name =
     Element.el
         [ Element.width Element.fill ]
         (listItemTitle theme
             (Element.el
                 [ Element.width Element.fill
                 , Element.clip
+                , uiClass "ui-text-ellipsis"
                 ]
-                (Element.text (truncateWithEllipsis (truncationCap device) name))
+                (Element.text name)
             )
+        )
+
+
+wrappedListItemTitle : Theme -> String -> Element msg
+wrappedListItemTitle theme name =
+    listItemTitle theme
+        (Element.paragraph
+            [ Element.width Element.fill
+            , minWidthZero
+            ]
+            [ Element.text name ]
         )
 
 
@@ -463,41 +473,19 @@ uiClass className =
     Element.htmlAttribute (Html.Attributes.class className)
 
 
-defaultTruncationChars : Int
-defaultTruncationChars =
-    40
-
-
-truncationCap : Device -> Int
-truncationCap device =
-    if isSmall device then
-        25
-
-    else
-        defaultTruncationChars
-
-
-truncateWithEllipsis : Int -> String -> String
-truncateWithEllipsis maxChars string =
-    let
-        visible : Int
-        visible =
-            Basics.max 0 (maxChars - 3)
-    in
-    if String.length string <= maxChars then
-        string
-
-    else
-        String.left visible string ++ "..."
+minWidthZero : Element.Attribute msg
+minWidthZero =
+    Element.htmlAttribute (Html.Attributes.style "min-width" "0")
 
 
 truncatedText : Device -> String -> Element msg
-truncatedText device string =
+truncatedText _ string =
     Element.el
         [ Element.width Element.fill
         , Element.clip
+        , uiClass "ui-text-ellipsis"
         ]
-        (Element.text (truncateWithEllipsis (truncationCap device) string))
+        (Element.text string)
 
 
 card : Theme -> List (Element msg) -> Element msg
@@ -613,7 +601,10 @@ pageHeader theme config =
         titleColumn : Element msg
         titleColumn =
             Element.column
-                [ Element.width Element.fill, Element.spacing space4 ]
+                [ Element.width Element.fill
+                , Element.spacing space4
+                , minWidthZero
+                ]
                 (config.title
                     :: (case config.subtitle of
                             Just text ->
@@ -635,6 +626,7 @@ pageHeader theme config =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.spacing space12
+        , minWidthZero
         ]
         [ leadingElement, titleColumn, actionsRow ]
 
@@ -741,12 +733,17 @@ listRow config =
             ]
             { onPress = Just config.onSelect
             , label =
-                Element.row [ Element.width Element.fill, Element.spacing space12 ]
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing space12
+                    , minWidthZero
+                    ]
                     [ listRowLeading config.leading
                     , Element.column
                         [ Element.width Element.fill
                         , Element.spacing space4
                         , Element.alignTop
+                        , minWidthZero
                         ]
                         (config.title :: config.subtitle)
                     ]
@@ -1080,7 +1077,9 @@ bottomNavBar theme items =
         , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
         , Border.color theme.divider
         , Region.navigation
-        -- Keep viewport positioning inline; elm-ui's generated position rules can override class-based CSS here.
+
+        -- Keep viewport positioning inline.
+        -- elm-ui's generated position rules can override class-based CSS here.
         , Element.htmlAttribute (Html.Attributes.style "position" "fixed")
         , Element.htmlAttribute (Html.Attributes.style "right" "0")
         , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
@@ -1714,17 +1713,16 @@ skeletonBar theme =
 
 
 truncatedHeader : Theme -> Device -> String -> Element msg
-truncatedHeader theme device heading =
-    Element.el
+truncatedHeader theme _ heading =
+    Element.paragraph
         [ sizeSectionTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 2
         , Element.width Element.fill
-        , Element.clip
-        , Element.height (Element.px 28)
+        , minWidthZero
         ]
-        (Element.text (truncateWithEllipsis (truncationCap device) heading))
+        [ Element.text heading ]
 
 
 iconButton : Device -> Theme -> { icon : Icon, title : String, onPress : msg } -> Element msg

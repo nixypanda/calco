@@ -107,7 +107,7 @@ bodyView theme device model =
 
 
 foodRow : Theme -> Device -> ProductDetail -> Element Msg
-foodRow theme device food =
+foodRow theme _ food =
     let
         macroDot : Element Msg
         macroDot =
@@ -117,7 +117,7 @@ foodRow theme device food =
     Ui.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
-        , title = Ui.truncatedListItemTitle theme device food.name
+        , title = Ui.wrappedListItemTitle theme food.name
         , subtitle =
             [ Ui.mutedBody theme (foodSummaryText food)
             , Ui.chips theme food.categories

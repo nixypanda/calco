@@ -93,7 +93,11 @@ resultRow theme device config =
                 [ Element.width Element.fill
                 , Element.spacing Ui.space4
                 ]
-                [ Ui.truncatedListItemTitle theme device config.item.name
+                [ if Ui.isSmall device then
+                    Ui.wrappedListItemTitle theme config.item.name
+
+                  else
+                    Ui.truncatedListItemTitle theme device config.item.name
                 , Ui.mutedCaption theme (metaText config.query config.item)
                 ]
 
@@ -108,7 +112,10 @@ resultRow theme device config =
                     [ Element.width Element.fill
                     , Element.spacing Ui.space12
                     ]
-                    [ Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                    [ Element.wrappedRow
+                        [ Element.width Element.fill
+                        , Element.spacing Ui.space12
+                        ]
                         [ macroDot, searchItem ]
                     , categoryTags
                     ]
