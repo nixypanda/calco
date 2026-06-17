@@ -257,7 +257,7 @@ update msg model =
 
         LogoutCompleted ->
             ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key "/login"
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
         MenuClicked ->
@@ -664,7 +664,9 @@ applyLoginOutMsg outMsg model =
                 nextSession =
                     Session.applyAuthResult (Ok loginSession) model.session
             in
-            ( { model | session = nextSession }, Nav.replaceUrl model.key "/" )
+            ( { model | session = nextSession }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
+            )
 
 
 applySetupOutMsg : BootstrapSetup.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -685,7 +687,7 @@ applySetupOutMsg outMsg model =
                     Session.applyAuthResult (Ok loginSession) model.session
             in
             ( { model | session = nextSession, adminExists = True }
-            , Nav.replaceUrl model.key "/admin"
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
             )
 
 
@@ -702,7 +704,9 @@ applyAdminOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         AdminDashboard.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyAdminCreateUserOutMsg : AdminCreateUser.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -720,7 +724,9 @@ applyAdminCreateUserOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
 
         AdminCreateUser.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyAdminEditUserOutMsg : AdminEditUser.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -754,7 +760,9 @@ applyAdminEditUserOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
 
         AdminEditUser.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyDiaryOutMsg : DiaryDay.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -775,7 +783,9 @@ applyDiaryOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         DiaryDay.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyGoalsSettingsOutMsg : GoalsSettings.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -799,7 +809,9 @@ applyGoalsSettingsOutMsg outMsg model =
             )
 
         GoalsSettings.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyFoodSearchOutMsg : FoodSearch.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -826,7 +838,9 @@ applyFoodSearchOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodSearch.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyFoodDetailOutMsg : FoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -853,7 +867,9 @@ applyFoodDetailOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyFoodLogDetailOutMsg : FoodLogEntry.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -903,7 +919,9 @@ applyFoodLogDetailOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         FoodLogEntry.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyCustomFoodCreateOutMsg : CustomFoodCreate.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -939,7 +957,9 @@ applyCustomFoodCreateOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodCreate.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyCustomFoodEditOutMsg : CustomFoodEdit.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -978,7 +998,9 @@ applyCustomFoodEditOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodEdit.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyCustomFoodsOutMsg : CustomFoodList.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -996,7 +1018,9 @@ applyCustomFoodsOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodList.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyCustomFoodShowOutMsg : CustomFoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1026,7 +1050,9 @@ applyCustomFoodShowOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         CustomFoodShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyMealsOutMsg : MealList.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1042,7 +1068,9 @@ applyMealsOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealList.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyMealCreateOutMsg : MealCreate.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1064,7 +1092,9 @@ applyMealCreateOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealCreate.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyMealEditOutMsg : MealEdit.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1101,7 +1131,9 @@ applyMealEditOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealEdit.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyMealFormOutMsg :
@@ -1161,7 +1193,9 @@ applyMealFormOutMsg { toPageMsg } outMsg model =
             )
 
         MealForm.FormSessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 applyMealDetailOutMsg : MealShow.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -1202,7 +1236,9 @@ applyMealDetailOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         MealShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }, Nav.replaceUrl model.key "/login" )
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
 
 
 type LeadingAction
