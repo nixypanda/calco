@@ -1388,12 +1388,12 @@ appFrame model =
     in
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        [ if model.updateAvailable then
+        [ topBarView model
+        , if model.updateAvailable then
             updateBanner model
 
           else
             Element.none
-        , topBarView model
         , Element.el pageAttrs (pageView model)
         ]
 
