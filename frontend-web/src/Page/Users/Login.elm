@@ -16,13 +16,12 @@ import Page.Users.CredentialForm as CredentialForm
 import Ui.Theme exposing (Theme)
 
 
+
+-- MODEL
+
+
 type alias Model =
     CredentialForm.Model
-
-
-type Msg
-    = FormMsg CredentialForm.Msg
-    | LoginCompleted (Result Client.ApiError Auth.LoginSession)
 
 
 type OutMsg
@@ -34,6 +33,15 @@ type OutMsg
 init : Model
 init =
     CredentialForm.init
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FormMsg CredentialForm.Msg
+    | LoginCompleted (Result Client.ApiError Auth.LoginSession)
 
 
 loginPayload : CredentialForm.Form -> Result String Auth.LoginRequest
@@ -82,6 +90,10 @@ update msg model =
             , Cmd.none
             , NoOp
             )
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

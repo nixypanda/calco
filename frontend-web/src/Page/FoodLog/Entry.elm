@@ -33,6 +33,10 @@ import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
+
+-- MODEL
+
+
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
@@ -94,6 +98,21 @@ type alias LoadFailedModel =
     }
 
 
+init : String -> ( Model, OutMsg )
+init logId =
+    ( Loading
+        { logId = logId
+        , log = Nothing
+        , units = Nothing
+        }
+    , RequestInitialData logId
+    )
+
+
+
+-- UPDATE
+
+
 type Msg
     = LogLoaded (Result Client.ApiError FoodLog)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
@@ -117,17 +136,6 @@ type OutMsg
     | RequestDeleteLog String
     | Navigate Route
     | SessionExpired
-
-
-init : String -> ( Model, OutMsg )
-init logId =
-    ( Loading
-        { logId = logId
-        , log = Nothing
-        , units = Nothing
-        }
-    , RequestInitialData logId
-    )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -573,6 +581,10 @@ modelLogId model =
 
         LoadFailed failed ->
             failed.logId
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

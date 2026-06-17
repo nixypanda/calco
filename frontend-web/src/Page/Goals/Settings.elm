@@ -18,6 +18,10 @@ import Ui
 import Ui.Theme exposing (Theme)
 
 
+
+-- MODEL
+
+
 type Model
     = Loading
     | Ready LoadedModel
@@ -43,17 +47,6 @@ type SaveState
     | SaveFailed String
 
 
-type Msg
-    = GoalLoaded (Result Client.ApiError GoalSnapshot)
-    | CalorieTargetChanged String
-    | ProteinTargetChanged String
-    | CarbsTargetChanged String
-    | FatTargetChanged String
-    | SaveClicked
-    | LocalContextReceived { date : String, timezone : String }
-    | SaveCompleted (Result Client.ApiError GoalSnapshot)
-
-
 type OutMsg
     = NoOp
     | RequestGoal LocalDate
@@ -65,6 +58,21 @@ type OutMsg
 init : LocalDate -> ( Model, OutMsg )
 init today =
     ( Loading, RequestGoal today )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = GoalLoaded (Result Client.ApiError GoalSnapshot)
+    | CalorieTargetChanged String
+    | ProteinTargetChanged String
+    | CarbsTargetChanged String
+    | FatTargetChanged String
+    | SaveClicked
+    | LocalContextReceived { date : String, timezone : String }
+    | SaveCompleted (Result Client.ApiError GoalSnapshot)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -269,6 +277,10 @@ loadedModelFor snapshot =
     , fatTargetG = String.fromFloat snapshot.targets.fatTargetG
     , saveState = Editing
     }
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

@@ -19,12 +19,29 @@ import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
 
+
+-- MODEL
+
+
 type alias Model =
     { search : QueryState
     , results : Loadable Client.ApiError (List Foods.SearchResult)
     , date : Maybe String
     , mealSlot : Maybe MealSlot
     }
+
+
+init : Maybe String -> Maybe MealSlot -> Model
+init date mealSlot =
+    { search = Search.empty
+    , results = NotAsked
+    , date = date
+    , mealSlot = mealSlot
+    }
+
+
+
+-- UPDATE
 
 
 type Msg
@@ -44,15 +61,6 @@ type OutMsg
     | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | Navigate Route
     | SessionExpired
-
-
-init : Maybe String -> Maybe MealSlot -> Model
-init date mealSlot =
-    { search = Search.empty
-    , results = NotAsked
-    , date = date
-    , mealSlot = mealSlot
-    }
 
 
 debounceConfig : { delayMs : Int, onFire : Int -> String -> Msg }
@@ -176,6 +184,10 @@ update msg model =
 
         CreateCustomFoodClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

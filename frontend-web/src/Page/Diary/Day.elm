@@ -30,6 +30,10 @@ import Ui.Theme exposing (Mode(..), Theme)
 import View.Nutrients
 
 
+
+-- MODEL
+
+
 type MacroMode
     = Grams
     | Percent
@@ -63,25 +67,6 @@ type alias Model =
     }
 
 
-type Msg
-    = LoadStarted
-    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
-    | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
-    | PreviousDayClicked
-    | NextDayClicked
-    | MacroModeToggled
-    | AddFoodClicked MealSlot
-    | LogClicked String
-    | MealsClicked
-
-
-type OutMsg
-    = NoOp
-    | RequestDiaryData LocalDate
-    | Navigate Route
-    | SessionExpired
-
-
 init : { dateParam : Maybe String, today : LocalDate } -> ( Model, OutMsg )
 init args =
     let
@@ -99,6 +84,29 @@ init args =
       }
     , RequestDiaryData currentDate
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = LoadStarted
+    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
+    | PreviousDayClicked
+    | NextDayClicked
+    | MacroModeToggled
+    | AddFoodClicked MealSlot
+    | LogClicked String
+    | MealsClicked
+
+
+type OutMsg
+    = NoOp
+    | RequestDiaryData LocalDate
+    | Navigate Route
+    | SessionExpired
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -371,6 +379,10 @@ uniqueBy toKey list =
 dailyCalories : List NutrientAmount -> Float
 dailyCalories summary =
     caloriesFrom summary
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

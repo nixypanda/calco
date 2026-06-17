@@ -26,6 +26,10 @@ import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
+
+-- MODEL
+
+
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
@@ -58,15 +62,6 @@ type RequestState
     | Saving
 
 
-type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
-    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | FormMsg FoodLogForm.Msg
-    | SubmitClicked
-    | LocalContextReceived { date : String, timezone : String }
-    | LogCompleted (Result Client.ApiError FoodLog)
-
-
 type OutMsg
     = NoOp
     | RequestInitialData String
@@ -87,6 +82,19 @@ init productId logDate mealSlot =
         }
     , RequestInitialData productId
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FoodLoaded (Result Client.ApiError ProductDetail)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | FormMsg FoodLogForm.Msg
+    | SubmitClicked
+    | LocalContextReceived { date : String, timezone : String }
+    | LogCompleted (Result Client.ApiError FoodLog)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -329,6 +337,10 @@ applyLoadedError message model =
 
         _ ->
             model
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
