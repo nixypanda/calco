@@ -391,7 +391,7 @@ loadedView theme device loaded =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ foodHeader theme device food
+        [ foodHeader theme food
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request
         , View.Nutrients.nutritionCard theme device nutrients
@@ -443,8 +443,8 @@ foodNutrientsPer100g food =
         food.nutrients
 
 
-foodHeader : Theme -> Device -> ProductDetail -> Element Msg
-foodHeader theme device food =
+foodHeader : Theme -> ProductDetail -> Element Msg
+foodHeader theme food =
     let
         macroNutrients : List Nutrition.NutrientAmount
         macroNutrients =
@@ -455,7 +455,7 @@ foodHeader theme device food =
     Ui.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
-            , title = Ui.truncatedHeader theme device food.name
+            , title = Ui.truncatedHeader theme food.name
             , subtitle = Just (metaText food)
             , actions = []
             }

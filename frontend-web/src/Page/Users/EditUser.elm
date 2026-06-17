@@ -257,14 +257,14 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         (errorView theme model.status
-            ++ userInfoView device theme model
+            ++ userInfoView theme model
             ++ resetPasswordView device theme model
             ++ accountActionView device theme model
         )
 
 
-userInfoView : Device -> Theme -> Model -> List (Element Msg)
-userInfoView device theme model =
+userInfoView : Theme -> Model -> List (Element Msg)
+userInfoView theme model =
     case model.status of
         Loading ->
             [ Ui.skeletonLoading theme ]
@@ -273,7 +273,7 @@ userInfoView device theme model =
             [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Loaded loadedUser _ ->
-            [ userSummaryCard device theme loadedUser.user ]
+            [ userSummaryCard theme loadedUser.user ]
 
 
 resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
@@ -395,11 +395,11 @@ problemMessage problem =
             "New password is required"
 
 
-userSummaryCard : Device -> Theme -> User -> Element msg
-userSummaryCard device theme user =
+userSummaryCard : Theme -> User -> Element msg
+userSummaryCard theme user =
     Ui.card theme
         [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.sectionTitle theme device user.username
+            [ Ui.listItemTitle theme (Element.text user.username)
             , Ui.detailRow theme
                 "Display Name"
                 (Element.el [ Ui.caption ] (Element.text user.displayName))

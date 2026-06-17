@@ -296,7 +296,7 @@ loadedView theme device loaded =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ foodHeader theme device food
+        [ foodHeader theme food
         , View.Nutrients.nutritionCard theme device nutrients
         , bottomActionsView theme device food
         ]
@@ -314,8 +314,8 @@ foodNutrientsPer100g food =
         food.nutrients
 
 
-foodHeader : Theme -> Device -> ProductDetail -> Element Msg
-foodHeader theme device food =
+foodHeader : Theme -> ProductDetail -> Element Msg
+foodHeader theme food =
     let
         macroNutrients : List Nutrition.NutrientAmount
         macroNutrients =
@@ -326,7 +326,7 @@ foodHeader theme device food =
     Ui.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
-            , title = Ui.truncatedHeader theme device food.name
+            , title = Ui.truncatedHeader theme food.name
             , subtitle = Just (metaText food)
             , actions = []
             }
@@ -383,7 +383,6 @@ deleteModalView theme device loaded =
 deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
 deleteModalContent theme device maybeError deleting =
     Ui.modalOverlay theme
-        device
         { title = "Delete food?"
         , body =
             [ Ui.mutedParagraph theme "This will permanently remove the custom food."

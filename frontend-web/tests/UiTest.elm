@@ -150,10 +150,10 @@ truncationHelpers =
         , test "truncatedText renders an empty string" <|
             \_ -> Ui.truncatedText phone "" |> pass
         , test "truncatedHeader renders a long heading on phone" <|
-            \_ -> Ui.truncatedHeader theme phone "Roasted Sweet Potato With Cumin Yogurt" |> pass
+            \_ -> Ui.truncatedHeader theme "Roasted Sweet Potato With Cumin Yogurt" |> pass
         , test "truncatedListItemTitle renders a long label on phone" <|
             \_ ->
-                Ui.truncatedListItemTitle theme phone "Roasted Sweet Potato With Cumin Yogurt"
+                Ui.truncatedListItemTitle theme "Roasted Sweet Potato With Cumin Yogurt"
                     |> pass
         ]
 

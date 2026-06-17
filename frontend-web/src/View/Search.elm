@@ -97,7 +97,7 @@ resultRow theme device config =
                     Ui.wrappedListItemTitle theme config.item.name
 
                   else
-                    Ui.truncatedListItemTitle theme device config.item.name
+                    Ui.truncatedListItemTitle theme config.item.name
                 , Ui.mutedCaption theme (metaText config.query config.item)
                 ]
 

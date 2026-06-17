@@ -296,7 +296,7 @@ view { model, device, theme } =
             Ready loaded ->
                 [ Ui.maybeErrorBanner theme (requestError loaded.saveState)
                 , Ui.card theme
-                    [ Ui.sectionTitle theme device "Daily Targets"
+                    [ Ui.sectionTitle theme "Daily Targets"
                     , Ui.mutedParagraph theme (statusMessage loaded.snapshot)
                     , Ui.input theme
                         { label = "Calories"

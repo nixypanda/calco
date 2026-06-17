@@ -1482,7 +1482,7 @@ topBarView model =
                 [ Element.width Element.fill
                 , Element.clip
                 ]
-                (Ui.subsectionTitle model.theme model.device meta.title)
+                (Ui.subsectionTitle model.theme meta.title)
             , Element.el
                 [ Element.paddingEach { top = 0, right = Ui.space8, bottom = 0, left = 0 } ]
                 (themeToggle model)
@@ -1501,7 +1501,7 @@ topBarView model =
                     { src = "/android-chrome-192x192.png"
                     , description = "CalCo"
                     }
-                , Ui.pageTitle model.theme model.device "CalCo"
+                , Ui.pageTitle model.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
             , themeToggle model
@@ -1732,7 +1732,7 @@ drawerView model =
             [ Ui.iconButton model.device
                 model.theme
                 { icon = Icon.Menu, title = "Close", onPress = DrawerClosed }
-            , Ui.sectionTitle model.theme model.device "CalCo"
+            , Ui.sectionTitle model.theme "CalCo"
             ]
             :: Ui.hairline model.theme
             :: drawerItems model
@@ -1853,7 +1853,7 @@ updateBanner model =
         , Element.paddingXY Ui.space16 Ui.space12
         , Background.color model.theme.brandBlueSoft
         , Font.color model.theme.brandBlue
-        , Font.size 15
+        , Font.size 18
         ]
         { onPress = Just ReloadPageClicked
         , label =

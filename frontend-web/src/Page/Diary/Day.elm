@@ -428,7 +428,7 @@ dateCard theme model device =
                 [ Element.width Element.fill
                 , Font.center
                 ]
-                (Ui.sectionTitle theme device (LocalDate.display model.currentDate))
+                (Ui.sectionTitle theme (LocalDate.display model.currentDate))
             , if canGoNext then
                 Ui.iconButton device
                     theme
@@ -598,7 +598,7 @@ slotView theme device macroMode section =
     mealSlotCard theme
         device
         section.slot
-        (mealSlotHeader theme device macroMode section totals)
+        (mealSlotHeader theme macroMode section totals)
         (Ui.hairline theme
             :: (if List.isEmpty section.logs then
                     [ Element.el
@@ -630,12 +630,11 @@ slotView theme device macroMode section =
 
 mealSlotHeader :
     Theme
-    -> Device
     -> MacroMode
     -> SlotSection
     -> MacroTotals
     -> Element Msg
-mealSlotHeader theme device macroMode section totals =
+mealSlotHeader theme macroMode section totals =
     let
         sectionKcal : Float
         sectionKcal =
@@ -649,7 +648,7 @@ mealSlotHeader theme device macroMode section totals =
         , Element.spacing Ui.space12
         ]
         [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-            [ Ui.sectionTitle theme device (MealSlot.label section.slot)
+            [ Ui.sectionTitle theme (MealSlot.label section.slot)
             , Input.button []
                 { onPress = Just MacroModeToggled
                 , label = Ui.mutedCaption theme (macroSummary macroMode totals)

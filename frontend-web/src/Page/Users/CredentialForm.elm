@@ -132,8 +132,8 @@ view config { model, device, theme } =
             , Element.spacing Ui.space16
             ]
             [ Ui.card theme
-                ([ Ui.pageTitle theme device "CalCo"
-                 , Ui.subsectionTitle theme device config.title
+                ([ Ui.pageTitle theme "CalCo"
+                 , Ui.subsectionTitle theme config.title
                  ]
                     ++ descriptionView theme config.description
                     ++ [ Ui.input theme

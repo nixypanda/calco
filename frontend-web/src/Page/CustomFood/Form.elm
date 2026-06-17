@@ -708,7 +708,6 @@ view theme device nutrients units form =
 basicInfoCard : Theme -> Device -> FormModel -> Element Msg
 basicInfoCard theme device form =
     Ui.formSection theme
-        device
         "Basic Info"
         [ Ui.input theme { label = "Name", value = form.name, onChange = NameChanged }
         , Ui.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
@@ -719,7 +718,6 @@ basicInfoCard theme device form =
 portionInfoCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 portionInfoCard theme device form units =
     Ui.formSection theme
-        device
         "Portion Info"
         [ Ui.input theme
             { label = "Serving Size (g)"
@@ -747,7 +745,7 @@ nutrientsCard theme device form nutrients =
         { header =
             Just
                 (Element.column [ Element.spacing Ui.space8 ]
-                    [ Ui.subsectionTitle theme device "Nutrients", addRowHint theme ]
+                    [ Ui.subsectionTitle theme "Nutrients", addRowHint theme ]
                 )
         , body =
             [ Element.column
@@ -766,7 +764,7 @@ nutrientsCard theme device form nutrients =
 servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 servingsCard theme device form units =
     Ui.section theme
-        { header = Just (Ui.subsectionTitle theme device "Servings")
+        { header = Just (Ui.subsectionTitle theme "Servings")
         , body =
             [ Element.column
                 [ Element.width Element.fill

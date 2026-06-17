@@ -90,7 +90,7 @@ bodyView device theme model =
                 { rows =
                     List.map
                         (\user ->
-                            userListRow device
+                            userListRow
                                 theme
                                 { user = user, onSelect = NavigateEditUser }
                         )
@@ -106,12 +106,12 @@ bodyView device theme model =
             Ui.errorBanner theme (Client.displayError error)
 
 
-userListRow : Device -> Theme -> { user : User, onSelect : String -> msg } -> Element msg
-userListRow device theme config =
+userListRow : Theme -> { user : User, onSelect : String -> msg } -> Element msg
+userListRow theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Ui.sectionTitle theme device config.user.username
+        , title = Ui.listItemTitle theme (Element.text config.user.username)
         , subtitle = [ Ui.mutedBody theme config.user.displayName ]
         , trailing = [ Ui.statusBadge theme config.user.status ]
         }

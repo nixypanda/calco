@@ -659,7 +659,7 @@ loadedView theme device model =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ itemHeader theme device model
+        [ itemHeader theme model
         , Element.map FormMsg
             (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
         , detailActionsView theme device model
@@ -723,8 +723,8 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Theme -> Device -> LoadedModel -> Element Msg
-itemHeader theme device model =
+itemHeader : Theme -> LoadedModel -> Element Msg
+itemHeader theme model =
     let
         maybeFood : Maybe ProductDetail
         maybeFood =
@@ -733,7 +733,7 @@ itemHeader theme device model =
     Ui.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
-            , title = itemTitle theme device model.item
+            , title = itemTitle theme model.item
             , subtitle = Just (metaText maybeFood model.log)
             , actions = []
             }
@@ -751,8 +751,8 @@ itemHeader theme device model =
         ]
 
 
-itemTitle : Theme -> Device -> LoadedItem -> Element msg
-itemTitle theme device item =
+itemTitle : Theme -> LoadedItem -> Element msg
+itemTitle theme item =
     case item of
         ProductItem productState ->
             case productState of
@@ -760,7 +760,7 @@ itemTitle theme device item =
                     Ui.skeletonBar theme
 
                 DetailLoaded food ->
-                    Ui.truncatedHeader theme device food.name
+                    Ui.truncatedHeader theme food.name
 
                 DetailUnavailable fallback ->
                     Element.text fallback.name
@@ -771,7 +771,7 @@ itemTitle theme device item =
                     Ui.skeletonBar theme
 
                 DetailLoaded meal ->
-                    Ui.truncatedHeader theme device meal.name
+                    Ui.truncatedHeader theme meal.name
 
                 DetailUnavailable fallback ->
                     Element.text fallback.name
@@ -839,7 +839,6 @@ deleteModalView theme device loaded =
 deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
 deleteModalContent theme device maybeError deleting =
     Ui.modalOverlay theme
-        device
         { title = "Delete log?"
         , body =
             [ Ui.mutedParagraph theme "This will permanently remove the log entry."

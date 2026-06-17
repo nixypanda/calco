@@ -208,33 +208,33 @@ radiusPill =
 
 body : Element.Attribute msg
 body =
-    Font.size 14
+    Font.size 16
 
 
 caption : Element.Attribute msg
 caption =
-    Font.size 12
+    Font.size 13
 
 
 sizePageTitle : Element.Attribute msg
 sizePageTitle =
-    Font.size 28
+    Font.size 32
 
 
 sizeSectionTitle : Element.Attribute msg
 sizeSectionTitle =
-    Font.size 22
+    Font.size 24
 
 
 sizeSubsectionTitle : Element.Attribute msg
 sizeSubsectionTitle =
-    Font.size 17
+    Font.size 20
 
 
-pageTitle : Theme -> Device -> String -> Element msg
-pageTitle theme device text =
+pageTitle : Theme -> String -> Element msg
+pageTitle theme text =
     Element.el
-        [ onPhone device (Font.size 24) sizePageTitle
+        [ sizePageTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 1
@@ -242,10 +242,10 @@ pageTitle theme device text =
         (Element.text text)
 
 
-sectionTitle : Theme -> Device -> String -> Element msg
-sectionTitle theme device text =
+sectionTitle : Theme -> String -> Element msg
+sectionTitle theme text =
     Element.el
-        [ onPhone device (Font.size 18) sizeSectionTitle
+        [ sizeSectionTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 2
@@ -253,10 +253,10 @@ sectionTitle theme device text =
         (Element.text text)
 
 
-subsectionTitle : Theme -> Device -> String -> Element msg
-subsectionTitle theme device text =
+subsectionTitle : Theme -> String -> Element msg
+subsectionTitle theme text =
     Element.el
-        [ onPhone device (Font.size 15) sizeSubsectionTitle
+        [ sizeSubsectionTitle
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 3
@@ -274,8 +274,8 @@ listItemTitle theme child =
         child
 
 
-truncatedListItemTitle : Theme -> Device -> String -> Element msg
-truncatedListItemTitle theme _ name =
+truncatedListItemTitle : Theme -> String -> Element msg
+truncatedListItemTitle theme name =
     Element.el
         [ Element.width Element.fill ]
         (listItemTitle theme
@@ -593,10 +593,10 @@ section theme config =
     card theme (headerSlot ++ config.body ++ footerSlot)
 
 
-formSection : Theme -> Device -> String -> List (Element msg) -> Element msg
-formSection theme device title content =
+formSection : Theme -> String -> List (Element msg) -> Element msg
+formSection theme title content =
     section theme
-        { header = Just (subsectionTitle theme device title)
+        { header = Just (subsectionTitle theme title)
         , body = content
         , footer = Nothing
         }
@@ -985,7 +985,7 @@ bottomNavTab theme config =
                     )
                 , Element.el
                     [ Element.centerX
-                    , Font.size 11
+                    , Font.size 12
                     ]
                     (Element.text config.label)
                 ]
@@ -1137,7 +1137,6 @@ mutedParagraph theme text =
 
 modalOverlay :
     Theme
-    -> Device
     ->
         { title : String
         , body : List (Element msg)
@@ -1145,7 +1144,7 @@ modalOverlay :
         , onBackgroundPress : Maybe msg
         }
     -> Element msg
-modalOverlay theme device config =
+modalOverlay theme config =
     let
         modalCard : Element msg
         modalCard =
@@ -1157,7 +1156,7 @@ modalOverlay theme device config =
                 , uiClass "ui-modal-card"
                 ]
                 (card theme
-                    (sectionTitle theme device config.title
+                    (sectionTitle theme config.title
                         :: config.body
                         ++ [ config.actions ]
                     )
@@ -1582,8 +1581,8 @@ skeletonBar theme =
         Element.none
 
 
-truncatedHeader : Theme -> Device -> String -> Element msg
-truncatedHeader theme _ heading =
+truncatedHeader : Theme -> String -> Element msg
+truncatedHeader theme heading =
     Element.paragraph
         [ sizeSectionTitle
         , Font.bold

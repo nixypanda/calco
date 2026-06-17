@@ -474,7 +474,7 @@ the prior pattern of two stacked cards.
 nutritionCard : Theme -> Device -> List NutrientAmount -> Element msg
 nutritionCard theme device nutrients =
     Ui.section theme
-        { header = Just (Ui.subsectionTitle theme device "Nutrition")
+        { header = Just (Ui.subsectionTitle theme "Nutrition")
         , body =
             [ macroBreakdownView theme device nutrients
             , Ui.hairline theme

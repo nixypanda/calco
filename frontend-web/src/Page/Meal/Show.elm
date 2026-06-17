@@ -492,7 +492,7 @@ view { model, device, theme } =
         )
         (Ui.pageContainer device
             [ Ui.section theme
-                { header = Just (headerView theme device model)
+                { header = Just (headerView theme model)
                 , body =
                     [ case model of
                         Loaded loaded ->
@@ -539,8 +539,8 @@ modalOverlayAttrs theme device model =
             []
 
 
-headerView : Theme -> Device -> Model -> Element Msg
-headerView theme device model =
+headerView : Theme -> Model -> Element Msg
+headerView theme model =
     case model of
         Loaded loaded ->
             Ui.pageHeader theme
@@ -548,20 +548,20 @@ headerView theme device model =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
                             (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
-                , title = Ui.truncatedHeader theme device loaded.meal.name
+                , title = Ui.truncatedHeader theme loaded.meal.name
                 , subtitle = Nothing
                 , actions = []
                 }
 
         _ ->
-            Ui.pageTitle theme device "Meal"
+            Ui.pageTitle theme "Meal"
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ Ui.section theme
-            { header = Just (Ui.subsectionTitle theme device "Components")
+            { header = Just (Ui.subsectionTitle theme "Components")
             , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
             }
@@ -677,7 +677,6 @@ deleteModalView theme device loaded =
 deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
 deleteModalContent theme device maybeError deleting =
     Ui.modalOverlay theme
-        device
         { title = "Delete meal?"
         , body =
             [ Ui.mutedParagraph theme "This will permanently remove the meal."

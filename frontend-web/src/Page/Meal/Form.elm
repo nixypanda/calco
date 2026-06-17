@@ -374,7 +374,7 @@ viewFormFields theme device toMsg form =
             , footer = Nothing
             }
         , Ui.section theme
-            { header = Just (Ui.subsectionTitle theme device "Components")
+            { header = Just (Ui.subsectionTitle theme "Components")
             , body =
                 List.intersperse (Ui.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
