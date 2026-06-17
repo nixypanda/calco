@@ -13,61 +13,220 @@ frontend-web/
     Page/
     View/
     Main.elm
+    Session.elm
+    Access.elm
     Ui.elm
+    Ui/Theme.elm
   tests/
   index.html
   vite.config.js
 ```
 
-It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
+It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend
+through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout
+and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
 
-The legacy React frontend has been removed. The current Elm app is built and served with Vite, and all frontend work lives in `frontend-web/`.
+The legacy React frontend has been removed. All active frontend work lives in
+`frontend-web/`.
 
 ## Architecture
 
-Every page module follows the canonical TEA (The Elm Architecture) pattern:
-
-```elm
-module Page.Diary exposing (Model, Msg, init, update, view, subscriptions)
-
-type alias Model = { ... }
-type Msg = ...
-
-init : Args -> Session -> ( Model, Cmd Msg )
-update : Msg -> Model -> ( Model, Cmd Msg )
-view : Model -> Element Msg
-subscriptions : Model -> Sub Msg
-```
-
-### Global State
-
-`Main.elm` owns the top-level model and uses a `PageModel` ADT to scope page state:
+The frontend follows a strict ownership model:
 
 ```text
-Model: key, route, session, bootstrap, page
-PageModel = DiaryPage | MealDetailPage | FoodLogDetailPage | ... | NotFound
-Msg: UrlChanged | LinkClicked | SessionLoaded | GotPage PageMsg
-PageMsg = DiaryMsg | MealDetailMsg | ... (Cmd.map'd into Main.update)
+Main -> Access / Session / Data.Route / Page
+Page -> Data / Api / Ui / View / Lib
+View -> Ui / Data / Lib
+Api -> Api.Client / Data decoders / Lib.Json
+Data -> other Data / Lib
+Ui -> Ui.Theme / Data / Lib
 ```
 
-### Page → App Boundary
+Disallowed dependency directions:
 
-When a page needs to signal the global layer (session expired, navigate), it returns an `OutMsg` from `update`:
+- `Data` importing `Page`, `Main`, or `Api`.
+- `Ui` importing page-specific modules.
+- `Api` owning page state, navigation decisions, or view formatting.
+- `View` triggering HTTP or owning page orchestration.
+
+This keeps the composition root in one place, keeps pages readable, and
+prevents domain shaping from drifting into transport or presentation layers.
+
+### Module Ownership
+
+`Main.elm` is the app-wide composition root. It owns:
+
+- URL changes and browser navigation.
+- session/bootstrap loading.
+- page lifting and `Cmd.map`.
+- top-level device, drawer, profile, and theme state.
+- routing into the correct page model.
+
+`Access.elm` is the single route-access policy point. It decides whether a
+route should render, redirect, or wait for session/bootstrap state.
+
+`Data.Route.elm` is the single source of truth for route parsing and route
+serialization. Query-param-backed navigation state belongs here.
+
+`Page.*` modules own page-local TEA, page-local loading/submitting/deleting
+state, and page-specific composition of shared UI and API calls.
+
+`Api.*` modules own request construction, response decoding, and transport
+errors. They do not own business interpretation beyond transport concerns.
+
+`Data.*` modules own domain-facing frontend types and pure helpers. They should
+be safe to test in isolation without HTTP or page wiring.
+
+`Ui.elm`, `Ui.Theme`, and `View.*` own shared presentation primitives. Pages
+compose them, but should not copy their look-and-feel logic locally unless the
+pattern is truly one-off.
+
+## Page Structure
+
+Every non-trivial `Page.*` module should follow canonical TEA and should be
+organized so the high-level sections are obvious when scanning the file.
+
+Expected minimum shape:
 
 ```elm
-type OutMsg = NoOp | SessionExpired | NavigateTo Route
+module Page.SomePage exposing (Model, Msg, init, update, view)
+
+-- MODEL
+
+type alias Model = ...
+
+init : Args -> Model
+init args =
+    ...
+
+
+-- UPDATE
+
+type Msg
+    = ...
+
+update : Msg -> Model -> ( Model, Cmd Msg )
+update msg model =
+    ...
+
+
+-- VIEW
+
+view : ViewArgs -> Model -> Element Msg
+view args model =
+    ...
 ```
 
-`Main.update` branches on `OutMsg` to clear session, navigate, or do nothing.
+When a page needs to signal the app layer or own subscriptions, extend the
+shape explicitly:
 
-### Invalid States
+```elm
+module Page.SomePage exposing
+    ( Model
+    , Msg
+    , OutMsg(..)
+    , init
+    , update
+    , view
+    , subscriptions
+    )
+
+type OutMsg
+    = NoOp
+    | Navigate Route
+    | SessionExpired
+
+
+init : Args -> ( Model, OutMsg )
+init args =
+    ...
+
+
+-- UPDATE
+
+type Msg
+    = ...
+
+update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
+update msg model =
+    ...
+
+
+-- VIEW
+
+view : ViewArgs -> Model -> Element Msg
+view args model =
+    ...
+
+
+-- SUBSCRIPTIONS
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.none
+```
+
+Rules:
+
+- Each page should expose and own `Model`, `Msg`, `init`, `update`, and
+  `view`.
+- Add `OutMsg` when the page must signal app-level effects such as navigation,
+  session expiration, or startup orchestration.
+- Add `subscriptions` only when the page owns actual subscriptions.
+- `init` may return either a bare `Model` or `( Model, OutMsg )` depending on
+  whether startup coordination is needed.
+- In non-trivial page modules, prefer three primary sections:
+  `-- MODEL`, `-- UPDATE`, and `-- VIEW`.
+- Keep model definitions, submodels, optional `OutMsg`, and `init` together
+  under `-- MODEL`.
+- Keep `Msg`, `update`, and update-oriented helpers together under
+  `-- UPDATE`.
+- Keep `view` and view-oriented helpers together under `-- VIEW`.
+- Add optional sections like `-- SUBSCRIPTIONS` or `-- PORTS` only when the
+  module actually has them.
+- Add `-- HELPERS` only when helper volume is large enough that keeping them
+  inside `-- UPDATE` or `-- VIEW` would hurt scanability.
+- Do not force ceremony into tiny helper modules. This rule is for page
+  readability, not comment noise.
+
+### Page To App Boundary
+
+When a page needs to signal the global layer, it should return an `OutMsg`
+rather than reaching indirectly into app concerns.
+
+Allowed examples:
+
+```elm
+type OutMsg
+    = NoOp
+    | Navigate Route
+    | SessionExpired
+    | RequestDiaryData LocalDate
+```
+
+Disallowed examples:
+
+```elm
+-- Page decides to mutate global session directly.
+
+-- Page reconstructs app-wide route access rules locally.
+
+-- Page hides navigation inside an opaque helper in Api.*
+```
+
+If an effect changes global navigation, session state, or app-level loading
+behavior, surface it as an `OutMsg` and let `Main.update` coordinate it.
+
+## State Modeling
 
 Frontend models should make important invalid states unrepresentable to a
-pragmatic extent. Prefer types that describe the real states a page can be in
+pragmatic extent. Prefer ADTs that describe the real states a page can be in
 over records of independent `Maybe`s and booleans that can contradict each
 other.
 
-Use page-specific union types when state changes what data is available or
+### Use ADTs To Disallow Invalid States
+
+Prefer page-specific union types when state changes what data is available or
 which actions are valid:
 
 ```elm
@@ -104,6 +263,32 @@ That record can represent states the UI should never see, such as a form
 without its food, units without a form, or an error and loaded data competing
 for the same screen.
 
+### Keep It Pragmatic
+
+This is not a rule to invent ceremony everywhere.
+
+Allowed:
+
+- `Maybe` for genuinely optional single values.
+- `Loadable` for small isolated values where every variant is meaningful.
+- simple records when all fields are independently valid.
+
+Preferred:
+
+- page-specific ADTs for loading/loaded/failed flows.
+- action-state ADTs for submit/delete/save flows.
+- narrow unions when behavior changes materially by state.
+
+Disallowed:
+
+- records full of unrelated flags that require the view to re-check impossible
+  combinations repeatedly.
+- shoving partial loading state into the loaded model.
+- using booleans like `isLoading`, `hasLoaded`, and `hasError` together when a
+  union type would express the state directly.
+
+### Loading Aggregation
+
 Partial `Maybe`s are acceptable inside loading aggregators when independent
 requests complete in any order:
 
@@ -116,6 +301,8 @@ type alias LoadingModel =
 
 Once all required data is present, transition to `Loaded`. Keep the partial
 state scoped to loading instead of leaking it into the loaded model.
+
+### Form And Request State
 
 Model form and action lifecycles explicitly when they affect behavior:
 
@@ -136,56 +323,11 @@ This is especially useful for submit/delete flows, validation errors, and
 stale async completions. If a completion should only apply while a matching
 request is pending, store enough state to check that before updating the page.
 
-The goal is not to eliminate every theoretical impossible state. It is to avoid
-state shapes that force views and updates to repeatedly defend against
-combinations that should not happen. Small, isolated state can still use a
-generic `Loadable`:
+## Routing And Access
 
-```elm
-type Loadable error value
-    = NotAsked
-    | Loading
-    | Failure error
-    | Success value
-```
-
-Use `Loadable` when all of its variants are meaningful for that local value.
-Use a page-specific union when the page has dependent data, multiple requests,
-or action state.
-
-### API Errors
-
-Backend error envelopes are preserved as an ADT in `Api.Client`:
-
-```elm
-type ApiError = BadUrl String | Timeout | NetworkError | BadStatus Int String String | BadBody String
-```
-
-### URL As Source Of Truth
-
-`Browser.application` enforces URL-sourced state. Diary date, meal slot context, and other navigation-critical state live in query params, not in application state.
-
-## Runtime Shape
-
-`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js` and owns the small JavaScript bridge for the local date and IANA timezone:
-
-- Elm calls the `requestLocalContext` port.
-- JavaScript replies through `localContextReceived` with a `{ date, timezone }` record where `date` is the local `YYYY-MM-DD` (from `toLocaleDateString('en-CA')`) and `timezone` is the resolved IANA zone (from `Intl.DateTimeFormat().resolvedOptions().timeZone`).
-
-Vite serves the frontend and proxies `/api/*` to the backend during local development. Defaults:
-
-```text
-frontend-web dev server: http://localhost:1234
-API target: http://localhost:3001
-```
-
-Override with:
-
-```bash
-cd frontend-web && PORT=1235 API_TARGET=http://localhost:3001 npm run dev
-```
-
-## Routes
+`Browser.application` makes URL-backed state a core part of the architecture.
+Navigation-critical state should live in routes or query params, not in hidden
+application state.
 
 Current routes are defined in `frontend-web/src/Data/Route.elm`:
 
@@ -217,73 +359,29 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 *
 ```
 
-Route access is enforced in `frontend-web/src/Access.elm` and coordinated from `frontend-web/src/Main.elm`:
+Rules:
 
-- Bootstrap setup is available only while admin bootstrap is incomplete.
-- Login is for unauthenticated sessions.
-- Admin dashboard is for admin sessions.
-- Diary, food, log, and meal routes are for normal authenticated user sessions.
+- Diary date, meal-slot context, and similar navigation-critical state belong
+  in route parameters or query params.
+- `Data.Route` owns parsing and serialization of that state.
+- `Access.resolveRoute` owns access policy for bootstrap-only, anonymous,
+  admin-only, and normal authenticated routes.
 - Admin identities do not own diary data, foods, logs, or meals.
+- Do not reconstruct route strings ad hoc in page modules.
 
-## Pages
+Allowed examples:
 
-### Auth
+```elm
+Navigate (FoodSearch (Just date) (Just slot))
+```
 
-- `Page.Users.BootstrapSetup`
-- `Page.Users.Login`
-- `Page.Users.Dashboard`
-- `Page.Users.CreateUser`
-- `Page.Users.EditUser`
+Disallowed examples:
 
-The first-run flow creates a bootstrap admin. Admins create and manage normal user accounts.
+```elm
+NavigateToPath ("/search?date=" ++ date ++ "&meal_slot=" ++ slot)
+```
 
-### Diary
-
-`Page.Diary.Day` is the main authenticated user screen.
-
-It provides:
-
-- Selected-day navigation.
-- Calorie and macro summary.
-- Goal-aware calorie and macro progress against the effective target for the selected day.
-- Meal-slot grouped logs.
-- Add-food actions per meal slot.
-- App navigation drawer and profile/logout menu.
-
-Users can inspect previous days with the diary date selector. A separate history/trends screen is out of scope.
-
-### Goals
-
-`Page.Goals.Settings` lets an authenticated user view and save calorie and macro targets for the current local day.
-
-### Foods
-
-- `Page.Food.Search`
-- `Page.Food.Show`
-- `Page.CustomFood.List`
-- `Page.CustomFood.Create`
-- `Page.CustomFood.Show`
-- `Page.CustomFood.Edit`
-
-Custom foods use the same catalog model as imported/global foods, scoped by user ownership.
-
-### Logs
-
-`Page.FoodLog.Entry` supports viewing, editing quantity/unit/meal slot/notes, and deleting a log.
-
-Editing logged timestamp or swapping the selected item is intentionally not required for current scope.
-
-### Meals
-
-- `Page.Meal.List`
-- `Page.Meal.Show`
-- `Page.Meal.Create`
-- `Page.Meal.Edit`
-- `Page.Meal.Form`
-
-Meal forms edit components inside the aggregate. There are no independent component screens.
-
-## API Client
+## API Boundary
 
 API modules live in `frontend-web/src/Api/`:
 
@@ -296,34 +394,152 @@ API modules live in `frontend-web/src/Api/`:
 - `Client.elm`
 - `Result.elm`
 
-`Api.Client` centralizes request construction and API error handling. The frontend uses server-managed browser sessions, so requests rely on the browser session cookie.
+`Api.Client` centralizes request construction and API error handling. The
+frontend uses server-managed browser sessions, so requests rely on the browser
+session cookie.
+
+Backend error envelopes are preserved as an ADT in `Api.Client`:
+
+```elm
+type ApiError
+    = BadUrl String
+    | Timeout
+    | NetworkError
+    | BadStatus Int String String
+    | BadBody String
+```
+
+Rules:
+
+- `Api.*` owns transport details and decoding.
+- `Page.*` owns what the data means for the screen.
+- transport failures should be normalized through `Api.Client.ApiError`.
+- session-expired behavior should be surfaced through page `OutMsg` and handled
+  in `Main`.
+- do not bury navigation or page-state transitions inside API helpers.
+
+The frontend boundary should stay: request/response in `Api`, business meaning
+in `Data` and `Page`, app coordination in `Main`.
+
+## Runtime Shape
+
+`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js`
+and owns the small JavaScript bridge for the local date and IANA timezone:
+
+- Elm calls the `requestLocalContext` port.
+- JavaScript replies through `localContextReceived` with a `{ date, timezone }`
+  record where `date` is the local `YYYY-MM-DD` and `timezone` is the resolved
+  IANA zone.
+
+Vite serves the frontend and proxies `/api/*` to the backend during local
+development. Defaults:
+
+```text
+frontend-web dev server: http://localhost:1234
+API target: http://localhost:3001
+```
+
+Override with:
+
+```bash
+cd frontend-web && PORT=1235 API_TARGET=http://localhost:3001 npm run dev
+```
+
+## Pages
+
+### Auth
+
+- `Page.Users.BootstrapSetup`
+- `Page.Users.Login`
+- `Page.Users.Dashboard`
+- `Page.Users.CreateUser`
+- `Page.Users.EditUser`
+
+The first-run flow creates a bootstrap admin. Admins create and manage normal
+user accounts.
+
+### Diary
+
+`Page.Diary.Day` is the main authenticated user screen.
+
+It provides:
+
+- selected-day navigation.
+- calorie and macro summary.
+- goal-aware calorie and macro progress against the effective target for the
+  selected day.
+- meal-slot grouped logs.
+- add-food actions per meal slot.
+- app navigation drawer and profile/logout menu.
+
+Users can inspect previous days with the diary date selector. A separate
+history/trends screen is out of scope.
+
+### Goals
+
+`Page.Goals.Settings` lets an authenticated user view and save calorie and
+macro targets for the current local day.
+
+### Foods
+
+- `Page.Food.Search`
+- `Page.Food.Show`
+- `Page.CustomFood.List`
+- `Page.CustomFood.Create`
+- `Page.CustomFood.Show`
+- `Page.CustomFood.Edit`
+
+Custom foods use the same catalog model as imported/global foods, scoped by
+user ownership.
+
+### Logs
+
+`Page.FoodLog.Entry` supports viewing, editing quantity/unit/meal slot/notes,
+and deleting a log.
+
+Editing logged timestamp or swapping the selected item is intentionally not
+required for current scope.
+
+### Meals
+
+- `Page.Meal.List`
+- `Page.Meal.Show`
+- `Page.Meal.Create`
+- `Page.Meal.Edit`
+- `Page.Meal.Form`
+
+Meal forms edit components inside the aggregate. There are no independent
+component screens.
 
 ## Design Direction
 
 The UI should stay functional and food-diary oriented:
 
-- Mobile-first responsive layouts. Small screens are the primary target, so UI/UX work should be designed and reviewed on mobile widths first.
-- Fast repeated logging.
-- Dense enough for daily use without becoming a spreadsheet.
-- No marketing landing page.
-- No analytics dashboard unless product scope changes.
+- mobile-first responsive layouts. Small screens are the primary target.
+- fast repeated logging.
+- dense enough for daily use without becoming a spreadsheet.
+- no marketing landing page.
+- no analytics dashboard unless product scope changes.
 
-Search, diary, and logging surfaces should prioritize compact, scannable controls and rows. Avoid oversized cards, large text that truncates early, or layouts that only work comfortably on desktop widths.
+Search, diary, and logging surfaces should prioritize compact, scannable
+controls and rows. Avoid oversized cards, large text that truncates early, or
+layouts that only work comfortably on desktop widths.
 
 ## Design System
 
-Shared primitives live in `frontend-web/src/Ui.elm`. Prefer extending these helpers before styling one-off page elements.
+Shared primitives live in `frontend-web/src/Ui.elm`. Prefer extending these
+helpers before styling one-off page elements.
 
 Current visual language:
 
 - `elm-ui` layout primitives, not CSS utility classes.
 - Inter/system sans typography.
-- Light theme page background `#f4f6f8`.
-- White cards with 20px radius, 20px padding, and 12px internal spacing.
-- Primary action color `#4b91cf` in light mode.
-- Danger action color `#ff6b7a` in light mode.
-- Muted gray text for captions and secondary content.
-- Macro colors: protein pink/red, carbs green, fat amber.
+- light theme page background `#f4f6f8`.
+- white cards with 20px radius, 20px padding, and 12px internal spacing.
+- primary action color `#4b91cf` in light mode.
+- danger action color `#ff6b7a` in light mode.
+- muted gray text for captions and secondary content.
+- macro colors: protein pink/red, carbs green, fat amber.
 
 Typography tokens in `Ui.elm` are intentionally restrained:
 
@@ -337,13 +553,22 @@ caption  12px
 
 Control conventions:
 
-- Use `Ui.button`, `Ui.submitButton`, `Ui.dangerButton`, and `Ui.smallButton` for actions.
-- Use `Ui.input`, `Ui.passwordInput`, `Ui.select`, or `Ui.selectDropdown` for form fields.
-- Use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and `Ui.skeletonLoading` for common states.
-- Use `Ui.badge` for compact metadata.
-- Use `Ui.macroBar` for macro summaries.
+- use `Ui.button`, `Ui.submitButton`, `Ui.dangerButton`, and `Ui.smallButton`
+  for actions.
+- use `Ui.input`, `Ui.passwordInput`, `Ui.select`, or `Ui.selectDropdown` for
+  form fields.
+- use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and
+  `Ui.skeletonLoading` for common states.
+- use `Ui.badge` for compact metadata.
+- use `Ui.macroBar` for macro summaries.
 
-Keep page-specific layout inside the owning page module, but shared look and feel should stay in `Ui.elm`.
+Rules:
+
+- prefer existing `Ui.*` primitives before building local one-off styles.
+- move a pattern into `Ui` or `View` once it is reused or clearly foundational.
+- keep page-specific layout in the owning page module.
+- do not bypass `elm-ui` with ad hoc CSS-heavy page structures unless the
+  browser integration genuinely requires it.
 
 ## Tests
 
@@ -366,6 +591,16 @@ cd frontend-web
 elm-test
 ```
 
+Useful frontend-web checks:
+
+```bash
+nix develop -c just frontend-web-line-length
+nix develop -c just frontend-web-review
+nix develop -c just frontend-web-test
+nix develop -c just frontend-web-format
+nix develop -c just frontend-web-build
+```
+
 Build:
 
 ```bash
@@ -378,16 +613,6 @@ Or directly:
 cd frontend-web
 mkdir -p dist
 elm make src/Main.elm --output=dist/main.js
-```
-
-Useful frontend-web checks:
-
-```bash
-nix develop -c just frontend-web-format
-nix develop -c just frontend-web-review
-nix develop -c just frontend-web-line-length
-nix develop -c just frontend-web-test
-nix develop -c just frontend-web-build
 ```
 
 No browser e2e suite is configured at the moment.
