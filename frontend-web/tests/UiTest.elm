@@ -22,6 +22,7 @@ import Element
 import Expect
 import Test exposing (Test, describe, test)
 import Ui
+import Ui.Icon as Icon
 import Ui.Theme as Theme exposing (Theme)
 import View.Charts
 
@@ -149,19 +150,23 @@ truncationHelpers =
 renderingSmoke : Test
 renderingSmoke =
     describe "new components (smoke)"
-        [ test "iconButton does not crash on empty label" <|
+        [ test "iconButton does not crash on valid icon" <|
             \_ ->
-                Ui.iconButton phone theme { label = "", title = "Empty", onPress = () }
+                Ui.iconButton phone
+                    theme
+                    { icon = Icon.ChevronLeft, title = "Back", onPress = () }
                     |> pass
-        , test "iconButton renders with a glyph" <|
+        , test "iconButton renders an SVG icon" <|
             \_ ->
-                Ui.iconButton phone theme { label = "←", title = "Back", onPress = () }
+                Ui.iconButton phone
+                    theme
+                    { icon = Icon.ChevronLeft, title = "Back", onPress = () }
                     |> pass
-        , test "dangerIconButton renders with a glyph" <|
+        , test "dangerIconButton renders an SVG icon" <|
             \_ ->
                 Ui.dangerIconButton phone
                     theme
-                    { label = "×", title = "Delete", onPress = () }
+                    { icon = Icon.Close, title = "Delete", onPress = () }
                     |> pass
         , test "fieldLabel renders with a label" <|
             \_ -> Ui.fieldLabel theme "Amount" |> pass

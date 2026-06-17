@@ -26,6 +26,7 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Icon as Icon
 import Ui.Theme exposing (Mode(..), Theme)
 import View.Nutrients
 
@@ -422,7 +423,7 @@ dateCard theme model device =
             ]
             [ Ui.iconButton device
                 theme
-                { label = "←", title = "Previous Day", onPress = PreviousDayClicked }
+                { icon = Icon.ChevronLeft, title = "Previous Day", onPress = PreviousDayClicked }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
@@ -431,10 +432,10 @@ dateCard theme model device =
             , if canGoNext then
                 Ui.iconButton device
                     theme
-                    { label = "→", title = "Next Day", onPress = NextDayClicked }
+                    { icon = Icon.ChevronRight, title = "Next Day", onPress = NextDayClicked }
 
               else
-                Ui.disabledIconButton theme { label = "→" }
+                Ui.disabledIconButton theme { icon = Icon.ChevronRight }
             ]
         , Ui.hairline theme
         , Element.column

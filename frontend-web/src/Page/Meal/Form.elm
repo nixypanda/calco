@@ -37,6 +37,7 @@ import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Ui
+import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
@@ -694,7 +695,7 @@ componentRowView theme device toMsg row =
             , Element.el [ Element.centerY ]
                 (Ui.dangerIconButton device
                     theme
-                    { label = "×"
+                    { icon = Icon.Close
                     , title = "Remove"
                     , onPress = toMsg (RemoveComponentClicked row.rowId)
                     }

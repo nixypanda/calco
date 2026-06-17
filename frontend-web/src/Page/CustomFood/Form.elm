@@ -36,6 +36,7 @@ import Element.Input as Input
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
 import Ui
+import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -814,7 +815,9 @@ categoryInputView theme device open input =
 
 addCategoryButton : Theme -> Device -> CategoryInput -> Element Msg
 addCategoryButton theme device input =
-    Ui.iconButton device theme { label = "+", title = "Edit", onPress = AddCategory input.query }
+    Ui.iconButton device
+        theme
+        { icon = Icon.Plus, title = "Add category", onPress = AddCategory input.query }
 
 
 chipRowView : Theme -> Device -> List String -> Element Msg
@@ -917,7 +920,7 @@ nutrientRowView theme device nutrients openDropdown index row =
         removeButton =
             rowActionButton theme
                 device
-                { label = "×"
+                { icon = Icon.Close
                 , title = "Remove"
                 , onPress = RemoveNutrientRow index
                 }
@@ -1021,7 +1024,7 @@ servingRowView theme device units openDropdown index row =
                 )
             , rowActionButton theme
                 device
-                { label = "×"
+                { icon = Icon.Close
                 , title = "Remove"
                 , onPress = RemoveServingRow index
                 }
@@ -1032,7 +1035,7 @@ servingRowView theme device units openDropdown index row =
 rowActionButton :
     Theme
     -> Device
-    -> { label : String, title : String, onPress : msg }
+    -> { icon : Icon, title : String, onPress : msg }
     -> Element msg
 rowActionButton theme device config =
     Element.el

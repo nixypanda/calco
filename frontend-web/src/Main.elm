@@ -17,9 +17,12 @@ import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
+import Element.Input as Input
 import Element.Region as Region
 import Html
+import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -44,6 +47,7 @@ import Session exposing (Session)
 import Task
 import Time
 import Ui
+import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme as Theme exposing (Mode, Theme)
 import Url exposing (Url)
 
@@ -1298,7 +1302,14 @@ appFrame model =
         chromeAttrs : List (Element.Attribute Msg)
         chromeAttrs =
             if useBottomNav then
-                [ Element.inFront (bottomNavBar model) ]
+                [ Element.inFront
+                    (Element.el
+                        [ Element.width Element.fill
+                        , Element.alignBottom
+                        ]
+                        (bottomNavBar model)
+                    )
+                ]
 
             else
                 drawerOverlay model
@@ -1335,14 +1346,14 @@ showBottomNav model =
 bottomNavBar : Model -> Element Msg
 bottomNavBar model =
     Ui.bottomNavBar model.theme
-        [ tabButton model "⌂" "Diary" (DiaryDay Nothing)
-        , tabButton model "🔍︎" "Search" (FoodSearch Nothing Nothing)
-        , tabButton model "◉" "Foods" CustomFoodList
-        , tabButton model "🍽" "Meals" MealList
+        [ tabButton model Icon.Home "Diary" (DiaryDay Nothing)
+        , tabButton model Icon.Search "Search" (FoodSearch Nothing Nothing)
+        , tabButton model Icon.Box "Foods" CustomFoodList
+        , tabButton model Icon.Utensils "Meals" MealList
         ]
 
 
-tabButton : Model -> String -> String -> Route -> Element Msg
+tabButton : Model -> Icon -> String -> Route -> Element Msg
 tabButton model icon label target =
     let
         active : Bool
@@ -1425,10 +1436,12 @@ leadingButton : Element.Device -> Theme -> LeadingAction -> Element Msg
 leadingButton device theme leading =
     case leading of
         OpenMenu ->
-            Ui.iconButton device theme { label = "☰", title = "Menu", onPress = MenuClicked }
+            Ui.iconButton device theme { icon = Icon.Menu, title = "Menu", onPress = MenuClicked }
 
         GoBack route ->
-            Ui.iconButton device theme { label = "←", title = "Back", onPress = NavigateTo route }
+            Ui.iconButton device
+                theme
+                { icon = Icon.ChevronLeft, title = "Back", onPress = NavigateTo route }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -1448,10 +1461,26 @@ profileButton model =
     in
     Element.el
         (profileMenuAnchor model)
-        (Ui.iconButton model.device
-            model.theme
-            { label = letter, title = "Profile", onPress = ProfileClicked }
-        )
+        (profileInitialButton model.theme letter)
+
+
+profileInitialButton : Theme -> String -> Element Msg
+profileInitialButton theme label =
+    Input.button
+        [ Element.width (Element.px 44)
+        , Element.height (Element.px 44)
+        , Background.color theme.cardBg
+        , Font.color theme.textPrimary
+        , Font.center
+        , Border.rounded Ui.radiusPill
+        , Border.width 1
+        , Border.color theme.divider
+        , Element.htmlAttribute (Html.Attributes.title "Profile")
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" "Profile")
+        ]
+        { onPress = Just ProfileClicked
+        , label = Element.text label
+        }
 
 
 profileMenuAnchor : Model -> List (Element.Attribute Msg)
@@ -1608,7 +1637,7 @@ drawerView model =
         (Element.row [ Element.spacing Ui.space8 ]
             [ Ui.iconButton model.device
                 model.theme
-                { label = "☰", title = "Close", onPress = DrawerClosed }
+                { icon = Icon.Menu, title = "Close", onPress = DrawerClosed }
             , Ui.sectionTitle model.theme model.device "CalCo"
             ]
             :: Ui.hairline model.theme

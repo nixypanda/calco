@@ -110,6 +110,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
+import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 
 
@@ -1086,19 +1087,24 @@ bottomNavBar theme items =
 
 bottomNavTab :
     Theme
-    -> { icon : String, label : String, active : Bool, onPress : msg }
+    -> { icon : Icon, label : String, active : Bool, onPress : msg }
     -> Element msg
 bottomNavTab theme config =
+    let
+        iconColor : Element.Color
+        iconColor =
+            if config.active then
+                theme.brandBlue
+
+            else
+                theme.textMuted
+    in
     Input.button
         [ Element.width (Element.fillPortion 1)
         , Element.height Element.fill
+        , Element.paddingEach { top = 6, right = 0, bottom = 4, left = 0 }
         , Font.color
-            (if config.active then
-                theme.brandBlue
-
-             else
-                theme.textMuted
-            )
+            iconColor
         , Border.widthEach
             { top =
                 if config.active then
@@ -1119,7 +1125,13 @@ bottomNavTab theme config =
                 , Element.centerY
                 , Element.spacing 2
                 ]
-                [ Element.el [ Element.centerX ] (Element.text config.icon)
+                [ Element.el [ Element.centerX ]
+                    (Icon.view
+                        { icon = config.icon
+                        , size = 22
+                        , color = iconColor
+                        }
+                    )
                 , Element.el
                     [ Element.centerX
                     , Font.size 11
@@ -1587,13 +1599,16 @@ selectDropdown device theme config =
                                     selectedLabel
                                 )
                             )
-                        , Element.text
-                            (if config.isOpen then
-                                "▲"
+                        , Icon.view
+                            { icon =
+                                if config.isOpen then
+                                    Icon.ChevronUp
 
-                             else
-                                "▼"
-                            )
+                                else
+                                    Icon.ChevronDown
+                            , size = 20
+                            , color = theme.textMuted
+                            }
                         ]
                 }
             )
@@ -1707,7 +1722,7 @@ truncatedHeader theme device heading =
         (Element.text (truncateWithEllipsis (truncationCap device) heading))
 
 
-iconButton : Device -> Theme -> { label : String, title : String, onPress : msg } -> Element msg
+iconButton : Device -> Theme -> { icon : Icon, title : String, onPress : msg } -> Element msg
 iconButton device theme config =
     Input.button
         [ Element.width (Element.px 44)
@@ -1726,16 +1741,33 @@ iconButton device theme config =
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = Just config.onPress
-        , label = Element.text config.label
+        , label =
+            Element.el [ Element.centerX, Element.centerY ]
+                (Icon.view
+                    { icon = config.icon
+                    , size = 22
+                    , color = theme.textPrimary
+                    }
+                )
         }
 
 
 dangerIconButton :
     Device
     -> Theme
-    -> { label : String, title : String, onPress : msg }
+    -> { icon : Icon, title : String, onPress : msg }
     -> Element msg
 dangerIconButton device theme config =
+    let
+        iconSize : Int
+        iconSize =
+            case config.icon of
+                Icon.Close ->
+                    18
+
+                _ ->
+                    22
+    in
     Input.button
         [ Element.width (Element.px 44)
         , Element.height (Element.px 44)
@@ -1754,11 +1786,18 @@ dangerIconButton device theme config =
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = Just config.onPress
-        , label = Element.text config.label
+        , label =
+            Element.el [ Element.centerX, Element.centerY ]
+                (Icon.view
+                    { icon = config.icon
+                    , size = iconSize
+                    , color = theme.dangerFg
+                    }
+                )
         }
 
 
-disabledIconButton : Theme -> { label : String } -> Element msg
+disabledIconButton : Theme -> { icon : Icon } -> Element msg
 disabledIconButton theme config =
     Input.button
         [ Element.width (Element.px 40)
@@ -1769,7 +1808,14 @@ disabledIconButton theme config =
         , Border.rounded radiusPill
         ]
         { onPress = Nothing
-        , label = Element.text config.label
+        , label =
+            Element.el [ Element.centerX, Element.centerY ]
+                (Icon.view
+                    { icon = config.icon
+                    , size = 22
+                    , color = theme.textMuted
+                    }
+                )
         }
 
 
@@ -1844,7 +1890,14 @@ removableChip device theme config =
                 ]
             ]
             { onPress = Just config.onRemove
-            , label = Element.text "×"
+            , label =
+                Element.el [ Element.centerX, Element.centerY ]
+                    (Icon.view
+                        { icon = Icon.Close
+                        , size = 16
+                        , color = theme.dangerFg
+                        }
+                    )
             }
         ]
 
