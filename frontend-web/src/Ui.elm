@@ -15,16 +15,13 @@ module Ui exposing
     , button
     , caption
     , card
-    , cardActions
     , chip
     , chipBackground
     , chips
     , coloredPill
     , completionDropdown
     , completionRow
-    , dangerButton
     , dangerIconButton
-    , dangerPanel
     , detailRow
     , disabledIconButton
     , dotSeparated
@@ -34,6 +31,7 @@ module Ui exposing
     , errorBanner
     , fieldLabel
     , formSection
+    , fullWidthDangerButton
     , fullWidthGhostButton
     , ghostButton
     , hairline
@@ -189,11 +187,6 @@ radiusSmall =
 radiusControl : Int
 radiusControl =
     12
-
-
-radiusPanel : Int
-radiusPanel =
-    16
 
 
 radiusCard : Int
@@ -571,16 +564,6 @@ macroDotGhost =
         Element.none
 
 
-cardActions : List (Element msg) -> Element msg
-cardActions buttons =
-    Element.row
-        [ Element.width Element.fill
-        , Element.paddingEach { top = 12, right = 0, bottom = 0, left = 0 }
-        , Element.spacing space12
-        ]
-        buttons
-
-
 section :
     Theme
     ->
@@ -748,28 +731,6 @@ errorBanner theme message =
         (Element.text message)
 
 
-dangerPanel :
-    Theme
-    -> { title : String, body : List (Element msg) }
-    -> Element msg
-dangerPanel theme config =
-    Element.column
-        [ Element.width Element.fill
-        , Background.color theme.statusDisabledBg
-        , Border.rounded radiusPanel
-        , Element.padding space16
-        , Element.spacing space12
-        ]
-        (Element.el
-            [ Font.medium
-            , body
-            , Font.color theme.dangerFg
-            ]
-            (Element.text config.title)
-            :: config.body
-        )
-
-
 
 -- Buttons
 
@@ -798,6 +759,7 @@ type SubmitState
 
 type BottomActionTone
     = PrimaryAction
+    | SecondaryAction
     | DangerAction
 
 
@@ -880,6 +842,9 @@ bottomActionButtons device theme buttons =
                     PrimaryAction ->
                         primaryActionButton device theme config.label config.onPress
 
+                    SecondaryAction ->
+                        fullWidthGhostButton device theme config.label config.onPress
+
                     DangerAction ->
                         fullWidthDangerButton device theme config.label config.onPress
                 )
@@ -912,22 +877,6 @@ bottomActionButtons device theme buttons =
                 , Element.spacing space12
                 ]
                 buttonElements
-
-
-dangerButton : Device -> Theme -> String -> msg -> Element msg
-dangerButton device theme label msg =
-    Input.button
-        [ Background.color theme.dangerSolid
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , Element.paddingEach { top = 14, right = 18, bottom = 14, left = 18 }
-        , Font.medium
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.dangerFg ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
 
 
 primaryActionButton : Device -> Theme -> String -> msg -> Element msg

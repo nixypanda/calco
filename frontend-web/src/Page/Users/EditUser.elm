@@ -259,7 +259,7 @@ view { model, device, theme } =
         (errorView theme model.status
             ++ userInfoView device theme model
             ++ resetPasswordView device theme model
-            ++ enableDisableView device theme model
+            ++ accountActionView device theme model
         )
 
 
@@ -286,26 +286,47 @@ resetPasswordView device theme model =
                 , value = currentPassword model.status
                 , onChange = PasswordChanged
                 }
-            , Ui.button device theme "Reset Password" ResetSubmitted
+            , Ui.fullWidthGhostButton
+                device
+                theme
+                (if isResetPending model.status then
+                    "Resetting..."
+
+                 else
+                    "Reset Password"
+                )
+                ResetSubmitted
             ]
         ]
     ]
 
 
-enableDisableView : Device -> Theme -> Model -> List (Element Msg)
-enableDisableView device theme model =
+accountActionView : Device -> Theme -> Model -> List (Element Msg)
+accountActionView device theme model =
     case model.status of
         Loaded loadedUser _ ->
-            [ Ui.card theme
-                [ Ui.dangerPanel theme
-                    { title = "Danger Zone"
-                    , body =
-                        [ if loadedUser.user.status == "active" then
-                            Ui.dangerButton device theme "Disable User" DisableClicked
+            [ Ui.bottomActionButtons device
+                theme
+                [ if loadedUser.user.status == "active" then
+                    { label =
+                        if isDisablePending model.status then
+                            "Disabling..."
 
-                          else
-                            Ui.button device theme "Enable User" EnableClicked
-                        ]
+                        else
+                            "Disable User"
+                    , onPress = DisableClicked
+                    , tone = Ui.DangerAction
+                    }
+
+                  else
+                    { label =
+                        if isEnablePending model.status then
+                            "Enabling..."
+
+                        else
+                            "Enable User"
+                    , onPress = EnableClicked
+                    , tone = Ui.PrimaryAction
                     }
                 ]
             ]
@@ -322,6 +343,36 @@ currentPassword status =
 
         _ ->
             ""
+
+
+isResetPending : Status -> Bool
+isResetPending status =
+    case status of
+        Loaded _ ResettingPassword ->
+            True
+
+        _ ->
+            False
+
+
+isDisablePending : Status -> Bool
+isDisablePending status =
+    case status of
+        Loaded _ DisablingUser ->
+            True
+
+        _ ->
+            False
+
+
+isEnablePending : Status -> Bool
+isEnablePending status =
+    case status of
+        Loaded _ EnablingUser ->
+            True
+
+        _ ->
+            False
 
 
 errorView : Theme -> Status -> List (Element msg)

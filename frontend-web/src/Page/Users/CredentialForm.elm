@@ -127,31 +127,36 @@ view config { model, device, theme } =
         , Element.width (Element.fill |> Element.maximum 420)
         , Element.padding outerPadding
         ]
-        (Ui.card theme
-            ([ Ui.pageTitle theme device "CalCo"
-             , Ui.subsectionTitle theme device config.title
-             ]
-                ++ descriptionView theme config.description
-                ++ [ Ui.input theme
-                        { label = "Username"
-                        , value = form.username
-                        , onChange = UsernameChanged
-                        }
-                   , Ui.passwordInput theme
-                        { label = "Password"
-                        , value = form.password
-                        , onChange = PasswordChanged
-                        }
-                   , Ui.maybeErrorBanner theme (errorMessage model)
-                   , Ui.primarySubmitButton device
-                        theme
-                        { state = Ui.submittingOrIdle (isSubmitting model)
-                        , idleLabel = config.submitLabel
-                        , submittingLabel = config.submittingLabel
-                        , onPress = Submitted
-                        }
-                   ]
-            )
+        (Element.column
+            [ Element.width Element.fill
+            , Element.spacing Ui.space16
+            ]
+            [ Ui.card theme
+                ([ Ui.pageTitle theme device "CalCo"
+                 , Ui.subsectionTitle theme device config.title
+                 ]
+                    ++ descriptionView theme config.description
+                    ++ [ Ui.input theme
+                            { label = "Username"
+                            , value = form.username
+                            , onChange = UsernameChanged
+                            }
+                       , Ui.passwordInput theme
+                            { label = "Password"
+                            , value = form.password
+                            , onChange = PasswordChanged
+                            }
+                       , Ui.maybeErrorBanner theme (errorMessage model)
+                       ]
+                )
+            , Ui.primarySubmitButton device
+                theme
+                { state = Ui.submittingOrIdle (isSubmitting model)
+                , idleLabel = config.submitLabel
+                , submittingLabel = config.submittingLabel
+                , onPress = Submitted
+                }
+            ]
         )
 
 

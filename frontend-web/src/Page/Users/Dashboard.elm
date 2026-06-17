@@ -95,7 +95,8 @@ bodyView device theme model =
                                 { user = user, onSelect = NavigateEditUser }
                         )
                         users
-                , footer = Just (Ui.ghostButton device theme "+ Create User" NavigateCreateUser)
+                , footer =
+                    Just (Ui.fullWidthGhostButton device theme "+ Create User" NavigateCreateUser)
                 }
 
         Loading ->

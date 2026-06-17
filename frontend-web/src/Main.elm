@@ -1727,8 +1727,8 @@ profileMenuContent model =
             _ ->
                 "Signed in"
         )
-    , Ui.ghostButton model.device model.theme "Goals" (NavigateTo GoalSettings)
-    , Ui.button model.device model.theme "Logout" LogoutClicked
+    , Ui.fullWidthGhostButton model.device model.theme "Goals" (NavigateTo GoalSettings)
+    , Ui.fullWidthDangerButton model.device model.theme "Logout" LogoutClicked
     ]
 
 

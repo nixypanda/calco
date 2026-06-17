@@ -239,6 +239,14 @@ renderingSmoke =
                 Ui.toggleSwitch theme
                     { isActive = False, onToggle = () }
                     |> pass
+        , test "bottomActionButtons renders a secondary action" <|
+            \_ ->
+                Ui.bottomActionButtons phone
+                    theme
+                    [ { label = "Cancel", onPress = (), tone = Ui.SecondaryAction }
+                    , { label = "Delete", onPress = (), tone = Ui.DangerAction }
+                    ]
+                    |> pass
         , test "macroColor resolves Protein to the theme protein accent" <|
             \_ ->
                 Ui.macroColor theme Data.Nutrition.Protein

@@ -235,7 +235,13 @@ bodyView theme model device =
             if List.isEmpty items then
                 Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
                     [ Ui.emptyState theme "No foods found. Try a different search."
-                    , Ui.button device theme "Create Custom Food" CreateCustomFoodClicked
+                    , Ui.primarySubmitButton device
+                        theme
+                        { state = Ui.Idle
+                        , idleLabel = "Create Custom Food"
+                        , submittingLabel = "Create Custom Food"
+                        , onPress = CreateCustomFoodClicked
+                        }
                     ]
 
             else

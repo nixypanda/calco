@@ -204,10 +204,26 @@ view { model, device, theme } =
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
-                    , Ui.button device theme "Save" Submitted
                     ]
+               , Ui.primarySubmitButton device
+                    theme
+                    { state = Ui.submittingOrIdle (isSubmitting model)
+                    , idleLabel = "Save"
+                    , submittingLabel = "Saving..."
+                    , onPress = Submitted
+                    }
                ]
         )
+
+
+isSubmitting : Model -> Bool
+isSubmitting model =
+    case model of
+        Submitting _ ->
+            True
+
+        _ ->
+            False
 
 
 errorView : Theme -> Model -> List (Element msg)

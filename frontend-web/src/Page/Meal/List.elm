@@ -95,7 +95,8 @@ bodyView theme device model =
         Loaded meals ->
             Ui.listCard theme
                 { rows = List.map (mealRow theme device) meals
-                , footer = Just (Ui.ghostButton device theme "+ Create Meal" CreateMealClicked)
+                , footer =
+                    Just (Ui.fullWidthGhostButton device theme "+ Create Meal" CreateMealClicked)
                 }
 
         LoadFailed _ ->

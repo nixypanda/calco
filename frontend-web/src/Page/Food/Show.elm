@@ -393,30 +393,33 @@ loadedView theme device loaded =
         ]
         [ foodHeader theme device food
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
-        , Ui.cardActions
-            [ Ui.primarySubmitButton device
-                theme
-                { state = Ui.submittingOrIdle (loaded.request == Saving)
-                , idleLabel = "Log Food"
-                , submittingLabel = "Logging..."
-                , onPress = SubmitClicked
-                }
-            ]
-            |> (\actions ->
-                    if Ui.isSmall device then
-                        Element.el
-                            [ Element.htmlAttribute
-                                (Html.Attributes.style "padding-bottom"
-                                    "calc(14px + env(safe-area-inset-bottom))"
-                                )
-                            ]
-                            actions
-
-                    else
-                        actions
-               )
+        , submitActionView theme device loaded.request
         , View.Nutrients.nutritionCard theme device nutrients
         ]
+
+
+submitActionView : Theme -> Device -> RequestState -> Element Msg
+submitActionView theme device requestState =
+    Ui.primarySubmitButton device
+        theme
+        { state = Ui.submittingOrIdle (requestState == Saving)
+        , idleLabel = "Log Food"
+        , submittingLabel = "Logging..."
+        , onPress = SubmitClicked
+        }
+        |> (\button ->
+                if Ui.isSmall device then
+                    Element.el
+                        [ Element.htmlAttribute
+                            (Html.Attributes.style "padding-bottom"
+                                "calc(14px + env(safe-area-inset-bottom))"
+                            )
+                        ]
+                        button
+
+                else
+                    button
+           )
 
 
 foodNutrientsForDisplay : ProductDetail -> FoodLogForm.Model -> List Nutrition.NutrientAmount
