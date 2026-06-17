@@ -819,9 +819,16 @@ logRow theme device log =
             else
                 Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
                     [ View.Nutrients.macroDot log.nutrients
-                    , Ui.wrappedListItemTitle theme log.item.name
-                    , Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
-                    , Ui.mutedCaption theme
-                        (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
+                    , Element.el
+                        [ Element.width Element.fill
+                        , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
+                        ]
+                        (Ui.truncatedListItemTitle theme device log.item.name)
+                    , Element.row
+                        [ Element.alignRight, Element.spacing Ui.space12 ]
+                        [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
+                        , Ui.mutedCaption theme
+                            (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
+                        ]
                     ]
         }
