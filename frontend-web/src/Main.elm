@@ -1249,6 +1249,7 @@ type LeadingAction
     = OpenMenu
     | GoBack Route
     | NoLeadingAction
+    | ShowAppIcon
 
 
 type alias ScreenMeta =
@@ -1420,7 +1421,20 @@ topBarView model =
             ]
 
          else
-            [ Element.el [ Element.width Element.fill ] Element.none
+            [ Element.row
+                [ Element.spacing Ui.space8
+                , Element.centerY
+                ]
+                [ Element.image
+                    [ Element.width (Element.px 28)
+                    , Element.height (Element.px 28)
+                    ]
+                    { src = "/android-chrome-192x192.png"
+                    , description = "CalCo"
+                    }
+                , Ui.pageTitle model.theme model.device "CalCo"
+                ]
+            , Element.el [ Element.width Element.fill ] Element.none
             , themeToggle model
             ]
         )
@@ -1447,6 +1461,15 @@ leadingButton device theme leading =
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
+
+        ShowAppIcon ->
+            Element.image
+                [ Element.width (Element.px 28)
+                , Element.height (Element.px 28)
+                ]
+                { src = "/android-chrome-192x192.png"
+                , description = "CalCo"
+                }
 
 
 profileButton : Model -> Element Msg
@@ -1522,7 +1545,7 @@ screenMeta device session route =
             { title = "Diary"
             , leading =
                 if phoneNonAdmin then
-                    NoLeadingAction
+                    ShowAppIcon
 
                 else
                     OpenMenu
@@ -1532,7 +1555,7 @@ screenMeta device session route =
             { title = "Diary"
             , leading =
                 if phoneNonAdmin then
-                    NoLeadingAction
+                    ShowAppIcon
 
                 else
                     OpenMenu
