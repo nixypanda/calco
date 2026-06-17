@@ -20,6 +20,7 @@ we:
 import Data.Nutrition
 import Element
 import Expect
+import String
 import Test exposing (Test, describe, test)
 import Ui
 import Ui.Icon as Icon
@@ -44,6 +45,7 @@ tests : Test
 tests =
     describe "Ui"
         [ chipBehavior
+        , cssVariables
         , deviceHelpers
         , truncationHelpers
         , renderingSmoke
@@ -62,10 +64,41 @@ chipBehavior =
             \_ ->
                 Ui.chipBackground theme False
                     |> Expect.equal theme.chipBg
-        , test "uses primaryTeal background when selected" <|
+        , test "uses theme chip-selected background when selected" <|
             \_ ->
                 Ui.chipBackground theme True
-                    |> Expect.equal Ui.primaryTeal
+                    |> Expect.equal theme.chipSelectedBg
+        ]
+
+
+cssVariables : Test
+cssVariables =
+    describe "themeCssVariables"
+        [ test "includes chip-selected and focus-ring theme values" <|
+            \_ ->
+                let
+                    cssVars : String
+                    cssVars =
+                        Ui.themeCssVariables theme
+                in
+                Expect.all
+                    [ \_ ->
+                        String.contains
+                            ("--ui-chip-selected-bg: " ++ Ui.toCssColor theme.chipSelectedBg)
+                            cssVars
+                            |> Expect.equal True
+                    , \_ ->
+                        String.contains
+                            ("--ui-chip-selected-fg: " ++ Ui.toCssColor theme.chipSelectedFg)
+                            cssVars
+                            |> Expect.equal True
+                    , \_ ->
+                        String.contains
+                            ("--ui-focus-ring: " ++ Ui.toCssColor theme.focusRing)
+                            cssVars
+                            |> Expect.equal True
+                    ]
+                    ()
         ]
 
 
@@ -168,20 +201,20 @@ renderingSmoke =
                     { value = "100"
                     , unit = "kcal"
                     , label = "Calories"
-                    , color = Ui.primaryTeal
+                    , color = theme.calorieAccent
                     }
                     |> pass
         , test "statBlockGroup arranges four blocks" <|
             \_ ->
                 Ui.statBlockGroup
                     [ Ui.statBlock
-                        { value = "1", unit = "u", label = "A", color = Ui.primaryTeal }
+                        { value = "1", unit = "u", label = "A", color = theme.calorieAccent }
                     , Ui.statBlock
-                        { value = "2", unit = "u", label = "B", color = Ui.accentPink }
+                        { value = "2", unit = "u", label = "B", color = theme.proteinAccent }
                     , Ui.statBlock
-                        { value = "3", unit = "u", label = "C", color = Ui.accentYellow }
+                        { value = "3", unit = "u", label = "C", color = theme.fatAccent }
                     , Ui.statBlock
-                        { value = "4", unit = "u", label = "D", color = Ui.accentSoftGreen }
+                        { value = "4", unit = "u", label = "D", color = theme.carbsAccent }
                     ]
                     |> pass
         , test "chip renders in the unselected state" <|
@@ -206,18 +239,18 @@ renderingSmoke =
                 Ui.toggleSwitch theme
                     { isActive = False, onToggle = () }
                     |> pass
-        , test "macroColor resolves Protein to accentPink" <|
+        , test "macroColor resolves Protein to the theme protein accent" <|
             \_ ->
-                Ui.macroColor Data.Nutrition.Protein
-                    |> Expect.equal Ui.proteinColor
-        , test "macroColor resolves Carbs to accentSoftGreen" <|
+                Ui.macroColor theme Data.Nutrition.Protein
+                    |> Expect.equal theme.proteinAccent
+        , test "macroColor resolves Carbs to the theme carbs accent" <|
             \_ ->
-                Ui.macroColor Data.Nutrition.Carbs
-                    |> Expect.equal Ui.carbsColor
-        , test "macroColor resolves Fat to accentYellow" <|
+                Ui.macroColor theme Data.Nutrition.Carbs
+                    |> Expect.equal theme.carbsAccent
+        , test "macroColor resolves Fat to the theme fat accent" <|
             \_ ->
-                Ui.macroColor Data.Nutrition.Fat
-                    |> Expect.equal Ui.fatColor
+                Ui.macroColor theme Data.Nutrition.Fat
+                    |> Expect.equal theme.fatAccent
         ]
 
 
@@ -231,12 +264,12 @@ chartSmoke =
         [ test "linearProgress renders with a non-zero value" <|
             \_ ->
                 Ui.linearProgress theme
-                    { value = 75, max = 100, color = Ui.proteinColor }
+                    { value = 75, max = 100, color = theme.proteinAccent }
                     |> pass
         , test "linearProgress renders with a zero max without crashing" <|
             \_ ->
                 Ui.linearProgress theme
-                    { value = 10, max = 0, color = Ui.proteinColor }
+                    { value = 10, max = 0, color = theme.proteinAccent }
                     |> pass
         , test "verticalBarChart renders a list of bars" <|
             \_ ->

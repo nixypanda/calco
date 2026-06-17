@@ -14,7 +14,6 @@ module Ui exposing
     , bottomNavTab
     , button
     , caption
-    , carbsColor
     , card
     , cardActions
     , chip
@@ -33,7 +32,6 @@ module Ui exposing
     , drawerPanel
     , emptyState
     , errorBanner
-    , fatColor
     , fieldLabel
     , formSection
     , fullWidthGhostButton
@@ -64,8 +62,6 @@ module Ui exposing
     , pageTitle
     , passwordInput
     , primarySubmitButton
-    , primaryTeal
-    , proteinColor
     , radiusPill
     , radiusTight
     , removableChip
@@ -114,7 +110,7 @@ import Ui.Theme exposing (Theme)
 
 
 
--- Accent palette (theme-independent macro accents)
+-- Accent palette for non-semantic decorative use
 
 
 accentPink : Element.Color
@@ -130,28 +126,6 @@ accentYellow =
 accentSoftGreen : Element.Color
 accentSoftGreen =
     Element.rgb255 200 235 200
-
-
-{-| Legacy mint, kept for chip selected and accent dots.
--}
-primaryTeal : Element.Color
-primaryTeal =
-    Element.rgb255 94 224 213
-
-
-proteinColor : Element.Color
-proteinColor =
-    accentPink
-
-
-carbsColor : Element.Color
-carbsColor =
-    accentSoftGreen
-
-
-fatColor : Element.Color
-fatColor =
-    accentYellow
 
 
 
@@ -1576,17 +1550,17 @@ selectDropdown device theme config =
         ]
 
 
-macroColor : Data.Nutrition.Macro -> Element.Color
-macroColor m =
+macroColor : Theme -> Data.Nutrition.Macro -> Element.Color
+macroColor theme m =
     case m of
         Data.Nutrition.Protein ->
-            proteinColor
+            theme.proteinAccent
 
         Data.Nutrition.Carbs ->
-            carbsColor
+            theme.carbsAccent
 
         Data.Nutrition.Fat ->
-            fatColor
+            theme.fatAccent
 
 
 macroBar :
@@ -1782,7 +1756,7 @@ disabledIconButton theme config =
 chipBackground : Theme -> Bool -> Element.Color
 chipBackground theme selected =
     if selected then
-        primaryTeal
+        theme.chipSelectedBg
 
     else
         theme.chipBg
@@ -1791,7 +1765,7 @@ chipBackground theme selected =
 chipForeground : Theme -> Bool -> Element.Color
 chipForeground theme selected =
     if selected then
-        Element.rgb255 255 255 255
+        theme.chipSelectedFg
 
     else
         theme.textPrimary
@@ -1905,9 +1879,9 @@ themeCssVariables theme =
         , "--ui-chip-bg: " ++ toCssColor theme.chipBg
         , "--ui-chip-border: " ++ toCssColor theme.chipBorder
         , "--ui-chip-fg: " ++ toCssColor theme.textPrimary
-        , "--ui-chip-selected-bg: " ++ toCssColor primaryTeal
-        , "--ui-chip-selected-fg: rgba(255, 255, 255, 1)"
-        , "--ui-focus-ring: " ++ toCssColor primaryTeal
+        , "--ui-chip-selected-bg: " ++ toCssColor theme.chipSelectedBg
+        , "--ui-chip-selected-fg: " ++ toCssColor theme.chipSelectedFg
+        , "--ui-focus-ring: " ++ toCssColor theme.focusRing
         ]
 
 

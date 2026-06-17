@@ -132,14 +132,14 @@ nutrientLabel code =
             genericNutrientLabel code
 
 
-macroDot : List NutrientAmount -> Element msg
-macroDot nutrients =
-    case nutrients |> Nutrition.dominantMacro |> Maybe.map Ui.macroColor of
+macroDot : Theme -> List NutrientAmount -> Element msg
+macroDot theme nutrients =
+    case nutrients |> Nutrition.dominantMacro |> Maybe.map (Ui.macroColor theme) of
         Just c ->
             Ui.accentDot c
 
         Nothing ->
-            Ui.accentDot Ui.primaryTeal
+            Ui.accentDot theme.calorieAccent
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.
@@ -310,7 +310,7 @@ macroBreakdownView theme device nutrients =
             Element.none
 
           else
-            macroLegend portions
+            macroLegend theme portions
         ]
 
 
@@ -365,9 +365,9 @@ macroBarRow theme height portions =
         , Border.rounded Ui.radiusPill
         , Element.clip
         ]
-        [ barSegment Ui.proteinColor portions.proteinPct
-        , barSegment Ui.carbsColor portions.carbsPct
-        , barSegment Ui.fatColor portions.fatPct
+        [ barSegment theme.proteinAccent portions.proteinPct
+        , barSegment theme.carbsAccent portions.carbsPct
+        , barSegment theme.fatAccent portions.fatPct
         ]
 
 
@@ -381,22 +381,22 @@ barSegment color pct =
         Element.none
 
 
-macroLegend : MacroPortions -> Element msg
-macroLegend portions =
+macroLegend : Theme -> MacroPortions -> Element msg
+macroLegend theme portions =
     Element.row
         [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ Element.row [ Element.spacing Ui.space4 ]
-            [ legendDot Ui.proteinColor
+            [ legendDot theme.proteinAccent
             , Element.el [ Ui.body ]
                 (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
             ]
         , Element.row [ Element.spacing Ui.space4 ]
-            [ legendDot Ui.carbsColor
+            [ legendDot theme.carbsAccent
             , Element.el [ Ui.body ]
                 (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
             ]
         , Element.row [ Element.spacing Ui.space4 ]
-            [ legendDot Ui.fatColor
+            [ legendDot theme.fatAccent
             , Element.el [ Ui.body ]
                 (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
             ]

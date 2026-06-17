@@ -547,7 +547,7 @@ headerView theme device model =
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
-                            (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                            (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
                 , title = Ui.truncatedHeader theme device loaded.meal.name
                 , subtitle = Nothing
                 , actions = []
@@ -589,7 +589,7 @@ componentView theme loaded component =
         macroDot =
             Maybe.withDefault Element.none
                 (Maybe.map
-                    (View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                    (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
                     component.nutritionSummary
                 )
 

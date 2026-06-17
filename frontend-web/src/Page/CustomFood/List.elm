@@ -111,7 +111,7 @@ foodRow theme _ food =
     let
         macroDot : Element Msg
         macroDot =
-            View.Nutrients.macroDot
+            View.Nutrients.macroDot theme
                 (food.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
     in
     Ui.listRow

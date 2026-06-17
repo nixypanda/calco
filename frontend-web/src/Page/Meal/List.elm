@@ -112,7 +112,10 @@ mealRow theme _ meal =
         macroDot =
             Maybe.withDefault []
                 (Maybe.map
-                    (List.singleton << View.Nutrients.macroDot << Nutrition.summaryToNutrients)
+                    (List.singleton
+                        << View.Nutrients.macroDot theme
+                        << Nutrition.summaryToNutrients
+                    )
                     meal.nutritionSummary
                 )
     in

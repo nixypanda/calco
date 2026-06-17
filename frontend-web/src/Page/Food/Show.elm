@@ -451,7 +451,7 @@ foodHeader theme device food =
     in
     Ui.card theme
         [ Ui.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot macroNutrients)
+            { leading = Just (View.Nutrients.macroDot theme macroNutrients)
             , title = Ui.truncatedHeader theme device food.name
             , subtitle = Just (metaText food)
             , actions = []

@@ -22,6 +22,8 @@ type alias Theme =
     , cardBg : Color
     , chipBg : Color
     , chipBorder : Color
+    , chipSelectedBg : Color
+    , chipSelectedFg : Color
     , textPrimary : Color
     , textMuted : Color
     , textMedium : Color
@@ -39,6 +41,11 @@ type alias Theme =
     , statusRed : Color
     , statusActiveBg : Color
     , statusDisabledBg : Color
+    , focusRing : Color
+    , calorieAccent : Color
+    , proteinAccent : Color
+    , carbsAccent : Color
+    , fatAccent : Color
     , cardShadow : String
     }
 
@@ -50,6 +57,8 @@ light =
     , cardBg = rgb255 255 255 255
     , chipBg = rgb255 236 240 244
     , chipBorder = rgb255 218 224 232
+    , chipSelectedBg = rgb255 94 224 213
+    , chipSelectedFg = rgb255 255 255 255
     , textPrimary = rgb255 28 32 44
     , textMuted = rgb255 120 124 140
     , textMedium = rgb255 64 70 84
@@ -67,6 +76,11 @@ light =
     , statusRed = rgb255 180 60 80
     , statusActiveBg = rgb255 200 235 200
     , statusDisabledBg = rgb255 255 200 210
+    , focusRing = rgb255 94 224 213
+    , calorieAccent = rgb255 94 224 213
+    , proteinAccent = rgb255 255 138 170
+    , carbsAccent = rgb255 200 235 200
+    , fatAccent = rgb255 255 210 80
     , cardShadow = "0 4px 16px rgba(28, 32, 44, 0.06)"
     }
 
@@ -78,6 +92,8 @@ dark =
     , cardBg = rgb255 28 32 40
     , chipBg = rgb255 42 47 58
     , chipBorder = rgb255 58 66 80
+    , chipSelectedBg = rgb255 46 155 146
+    , chipSelectedFg = rgb255 237 252 250
     , textPrimary = rgb255 232 234 240
     , textMuted = rgb255 148 152 168
     , textMedium = rgb255 192 196 208
@@ -95,6 +111,11 @@ dark =
     , statusRed = rgb255 255 130 150
     , statusActiveBg = rgb255 60 110 70
     , statusDisabledBg = rgb255 110 50 60
+    , focusRing = rgb255 104 226 214
+    , calorieAccent = rgb255 78 208 196
+    , proteinAccent = rgb255 255 158 188
+    , carbsAccent = rgb255 126 192 136
+    , fatAccent = rgb255 242 196 96
     , cardShadow = "0 4px 16px rgba(0, 0, 0, 0.4)"
     }
 

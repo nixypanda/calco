@@ -459,28 +459,28 @@ totalsView theme targets summary =
             { label = "Calories"
             , value = dailyCalories summary
             , unit = "kcal"
-            , color = Ui.primaryTeal
+            , color = theme.calorieAccent
             , max = targets.calorieTarget
             }
         , Ui.macroBar theme
             { label = "Protein"
             , value = summaryAmount "PROTEIN_G" summary
             , unit = "g"
-            , color = Ui.proteinColor
+            , color = theme.proteinAccent
             , max = targets.proteinTargetG
             }
         , Ui.macroBar theme
             { label = "Carbs"
             , value = summaryAmount "CARBS_G" summary
             , unit = "g"
-            , color = Ui.carbsColor
+            , color = theme.carbsAccent
             , max = targets.carbsTargetG
             }
         , Ui.macroBar theme
             { label = "Fat"
             , value = summaryAmount "FAT_G" summary
             , unit = "g"
-            , color = Ui.fatColor
+            , color = theme.fatAccent
             , max = targets.fatTargetG
             }
         ]
@@ -809,7 +809,7 @@ logRow theme device log =
                     [ Element.width Element.fill
                     , Element.spacing Ui.space12
                     ]
-                    [ View.Nutrients.macroDot log.nutrients
+                    [ View.Nutrients.macroDot theme log.nutrients
                     , Ui.wrappedListItemTitle theme log.item.name
                     , Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Ui.mutedCaption theme
@@ -818,7 +818,7 @@ logRow theme device log =
 
             else
                 Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                    [ View.Nutrients.macroDot log.nutrients
+                    [ View.Nutrients.macroDot theme log.nutrients
                     , Element.el
                         [ Element.width Element.fill
                         , Element.htmlAttribute (Html.Attributes.style "min-width" "0")

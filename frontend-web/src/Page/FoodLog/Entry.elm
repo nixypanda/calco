@@ -732,7 +732,7 @@ itemHeader theme device model =
     in
     Ui.card theme
         [ Ui.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot model.log.nutrients)
+            { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme device model.item
             , subtitle = Just (metaText maybeFood model.log)
             , actions = []

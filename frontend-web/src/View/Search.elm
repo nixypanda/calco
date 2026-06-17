@@ -84,7 +84,7 @@ resultRow theme device config =
     let
         macroDot : Element msg
         macroDot =
-            View.Nutrients.macroDot
+            View.Nutrients.macroDot theme
                 (config.item.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
 
         searchItem : Element msg
