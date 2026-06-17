@@ -3,7 +3,7 @@ module Page.Goals.Settings exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , RequestState(..)
+    , SaveState(..)
     , init
     , update
     , view
@@ -31,16 +31,16 @@ type alias LoadedModel =
     , proteinTargetG : String
     , carbsTargetG : String
     , fatTargetG : String
-    , formError : Maybe String
-    , requestError : Maybe String
-    , requestState : RequestState
+    , saveState : SaveState
     }
 
 
-type RequestState
-    = Idle
+type SaveState
+    = Editing
+    | ValidationFailed String
     | WaitingForLocalContext
     | Saving
+    | SaveFailed String
 
 
 type Msg
@@ -92,7 +92,7 @@ update msg model =
                                 , sessionExpired = SessionExpired
                                 , applyError =
                                     \message _ ->
-                                        Ready { loaded | requestError = Just message }
+                                        Ready { loaded | saveState = SaveFailed message }
                                 }
                                 error
                                 model
@@ -119,16 +119,18 @@ update msg model =
                         Ok _ ->
                             ( Ready
                                 { loaded
-                                    | formError = Nothing
-                                    , requestError = Nothing
-                                    , requestState = WaitingForLocalContext
+                                    | saveState = WaitingForLocalContext
                                 }
                             , Cmd.none
                             , RequestLocalContext
                             )
 
                         Err message ->
-                            ( Ready { loaded | formError = Just message }, Cmd.none, NoOp )
+                            ( Ready
+                                { loaded | saveState = ValidationFailed message }
+                            , Cmd.none
+                            , NoOp
+                            )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -136,30 +138,30 @@ update msg model =
         LocalContextReceived context ->
             case model of
                 Ready loaded ->
-                    if loaded.requestState /= WaitingForLocalContext then
-                        ( model, Cmd.none, NoOp )
+                    case loaded.saveState of
+                        WaitingForLocalContext ->
+                            case validate loaded of
+                                Ok targets ->
+                                    ( Ready { loaded | saveState = Saving }
+                                    , Cmd.none
+                                    , RequestSaveGoal
+                                        { localDate = context.date
+                                        , deviceTimezone = context.timezone
+                                        , targets = targets
+                                        }
+                                    )
 
-                    else
-                        case validate loaded of
-                            Ok targets ->
-                                ( Ready { loaded | requestState = Saving }
-                                , Cmd.none
-                                , RequestSaveGoal
-                                    { localDate = context.date
-                                    , deviceTimezone = context.timezone
-                                    , targets = targets
-                                    }
-                                )
+                                Err message ->
+                                    ( Ready
+                                        { loaded
+                                            | saveState = ValidationFailed message
+                                        }
+                                    , Cmd.none
+                                    , NoOp
+                                    )
 
-                            Err message ->
-                                ( Ready
-                                    { loaded
-                                        | formError = Just message
-                                        , requestState = Idle
-                                    }
-                                , Cmd.none
-                                , NoOp
-                                )
+                        _ ->
+                            ( model, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -167,28 +169,28 @@ update msg model =
         SaveCompleted result ->
             case model of
                 Ready loaded ->
-                    if loaded.requestState /= Saving then
-                        ( model, Cmd.none, NoOp )
+                    case loaded.saveState of
+                        Saving ->
+                            case result of
+                                Ok snapshot ->
+                                    ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
 
-                    else
-                        case result of
-                            Ok snapshot ->
-                                ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
+                                Err error ->
+                                    Client.failure
+                                        { noOp = NoOp
+                                        , sessionExpired = SessionExpired
+                                        , applyError =
+                                            \message _ ->
+                                                Ready
+                                                    { loaded
+                                                        | saveState = SaveFailed message
+                                                    }
+                                        }
+                                        error
+                                        model
 
-                            Err error ->
-                                Client.failure
-                                    { noOp = NoOp
-                                    , sessionExpired = SessionExpired
-                                    , applyError =
-                                        \message _ ->
-                                            Ready
-                                                { loaded
-                                                    | requestError = Just message
-                                                    , requestState = Idle
-                                                }
-                                    }
-                                    error
-                                    model
+                        _ ->
+                            ( model, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -201,9 +203,7 @@ updateField transform model =
             ( Ready
                 (transform
                     { loaded
-                        | formError = Nothing
-                        , requestError = Nothing
-                        , requestState = Idle
+                        | saveState = Editing
                     }
                 )
             , Cmd.none
@@ -267,9 +267,7 @@ loadedModelFor snapshot =
     , proteinTargetG = String.fromFloat snapshot.targets.proteinTargetG
     , carbsTargetG = String.fromFloat snapshot.targets.carbsTargetG
     , fatTargetG = String.fromFloat snapshot.targets.fatTargetG
-    , formError = Nothing
-    , requestError = Nothing
-    , requestState = Idle
+    , saveState = Editing
     }
 
 
@@ -284,7 +282,7 @@ view { model, device, theme } =
                 [ Ui.errorBanner theme message ]
 
             Ready loaded ->
-                [ Ui.maybeErrorBanner theme loaded.requestError
+                [ Ui.maybeErrorBanner theme (requestError loaded.saveState)
                 , Ui.card theme
                     [ Ui.sectionTitle theme device "Daily Targets"
                     , Ui.mutedParagraph theme (statusMessage loaded.snapshot)
@@ -308,11 +306,11 @@ view { model, device, theme } =
                         , value = loaded.fatTargetG
                         , onChange = FatTargetChanged
                         }
-                    , Ui.maybeErrorBanner theme loaded.formError
+                    , Ui.maybeErrorBanner theme (formError loaded.saveState)
                     ]
                 , Ui.primarySubmitButton device
                     theme
-                    { state = Ui.submittingOrIdle (loaded.requestState == Saving)
+                    { state = Ui.submittingOrIdle (loaded.saveState == Saving)
                     , idleLabel = "Save Goals"
                     , submittingLabel = "Saving..."
                     , onPress = SaveClicked
@@ -335,3 +333,23 @@ statusMessage snapshot =
 
         ( Default, Just effectiveFrom ) ->
             "Using backend defaults after " ++ LocalDate.display effectiveFrom ++ "."
+
+
+formError : SaveState -> Maybe String
+formError saveState =
+    case saveState of
+        ValidationFailed message ->
+            Just message
+
+        _ ->
+            Nothing
+
+
+requestError : SaveState -> Maybe String
+requestError saveState =
+    case saveState of
+        SaveFailed message ->
+            Just message
+
+        _ ->
+            Nothing

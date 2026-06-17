@@ -37,16 +37,38 @@ tests =
                     ( model, _, outMsg ) =
                         GoalsSettings.update GoalsSettings.SaveClicked badModel
                 in
-                ( outMsg, formError model )
+                ( outMsg, saveState model )
                     |> Expect.equal
                         ( GoalsSettings.NoOp
-                        , Just "Calories must equal protein*4 + carbs*4 + fat*9."
+                        , Just
+                            (GoalsSettings.ValidationFailed
+                                "Calories must equal protein*4 + carbs*4 + fat*9."
+                            )
                         )
         , test "save click requests local context after validation" <|
             \_ ->
                 GoalsSettings.update GoalsSettings.SaveClicked (GoalsSettings.Ready loadedModel)
                     |> third
                     |> Expect.equal GoalsSettings.RequestLocalContext
+        , test "invalid numeric input blocks save with validation failure" <|
+            \_ ->
+                let
+                    invalidModel : GoalsSettings.Model
+                    invalidModel =
+                        GoalsSettings.Ready
+                            { loadedModel
+                                | proteinTargetG = "abc"
+                            }
+                in
+                GoalsSettings.update GoalsSettings.SaveClicked invalidModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal
+                        (Just
+                            (GoalsSettings.ValidationFailed
+                                "Enter valid numbers for all goal fields."
+                            )
+                        )
         , test "local context produces save request" <|
             \_ ->
                 GoalsSettings.update
@@ -69,6 +91,17 @@ tests =
                                 }
                             }
                         )
+        , test "stale local context is ignored outside waiting state" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.LocalContextReceived
+                        { date = "2026-06-16"
+                        , timezone = "Asia/Kolkata"
+                        }
+                    )
+                    (GoalsSettings.Ready loadedModel)
+                    |> third
+                    |> Expect.equal GoalsSettings.NoOp
         , test "save success refreshes snapshot and fields" <|
             \_ ->
                 GoalsSettings.update
@@ -87,8 +120,31 @@ tests =
                             savingModel
                             |> first
                 in
-                requestError model
-                    |> Expect.equal (Just "Network error")
+                saveState model
+                    |> Expect.equal (Just (GoalsSettings.SaveFailed "Network error"))
+        , test "stale save completion is ignored outside saving state" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.SaveCompleted (Err Client.NetworkError))
+                    (GoalsSettings.Ready loadedModel)
+                    |> third
+                    |> Expect.equal GoalsSettings.NoOp
+        , test "editing after failure clears failure state" <|
+            \_ ->
+                let
+                    failedModel : GoalsSettings.Model
+                    failedModel =
+                        GoalsSettings.Ready
+                            { loadedModel
+                                | saveState = GoalsSettings.SaveFailed "Network error"
+                            }
+                in
+                GoalsSettings.update
+                    (GoalsSettings.CalorieTargetChanged "2300")
+                    failedModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal (Just GoalsSettings.Editing)
         ]
 
 
@@ -100,20 +156,18 @@ loadedModel =
     , proteinTargetG = "160"
     , carbsTargetG = "255"
     , fatTargetG = "70"
-    , formError = Nothing
-    , requestError = Nothing
-    , requestState = GoalsSettings.Idle
+    , saveState = GoalsSettings.Editing
     }
 
 
 waitingModel : GoalsSettings.Model
 waitingModel =
-    GoalsSettings.Ready { loadedModel | requestState = GoalsSettings.WaitingForLocalContext }
+    GoalsSettings.Ready { loadedModel | saveState = GoalsSettings.WaitingForLocalContext }
 
 
 savingModel : GoalsSettings.Model
 savingModel =
-    GoalsSettings.Ready { loadedModel | requestState = GoalsSettings.Saving }
+    GoalsSettings.Ready { loadedModel | saveState = GoalsSettings.Saving }
 
 
 savedSnapshot : GoalSnapshot
@@ -179,21 +233,11 @@ fields model =
             Nothing
 
 
-formError : GoalsSettings.Model -> Maybe String
-formError model =
+saveState : GoalsSettings.Model -> Maybe GoalsSettings.SaveState
+saveState model =
     case model of
         GoalsSettings.Ready loaded ->
-            loaded.formError
-
-        _ ->
-            Nothing
-
-
-requestError : GoalsSettings.Model -> Maybe String
-requestError model =
-    case model of
-        GoalsSettings.Ready loaded ->
-            loaded.requestError
+            Just loaded.saveState
 
         _ ->
             Nothing
