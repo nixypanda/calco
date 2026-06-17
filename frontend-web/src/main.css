@@ -34,17 +34,6 @@ body {
   border-radius: 6px;
 }
 
-/* App shell
-   Shared viewport-level chrome that is easier to keep stable as CSS utilities. */
-.app-bottom-nav {
-  /* App-shell positioning is shared chrome, so keep it out of inline Elm styles. */
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 10;
-}
-
 .ui-card-shadow {
   /* Shared visual tokens come from Elm via CSS variables and are consumed here. */
   box-shadow: var(--ui-card-shadow);
