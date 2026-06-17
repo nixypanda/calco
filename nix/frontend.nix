@@ -19,15 +19,11 @@ buildNpmPackage {
   ];
 
   # Elm needs its package registry cache; fetchElmDeps wires it up offline.
-  configurePhase = ''
-    runHook preConfigure
-    ${elmPackages.fetchElmDeps {
-      elmPackages = (import ./elm-srcs.nix);
-      elmVersion = "0.19.1";
-      registryDat = ./registry.dat;
-    }}
-    runHook postConfigure
-  '';
+  postConfigure = elmPackages.fetchElmDeps {
+    elmPackages = import ./elm-srcs.nix;
+    elmVersion = "0.19.1";
+    registryDat = ./registry.dat;
+  };
 
   buildPhase = ''
     runHook preBuild
