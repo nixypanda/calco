@@ -122,7 +122,6 @@ mealRow theme _ meal =
         , title = Ui.wrappedListItemTitle theme meal.name
         , subtitle =
             [ Ui.mutedBody theme (mealSummaryText meal)
-            , Ui.mutedParagraph theme (Maybe.withDefault "" meal.notes)
             ]
         , trailing = []
         }
