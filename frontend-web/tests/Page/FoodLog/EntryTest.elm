@@ -140,7 +140,9 @@ tests =
                             { logId = "log-1"
                             , amount = "4"
                             , request = FoodLogEntry.Idle
-                            , error = Just "Network error"
+                            , submitState =
+                                FoodLogForm.SubmitFailed
+                                    (FoodLogForm.RequestFailed "Network error")
                             }
                         )
         , test "delete click opens confirmation state" <|
@@ -199,7 +201,6 @@ loadedModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , error = Nothing
         , request = FoodLogEntry.Idle
         , delete = FoodLogEntry.DeleteIdle
         }
@@ -214,8 +215,11 @@ savingModel =
             FoodLogEntry.ProductItem
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
-        , form = { form | amount = "4", submitting = True }
-        , error = Nothing
+        , form =
+            { form
+                | amount = "4"
+                , submitState = FoodLogForm.SubmitSubmitting
+            }
         , request = FoodLogEntry.Saving
         , delete = FoodLogEntry.DeleteIdle
         }
@@ -231,7 +235,6 @@ deletingModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , error = Nothing
         , request = FoodLogEntry.Deleting
         , delete = FoodLogEntry.DeleteConfirming
         }
@@ -245,7 +248,6 @@ mealLoadedModel =
         , item = FoodLogEntry.MealItem (FoodLogEntry.DetailLoading mealLog.item)
         , units = [ gram ]
         , form = FoodLogForm.initLogFormFromLog mealLog
-        , error = Nothing
         , request = FoodLogEntry.Idle
         , delete = FoodLogEntry.DeleteIdle
         }
@@ -457,7 +459,7 @@ loadedFailureSummary :
             { logId : String
             , amount : String
             , request : FoodLogEntry.RequestState
-            , error : Maybe String
+            , submitState : FoodLogForm.SubmitState
             }
 loadedFailureSummary model =
     case model of
@@ -466,7 +468,7 @@ loadedFailureSummary model =
                 { logId = loaded.log.id
                 , amount = loaded.form.amount
                 , request = loaded.request
-                , error = loaded.error
+                , submitState = loaded.form.submitState
                 }
 
         _ ->

@@ -30,6 +30,28 @@ tests =
                     { food | defaultQuantity = Nothing, defaultUnit = Nothing }
                     |> (\current -> ( current.amount, current.unit ))
                     |> Expect.equal ( "1", "g" )
+        , test "meal dropdown toggle opens only meal dropdown" <|
+            \_ ->
+                FoodLogForm.update FoodLogForm.ToggleMealSlotDropdown form
+                    |> .openDropdown
+                    |> Expect.equal FoodLogForm.MealSlotDropdownOpen
+        , test "unit dropdown toggle closes meal dropdown" <|
+            \_ ->
+                FoodLogForm.update FoodLogForm.ToggleMealSlotDropdown form
+                    |> FoodLogForm.update FoodLogForm.ToggleUnitDropdown
+                    |> .openDropdown
+                    |> Expect.equal FoodLogForm.UnitDropdownOpen
+        , test "editing clears submit failure" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.AmountChanged "2")
+                    { form
+                        | submitState =
+                            FoodLogForm.SubmitFailed
+                                FoodLogForm.AmountRequiredMessage
+                    }
+                    |> .submitState
+                    |> Expect.equal FoodLogForm.SubmitIdle
         , test "amount is required" <|
             \_ ->
                 FoodLogForm.createProductLogRequest rawDate
@@ -121,10 +143,8 @@ form =
     , unit = "g"
     , mealSlot = Nothing
     , notes = ""
-    , mealSlotOpen = False
-    , unitOpen = False
-    , error = Nothing
-    , submitting = False
+    , openDropdown = FoodLogForm.NoDropdownOpen
+    , submitState = FoodLogForm.SubmitIdle
     }
 
 

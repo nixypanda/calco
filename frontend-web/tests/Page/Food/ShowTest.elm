@@ -110,7 +110,7 @@ tests =
                     formError : Maybe String
                     formError =
                         formOf model
-                            |> Maybe.andThen .error
+                            |> Maybe.andThen submitFailureMessage
                 in
                 ( outMsg
                 , formError
@@ -132,10 +132,14 @@ tests =
                             (FoodShow.LogCompleted (Err Client.NetworkError))
                             savingModel
                 in
-                ( Maybe.map (\current -> ( current.amount, current.submitting )) (formOf model)
-                , errorOf model
-                )
-                    |> Expect.equal ( Just ( "2", False ), Just "Network error" )
+                Maybe.map (\current -> ( current.amount, current.submitState )) (formOf model)
+                    |> Expect.equal
+                        (Just
+                            ( "2"
+                            , FoodLogForm.SubmitFailed
+                                (FoodLogForm.RequestFailed "Network error")
+                            )
+                        )
         ]
 
 
@@ -159,7 +163,6 @@ loadedModel =
         , food = food
         , units = [ gram ]
         , form = form
-        , error = Nothing
         , request = FoodShow.Idle
         }
 
@@ -173,7 +176,6 @@ contextReadyModel =
         , food = food
         , units = [ gram ]
         , form = form
-        , error = Nothing
         , request = FoodShow.RequestingLocalContext
         }
 
@@ -187,7 +189,6 @@ contextReadyWithoutDateModel =
         , food = food
         , units = [ gram ]
         , form = form
-        , error = Nothing
         , request = FoodShow.RequestingLocalContext
         }
 
@@ -200,8 +201,7 @@ savingModel =
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
-        , form = { form | submitting = True }
-        , error = Nothing
+        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , request = FoodShow.Saving
         }
 
@@ -229,16 +229,13 @@ unitsOf model =
             Nothing
 
 
-errorOf : FoodShow.Model -> Maybe String
-errorOf model =
-    case model of
-        FoodShow.Loaded loaded ->
-            loaded.error
+submitFailureMessage : FoodLogForm.Model -> Maybe String
+submitFailureMessage current =
+    case current.submitState of
+        FoodLogForm.SubmitFailed failure ->
+            Just (FoodLogForm.submitFailureMessage failure)
 
-        FoodShow.LoadFailed message ->
-            Just message
-
-        FoodShow.Loading _ ->
+        _ ->
             Nothing
 
 

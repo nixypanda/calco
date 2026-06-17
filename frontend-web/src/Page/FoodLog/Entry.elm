@@ -52,7 +52,6 @@ type alias LoadedModel =
     , item : LoadedItem
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , error : Maybe String
     , request : RequestState
     , delete : DeleteState
     }
@@ -222,7 +221,6 @@ update msg model =
                                 ( Loaded
                                     { loaded
                                         | request = Deleting
-                                        , error = Nothing
                                     }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
@@ -232,7 +230,6 @@ update msg model =
                                 ( Loaded
                                     { loaded
                                         | request = Deleting
-                                        , error = Nothing
                                     }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
@@ -277,46 +274,42 @@ submitLoaded : LoadedModel -> ( Model, Cmd Msg, OutMsg )
 submitLoaded loaded =
     case FoodLogForm.createUpdateLogRequest loaded.form of
         Ok request ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-
-                nextForm : FoodLogForm.Model
-                nextForm =
-                    { form | submitting = True, error = Nothing }
-            in
-            ( Loaded { loaded | form = nextForm, error = Nothing, request = Saving }
+            ( Loaded
+                { loaded
+                    | form =
+                        FoodLogForm.setSubmitState
+                            FoodLogForm.SubmitSubmitting
+                            loaded.form
+                    , request = Saving
+                }
             , Cmd.none
             , RequestUpdateLog loaded.logId request
             )
 
         Err FoodLogForm.AmountRequired ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-
-                nextForm : FoodLogForm.Model
-                nextForm =
-                    { form | error = Just "Amount is required." }
-            in
-            ( Loaded { loaded | form = nextForm }
+            ( Loaded
+                { loaded
+                    | form =
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                FoodLogForm.AmountRequiredMessage
+                            )
+                            loaded.form
+                }
             , Cmd.none
             , NoOp
             )
 
         Err FoodLogForm.InvalidDate ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-
-                nextForm : FoodLogForm.Model
-                nextForm =
-                    { form | error = Just "Could not read device date." }
-            in
-            ( Loaded { loaded | form = nextForm }
+            ( Loaded
+                { loaded
+                    | form =
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                FoodLogForm.InvalidDateMessage
+                            )
+                            loaded.form
+                }
             , Cmd.none
             , NoOp
             )
@@ -334,7 +327,6 @@ setLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , error = Nothing
                     , request = Idle
                     , delete = DeleteIdle
                 }
@@ -350,7 +342,7 @@ setLoadedUnits units model =
             completeLoading { loading | units = Just units }
 
         Loaded loaded ->
-            Loaded { loaded | units = units, error = Nothing, delete = DeleteIdle }
+            Loaded { loaded | units = units, delete = DeleteIdle }
 
         LoadFailed _ ->
             model
@@ -366,7 +358,6 @@ completeLoading loading =
                 , item = initialLoadedItem log
                 , units = units
                 , form = FoodLogForm.initLogFormFromLog log
-                , error = Nothing
                 , request = Idle
                 , delete = DeleteIdle
                 }
@@ -384,7 +375,6 @@ updateLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , error = Nothing
                     , request = Idle
                     , delete = DeleteIdle
                 }
@@ -526,19 +516,14 @@ applyLoadedError : String -> Model -> Model
 applyLoadedError message model =
     case model of
         Loaded loaded ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-
-                nextForm : FoodLogForm.Model
-                nextForm =
-                    { form | submitting = False }
-            in
             Loaded
                 { loaded
-                    | form = nextForm
-                    , error = Just message
+                    | form =
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                (FoodLogForm.RequestFailed message)
+                            )
+                            loaded.form
                     , request = Idle
                     , delete = DeleteIdle
                 }
@@ -631,13 +616,8 @@ pageError model =
         Loading _ ->
             Nothing
 
-        Loaded loaded ->
-            case loaded.delete of
-                DeleteIdle ->
-                    loaded.error
-
-                _ ->
-                    Nothing
+        Loaded _ ->
+            Nothing
 
         LoadFailed failed ->
             Just failed.error

@@ -48,7 +48,6 @@ type alias LoadedModel =
     , food : ProductDetail
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , error : Maybe String
     , request : RequestState
     }
 
@@ -125,30 +124,26 @@ update msg model =
                 Loaded loaded ->
                     if loaded.request == Idle then
                         if String.trim loaded.form.amount == "" then
-                            let
-                                form : FoodLogForm.Model
-                                form =
-                                    loaded.form
-                            in
                             ( Loaded
                                 { loaded
                                     | form =
-                                        { form | error = Just "Amount is required." }
+                                        FoodLogForm.setSubmitState
+                                            (FoodLogForm.SubmitFailed
+                                                FoodLogForm.AmountRequiredMessage
+                                            )
+                                            loaded.form
                                 }
                             , Cmd.none
                             , NoOp
                             )
 
                         else
-                            let
-                                form : FoodLogForm.Model
-                                form =
-                                    loaded.form
-                            in
                             ( Loaded
                                 { loaded
-                                    | form = { form | error = Nothing }
-                                    , error = Nothing
+                                    | form =
+                                        FoodLogForm.setSubmitState
+                                            FoodLogForm.SubmitIdle
+                                            loaded.form
                                     , request = RequestingLocalContext
                                 }
                             , Cmd.none
@@ -216,15 +211,12 @@ createLogFromLocalContext context loaded =
             loaded.form
     of
         Ok request ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-            in
             ( Loaded
                 { loaded
-                    | form = { form | submitting = True, error = Nothing }
-                    , error = Nothing
+                    | form =
+                        FoodLogForm.setSubmitState
+                            FoodLogForm.SubmitSubmitting
+                            loaded.form
                     , request = Saving
                 }
             , Cmd.none
@@ -232,18 +224,14 @@ createLogFromLocalContext context loaded =
             )
 
         Err FoodLogForm.AmountRequired ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-            in
             ( Loaded
                 { loaded
                     | form =
-                        { form
-                            | submitting = False
-                            , error = Just "Amount is required."
-                        }
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                FoodLogForm.AmountRequiredMessage
+                            )
+                            loaded.form
                     , request = Idle
                 }
             , Cmd.none
@@ -251,18 +239,14 @@ createLogFromLocalContext context loaded =
             )
 
         Err FoodLogForm.InvalidDate ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-            in
             ( Loaded
                 { loaded
                     | form =
-                        { form
-                            | submitting = False
-                            , error = Just "Could not read device date."
-                        }
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                FoodLogForm.InvalidDateMessage
+                            )
+                            loaded.form
                     , request = Idle
                 }
             , Cmd.none
@@ -281,7 +265,6 @@ setLoadedFood food model =
                 { loaded
                     | food = food
                     , form = FoodLogForm.initLogFormFromFood loaded.mealSlot food
-                    , error = Nothing
                     , request = Idle
                 }
 
@@ -296,7 +279,7 @@ setLoadedUnits units model =
             completeLoading { loading | units = Just units }
 
         Loaded loaded ->
-            Loaded { loaded | units = units, error = Nothing }
+            Loaded { loaded | units = units }
 
         LoadFailed _ ->
             model
@@ -313,7 +296,6 @@ completeLoading loading =
                 , food = food
                 , units = units
                 , form = FoodLogForm.initLogFormFromFood loading.mealSlot food
-                , error = Nothing
                 , request = Idle
                 }
 
@@ -334,15 +316,14 @@ applyLoadedError : String -> Model -> Model
 applyLoadedError message model =
     case model of
         Loaded loaded ->
-            let
-                form : FoodLogForm.Model
-                form =
-                    loaded.form
-            in
             Loaded
                 { loaded
-                    | form = { form | submitting = False }
-                    , error = Just message
+                    | form =
+                        FoodLogForm.setSubmitState
+                            (FoodLogForm.SubmitFailed
+                                (FoodLogForm.RequestFailed message)
+                            )
+                            loaded.form
                     , request = Idle
                 }
 
@@ -354,16 +335,11 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         [ case model of
-            Loaded loaded ->
-                case loaded.error of
-                    Just message ->
-                        Ui.errorBanner theme message
-
-                    Nothing ->
-                        Element.none
-
             LoadFailed message ->
                 Ui.errorBanner theme message
+
+            Loaded _ ->
+                Element.none
 
             Loading _ ->
                 Element.none

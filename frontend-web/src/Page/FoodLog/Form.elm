@@ -1,11 +1,16 @@
 module Page.FoodLog.Form exposing
     ( Model
     , Msg(..)
+    , OpenDropdown(..)
+    , SubmitFailure(..)
+    , SubmitState(..)
     , ValidationError(..)
     , createProductLogRequest
     , createUpdateLogRequest
     , initLogFormFromFood
     , initLogFormFromLog
+    , setSubmitState
+    , submitFailureMessage
     , update
     , view
     )
@@ -48,11 +53,27 @@ type alias Model =
     , unit : String
     , mealSlot : Maybe MealSlot
     , notes : String
-    , mealSlotOpen : Bool
-    , unitOpen : Bool
-    , error : Maybe String
-    , submitting : Bool
+    , openDropdown : OpenDropdown
+    , submitState : SubmitState
     }
+
+
+type OpenDropdown
+    = NoDropdownOpen
+    | MealSlotDropdownOpen
+    | UnitDropdownOpen
+
+
+type SubmitState
+    = SubmitIdle
+    | SubmitSubmitting
+    | SubmitFailed SubmitFailure
+
+
+type SubmitFailure
+    = AmountRequiredMessage
+    | InvalidDateMessage
+    | RequestFailed String
 
 
 type Msg
@@ -75,10 +96,8 @@ initLogFormFromFood mealSlot food =
     , unit = food.defaultUnit |> Maybe.withDefault defaultCode
     , mealSlot = mealSlot
     , notes = ""
-    , mealSlotOpen = False
-    , unitOpen = False
-    , error = Nothing
-    , submitting = False
+    , openDropdown = NoDropdownOpen
+    , submitState = SubmitIdle
     }
 
 
@@ -88,10 +107,8 @@ initLogFormFromLog log =
     , unit = log.quantity.unit
     , mealSlot = Maybe.andThen MealSlot.fromString log.mealSlot
     , notes = log.notes |> Maybe.withDefault ""
-    , mealSlotOpen = False
-    , unitOpen = False
-    , error = Nothing
-    , submitting = False
+    , openDropdown = NoDropdownOpen
+    , submitState = SubmitIdle
     }
 
 
@@ -99,22 +116,62 @@ update : Msg -> Model -> Model
 update msg model =
     case msg of
         AmountChanged value ->
-            { model | amount = value, mealSlotOpen = False, unitOpen = False, error = Nothing }
+            { model
+                | amount = value
+                , openDropdown = NoDropdownOpen
+                , submitState = clearSubmitFailure model.submitState
+            }
 
         UnitChanged value ->
-            { model | unit = value, unitOpen = False, error = Nothing }
+            { model
+                | unit = value
+                , openDropdown = NoDropdownOpen
+                , submitState = clearSubmitFailure model.submitState
+            }
 
         MealSlotChanged value ->
-            { model | mealSlot = value, mealSlotOpen = False, error = Nothing }
+            { model
+                | mealSlot = value
+                , openDropdown = NoDropdownOpen
+                , submitState = clearSubmitFailure model.submitState
+            }
 
         NotesChanged value ->
-            { model | notes = value, mealSlotOpen = False, unitOpen = False, error = Nothing }
+            { model
+                | notes = value
+                , openDropdown = NoDropdownOpen
+                , submitState = clearSubmitFailure model.submitState
+            }
 
         ToggleMealSlotDropdown ->
-            { model | mealSlotOpen = not model.mealSlotOpen, unitOpen = False }
+            { model
+                | openDropdown =
+                    if model.openDropdown == MealSlotDropdownOpen then
+                        NoDropdownOpen
+
+                    else
+                        MealSlotDropdownOpen
+            }
 
         ToggleUnitDropdown ->
-            { model | unitOpen = not model.unitOpen, mealSlotOpen = False }
+            { model
+                | openDropdown =
+                    if model.openDropdown == UnitDropdownOpen then
+                        NoDropdownOpen
+
+                    else
+                        UnitDropdownOpen
+            }
+
+
+clearSubmitFailure : SubmitState -> SubmitState
+clearSubmitFailure submitState =
+    case submitState of
+        SubmitFailed _ ->
+            SubmitIdle
+
+        _ ->
+            submitState
 
 
 createProductLogRequest :
@@ -156,13 +213,31 @@ createUpdateLogRequest model =
             }
 
 
+submitFailureMessage : SubmitFailure -> String
+submitFailureMessage failure =
+    case failure of
+        AmountRequiredMessage ->
+            "Amount is required."
+
+        InvalidDateMessage ->
+            "Could not read device date."
+
+        RequestFailed message ->
+            message
+
+
+setSubmitState : SubmitState -> Model -> Model
+setSubmitState submitState model =
+    { model | submitState = submitState }
+
+
 view : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
 view theme device food units model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ Ui.maybeErrorBanner theme model.error
+        [ Ui.maybeErrorBanner theme (submitError model.submitState)
         , Ui.card theme
             [ mealSlotDropdown theme device model
             , View.QuantityInput.dropdown theme
@@ -174,12 +249,22 @@ view theme device food units model =
                 , unit = model.unit
                 , units = sourceForFood food units
                 , onUnitChange = UnitChanged
-                , unitOpen = model.unitOpen
+                , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
             , Ui.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
             ]
         ]
+
+
+submitError : SubmitState -> Maybe String
+submitError submitState =
+    case submitState of
+        SubmitFailed failure ->
+            Just (submitFailureMessage failure)
+
+        _ ->
+            Nothing
 
 
 mealSlotDropdown : Theme -> Device -> Model -> Element Msg
@@ -196,6 +281,6 @@ mealSlotDropdown theme device model =
             , ( Just Snack, MealSlot.label Snack )
             ]
         , onChange = MealSlotChanged
-        , isOpen = model.mealSlotOpen
+        , isOpen = model.openDropdown == MealSlotDropdownOpen
         , onToggle = ToggleMealSlotDropdown
         }
