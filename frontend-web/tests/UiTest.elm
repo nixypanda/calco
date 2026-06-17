@@ -61,7 +61,7 @@ chipBehavior =
         [ test "uses inputFill background when not selected" <|
             \_ ->
                 Ui.chipBackground theme False
-                    |> Expect.equal theme.inputFill
+                    |> Expect.equal theme.chipBg
         , test "uses primaryTeal background when selected" <|
             \_ ->
                 Ui.chipBackground theme True

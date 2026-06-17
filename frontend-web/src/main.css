@@ -135,7 +135,8 @@ body {
 
 .ui-chip-button {
   cursor: pointer;
-  border: none;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .ui-text-ellipsis {

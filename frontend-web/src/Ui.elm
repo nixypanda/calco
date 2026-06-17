@@ -89,6 +89,7 @@ module Ui exposing
     , subsectionTitle
     , suggestionList
     , tableHeader
+    , themeCssVariables
     , toCssColor
     , toggleSwitch
     , truncatedHeader
@@ -372,50 +373,6 @@ layout theme content =
         , Font.color theme.textPrimary
         , body
         , uiClass "ui-theme-root"
-
-        -- CSS owns shared rules; Elm only publishes the active theme tokens.
-        , Element.htmlAttribute (Html.Attributes.style "--ui-page-bg" (toCssColor theme.pageBg))
-        , Element.htmlAttribute (Html.Attributes.style "--ui-card-bg" (toCssColor theme.cardBg))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-text-primary" (toCssColor theme.textPrimary))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-text-muted" (toCssColor theme.textMuted))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-text-medium" (toCssColor theme.textMedium))
-        , Element.htmlAttribute (Html.Attributes.style "--ui-divider" (toCssColor theme.divider))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-input-fill" (toCssColor theme.inputFill))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-brand-blue" (toCssColor theme.brandBlue))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-brand-blue-pressed" (toCssColor theme.brandBluePressed))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-brand-blue-soft" (toCssColor theme.brandBlueSoft))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-brand-blue-disabled" (toCssColor theme.brandBlueDisabled))
-        , Element.htmlAttribute (Html.Attributes.style "--ui-danger-bg" (toCssColor theme.dangerBg))
-        , Element.htmlAttribute (Html.Attributes.style "--ui-danger-fg" (toCssColor theme.dangerFg))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-danger-solid" (toCssColor theme.dangerSolid))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-drawer-selection-bg" (toCssColor theme.drawerSelectionBg))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-status-green" (toCssColor theme.statusGreen))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-status-red" (toCssColor theme.statusRed))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-status-active-bg" (toCssColor theme.statusActiveBg))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-status-disabled-bg" (toCssColor theme.statusDisabledBg))
-        , Element.htmlAttribute (Html.Attributes.style "--ui-card-shadow" theme.cardShadow)
-        , Element.htmlAttribute (Html.Attributes.style "--ui-chip-bg" (toCssColor theme.inputFill))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-chip-fg" (toCssColor theme.textPrimary))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-chip-selected-bg" (toCssColor primaryTeal))
-        , Element.htmlAttribute
-            (Html.Attributes.style "--ui-chip-selected-fg" "rgba(255, 255, 255, 1)")
-        , Element.htmlAttribute (Html.Attributes.style "--ui-focus-ring" (toCssColor primaryTeal))
         ]
         [ content ]
 
@@ -1828,7 +1785,7 @@ chipBackground theme selected =
         primaryTeal
 
     else
-        theme.inputFill
+        theme.chipBg
 
 
 chipForeground : Theme -> Bool -> Element.Color
@@ -1920,6 +1877,38 @@ toCssColor color =
         ++ ", "
         ++ String.fromFloat alpha
         ++ ")"
+
+
+themeCssVariables : Theme -> String
+themeCssVariables theme =
+    String.join "; "
+        [ "--ui-page-bg: " ++ toCssColor theme.pageBg
+        , "--ui-card-bg: " ++ toCssColor theme.cardBg
+        , "--ui-text-primary: " ++ toCssColor theme.textPrimary
+        , "--ui-text-muted: " ++ toCssColor theme.textMuted
+        , "--ui-text-medium: " ++ toCssColor theme.textMedium
+        , "--ui-divider: " ++ toCssColor theme.divider
+        , "--ui-input-fill: " ++ toCssColor theme.inputFill
+        , "--ui-brand-blue: " ++ toCssColor theme.brandBlue
+        , "--ui-brand-blue-pressed: " ++ toCssColor theme.brandBluePressed
+        , "--ui-brand-blue-soft: " ++ toCssColor theme.brandBlueSoft
+        , "--ui-brand-blue-disabled: " ++ toCssColor theme.brandBlueDisabled
+        , "--ui-danger-bg: " ++ toCssColor theme.dangerBg
+        , "--ui-danger-fg: " ++ toCssColor theme.dangerFg
+        , "--ui-danger-solid: " ++ toCssColor theme.dangerSolid
+        , "--ui-drawer-selection-bg: " ++ toCssColor theme.drawerSelectionBg
+        , "--ui-status-green: " ++ toCssColor theme.statusGreen
+        , "--ui-status-red: " ++ toCssColor theme.statusRed
+        , "--ui-status-active-bg: " ++ toCssColor theme.statusActiveBg
+        , "--ui-status-disabled-bg: " ++ toCssColor theme.statusDisabledBg
+        , "--ui-card-shadow: " ++ theme.cardShadow
+        , "--ui-chip-bg: " ++ toCssColor theme.chipBg
+        , "--ui-chip-border: " ++ toCssColor theme.chipBorder
+        , "--ui-chip-fg: " ++ toCssColor theme.textPrimary
+        , "--ui-chip-selected-bg: " ++ toCssColor primaryTeal
+        , "--ui-chip-selected-fg: rgba(255, 255, 255, 1)"
+        , "--ui-focus-ring: " ++ toCssColor primaryTeal
+        ]
 
 
 chipHtml :

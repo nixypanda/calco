@@ -1268,6 +1268,8 @@ view model =
                     ++ Ui.toCssColor model.theme.pageBg
                     ++ "; } :root { background: "
                     ++ Ui.toCssColor model.theme.pageBg
+                    ++ "; "
+                    ++ Ui.themeCssVariables model.theme
                     ++ "; }"
                 )
             ]

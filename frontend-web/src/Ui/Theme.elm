@@ -20,6 +20,8 @@ type alias Theme =
     { mode : Mode
     , pageBg : Color
     , cardBg : Color
+    , chipBg : Color
+    , chipBorder : Color
     , textPrimary : Color
     , textMuted : Color
     , textMedium : Color
@@ -46,6 +48,8 @@ light =
     { mode = Light
     , pageBg = rgb255 244 246 248
     , cardBg = rgb255 255 255 255
+    , chipBg = rgb255 236 240 244
+    , chipBorder = rgb255 218 224 232
     , textPrimary = rgb255 28 32 44
     , textMuted = rgb255 120 124 140
     , textMedium = rgb255 64 70 84
@@ -72,6 +76,8 @@ dark =
     { mode = Dark
     , pageBg = rgb255 18 20 26
     , cardBg = rgb255 28 32 40
+    , chipBg = rgb255 42 47 58
+    , chipBorder = rgb255 58 66 80
     , textPrimary = rgb255 232 234 240
     , textMuted = rgb255 148 152 168
     , textMedium = rgb255 192 196 208
