@@ -410,7 +410,8 @@ submitActionView theme device requestState =
         |> (\button ->
                 if Ui.isSmall device then
                     Element.el
-                        [ Element.htmlAttribute
+                        [ Element.width Element.fill
+                        , Element.htmlAttribute
                             (Html.Attributes.style "padding-bottom"
                                 "calc(14px + env(safe-area-inset-bottom))"
                             )
