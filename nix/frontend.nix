@@ -5,6 +5,7 @@
   elmPackages,
   nodejs_22,
   git,
+  frontendVersion ? "dev",
 }:
 
 buildNpmPackage {
@@ -42,6 +43,7 @@ buildNpmPackage {
 
   buildPhase = ''
     runHook preBuild
+    export CALCO_FRONTEND_VERSION=${lib.escapeShellArg frontendVersion}
     npm run build
     runHook postBuild
   '';

@@ -35,13 +35,18 @@
             cargo = toolchain;
             rustc = toolchain;
           };
+
+          frontendVersion =
+            self.shortRev or (self.dirtyShortRev or (toString (self.lastModified or 0)));
         in
         {
           packages.backend = pkgs.callPackage ./nix/backend.nix {
             inherit rustPlatform;
           };
 
-          packages.frontend = pkgs.callPackage ./nix/frontend.nix { };
+          packages.frontend = pkgs.callPackage ./nix/frontend.nix {
+            inherit frontendVersion;
+          };
 
           packages.default = self.packages.${system}.backend;
 

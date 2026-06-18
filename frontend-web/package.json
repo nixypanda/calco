@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "version:write": "node -e \"let h='release';try{h=require('child_process').execSync('git rev-parse --short HEAD').toString().trim()}catch(e){}require('fs').writeFileSync('public/version.json',JSON.stringify({version:h}))\"",
+    "version:write": "node -e \"const{execSync}=require('child_process');const{writeFileSync}=require('fs');let h=(process.env.CALCO_FRONTEND_VERSION||'').trim();if(!h){try{h=execSync('git rev-parse --short HEAD',{stdio:['ignore','pipe','ignore']}).toString().trim()}catch(e){h='dev'}}writeFileSync('public/version.json',JSON.stringify({version:h})+'\\n')\"",
     "prebuild": "npm run version:write",
     "predev": "npm run version:write",
     "dev": "vite",
