@@ -6,6 +6,7 @@ module Page.CustomFood.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , modalView
     , update
     , view
     )
@@ -235,37 +236,25 @@ applyDeleteError message model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Element.el
-        ([ Element.width Element.fill
-         , Element.height Element.fill
-         ]
-            ++ modalOverlayAttrs theme device model
-        )
-        (Ui.pageContainer device
-            [ case model of
-                LoadFailed message ->
-                    Ui.errorBanner theme message
+    Ui.pageContainer device
+        [ case model of
+            LoadFailed message ->
+                Ui.errorBanner theme message
 
-                _ ->
-                    Element.none
-            , bodyView theme device model
-            ]
-        )
+            _ ->
+                Element.none
+        , bodyView theme device model
+        ]
 
 
-modalOverlayAttrs : Theme -> Device -> Model -> List (Element.Attribute Msg)
-modalOverlayAttrs theme device model =
+modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView { model, device, theme } =
     case model of
         Loaded loaded ->
-            case deleteModalView theme device loaded of
-                Just modal ->
-                    [ Element.inFront modal ]
-
-                Nothing ->
-                    []
+            deleteModalView theme device loaded
 
         _ ->
-            []
+            Nothing
 
 
 bodyView : Theme -> Device -> Model -> Element Msg

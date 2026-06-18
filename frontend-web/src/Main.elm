@@ -1346,12 +1346,22 @@ view model =
                     }
                 ]
             }
-            []
+            (layoutAttrs model)
           <|
             Ui.layout model.theme <|
                 appFrame model
         ]
     }
+
+
+layoutAttrs : Model -> List (Element.Attribute Msg)
+layoutAttrs model =
+    case pageModalView model of
+        Just modal ->
+            [ Element.inFront modal ]
+
+        Nothing ->
+            []
 
 
 appFrame : Model -> Element Msg
@@ -1886,21 +1896,13 @@ pageView model =
 
     else
         let
-            device : Element.Device
-            device =
-                model.device
-
-            theme : Theme
-            theme =
-                model.theme
-
             props : subModel -> { model : subModel, device : Element.Device, theme : Theme }
-            props subModel =
-                { model = subModel, device = device, theme = theme }
+            props =
+                pageProps model
         in
         case model.page of
             LoadingPage ->
-                Ui.skeletonLoading theme
+                Ui.skeletonLoading model.theme
 
             LoginPage loginModel ->
                 Element.map GotLoginMsg (AuthLogin.view (props loginModel))
@@ -1959,6 +1961,33 @@ pageView model =
 
             PlaceholderPage message ->
                 Element.el [ Element.padding Ui.space24 ] (Element.text message)
+
+
+pageModalView : Model -> Maybe (Element Msg)
+pageModalView model =
+    case model.page of
+        FoodLogDetailPage foodLogDetailModel ->
+            FoodLogEntry.modalView (pageProps model foodLogDetailModel)
+                |> Maybe.map (Element.map GotFoodLogDetailMsg)
+
+        CustomFoodShowPage customFoodShowModel ->
+            CustomFoodShow.modalView (pageProps model customFoodShowModel)
+                |> Maybe.map (Element.map GotCustomFoodShowMsg)
+
+        MealDetailPage mealDetailModel ->
+            MealShow.modalView (pageProps model mealDetailModel)
+                |> Maybe.map (Element.map GotMealDetailMsg)
+
+        _ ->
+            Nothing
+
+
+pageProps : Model -> subModel -> { model : subModel, device : Element.Device, theme : Theme }
+pageProps model subModel =
+    { model = subModel
+    , device = model.device
+    , theme = model.theme
+    }
 
 
 

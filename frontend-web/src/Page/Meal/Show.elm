@@ -6,6 +6,7 @@ module Page.Meal.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , modalView
     , uniqueProductIds
     , update
     , view
@@ -484,59 +485,47 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Element.el
-        ([ Element.width Element.fill
-         , Element.height Element.fill
-         ]
-            ++ modalOverlayAttrs theme device model
-        )
-        (Ui.pageContainer device
-            [ Ui.section theme
-                { header = Just (headerView theme model)
-                , body =
-                    [ case model of
-                        Loaded loaded ->
-                            case loaded.meal.notes of
-                                Just notes ->
-                                    Ui.mutedParagraph theme notes
+    Ui.pageContainer device
+        [ Ui.section theme
+            { header = Just (headerView theme model)
+            , body =
+                [ case model of
+                    Loaded loaded ->
+                        case loaded.meal.notes of
+                            Just notes ->
+                                Ui.mutedParagraph theme notes
 
-                                Nothing ->
-                                    Element.none
+                            Nothing ->
+                                Element.none
 
-                        LoadFailed message ->
-                            Ui.errorBanner theme message
+                    LoadFailed message ->
+                        Ui.errorBanner theme message
 
-                        Loading _ ->
-                            Ui.skeletonLoading theme
-                    ]
-                , footer = Nothing
-                }
-            , case model of
-                Loaded loaded ->
-                    loadedView theme device loaded
+                    Loading _ ->
+                        Ui.skeletonLoading theme
+                ]
+            , footer = Nothing
+            }
+        , case model of
+            Loaded loaded ->
+                loadedView theme device loaded
 
-                LoadFailed message ->
-                    Ui.errorBanner theme message
+            LoadFailed message ->
+                Ui.errorBanner theme message
 
-                Loading _ ->
-                    Ui.skeletonLoading theme
-            ]
-        )
+            Loading _ ->
+                Ui.skeletonLoading theme
+        ]
 
 
-modalOverlayAttrs : Theme -> Device -> Model -> List (Element.Attribute Msg)
-modalOverlayAttrs theme device model =
+modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView { model, device, theme } =
     case model of
         Loaded loaded ->
-            case deleteModalView theme device loaded of
-                Just modal ->
-                    [ Element.inFront modal ]
-
-                Nothing ->
-                    []
+            deleteModalView theme device loaded
 
         _ ->
-            []
+            Nothing
 
 
 headerView : Theme -> Model -> Element Msg
