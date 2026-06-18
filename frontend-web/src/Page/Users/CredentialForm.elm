@@ -132,23 +132,20 @@ view config { model, device, theme } =
             , Element.spacing Ui.space16
             ]
             [ Ui.card theme
-                ([ Ui.pageTitle theme "CalCo"
-                 , Ui.subsectionTitle theme config.title
-                 ]
-                    ++ descriptionView theme config.description
-                    ++ [ Ui.input theme
-                            { label = "Username"
-                            , value = form.username
-                            , onChange = UsernameChanged
-                            }
-                       , Ui.passwordInput theme
-                            { label = "Password"
-                            , value = form.password
-                            , onChange = PasswordChanged
-                            }
-                       , Ui.maybeErrorBanner theme (errorMessage model)
-                       ]
-                )
+                [ Ui.subsectionTitle theme config.title
+                , descriptionView theme config.description
+                , Ui.input theme
+                    { label = "Username"
+                    , value = form.username
+                    , onChange = UsernameChanged
+                    }
+                , Ui.passwordInput theme
+                    { label = "Password"
+                    , value = form.password
+                    , onChange = PasswordChanged
+                    }
+                , Ui.maybeErrorBanner theme (errorMessage model)
+                ]
             , Ui.primarySubmitButton device
                 theme
                 { state = Ui.submittingOrIdle (isSubmitting model)
@@ -160,19 +157,18 @@ view config { model, device, theme } =
         )
 
 
-descriptionView : Theme -> Maybe String -> List (Element Msg)
+descriptionView : Theme -> Maybe String -> Element Msg
 descriptionView theme maybeDescription =
     case maybeDescription of
         Just description ->
-            [ Element.paragraph
+            Element.paragraph
                 [ Ui.body
                 , Font.color theme.textMedium
                 ]
                 [ Element.text description ]
-            ]
 
         Nothing ->
-            []
+            Element.none
 
 
 isSubmitting : Model -> Bool
