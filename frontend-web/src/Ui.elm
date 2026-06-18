@@ -2057,13 +2057,7 @@ toggleSwitch theme config =
         [ Element.width (Element.px 44)
         , Element.height (Element.px 24)
         , Border.rounded radiusPill
-        , Background.color
-            (if config.isActive then
-                theme.brandBlue
-
-             else
-                theme.inputFill
-            )
+        , Background.color theme.inputFill
         , Element.padding space2
         , uiClass
             ("ui-toggle-track ui-motion ui-pressable"
