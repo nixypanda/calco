@@ -53,6 +53,7 @@ module Ui exposing
     , mutedBody
     , mutedCaption
     , mutedParagraph
+    , optionRow
     , pageContainer
     , pageHeader
     , pageTitle
@@ -1303,46 +1304,109 @@ completionDropdown :
     -> { height : Int, rows : List (Element msg) }
     -> Element msg
 completionDropdown theme config =
+    optionList theme
+        { maxHeight = Just config.height
+        , rows = config.rows
+        }
+
+
+optionList :
+    Theme
+    -> { maxHeight : Maybe Int, rows : List (Element msg) }
+    -> Element msg
+optionList theme config =
     if List.isEmpty config.rows then
         Element.none
 
     else
         Element.column
-            [ Element.width Element.fill
-            , Element.height (Element.px config.height)
-            , Element.scrollbarY
-            , Element.spacing space2
-            , Element.padding space4
-            , Border.rounded radiusControl
-            , Background.color theme.cardBg
-            , cardShadow theme
-            ]
+            ([ Element.width Element.fill
+             , Element.spacing space2
+             , Element.padding space4
+             , Border.rounded radiusControl
+             , Background.color theme.cardBg
+             , Border.width 1
+             , Border.color theme.divider
+             , cardShadow theme
+             ]
+                ++ (case config.maxHeight of
+                        Just height ->
+                            [ Element.height (Element.px height)
+                            , Element.scrollbarY
+                            ]
+
+                        Nothing ->
+                            []
+                   )
+            )
             config.rows
 
 
 completionRow :
     Device
+    -> Theme
     ->
         { label : String
         , trailing : Maybe (Element msg)
         , onPress : msg
         }
     -> Element msg
-completionRow device config =
+completionRow device theme config =
+    optionRow device
+        theme
+        { label = config.label
+        , trailing = config.trailing
+        , selected = False
+        , onPress = config.onPress
+        }
+
+
+optionRow :
+    Device
+    -> Theme
+    ->
+        { label : String
+        , trailing : Maybe (Element msg)
+        , selected : Bool
+        , onPress : msg
+        }
+    -> Element msg
+optionRow device theme config =
+    let
+        itemColor : Element.Color
+        itemColor =
+            if config.selected then
+                Element.rgb255 255 255 255
+
+            else
+                theme.textPrimary
+    in
     Input.button
         [ Element.width Element.fill
         , if isSmall device then
-            Element.padding space12
+            Element.paddingXY space12 10
 
           else
             Element.paddingXY 12 10
-        , Border.rounded radiusPill
+        , Border.rounded radiusControl
+        , Background.color
+            (if config.selected then
+                theme.brandBlue
+
+             else
+                theme.cardBg
+            )
+        , Font.color itemColor
+        , uiClass "ui-motion ui-pressable"
         ]
         { onPress = Just config.onPress
         , label =
-            Element.row [ Element.width Element.fill, Element.spacing space8 ]
+            Element.row [ Element.width Element.fill, Element.spacing space8, minWidthZero ]
                 [ Element.el
-                    [ Element.width Element.fill, Font.medium ]
+                    [ Element.width Element.fill
+                    , Font.medium
+                    , minWidthZero
+                    ]
                     (Element.text config.label)
                 , Maybe.withDefault Element.none config.trailing
                 ]
@@ -1351,20 +1415,10 @@ completionRow device config =
 
 suggestionList : Theme -> List (Element msg) -> Element msg
 suggestionList theme items =
-    if List.isEmpty items then
-        Element.none
-
-    else
-        Element.column
-            [ Element.width Element.fill
-            , Element.spacing space4
-            , Border.rounded radiusControl
-            , Background.color theme.cardBg
-            , Border.width 1
-            , Border.color theme.divider
-            , Element.padding space8
-            ]
-            items
+    optionList theme
+        { maxHeight = Nothing
+        , rows = items
+        }
 
 
 selectDropdown :
@@ -1396,38 +1450,22 @@ selectDropdown device theme config =
 
         renderOption : ( a, String ) -> Element msg
         renderOption ( val, lbl ) =
-            Input.button
-                [ Element.width Element.fill
-                , Element.paddingXY space16 space12
-                , Background.color
-                    (if isSelected val then
-                        theme.brandBlue
-
-                     else
-                        theme.cardBg
-                    )
-                , Font.color
-                    (if isSelected val then
-                        Element.rgb255 255 255 255
-
-                     else
-                        theme.textPrimary
-                    )
-                ]
-                { onPress = Just (config.onChange val)
-                , label = Element.text lbl
+            optionRow device
+                theme
+                { label = lbl
+                , trailing = Nothing
+                , selected = isSelected val
+                , onPress = config.onChange val
                 }
 
         optionsElement : Element msg
         optionsElement =
-            Element.column
-                [ Element.width Element.fill
-                , Border.rounded radiusControl
-                , Background.color theme.cardBg
-                , cardShadow theme
-                , Element.moveDown 4
-                ]
-                (List.map renderOption config.options)
+            Element.el [ Element.moveDown 4 ]
+                (optionList theme
+                    { maxHeight = Nothing
+                    , rows = List.map renderOption config.options
+                    }
+                )
 
         triggerAnchor : List (Element.Attribute msg)
         triggerAnchor =

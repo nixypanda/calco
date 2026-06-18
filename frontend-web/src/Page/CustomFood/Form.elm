@@ -32,7 +32,6 @@ import Api.Foods
 import Data.Nutrition exposing (defaultCode)
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
-import Element.Input as Input
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
 import Ui
@@ -806,7 +805,7 @@ categoryInputView theme device open input =
                 ]
                 (addCategoryButton theme device input)
             ]
-        , suggestionRowView theme open input
+        , suggestionRowView theme device open input
         , chipRowView theme device input.selected
         ]
 
@@ -841,8 +840,8 @@ chipView theme device tag =
         }
 
 
-suggestionRowView : Theme -> Bool -> CategoryInput -> Element Msg
-suggestionRowView theme open input =
+suggestionRowView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
+suggestionRowView theme device open input =
     let
         open_ : Bool
         open_ =
@@ -867,26 +866,17 @@ suggestionRowView theme open input =
         Element.none
 
     else
-        Ui.suggestionList theme (List.map (suggestionPill theme) matching)
+        Ui.suggestionList theme (List.map (suggestionRow theme device) matching)
 
 
-suggestionPill : Theme -> CategorySuggestion -> Element Msg
-suggestionPill theme s =
-    Input.button
-        [ Element.padding Ui.space4
-        , Element.width Element.fill
-        ]
-        { onPress = Just (AcceptCategorySuggestion s.value)
-        , label =
-            Element.row
-                [ Element.width Element.fill
-                , Element.spacing Ui.space8
-                , Element.paddingEach { top = 4, right = 8, bottom = 4, left = 8 }
-                ]
-                [ Ui.fieldLabel theme s.value
-                , Element.el [ Element.alignRight ]
-                    (Ui.mutedCaption theme (String.fromInt s.count ++ " uses"))
-                ]
+suggestionRow : Theme -> Device -> CategorySuggestion -> Element Msg
+suggestionRow theme device s =
+    Ui.optionRow device
+        theme
+        { label = s.value
+        , trailing = Just (Ui.mutedCaption theme (String.fromInt s.count ++ " uses"))
+        , selected = False
+        , onPress = AcceptCategorySuggestion s.value
         }
 
 

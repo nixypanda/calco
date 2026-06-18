@@ -7,7 +7,6 @@ import Api.Foods exposing (SearchResult)
 import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
 import Element exposing (Device, Element)
-import Element.Input as Input
 import Html
 import Html.Events
 import Json.Decode as Decode
@@ -105,34 +104,26 @@ resultRow theme device config =
         categoryTags =
             categoryPills theme device config.item.categories
 
-        content : Element msg
-        content =
-            if Ui.isSmall device then
-                Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing Ui.space12
-                    ]
-                    [ Element.wrappedRow
-                        [ Element.width Element.fill
-                        , Element.spacing Ui.space12
-                        ]
-                        [ macroDot, searchItem ]
-                    , categoryTags
-                    ]
+        hasCategories : Bool
+        hasCategories =
+            not (List.isEmpty (visibleCategories config.item.categories))
+    in
+    Ui.listRow
+        { onSelect = config.onSelect config.item.id
+        , leading = [ macroDot ]
+        , title = searchItem
+        , subtitle =
+            if Ui.isSmall device && hasCategories then
+                [ categoryTags ]
 
             else
-                Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing Ui.space12
-                    ]
-                    [ macroDot, searchItem, categoryTags ]
-    in
-    Input.button
-        [ Element.width Element.fill
-        , Element.padding Ui.space16
-        ]
-        { onPress = Just (config.onSelect config.item.id)
-        , label = content
+                []
+        , trailing =
+            if Ui.isSmall device || not hasCategories then
+                []
+
+            else
+                [ categoryTags ]
         }
 
 
@@ -148,6 +139,7 @@ completionDropdownHeight device options =
 completionRow : Theme -> Device -> (Completion -> msg) -> Completion -> Element msg
 completionRow theme device onSelect completion =
     Ui.completionRow device
+        theme
         { label = Search.completionLabel completion
         , trailing =
             case completion of
