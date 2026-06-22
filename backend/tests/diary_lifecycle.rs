@@ -34,6 +34,21 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
     created["id"].as_str().unwrap().to_string()
 }
 
+async fn seed_meal(router: &axum::Router, user: &str, product_id: &str) -> String {
+    let payload = json!({
+        "name": "Recent Test Meal",
+        "total_quantity": { "amount": 100, "unit": "g" },
+        "components": [
+            {
+                "item": { "type": "product", "id": product_id },
+                "quantity": { "amount": 100, "unit": "g" }
+            }
+        ]
+    });
+    let created: Value = post_json(router, "/api/meals", user, &payload, StatusCode::CREATED).await;
+    created["id"].as_str().unwrap().to_string()
+}
+
 #[sqlx::test]
 async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     let router = app(pool).await;
@@ -154,4 +169,108 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     delete_no_content(&router, &format!("/api/logs/{log_id}"), &user).await;
     let (status, _) = get_status(&router, &format!("/api/logs/{log_id}"), &user).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[sqlx::test]
+async fn recent_items_and_last_used_defaults(pool: PgPool) {
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+
+    let product_id = seed_product(&router, &user).await;
+    let meal_id = seed_meal(&router, &user, &product_id).await;
+
+    let first_product_log = json!({
+        "log_date": "2026-06-01",
+        "meal_slot": "breakfast",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 100, "unit": "g" }
+    });
+    let _: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &first_product_log,
+        StatusCode::CREATED,
+    )
+    .await;
+
+    let latest_product_log = json!({
+        "log_date": "2026-06-03",
+        "meal_slot": "breakfast",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 175, "unit": "g" }
+    });
+    let _: Value = post_json(
+        &router,
+        "/api/logs",
+        &user,
+        &latest_product_log,
+        StatusCode::CREATED,
+    )
+    .await;
+
+    let meal_log = json!({
+        "log_date": "2026-06-02",
+        "meal_slot": "breakfast",
+        "item": { "type": "meal", "id": meal_id },
+        "quantity": { "amount": 100, "unit": "g" }
+    });
+    let _: Value = post_json(&router, "/api/logs", &user, &meal_log, StatusCode::CREATED).await;
+
+    let recent: Value = get_json(
+        &router,
+        "/api/logs/recent-items?from_date=2026-06-01&to_date=2026-06-03&meal_slot=breakfast",
+        &user,
+    )
+    .await;
+    let recent_items = recent["items"].as_array().unwrap();
+    assert_eq!(recent_items.len(), 2);
+
+    let product_recent = recent_items
+        .iter()
+        .find(|item| item["item"]["type"] == "product")
+        .expect("recent product missing");
+    assert_eq!(product_recent["item"]["id"], product_id);
+    assert_eq!(product_recent["last_used_date"], "2026-06-03");
+    assert_eq!(product_recent["quantity"]["amount"], "175");
+    assert_eq!(product_recent["quantity"]["unit"], "g");
+
+    let meal_recent = recent_items
+        .iter()
+        .find(|item| item["item"]["type"] == "meal")
+        .expect("recent meal missing");
+    assert_eq!(meal_recent["item"]["id"], meal_id);
+    assert_eq!(meal_recent["last_used_date"], "2026-06-02");
+    assert_eq!(meal_recent["quantity"]["amount"], "100");
+    assert_eq!(meal_recent["quantity"]["unit"], "g");
+
+    let last_used_payload = json!({
+        "from_date": "2026-06-01",
+        "to_date": "2026-06-03",
+        "meal_slot": "breakfast",
+        "items": [
+            { "type": "product", "id": product_id },
+            { "type": "meal", "id": meal_id }
+        ]
+    });
+    let last_used: Value = post_json(
+        &router,
+        "/api/logs/last-used",
+        &user,
+        &last_used_payload,
+        StatusCode::OK,
+    )
+    .await;
+    let defaults = last_used["items"].as_array().unwrap();
+    assert_eq!(defaults.len(), 2);
+    assert!(
+        defaults.iter().any(|item| {
+            item["item"]["type"] == "product" && item["quantity"]["amount"] == "175"
+        })
+    );
+    assert!(
+        defaults
+            .iter()
+            .any(|item| item["item"]["type"] == "meal" && item["quantity"]["unit"] == "g")
+    );
 }

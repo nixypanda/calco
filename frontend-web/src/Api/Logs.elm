@@ -1,15 +1,21 @@
 module Api.Logs exposing
     ( BatchLogResponse
     , CreateLogRequest
+    , LastUsedItemsRequest
     , LatestSlotResponse
+    , RecentItem
+    , RecentItemsRequest
+    , RecentItemsResponse
     , UpdateLogRequest
     , createLog
     , createLogRequestEncoder
     , createLogsBatch
     , deleteLog
     , getLog
+    , lastUsedItems
     , latestSlot
     , listLogs
+    , recentItems
     , updateLog
     , updateLogRequestEncoder
     )
@@ -46,6 +52,34 @@ type alias LatestSlotResponse =
     { sourceDate : LocalDate
     , mealSlot : String
     , items : List FoodLog
+    }
+
+
+type alias RecentItem =
+    { item : FoodLog.LogItem
+    , lastUsedDate : LocalDate
+    , mealSlot : Maybe String
+    , quantity : Nutrition.Quantity
+    }
+
+
+type alias RecentItemsResponse =
+    { items : List RecentItem
+    }
+
+
+type alias RecentItemsRequest =
+    { fromDate : LocalDate
+    , toDate : LocalDate
+    , mealSlot : Maybe String
+    }
+
+
+type alias LastUsedItemsRequest =
+    { fromDate : LocalDate
+    , toDate : LocalDate
+    , mealSlot : Maybe String
+    , items : List ItemRef
     }
 
 
@@ -116,6 +150,42 @@ latestSlot query toMsg =
             ]
         )
         latestSlotResponseDecoder
+        toMsg
+
+
+recentItems :
+    RecentItemsRequest
+    -> (Result Client.ApiError RecentItemsResponse -> msg)
+    -> Cmd msg
+recentItems request toMsg =
+    Client.get
+        (Builder.absolute
+            [ "api", "logs", "recent-items" ]
+            ([ Builder.string "from_date" (LocalDate.format request.fromDate)
+             , Builder.string "to_date" (LocalDate.format request.toDate)
+             ]
+                ++ maybeMealSlotQuery request.mealSlot
+            )
+        )
+        recentItemsResponseDecoder
+        toMsg
+
+
+lastUsedItems :
+    LastUsedItemsRequest
+    -> (Result Client.ApiError RecentItemsResponse -> msg)
+    -> Cmd msg
+lastUsedItems request toMsg =
+    Client.post
+        (Builder.absolute [ "api", "logs", "last-used" ] [])
+        (Encode.object
+            [ ( "from_date", Encode.string (LocalDate.format request.fromDate) )
+            , ( "to_date", Encode.string (LocalDate.format request.toDate) )
+            , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
+            , ( "items", Encode.list ItemRef.encoder request.items )
+            ]
+        )
+        recentItemsResponseDecoder
         toMsg
 
 
@@ -190,6 +260,31 @@ batchLogResponseDecoder : Decode.Decoder BatchLogResponse
 batchLogResponseDecoder =
     Decode.map BatchLogResponse
         (Decode.field "items" (Decode.list FoodLog.decoder))
+
+
+recentItemsResponseDecoder : Decode.Decoder RecentItemsResponse
+recentItemsResponseDecoder =
+    Decode.map RecentItemsResponse
+        (Decode.field "items" (Decode.list recentItemDecoder))
+
+
+recentItemDecoder : Decode.Decoder RecentItem
+recentItemDecoder =
+    Decode.map4 RecentItem
+        (Decode.field "item" FoodLog.logItemDecoder)
+        (Decode.field "last_used_date" dateFieldDecoder)
+        (Decode.field "meal_slot" (Decode.nullable Decode.string))
+        (Decode.field "quantity" Nutrition.quantityDecoder)
+
+
+maybeMealSlotQuery : Maybe String -> List Builder.QueryParameter
+maybeMealSlotQuery maybeSlot =
+    case maybeSlot of
+        Just slot ->
+            [ Builder.string "meal_slot" slot ]
+
+        Nothing ->
+            []
 
 
 dateFieldDecoder : Decode.Decoder LocalDate

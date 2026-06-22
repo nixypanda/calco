@@ -310,6 +310,50 @@ mod tests {
             }))
         }
 
+        async fn list_recent_items(
+            &self,
+            user_id: Uuid,
+            from_date: NaiveDate,
+            to_date: NaiveDate,
+            meal_slot: Option<MealSlot>,
+        ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+            let logs = self.logs.lock().unwrap();
+            Ok(dedup_recent_items(
+                logs.iter()
+                    .filter(|log| {
+                        log.user_id == user_id
+                            && log.log_date >= from_date
+                            && log.log_date <= to_date
+                            && meal_slot.is_none_or(|slot| log.meal_slot == Some(slot))
+                    })
+                    .cloned()
+                    .collect(),
+            ))
+        }
+
+        async fn find_last_used_items(
+            &self,
+            user_id: Uuid,
+            from_date: NaiveDate,
+            to_date: NaiveDate,
+            meal_slot: Option<MealSlot>,
+            items: &[FoodLogItemRef],
+        ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+            let logs = self.logs.lock().unwrap();
+            Ok(dedup_recent_items(
+                logs.iter()
+                    .filter(|log| {
+                        log.user_id == user_id
+                            && log.log_date >= from_date
+                            && log.log_date <= to_date
+                            && meal_slot.is_none_or(|slot| log.meal_slot == Some(slot))
+                            && items.iter().any(|item| log_item_matches(&log.item, item))
+                    })
+                    .cloned()
+                    .collect(),
+            ))
+        }
+
         async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
             let mut logs = self.logs.lock().unwrap();
             if let Some(existing) = logs.iter_mut().find(|l| l.id == log.id) {
@@ -328,6 +372,60 @@ mod tests {
                 .ok_or_else(|| NutritionError::NotFound("not found".into()))?;
             logs.remove(idx);
             Ok(())
+        }
+    }
+
+    fn dedup_recent_items(mut logs: Vec<FoodLog>) -> Vec<RecentFoodLogItem> {
+        logs.sort_by(|left, right| {
+            right
+                .log_date
+                .cmp(&left.log_date)
+                .then_with(|| right.created_at.cmp(&left.created_at))
+        });
+
+        let mut items = Vec::new();
+        for log in logs {
+            if items
+                .iter()
+                .any(|item: &RecentFoodLogItem| same_item_snapshot(&item.item, &log.item))
+            {
+                continue;
+            }
+            items.push(RecentFoodLogItem {
+                item: log.item,
+                log_date: log.log_date,
+                meal_slot: log.meal_slot,
+                quantity_amount: log.quantity_amount,
+                quantity_unit: log.quantity_unit,
+            });
+        }
+        items
+    }
+
+    fn same_item_snapshot(left: &FoodLogItemSnapshot, right: &FoodLogItemSnapshot) -> bool {
+        match (left, right) {
+            (
+                FoodLogItemSnapshot::Product { id: left_id, .. },
+                FoodLogItemSnapshot::Product { id: right_id, .. },
+            ) => left_id == right_id,
+            (
+                FoodLogItemSnapshot::Meal { id: left_id, .. },
+                FoodLogItemSnapshot::Meal { id: right_id, .. },
+            ) => left_id == right_id,
+            _ => false,
+        }
+    }
+
+    fn log_item_matches(snapshot: &FoodLogItemSnapshot, item: &FoodLogItemRef) -> bool {
+        match (snapshot, item) {
+            (
+                FoodLogItemSnapshot::Product { id: left_id, .. },
+                FoodLogItemRef::Product(right_id),
+            ) => left_id == right_id,
+            (FoodLogItemSnapshot::Meal { id: left_id, .. }, FoodLogItemRef::Meal(right_id)) => {
+                left_id == right_id
+            }
+            _ => false,
         }
     }
 

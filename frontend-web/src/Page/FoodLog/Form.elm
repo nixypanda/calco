@@ -5,6 +5,7 @@ module Page.FoodLog.Form exposing
     , SubmitFailure(..)
     , SubmitState(..)
     , ValidationError(..)
+    , applyQuantityDefault
     , createProductLogRequest
     , createUpdateLogRequest
     , initLogFormFromFood
@@ -109,6 +110,14 @@ initLogFormFromLog log =
     , notes = log.notes |> Maybe.withDefault ""
     , openDropdown = NoDropdownOpen
     , submitState = SubmitIdle
+    }
+
+
+applyQuantityDefault : Quantity -> Model -> Model
+applyQuantityDefault quantity model =
+    { model
+        | amount = quantity.amount
+        , unit = quantity.unit
     }
 
 

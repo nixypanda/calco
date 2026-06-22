@@ -26,6 +26,8 @@ pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
         .route("/logs", post(create_log_handler).get(list_logs_handler))
         .route("/logs/batch", post(create_logs_batch_handler))
+        .route("/logs/last-used", post(last_used_items_handler))
+        .route("/logs/recent-items", get(recent_items_handler))
         .route("/logs/latest-slot", get(latest_slot_handler))
         .route(
             "/logs/{id}",
@@ -134,6 +136,27 @@ pub struct LatestSlotResponse {
 }
 
 #[derive(Serialize)]
+pub struct RecentItemsResponse {
+    pub items: Vec<RecentItemResponse>,
+}
+
+#[derive(Serialize)]
+pub struct RecentItemResponse {
+    pub item: ItemDto,
+    pub last_used_date: NaiveDate,
+    pub meal_slot: Option<MealSlotDto>,
+    pub quantity: QuantityDto,
+}
+
+#[derive(Deserialize)]
+pub struct LastUsedItemsRequest {
+    pub from_date: String,
+    pub to_date: String,
+    pub meal_slot: Option<String>,
+    pub items: Vec<ItemRefDto>,
+}
+
+#[derive(Serialize)]
 pub struct BatchLogResponse {
     pub items: Vec<LogResponse>,
 }
@@ -148,6 +171,13 @@ pub struct LatestSlotQuery {
     pub meal_slot: String,
     pub before: String,
     pub lookback_days: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub struct RecentItemsQuery {
+    pub from_date: String,
+    pub to_date: String,
+    pub meal_slot: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -268,6 +298,64 @@ async fn latest_slot_handler(
     }
 }
 
+async fn recent_items_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Query(query): Query<RecentItemsQuery>,
+) -> impl IntoResponse {
+    let (from_date, to_date, meal_slot) =
+        match parse_recent_item_scope(&query.from_date, &query.to_date, query.meal_slot.as_deref())
+        {
+            Ok(scope) => scope,
+            Err(err) => return err.into_response(),
+        };
+
+    match state
+        .food_log_repo
+        .list_recent_items(auth.0.id, from_date, to_date, meal_slot)
+        .await
+    {
+        Ok(items) => Json(RecentItemsResponse {
+            items: items.iter().map(recent_item_to_response).collect(),
+        })
+        .into_response(),
+        Err(err) => internal_error(err).into_response(),
+    }
+}
+
+async fn last_used_items_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<LastUsedItemsRequest>,
+) -> impl IntoResponse {
+    let (from_date, to_date, meal_slot) =
+        match parse_recent_item_scope(&req.from_date, &req.to_date, req.meal_slot.as_deref()) {
+            Ok(scope) => scope,
+            Err(err) => return err.into_response(),
+        };
+    let items = match req
+        .items
+        .iter()
+        .map(parse_food_log_item_ref)
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(items) => items,
+        Err(err) => return err.into_response(),
+    };
+
+    match state
+        .food_log_repo
+        .find_last_used_items(auth.0.id, from_date, to_date, meal_slot, &items)
+        .await
+    {
+        Ok(items) => Json(RecentItemsResponse {
+            items: items.iter().map(recent_item_to_response).collect(),
+        })
+        .into_response(),
+        Err(err) => internal_error(err).into_response(),
+    }
+}
+
 async fn get_log_handler(
     auth: AuthUser,
     State(state): State<AppState>,
@@ -367,6 +455,22 @@ fn parse_quantity(q: &QuantityDto) -> Result<Quantity, NutritionError> {
 fn parse_log_date(s: &str) -> Result<NaiveDate, NutritionError> {
     NaiveDate::parse_from_str(s, "%Y-%m-%d")
         .map_err(|_| NutritionError::Validation("invalid log_date".into()))
+}
+
+fn parse_recent_item_scope(
+    from_date: &str,
+    to_date: &str,
+    meal_slot: Option<&str>,
+) -> Result<(NaiveDate, NaiveDate, Option<MealSlot>), NutritionError> {
+    let from_date = parse_log_date(from_date)?;
+    let to_date = parse_log_date(to_date)?;
+    if from_date > to_date {
+        return Err(NutritionError::Validation(
+            "from_date must be on or before to_date".into(),
+        ));
+    }
+    let meal_slot = meal_slot.map(parse_meal_slot).transpose()?;
+    Ok((from_date, to_date, meal_slot))
 }
 
 fn normalize_device_timezone(tz: Option<String>) -> Result<Option<String>, NutritionError> {
@@ -490,6 +594,15 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
         notes: log.notes.clone(),
         created_at: log.created_at,
         updated_at: log.updated_at,
+    }
+}
+
+fn recent_item_to_response(item: &RecentFoodLogItem) -> RecentItemResponse {
+    RecentItemResponse {
+        item: item_to_dto(&item.item),
+        last_used_date: item.log_date,
+        meal_slot: item.meal_slot.map(Into::into),
+        quantity: quantity_to_dto(item.quantity_amount, item.quantity_unit.0.clone()),
     }
 }
 

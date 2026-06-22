@@ -129,6 +129,15 @@ pub struct FoodLog {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone)]
+pub struct RecentFoodLogItem {
+    pub item: FoodLogItemSnapshot,
+    pub log_date: NaiveDate,
+    pub meal_slot: Option<MealSlot>,
+    pub quantity_amount: Decimal,
+    pub quantity_unit: UnitCode,
+}
+
 impl FoodLog {
     pub fn new_product_log(
         user_id: Uuid,
@@ -323,6 +332,21 @@ pub trait FoodLogRepository: Send + Sync {
         before_date: NaiveDate,
         lookback_days: i64,
     ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError>;
+    async fn list_recent_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError>;
+    async fn find_last_used_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+        items: &[FoodLogItemRef],
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError>;
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError>;
     async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError>;
 }

@@ -130,6 +130,114 @@ impl PostgresFoodLogRepository {
         let source_date = rows[0].log_date;
         Ok(Some((source_date, self.rows_to_food_logs(rows).await?)))
     }
+
+    async fn load_recent_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        let rows = sqlx::query_as::<_, RecentFoodLogItemRow>(
+            r#"
+            WITH ranked AS (
+                SELECT fl.log_date, fl.meal_slot, fl.item_product_id, fl.item_meal_id,
+                       fl.item_name, fl.item_brand, fl.quantity, fl.unit,
+                       row_number() OVER (
+                           PARTITION BY
+                               CASE WHEN fl.item_product_id IS NOT NULL THEN 'product' ELSE 'meal' END,
+                               COALESCE(fl.item_product_id, fl.item_meal_id)
+                           ORDER BY fl.log_date DESC, fl.created_at DESC
+                       ) AS rn
+                FROM food_logs fl
+                WHERE fl.user_id = $1
+                  AND fl.log_date >= $2
+                  AND fl.log_date <= $3
+                  AND ($4::text IS NULL OR fl.meal_slot = $4)
+            )
+            SELECT log_date, meal_slot, item_product_id, item_meal_id,
+                   item_name, item_brand, quantity, unit
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY log_date DESC, item_name ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(from_date)
+        .bind(to_date)
+        .bind(meal_slot.as_ref().map(|m| m.as_str()))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(recent_row_to_item).collect()
+    }
+
+    async fn load_last_used_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+        items: &[FoodLogItemRef],
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let product_ids: Vec<Uuid> = items
+            .iter()
+            .filter_map(|item| match item {
+                FoodLogItemRef::Product(id) => Some(id.0),
+                FoodLogItemRef::Meal(_) => None,
+            })
+            .collect();
+        let meal_ids: Vec<Uuid> = items
+            .iter()
+            .filter_map(|item| match item {
+                FoodLogItemRef::Product(_) => None,
+                FoodLogItemRef::Meal(id) => Some(id.0),
+            })
+            .collect();
+
+        let rows = sqlx::query_as::<_, RecentFoodLogItemRow>(
+            r#"
+            WITH ranked AS (
+                SELECT fl.log_date, fl.meal_slot, fl.item_product_id, fl.item_meal_id,
+                       fl.item_name, fl.item_brand, fl.quantity, fl.unit,
+                       row_number() OVER (
+                           PARTITION BY
+                               CASE WHEN fl.item_product_id IS NOT NULL THEN 'product' ELSE 'meal' END,
+                               COALESCE(fl.item_product_id, fl.item_meal_id)
+                           ORDER BY fl.log_date DESC, fl.created_at DESC
+                       ) AS rn
+                FROM food_logs fl
+                WHERE fl.user_id = $1
+                  AND fl.log_date >= $2
+                  AND fl.log_date <= $3
+                  AND ($4::text IS NULL OR fl.meal_slot = $4)
+                  AND (
+                    fl.item_product_id = ANY($5::uuid[])
+                    OR fl.item_meal_id = ANY($6::uuid[])
+                  )
+            )
+            SELECT log_date, meal_slot, item_product_id, item_meal_id,
+                   item_name, item_brand, quantity, unit
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY log_date DESC, item_name ASC
+            "#,
+        )
+        .bind(user_id)
+        .bind(from_date)
+        .bind(to_date)
+        .bind(meal_slot.as_ref().map(|m| m.as_str()))
+        .bind(&product_ids)
+        .bind(&meal_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(recent_row_to_item).collect()
+    }
 }
 
 fn food_log_row_to_food_log(
@@ -168,6 +276,33 @@ fn food_log_row_to_food_log(
         notes: row.notes,
         created_at: row.created_at,
         updated_at: row.updated_at,
+    })
+}
+
+fn recent_row_to_item(row: RecentFoodLogItemRow) -> Result<RecentFoodLogItem, NutritionError> {
+    let item = if let Some(pid) = row.item_product_id {
+        FoodLogItemSnapshot::Product {
+            id: ProductId(pid),
+            name: row.item_name,
+            brand: row.item_brand,
+        }
+    } else if let Some(mid) = row.item_meal_id {
+        FoodLogItemSnapshot::Meal {
+            id: MealId(mid),
+            name: row.item_name,
+        }
+    } else {
+        return Err(NutritionError::Internal(
+            "recent food log item has no item reference".into(),
+        ));
+    };
+
+    Ok(RecentFoodLogItem {
+        item,
+        log_date: row.log_date,
+        meal_slot: row.meal_slot.and_then(|s| s.parse().ok()),
+        quantity_amount: row.quantity,
+        quantity_unit: UnitCode(row.unit),
     })
 }
 
@@ -273,6 +408,29 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             .await
     }
 
+    async fn list_recent_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        self.load_recent_items(user_id, from_date, to_date, meal_slot)
+            .await
+    }
+
+    async fn find_last_used_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+        items: &[FoodLogItemRef],
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        self.load_last_used_items(user_id, from_date, to_date, meal_slot, items)
+            .await
+    }
+
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
@@ -352,6 +510,18 @@ struct FoodLogSnapshotJoinRow {
     amount: Decimal,
     unit: String,
     code: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct RecentFoodLogItemRow {
+    log_date: NaiveDate,
+    meal_slot: Option<String>,
+    item_product_id: Option<Uuid>,
+    item_meal_id: Option<Uuid>,
+    item_name: String,
+    item_brand: Option<String>,
+    quantity: Decimal,
+    unit: String,
 }
 
 fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &str, Option<&str>) {

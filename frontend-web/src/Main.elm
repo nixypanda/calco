@@ -12,7 +12,8 @@ import Browser
 import Browser.Events
 import Browser.Navigation as Nav
 import Data.Auth as Auth
-import Data.MealSlot as MealSlot
+import Data.ItemRef as ItemRef
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
@@ -470,6 +471,13 @@ update msg model =
                 FoodDetailPage _ ->
                     stepFoodDetail (FoodShow.LocalContextReceived context) model
 
+                FoodSearchPage sub ->
+                    stepPage FoodSearchPage
+                        GotFoodSearchMsg
+                        applyFoodSearchOutMsg
+                        (FoodSearch.update (FoodSearch.LocalContextReceived context) sub)
+                        model
+
                 GoalsSettingsPage sub ->
                     stepPage GoalsSettingsPage
                         GotGoalsSettingsMsg
@@ -670,7 +678,21 @@ loadPage route model =
                     ( { model | page = LoadingPage }, Cmd.none )
 
         FoodSearch dateParam mealSlot ->
-            ( { model | page = FoodSearchPage (FoodSearch.init dateParam mealSlot) }, Cmd.none )
+            let
+                searchModel : FoodSearch.Model
+                searchModel =
+                    FoodSearch.init dateParam mealSlot
+            in
+            ( { model | page = FoodSearchPage searchModel }
+            , case recentItemsRequest dateParam mealSlot of
+                Just request ->
+                    Api.Logs.recentItems
+                        request
+                        (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded)
+
+                Nothing ->
+                    Cmd.none
+            )
 
         FoodShow productId dateParam mealSlot ->
             initPage
@@ -714,6 +736,44 @@ loadPage route model =
 
         _ ->
             ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
+
+
+recentItemsRequest :
+    Maybe String
+    -> Maybe MealSlot
+    -> Maybe Api.Logs.RecentItemsRequest
+recentItemsRequest maybeDate maybeSlot =
+    maybeDate
+        |> Maybe.andThen LocalDate.fromString
+        |> Maybe.map
+            (\toDate ->
+                { fromDate = LocalDate.addDays -30 toDate
+                , toDate = toDate
+                , mealSlot = Maybe.map MealSlot.toString maybeSlot
+                }
+            )
+
+
+lastUsedProductDefaultCmd : Route -> String -> List (Cmd Msg)
+lastUsedProductDefaultCmd route productId =
+    case route of
+        FoodShow _ maybeDate maybeSlot ->
+            case recentItemsRequest maybeDate maybeSlot of
+                Just request ->
+                    [ Api.Logs.lastUsedItems
+                        { fromDate = request.fromDate
+                        , toDate = request.toDate
+                        , mealSlot = request.mealSlot
+                        , items = [ { itemType = ItemRef.Product, id = productId } ]
+                        }
+                        (GotFoodDetailMsg << FoodShow.LastUsedLoaded)
+                    ]
+
+                Nothing ->
+                    []
+
+        _ ->
+            []
 
 
 applyLoginOutMsg : AuthLogin.OutMsg -> Model -> ( Model, Cmd Msg )
@@ -925,6 +985,12 @@ applyFoodSearchOutMsg outMsg model =
                 (GotFoodSearchMsg << FoodSearch.CategorySuggestionsCompleted token)
             )
 
+        FoodSearch.RequestLocalContext ->
+            ( model, requestLocalContext () )
+
+        FoodSearch.RequestCreateLog request ->
+            ( model, Api.Logs.createLog request (GotFoodSearchMsg << FoodSearch.QuickAddCompleted) )
+
         FoodSearch.Navigate route ->
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
@@ -943,9 +1009,11 @@ applyFoodDetailOutMsg outMsg model =
         FoodShow.RequestInitialData productId ->
             ( model
             , Cmd.batch
-                [ Api.Foods.getFoodDetail productId (GotFoodDetailMsg << FoodShow.FoodLoaded)
-                , Api.Foods.listUnits (GotFoodDetailMsg << FoodShow.UnitsLoaded)
-                ]
+                ([ Api.Foods.getFoodDetail productId (GotFoodDetailMsg << FoodShow.FoodLoaded)
+                 , Api.Foods.listUnits (GotFoodDetailMsg << FoodShow.UnitsLoaded)
+                 ]
+                    ++ lastUsedProductDefaultCmd model.route productId
+                )
             )
 
         FoodShow.RequestLocalContext ->

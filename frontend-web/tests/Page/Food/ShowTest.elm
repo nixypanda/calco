@@ -151,6 +151,7 @@ emptyModel =
         , mealSlot = Just Lunch
         , food = Nothing
         , units = Nothing
+        , lastUsedDefault = Nothing
         }
 
 
@@ -164,6 +165,7 @@ loadedModel =
         , units = [ gram ]
         , form = form
         , request = FoodShow.Idle
+        , lastUsedDefault = Nothing
         }
 
 
@@ -177,6 +179,7 @@ contextReadyModel =
         , units = [ gram ]
         , form = form
         , request = FoodShow.RequestingLocalContext
+        , lastUsedDefault = Nothing
         }
 
 
@@ -190,6 +193,7 @@ contextReadyWithoutDateModel =
         , units = [ gram ]
         , form = form
         , request = FoodShow.RequestingLocalContext
+        , lastUsedDefault = Nothing
         }
 
 
@@ -203,6 +207,7 @@ savingModel =
         , units = [ gram ]
         , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , request = FoodShow.Saving
+        , lastUsedDefault = Nothing
         }
 
 

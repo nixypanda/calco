@@ -3,6 +3,7 @@ module Data.FoodLog exposing
     , LogItem
     , decoder
     , listDecoder
+    , logItemDecoder
     )
 
 import Data.ItemRef as ItemRef exposing (ItemType)

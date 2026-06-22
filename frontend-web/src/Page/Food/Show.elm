@@ -13,7 +13,7 @@ module Page.Food.Show exposing
 
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
-import Api.Logs exposing (CreateLogRequest)
+import Api.Logs exposing (CreateLogRequest, RecentItemsResponse)
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
@@ -42,6 +42,7 @@ type alias LoadingModel =
     , mealSlot : Maybe MealSlot
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
+    , lastUsedDefault : Maybe Nutrition.Quantity
     }
 
 
@@ -53,6 +54,7 @@ type alias LoadedModel =
     , units : List UnitItem
     , form : FoodLogForm.Model
     , request : RequestState
+    , lastUsedDefault : Maybe Nutrition.Quantity
     }
 
 
@@ -79,6 +81,7 @@ init productId logDate mealSlot =
         , mealSlot = mealSlot
         , food = Nothing
         , units = Nothing
+        , lastUsedDefault = Nothing
         }
     , RequestInitialData productId
     )
@@ -91,6 +94,7 @@ init productId logDate mealSlot =
 type Msg
     = FoodLoaded (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | LastUsedLoaded (Result Client.ApiError RecentItemsResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
     | LocalContextReceived { date : String, timezone : String }
@@ -115,6 +119,23 @@ update msg model =
 
                 Err error ->
                     failure error model
+
+        LastUsedLoaded result ->
+            case result of
+                Ok response ->
+                    ( applyLastUsedDefault
+                        (List.head response.items |> Maybe.map .quantity)
+                        model
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                Err error ->
+                    if Client.isUnauthorized error then
+                        ( model, Cmd.none, SessionExpired )
+
+                    else
+                        ( model, Cmd.none, NoOp )
 
         FormMsg subMsg ->
             case model of
@@ -272,7 +293,10 @@ setLoadedFood food model =
             Loaded
                 { loaded
                     | food = food
-                    , form = FoodLogForm.initLogFormFromFood loaded.mealSlot food
+                    , form =
+                        formWithLastUsedDefault
+                            loaded.lastUsedDefault
+                            (FoodLogForm.initLogFormFromFood loaded.mealSlot food)
                     , request = Idle
                 }
 
@@ -303,12 +327,51 @@ completeLoading loading =
                 , mealSlot = loading.mealSlot
                 , food = food
                 , units = units
-                , form = FoodLogForm.initLogFormFromFood loading.mealSlot food
+                , form =
+                    formWithLastUsedDefault
+                        loading.lastUsedDefault
+                        (FoodLogForm.initLogFormFromFood loading.mealSlot food)
                 , request = Idle
+                , lastUsedDefault = loading.lastUsedDefault
                 }
 
         _ ->
             Loading loading
+
+
+applyLastUsedDefault : Maybe Nutrition.Quantity -> Model -> Model
+applyLastUsedDefault maybeQuantity model =
+    case maybeQuantity of
+        Nothing ->
+            model
+
+        Just quantity ->
+            case model of
+                Loading loading ->
+                    Loading { loading | lastUsedDefault = Just quantity }
+
+                Loaded loaded ->
+                    Loaded
+                        { loaded
+                            | lastUsedDefault = Just quantity
+                            , form = FoodLogForm.applyQuantityDefault quantity loaded.form
+                        }
+
+                LoadFailed _ ->
+                    model
+
+
+formWithLastUsedDefault :
+    Maybe Nutrition.Quantity
+    -> FoodLogForm.Model
+    -> FoodLogForm.Model
+formWithLastUsedDefault maybeQuantity form =
+    case maybeQuantity of
+        Just quantity ->
+            FoodLogForm.applyQuantityDefault quantity form
+
+        Nothing ->
+            form
 
 
 failure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
