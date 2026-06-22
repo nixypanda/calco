@@ -841,9 +841,17 @@ applyDiaryOutMsg outMsg model =
         DiaryDay.RequestDiaryData date ->
             ( model
             , Cmd.batch
-                [ Cmd.map GotDiaryMsg (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
-                , Cmd.map GotDiaryMsg (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
-                ]
+                (Cmd.map GotDiaryMsg (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
+                    :: Cmd.map GotDiaryMsg (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
+                    :: latestSlotRequests date
+                )
+            )
+
+        DiaryDay.RequestCopyLatestSlot date requests ->
+            ( model
+            , Api.Logs.createLogsBatch
+                requests
+                (GotDiaryMsg << DiaryDay.CopyLatestCompleted date)
             )
 
         DiaryDay.Navigate route ->
@@ -852,6 +860,22 @@ applyDiaryOutMsg outMsg model =
         DiaryDay.SessionExpired ->
             ( { model | session = Session.clear model.session }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
+
+
+latestSlotRequests : LocalDate -> List (Cmd Msg)
+latestSlotRequests date =
+    [ MealSlot.Breakfast, MealSlot.Lunch, MealSlot.Dinner, MealSlot.Snack ]
+        |> List.map
+            (\slot ->
+                Cmd.map GotDiaryMsg
+                    (Api.Logs.latestSlot
+                        { mealSlot = MealSlot.toString slot
+                        , before = date
+                        , lookbackDays = 30
+                        }
+                        (DiaryDay.LatestSlotLoaded date slot)
+                    )
             )
 
 

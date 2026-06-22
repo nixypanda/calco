@@ -1,10 +1,14 @@
 module Api.Logs exposing
-    ( CreateLogRequest
+    ( BatchLogResponse
+    , CreateLogRequest
+    , LatestSlotResponse
     , UpdateLogRequest
     , createLog
     , createLogRequestEncoder
+    , createLogsBatch
     , deleteLog
     , getLog
+    , latestSlot
     , listLogs
     , updateLog
     , updateLogRequestEncoder
@@ -14,6 +18,7 @@ import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.Nutrition as Nutrition
+import Json.Decode as Decode
 import Json.Encode as Encode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Json as Json
@@ -37,12 +42,39 @@ type alias UpdateLogRequest =
     }
 
 
+type alias LatestSlotResponse =
+    { sourceDate : LocalDate
+    , mealSlot : String
+    , items : List FoodLog
+    }
+
+
+type alias BatchLogResponse =
+    { items : List FoodLog
+    }
+
+
 createLog : CreateLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 createLog request toMsg =
     Client.post
         (Builder.absolute [ "api", "logs" ] [])
         (createLogRequestEncoder request)
         FoodLog.decoder
+        toMsg
+
+
+createLogsBatch :
+    List CreateLogRequest
+    -> (Result Client.ApiError BatchLogResponse -> msg)
+    -> Cmd msg
+createLogsBatch requests toMsg =
+    Client.post
+        (Builder.absolute [ "api", "logs", "batch" ] [])
+        (Encode.object
+            [ ( "items", Encode.list createLogRequestEncoder requests )
+            ]
+        )
+        batchLogResponseDecoder
         toMsg
 
 
@@ -67,6 +99,23 @@ deleteLog : String -> (Result Client.ApiError () -> msg) -> Cmd msg
 deleteLog id toMsg =
     Client.delete
         (Builder.absolute [ "api", "logs", id ] [])
+        toMsg
+
+
+latestSlot :
+    { mealSlot : String, before : LocalDate, lookbackDays : Int }
+    -> (Result Client.ApiError LatestSlotResponse -> msg)
+    -> Cmd msg
+latestSlot query toMsg =
+    Client.get
+        (Builder.absolute
+            [ "api", "logs", "latest-slot" ]
+            [ Builder.string "meal_slot" query.mealSlot
+            , Builder.string "before" (LocalDate.format query.before)
+            , Builder.int "lookback_days" query.lookbackDays
+            ]
+        )
+        latestSlotResponseDecoder
         toMsg
 
 
@@ -127,3 +176,31 @@ deviceTimezoneField maybeTimezone =
 
         Nothing ->
             []
+
+
+latestSlotResponseDecoder : Decode.Decoder LatestSlotResponse
+latestSlotResponseDecoder =
+    Decode.map3 LatestSlotResponse
+        (Decode.field "source_date" dateFieldDecoder)
+        (Decode.field "meal_slot" Decode.string)
+        (Decode.field "items" (Decode.list FoodLog.decoder))
+
+
+batchLogResponseDecoder : Decode.Decoder BatchLogResponse
+batchLogResponseDecoder =
+    Decode.map BatchLogResponse
+        (Decode.field "items" (Decode.list FoodLog.decoder))
+
+
+dateFieldDecoder : Decode.Decoder LocalDate
+dateFieldDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\raw ->
+                case LocalDate.fromString raw of
+                    Just date ->
+                        Decode.succeed date
+
+                    Nothing ->
+                        Decode.fail ("Invalid local date: " ++ raw)
+            )

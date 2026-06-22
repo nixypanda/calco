@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Duration, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
@@ -42,6 +42,93 @@ impl PostgresFoodLogRepository {
                 unit: UnitCode(r.unit),
             })
             .collect())
+    }
+
+    async fn rows_to_food_logs(
+        &self,
+        rows: Vec<FoodLogRow>,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+        let snapshot_rows = sqlx::query_as::<_, FoodLogSnapshotJoinRow>(
+            r#"
+            SELECT fln.food_log_id, fln.amount, fln.unit, n.code
+            FROM food_log_nutrients fln
+            JOIN nutrients n ON n.id = fln.nutrient_id
+            WHERE fln.food_log_id = ANY($1)
+            "#,
+        )
+        .bind(&ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
+            std::collections::HashMap::new();
+        for s in snapshot_rows {
+            snapshots_by_log
+                .entry(s.food_log_id)
+                .or_default()
+                .push(FoodLogNutrientSnapshot {
+                    nutrient_code: NutrientCode(s.code),
+                    amount: s.amount,
+                    unit: UnitCode(s.unit),
+                });
+        }
+
+        let mut results = Vec::with_capacity(rows.len());
+        for r in rows {
+            let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
+            results.push(food_log_row_to_food_log(r, snapshots)?);
+        }
+        Ok(results)
+    }
+
+    async fn load_latest_slot_before(
+        &self,
+        user_id: Uuid,
+        meal_slot: MealSlot,
+        before_date: NaiveDate,
+        lookback_days: i64,
+    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
+        let cutoff_date = before_date - Duration::days(lookback_days);
+        let rows = sqlx::query_as::<_, FoodLogRow>(
+            r#"
+            WITH latest AS (
+                SELECT log_date
+                FROM food_logs
+                WHERE user_id = $1
+                  AND meal_slot = $2
+                  AND log_date < $3
+                  AND log_date >= $4
+                GROUP BY log_date
+                ORDER BY log_date DESC
+                LIMIT 1
+            )
+            SELECT fl.id, fl.user_id, fl.log_date, fl.meal_slot, fl.device_timezone,
+                   fl.item_product_id, fl.item_meal_id, fl.item_name, fl.item_brand,
+                   fl.quantity, fl.unit, fl.notes, fl.created_at, fl.updated_at
+            FROM food_logs fl
+            JOIN latest ON latest.log_date = fl.log_date
+            WHERE fl.user_id = $1 AND fl.meal_slot = $2
+            ORDER BY fl.created_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .bind(meal_slot.as_str())
+        .bind(before_date)
+        .bind(cutoff_date)
+        .fetch_all(&self.pool)
+        .await?;
+
+        if rows.is_empty() {
+            return Ok(None);
+        }
+
+        let source_date = rows[0].log_date;
+        Ok(Some((source_date, self.rows_to_food_logs(rows).await?)))
     }
 }
 
@@ -87,34 +174,40 @@ fn food_log_row_to_food_log(
 #[async_trait]
 impl FoodLogRepository for PostgresFoodLogRepository {
     async fn create(&self, log: &FoodLog) -> Result<(), NutritionError> {
+        self.create_many(std::slice::from_ref(log)).await
+    }
+
+    async fn create_many(&self, logs: &[FoodLog]) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
+        for log in logs {
+            let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
 
-        sqlx::query(
-            r#"
-            INSERT INTO food_logs (id, user_id, log_date, meal_slot, device_timezone, item_product_id, item_meal_id, item_name, item_brand, quantity, unit, notes, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-            "#,
-        )
-        .bind(log.id.0)
-        .bind(log.user_id)
-        .bind(log.log_date)
-        .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
-        .bind(&log.device_timezone)
-        .bind(product_id)
-        .bind(meal_id)
-        .bind(item_name)
-        .bind(item_brand)
-        .bind(log.quantity_amount)
-        .bind(&log.quantity_unit.0)
-        .bind(&log.notes)
-        .bind(log.created_at)
-        .bind(log.updated_at)
-        .execute(&mut *tx)
-        .await?;
+            sqlx::query(
+                r#"
+                INSERT INTO food_logs (id, user_id, log_date, meal_slot, device_timezone, item_product_id, item_meal_id, item_name, item_brand, quantity, unit, notes, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                "#,
+            )
+            .bind(log.id.0)
+            .bind(log.user_id)
+            .bind(log.log_date)
+            .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
+            .bind(&log.device_timezone)
+            .bind(product_id)
+            .bind(meal_id)
+            .bind(item_name)
+            .bind(item_brand)
+            .bind(log.quantity_amount)
+            .bind(&log.quantity_unit.0)
+            .bind(&log.notes)
+            .bind(log.created_at)
+            .bind(log.updated_at)
+            .execute(&mut *tx)
+            .await?;
 
-        insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
+            insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
+        }
 
         tx.commit().await?;
         Ok(())
@@ -166,42 +259,18 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         .fetch_all(&self.pool)
         .await?;
 
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
+        self.rows_to_food_logs(rows).await
+    }
 
-        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let snapshot_rows = sqlx::query_as::<_, FoodLogSnapshotJoinRow>(
-            r#"
-            SELECT fln.food_log_id, fln.amount, fln.unit, n.code
-            FROM food_log_nutrients fln
-            JOIN nutrients n ON n.id = fln.nutrient_id
-            WHERE fln.food_log_id = ANY($1)
-            "#,
-        )
-        .bind(&ids)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
-            std::collections::HashMap::new();
-        for s in snapshot_rows {
-            snapshots_by_log
-                .entry(s.food_log_id)
-                .or_default()
-                .push(FoodLogNutrientSnapshot {
-                    nutrient_code: NutrientCode(s.code),
-                    amount: s.amount,
-                    unit: UnitCode(s.unit),
-                });
-        }
-
-        let mut results = Vec::with_capacity(rows.len());
-        for r in rows {
-            let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
-            results.push(food_log_row_to_food_log(r, snapshots)?);
-        }
-        Ok(results)
+    async fn find_latest_slot_before(
+        &self,
+        user_id: Uuid,
+        meal_slot: MealSlot,
+        before_date: NaiveDate,
+        lookback_days: i64,
+    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
+        self.load_latest_slot_before(user_id, meal_slot, before_date, lookback_days)
+            .await
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {

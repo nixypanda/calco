@@ -55,6 +55,24 @@ impl FoodLogServices {
     }
 
     pub async fn log_item(&self, input: LogFoodInput) -> Result<FoodLog, NutritionError> {
+        let log = self.build_log(input).await?;
+        self.food_log_repo.create(&log).await?;
+        Ok(log)
+    }
+
+    pub async fn log_items(
+        &self,
+        inputs: Vec<LogFoodInput>,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        let mut logs = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            logs.push(self.build_log(input).await?);
+        }
+        self.food_log_repo.create_many(&logs).await?;
+        Ok(logs)
+    }
+
+    async fn build_log(&self, input: LogFoodInput) -> Result<FoodLog, NutritionError> {
         let log = match input.item {
             FoodLogItemRef::Product(product_id) => {
                 let product = self
@@ -93,8 +111,6 @@ impl FoodLogServices {
                 )?
             }
         };
-
-        self.food_log_repo.create(&log).await?;
         Ok(log)
     }
 
@@ -237,6 +253,11 @@ mod tests {
             Ok(())
         }
 
+        async fn create_many(&self, logs: &[FoodLog]) -> Result<(), NutritionError> {
+            self.logs.lock().unwrap().extend_from_slice(logs);
+            Ok(())
+        }
+
         async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError> {
             let logs = self.logs.lock().unwrap();
             Ok(logs.iter().find(|l| l.id == id).cloned())
@@ -253,6 +274,40 @@ mod tests {
                 .filter(|l| l.user_id == user_id && l.log_date == log_date)
                 .cloned()
                 .collect())
+        }
+
+        async fn find_latest_slot_before(
+            &self,
+            user_id: Uuid,
+            meal_slot: MealSlot,
+            before_date: NaiveDate,
+            lookback_days: i64,
+        ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
+            let cutoff_date = before_date - chrono::Duration::days(lookback_days);
+            let logs = self.logs.lock().unwrap();
+            let source_date = logs
+                .iter()
+                .filter(|log| {
+                    log.user_id == user_id
+                        && log.meal_slot == Some(meal_slot)
+                        && log.log_date < before_date
+                        && log.log_date >= cutoff_date
+                })
+                .map(|log| log.log_date)
+                .max();
+
+            Ok(source_date.map(|date| {
+                let items = logs
+                    .iter()
+                    .filter(|log| {
+                        log.user_id == user_id
+                            && log.meal_slot == Some(meal_slot)
+                            && log.log_date == date
+                    })
+                    .cloned()
+                    .collect();
+                (date, items)
+            }))
         }
 
         async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
@@ -745,6 +800,101 @@ mod tests {
             .unwrap();
 
         assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(60, 0));
+    }
+
+    #[tokio::test]
+    async fn find_latest_slot_before_skips_empty_days_and_returns_whole_slot() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 150).await;
+        log_test_product(&services, user_id, friday, MealSlot::Lunch, 200).await;
+
+        let latest = services
+            .food_log_repo
+            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+            .await
+            .unwrap()
+            .expect("expected latest breakfast slot");
+
+        assert_eq!(latest.0, friday);
+        assert_eq!(latest.1.len(), 2);
+        assert!(
+            latest
+                .1
+                .iter()
+                .all(|log| log.meal_slot == Some(MealSlot::Breakfast))
+        );
+    }
+
+    #[tokio::test]
+    async fn find_latest_slot_before_prefers_most_recent_prior_date() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let sunday = NaiveDate::from_ymd_opt(2026, 6, 21).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
+        log_test_product(&services, user_id, sunday, MealSlot::Breakfast, 125).await;
+        log_test_product(&services, user_id, monday, MealSlot::Breakfast, 150).await;
+
+        let latest = services
+            .food_log_repo
+            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+            .await
+            .unwrap()
+            .expect("expected latest breakfast slot");
+
+        assert_eq!(latest.0, sunday);
+        assert_eq!(latest.1.len(), 1);
+        assert_eq!(latest.1[0].quantity_amount, Decimal::new(125, 0));
+    }
+
+    #[tokio::test]
+    async fn find_latest_slot_before_respects_lookback_and_user() {
+        let services = make_services(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let old_date = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, old_date, MealSlot::Breakfast, 100).await;
+        log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 150).await;
+
+        let latest = services
+            .food_log_repo
+            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+            .await
+            .unwrap();
+
+        assert!(latest.is_none());
+    }
+
+    async fn log_test_product(
+        services: &FoodLogServices,
+        user_id: Uuid,
+        log_date: NaiveDate,
+        meal_slot: MealSlot,
+        amount_g: i64,
+    ) -> FoodLog {
+        services
+            .log_item(LogFoodInput {
+                user_id,
+                log_date,
+                device_timezone: None,
+                meal_slot: Some(meal_slot),
+                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                quantity: Quantity::new(Decimal::new(amount_g, 0), UnitCode("g".to_string()))
+                    .unwrap(),
+                notes: None,
+            })
+            .await
+            .unwrap()
     }
 
     #[tokio::test]

@@ -525,6 +525,19 @@ Search, diary, and logging surfaces should prioritize compact, scannable
 controls and rows. Avoid oversized cards, large text that truncates early, or
 layouts that only work comfortably on desktop widths.
 
+### Repeat Logging UI
+
+- Empty meal-slot cards should show a compact repeat action when the backend
+  finds a recent source slot. Use a single button label with source-date
+  context, such as `Log latest from Jun 19, 2026`.
+- If no source exists within the lookback window, keep showing the passive
+  `No items` state.
+- Keep `Add Food` as the path into search and manual selection.
+- Recent slot suggestions in the add/search flow are separate from `Log latest`:
+  show deduplicated foods and meals used in the same slot recently, using
+  last-used quantity and unit, so users can quickly log a subset without copying
+  the whole prior slot.
+
 ## Design System
 
 Shared primitives live in `frontend-web/src/Ui.elm`. Prefer extending these

@@ -309,12 +309,20 @@ pub use super::error::NutritionError;
 #[async_trait]
 pub trait FoodLogRepository: Send + Sync {
     async fn create(&self, log: &FoodLog) -> Result<(), NutritionError>;
+    async fn create_many(&self, logs: &[FoodLog]) -> Result<(), NutritionError>;
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError>;
     async fn list_by_user_and_date(
         &self,
         user_id: Uuid,
         log_date: NaiveDate,
     ) -> Result<Vec<FoodLog>, NutritionError>;
+    async fn find_latest_slot_before(
+        &self,
+        user_id: Uuid,
+        meal_slot: MealSlot,
+        before_date: NaiveDate,
+        lookback_days: i64,
+    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError>;
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError>;
     async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError>;
 }

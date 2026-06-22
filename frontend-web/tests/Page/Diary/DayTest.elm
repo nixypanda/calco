@@ -264,6 +264,8 @@ emptyModel =
             , logs = Nothing
             , goal = Nothing
             }
+    , latestSlots = DiaryDay.LatestSlotsLoaded today []
+    , copyState = DiaryDay.CopyIdle
     , macroMode = DiaryDay.Grams
     }
 

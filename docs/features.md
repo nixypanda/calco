@@ -5,8 +5,9 @@
 This document captures product features as user stories before mapping them into
 granular implementation features and API calls.
 
-Current implementation covers the core food diary plus meals/recipes, admin
-import staging/commit APIs, and Python dataset import tooling:
+Current implementation covers the core food diary plus meals/recipes, repeat
+meal-slot logging, admin import staging/commit APIs, and Python dataset import
+tooling:
 
 ```text
 Search/select food -> log quantity -> snapshot nutrients -> review daily totals
@@ -96,6 +97,15 @@ analytics or trend platform.
       false matches are surfaced before they reach the catalog.
 - [x] As an admin, I want a configurable source preference order so that
       higher-quality sources override lower-quality ones during merges.
+- [x] As a user, I want to copy the most recent non-empty log set for a meal
+      slot into today so that I can repeat common breakfasts, lunches, and
+      dinners even when I skipped logging for a few days. Implemented with
+      `GET /logs/latest-slot` plus `POST /logs/batch`, surfaced as `Log latest`
+      actions on empty diary meal slots.
+- [x] As a user, I want repeated meal-slot logging to ignore very old history
+      so that the app does not unexpectedly copy stale eating patterns.
+      Implemented with a bounded lookback window; the frontend requests 30 days
+      and the backend validates 1-90 days.
 
 ## Next User Stories
 
@@ -109,11 +119,11 @@ capabilities. They are grouped by theme so they can be ranked later.
 
 ### Repeat Behavior And Faster Logging
 
-- [ ] As a user, I want to pull the last meal or food used for a meal slot into
-      today so that I can repeat common breakfasts, lunches, and dinners
-      quickly.
-- [ ] As a user, I want to copy yesterday's entries for a meal slot into today
-      so that I can recreate a typical day with minimal taps.
+- [x] As a user, I want to copy the most recent non-empty log set for a meal
+      slot into today so that I can repeat common breakfasts, lunches, and
+      dinners even when I skipped logging for a few days.
+- [x] As a user, I want repeated meal-slot logging to ignore very old history
+      so that the app does not unexpectedly copy stale eating patterns.
 - [ ] As a user, I want to see recent foods and recent meals first when adding
       to a meal slot so that I can log repeat items before searching the broader
       catalog.
@@ -174,36 +184,3 @@ capabilities. They are grouped by theme so they can be ranked later.
       is protected.
 - [x] As a household user, I want multiple user accounts so that each person has
       separate logs and custom foods.
-
-## API Mapping Notes
-
-These notes capture endpoint choices surfaced during feature mapping.
-
-### Consolidated Endpoints
-
-- Food detail uses `GET /foods/{id}` and includes product nutrients and
-  servings. Do not add separate public `GET /foods/{id}/nutrients` or
-  `GET /foods/{id}/servings` endpoints unless partial loading becomes necessary.
-- Log history uses `GET /logs?from=YYYY-MM-DD&to=YYYY-MM-DD`. Use the same date
-  for `from` and `to` for a single-day view. Do not add a separate
-  `GET /logs/day/{date}` endpoint.
-- Nutrition summaries use
-  `GET /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...`. Use the same date for
-  `from` and `to` for daily totals. Omit `codes` to return all tracked
-  nutrients.
-- Goal targets use `GET /goal?date=YYYY-MM-DD` to resolve the effective targets
-  for a selected day and `PUT /goal` to create or overwrite the current day's
-  saved targets.
-- Meals use aggregate-shaped endpoints: `POST /meals`, `GET /meals`,
-  `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, and
-  `GET /meals/{id}/nutrients?quantity=&unit=`.
-- Food logs accept `item.type` values of `product` and `meal`.
-- Import APIs are admin-only and include staging endpoints for foods, nutrients,
-  and servings.
-
-### Identified API Gaps
-
-- Add export job APIs when async exports are implemented: `POST /exports`,
-  `GET /exports/{id}`, and `GET /exports/{id}/download`.
-- Use the username/password auth flow from `backend.md`; OAuth/OIDC/Tailscale
-  auth is out of scope.

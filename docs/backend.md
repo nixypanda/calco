@@ -123,6 +123,53 @@ If the method name says what happened in the business, it belongs in domain or a
 
 The import repository is an explicit exception for now because imports are primarily an infrastructure and data-ingestion workflow. Do not use import repository patterns as precedent for normal domain repositories.
 
+## API Design Notes
+
+These notes capture endpoint choices surfaced during feature mapping.
+
+### Consolidated Endpoints
+
+- Food detail uses `GET /foods/{id}` and includes product nutrients and
+  servings. Do not add separate public `GET /foods/{id}/nutrients` or
+  `GET /foods/{id}/servings` endpoints unless partial loading becomes necessary.
+- Log history uses `GET /logs?log_date=YYYY-MM-DD` for a single-day view. Do not
+  add a separate `GET /logs/day/{date}` endpoint.
+- Nutrition summaries use
+  `GET /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...`. Use the same date for
+  `from` and `to` for daily totals. Omit `codes` to return all tracked
+  nutrients.
+- Goal targets use `GET /goal?date=YYYY-MM-DD` to resolve the effective targets
+  for a selected day and `PUT /goal` to create or overwrite the current day's
+  saved targets.
+- Meals use aggregate-shaped endpoints: `POST /meals`, `GET /meals`,
+  `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, and
+  `GET /meals/{id}/nutrients?quantity=&unit=`.
+- Food logs accept `item.type` values of `product` and `meal`.
+- Import APIs are admin-only and include staging endpoints for foods, nutrients,
+  and servings.
+
+### Repeat Logging
+
+- Repeat logging uses a fetch plus batch-create flow:
+  `GET /logs/latest-slot` finds the latest prior date with one or more logs for
+  the requested user and meal slot, and `POST /logs/batch` creates copied logs
+  for the target date and same slot.
+- `GET /logs/latest-slot` should use a bounded lookback window. The frontend
+  currently requests 30 days.
+- `POST /logs/batch` should construct new logs through the same application
+  service path as single log creation, so copied logs recalculate nutrient
+  snapshots as new logs.
+- Do not implement a separate repeat-last-single-item endpoint unless the
+  product workflow changes. Current repeat behavior copies the whole latest
+  non-empty slot.
+
+### Identified API Gaps
+
+- Add export job APIs when async exports are implemented: `POST /exports`,
+  `GET /exports/{id}`, and `GET /exports/{id}/download`.
+- Use the username/password auth flow from this document; OAuth/OIDC/Tailscale
+  auth is out of scope.
+
 ### Aggregate Roots
 
 Current aggregate roots:

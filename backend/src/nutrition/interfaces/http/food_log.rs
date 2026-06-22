@@ -25,6 +25,8 @@ use crate::nutrition::domain::meal::MealId;
 pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
         .route("/logs", post(create_log_handler).get(list_logs_handler))
+        .route("/logs/batch", post(create_logs_batch_handler))
+        .route("/logs/latest-slot", get(latest_slot_handler))
         .route(
             "/logs/{id}",
             get(get_log_handler)
@@ -42,6 +44,11 @@ pub struct CreateLogRequest {
     pub item: ItemRefDto,
     pub quantity: QuantityDto,
     pub notes: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateLogsBatchRequest {
+    pub items: Vec<CreateLogRequest>,
 }
 
 #[derive(Deserialize)]
@@ -119,9 +126,28 @@ pub struct LogListResponse {
     pub items: Vec<LogResponse>,
 }
 
+#[derive(Serialize)]
+pub struct LatestSlotResponse {
+    pub source_date: NaiveDate,
+    pub meal_slot: MealSlotDto,
+    pub items: Vec<LogResponse>,
+}
+
+#[derive(Serialize)]
+pub struct BatchLogResponse {
+    pub items: Vec<LogResponse>,
+}
+
 #[derive(Deserialize)]
 pub struct LogQuery {
     pub log_date: String,
+}
+
+#[derive(Deserialize)]
+pub struct LatestSlotQuery {
+    pub meal_slot: String,
+    pub before: String,
+    pub lookback_days: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -160,6 +186,85 @@ async fn create_log_handler(
             (StatusCode::CREATED, Json(resp)).into_response()
         }
         Err(e) => e.into_response(),
+    }
+}
+
+async fn create_logs_batch_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Json(req): Json<CreateLogsBatchRequest>,
+) -> impl IntoResponse {
+    if req.items.is_empty() {
+        return error_response("validation", "batch must contain at least one log".into())
+            .into_response();
+    }
+    if req.items.len() > 50 {
+        return error_response(
+            "validation",
+            "batch cannot contain more than 50 logs".into(),
+        )
+        .into_response();
+    }
+
+    let inputs = match req
+        .items
+        .into_iter()
+        .map(|item| food_log_create_request_to_input(item, auth.0.id))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(inputs) => inputs,
+        Err(err) => return err.into_response(),
+    };
+
+    match state.food_log_services.log_items(inputs).await {
+        Ok(created) => (
+            StatusCode::CREATED,
+            Json(BatchLogResponse {
+                items: created.iter().map(food_log_to_response).collect(),
+            }),
+        )
+            .into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn latest_slot_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Query(query): Query<LatestSlotQuery>,
+) -> impl IntoResponse {
+    let meal_slot = match parse_meal_slot(&query.meal_slot) {
+        Ok(slot) => slot,
+        Err(err) => return err.into_response(),
+    };
+    let before_date = match parse_log_date(&query.before) {
+        Ok(date) => date,
+        Err(err) => return err.into_response(),
+    };
+    let lookback_days = query.lookback_days.unwrap_or(30);
+    if !(1..=90).contains(&lookback_days) {
+        return error_response(
+            "validation",
+            "lookback_days must be between 1 and 90".into(),
+        )
+        .into_response();
+    }
+
+    match state
+        .food_log_repo
+        .find_latest_slot_before(auth.0.id, meal_slot, before_date, lookback_days)
+        .await
+    {
+        Ok(Some((source_date, logs))) => Json(LatestSlotResponse {
+            source_date,
+            meal_slot: meal_slot.into(),
+            items: logs.iter().map(food_log_to_response).collect(),
+        })
+        .into_response(),
+        Ok(None) => {
+            error_response("not_found", "no recent logs for meal slot".into()).into_response()
+        }
+        Err(err) => internal_error(err).into_response(),
     }
 }
 
