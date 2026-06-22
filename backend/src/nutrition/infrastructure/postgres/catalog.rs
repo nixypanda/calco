@@ -374,14 +374,8 @@ impl ProductRepository for PostgresProductRepository {
 
         rows.into_iter()
             .map(|r| {
-                let nutrients = nutrients_by_product
-                    .get(&r.id)
-                    .cloned()
-                    .unwrap_or_default();
-                let servings = servings_by_product
-                    .get(&r.id)
-                    .cloned()
-                    .unwrap_or_default();
+                let nutrients = nutrients_by_product.get(&r.id).cloned().unwrap_or_default();
+                let servings = servings_by_product.get(&r.id).cloned().unwrap_or_default();
                 product_row_to_product(r, nutrients, servings)
             })
             .collect()

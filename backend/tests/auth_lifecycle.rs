@@ -118,8 +118,12 @@ async fn admin_user_workflows_disable_enable_reset_password(pool: PgPool) {
     let (disable_status, _disable_headers, disable_bytes) = send(&router, disable_req).await;
     assert_status(disable_status, StatusCode::OK, &disable_bytes);
 
-    let disabled_detail: Value =
-        get_json(&router, &format!("/api/admin/users/{user_id}"), &admin_cookie).await;
+    let disabled_detail: Value = get_json(
+        &router,
+        &format!("/api/admin/users/{user_id}"),
+        &admin_cookie,
+    )
+    .await;
     assert_eq!(disabled_detail["status"], "disabled");
 
     let disabled_session_req = empty_request(Method::GET, "/api/auth/session", Some(&user_cookie));
@@ -203,15 +207,22 @@ async fn admin_user_workflows_disable_enable_reset_password(pool: PgPool) {
         &old_password_login_bytes,
     );
     let old_password_login_body: Value = parse_json(&old_password_login_bytes);
-    assert_eq!(old_password_login_body["error"]["code"], "invalid_credentials");
+    assert_eq!(
+        old_password_login_body["error"]["code"],
+        "invalid_credentials"
+    );
 
     let new_password_cookie = login(&router, "tester", "newpassword123").await;
     let new_session: Value = get_json(&router, "/api/auth/session", &new_password_cookie).await;
     assert_eq!(new_session["identity"]["username"], "tester");
     assert_eq!(new_session["profile"]["display_name"], "Tester");
 
-    let final_detail: Value =
-        get_json(&router, &format!("/api/admin/users/{user_id}"), &admin_cookie).await;
+    let final_detail: Value = get_json(
+        &router,
+        &format!("/api/admin/users/{user_id}"),
+        &admin_cookie,
+    )
+    .await;
     assert_eq!(final_detail["status"], "active");
 }
 

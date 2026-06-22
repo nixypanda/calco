@@ -244,8 +244,6 @@ pub struct UserListResponse {
     pub users: Vec<UserItemDto>,
 }
 
-
-
 #[derive(Deserialize)]
 pub struct ResetPasswordRequest {
     pub new_password: String,

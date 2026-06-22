@@ -23,7 +23,11 @@ impl GoalTargetServices {
         user_id: uuid::Uuid,
         requested_date: NaiveDate,
     ) -> Result<GoalTargetSnapshot, NutritionError> {
-        match self.repo.find_effective_for_date(user_id, requested_date).await? {
+        match self
+            .repo
+            .find_effective_for_date(user_id, requested_date)
+            .await?
+        {
             Some(goal_target) => Ok(GoalTargetSnapshot {
                 requested_date,
                 effective_from: Some(goal_target.effective_from),
@@ -165,7 +169,10 @@ mod tests {
         let user_id = Uuid::new_v4();
         let requested_date = NaiveDate::from_ymd_opt(2026, 6, 16).unwrap();
 
-        let snapshot = services.get_goal_for_date(user_id, requested_date).await.unwrap();
+        let snapshot = services
+            .get_goal_for_date(user_id, requested_date)
+            .await
+            .unwrap();
 
         assert_eq!(snapshot.source, GoalTargetSource::Default);
         assert_eq!(snapshot.effective_from, None);
@@ -221,7 +228,12 @@ mod tests {
         let services = GoalTargetServices::new(repo.clone());
 
         let snapshot = services
-            .save_goal_for_today(user_id, local_date, timezone, sample_targets(2290, 160, 255, 70))
+            .save_goal_for_today(
+                user_id,
+                local_date,
+                timezone,
+                sample_targets(2290, 160, 255, 70),
+            )
             .await
             .unwrap();
 
@@ -246,7 +258,12 @@ mod tests {
             - Duration::days(1);
 
         let result = services
-            .save_goal_for_today(user_id, local_date, timezone, sample_targets(2100, 150, 240, 60))
+            .save_goal_for_today(
+                user_id,
+                local_date,
+                timezone,
+                sample_targets(2100, 150, 240, 60),
+            )
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));

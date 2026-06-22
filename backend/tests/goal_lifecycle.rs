@@ -22,7 +22,8 @@ async fn goal_defaults_and_save_flow(pool: PgPool) {
     let timezone = "Asia/Kolkata";
     let today = today_in_timezone(timezone);
 
-    let unauthenticated = common::empty_request(axum::http::Method::GET, "/api/goal?date=2026-05-01", None);
+    let unauthenticated =
+        common::empty_request(axum::http::Method::GET, "/api/goal?date=2026-05-01", None);
     let (status, _headers, _body) = common::send(&router, unauthenticated).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
@@ -64,8 +65,14 @@ async fn goal_defaults_and_save_flow(pool: PgPool) {
         "carbs_target_g": 255,
         "fat_target_g": 70
     });
-    let overwritten: Value =
-        put_json(&router, "/api/goal", &user, &overwrite_payload, StatusCode::OK).await;
+    let overwritten: Value = put_json(
+        &router,
+        "/api/goal",
+        &user,
+        &overwrite_payload,
+        StatusCode::OK,
+    )
+    .await;
     assert_eq!(overwritten["calorie_target"], "2290");
     assert_eq!(overwritten["protein_target_g"], "160");
 }

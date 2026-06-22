@@ -46,8 +46,9 @@ impl GoalTargets {
             ));
         }
 
-        let expected_calories =
-            protein_target_g * Decimal::from(4) + carbs_target_g * Decimal::from(4) + fat_target_g * Decimal::from(9);
+        let expected_calories = protein_target_g * Decimal::from(4)
+            + carbs_target_g * Decimal::from(4)
+            + fat_target_g * Decimal::from(9);
         if calorie_target != expected_calories {
             return Err(NutritionError::Validation(
                 "calorie_target must equal protein_target_g * 4 + carbs_target_g * 4 + fat_target_g * 9".into(),

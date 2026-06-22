@@ -44,6 +44,10 @@ backend-dev:
 backend-build:
     cargo build --manifest-path backend/Cargo.toml
 
+# Format backend Rust sources
+backend-format:
+    cargo fmt --manifest-path backend/Cargo.toml --all --check
+
 # Run backend tests
 backend-test:
     cargo nextest run --manifest-path backend/Cargo.toml

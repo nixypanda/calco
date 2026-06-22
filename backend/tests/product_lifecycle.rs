@@ -143,7 +143,10 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     assert_eq!(listed_nutrients.len(), 4);
     assert_eq!(listed["servings"].as_array().unwrap().len(), 1);
     let allowed_units = listed["allowed_units"].as_array().expect("allowed_units");
-    assert!(!allowed_units.is_empty(), "allowed_units should not be empty");
+    assert!(
+        !allowed_units.is_empty(),
+        "allowed_units should not be empty"
+    );
 
     // ── Delete ──────────────────────────────────────────────────────────
     delete_no_content(&router, &format!("/api/foods/custom/{id}"), &user).await;

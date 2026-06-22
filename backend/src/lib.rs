@@ -96,8 +96,8 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let food_log_repo =
         Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
     let meal_repo = Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
-    let goal_target_repo = Arc::new(PostgresGoalTargetRepository::new(pool.clone()))
-        as Arc<dyn GoalTargetRepository>;
+    let goal_target_repo =
+        Arc::new(PostgresGoalTargetRepository::new(pool.clone())) as Arc<dyn GoalTargetRepository>;
 
     let food_log_services = FoodLogServices::new(
         food_log_repo.clone(),

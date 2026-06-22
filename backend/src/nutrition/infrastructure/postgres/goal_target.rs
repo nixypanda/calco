@@ -4,9 +4,7 @@ use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
-use crate::nutrition::domain::goal_target::{
-    GoalTarget, GoalTargetRepository, GoalTargets,
-};
+use crate::nutrition::domain::goal_target::{GoalTarget, GoalTargetRepository, GoalTargets};
 
 #[derive(Clone)]
 pub struct PostgresGoalTargetRepository {
