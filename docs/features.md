@@ -124,9 +124,11 @@ capabilities. They are grouped by theme so they can be ranked later.
       dinners even when I skipped logging for a few days.
 - [x] As a user, I want repeated meal-slot logging to ignore very old history
       so that the app does not unexpectedly copy stale eating patterns.
-- [ ] As a user, I want to see recent foods and recent meals first when adding
+- [x] As a user, I want to see recent foods and recent meals first when adding
       to a meal slot so that I can log repeat items before searching the broader
-      catalog.
+      catalog. The search page shows recent items before a query is active, then
+      replaces that list with search loading, errors, empty states, or results
+      once the user searches.
 - [ ] As a user, I want foods and meals to remember my last-used quantity and
       unit so that repeat logging defaults to how I actually consume them.
 - [ ] As a user, I want to duplicate an existing log to another meal slot or
