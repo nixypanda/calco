@@ -27,6 +27,10 @@ import View.Nutrients exposing (NutritionInput, NutritionState(..), defaultNutri
 import View.QuantityInput
 
 
+
+-- MODEL
+
+
 type Model
     = Loading LoadingModel
     | LoadFailed String
@@ -57,21 +61,6 @@ type DeleteState
     | DeleteFailed String
 
 
-type Msg
-    = MealLoaded (Result Client.ApiError Meal)
-    | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
-    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | AmountChanged String
-    | UnitChanged String
-    | ToggleUnitDropdown
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
-    | DeleteClicked
-    | CancelDeleteClicked
-    | ConfirmDeleteClicked
-    | DeleteCompleted (Result Client.ApiError ())
-    | EditClicked
-
-
 type OutMsg
     = NoOp
     | RequestInitialData String
@@ -91,6 +80,25 @@ init mealId =
         }
     , RequestInitialData mealId
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = MealLoaded (Result Client.ApiError Meal)
+    | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | AmountChanged String
+    | UnitChanged String
+    | ToggleUnitDropdown
+    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | DeleteClicked
+    | CancelDeleteClicked
+    | ConfirmDeleteClicked
+    | DeleteCompleted (Result Client.ApiError ())
+    | EditClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -481,6 +489,10 @@ failure =
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message
         }
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

@@ -16,14 +16,12 @@ import Ui
 import Ui.Theme exposing (Theme)
 
 
+
+-- MODEL
+
+
 type alias Model =
     Common.FormFields
-
-
-type Msg
-    = FormMsg Common.FormFieldMsg
-    | SubmitClicked
-    | SaveCompleted (Result Client.ApiError Meal)
 
 
 type OutMsg
@@ -37,6 +35,16 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Common.emptyFormFields, NoOp )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FormMsg Common.FormFieldMsg
+    | SubmitClicked
+    | SaveCompleted (Result Client.ApiError Meal)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -116,6 +124,10 @@ mapFormOutMsg maybeOutMsg =
 
         Just Common.FormSessionExpired ->
             SessionExpired
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

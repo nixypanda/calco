@@ -42,6 +42,10 @@ import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
 
+
+-- MODEL
+
+
 type alias RowId =
     Int
 
@@ -114,24 +118,6 @@ type ValidationError
     | ComponentRequired
 
 
-type FormFieldMsg
-    = NameChanged String
-    | NotesChanged String
-    | TotalQuantityChanged String
-    | TotalUnitChanged String
-    | ComponentSearchChanged RowId String
-    | ComponentSearchCompleted RowId Int (Result Client.ApiError SearchResponse)
-    | ComponentCategoriesCompleted RowId Int CategorySuggestionResult
-    | CompleteFirstComponentSuggestion RowId
-    | ComponentCompletionClicked RowId Completion
-    | SelectProduct RowId SearchResult
-    | ComponentQuantityChanged RowId String
-    | ComponentUnitChanged RowId String
-    | AddComponentClicked
-    | RemoveComponentClicked RowId
-    | ProductNameLoaded String (Result Client.ApiError ProductDetail)
-
-
 type FormFieldOutMsg
     = RequestProductName String
     | RequestProductSearch RowId Int Foods.SearchRequest
@@ -164,6 +150,28 @@ emptyComponentRow rowId =
     , search = Search.empty
     , searchResults = NotAsked
     }
+
+
+
+-- UPDATE
+
+
+type FormFieldMsg
+    = NameChanged String
+    | NotesChanged String
+    | TotalQuantityChanged String
+    | TotalUnitChanged String
+    | ComponentSearchChanged RowId String
+    | ComponentSearchCompleted RowId Int (Result Client.ApiError SearchResponse)
+    | ComponentCategoriesCompleted RowId Int CategorySuggestionResult
+    | CompleteFirstComponentSuggestion RowId
+    | ComponentCompletionClicked RowId Completion
+    | SelectProduct RowId SearchResult
+    | ComponentQuantityChanged RowId String
+    | ComponentUnitChanged RowId String
+    | AddComponentClicked
+    | RemoveComponentClicked RowId
+    | ProductNameLoaded String (Result Client.ApiError ProductDetail)
 
 
 updateFormField :
@@ -338,6 +346,10 @@ updateFormField msg form =
             , Cmd.none
             , Nothing
             )
+
+
+
+-- VIEW
 
 
 viewFormFields :

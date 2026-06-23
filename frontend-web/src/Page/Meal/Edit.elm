@@ -27,6 +27,10 @@ import View.Nutrients
         )
 
 
+
+-- MODEL
+
+
 type alias LoadingModel =
     { mealId : String
     , nutrition : NutritionState
@@ -48,14 +52,6 @@ type Model
     | Editing LoadedModel
 
 
-type Msg
-    = FormMsg Common.FormFieldMsg
-    | MealLoaded (Result Client.ApiError Meal)
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
-    | SubmitClicked
-    | SaveCompleted (Result Client.ApiError Meal)
-
-
 type OutMsg
     = NoOp
     | FormOutMsg Common.FormFieldOutMsg
@@ -73,6 +69,18 @@ init mealId =
         }
     , RequestMeal mealId
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FormMsg Common.FormFieldMsg
+    | MealLoaded (Result Client.ApiError Meal)
+    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | SubmitClicked
+    | SaveCompleted (Result Client.ApiError Meal)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -374,6 +382,10 @@ mapFormOutMsg maybeOutMsg =
 
         Just Common.FormSessionExpired ->
             SessionExpired
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

@@ -16,6 +16,10 @@ import Ui
 import Ui.Theme exposing (Theme)
 
 
+
+-- MODEL
+
+
 type alias Form =
     { username : String
     , password : String
@@ -27,12 +31,6 @@ type Model
     | Invalid Form String
     | Submitting Form
     | Failed Form String
-
-
-type Msg
-    = UsernameChanged String
-    | PasswordChanged String
-    | Submitted
 
 
 type OutMsg request
@@ -52,6 +50,16 @@ type alias Config request =
 init : Model
 init =
     Editing { username = "", password = "" }
+
+
+
+-- UPDATE
+
+
+type Msg
+    = UsernameChanged String
+    | PasswordChanged String
+    | Submitted
 
 
 currentForm : Model -> Form
@@ -101,6 +109,10 @@ markFailed message model =
 
         _ ->
             model
+
+
+
+-- VIEW
 
 
 view :

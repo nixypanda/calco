@@ -40,6 +40,10 @@ import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
 
+
+-- MODEL
+
+
 type alias FormModel =
     { name : String
     , brand : String
@@ -119,33 +123,6 @@ type ValidationError
     | InvalidServingGrams String
 
 
-type Msg
-    = NameChanged String
-    | BrandChanged String
-    | ServingSizeChanged String
-    | DefaultQuantityChanged String
-    | DefaultUnitChanged String
-    | ToggleDefaultUnitDropdown
-    | NutrientsLoaded (List NutrientItem)
-    | CategoryQueryChanged String
-    | AddCategory String
-    | RemoveCategory String
-    | AcceptCategorySuggestion String
-    | CategorySuggestionsLoaded Int (Result Client.ApiError (List CategorySuggestion))
-    | NutrientCodeChanged Int String
-    | ToggleNutrientCodeDropdown Int
-    | NutrientAmountChanged Int String
-    | AddNutrientRow
-    | RemoveNutrientRow Int
-    | ServingLabelChanged Int String
-    | ServingQuantityChanged Int String
-    | ServingUnitChanged Int String
-    | ToggleServingUnitDropdown Int
-    | ServingGramsChanged Int String
-    | AddServingRow
-    | RemoveServingRow Int
-
-
 type OutMsg
     = NoOutMsg
     | RequestCategorySuggestions Int CategorySuggestionRequest
@@ -187,6 +164,37 @@ emptyNutrientRow =
 emptyServingRow : ServingRow
 emptyServingRow =
     { label = "", quantity = "", unit = defaultCode, grams = "" }
+
+
+
+-- UPDATE
+
+
+type Msg
+    = NameChanged String
+    | BrandChanged String
+    | ServingSizeChanged String
+    | DefaultQuantityChanged String
+    | DefaultUnitChanged String
+    | ToggleDefaultUnitDropdown
+    | NutrientsLoaded (List NutrientItem)
+    | CategoryQueryChanged String
+    | AddCategory String
+    | RemoveCategory String
+    | AcceptCategorySuggestion String
+    | CategorySuggestionsLoaded Int (Result Client.ApiError (List CategorySuggestion))
+    | NutrientCodeChanged Int String
+    | ToggleNutrientCodeDropdown Int
+    | NutrientAmountChanged Int String
+    | AddNutrientRow
+    | RemoveNutrientRow Int
+    | ServingLabelChanged Int String
+    | ServingQuantityChanged Int String
+    | ServingUnitChanged Int String
+    | ToggleServingUnitDropdown Int
+    | ServingGramsChanged Int String
+    | AddServingRow
+    | RemoveServingRow Int
 
 
 fromProductDetail : ProductDetail -> FormModel
@@ -693,6 +701,10 @@ addCategoryTag raw selected =
             selected
 
 
+
+-- VIEW
+
+
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view theme device nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
@@ -1041,7 +1053,3 @@ unitOptions selected units =
 addRowHint : Theme -> Element msg
 addRowHint theme =
     Ui.mutedCaption theme "Enter calories and macros (per 100g) to save."
-
-
-
--- unusual-other-purpose-rural

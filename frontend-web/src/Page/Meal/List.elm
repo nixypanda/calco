@@ -18,17 +18,14 @@ import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
+
+-- MODEL
+
+
 type Model
     = Loading
     | LoadFailed String
     | Loaded (List Meal)
-
-
-type Msg
-    = MealsLoaded (Result Client.ApiError MealsApi.MealListResponse)
-    | OpenMealClicked String
-    | CreateMealClicked
-    | BackClicked
 
 
 type OutMsg
@@ -41,6 +38,17 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( Loading, RequestMeals )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = MealsLoaded (Result Client.ApiError MealsApi.MealListResponse)
+    | OpenMealClicked String
+    | CreateMealClicked
+    | BackClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -71,6 +79,10 @@ failure =
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message
         }
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

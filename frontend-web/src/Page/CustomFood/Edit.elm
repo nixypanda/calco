@@ -26,6 +26,10 @@ import Ui
 import Ui.Theme exposing (Theme)
 
 
+
+-- MODEL
+
+
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
@@ -48,16 +52,6 @@ type alias LoadedModel =
     }
 
 
-type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
-    | NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
-    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | FormMsg Form.Msg
-    | CategorySuggestionsLoaded Int (Result Client.ApiError CategorySuggestionResponse)
-    | SubmitClicked
-    | SaveCompleted (Result Client.ApiError CreateFoodResponse)
-
-
 type OutMsg
     = NoOp
     | RequestInitialData String
@@ -77,6 +71,20 @@ init productId =
         }
     , RequestInitialData productId
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FoodLoaded (Result Client.ApiError ProductDetail)
+    | NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | FormMsg Form.Msg
+    | CategorySuggestionsLoaded Int (Result Client.ApiError CategorySuggestionResponse)
+    | SubmitClicked
+    | SaveCompleted (Result Client.ApiError CreateFoodResponse)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -327,6 +335,10 @@ failure =
         , sessionExpired = SessionExpired
         , applyError = \message _ -> LoadFailed message
         }
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg

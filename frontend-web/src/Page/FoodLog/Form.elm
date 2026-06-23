@@ -49,6 +49,10 @@ sourceForFood food units =
             units
 
 
+
+-- MODEL
+
+
 type alias Model =
     { amount : String
     , unit : String
@@ -75,15 +79,6 @@ type SubmitFailure
     = AmountRequiredMessage
     | InvalidDateMessage
     | RequestFailed String
-
-
-type Msg
-    = AmountChanged String
-    | UnitChanged String
-    | MealSlotChanged (Maybe MealSlot)
-    | NotesChanged String
-    | ToggleMealSlotDropdown
-    | ToggleUnitDropdown
 
 
 type ValidationError
@@ -119,6 +114,19 @@ applyQuantityDefault quantity model =
         | amount = quantity.amount
         , unit = quantity.unit
     }
+
+
+
+-- UPDATE
+
+
+type Msg
+    = AmountChanged String
+    | UnitChanged String
+    | MealSlotChanged (Maybe MealSlot)
+    | NotesChanged String
+    | ToggleMealSlotDropdown
+    | ToggleUnitDropdown
 
 
 update : Msg -> Model -> Model
@@ -238,6 +246,10 @@ submitFailureMessage failure =
 setSubmitState : SubmitState -> Model -> Model
 setSubmitState submitState model =
     { model | submitState = submitState }
+
+
+
+-- VIEW
 
 
 view : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg

@@ -21,6 +21,10 @@ import Ui.Theme exposing (Theme)
 import View.Nutrients
 
 
+
+-- MODEL
+
+
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
@@ -49,16 +53,6 @@ type DeleteState
     | DeleteFailed String
 
 
-type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
-    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | EditClicked
-    | DeleteClicked
-    | CancelDeleteClicked
-    | ConfirmDeleteClicked
-    | DeleteCompleted (Result Client.ApiError ())
-
-
 type OutMsg
     = NoOp
     | RequestInitialData String
@@ -76,6 +70,20 @@ init productId =
         }
     , RequestInitialData productId
     )
+
+
+
+-- UPDATE
+
+
+type Msg
+    = FoodLoaded (Result Client.ApiError ProductDetail)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+    | EditClicked
+    | DeleteClicked
+    | CancelDeleteClicked
+    | ConfirmDeleteClicked
+    | DeleteCompleted (Result Client.ApiError ())
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -232,6 +240,10 @@ applyDeleteError message model =
 
         _ ->
             model
+
+
+
+-- VIEW
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
