@@ -1,6 +1,5 @@
 module Page.FoodLog.Entry exposing
-    ( DeleteState(..)
-    , ItemDetail(..)
+    ( ItemDetail(..)
     , LoadFailedModel
     , LoadedItem(..)
     , LoadedModel
@@ -31,6 +30,7 @@ import Lib.Date as LocalDate
 import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.Theme exposing (Theme)
+import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
 
 
@@ -84,13 +84,6 @@ type alias MealState =
 type RequestState
     = Idle
     | Saving
-    | Deleting
-
-
-type DeleteState
-    = DeleteIdle
-    | DeleteConfirming
-    | DeleteFailed String
 
 
 type alias LoadFailedModel =
@@ -229,7 +222,7 @@ update msg model =
                             DeleteConfirming ->
                                 ( Loaded
                                     { loaded
-                                        | request = Deleting
+                                        | delete = Deleting
                                     }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
@@ -238,13 +231,13 @@ update msg model =
                             DeleteFailed _ ->
                                 ( Loaded
                                     { loaded
-                                        | request = Deleting
+                                        | delete = Deleting
                                     }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
                                 )
 
-                            DeleteIdle ->
+                            _ ->
                                 ( model, Cmd.none, NoOp )
 
                     else
@@ -256,7 +249,7 @@ update msg model =
         DeleteCompleted result ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Deleting then
+                    if loaded.delete == Deleting then
                         case result of
                             Ok _ ->
                                 ( model, Cmd.none, Navigate (DiaryDay Nothing) )
@@ -814,38 +807,11 @@ detailActionsView theme device model =
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
-    case loaded.delete of
-        DeleteConfirming ->
-            Just (deleteModalContent theme device Nothing (loaded.request == Deleting))
-
-        DeleteFailed message ->
-            Just (deleteModalContent theme device (Just message) False)
-
-        DeleteIdle ->
-            Nothing
-
-
-deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
-deleteModalContent theme device maybeError deleting =
-    Ui.modalOverlay theme
+    View.DeleteModal.deleteModalView theme
+        device
         { title = "Delete log?"
-        , body =
-            [ Ui.mutedParagraph theme "This will permanently remove the log entry."
-            , Ui.maybeErrorBanner theme maybeError
-            ]
-        , actions =
-            Ui.bottomActionButtons device
-                theme
-                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
-                , { label =
-                        if deleting then
-                            "Deleting..."
-
-                        else
-                            "Confirm Delete"
-                  , onPress = ConfirmDeleteClicked
-                  , tone = Ui.DangerAction
-                  }
-                ]
-        , onBackgroundPress = Just CancelDeleteClicked
+        , description = "This will permanently remove the log entry."
+        , onCancel = CancelDeleteClicked
+        , onConfirm = ConfirmDeleteClicked
         }
+        loaded.delete

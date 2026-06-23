@@ -1009,7 +1009,7 @@ servingRowView theme device units openDropdown index row =
                     theme
                     { label = "Unit"
                     , selected = row.unit
-                    , options = unitOptions row.unit units
+                    , options = View.QuantityInput.unitOptions row.unit units
                     , onChange = ServingUnitChanged index
                     , isOpen = openDropdown == ServingUnitOpen index
                     , onToggle = ToggleServingUnitDropdown index
@@ -1043,11 +1043,6 @@ rowActionButton theme device config =
         , Element.paddingEach { top = Ui.space16, right = 0, bottom = 0, left = 0 }
         ]
         (Ui.dangerIconButton device theme config)
-
-
-unitOptions : String -> List UnitItem -> List ( String, String )
-unitOptions selected units =
-    View.QuantityInput.unitOptions selected units
 
 
 addRowHint : Theme -> Element msg

@@ -12,6 +12,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.Entry as FoodLogEntry
 import Page.FoodLog.Form as FoodLogForm
 import Test exposing (Test, describe, test)
+import View.DeleteModal exposing (DeleteState(..))
 
 
 tests : Test
@@ -150,7 +151,7 @@ tests =
                 FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just FoodLogEntry.DeleteConfirming)
+                    |> Expect.equal (Just DeleteConfirming)
         , test "delete confirm requests log deletion" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
@@ -176,7 +177,7 @@ tests =
                         (Just
                             { logId = "log-1"
                             , request = FoodLogEntry.Idle
-                            , delete = FoodLogEntry.DeleteFailed "Network error"
+                            , delete = DeleteFailed "Network error"
                             }
                         )
         , test "units loaded success stores units and stays Loading if log missing" <|
@@ -243,7 +244,7 @@ tests =
                 FoodLogEntry.update FoodLogEntry.CancelDeleteClicked deletingModel
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just FoodLogEntry.DeleteIdle)
+                    |> Expect.equal (Just DeleteIdle)
         , test "cancel delete clicked when not Loaded is a no-op" <|
             \_ ->
                 let
@@ -335,7 +336,7 @@ loadedModel =
         , units = [ gram ]
         , form = form
         , request = FoodLogEntry.Idle
-        , delete = FoodLogEntry.DeleteIdle
+        , delete = DeleteIdle
         }
 
 
@@ -354,7 +355,7 @@ savingModel =
                 , submitState = FoodLogForm.SubmitSubmitting
             }
         , request = FoodLogEntry.Saving
-        , delete = FoodLogEntry.DeleteIdle
+        , delete = DeleteIdle
         }
 
 
@@ -368,8 +369,8 @@ deletingModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Deleting
-        , delete = FoodLogEntry.DeleteConfirming
+        , request = FoodLogEntry.Idle
+        , delete = Deleting
         }
 
 
@@ -384,7 +385,7 @@ deleteFailedModel =
         , units = [ gram ]
         , form = form
         , request = FoodLogEntry.Idle
-        , delete = FoodLogEntry.DeleteFailed "Network error"
+        , delete = DeleteFailed "Network error"
         }
 
 
@@ -397,7 +398,7 @@ mealLoadedModel =
         , units = [ gram ]
         , form = FoodLogForm.initLogFormFromLog mealLog
         , request = FoodLogEntry.Idle
-        , delete = FoodLogEntry.DeleteIdle
+        , delete = DeleteIdle
         }
 
 
@@ -629,7 +630,7 @@ loadedDeleteFailureSummary :
         Maybe
             { logId : String
             , request : FoodLogEntry.RequestState
-            , delete : FoodLogEntry.DeleteState
+            , delete : DeleteState
             }
 loadedDeleteFailureSummary model =
     case model of
@@ -644,7 +645,7 @@ loadedDeleteFailureSummary model =
             Nothing
 
 
-deleteStateOf : FoodLogEntry.Model -> Maybe FoodLogEntry.DeleteState
+deleteStateOf : FoodLogEntry.Model -> Maybe DeleteState
 deleteStateOf model =
     case model of
         FoodLogEntry.Loaded loaded ->

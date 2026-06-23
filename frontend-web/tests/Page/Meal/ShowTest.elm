@@ -10,6 +10,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Show as MealShow
 import Test exposing (Test, describe, test)
+import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients exposing (NutritionState(..))
 
 
@@ -234,7 +235,7 @@ tests =
                     |> MealShow.update MealShow.CancelDeleteClicked
                     |> first
                     |> deleteOf
-                    |> Expect.equal (Just MealShow.DeleteIdle)
+                    |> Expect.equal (Just DeleteIdle)
         , test "delete click in loading state is ignored" <|
             \_ ->
                 MealShow.update MealShow.DeleteClicked baseModel
@@ -256,7 +257,7 @@ tests =
             \_ ->
                 MealShow.update
                     MealShow.ConfirmDeleteClicked
-                    (loadedWithDelete (MealShow.DeleteFailed "Try again"))
+                    (loadedWithDelete (DeleteFailed "Try again"))
                     |> third
                     |> Expect.equal (MealShow.RequestDeleteMeal "meal-1")
         , test "confirm delete is ignored from idle state" <|
@@ -273,24 +274,24 @@ tests =
             \_ ->
                 MealShow.update
                     (MealShow.DeleteCompleted (Ok ()))
-                    (loadedWithDelete MealShow.Deleting)
+                    (loadedWithDelete Deleting)
                     |> third
                     |> Expect.equal (MealShow.Navigate MealList)
         , test "delete failure stores delete error" <|
             \_ ->
                 MealShow.update
                     (MealShow.DeleteCompleted (Err Client.NetworkError))
-                    (loadedWithDelete MealShow.Deleting)
+                    (loadedWithDelete Deleting)
                     |> first
                     |> deleteOf
-                    |> Expect.equal (Just (MealShow.DeleteFailed "Network error"))
+                    |> Expect.equal (Just (DeleteFailed "Network error"))
         , test "delete unauthorized expires session" <|
             \_ ->
                 MealShow.update
                     (MealShow.DeleteCompleted
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
-                    (loadedWithDelete MealShow.Deleting)
+                    (loadedWithDelete Deleting)
                     |> third
                     |> Expect.equal MealShow.SessionExpired
         , test "delete completion is ignored unless deleting" <|
@@ -346,7 +347,7 @@ loadedWithMeal nextMeal =
             NutritionLoaded
                 { amount = "100", unit = "g", unitOpen = False }
                 [ nutrient ]
-        , delete = MealShow.DeleteIdle
+        , delete = DeleteIdle
         }
 
 
@@ -365,11 +366,11 @@ loadedWithMealAndName nextMeal productId =
             NutritionLoaded
                 { amount = "100", unit = "g", unitOpen = False }
                 [ nutrient ]
-        , delete = MealShow.DeleteIdle
+        , delete = DeleteIdle
         }
 
 
-loadedWithDelete : MealShow.DeleteState -> MealShow.Model
+loadedWithDelete : DeleteState -> MealShow.Model
 loadedWithDelete delete =
     case loadedModel of
         MealShow.Loaded loaded ->
@@ -533,7 +534,7 @@ nutritionLoadingOf model =
             False
 
 
-deleteOf : MealShow.Model -> Maybe MealShow.DeleteState
+deleteOf : MealShow.Model -> Maybe DeleteState
 deleteOf model =
     case model of
         MealShow.Loaded loaded ->

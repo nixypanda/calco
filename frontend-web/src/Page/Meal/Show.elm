@@ -1,6 +1,5 @@
 module Page.Meal.Show exposing
-    ( DeleteState(..)
-    , LoadedModel
+    ( LoadedModel
     , LoadingModel
     , Model(..)
     , Msg(..)
@@ -23,6 +22,7 @@ import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
 import Ui.Theme exposing (Theme)
+import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients exposing (NutritionInput, NutritionState(..), defaultNutritionInput)
 import View.QuantityInput
 
@@ -52,13 +52,6 @@ type alias LoadedModel =
     , nutrition : NutritionState
     , delete : DeleteState
     }
-
-
-type DeleteState
-    = DeleteIdle
-    | DeleteConfirming
-    | Deleting
-    | DeleteFailed String
 
 
 type OutMsg
@@ -661,41 +654,11 @@ bottomActionsView theme device =
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
-    case loaded.delete of
-        DeleteConfirming ->
-            Just (deleteModalContent theme device Nothing False)
-
-        Deleting ->
-            Just (deleteModalContent theme device Nothing True)
-
-        DeleteFailed message ->
-            Just (deleteModalContent theme device (Just message) False)
-
-        DeleteIdle ->
-            Nothing
-
-
-deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
-deleteModalContent theme device maybeError deleting =
-    Ui.modalOverlay theme
+    View.DeleteModal.deleteModalView theme
+        device
         { title = "Delete meal?"
-        , body =
-            [ Ui.mutedParagraph theme "This will permanently remove the meal."
-            , Ui.maybeErrorBanner theme maybeError
-            ]
-        , actions =
-            Ui.bottomActionButtons device
-                theme
-                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
-                , { label =
-                        if deleting then
-                            "Deleting..."
-
-                        else
-                            "Confirm Delete"
-                  , onPress = ConfirmDeleteClicked
-                  , tone = Ui.DangerAction
-                  }
-                ]
-        , onBackgroundPress = Just CancelDeleteClicked
+        , description = "This will permanently remove the meal."
+        , onCancel = CancelDeleteClicked
+        , onConfirm = ConfirmDeleteClicked
         }
+        loaded.delete

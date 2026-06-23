@@ -11,7 +11,6 @@ module Page.Users.CredentialForm exposing
     )
 
 import Element exposing (Device, Element)
-import Element.Font as Font
 import Ui
 import Ui.Theme exposing (Theme)
 
@@ -145,7 +144,7 @@ view config { model, device, theme } =
             ]
             [ Ui.card theme
                 [ Ui.subsectionTitle theme config.title
-                , descriptionView theme config.description
+                , Ui.maybeMutedParagraph theme config.description
                 , Ui.input theme
                     { label = "Username"
                     , value = form.username
@@ -167,20 +166,6 @@ view config { model, device, theme } =
                 }
             ]
         )
-
-
-descriptionView : Theme -> Maybe String -> Element Msg
-descriptionView theme maybeDescription =
-    case maybeDescription of
-        Just description ->
-            Element.paragraph
-                [ Ui.body
-                , Font.color theme.textMedium
-                ]
-                [ Element.text description ]
-
-        Nothing ->
-            Element.none
 
 
 isSubmitting : Model -> Bool

@@ -48,6 +48,7 @@ module Ui exposing
     , macroColor
     , macroDotGhost
     , maybeErrorBanner
+    , maybeMutedParagraph
     , menuCard
     , modalOverlay
     , mutedBody
@@ -1134,6 +1135,16 @@ mutedParagraph theme text =
         , body
         ]
         [ Element.text text ]
+
+
+maybeMutedParagraph : Theme -> Maybe String -> Element msg
+maybeMutedParagraph theme maybeText =
+    case maybeText of
+        Just text ->
+            mutedParagraph theme text
+
+        Nothing ->
+            Element.none
 
 
 modalOverlay :

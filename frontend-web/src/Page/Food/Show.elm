@@ -24,6 +24,7 @@ import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.Theme exposing (Theme)
 import View.Nutrients
+import View.Product
 
 
 
@@ -454,7 +455,7 @@ loadedView theme device loaded =
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ foodHeader theme food
+        [ View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request
         , View.Nutrients.nutritionCard theme device nutrients
@@ -492,49 +493,4 @@ foodNutrientsForDisplay food form =
         { amount = form.amount, unit = form.unit }
         food.servings
         food.nutrients
-        |> Maybe.withDefault (foodNutrientsPer100g food)
-
-
-foodNutrientsPer100g : ProductDetail -> List Nutrition.NutrientAmount
-foodNutrientsPer100g food =
-    List.map
-        (\nutrient ->
-            { code = nutrient.code
-            , amount = nutrient.amountPer100g
-            , unit = nutrient.unit
-            }
-        )
-        food.nutrients
-
-
-foodHeader : Theme -> ProductDetail -> Element Msg
-foodHeader theme food =
-    let
-        macroNutrients : List Nutrition.NutrientAmount
-        macroNutrients =
-            food.nutrients
-                |> List.map
-                    (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
-    in
-    Ui.card theme
-        [ Ui.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot theme macroNutrients)
-            , title = Ui.truncatedHeader theme food.name
-            , subtitle = Just (metaText food)
-            , actions = []
-            }
-        , if List.isEmpty food.categories then
-            Element.none
-
-          else
-            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                [ Ui.macroDotGhost, Ui.chips theme food.categories ]
-        ]
-
-
-metaText : ProductDetail -> String
-metaText food =
-    [ food.brand
-    , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-    ]
-        |> Ui.dotSeparated
+        |> Maybe.withDefault (View.Product.foodNutrientsPer100g food)

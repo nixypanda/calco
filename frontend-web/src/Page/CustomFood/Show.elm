@@ -1,6 +1,5 @@
 module Page.CustomFood.Show exposing
-    ( DeleteState(..)
-    , LoadedModel
+    ( LoadedModel
     , LoadingModel
     , Model(..)
     , Msg(..)
@@ -18,7 +17,9 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
+import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
+import View.Product
 
 
 
@@ -44,13 +45,6 @@ type alias LoadedModel =
     , units : List UnitItem
     , delete : DeleteState
     }
-
-
-type DeleteState
-    = DeleteIdle
-    | DeleteConfirming
-    | Deleting
-    | DeleteFailed String
 
 
 type OutMsg
@@ -291,61 +285,16 @@ loadedView theme device loaded =
 
         nutrients : List Nutrition.NutrientAmount
         nutrients =
-            foodNutrientsPer100g food
+            View.Product.foodNutrientsPer100g food
     in
     Element.column
         [ Element.width Element.fill
         , Element.spacing Ui.space16
         ]
-        [ foodHeader theme food
+        [ View.Product.foodHeader theme food []
         , View.Nutrients.nutritionCard theme device nutrients
         , bottomActionsView theme device food
         ]
-
-
-foodNutrientsPer100g : ProductDetail -> List Nutrition.NutrientAmount
-foodNutrientsPer100g food =
-    List.map
-        (\nutrient ->
-            { code = nutrient.code
-            , amount = nutrient.amountPer100g
-            , unit = nutrient.unit
-            }
-        )
-        food.nutrients
-
-
-foodHeader : Theme -> ProductDetail -> Element Msg
-foodHeader theme food =
-    let
-        macroNutrients : List Nutrition.NutrientAmount
-        macroNutrients =
-            food.nutrients
-                |> List.map
-                    (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
-    in
-    Ui.card theme
-        [ Ui.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot theme macroNutrients)
-            , title = Ui.truncatedHeader theme food.name
-            , subtitle = Just (metaText food)
-            , actions = []
-            }
-        , if List.isEmpty food.categories then
-            Element.none
-
-          else
-            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                [ Ui.macroDotGhost, Ui.chips theme food.categories ]
-        ]
-
-
-metaText : ProductDetail -> String
-metaText food =
-    [ food.brand
-    , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-    ]
-        |> Ui.dotSeparated
 
 
 bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
@@ -367,44 +316,14 @@ bottomActionsView theme device food =
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
-    case loaded.delete of
-        DeleteConfirming ->
-            Just (deleteModalContent theme device Nothing False)
-
-        Deleting ->
-            Just (deleteModalContent theme device Nothing True)
-
-        DeleteFailed message ->
-            Just (deleteModalContent theme device (Just message) False)
-
-        DeleteIdle ->
-            Nothing
-
-
-deleteModalContent : Theme -> Device -> Maybe String -> Bool -> Element Msg
-deleteModalContent theme device maybeError deleting =
-    Ui.modalOverlay theme
+    View.DeleteModal.deleteModalView theme
+        device
         { title = "Delete food?"
-        , body =
-            [ Ui.mutedParagraph theme "This will permanently remove the custom food."
-            , Ui.maybeErrorBanner theme maybeError
-            ]
-        , actions =
-            Ui.bottomActionButtons device
-                theme
-                [ { label = "Cancel", onPress = CancelDeleteClicked, tone = Ui.PrimaryAction }
-                , { label =
-                        if deleting then
-                            "Deleting..."
-
-                        else
-                            "Confirm Delete"
-                  , onPress = ConfirmDeleteClicked
-                  , tone = Ui.DangerAction
-                  }
-                ]
-        , onBackgroundPress = Just CancelDeleteClicked
+        , description = "This will permanently remove the custom food."
+        , onCancel = CancelDeleteClicked
+        , onConfirm = ConfirmDeleteClicked
         }
+        loaded.delete
 
 
 customFoodEditRoute : ProductDetail -> Maybe Route

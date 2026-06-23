@@ -7,6 +7,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Page.CustomFood.Show as CustomFoodShow
 import Test exposing (Test, describe, test)
+import View.DeleteModal exposing (DeleteState(..))
 
 
 tests : Test
@@ -26,7 +27,7 @@ tests =
                     |> CustomFoodShow.update (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
                     |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], CustomFoodShow.DeleteIdle ))
+                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
         , test "units then food load completes model" <|
             \_ ->
                 CustomFoodShow.init "food-1"
@@ -36,19 +37,19 @@ tests =
                     |> CustomFoodShow.update (CustomFoodShow.FoodLoaded (Ok food))
                     |> first
                     |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], CustomFoodShow.DeleteIdle ))
+                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
         , test "food load refreshes loaded food and clears delete state" <|
             \_ ->
                 CustomFoodShow.update
                     (CustomFoodShow.FoodLoaded (Ok { food | name = "Pear" }))
                     (CustomFoodShow.Loaded
                         { loadedModelRecord
-                            | delete = CustomFoodShow.DeleteFailed "old"
+                            | delete = DeleteFailed "old"
                         }
                     )
                     |> first
                     |> loadedFoodNameAndDelete
-                    |> Expect.equal (Just ( "Pear", CustomFoodShow.DeleteIdle ))
+                    |> Expect.equal (Just ( "Pear", DeleteIdle ))
         , test "unit load refreshes loaded units" <|
             \_ ->
                 CustomFoodShow.update
@@ -56,7 +57,7 @@ tests =
                     loadedModel
                     |> first
                     |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], CustomFoodShow.DeleteIdle ))
+                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
         , test "load failure stores error" <|
             \_ ->
                 CustomFoodShow.update
@@ -104,7 +105,7 @@ tests =
                 CustomFoodShow.update CustomFoodShow.DeleteClicked loadedModel
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just CustomFoodShow.DeleteConfirming)
+                    |> Expect.equal (Just DeleteConfirming)
         , test "delete click in loading state is ignored" <|
             \_ ->
                 CustomFoodShow.update
@@ -117,11 +118,11 @@ tests =
                 CustomFoodShow.update
                     CustomFoodShow.CancelDeleteClicked
                     (CustomFoodShow.Loaded
-                        { loadedModelRecord | delete = CustomFoodShow.DeleteConfirming }
+                        { loadedModelRecord | delete = DeleteConfirming }
                     )
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just CustomFoodShow.DeleteIdle)
+                    |> Expect.equal (Just DeleteIdle)
         , test "cancel delete in loading state is ignored" <|
             \_ ->
                 CustomFoodShow.update
@@ -142,7 +143,7 @@ tests =
                     CustomFoodShow.ConfirmDeleteClicked
                     (CustomFoodShow.Loaded
                         { loadedModelRecord
-                            | delete = CustomFoodShow.DeleteFailed "Try again"
+                            | delete = DeleteFailed "Try again"
                         }
                     )
                     |> third
@@ -173,7 +174,7 @@ tests =
                     deletingModel
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just (CustomFoodShow.DeleteFailed "Network error"))
+                    |> Expect.equal (Just (DeleteFailed "Network error"))
         , test "delete unauthorized expires session" <|
             \_ ->
                 CustomFoodShow.update
@@ -211,14 +212,14 @@ loadedModelRecord =
     { productId = "food-1"
     , food = food
     , units = []
-    , delete = CustomFoodShow.DeleteIdle
+    , delete = DeleteIdle
     }
 
 
 deletingModel : CustomFoodShow.Model
 deletingModel =
     CustomFoodShow.Loaded
-        { loadedModelRecord | delete = CustomFoodShow.Deleting }
+        { loadedModelRecord | delete = Deleting }
 
 
 loadedWithFood : ProductDetail -> CustomFoodShow.Model
@@ -251,7 +252,7 @@ gram =
     { code = "g", name = "Gram", kind = "mass" }
 
 
-deleteStateOf : CustomFoodShow.Model -> Maybe CustomFoodShow.DeleteState
+deleteStateOf : CustomFoodShow.Model -> Maybe DeleteState
 deleteStateOf model =
     case model of
         CustomFoodShow.Loaded loaded ->
@@ -263,7 +264,7 @@ deleteStateOf model =
 
 loadedSummary :
     CustomFoodShow.Model
-    -> Maybe ( String, List UnitItem, CustomFoodShow.DeleteState )
+    -> Maybe ( String, List UnitItem, DeleteState )
 loadedSummary model =
     case model of
         CustomFoodShow.Loaded loaded ->
@@ -275,7 +276,7 @@ loadedSummary model =
 
 loadedFoodNameAndDelete :
     CustomFoodShow.Model
-    -> Maybe ( String, CustomFoodShow.DeleteState )
+    -> Maybe ( String, DeleteState )
 loadedFoodNameAndDelete model =
     case model of
         CustomFoodShow.Loaded loaded ->
