@@ -40,6 +40,92 @@ tests =
                     |> first
                     |> unitsOf
                     |> Expect.equal (Just [ gram ])
+        , test "food load failure stores error" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.FoodLoaded (Err Client.NetworkError))
+                    emptyModel
+                    |> first
+                    |> Expect.equal (FoodShow.LoadFailed "Network error")
+        , test "units load unauthorized expires session" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.UnitsLoaded
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    emptyModel
+                    |> third
+                    |> Expect.equal FoodShow.SessionExpired
+        , test "load success is ignored after load failed" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.FoodLoaded (Ok food))
+                    (FoodShow.LoadFailed "old")
+                    |> first
+                    |> Expect.equal (FoodShow.LoadFailed "old")
+        , test "food reload refreshes loaded form and clears request state" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.FoodLoaded (Ok { food | defaultQuantity = Just "3" }))
+                    savingModel
+                    |> first
+                    |> (\model -> ( formOf model |> Maybe.map .amount, requestOf model ))
+                    |> Expect.equal ( Just "3", Just FoodShow.Idle )
+        , test "units reload refreshes loaded units" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.UnitsLoaded (Ok { items = [ ounce ] }))
+                    loadedModel
+                    |> first
+                    |> unitsOf
+                    |> Expect.equal (Just [ ounce ])
+        , test "last used default is stored while loading and applied after load completes" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded (Ok { items = [ recentItem ] }))
+                    emptyModel
+                    |> first
+                    |> FoodShow.update (FoodShow.FoodLoaded (Ok food))
+                    |> first
+                    |> FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
+                    |> first
+                    |> formOf
+                    |> Maybe.map (\current -> ( current.amount, current.unit ))
+                    |> Expect.equal (Just ( "5", "g" ))
+        , test "last used default updates loaded form" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded (Ok { items = [ recentItem ] }))
+                    loadedModel
+                    |> first
+                    |> formOf
+                    |> Maybe.map (\current -> ( current.amount, current.unit ))
+                    |> Expect.equal (Just ( "5", "g" ))
+        , test "empty last used response is no-op" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded (Ok { items = [] }))
+                    loadedModel
+                    |> first
+                    |> formOf
+                    |> Maybe.map .amount
+                    |> Expect.equal (Just "2")
+        , test "last used failure is ignored" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded (Err Client.NetworkError))
+                    loadedModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
+        , test "last used unauthorized expires session" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    loadedModel
+                    |> third
+                    |> Expect.equal FoodShow.SessionExpired
         , test "display nutrients follow the current form quantity" <|
             \_ ->
                 FoodShow.foodNutrientsForDisplay foodWithNutrition form
@@ -55,6 +141,41 @@ tests =
                 FoodShow.update FoodShow.SubmitClicked loadedModel
                     |> third
                     |> Expect.equal FoodShow.RequestLocalContext
+        , test "submit with blank amount stores validation error" <|
+            \_ ->
+                FoodShow.update
+                    FoodShow.SubmitClicked
+                    (loadedWithForm { form | amount = " " })
+                    |> first
+                    |> formOf
+                    |> Maybe.andThen submitFailureMessage
+                    |> Expect.equal (Just "Amount is required.")
+        , test "submit is ignored while request is in flight" <|
+            \_ ->
+                FoodShow.update FoodShow.SubmitClicked contextReadyModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
+        , test "submit in loading state is ignored" <|
+            \_ ->
+                FoodShow.update FoodShow.SubmitClicked emptyModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
+        , test "form message updates loaded form" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.FormMsg (FoodLogForm.AmountChanged "4"))
+                    loadedModel
+                    |> first
+                    |> formOf
+                    |> Maybe.map .amount
+                    |> Expect.equal (Just "4")
+        , test "form message in loading state is ignored" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.FormMsg (FoodLogForm.AmountChanged "4"))
+                    emptyModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
         , test "local context uses selected diary date for log request" <|
             \_ ->
                 FoodShow.update
@@ -119,6 +240,24 @@ tests =
                         ( FoodShow.NoOp
                         , Just "Could not read device date."
                         )
+        , test "local context is ignored unless request is pending" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LocalContextReceived
+                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
+                    )
+                    loadedModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
+        , test "local context in loading state is ignored" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LocalContextReceived
+                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
+                    )
+                    emptyModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
         , test "log success navigates back to selected diary day" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
@@ -140,6 +279,25 @@ tests =
                                 (FoodLogForm.RequestFailed "Network error")
                             )
                         )
+        , test "log unauthorized expires session" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LogCompleted
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    savingModel
+                    |> third
+                    |> Expect.equal FoodShow.SessionExpired
+        , test "log completion is ignored unless saving" <|
+            \_ ->
+                FoodShow.update (FoodShow.LogCompleted (Ok log)) loadedModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
+        , test "log completion in loading state is ignored" <|
+            \_ ->
+                FoodShow.update (FoodShow.LogCompleted (Ok log)) emptyModel
+                    |> third
+                    |> Expect.equal FoodShow.NoOp
         ]
 
 
@@ -211,6 +369,20 @@ savingModel =
         }
 
 
+loadedWithForm : FoodLogForm.Model -> FoodShow.Model
+loadedWithForm nextForm =
+    FoodShow.Loaded
+        { productId = "food-1"
+        , logDate = Just "2026-05-29"
+        , mealSlot = Just Lunch
+        , food = food
+        , units = [ gram ]
+        , form = nextForm
+        , request = FoodShow.Idle
+        , lastUsedDefault = Nothing
+        }
+
+
 formOf : FoodShow.Model -> Maybe FoodLogForm.Model
 formOf model =
     case model of
@@ -231,6 +403,16 @@ unitsOf model =
             Just loaded.units
 
         FoodShow.LoadFailed _ ->
+            Nothing
+
+
+requestOf : FoodShow.Model -> Maybe FoodShow.RequestState
+requestOf model =
+    case model of
+        FoodShow.Loaded loaded ->
+            Just loaded.request
+
+        _ ->
             Nothing
 
 
@@ -293,6 +475,27 @@ foodWithNutrition =
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
+
+
+ounce : UnitItem
+ounce =
+    { code = "oz", name = "Ounce", kind = "mass" }
+
+
+recentItem :
+    { item : Data.FoodLog.LogItem
+    , lastUsedDate : LocalDate
+    , mealSlot : Maybe String
+    , quantity : Nutrition.Quantity
+    , nutritionSummary : Nutrition.NutritionSummary
+    }
+recentItem =
+    { item = { itemType = ItemRef.Product, id = "food-1", name = "Apple", brand = Nothing }
+    , lastUsedDate = sampleDate
+    , mealSlot = Just "lunch"
+    , quantity = { amount = "5", unit = "g" }
+    , nutritionSummary = Nutrition.emptySummary
+    }
 
 
 log : FoodLog

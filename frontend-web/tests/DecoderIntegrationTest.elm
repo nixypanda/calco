@@ -4,7 +4,7 @@ import Api.Foods as Foods
 import Api.Logs as Logs
 import Data.Auth as Auth
 import Data.FoodLog as FoodLog
-import Data.ItemRef as ItemRef
+import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.Nutrition as Nutrition
 import Data.User as User
 import Expect
@@ -381,7 +381,7 @@ date raw =
                     today
 
 
-itemRefFuzzer : Fuzzer ItemRef.ItemRef
+itemRefFuzzer : Fuzzer ItemRef
 itemRefFuzzer =
     Fuzz.map2 ItemRef.ItemRef itemTypeFuzzer Fuzz.string
 

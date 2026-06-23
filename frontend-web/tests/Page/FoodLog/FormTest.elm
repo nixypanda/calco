@@ -134,6 +134,120 @@ tests =
                 FoodLogForm.createUpdateLogRequest { form | mealSlot = Nothing, notes = "   " }
                     |> Result.map (\request -> ( request.mealSlot, request.notes ))
                     |> Expect.equal (Ok ( Nothing, Nothing ))
+        , test "UnitChanged sets unit and closes dropdown" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.UnitChanged "serving")
+                    { form | openDropdown = FoodLogForm.UnitDropdownOpen }
+                    |> (\current -> ( current.unit, current.openDropdown ))
+                    |> Expect.equal ( "serving", FoodLogForm.NoDropdownOpen )
+        , test "UnitChanged clears submit failure" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.UnitChanged "g")
+                    { form
+                        | submitState =
+                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
+                    }
+                    |> .submitState
+                    |> Expect.equal FoodLogForm.SubmitIdle
+        , test "MealSlotChanged sets meal slot and closes dropdown" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.MealSlotChanged (Just Lunch))
+                    { form | openDropdown = FoodLogForm.MealSlotDropdownOpen }
+                    |> (\current -> ( current.mealSlot, current.openDropdown ))
+                    |> Expect.equal ( Just Lunch, FoodLogForm.NoDropdownOpen )
+        , test "MealSlotChanged clears submit failure" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.MealSlotChanged (Just Lunch))
+                    { form
+                        | submitState =
+                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
+                    }
+                    |> .submitState
+                    |> Expect.equal FoodLogForm.SubmitIdle
+        , test "NotesChanged sets notes and closes dropdown" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.NotesChanged "tasty")
+                    { form | openDropdown = FoodLogForm.UnitDropdownOpen }
+                    |> (\current -> ( current.notes, current.openDropdown ))
+                    |> Expect.equal ( "tasty", FoodLogForm.NoDropdownOpen )
+        , test "NotesChanged clears submit failure" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.NotesChanged "tasty")
+                    { form
+                        | submitState =
+                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
+                    }
+                    |> .submitState
+                    |> Expect.equal FoodLogForm.SubmitIdle
+        , test "AmountChanged updates amount field" <|
+            \_ ->
+                FoodLogForm.update (FoodLogForm.AmountChanged "5") form
+                    |> .amount
+                    |> Expect.equal "5"
+        , test "AmountChanged closes dropdown" <|
+            \_ ->
+                FoodLogForm.update
+                    (FoodLogForm.AmountChanged "5")
+                    { form | openDropdown = FoodLogForm.MealSlotDropdownOpen }
+                    |> .openDropdown
+                    |> Expect.equal FoodLogForm.NoDropdownOpen
+        , test "ToggleMealSlotDropdown closes when already open" <|
+            \_ ->
+                FoodLogForm.update
+                    FoodLogForm.ToggleMealSlotDropdown
+                    { form | openDropdown = FoodLogForm.MealSlotDropdownOpen }
+                    |> .openDropdown
+                    |> Expect.equal FoodLogForm.NoDropdownOpen
+        , test "ToggleUnitDropdown closes when already open" <|
+            \_ ->
+                FoodLogForm.update
+                    FoodLogForm.ToggleUnitDropdown
+                    { form | openDropdown = FoodLogForm.UnitDropdownOpen }
+                    |> .openDropdown
+                    |> Expect.equal FoodLogForm.NoDropdownOpen
+        , test "submitFailureMessage for AmountRequiredMessage" <|
+            \_ ->
+                FoodLogForm.submitFailureMessage FoodLogForm.AmountRequiredMessage
+                    |> Expect.equal "Amount is required."
+        , test "submitFailureMessage for InvalidDateMessage" <|
+            \_ ->
+                FoodLogForm.submitFailureMessage FoodLogForm.InvalidDateMessage
+                    |> Expect.equal "Could not read device date."
+        , test "submitFailureMessage for RequestFailed" <|
+            \_ ->
+                FoodLogForm.submitFailureMessage (FoodLogForm.RequestFailed "network error")
+                    |> Expect.equal "network error"
+        , test "setSubmitState sets the state" <|
+            \_ ->
+                FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting form
+                    |> .submitState
+                    |> Expect.equal FoodLogForm.SubmitSubmitting
+        , test "createUpdateLogRequest with valid data" <|
+            \_ ->
+                FoodLogForm.createUpdateLogRequest
+                    { form
+                        | amount = "2"
+                        , unit = "g"
+                        , mealSlot = Just Lunch
+                        , notes = "good"
+                    }
+                    |> Expect.equal
+                        (Ok
+                            { mealSlot = Just "lunch"
+                            , quantity = { amount = "2", unit = "g" }
+                            , notes = Just "good"
+                            }
+                        )
+        , test "createUpdateLogRequest with blank amount returns Err AmountRequired" <|
+            \_ ->
+                FoodLogForm.createUpdateLogRequest { form | amount = " " }
+                    |> Expect.equal (Err FoodLogForm.AmountRequired)
         ]
 
 

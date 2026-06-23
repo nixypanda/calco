@@ -145,6 +145,176 @@ tests =
                     |> first
                     |> saveState
                     |> Expect.equal (Just GoalsSettings.Editing)
+        , test "protein target change updates protein field" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.ProteinTargetChanged "180")
+                    (GoalsSettings.Ready loadedModel)
+                    |> first
+                    |> (\m -> ( fields m, saveState m ))
+                    |> Expect.equal
+                        ( Just [ "2290", "180", "255", "70" ]
+                        , Just GoalsSettings.Editing
+                        )
+        , test "carbs target change updates carbs field" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.CarbsTargetChanged "300")
+                    (GoalsSettings.Ready loadedModel)
+                    |> first
+                    |> (\m -> ( fields m, saveState m ))
+                    |> Expect.equal
+                        ( Just [ "2290", "160", "300", "70" ]
+                        , Just GoalsSettings.Editing
+                        )
+        , test "fat target change updates fat field" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.FatTargetChanged "80")
+                    (GoalsSettings.Ready loadedModel)
+                    |> first
+                    |> (\m -> ( fields m, saveState m ))
+                    |> Expect.equal
+                        ( Just [ "2290", "160", "255", "80" ]
+                        , Just GoalsSettings.Editing
+                        )
+        , test "protein target change clears save failure" <|
+            \_ ->
+                let
+                    failedModel : GoalsSettings.Model
+                    failedModel =
+                        GoalsSettings.Ready
+                            { loadedModel
+                                | saveState = GoalsSettings.SaveFailed "error"
+                            }
+                in
+                GoalsSettings.update
+                    (GoalsSettings.ProteinTargetChanged "180")
+                    failedModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal (Just GoalsSettings.Editing)
+        , test "goal load error on loading moves to failed" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.GoalLoaded (Err Client.NetworkError))
+                    GoalsSettings.Loading
+                    |> first
+                    |> Expect.equal (GoalsSettings.Failed "Network error")
+        , test "goal load error on ready stores save error" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.GoalLoaded (Err Client.NetworkError))
+                    (GoalsSettings.Ready loadedModel)
+                    |> first
+                    |> saveState
+                    |> Expect.equal (Just (GoalsSettings.SaveFailed "Network error"))
+        , test "goal load 401 on loading triggers session expired" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.GoalLoaded (Err (Client.BadStatus 401 "" "")))
+                    GoalsSettings.Loading
+                    |> third
+                    |> Expect.equal GoalsSettings.SessionExpired
+        , test "calorie target change on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.CalorieTargetChanged "100")
+                    GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "protein target change on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.ProteinTargetChanged "100")
+                    GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "carbs target change on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update (GoalsSettings.CarbsTargetChanged "100") GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "fat target change on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update (GoalsSettings.FatTargetChanged "100") GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "save click on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update GoalsSettings.SaveClicked GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "save click on failed is no-op" <|
+            \_ ->
+                GoalsSettings.update
+                    GoalsSettings.SaveClicked
+                    (GoalsSettings.Failed "old")
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Failed "old", GoalsSettings.NoOp )
+        , test "local context received on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.LocalContextReceived
+                        { date = "2026-06-16"
+                        , timezone = "Asia/Kolkata"
+                        }
+                    )
+                    GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "save completed on loading is no-op" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.SaveCompleted (Err Client.NetworkError))
+                    GoalsSettings.Loading
+                    |> (\( m, _, out ) -> ( m, out ))
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.NoOp )
+        , test "save completed 401 triggers session expired" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.SaveCompleted (Err (Client.BadStatus 401 "" "")))
+                    savingModel
+                    |> third
+                    |> Expect.equal GoalsSettings.SessionExpired
+        , test "negative calorie target blocks save" <|
+            \_ ->
+                let
+                    badModel : GoalsSettings.Model
+                    badModel =
+                        GoalsSettings.Ready
+                            { loadedModel
+                                | calorieTarget = "-1"
+                            }
+                in
+                GoalsSettings.update GoalsSettings.SaveClicked badModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal
+                        (Just
+                            (GoalsSettings.ValidationFailed
+                                "Calories must be greater than 0."
+                            )
+                        )
+        , test "zero calorie target blocks save" <|
+            \_ ->
+                let
+                    badModel : GoalsSettings.Model
+                    badModel =
+                        GoalsSettings.Ready
+                            { loadedModel
+                                | calorieTarget = "0"
+                            }
+                in
+                GoalsSettings.update GoalsSettings.SaveClicked badModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal
+                        (Just
+                            (GoalsSettings.ValidationFailed
+                                "Calories must be greater than 0."
+                            )
+                        )
         ]
 
 

@@ -179,6 +179,139 @@ tests =
                             , delete = FoodLogEntry.DeleteFailed "Network error"
                             }
                         )
+        , test "units loaded success stores units and stays Loading if log missing" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] }))
+                    emptyModel
+                    |> first
+                    |> Expect.equal
+                        (FoodLogEntry.Loading
+                            { logId = "log-1"
+                            , log = Nothing
+                            , units = Just [ gram ]
+                            }
+                        )
+        , test "units loaded success completes loading when log already present" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.UnitsLoaded (Ok { items = [ gram ] }))
+                    (FoodLogEntry.Loading
+                        { logId = "log-1"
+                        , log = Just productLog
+                        , units = Nothing
+                        }
+                    )
+                    |> first
+                    |> loadedLogQuantity
+                    |> Expect.equal (Just { amount = "2", unit = "serving" })
+        , test "units loaded failure stores error" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.UnitsLoaded (Err Client.NetworkError))
+                    emptyModel
+                    |> first
+                    |> Expect.equal
+                        (FoodLogEntry.LoadFailed
+                            { logId = "log-1"
+                            , error = "Network error"
+                            }
+                        )
+        , test "form amount changed updates form amount when Loaded" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "5"))
+                    loadedModel
+                    |> first
+                    |> loadedForm
+                    |> Maybe.map .amount
+                    |> Expect.equal (Just "5")
+        , test "form message when not Loaded is a no-op" <|
+            \_ ->
+                let
+                    original : FoodLogEntry.Model
+                    original =
+                        emptyModel
+                in
+                FoodLogEntry.update
+                    (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "5"))
+                    original
+                    |> first
+                    |> Expect.equal original
+        , test "cancel delete clicked when Loaded resets to DeleteIdle" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.CancelDeleteClicked deletingModel
+                    |> first
+                    |> deleteStateOf
+                    |> Expect.equal (Just FoodLogEntry.DeleteIdle)
+        , test "cancel delete clicked when not Loaded is a no-op" <|
+            \_ ->
+                let
+                    original : FoodLogEntry.Model
+                    original =
+                        emptyModel
+                in
+                FoodLogEntry.update FoodLogEntry.CancelDeleteClicked original
+                    |> first
+                    |> Expect.equal original
+        , test "log loaded failure stores error" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.LogLoaded (Err Client.NetworkError))
+                    emptyModel
+                    |> first
+                    |> Expect.equal
+                        (FoodLogEntry.LoadFailed
+                            { logId = "log-1"
+                            , error = "Network error"
+                            }
+                        )
+        , test "submit clicked when request is not Idle is a no-op" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.SubmitClicked savingModel
+                    |> first
+                    |> Expect.equal savingModel
+        , test "submit clicked when not Loaded is a no-op" <|
+            \_ ->
+                let
+                    original : FoodLogEntry.Model
+                    original =
+                        emptyModel
+                in
+                FoodLogEntry.update FoodLogEntry.SubmitClicked original
+                    |> first
+                    |> Expect.equal original
+        , test "delete clicked when request is not Idle is a no-op" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.DeleteClicked savingModel
+                    |> first
+                    |> Expect.equal savingModel
+        , test "confirm delete clicked with DeleteFailed retries the deletion" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked deleteFailedModel
+                    |> third
+                    |> Expect.equal (FoodLogEntry.RequestDeleteLog "log-1")
+        , test "confirm delete clicked with DeleteIdle is a no-op" <|
+            \_ ->
+                FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked loadedModel
+                    |> first
+                    |> Expect.equal loadedModel
+        , test "delete completed with unauthorized error triggers SessionExpired" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.DeleteCompleted
+                        (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
+                    )
+                    deletingModel
+                    |> third
+                    |> Expect.equal FoodLogEntry.SessionExpired
+        , test "delete completed when request is not Deleting is a no-op" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.DeleteCompleted (Ok ()))
+                    loadedModel
+                    |> third
+                    |> Expect.equal FoodLogEntry.NoOp
         ]
 
 
@@ -237,6 +370,21 @@ deletingModel =
         , form = form
         , request = FoodLogEntry.Deleting
         , delete = FoodLogEntry.DeleteConfirming
+        }
+
+
+deleteFailedModel : FoodLogEntry.Model
+deleteFailedModel =
+    FoodLogEntry.Loaded
+        { logId = "log-1"
+        , log = productLog
+        , item =
+            FoodLogEntry.ProductItem
+                (FoodLogEntry.DetailLoading productLog.item)
+        , units = [ gram ]
+        , form = form
+        , request = FoodLogEntry.Idle
+        , delete = FoodLogEntry.DeleteFailed "Network error"
         }
 
 

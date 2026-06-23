@@ -156,6 +156,86 @@ tests =
                         )
                     |> thirdOfThree
                     |> Expect.equal EditUser.SessionExpired
+        , test "PasswordChanged on Loading is no-op" <|
+            \_ ->
+                initialModel
+                    |> EditUser.update (EditUser.PasswordChanged "new")
+                    |> firstOfThree
+                    |> .status
+                    |> Expect.equal EditUser.Loading
+        , test "PasswordChanged with Invalid state resets to Idle" <|
+            \_ ->
+                invalidModel
+                    |> EditUser.update (EditUser.PasswordChanged "new")
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just EditUser.Idle)
+        , test "PasswordChanged with ActionFailed resets to Idle" <|
+            \_ ->
+                actionFailedModel
+                    |> EditUser.update (EditUser.PasswordChanged "new")
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just EditUser.Idle)
+        , test "PasswordChanged with ResettingPassword keeps ResettingPassword" <|
+            \_ ->
+                resettingWithNewPasswordModel
+                    |> EditUser.update (EditUser.PasswordChanged "new")
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just EditUser.ResettingPassword)
+        , test "ResetSubmitted when pending is no-op" <|
+            \_ ->
+                resettingModel
+                    |> EditUser.update EditUser.ResetSubmitted
+                    |> firstOfThree
+                    |> Expect.equal resettingModel
+        , test "DisableClicked when pending is no-op" <|
+            \_ ->
+                resettingModel
+                    |> EditUser.update EditUser.DisableClicked
+                    |> firstOfThree
+                    |> Expect.equal resettingModel
+        , test "EnableClicked when pending is no-op" <|
+            \_ ->
+                resettingModel
+                    |> EditUser.update EditUser.EnableClicked
+                    |> firstOfThree
+                    |> Expect.equal resettingModel
+        , test "ResetCompleted with non-matching action state is no-op" <|
+            \_ ->
+                disablingModel
+                    |> EditUser.update (EditUser.ResetCompleted (Ok ()))
+                    |> firstOfThree
+                    |> Expect.equal disablingModel
+        , test "DisableCompleted failure stores ActionFailed" <|
+            \_ ->
+                disablingModel
+                    |> EditUser.update (EditUser.DisableCompleted (Err Client.NetworkError))
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just (EditUser.ActionFailed "Network error"))
+        , test "EnableCompleted failure stores ActionFailed" <|
+            \_ ->
+                enablingModel
+                    |> EditUser.update (EditUser.EnableCompleted (Err Client.NetworkError))
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just (EditUser.ActionFailed "Network error"))
+        , test "DisableClicked on Loading is no-op" <|
+            \_ ->
+                initialModel
+                    |> EditUser.update EditUser.DisableClicked
+                    |> firstOfThree
+                    |> .status
+                    |> Expect.equal EditUser.Loading
+        , test "EnableClicked on Loading is no-op" <|
+            \_ ->
+                initialModel
+                    |> EditUser.update EditUser.EnableClicked
+                    |> firstOfThree
+                    |> .status
+                    |> Expect.equal EditUser.Loading
         ]
 
 
@@ -206,6 +286,36 @@ enablingModel =
             EditUser.Loaded
                 { user = disabledUser, password = "" }
                 EditUser.EnablingUser
+    }
+
+
+invalidModel : EditUser.Model
+invalidModel =
+    { initialModel
+        | status =
+            EditUser.Loaded
+                { user = user, password = "" }
+                (EditUser.Invalid EditUser.NewPasswordRequired)
+    }
+
+
+actionFailedModel : EditUser.Model
+actionFailedModel =
+    { initialModel
+        | status =
+            EditUser.Loaded
+                { user = user, password = "" }
+                (EditUser.ActionFailed "old error")
+    }
+
+
+resettingWithNewPasswordModel : EditUser.Model
+resettingWithNewPasswordModel =
+    { initialModel
+        | status =
+            EditUser.Loaded
+                { user = user, password = "new" }
+                EditUser.ResettingPassword
     }
 
 

@@ -163,9 +163,198 @@ tests =
                         emptyModel
                         |> first
                         |> Expect.equal emptyModel
+            , test "stale log success is ignored" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LogsLoaded yesterday (Ok [ yesterdayLunchLog ]))
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
+            , test "goal failure stores an error" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.GoalLoaded today (Err Client.NetworkError))
+                        emptyModel
+                        |> first
+                        |> .diary
+                        |> Expect.equal (DiaryDay.Failed today "Network error")
+            , test "goal unauthorized expires session" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.GoalLoaded
+                            today
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        emptyModel
+                        |> third
+                        |> Expect.equal DiaryDay.SessionExpired
+            , test "goal success after failure keeps partial goal loading state" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.GoalLoaded today (Ok goalSnapshot))
+                        { emptyModel | diary = DiaryDay.Failed today "old" }
+                        |> first
+                        |> .diary
+                        |> Expect.equal
+                            (DiaryDay.Loading
+                                { date = today
+                                , logs = Nothing
+                                , goal = Just goalSnapshot
+                                }
+                            )
+            , test "logs success after failure keeps partial logs loading state" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LogsLoaded today (Ok [ lunchLog ]))
+                        { emptyModel | diary = DiaryDay.Failed today "old" }
+                        |> first
+                        |> .diary
+                        |> Expect.equal
+                            (DiaryDay.Loading
+                                { date = today
+                                , logs = Just [ lunchLog ]
+                                , goal = Nothing
+                                }
+                            )
+            , test "load started for same loading date is no-op" <|
+                \_ ->
+                    DiaryDay.update DiaryDay.LoadStarted emptyModel
+                        |> third
+                        |> Expect.equal DiaryDay.NoOp
+            , test "load started for changed date resets diary and latest slots" <|
+                \_ ->
+                    DiaryDay.update
+                        DiaryDay.LoadStarted
+                        { emptyModel
+                            | currentDate = yesterday
+                            , diary =
+                                DiaryDay.Loading
+                                    { date = today
+                                    , logs = Nothing
+                                    , goal = Nothing
+                                    }
+                            , copyState = DiaryDay.CopyFailed "old"
+                        }
+                        |> first
+                        |> (\model -> ( model.diary, model.latestSlots, model.copyState ))
+                        |> Expect.equal
+                            ( DiaryDay.Loading
+                                { date = yesterday, logs = Nothing, goal = Nothing }
+                            , DiaryDay.LatestSlotsLoading yesterday 4 []
+                            , DiaryDay.CopyIdle
+                            )
+            , test "latest slot success accumulates source while loading" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded
+                            today
+                            Dinner
+                            (Ok
+                                { sourceDate = yesterday
+                                , mealSlot = "dinner"
+                                , items = [ yesterdayDinnerLog ]
+                                }
+                            )
+                        )
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 4 [] }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal
+                            (DiaryDay.LatestSlotsLoading today 3 [ dinnerSource ])
+            , test "latest slot success completes when remaining count reaches zero" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded
+                            today
+                            Dinner
+                            (Ok
+                                { sourceDate = yesterday
+                                , mealSlot = "dinner"
+                                , items = [ yesterdayDinnerLog ]
+                                }
+                            )
+                        )
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 1 [] }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal
+                            (DiaryDay.LatestSlotsLoaded today [ dinnerSource ])
+            , test "latest slot success appends to loaded state" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded
+                            today
+                            Dinner
+                            (Ok
+                                { sourceDate = yesterday
+                                , mealSlot = "dinner"
+                                , items = [ yesterdayDinnerLog ]
+                                }
+                            )
+                        )
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoaded today [] }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal
+                            (DiaryDay.LatestSlotsLoaded today [ dinnerSource ])
+            , test "latest slot failure marks one slot unavailable" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded today Dinner (Err Client.NetworkError))
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 1 [] }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal (DiaryDay.LatestSlotsLoaded today [])
+            , test "latest slot unauthorized expires session" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded
+                            today
+                            Dinner
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        emptyModel
+                        |> third
+                        |> Expect.equal DiaryDay.SessionExpired
+            , test "stale latest slot response is ignored" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotLoaded
+                            yesterday
+                            Dinner
+                            (Ok
+                                { sourceDate = yesterday
+                                , mealSlot = "dinner"
+                                , items = [ yesterdayDinnerLog ]
+                                }
+                            )
+                        )
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
             ]
         , describe "repeat logging"
-            [ test "copy success appends returned logs without requesting reload" <|
+            [ test "copy latest clicked builds copy requests from source logs" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.CopyLatestClicked dinnerSource)
+                        emptyModel
+                        |> third
+                        |> Expect.equal
+                            (DiaryDay.RequestCopyLatestSlot today
+                                [ { logDate = today
+                                  , deviceTimezone = yesterdayDinnerLog.deviceTimezone
+                                  , mealSlot = Just "dinner"
+                                  , item =
+                                        { itemType = yesterdayDinnerLog.item.itemType
+                                        , id = yesterdayDinnerLog.item.id
+                                        }
+                                  , quantity = yesterdayDinnerLog.quantity
+                                  , notes = yesterdayDinnerLog.notes
+                                  }
+                                ]
+                            )
+            , test "copy success appends returned logs without requesting reload" <|
                 \_ ->
                     let
                         model : DiaryDay.Model
@@ -270,6 +459,34 @@ tests =
                             , copyState = DiaryDay.CopyIdle
                             , outMsg = DiaryDay.RequestDiaryData today
                             }
+            , test "copy success with stale date is ignored" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.CopyLatestCompleted
+                            yesterday
+                            (Ok { items = [ yesterdayDinnerLog ] })
+                        )
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
+            , test "copy failure stores display error" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.CopyLatestCompleted today (Err Client.NetworkError))
+                        { emptyModel | copyState = DiaryDay.Copying Dinner }
+                        |> first
+                        |> .copyState
+                        |> Expect.equal (DiaryDay.CopyFailed "Network error")
+            , test "copy unauthorized resets copy state and expires session" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.CopyLatestCompleted
+                            today
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        { emptyModel | copyState = DiaryDay.Copying Dinner }
+                        |> (\( model, _, outMsg ) -> ( model.copyState, outMsg ))
+                        |> Expect.equal ( DiaryDay.CopyIdle, DiaryDay.SessionExpired )
             ]
         , describe "derived behavior"
             [ test "slot calories are summed from snapshots" <|

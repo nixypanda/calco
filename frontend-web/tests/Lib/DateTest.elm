@@ -2,7 +2,7 @@ module Lib.DateTest exposing (tests)
 
 import Expect
 import Fuzz exposing (Fuzzer)
-import Lib.Date as LocalDate
+import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, fuzz, test)
 
 
@@ -43,7 +43,7 @@ tests =
         ]
 
 
-localDateFuzzer : Fuzzer LocalDate.LocalDate
+localDateFuzzer : Fuzzer LocalDate
 localDateFuzzer =
     Fuzz.map3 dateFromParts
         (Fuzz.intRange 1 9999)
@@ -51,7 +51,7 @@ localDateFuzzer =
         (Fuzz.intRange 1 28)
 
 
-dateFromParts : Int -> Int -> Int -> LocalDate.LocalDate
+dateFromParts : Int -> Int -> Int -> LocalDate
 dateFromParts year month day =
     case LocalDate.fromParts year month day of
         Just date ->

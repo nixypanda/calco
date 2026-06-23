@@ -1,5 +1,7 @@
 module Page.Meal.ShowTest exposing (tests)
 
+import Api.Client as Client
+import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Meals exposing (Meal)
 import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
@@ -22,16 +24,110 @@ tests =
                     |> first
                     |> mealIdOf
                     |> Expect.equal (Just "meal-1")
+        , test "meal load requests first missing product detail" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.MealLoaded (Ok twoProductMeal))
+                    (Tuple.first (MealShow.init "meal-1"))
+                    |> third
+                    |> Expect.equal (MealShow.RequestProductDetail "food-1")
+        , test "meal load with no product components requests no-op" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.MealLoaded (Ok mealOnlyMeal))
+                    (Tuple.first (MealShow.init "meal-1"))
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "meal load failure stores error" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.MealLoaded (Err Client.NetworkError))
+                    (Tuple.first (MealShow.init "meal-1"))
+                    |> first
+                    |> Expect.equal (MealShow.LoadFailed "Network error")
+        , test "meal load unauthorized expires session" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.MealLoaded
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    (Tuple.first (MealShow.init "meal-1"))
+                    |> third
+                    |> Expect.equal MealShow.SessionExpired
         , test "component product ids are extracted uniquely" <|
             \_ ->
                 MealShow.uniqueProductIds
                     { meal | components = meal.components ++ meal.components }
                     |> Expect.equal [ "food-1" ]
+        , test "component meal refs are ignored when extracting product ids" <|
+            \_ ->
+                MealShow.uniqueProductIds mealOnlyMeal
+                    |> Expect.equal []
         , test "init requests initial meal data" <|
             \_ ->
                 MealShow.init "meal-1"
                     |> Tuple.second
                     |> Expect.equal (MealShow.RequestInitialData "meal-1")
+        , test "product detail load stores name and requests next missing product" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.ProductDetailLoaded "food-1" (Ok product))
+                    (loadedWithMeal twoProductMeal)
+                    |> third
+                    |> Expect.equal (MealShow.RequestProductDetail "food-2")
+        , test "product detail failure stores unknown name and continues" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.ProductDetailLoaded "food-1" (Err Client.NetworkError))
+                    (loadedWithMeal twoProductMeal)
+                    |> third
+                    |> Expect.equal (MealShow.RequestProductDetail "food-2")
+        , test "last product detail load ends request chain" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.ProductDetailLoaded "food-2" (Ok { product | id = "food-2" }))
+                    (loadedWithMealAndName twoProductMeal "food-1")
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "product detail load outside loaded state is ignored" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.ProductDetailLoaded "food-1" (Ok product))
+                    baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "unit load stores units in loading model" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitsLoaded (Ok { items = [ gram ] }))
+                    baseModel
+                    |> first
+                    |> unitsOf
+                    |> Expect.equal (Just [ gram ])
+        , test "unit load stores units in loaded model" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitsLoaded (Ok { items = [ ounce ] }))
+                    loadedModel
+                    |> first
+                    |> unitsOf
+                    |> Expect.equal (Just [ ounce ])
+        , test "empty unit response uses fallback unit" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitsLoaded (Ok { items = [] }))
+                    loadedModel
+                    |> first
+                    |> unitsOf
+                    |> Expect.equal (Just [ { code = "g", name = "g", kind = "mass" } ])
+        , test "unit load failure uses fallback unit" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitsLoaded (Err Client.NetworkError))
+                    loadedModel
+                    |> first
+                    |> unitsOf
+                    |> Expect.equal (Just [ { code = "g", name = "g", kind = "mass" } ])
         , test "nutrient preview response stores nutrients" <|
             \_ ->
                 MealShow.update
@@ -40,6 +136,37 @@ tests =
                     |> first
                     |> nutrientsOf
                     |> Expect.equal (Just [ nutrient ])
+        , test "stale nutrient preview response is ignored" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.NutrientPreviewLoaded
+                        (Ok
+                            { nutrientPreview
+                                | quantity = { amount = "200", unit = "g" }
+                            }
+                        )
+                    )
+                    loadedModel
+                    |> first
+                    |> nutrientsOf
+                    |> Expect.equal (Just [ nutrient ])
+        , test "nutrient preview failure stores error" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.NutrientPreviewLoaded (Err Client.NetworkError))
+                    loadedModel
+                    |> first
+                    |> nutritionErrorOf
+                    |> Expect.equal (Just "Network error")
+        , test "nutrient preview unauthorized expires session" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.NutrientPreviewLoaded
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    loadedModel
+                    |> third
+                    |> Expect.equal MealShow.SessionExpired
         , test "amount changes request nutrient preview" <|
             \_ ->
                 MealShow.update
@@ -47,6 +174,46 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal (MealShow.RequestNutrientPreview "meal-1" "150" "g")
+        , test "zero amount clears nutrient preview" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.AmountChanged "0")
+                    nutritionLoadedModel
+                    |> first
+                    |> nutrientsOf
+                    |> Expect.equal Nothing
+        , test "amount change in loading state is ignored" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.AmountChanged "150")
+                    baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "unit change requests nutrient preview" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitChanged "serving")
+                    loadedModel
+                    |> third
+                    |> Expect.equal (MealShow.RequestNutrientPreview "meal-1" "100" "serving")
+        , test "unit change in loading state is ignored" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.UnitChanged "serving")
+                    baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "toggle unit dropdown toggles loaded input" <|
+            \_ ->
+                MealShow.update MealShow.ToggleUnitDropdown loadedModel
+                    |> first
+                    |> unitOpenOf
+                    |> Expect.equal (Just True)
+        , test "toggle unit dropdown in loading state is ignored" <|
+            \_ ->
+                MealShow.update MealShow.ToggleUnitDropdown baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
         , test "invalid amount clears nutrient preview" <|
             \_ ->
                 MealShow.update
@@ -68,11 +235,88 @@ tests =
                     |> first
                     |> deleteOf
                     |> Expect.equal (Just MealShow.DeleteIdle)
+        , test "delete click in loading state is ignored" <|
+            \_ ->
+                MealShow.update MealShow.DeleteClicked baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "cancel delete in loading state is ignored" <|
+            \_ ->
+                MealShow.update MealShow.CancelDeleteClicked baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "confirm delete requests deletion from confirming state" <|
+            \_ ->
+                MealShow.update MealShow.DeleteClicked loadedModel
+                    |> first
+                    |> MealShow.update MealShow.ConfirmDeleteClicked
+                    |> third
+                    |> Expect.equal (MealShow.RequestDeleteMeal "meal-1")
+        , test "confirm delete retries from failed state" <|
+            \_ ->
+                MealShow.update
+                    MealShow.ConfirmDeleteClicked
+                    (loadedWithDelete (MealShow.DeleteFailed "Try again"))
+                    |> third
+                    |> Expect.equal (MealShow.RequestDeleteMeal "meal-1")
+        , test "confirm delete is ignored from idle state" <|
+            \_ ->
+                MealShow.update MealShow.ConfirmDeleteClicked loadedModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "confirm delete in loading state is ignored" <|
+            \_ ->
+                MealShow.update MealShow.ConfirmDeleteClicked baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "delete success navigates to meal list" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.DeleteCompleted (Ok ()))
+                    (loadedWithDelete MealShow.Deleting)
+                    |> third
+                    |> Expect.equal (MealShow.Navigate MealList)
+        , test "delete failure stores delete error" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.DeleteCompleted (Err Client.NetworkError))
+                    (loadedWithDelete MealShow.Deleting)
+                    |> first
+                    |> deleteOf
+                    |> Expect.equal (Just (MealShow.DeleteFailed "Network error"))
+        , test "delete unauthorized expires session" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.DeleteCompleted
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    (loadedWithDelete MealShow.Deleting)
+                    |> third
+                    |> Expect.equal MealShow.SessionExpired
+        , test "delete completion is ignored unless deleting" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.DeleteCompleted (Ok ()))
+                    loadedModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
+        , test "delete completion in loading state is ignored" <|
+            \_ ->
+                MealShow.update
+                    (MealShow.DeleteCompleted (Ok ()))
+                    baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
         , test "edit action navigates to meal edit" <|
             \_ ->
                 MealShow.update MealShow.EditClicked loadedModel
                     |> third
                     |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
+        , test "edit action in loading state is ignored" <|
+            \_ ->
+                MealShow.update MealShow.EditClicked baseModel
+                    |> third
+                    |> Expect.equal MealShow.NoOp
         ]
 
 
@@ -83,32 +327,56 @@ baseModel =
 
 loadedModel : MealShow.Model
 loadedModel =
-    MealShow.Loaded
-        { mealId = "meal-1"
-        , meal = meal
-        , productNames = ItemNameLookup.empty
-        , units = [ { code = "g", name = "Gram", kind = "mass" } ]
-        , nutrition =
-            NutritionLoaded
-                { amount = "100", unit = "g", unitOpen = False }
-                [ nutrient ]
-        , delete = MealShow.DeleteIdle
-        }
+    loadedWithMeal meal
 
 
 nutritionLoadedModel : MealShow.Model
 nutritionLoadedModel =
+    loadedWithMeal meal
+
+
+loadedWithMeal : Meal -> MealShow.Model
+loadedWithMeal nextMeal =
     MealShow.Loaded
         { mealId = "meal-1"
-        , meal = meal
+        , meal = nextMeal
         , productNames = ItemNameLookup.empty
-        , units = [ { code = "g", name = "Gram", kind = "mass" } ]
+        , units = [ gram ]
         , nutrition =
             NutritionLoaded
                 { amount = "100", unit = "g", unitOpen = False }
                 [ nutrient ]
         , delete = MealShow.DeleteIdle
         }
+
+
+loadedWithMealAndName : Meal -> String -> MealShow.Model
+loadedWithMealAndName nextMeal productId =
+    MealShow.Loaded
+        { mealId = "meal-1"
+        , meal = nextMeal
+        , productNames =
+            ItemNameLookup.insertProduct
+                productId
+                "Loaded"
+                ItemNameLookup.empty
+        , units = [ gram ]
+        , nutrition =
+            NutritionLoaded
+                { amount = "100", unit = "g", unitOpen = False }
+                [ nutrient ]
+        , delete = MealShow.DeleteIdle
+        }
+
+
+loadedWithDelete : MealShow.DeleteState -> MealShow.Model
+loadedWithDelete delete =
+    case loadedModel of
+        MealShow.Loaded loaded ->
+            MealShow.Loaded { loaded | delete = delete }
+
+        _ ->
+            loadedModel
 
 
 nutrient : NutrientAmount
@@ -147,6 +415,63 @@ meal =
     , createdAt = "now"
     , updatedAt = "now"
     }
+
+
+twoProductMeal : Meal
+twoProductMeal =
+    { meal
+        | components =
+            meal.components
+                ++ [ { id = "component-2"
+                     , item = { itemType = ItemRef.Product, id = "food-2" }
+                     , quantity = { amount = "50", unit = "g" }
+                     , nutritionSummary = Nothing
+                     }
+                   ]
+    }
+
+
+mealOnlyMeal : Meal
+mealOnlyMeal =
+    { meal
+        | components =
+            [ { id = "component-meal"
+              , item = { itemType = ItemRef.Meal, id = "meal-child" }
+              , quantity = { amount = "1", unit = "serving" }
+              , nutritionSummary = Nothing
+              }
+            ]
+    }
+
+
+product : ProductDetail
+product =
+    { id = "food-1"
+    , source = "USER"
+    , sourceId = Nothing
+    , visibility = "private"
+    , barcode = Nothing
+    , name = "Apple"
+    , brand = Nothing
+    , categories = []
+    , defaultQuantity = Nothing
+    , defaultUnit = Nothing
+    , servingSizeG = Nothing
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutrients = []
+    , servings = []
+    , allowedUnits = [ gram ]
+    }
+
+
+gram : UnitItem
+gram =
+    { code = "g", name = "Gram", kind = "mass" }
+
+
+ounce : UnitItem
+ounce =
+    { code = "oz", name = "Ounce", kind = "mass" }
 
 
 first : ( a, b, c ) -> a
@@ -213,6 +538,40 @@ deleteOf model =
     case model of
         MealShow.Loaded loaded ->
             Just loaded.delete
+
+        _ ->
+            Nothing
+
+
+unitsOf : MealShow.Model -> Maybe (List UnitItem)
+unitsOf model =
+    case model of
+        MealShow.Loading loading ->
+            Just loading.units
+
+        MealShow.Loaded loaded ->
+            Just loaded.units
+
+        MealShow.LoadFailed _ ->
+            Nothing
+
+
+unitOpenOf : MealShow.Model -> Maybe Bool
+unitOpenOf model =
+    case model of
+        MealShow.Loaded loaded ->
+            case loaded.nutrition of
+                NutritionLoaded input _ ->
+                    Just input.unitOpen
+
+                NutritionLoading input ->
+                    Just input.unitOpen
+
+                NutritionFailed input _ ->
+                    Just input.unitOpen
+
+                NutritionUnavailable input ->
+                    Just input.unitOpen
 
         _ ->
             Nothing
