@@ -1,4 +1,4 @@
-module Lib.ListExtra exposing (groupsOf, removeAt, uniqueBy, updateAt)
+module Lib.ListExtra exposing (combineErrors, groupsOf, removeAt, uniqueBy, updateAt)
 
 
 updateAt : Int -> (a -> a) -> List a -> List a
@@ -62,3 +62,21 @@ groupsOf n list =
                     List.reverse acc
     in
     step n list []
+
+
+{-| Combine a list of Results into a Result containing a list.
+If any Result is an Err, the first Err is returned.
+-}
+combineErrors : List (Result e a) -> Result e (List a)
+combineErrors results =
+    case results of
+        [] ->
+            Ok []
+
+        x :: xs ->
+            case x of
+                Err e ->
+                    Err e
+
+                Ok v ->
+                    combineErrors xs |> Result.map (\rest -> v :: rest)

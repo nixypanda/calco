@@ -495,7 +495,7 @@ tests =
                         |> Expect.within (Expect.Absolute 0.0001) 347.5
             , test "daily calories come from totals ENERGY_KCAL" <|
                 \_ ->
-                    DiaryDay.dailyCalories summary
+                    Nutrition.caloriesFrom summary
                         |> Expect.within (Expect.Absolute 0.0001) 247.5
             , test "macro totals calculate grams and percentages" <|
                 \_ ->

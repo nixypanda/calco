@@ -589,8 +589,8 @@ recentItemRow theme device model item =
             [ Ui.mutedCaption theme
                 (Ui.dotSeparated
                     [ item.item.brand
-                    , Just (quantityText item.quantity)
-                    , servingCaloriesText item
+                    , Just (Nutrition.quantityText item.quantity)
+                    , Nutrition.servingCaloriesText item
                     ]
                 )
             ]
@@ -682,20 +682,6 @@ quickAddButtonIcon state =
 
         QuickAddAdded ->
             Icon.Check
-
-
-quantityText : Nutrition.Quantity -> String
-quantityText quantity =
-    quantity.amount ++ " " ++ quantity.unit
-
-
-servingCaloriesText : Logs.RecentItem -> Maybe String
-servingCaloriesText item =
-    item.nutritionSummary.energyKcal
-        |> Maybe.map
-            (\kcal ->
-                String.fromInt (round (Nutrition.safeAmount kcal)) ++ " kcal"
-            )
 
 
 hasActiveSearch : Model -> Bool

@@ -4,9 +4,12 @@ module Data.FoodLog exposing
     , decoder
     , listDecoder
     , logItemDecoder
+    , logsForDate
+    , logsForSlot
     )
 
 import Data.ItemRef as ItemRef exposing (ItemType)
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition exposing (NutrientAmount, NutritionSummary)
 import Json.Decode as Decode exposing (Decoder)
 import Lib.Date as LocalDate exposing (LocalDate)
@@ -78,3 +81,13 @@ logItemDecoder =
 listDecoder : Decoder (List FoodLog)
 listDecoder =
     Decode.field "items" (Decode.list decoder)
+
+
+logsForDate : LocalDate -> List FoodLog -> List FoodLog
+logsForDate date logs =
+    List.filter (\log -> LocalDate.equals log.logDate date) logs
+
+
+logsForSlot : MealSlot -> List FoodLog -> List FoodLog
+logsForSlot slot logs =
+    List.filter (\log -> MealSlot.matches slot log.mealSlot) logs

@@ -9,7 +9,6 @@ module Page.Diary.Day exposing
     , Model
     , Msg(..)
     , OutMsg(..)
-    , dailyCalories
     , init
     , slotCalories
     , update
@@ -18,7 +17,7 @@ module Page.Diary.Day exposing
 
 import Api.Client as Client
 import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotResponse)
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot, GoalTargets)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
@@ -493,7 +492,7 @@ applyCopiedLogs requestDate copiedLogs diary =
     let
         matchingLogs : List FoodLog
         matchingLogs =
-            logsForDate requestDate copiedLogs
+            FoodLog.logsForDate requestDate copiedLogs
     in
     case diary of
         Loaded loaded ->
@@ -524,7 +523,7 @@ applyLogsLoaded requestDate logs diary =
     let
         filteredLogs : List FoodLog
         filteredLogs =
-            logsForDate requestDate logs
+            FoodLog.logsForDate requestDate logs
     in
     case diary of
         Loading loading ->
@@ -582,16 +581,6 @@ toLoadedOrLoading loading =
             Loading loading
 
 
-logsForDate : LocalDate -> List FoodLog -> List FoodLog
-logsForDate date logs =
-    List.filter (\log -> LocalDate.equals log.logDate date) logs
-
-
-logsForSlot : MealSlot -> List FoodLog -> List FoodLog
-logsForSlot slot logs =
-    List.filter (\log -> MealSlot.matches slot log.mealSlot) logs
-
-
 toggleMacroMode : MacroMode -> MacroMode
 toggleMacroMode mode =
     case mode of
@@ -605,89 +594,9 @@ toggleMacroMode mode =
 slotCalories : MealSlot -> List FoodLog -> Float
 slotCalories slot logs =
     logs
-        |> logsForSlot slot
-        |> List.map (.nutrients >> caloriesFrom)
+        |> FoodLog.logsForSlot slot
+        |> List.map (.nutrients >> Nutrition.caloriesFrom)
         |> List.sum
-
-
-caloriesFrom : List NutrientAmount -> Float
-caloriesFrom nutrients =
-    Nutrition.nutrientAmount "ENERGY_KCAL" nutrients
-
-
-totalsFromLogs : List { log | nutrients : List NutrientAmount } -> List NutrientAmount
-totalsFromLogs logs =
-    let
-        allNutrients : List NutrientAmount
-        allNutrients =
-            logs
-                |> List.concatMap .nutrients
-
-        codes : List String
-        codes =
-            allNutrients
-                |> List.map .code
-                |> uniqueCodes
-
-        units : List { code : String, unit : String }
-        units =
-            allNutrients
-                |> List.map (\n -> { code = n.code, unit = n.unit })
-                |> uniqueBy .code
-
-        unitForCode : String -> String
-        unitForCode code =
-            List.filter (.code >> (==) code) units
-                |> List.head
-                |> Maybe.map .unit
-                |> Maybe.withDefault ""
-    in
-    codes
-        |> List.map
-            (\code ->
-                { code = code
-                , amount =
-                    allNutrients
-                        |> List.filter (.code >> (==) code)
-                        |> List.map (.amount >> Nutrition.safeAmount)
-                        |> List.sum
-                        |> String.fromFloat
-                , unit = unitForCode code
-                }
-            )
-
-
-uniqueCodes : List String -> List String
-uniqueCodes list =
-    List.foldr
-        (\code acc ->
-            if List.member code acc then
-                acc
-
-            else
-                code :: acc
-        )
-        []
-        list
-
-
-uniqueBy : (a -> comparable) -> List a -> List a
-uniqueBy toKey list =
-    List.foldr
-        (\item acc ->
-            if List.member (toKey item) (List.map toKey acc) then
-                acc
-
-            else
-                item :: acc
-        )
-        []
-        list
-
-
-dailyCalories : List NutrientAmount -> Float
-dailyCalories summary =
-    caloriesFrom summary
 
 
 
@@ -753,10 +662,10 @@ dateCard theme model device =
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
-                    totalsView theme targets (totalsFromLogs logs)
+                    totalsView theme targets (Nutrition.totalsFromLogs logs)
 
                 Nothing ->
-                    totalsView theme loadingGoalTargets (totalsFromLogs logs)
+                    totalsView theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
         ]
 
@@ -766,7 +675,7 @@ totalsView theme targets summary =
     Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
         [ Ui.macroBar theme
             { label = "Calories"
-            , value = dailyCalories summary
+            , value = Nutrition.caloriesFrom summary
             , unit = "kcal"
             , color = theme.calorieAccent
             , max = targets.calorieTarget
@@ -888,7 +797,7 @@ logGroupsView theme device model logs =
     let
         section : MealSlot -> SlotSection
         section slot =
-            { slot = slot, logs = logsForSlot slot logs }
+            { slot = slot, logs = FoodLog.logsForSlot slot logs }
 
         otherSection : SlotSection
         otherSection =
@@ -1029,7 +938,7 @@ mealSlotHeader theme macroMode section totals =
         sectionKcal : Float
         sectionKcal =
             section.logs
-                |> List.map (.nutrients >> caloriesFrom)
+                |> List.map (.nutrients >> Nutrition.caloriesFrom)
                 |> List.sum
     in
     Element.row
@@ -1204,7 +1113,7 @@ logRow theme log =
                     [ Element.alignRight, Element.spacing Ui.space12 ]
                     [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Ui.mutedCaption theme
-                        (String.fromInt (round (caloriesFrom log.nutrients)) ++ " kcal")
+                        (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal")
                     ]
                 ]
         }

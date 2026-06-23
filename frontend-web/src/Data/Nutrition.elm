@@ -6,6 +6,7 @@ module Data.Nutrition exposing
     , Per100gNutrient
     , Quantity
     , Serving
+    , caloriesFrom
     , decoder
     , defaultCode
     , dominantMacro
@@ -15,17 +16,21 @@ module Data.Nutrition exposing
     , nutrientsForQuantity
     , quantityDecoder
     , quantityEncoder
+    , quantityText
     , safeAmount
     , scalePer100g
     , scaledSnapshotForQuantity
+    , servingCaloriesText
     , servingGrams
     , summaryDecoder
     , summaryToNutrients
     , summaryValue
+    , totalsFromLogs
     )
 
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Lib.ListExtra as ListExtra
 
 
 type alias NutrientAmount =
@@ -370,3 +375,78 @@ quantityEncoder quantity =
         [ ( "amount", Encode.string quantity.amount )
         , ( "unit", Encode.string quantity.unit )
         ]
+
+
+caloriesFrom : List NutrientAmount -> Float
+caloriesFrom nutrients =
+    nutrientAmount "ENERGY_KCAL" nutrients
+
+
+totalsFromLogs : List { log | nutrients : List NutrientAmount } -> List NutrientAmount
+totalsFromLogs logs =
+    let
+        allNutrients : List NutrientAmount
+        allNutrients =
+            logs
+                |> List.concatMap .nutrients
+
+        codes : List String
+        codes =
+            allNutrients
+                |> List.map .code
+                |> uniqueCodes
+
+        units : List { code : String, unit : String }
+        units =
+            allNutrients
+                |> List.map (\n -> { code = n.code, unit = n.unit })
+                |> ListExtra.uniqueBy .code
+
+        unitForCode : String -> String
+        unitForCode code =
+            List.filter (.code >> (==) code) units
+                |> List.head
+                |> Maybe.map .unit
+                |> Maybe.withDefault ""
+    in
+    codes
+        |> List.map
+            (\code ->
+                { code = code
+                , amount =
+                    allNutrients
+                        |> List.filter (.code >> (==) code)
+                        |> List.map (.amount >> safeAmount)
+                        |> List.sum
+                        |> String.fromFloat
+                , unit = unitForCode code
+                }
+            )
+
+
+uniqueCodes : List String -> List String
+uniqueCodes list =
+    List.foldr
+        (\code acc ->
+            if List.member code acc then
+                acc
+
+            else
+                code :: acc
+        )
+        []
+        list
+
+
+quantityText : Quantity -> String
+quantityText quantity =
+    quantity.amount ++ " " ++ quantity.unit
+
+
+servingCaloriesText : { item | nutritionSummary : NutritionSummary } -> Maybe String
+servingCaloriesText item =
+    item.nutritionSummary.energyKcal
+        |> Maybe.map
+            (\kcal ->
+                String.fromInt (round (safeAmount kcal)) ++ " kcal"
+            )

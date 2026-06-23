@@ -269,14 +269,14 @@ toCreateFoodRequest form =
                 form.nutrients
                     |> List.filter hasNutrientInput
                     |> List.map toNutrientRequest
-                    |> combineErrors
+                    |> ListExtra.combineErrors
 
             servingsResult : Result ValidationError (List Api.Foods.CreateFoodServingRequest)
             servingsResult =
                 form.servings
                     |> List.filter hasServingInput
                     |> List.map toServingRequest
-                    |> combineErrors
+                    |> ListExtra.combineErrors
         in
         Result.map2
             (\nutrients servings ->
@@ -363,21 +363,6 @@ toServingRequest row =
         )
         quantity
         grams
-
-
-combineErrors : List (Result e a) -> Result e (List a)
-combineErrors results =
-    case results of
-        [] ->
-            Ok []
-
-        x :: xs ->
-            case x of
-                Err e ->
-                    Err e
-
-                Ok v ->
-                    combineErrors xs |> Result.map (\rest -> v :: rest)
 
 
 categorySuggestionsRequest : String -> CategorySuggestionRequest
