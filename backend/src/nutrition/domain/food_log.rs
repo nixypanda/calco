@@ -136,6 +136,7 @@ pub struct RecentFoodLogItem {
     pub meal_slot: Option<MealSlot>,
     pub quantity_amount: Decimal,
     pub quantity_unit: UnitCode,
+    pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
 }
 
 impl FoodLog {

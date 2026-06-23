@@ -146,6 +146,7 @@ pub struct RecentItemResponse {
     pub last_used_date: NaiveDate,
     pub meal_slot: Option<MealSlotDto>,
     pub quantity: QuantityDto,
+    pub nutrition_summary: NutrientSummaryDto,
 }
 
 #[derive(Deserialize)]
@@ -603,6 +604,11 @@ fn recent_item_to_response(item: &RecentFoodLogItem) -> RecentItemResponse {
         last_used_date: item.log_date,
         meal_slot: item.meal_slot.map(Into::into),
         quantity: quantity_to_dto(item.quantity_amount, item.quantity_unit.0.clone()),
+        nutrition_summary: nutrient_summary_from_entries(
+            item.nutrient_snapshots
+                .iter()
+                .map(|snapshot| (snapshot.nutrient_code.0.clone(), snapshot.amount)),
+        ),
     }
 }
 

@@ -24,6 +24,8 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition exposing (MacroTotals, NutrientAmount)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import Element.Background as Background
+import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
@@ -858,11 +860,8 @@ emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
 emptySlotView theme device model slot =
     case latestSlotSourceFor model.currentDate slot model.latestSlots of
         Just source ->
-            Element.el
-                [ Element.width Element.fill
-                , Element.padding Ui.space12
-                ]
-                (Ui.fullWidthGhostButton
+            emptySlotBody
+                (latestSlotButton
                     device
                     theme
                     (copyLatestLabel model.copyState source)
@@ -870,12 +869,49 @@ emptySlotView theme device model slot =
                 )
 
         Nothing ->
-            Element.el
-                [ Element.padding Ui.space12
-                , Font.color theme.textMuted
-                , Element.centerX
-                ]
-                (Element.text "No items")
+            emptySlotBody
+                (Element.el
+                    [ Font.color theme.textMuted
+                    , Element.centerX
+                    , Element.centerY
+                    ]
+                    (Element.text "No items")
+                )
+
+
+emptySlotBody : Element Msg -> Element Msg
+emptySlotBody content =
+    Element.el
+        [ Element.width Element.fill
+        , Element.padding Ui.space12
+        ]
+        (Element.el
+            [ Element.width Element.fill
+            , Element.height (Element.px 24)
+            ]
+            content
+        )
+
+
+latestSlotButton : Device -> Theme -> String -> Msg -> Element Msg
+latestSlotButton device theme label msg =
+    Input.button
+        [ Element.width Element.fill
+        , Element.height (Element.px 24)
+        , Border.rounded Ui.radiusPill
+        , Font.color theme.brandBlue
+        , Font.medium
+        , Font.center
+        , if Ui.isSmall device then
+            Element.mouseOver []
+
+          else
+            Element.mouseOver [ Background.color theme.brandBlueSoft ]
+        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
+        ]
+        { onPress = Just msg
+        , label = Element.text label
+        }
 
 
 copyLatestLabel : CopyState -> LatestSlotSource -> String

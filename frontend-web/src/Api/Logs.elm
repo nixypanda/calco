@@ -16,6 +16,7 @@ module Api.Logs exposing
     , latestSlot
     , listLogs
     , recentItems
+    , recentItemsResponseDecoder
     , updateLog
     , updateLogRequestEncoder
     )
@@ -60,6 +61,7 @@ type alias RecentItem =
     , lastUsedDate : LocalDate
     , mealSlot : Maybe String
     , quantity : Nutrition.Quantity
+    , nutritionSummary : Nutrition.NutritionSummary
     }
 
 
@@ -270,11 +272,12 @@ recentItemsResponseDecoder =
 
 recentItemDecoder : Decode.Decoder RecentItem
 recentItemDecoder =
-    Decode.map4 RecentItem
+    Decode.map5 RecentItem
         (Decode.field "item" FoodLog.logItemDecoder)
         (Decode.field "last_used_date" dateFieldDecoder)
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
         (Decode.field "quantity" Nutrition.quantityDecoder)
+        (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
 
 
 maybeMealSlotQuery : Maybe String -> List Builder.QueryParameter

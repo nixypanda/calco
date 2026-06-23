@@ -397,6 +397,7 @@ mod tests {
                 meal_slot: log.meal_slot,
                 quantity_amount: log.quantity_amount,
                 quantity_unit: log.quantity_unit,
+                nutrient_snapshots: log.nutrient_snapshots,
             });
         }
         items

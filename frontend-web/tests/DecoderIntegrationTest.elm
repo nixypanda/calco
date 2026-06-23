@@ -116,6 +116,20 @@ tests =
                 Decode.decodeString FoodLog.decoder foodLogJson
                     |> Result.map (\log -> ( log.item.itemType, log.item.name, log.item.brand ))
                     |> Expect.equal (Ok ( ItemRef.Product, "Apple", Just "Local" ))
+        , test "decodes recent items with serving nutrition" <|
+            \_ ->
+                Decode.decodeString Logs.recentItemsResponseDecoder recentItemsJson
+                    |> Result.map
+                        (.items
+                            >> List.map
+                                (\item ->
+                                    ( item.quantity.amount
+                                    , item.quantity.unit
+                                    , item.nutritionSummary.energyKcal
+                                    )
+                                )
+                        )
+                    |> Expect.equal (Ok [ ( "175", "g", Just "91" ) ])
         , test "decodes admin user list" <|
             \_ ->
                 Decode.decodeString User.listUsersDecoder userListJson
@@ -288,6 +302,31 @@ foodLogJson =
     , "notes": null
     , "created_at": "2026-06-04T10:00:00+05:30"
     , "updated_at": "2026-06-04T10:00:00+05:30"
+    }
+    """
+
+
+recentItemsJson : String
+recentItemsJson =
+    """
+    { "items":
+        [{ "item":
+            { "type": "product"
+            , "id": "food-1"
+            , "name": "Apple"
+            , "brand": "Local"
+            }
+         , "last_used_date": "2026-06-03"
+         , "meal_slot": "breakfast"
+         , "quantity": { "amount": "175", "unit": "g" }
+         , "nutrition_summary":
+            { "energy_kcal": "91"
+            , "protein_g": null
+            , "carbs_g": null
+            , "fat_g": null
+            , "fiber_g": null
+            }
+         }]
     }
     """
 

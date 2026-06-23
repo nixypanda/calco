@@ -234,6 +234,7 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
     assert_eq!(product_recent["last_used_date"], "2026-06-03");
     assert_eq!(product_recent["quantity"]["amount"], "175");
     assert_eq!(product_recent["quantity"]["unit"], "g");
+    assert_eq!(product_recent["nutrition_summary"]["energy_kcal"], "91");
 
     let meal_recent = recent_items
         .iter()
@@ -243,6 +244,7 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
     assert_eq!(meal_recent["last_used_date"], "2026-06-02");
     assert_eq!(meal_recent["quantity"]["amount"], "100");
     assert_eq!(meal_recent["quantity"]["unit"], "g");
+    assert_eq!(meal_recent["nutrition_summary"]["energy_kcal"], "52");
 
     let last_used_payload = json!({
         "from_date": "2026-06-01",
@@ -273,4 +275,7 @@ async fn recent_items_and_last_used_defaults(pool: PgPool) {
             .iter()
             .any(|item| item["item"]["type"] == "meal" && item["quantity"]["unit"] == "g")
     );
+    assert!(defaults.iter().any(|item| {
+        item["item"]["type"] == "product" && item["nutrition_summary"]["energy_kcal"] == "91"
+    }));
 }

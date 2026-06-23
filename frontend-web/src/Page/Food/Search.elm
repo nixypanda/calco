@@ -22,9 +22,11 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html.Attributes
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
 import Ui
+import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
@@ -544,9 +546,8 @@ recentItemRow theme device model item =
             [ Ui.mutedCaption theme
                 (Ui.dotSeparated
                     [ item.item.brand
-                    , Just (itemTypeLabel item)
                     , Just (quantityText item.quantity)
-                    , Just (LocalDate.display item.lastUsedDate)
+                    , servingCaloriesText item
                     ]
                 )
             ]
@@ -575,6 +576,11 @@ quickAddButton :
     -> { label : String, enabled : Bool, onPress : Msg }
     -> Element Msg
 quickAddButton theme device config =
+    let
+        isIdleAdd : Bool
+        isIdleAdd =
+            config.label == "Add"
+    in
     Input.button
         [ Background.color
             (if config.enabled then
@@ -586,15 +592,21 @@ quickAddButton theme device config =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded Ui.radiusPill
         , Element.width
-            (if Ui.isSmall device then
+            (if isIdleAdd then
+                Element.px 44
+
+             else if Ui.isSmall device then
                 Element.px 88
 
              else
                 Element.px 96
             )
+        , Element.height (Element.px 44)
         , Element.paddingEach { top = 10, right = 14, bottom = 10, left = 14 }
         , Font.center
         , Font.medium
+        , Element.htmlAttribute (Html.Attributes.title config.label)
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
         ]
         { onPress =
             if config.enabled then
@@ -602,23 +614,31 @@ quickAddButton theme device config =
 
             else
                 Nothing
-        , label = Element.text config.label
+        , label =
+            if isIdleAdd then
+                Icon.view
+                    { icon = Icon.Plus
+                    , size = 18
+                    , color = Element.rgb255 255 255 255
+                    }
+
+            else
+                Element.text config.label
         }
-
-
-itemTypeLabel : Logs.RecentItem -> String
-itemTypeLabel item =
-    case item.item.itemType of
-        ItemRef.Product ->
-            "Food"
-
-        ItemRef.Meal ->
-            "Meal"
 
 
 quantityText : Nutrition.Quantity -> String
 quantityText quantity =
     quantity.amount ++ " " ++ quantity.unit
+
+
+servingCaloriesText : Logs.RecentItem -> Maybe String
+servingCaloriesText item =
+    item.nutritionSummary.energyKcal
+        |> Maybe.map
+            (\kcal ->
+                String.fromInt (round (Nutrition.safeAmount kcal)) ++ " kcal"
+            )
 
 
 hasActiveSearch : Model -> Bool
