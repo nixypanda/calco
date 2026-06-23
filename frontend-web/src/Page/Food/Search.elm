@@ -407,8 +407,7 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         [ searchInputView theme device model
-        , recentsView theme device model
-        , bodyView theme model device
+        , contentView theme device model
         ]
 
 
@@ -434,11 +433,7 @@ bodyView : Theme -> Model -> Device -> Element Msg
 bodyView theme model device =
     case model.results of
         NotAsked ->
-            if hasRecentItems model then
-                Element.none
-
-            else
-                Ui.emptyState theme "Search for a food to get started."
+            Ui.emptyState theme "Search for a food to get started."
 
         Loading ->
             Ui.card theme [ Ui.skeletonLoading theme ]
@@ -477,6 +472,15 @@ bodyView theme model device =
                             items
                     , footer = Nothing
                     }
+
+
+contentView : Theme -> Device -> Model -> Element Msg
+contentView theme device model =
+    if hasActiveSearch model then
+        bodyView theme model device
+
+    else
+        recentsView theme device model
 
 
 recentsView : Theme -> Device -> Model -> Element Msg
@@ -617,11 +621,21 @@ quantityText quantity =
     quantity.amount ++ " " ++ quantity.unit
 
 
-hasRecentItems : Model -> Bool
-hasRecentItems model =
-    case model.recentItems of
-        Success (_ :: _) ->
-            True
+hasActiveSearch : Model -> Bool
+hasActiveSearch model =
+    if not (String.isEmpty (String.trim model.search.query)) then
+        True
 
-        _ ->
-            False
+    else
+        case model.results of
+            NotAsked ->
+                False
+
+            Loading ->
+                True
+
+            Failure _ ->
+                True
+
+            Success _ ->
+                True

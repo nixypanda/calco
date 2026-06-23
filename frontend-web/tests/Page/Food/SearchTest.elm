@@ -115,6 +115,14 @@ tests =
                     |> first
                     |> .results
                     |> Expect.equal Loading
+        , test "search started keeps recent items state available" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.QueryChanged "apple")
+                    { emptyModel | recentItems = Success [] }
+                    |> first
+                    |> .recentItems
+                    |> Expect.equal (Success [])
         , test "debounce for current token requests search" <|
             \_ ->
                 FoodSearch.update
