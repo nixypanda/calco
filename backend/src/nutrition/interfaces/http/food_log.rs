@@ -273,17 +273,10 @@ async fn latest_slot_handler(
         Err(err) => return err.into_response(),
     };
     let lookback_days = query.lookback_days.unwrap_or(30);
-    if !(1..=90).contains(&lookback_days) {
-        return error_response(
-            "validation",
-            "lookback_days must be between 1 and 90".into(),
-        )
-        .into_response();
-    }
 
     match state
-        .food_log_repo
-        .find_latest_slot_before(auth.0.id, meal_slot, before_date, lookback_days)
+        .food_log_history_services
+        .latest_slot_before(auth.0.id, meal_slot, before_date, lookback_days)
         .await
     {
         Ok(Some((source_date, logs))) => Json(LatestSlotResponse {
@@ -295,7 +288,7 @@ async fn latest_slot_handler(
         Ok(None) => {
             error_response("not_found", "no recent logs for meal slot".into()).into_response()
         }
-        Err(err) => internal_error(err).into_response(),
+        Err(err) => err.into_response(),
     }
 }
 
@@ -312,7 +305,7 @@ async fn recent_items_handler(
         };
 
     match state
-        .food_log_repo
+        .food_log_history_services
         .list_recent_items(auth.0.id, from_date, to_date, meal_slot)
         .await
     {
@@ -320,7 +313,7 @@ async fn recent_items_handler(
             items: items.iter().map(recent_item_to_response).collect(),
         })
         .into_response(),
-        Err(err) => internal_error(err).into_response(),
+        Err(err) => err.into_response(),
     }
 }
 
@@ -345,7 +338,7 @@ async fn last_used_items_handler(
     };
 
     match state
-        .food_log_repo
+        .food_log_history_services
         .find_last_used_items(auth.0.id, from_date, to_date, meal_slot, &items)
         .await
     {
@@ -353,7 +346,7 @@ async fn last_used_items_handler(
             items: items.iter().map(recent_item_to_response).collect(),
         })
         .into_response(),
-        Err(err) => internal_error(err).into_response(),
+        Err(err) => err.into_response(),
     }
 }
 
@@ -465,11 +458,6 @@ fn parse_recent_item_scope(
 ) -> Result<(NaiveDate, NaiveDate, Option<MealSlot>), NutritionError> {
     let from_date = parse_log_date(from_date)?;
     let to_date = parse_log_date(to_date)?;
-    if from_date > to_date {
-        return Err(NutritionError::Validation(
-            "from_date must be on or before to_date".into(),
-        ));
-    }
     let meal_slot = meal_slot.map(parse_meal_slot).transpose()?;
     Ok((from_date, to_date, meal_slot))
 }

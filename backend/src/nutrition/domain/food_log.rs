@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
+use std::ops::Bound;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -137,6 +138,51 @@ pub struct RecentFoodLogItem {
     pub quantity_amount: Decimal,
     pub quantity_unit: UnitCode,
     pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DateRange {
+    pub start: Bound<NaiveDate>,
+    pub end: Bound<NaiveDate>,
+}
+
+impl DateRange {
+    pub fn inclusive(start: NaiveDate, end: NaiveDate) -> Result<Self, NutritionError> {
+        if start > end {
+            return Err(NutritionError::Validation(
+                "from_date must be on or before to_date".into(),
+            ));
+        }
+
+        Ok(Self {
+            start: Bound::Included(start),
+            end: Bound::Included(end),
+        })
+    }
+
+    pub fn inclusive_to_exclusive(
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Self, NutritionError> {
+        if start >= end {
+            return Err(NutritionError::Validation(
+                "start_date must be before end_date".into(),
+            ));
+        }
+
+        Ok(Self {
+            start: Bound::Included(start),
+            end: Bound::Excluded(end),
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FoodLogListFilter {
+    pub user_id: Uuid,
+    pub date_range: DateRange,
+    pub meal_slot: Option<MealSlot>,
+    pub items: Vec<FoodLogItemRef>,
 }
 
 impl FoodLog {
@@ -326,28 +372,10 @@ pub trait FoodLogRepository: Send + Sync {
         user_id: Uuid,
         log_date: NaiveDate,
     ) -> Result<Vec<FoodLog>, NutritionError>;
-    async fn find_latest_slot_before(
+    async fn list_by_filter(
         &self,
-        user_id: Uuid,
-        meal_slot: MealSlot,
-        before_date: NaiveDate,
-        lookback_days: i64,
-    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError>;
-    async fn list_recent_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError>;
-    async fn find_last_used_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-        items: &[FoodLogItemRef],
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError>;
+        filter: FoodLogListFilter,
+    ) -> Result<Vec<FoodLog>, NutritionError>;
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError>;
     async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError>;
 }

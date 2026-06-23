@@ -21,7 +21,7 @@ use crate::import::application::ImportServices;
 use crate::import::domain::ImportRepository;
 use crate::import::infrastructure::postgres::PostgresImportRepository;
 use crate::import::interfaces::http::import_routes;
-use crate::nutrition::application::food_log::FoodLogServices;
+use crate::nutrition::application::food_log::{FoodLogHistoryServices, FoodLogServices};
 use crate::nutrition::application::goal_target::GoalTargetServices;
 use crate::nutrition::application::meal::MealServices;
 use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
@@ -57,6 +57,7 @@ pub struct AppState {
     pub goal_target_repo: Arc<dyn GoalTargetRepository>,
     pub import_repo: Arc<dyn ImportRepository>,
     pub food_log_services: FoodLogServices,
+    pub food_log_history_services: FoodLogHistoryServices,
     pub meal_services: MealServices,
     pub goal_target_services: GoalTargetServices,
     pub import_services: ImportServices,
@@ -105,6 +106,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         unit_converter.clone(),
         meal_repo.clone(),
     );
+    let food_log_history_services = FoodLogHistoryServices::new(food_log_repo.clone());
 
     let meal_services = MealServices::new(
         meal_repo.clone(),
@@ -131,6 +133,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         goal_target_repo,
         import_repo,
         food_log_services,
+        food_log_history_services,
         meal_services,
         goal_target_services,
         import_services,

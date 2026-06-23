@@ -1,7 +1,9 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, QueryBuilder};
+use std::ops::Bound;
 use uuid::Uuid;
 
 use crate::nutrition::domain::catalog::*;
@@ -86,199 +88,108 @@ impl PostgresFoodLogRepository {
         Ok(results)
     }
 
-    async fn recent_rows_to_items(
+    async fn load_by_filter(
         &self,
-        rows: Vec<RecentFoodLogItemRow>,
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-        if rows.is_empty() {
-            return Ok(Vec::new());
-        }
+        filter: FoodLogListFilter,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        let mut query = food_log_filter_query(filter);
+        let rows = query
+            .build_query_as::<FoodLogRow>()
+            .fetch_all(&self.pool)
+            .await?;
+        self.rows_to_food_logs(rows).await
+    }
+}
 
-        let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
-        let snapshot_rows = sqlx::query_as::<_, FoodLogSnapshotJoinRow>(
-            r#"
-            SELECT fln.food_log_id, fln.amount, fln.unit, n.code
-            FROM food_log_nutrients fln
-            JOIN nutrients n ON n.id = fln.nutrient_id
-            WHERE fln.food_log_id = ANY($1)
-            "#,
-        )
-        .bind(&ids)
-        .fetch_all(&self.pool)
-        .await?;
+fn food_log_filter_query(filter: FoodLogListFilter) -> QueryBuilder<'static, Postgres> {
+    let FoodLogListFilter {
+        user_id,
+        date_range,
+        meal_slot,
+        items,
+    } = filter;
 
-        let mut snapshots_by_log: std::collections::HashMap<Uuid, Vec<FoodLogNutrientSnapshot>> =
-            std::collections::HashMap::new();
-        for s in snapshot_rows {
-            snapshots_by_log
-                .entry(s.food_log_id)
-                .or_default()
-                .push(FoodLogNutrientSnapshot {
-                    nutrient_code: NutrientCode(s.code),
-                    amount: s.amount,
-                    unit: UnitCode(s.unit),
-                });
-        }
+    let product_ids: Vec<Uuid> = items
+        .iter()
+        .filter_map(|item| match item {
+            FoodLogItemRef::Product(id) => Some(id.0),
+            FoodLogItemRef::Meal(_) => None,
+        })
+        .collect();
+    let meal_ids: Vec<Uuid> = items
+        .iter()
+        .filter_map(|item| match item {
+            FoodLogItemRef::Product(_) => None,
+            FoodLogItemRef::Meal(id) => Some(id.0),
+        })
+        .collect();
 
-        let mut results = Vec::with_capacity(rows.len());
-        for r in rows {
-            let snapshots = snapshots_by_log.remove(&r.id).unwrap_or_default();
-            results.push(recent_row_to_item(r, snapshots)?);
-        }
-        Ok(results)
+    let mut query = QueryBuilder::<Postgres>::new(
+        r#"
+        SELECT id, user_id, log_date, meal_slot, device_timezone,
+               item_product_id, item_meal_id, item_name, item_brand,
+               quantity, unit, notes, created_at, updated_at
+        FROM food_logs
+        WHERE user_id =
+        "#,
+    );
+    query.push_bind(user_id);
+
+    push_date_bound(&mut query, "log_date", &date_range.start, true);
+    push_date_bound(&mut query, "log_date", &date_range.end, false);
+
+    if let Some(slot) = meal_slot {
+        query.push(" AND meal_slot = ");
+        query.push_bind(slot.as_str());
     }
 
-    async fn load_latest_slot_before(
-        &self,
-        user_id: Uuid,
-        meal_slot: MealSlot,
-        before_date: NaiveDate,
-        lookback_days: i64,
-    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
-        let cutoff_date = before_date - Duration::days(lookback_days);
-        let rows = sqlx::query_as::<_, FoodLogRow>(
-            r#"
-            WITH latest AS (
-                SELECT log_date
-                FROM food_logs
-                WHERE user_id = $1
-                  AND meal_slot = $2
-                  AND log_date < $3
-                  AND log_date >= $4
-                GROUP BY log_date
-                ORDER BY log_date DESC
-                LIMIT 1
-            )
-            SELECT fl.id, fl.user_id, fl.log_date, fl.meal_slot, fl.device_timezone,
-                   fl.item_product_id, fl.item_meal_id, fl.item_name, fl.item_brand,
-                   fl.quantity, fl.unit, fl.notes, fl.created_at, fl.updated_at
-            FROM food_logs fl
-            JOIN latest ON latest.log_date = fl.log_date
-            WHERE fl.user_id = $1 AND fl.meal_slot = $2
-            ORDER BY fl.created_at DESC
-            "#,
-        )
-        .bind(user_id)
-        .bind(meal_slot.as_str())
-        .bind(before_date)
-        .bind(cutoff_date)
-        .fetch_all(&self.pool)
-        .await?;
+    if !items.is_empty() {
+        query.push(" AND (");
+        let mut has_previous_item_predicate = false;
 
-        if rows.is_empty() {
-            return Ok(None);
+        if !product_ids.is_empty() {
+            query.push("item_product_id = ANY(");
+            query.push_bind(product_ids);
+            query.push(")");
+            has_previous_item_predicate = true;
         }
 
-        let source_date = rows[0].log_date;
-        Ok(Some((source_date, self.rows_to_food_logs(rows).await?)))
-    }
-
-    async fn load_recent_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-        let rows = sqlx::query_as::<_, RecentFoodLogItemRow>(
-            r#"
-            WITH ranked AS (
-                SELECT fl.id, fl.log_date, fl.meal_slot, fl.item_product_id, fl.item_meal_id,
-                       fl.item_name, fl.item_brand, fl.quantity, fl.unit,
-                       row_number() OVER (
-                           PARTITION BY
-                               CASE WHEN fl.item_product_id IS NOT NULL THEN 'product' ELSE 'meal' END,
-                               COALESCE(fl.item_product_id, fl.item_meal_id)
-                           ORDER BY fl.log_date DESC, fl.created_at DESC
-                       ) AS rn
-                FROM food_logs fl
-                WHERE fl.user_id = $1
-                  AND fl.log_date >= $2
-                  AND fl.log_date <= $3
-                  AND ($4::text IS NULL OR fl.meal_slot = $4)
-            )
-            SELECT id, log_date, meal_slot, item_product_id, item_meal_id,
-                   item_name, item_brand, quantity, unit
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY log_date DESC, item_name ASC
-            "#,
-        )
-        .bind(user_id)
-        .bind(from_date)
-        .bind(to_date)
-        .bind(meal_slot.as_ref().map(|m| m.as_str()))
-        .fetch_all(&self.pool)
-        .await?;
-
-        self.recent_rows_to_items(rows).await
-    }
-
-    async fn load_last_used_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-        items: &[FoodLogItemRef],
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-        if items.is_empty() {
-            return Ok(Vec::new());
+        if !meal_ids.is_empty() {
+            if has_previous_item_predicate {
+                query.push(" OR ");
+            }
+            query.push("item_meal_id = ANY(");
+            query.push_bind(meal_ids);
+            query.push(")");
         }
 
-        let product_ids: Vec<Uuid> = items
-            .iter()
-            .filter_map(|item| match item {
-                FoodLogItemRef::Product(id) => Some(id.0),
-                FoodLogItemRef::Meal(_) => None,
-            })
-            .collect();
-        let meal_ids: Vec<Uuid> = items
-            .iter()
-            .filter_map(|item| match item {
-                FoodLogItemRef::Product(_) => None,
-                FoodLogItemRef::Meal(id) => Some(id.0),
-            })
-            .collect();
+        query.push(")");
+    }
 
-        let rows = sqlx::query_as::<_, RecentFoodLogItemRow>(
-            r#"
-            WITH ranked AS (
-                SELECT fl.id, fl.log_date, fl.meal_slot, fl.item_product_id, fl.item_meal_id,
-                       fl.item_name, fl.item_brand, fl.quantity, fl.unit,
-                       row_number() OVER (
-                           PARTITION BY
-                               CASE WHEN fl.item_product_id IS NOT NULL THEN 'product' ELSE 'meal' END,
-                               COALESCE(fl.item_product_id, fl.item_meal_id)
-                           ORDER BY fl.log_date DESC, fl.created_at DESC
-                       ) AS rn
-                FROM food_logs fl
-                WHERE fl.user_id = $1
-                  AND fl.log_date >= $2
-                  AND fl.log_date <= $3
-                  AND ($4::text IS NULL OR fl.meal_slot = $4)
-                  AND (
-                    fl.item_product_id = ANY($5::uuid[])
-                    OR fl.item_meal_id = ANY($6::uuid[])
-                  )
-            )
-            SELECT id, log_date, meal_slot, item_product_id, item_meal_id,
-                   item_name, item_brand, quantity, unit
-            FROM ranked
-            WHERE rn = 1
-            ORDER BY log_date DESC, item_name ASC
-            "#,
-        )
-        .bind(user_id)
-        .bind(from_date)
-        .bind(to_date)
-        .bind(meal_slot.as_ref().map(|m| m.as_str()))
-        .bind(&product_ids)
-        .bind(&meal_ids)
-        .fetch_all(&self.pool)
-        .await?;
+    query.push(" ORDER BY log_date DESC, created_at DESC");
+    query
+}
 
-        self.recent_rows_to_items(rows).await
+fn push_date_bound(
+    query: &mut QueryBuilder<'_, Postgres>,
+    column: &str,
+    bound: &Bound<NaiveDate>,
+    is_start: bool,
+) {
+    match bound {
+        Bound::Included(date) => {
+            query.push(" AND ");
+            query.push(column);
+            query.push(if is_start { " >= " } else { " <= " });
+            query.push_bind(*date);
+        }
+        Bound::Excluded(date) => {
+            query.push(" AND ");
+            query.push(column);
+            query.push(if is_start { " > " } else { " < " });
+            query.push_bind(*date);
+        }
+        Bound::Unbounded => {}
     }
 }
 
@@ -318,37 +229,6 @@ fn food_log_row_to_food_log(
         notes: row.notes,
         created_at: row.created_at,
         updated_at: row.updated_at,
-    })
-}
-
-fn recent_row_to_item(
-    row: RecentFoodLogItemRow,
-    nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
-) -> Result<RecentFoodLogItem, NutritionError> {
-    let item = if let Some(pid) = row.item_product_id {
-        FoodLogItemSnapshot::Product {
-            id: ProductId(pid),
-            name: row.item_name,
-            brand: row.item_brand,
-        }
-    } else if let Some(mid) = row.item_meal_id {
-        FoodLogItemSnapshot::Meal {
-            id: MealId(mid),
-            name: row.item_name,
-        }
-    } else {
-        return Err(NutritionError::Internal(
-            "recent food log item has no item reference".into(),
-        ));
-    };
-
-    Ok(RecentFoodLogItem {
-        item,
-        log_date: row.log_date,
-        meal_slot: row.meal_slot.and_then(|s| s.parse().ok()),
-        quantity_amount: row.quantity,
-        quantity_unit: UnitCode(row.unit),
-        nutrient_snapshots,
     })
 }
 
@@ -443,38 +323,11 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         self.rows_to_food_logs(rows).await
     }
 
-    async fn find_latest_slot_before(
+    async fn list_by_filter(
         &self,
-        user_id: Uuid,
-        meal_slot: MealSlot,
-        before_date: NaiveDate,
-        lookback_days: i64,
-    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
-        self.load_latest_slot_before(user_id, meal_slot, before_date, lookback_days)
-            .await
-    }
-
-    async fn list_recent_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-        self.load_recent_items(user_id, from_date, to_date, meal_slot)
-            .await
-    }
-
-    async fn find_last_used_items(
-        &self,
-        user_id: Uuid,
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-        items: &[FoodLogItemRef],
-    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-        self.load_last_used_items(user_id, from_date, to_date, meal_slot, items)
-            .await
+        filter: FoodLogListFilter,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        self.load_by_filter(filter).await
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
@@ -558,19 +411,6 @@ struct FoodLogSnapshotJoinRow {
     code: String,
 }
 
-#[derive(sqlx::FromRow)]
-struct RecentFoodLogItemRow {
-    id: Uuid,
-    log_date: NaiveDate,
-    meal_slot: Option<String>,
-    item_product_id: Option<Uuid>,
-    item_meal_id: Option<Uuid>,
-    item_name: String,
-    item_brand: Option<String>,
-    quantity: Decimal,
-    unit: String,
-}
-
 fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &str, Option<&str>) {
     match item {
         FoodLogItemSnapshot::Product { id, name, brand } => {
@@ -623,4 +463,157 @@ async fn insert_food_log_nutrients(
         )));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::Execute;
+
+    fn date(year: i32, month: u32, day: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(year, month, day).unwrap()
+    }
+
+    fn base_filter(date_range: DateRange) -> FoodLogListFilter {
+        FoodLogListFilter {
+            user_id: Uuid::nil(),
+            date_range,
+            meal_slot: None,
+            items: Vec::new(),
+        }
+    }
+
+    fn filter_sql(filter: FoodLogListFilter) -> String {
+        let mut query = food_log_filter_query(filter);
+        normalize_sql(query.build_query_as::<FoodLogRow>().sql())
+    }
+
+    fn normalize_sql(sql: &str) -> String {
+        sql.split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    fn expected_filter_sql(where_tail: &str) -> String {
+        format!(
+            "SELECT id, user_id, log_date, meal_slot, device_timezone, \
+             item_product_id, item_meal_id, item_name, item_brand, quantity, unit, \
+             notes, created_at, updated_at FROM food_logs WHERE user_id = $1 \
+             {where_tail} ORDER BY log_date DESC, created_at DESC"
+        )
+    }
+
+    #[test]
+    fn filter_query_uses_inclusive_date_bounds() {
+        let sql = filter_sql(base_filter(
+            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+        ));
+
+        assert_eq!(
+            sql,
+            expected_filter_sql("AND log_date >= $2 AND log_date <= $3")
+        );
+    }
+
+    #[test]
+    fn filter_query_uses_exclusive_end_date_bound() {
+        let sql = filter_sql(base_filter(
+            DateRange::inclusive_to_exclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+        ));
+
+        assert_eq!(
+            sql,
+            expected_filter_sql("AND log_date >= $2 AND log_date < $3")
+        );
+    }
+
+    #[test]
+    fn filter_query_adds_meal_slot_predicate() {
+        let mut filter =
+            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
+        filter.meal_slot = Some(MealSlot::Breakfast);
+
+        let sql = filter_sql(filter);
+
+        assert_eq!(
+            sql,
+            expected_filter_sql("AND log_date >= $2 AND log_date <= $3 AND meal_slot = $4")
+        );
+    }
+
+    #[test]
+    fn filter_query_omits_item_predicate_for_empty_items() {
+        let sql = filter_sql(base_filter(
+            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+        ));
+
+        assert_eq!(
+            sql,
+            expected_filter_sql("AND log_date >= $2 AND log_date <= $3")
+        );
+    }
+
+    #[test]
+    fn filter_query_adds_product_item_predicate() {
+        let mut filter =
+            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
+        filter
+            .items
+            .push(FoodLogItemRef::Product(ProductId(Uuid::nil())));
+
+        let sql = filter_sql(filter);
+
+        assert_eq!(
+            sql,
+            expected_filter_sql(
+                "AND log_date >= $2 AND log_date <= $3 AND (item_product_id = ANY($4))"
+            )
+        );
+    }
+
+    #[test]
+    fn filter_query_adds_meal_item_predicate() {
+        let mut filter =
+            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
+        filter.items.push(FoodLogItemRef::Meal(MealId(Uuid::nil())));
+
+        let sql = filter_sql(filter);
+
+        assert_eq!(
+            sql,
+            expected_filter_sql(
+                "AND log_date >= $2 AND log_date <= $3 AND (item_meal_id = ANY($4))"
+            )
+        );
+    }
+
+    #[test]
+    fn filter_query_adds_mixed_item_predicates() {
+        let mut filter =
+            base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
+        filter
+            .items
+            .push(FoodLogItemRef::Product(ProductId(Uuid::nil())));
+        filter.items.push(FoodLogItemRef::Meal(MealId(Uuid::nil())));
+
+        let sql = filter_sql(filter);
+
+        assert_eq!(
+            sql,
+            expected_filter_sql(
+                "AND log_date >= $2 AND log_date <= $3 AND \
+                 (item_product_id = ANY($4) OR item_meal_id = ANY($5))"
+            )
+        );
+    }
+
+    #[test]
+    fn filter_query_orders_by_date_and_created_at_desc() {
+        let sql = filter_sql(base_filter(
+            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
+        ));
+
+        assert_eq!(
+            sql,
+            expected_filter_sql("AND log_date >= $2 AND log_date <= $3")
+        );
+    }
 }

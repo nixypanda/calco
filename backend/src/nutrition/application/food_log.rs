@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{Duration, NaiveDate};
 #[cfg(test)]
 use rust_decimal::Decimal;
 use std::sync::Arc;
@@ -206,6 +206,159 @@ impl FoodLogServices {
     }
 }
 
+#[derive(Clone)]
+pub struct FoodLogHistoryServices {
+    food_log_repo: Arc<dyn FoodLogRepository>,
+}
+
+impl FoodLogHistoryServices {
+    pub fn new(food_log_repo: Arc<dyn FoodLogRepository>) -> Self {
+        Self { food_log_repo }
+    }
+
+    pub async fn latest_slot_before(
+        &self,
+        user_id: Uuid,
+        meal_slot: MealSlot,
+        before_date: NaiveDate,
+        lookback_days: i64,
+    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
+        if !(1..=90).contains(&lookback_days) {
+            return Err(NutritionError::Validation(
+                "lookback_days must be between 1 and 90".into(),
+            ));
+        }
+
+        let date_range = DateRange::inclusive_to_exclusive(
+            before_date - Duration::days(lookback_days),
+            before_date,
+        )?;
+        let mut logs = self
+            .food_log_repo
+            .list_by_filter(FoodLogListFilter {
+                user_id,
+                date_range,
+                meal_slot: Some(meal_slot),
+                items: Vec::new(),
+            })
+            .await?;
+
+        let source_date = match logs.iter().map(|log| log.log_date).max() {
+            Some(date) => date,
+            None => return Ok(None),
+        };
+
+        logs.retain(|log| log.log_date == source_date);
+        logs.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        Ok(Some((source_date, logs)))
+    }
+
+    pub async fn list_recent_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        let logs = self
+            .food_log_repo
+            .list_by_filter(FoodLogListFilter {
+                user_id,
+                date_range: DateRange::inclusive(from_date, to_date)?,
+                meal_slot,
+                items: Vec::new(),
+            })
+            .await?;
+
+        Ok(recent_items_from_logs(logs))
+    }
+
+    pub async fn find_last_used_items(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+        items: &[FoodLogItemRef],
+    ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let logs = self
+            .food_log_repo
+            .list_by_filter(FoodLogListFilter {
+                user_id,
+                date_range: DateRange::inclusive(from_date, to_date)?,
+                meal_slot,
+                items: items.to_vec(),
+            })
+            .await?;
+
+        Ok(recent_items_from_logs(logs))
+    }
+}
+
+fn recent_items_from_logs(mut logs: Vec<FoodLog>) -> Vec<RecentFoodLogItem> {
+    logs.sort_by(|left, right| {
+        right
+            .log_date
+            .cmp(&left.log_date)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+    });
+
+    let mut items = Vec::new();
+    for log in logs {
+        if items
+            .iter()
+            .any(|item: &RecentFoodLogItem| same_item_snapshot(&item.item, &log.item))
+        {
+            continue;
+        }
+        items.push(recent_item_from_log(log));
+    }
+
+    items.sort_by(|left, right| {
+        right
+            .log_date
+            .cmp(&left.log_date)
+            .then_with(|| item_name(&left.item).cmp(item_name(&right.item)))
+    });
+    items
+}
+
+fn recent_item_from_log(log: FoodLog) -> RecentFoodLogItem {
+    RecentFoodLogItem {
+        item: log.item,
+        log_date: log.log_date,
+        meal_slot: log.meal_slot,
+        quantity_amount: log.quantity_amount,
+        quantity_unit: log.quantity_unit,
+        nutrient_snapshots: log.nutrient_snapshots,
+    }
+}
+
+fn same_item_snapshot(left: &FoodLogItemSnapshot, right: &FoodLogItemSnapshot) -> bool {
+    match (left, right) {
+        (
+            FoodLogItemSnapshot::Product { id: left_id, .. },
+            FoodLogItemSnapshot::Product { id: right_id, .. },
+        ) => left_id == right_id,
+        (
+            FoodLogItemSnapshot::Meal { id: left_id, .. },
+            FoodLogItemSnapshot::Meal { id: right_id, .. },
+        ) => left_id == right_id,
+        _ => false,
+    }
+}
+
+fn item_name(item: &FoodLogItemSnapshot) -> &str {
+    match item {
+        FoodLogItemSnapshot::Product { name, .. } => name,
+        FoodLogItemSnapshot::Meal { name, .. } => name,
+    }
+}
+
 pub(crate) async fn load_meal_products(
     meal: &Meal,
     product_repo: &dyn ProductRepository,
@@ -232,6 +385,7 @@ mod tests {
     use super::*;
     use crate::nutrition::domain::meal::*;
     use async_trait::async_trait;
+    use std::ops::Bound;
     use std::sync::Mutex;
 
     struct MockFoodLogRepo {
@@ -276,82 +430,27 @@ mod tests {
                 .collect())
         }
 
-        async fn find_latest_slot_before(
+        async fn list_by_filter(
             &self,
-            user_id: Uuid,
-            meal_slot: MealSlot,
-            before_date: NaiveDate,
-            lookback_days: i64,
-        ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
-            let cutoff_date = before_date - chrono::Duration::days(lookback_days);
+            filter: FoodLogListFilter,
+        ) -> Result<Vec<FoodLog>, NutritionError> {
             let logs = self.logs.lock().unwrap();
-            let source_date = logs
+            Ok(logs
                 .iter()
                 .filter(|log| {
-                    log.user_id == user_id
-                        && log.meal_slot == Some(meal_slot)
-                        && log.log_date < before_date
-                        && log.log_date >= cutoff_date
+                    log.user_id == filter.user_id
+                        && matches_date_range(log.log_date, &filter.date_range)
+                        && filter
+                            .meal_slot
+                            .is_none_or(|slot| log.meal_slot == Some(slot))
+                        && (filter.items.is_empty()
+                            || filter
+                                .items
+                                .iter()
+                                .any(|item| log_item_matches(&log.item, item)))
                 })
-                .map(|log| log.log_date)
-                .max();
-
-            Ok(source_date.map(|date| {
-                let items = logs
-                    .iter()
-                    .filter(|log| {
-                        log.user_id == user_id
-                            && log.meal_slot == Some(meal_slot)
-                            && log.log_date == date
-                    })
-                    .cloned()
-                    .collect();
-                (date, items)
-            }))
-        }
-
-        async fn list_recent_items(
-            &self,
-            user_id: Uuid,
-            from_date: NaiveDate,
-            to_date: NaiveDate,
-            meal_slot: Option<MealSlot>,
-        ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-            let logs = self.logs.lock().unwrap();
-            Ok(dedup_recent_items(
-                logs.iter()
-                    .filter(|log| {
-                        log.user_id == user_id
-                            && log.log_date >= from_date
-                            && log.log_date <= to_date
-                            && meal_slot.is_none_or(|slot| log.meal_slot == Some(slot))
-                    })
-                    .cloned()
-                    .collect(),
-            ))
-        }
-
-        async fn find_last_used_items(
-            &self,
-            user_id: Uuid,
-            from_date: NaiveDate,
-            to_date: NaiveDate,
-            meal_slot: Option<MealSlot>,
-            items: &[FoodLogItemRef],
-        ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
-            let logs = self.logs.lock().unwrap();
-            Ok(dedup_recent_items(
-                logs.iter()
-                    .filter(|log| {
-                        log.user_id == user_id
-                            && log.log_date >= from_date
-                            && log.log_date <= to_date
-                            && meal_slot.is_none_or(|slot| log.meal_slot == Some(slot))
-                            && items.iter().any(|item| log_item_matches(&log.item, item))
-                    })
-                    .cloned()
-                    .collect(),
-            ))
+                .cloned()
+                .collect())
         }
 
         async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
@@ -375,45 +474,23 @@ mod tests {
         }
     }
 
-    fn dedup_recent_items(mut logs: Vec<FoodLog>) -> Vec<RecentFoodLogItem> {
-        logs.sort_by(|left, right| {
-            right
-                .log_date
-                .cmp(&left.log_date)
-                .then_with(|| right.created_at.cmp(&left.created_at))
-        });
-
-        let mut items = Vec::new();
-        for log in logs {
-            if items
-                .iter()
-                .any(|item: &RecentFoodLogItem| same_item_snapshot(&item.item, &log.item))
-            {
-                continue;
-            }
-            items.push(RecentFoodLogItem {
-                item: log.item,
-                log_date: log.log_date,
-                meal_slot: log.meal_slot,
-                quantity_amount: log.quantity_amount,
-                quantity_unit: log.quantity_unit,
-                nutrient_snapshots: log.nutrient_snapshots,
-            });
-        }
-        items
+    fn matches_date_range(date: NaiveDate, range: &DateRange) -> bool {
+        matches_lower_bound(date, &range.start) && matches_upper_bound(date, &range.end)
     }
 
-    fn same_item_snapshot(left: &FoodLogItemSnapshot, right: &FoodLogItemSnapshot) -> bool {
-        match (left, right) {
-            (
-                FoodLogItemSnapshot::Product { id: left_id, .. },
-                FoodLogItemSnapshot::Product { id: right_id, .. },
-            ) => left_id == right_id,
-            (
-                FoodLogItemSnapshot::Meal { id: left_id, .. },
-                FoodLogItemSnapshot::Meal { id: right_id, .. },
-            ) => left_id == right_id,
-            _ => false,
+    fn matches_lower_bound(date: NaiveDate, bound: &Bound<NaiveDate>) -> bool {
+        match bound {
+            Bound::Included(start) => date >= *start,
+            Bound::Excluded(start) => date > *start,
+            Bound::Unbounded => true,
+        }
+    }
+
+    fn matches_upper_bound(date: NaiveDate, bound: &Bound<NaiveDate>) -> bool {
+        match bound {
+            Bound::Included(end) => date <= *end,
+            Bound::Excluded(end) => date < *end,
+            Bound::Unbounded => true,
         }
     }
 
@@ -626,6 +703,14 @@ mod tests {
 
     fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogServices {
         build_services(product, Some(meal))
+    }
+
+    fn history_services_for(services: &FoodLogServices) -> FoodLogHistoryServices {
+        FoodLogHistoryServices::new(services.food_log_repo.clone())
+    }
+
+    fn empty_history_services() -> FoodLogHistoryServices {
+        FoodLogHistoryServices::new(Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>)
     }
 
     fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogServices {
@@ -901,6 +986,7 @@ mod tests {
     #[tokio::test]
     async fn find_latest_slot_before_skips_empty_days_and_returns_whole_slot() {
         let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
@@ -909,9 +995,8 @@ mod tests {
         log_test_product(&services, user_id, friday, MealSlot::Breakfast, 150).await;
         log_test_product(&services, user_id, friday, MealSlot::Lunch, 200).await;
 
-        let latest = services
-            .food_log_repo
-            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+        let latest = history_services
+            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
             .await
             .unwrap()
             .expect("expected latest breakfast slot");
@@ -929,6 +1014,7 @@ mod tests {
     #[tokio::test]
     async fn find_latest_slot_before_prefers_most_recent_prior_date() {
         let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let sunday = NaiveDate::from_ymd_opt(2026, 6, 21).unwrap();
@@ -938,9 +1024,8 @@ mod tests {
         log_test_product(&services, user_id, sunday, MealSlot::Breakfast, 125).await;
         log_test_product(&services, user_id, monday, MealSlot::Breakfast, 150).await;
 
-        let latest = services
-            .food_log_repo
-            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+        let latest = history_services
+            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
             .await
             .unwrap()
             .expect("expected latest breakfast slot");
@@ -953,6 +1038,7 @@ mod tests {
     #[tokio::test]
     async fn find_latest_slot_before_respects_lookback_and_user() {
         let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
         let user_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();
         let old_date = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
@@ -962,13 +1048,103 @@ mod tests {
         log_test_product(&services, user_id, old_date, MealSlot::Breakfast, 100).await;
         log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 150).await;
 
-        let latest = services
-            .food_log_repo
-            .find_latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+        let latest = history_services
+            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
             .await
             .unwrap();
 
         assert!(latest.is_none());
+    }
+
+    #[tokio::test]
+    async fn history_rejects_invalid_lookback_days() {
+        let history_services = empty_history_services();
+        let result = history_services
+            .latest_slot_before(
+                Uuid::new_v4(),
+                MealSlot::Breakfast,
+                NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
+                0,
+            )
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn history_rejects_recent_items_inverted_date_range() {
+        let history_services = empty_history_services();
+        let result = history_services
+            .list_recent_items(
+                Uuid::new_v4(),
+                NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 6, 21).unwrap(),
+                None,
+            )
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn history_rejects_last_used_inverted_date_range() {
+        let history_services = empty_history_services();
+        let result = history_services
+            .find_last_used_items(
+                Uuid::new_v4(),
+                NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
+                NaiveDate::from_ymd_opt(2026, 6, 21).unwrap(),
+                None,
+                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
+            )
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn history_lists_recent_items_through_repository() {
+        let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
+        let user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
+        log_test_product(&services, user_id, monday, MealSlot::Dinner, 150).await;
+
+        let recent = history_services
+            .list_recent_items(user_id, friday, monday, Some(MealSlot::Breakfast))
+            .await
+            .unwrap();
+
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].meal_slot, Some(MealSlot::Breakfast));
+    }
+
+    #[tokio::test]
+    async fn history_finds_last_used_items_through_repository() {
+        let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
+        let user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
+
+        let recent = history_services
+            .find_last_used_items(
+                user_id,
+                friday,
+                monday,
+                None,
+                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(recent.len(), 1);
+        assert_eq!(recent[0].quantity_amount, Decimal::new(100, 0));
     }
 
     async fn log_test_product(
