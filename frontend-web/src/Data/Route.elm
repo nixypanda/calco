@@ -1,6 +1,7 @@
 module Data.Route exposing
     ( Route(..)
     , fromUrl
+    , primaryRoute
     , routeToPath
     )
 
@@ -68,6 +69,49 @@ mealSlotQuery : Query.Parser (Maybe MealSlot)
 mealSlotQuery =
     Query.string "meal_slot"
         |> Query.map (Maybe.andThen MealSlot.fromString)
+
+
+primaryRoute : Route -> Route
+primaryRoute route =
+    case route of
+        FoodShow _ maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
+
+        CustomFoodCreate ->
+            CustomFoodList
+
+        CustomFoodEdit _ ->
+            CustomFoodList
+
+        CustomFoodShow _ ->
+            CustomFoodList
+
+        AdminCreateUser ->
+            AdminDashboard
+
+        AdminEditUser _ ->
+            AdminDashboard
+
+        MealCreate ->
+            MealList
+
+        MealShow _ ->
+            MealList
+
+        MealEdit _ ->
+            MealList
+
+        FoodLogEntry _ ->
+            DiaryDay Nothing
+
+        DiaryDay _ ->
+            DiaryDay Nothing
+
+        FoodSearch maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
+
+        other ->
+            other
 
 
 routeToPath : Route -> String

@@ -1,6 +1,7 @@
 module Lib.Text exposing
     ( blankToMaybe
     , commaSeparatedUniqueLower
+    , initial
     , isBlank
     , quoteIfWhitespace
     , requireTrimmed
@@ -13,6 +14,14 @@ module Lib.Text exposing
 isBlank : String -> Bool
 isBlank value =
     String.isEmpty (String.trim value)
+
+
+initial : String -> String
+initial value =
+    value
+        |> String.uncons
+        |> Maybe.map (\( c, _ ) -> String.fromChar c |> String.toUpper)
+        |> Maybe.withDefault "?"
 
 
 blankToMaybe : String -> Maybe String

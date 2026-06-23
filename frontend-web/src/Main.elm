@@ -17,15 +17,11 @@ import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Element.Background as Background
-import Element.Border as Border
-import Element.Font as Font
-import Element.Input as Input
 import Element.Region as Region
 import Html
-import Html.Attributes
 import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Text as Text
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
@@ -49,9 +45,13 @@ import Session exposing (Session)
 import Task
 import Time
 import Ui
-import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme as Theme exposing (Mode, Theme)
 import Url exposing (Url)
+import View.Chrome as Chrome
+
+
+
+-- MODEL
 
 
 type alias Flags =
@@ -104,87 +104,6 @@ type PageModel
     | PlaceholderPage String
 
 
-type Msg
-    = LinkClicked Browser.UrlRequest
-    | UrlChanged Url
-    | GotSession (Result Client.ApiError Auth.LoginSession)
-    | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
-    | GotLocalDate LocalDate
-    | LogoutClicked
-    | LogoutCompleted
-    | MenuClicked
-    | DrawerClosed
-    | ProfileClicked
-    | NavigateTo Route
-    | WindowResized Int Int
-    | GotLoginMsg AuthLogin.Msg
-    | GotSetupMsg BootstrapSetup.Msg
-    | GotAdminMsg AdminDashboard.Msg
-    | GotAdminCreateUserMsg AdminCreateUser.Msg
-    | GotAdminEditUserMsg AdminEditUser.Msg
-    | GotDiaryMsg DiaryDay.Msg
-    | GotGoalsSettingsMsg GoalsSettings.Msg
-    | GotFoodSearchMsg FoodSearch.Msg
-    | GotFoodDetailMsg FoodShow.Msg
-    | GotFoodLogDetailMsg FoodLogEntry.Msg
-    | GotCustomFoodCreateMsg CustomFoodCreate.Msg
-    | GotCustomFoodEditMsg CustomFoodEdit.Msg
-    | GotCustomFoodShowMsg CustomFoodShow.Msg
-    | GotCustomFoodsMsg CustomFoodList.Msg
-    | GotMealsMsg MealList.Msg
-    | GotMealCreateMsg MealCreate.Msg
-    | GotMealEditMsg MealEdit.Msg
-    | GotMealDetailMsg MealShow.Msg
-    | GotLocalContext { date : String, timezone : String }
-    | ThemeToggleClicked
-    | GotVersionCheck (Result Client.ApiError String)
-    | GotVersionCheckTime Time.Posix
-    | ReloadPageClicked
-    | CheckForUpdate
-    | NoOp
-
-
-port requestLocalContext : () -> Cmd msg
-
-
-port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
-
-
-port persistThemeMode : String -> Cmd msg
-
-
-port reloadPage : () -> Cmd msg
-
-
-main : Program Flags Model Msg
-main =
-    Browser.application
-        { init = init
-        , view = view
-        , update = update
-        , subscriptions = subscriptions
-        , onUrlRequest = LinkClicked
-        , onUrlChange = UrlChanged
-        }
-
-
-subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Sub.batch
-        [ localContextReceived GotLocalContext
-        , Browser.Events.onResize WindowResized
-        , Browser.Events.onVisibilityChange
-            (\visibility ->
-                case visibility of
-                    Browser.Events.Visible ->
-                        CheckForUpdate
-
-                    Browser.Events.Hidden ->
-                        NoOp
-            )
-        ]
-
-
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     let
@@ -224,34 +143,47 @@ init flags url key =
 
 
 
--- Generic page-lifting helpers. Each page's `update` returns
--- (subModel, Cmd subMsg, outMsg) and its `init` returns (subModel, outMsg).
--- These lift those into Main's Model / Msg, removing per-page boilerplate.
+-- UPDATE
 
 
-stepPage :
-    (subModel -> PageModel)
-    -> (subMsg -> Msg)
-    -> (outMsg -> Model -> ( Model, Cmd Msg ))
-    -> ( subModel, Cmd subMsg, outMsg )
-    -> Model
-    -> ( Model, Cmd Msg )
-stepPage toPage toMsg applyOut ( newSubModel, subCmd, outMsg ) model =
-    let
-        ( finalModel, outCmd ) =
-            applyOut outMsg { model | page = toPage newSubModel }
-    in
-    ( finalModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ] )
-
-
-initPage :
-    (subModel -> PageModel)
-    -> (outMsg -> Model -> ( Model, Cmd Msg ))
-    -> ( subModel, outMsg )
-    -> Model
-    -> ( Model, Cmd Msg )
-initPage toPage applyOut ( subModel, outMsg ) model =
-    applyOut outMsg { model | page = toPage subModel }
+type Msg
+    = LinkClicked Browser.UrlRequest
+    | UrlChanged Url
+    | GotSession (Result Client.ApiError Auth.LoginSession)
+    | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
+    | GotLocalDate LocalDate
+    | LogoutClicked
+    | LogoutCompleted
+    | MenuClicked
+    | DrawerClosed
+    | ProfileClicked
+    | NavigateTo Route
+    | WindowResized Int Int
+    | GotLoginMsg AuthLogin.Msg
+    | GotSetupMsg BootstrapSetup.Msg
+    | GotAdminMsg AdminDashboard.Msg
+    | GotAdminCreateUserMsg AdminCreateUser.Msg
+    | GotAdminEditUserMsg AdminEditUser.Msg
+    | GotDiaryMsg DiaryDay.Msg
+    | GotGoalsSettingsMsg GoalsSettings.Msg
+    | GotFoodSearchMsg FoodSearch.Msg
+    | GotFoodDetailMsg FoodShow.Msg
+    | GotFoodLogDetailMsg FoodLogEntry.Msg
+    | GotCustomFoodCreateMsg CustomFoodCreate.Msg
+    | GotCustomFoodEditMsg CustomFoodEdit.Msg
+    | GotCustomFoodShowMsg CustomFoodShow.Msg
+    | GotCustomFoodsMsg CustomFoodList.Msg
+    | GotMealsMsg MealList.Msg
+    | GotMealCreateMsg MealCreate.Msg
+    | GotMealEditMsg MealEdit.Msg
+    | GotMealDetailMsg MealShow.Msg
+    | GotLocalContext { date : String, timezone : String }
+    | ThemeToggleClicked
+    | GotVersionCheck (Result Client.ApiError String)
+    | GotVersionCheckTime Time.Posix
+    | ReloadPageClicked
+    | CheckForUpdate
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -1400,21 +1332,42 @@ applyMealDetailOutMsg outMsg model =
             )
 
 
-type LeadingAction
-    = OpenMenu
-    | GoBack Route
-    | NoLeadingAction
-    | ShowAppIcon
 
-
-type alias ScreenMeta =
-    { title : String
-    , leading : LeadingAction
-    }
+-- VIEW
 
 
 view : Model -> Browser.Document Msg
 view model =
+    let
+        isLoadingPage : Bool
+        isLoadingPage =
+            model.page == LoadingPage
+
+        useBottomNav : Bool
+        useBottomNav =
+            Chrome.showBottomNav model.device model.session isLoadingPage model.route
+
+        bottomNavEl : List (Element.Attribute Msg)
+        bottomNavEl =
+            if useBottomNav then
+                [ Element.inFront
+                    (Element.el
+                        [ Element.width Element.fill
+                        , Element.alignBottom
+                        ]
+                        (Chrome.bottomNavBar
+                            { theme = model.theme
+                            , session = model.session
+                            , route = model.route
+                            , onNavigate = NavigateTo
+                            }
+                        )
+                    )
+                ]
+
+            else
+                []
+    in
     { title = "CalCo"
     , body =
         [ Html.node "style"
@@ -1438,7 +1391,7 @@ view model =
                     }
                 ]
             }
-            (layoutAttrs model)
+            (layoutAttrs model ++ bottomNavEl)
           <|
             Ui.layout model.theme <|
                 appFrame model
@@ -1459,28 +1412,33 @@ layoutAttrs model =
 appFrame : Model -> Element Msg
 appFrame model =
     let
+        isLoadingPage : Bool
+        isLoadingPage =
+            model.page == LoadingPage
+
+        useBottomNav : Bool
+        useBottomNav =
+            Chrome.showBottomNav model.device model.session isLoadingPage model.route
+
         bottomNavClearance : Int
         bottomNavClearance =
             56
 
-        useBottomNav : Bool
-        useBottomNav =
-            showBottomNav model
-
         chromeAttrs : List (Element.Attribute Msg)
         chromeAttrs =
             if useBottomNav then
-                [ Element.inFront
-                    (Element.el
-                        [ Element.width Element.fill
-                        , Element.alignBottom
-                        ]
-                        (bottomNavBar model)
-                    )
-                ]
+                []
 
             else
-                drawerOverlay model
+                Chrome.drawerOverlay
+                    { device = model.device
+                    , theme = model.theme
+                    , session = model.session
+                    , route = model.route
+                    , drawerOpen = model.drawerOpen
+                    , onClose = DrawerClosed
+                    , onNavigate = NavigateTo
+                    }
 
         pageAttrs : List (Element.Attribute Msg)
         pageAttrs =
@@ -1496,12 +1454,55 @@ appFrame model =
                     else
                         []
                    )
+
+        profileLetter : String
+        profileLetter =
+            case model.session of
+                Session.Authenticated identity ->
+                    Text.initial identity.username
+
+                _ ->
+                    "?"
+
+        profileMenuEl : Maybe (Element Msg)
+        profileMenuEl =
+            if
+                model.profileOpen
+                    && Chrome.showsAppChrome model.session isLoadingPage model.route
+            then
+                Just
+                    (Chrome.profileMenu
+                        { device = model.device
+                        , theme = model.theme
+                        , session = model.session
+                        , onNavigate = NavigateTo
+                        , onLogout = LogoutClicked
+                        }
+                    )
+
+            else
+                Nothing
     in
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        (topBarView model
+        (Chrome.topBarView
+            { device = model.device
+            , theme = model.theme
+            , themeMode = model.themeMode
+            , session = model.session
+            , route = model.route
+            , profileOpen = model.profileOpen
+            , isLoadingPage = isLoadingPage
+            , onMenuClick = MenuClicked
+            , onProfileClick = ProfileClicked
+            , onThemeToggle = ThemeToggleClicked
+            , onNavigate = NavigateTo
+            }
+            { profileLabel = profileLetter
+            , profileMenu = profileMenuEl
+            }
             :: (if model.updateAvailable then
-                    [ updateBanner model ]
+                    [ Chrome.updateBanner model.theme ReloadPageClicked ]
 
                 else
                     []
@@ -1510,468 +1511,9 @@ appFrame model =
         )
 
 
-showBottomNav : Model -> Bool
-showBottomNav model =
-    Ui.isSmall model.device
-        && showsAppChrome model
-        && not (Session.isAdmin model.session)
-
-
-bottomNavBar : Model -> Element Msg
-bottomNavBar model =
-    Ui.bottomNavBar model.theme
-        [ tabButton model Icon.Home "Diary" (DiaryDay Nothing)
-        , tabButton model Icon.Search "Search" (FoodSearch Nothing Nothing)
-        , tabButton model Icon.Box "Foods" CustomFoodList
-        , tabButton model Icon.Utensils "Meals" MealList
-        ]
-
-
-tabButton : Model -> Icon -> String -> Route -> Element Msg
-tabButton model icon label target =
-    let
-        active : Bool
-        active =
-            primaryRoute model.route == primaryRoute target
-    in
-    Ui.bottomNavTab model.theme
-        { icon = icon
-        , label = label
-        , active = active
-        , onPress = NavigateTo target
-        }
-
-
-showsAppChrome : Model -> Bool
-showsAppChrome model =
-    Session.isAuthenticated model.session
-        && model.page
-        /= LoadingPage
-        && (case model.route of
-                AuthLogin ->
-                    False
-
-                BootstrapSetup ->
-                    False
-
-                _ ->
-                    True
-           )
-
-
-topBarView : Model -> Element Msg
-topBarView model =
-    let
-        chromeShown : Bool
-        chromeShown =
-            showsAppChrome model
-
-        meta : ScreenMeta
-        meta =
-            screenMeta model.device model.session model.route
-    in
-    Element.row
-        [ Element.width Element.fill
-        , Element.height (Element.px 58)
-        , Element.paddingXY Ui.space16 0
-        , Element.spacing Ui.space12
-        , Background.color model.theme.cardBg
-        , Font.color model.theme.textPrimary
-        ]
-        (if chromeShown then
-            [ leadingButton model.device model.theme meta.leading
-            , Element.el
-                [ Element.width Element.fill
-                , Element.clip
-                ]
-                (Ui.subsectionTitle model.theme meta.title)
-            , Element.el
-                [ Element.paddingEach { top = 0, right = Ui.space8, bottom = 0, left = 0 } ]
-                (themeToggle model)
-            , profileButton model
-            ]
-
-         else
-            [ Element.row
-                [ Element.spacing Ui.space8
-                , Element.centerY
-                ]
-                [ Element.image
-                    [ Element.width (Element.px 28)
-                    , Element.height (Element.px 28)
-                    ]
-                    { src = "/android-chrome-192x192.png"
-                    , description = "CalCo"
-                    }
-                , Ui.pageTitle model.theme "CalCo"
-                ]
-            , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle model
-            ]
-        )
-
-
-themeToggle : Model -> Element Msg
-themeToggle model =
-    Ui.toggleSwitch model.theme
-        { isActive = model.themeMode == Theme.Dark
-        , onToggle = ThemeToggleClicked
-        }
-
-
-leadingButton : Element.Device -> Theme -> LeadingAction -> Element Msg
-leadingButton device theme leading =
-    case leading of
-        OpenMenu ->
-            Ui.iconButton device theme { icon = Icon.Menu, title = "Menu", onPress = MenuClicked }
-
-        GoBack route ->
-            Ui.iconButton device
-                theme
-                { icon = Icon.ChevronLeft, title = "Back", onPress = NavigateTo route }
-
-        NoLeadingAction ->
-            Element.el [ Element.width (Element.px 40) ] Element.none
-
-        ShowAppIcon ->
-            Element.image
-                [ Element.width (Element.px 28)
-                , Element.height (Element.px 28)
-                ]
-                { src = "/android-chrome-192x192.png"
-                , description = "CalCo"
-                }
-
-
-profileButton : Model -> Element Msg
-profileButton model =
-    let
-        letter : String
-        letter =
-            case model.session of
-                Session.Authenticated identity ->
-                    initial identity.username
-
-                _ ->
-                    "?"
-    in
-    Element.el
-        (profileMenuAnchor model)
-        (profileInitialButton model.theme letter)
-
-
-profileInitialButton : Theme -> String -> Element Msg
-profileInitialButton theme label =
-    Input.button
-        [ Element.width (Element.px 44)
-        , Element.height (Element.px 44)
-        , Background.color theme.cardBg
-        , Font.color theme.textPrimary
-        , Font.center
-        , Border.rounded Ui.radiusPill
-        , Border.width 1
-        , Border.color theme.divider
-        , Element.htmlAttribute (Html.Attributes.title "Profile")
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" "Profile")
-        ]
-        { onPress = Just ProfileClicked
-        , label = Element.text label
-        }
-
-
-profileMenuAnchor : Model -> List (Element.Attribute Msg)
-profileMenuAnchor model =
-    if model.profileOpen && showsAppChrome model then
-        [ Element.below (profileMenu model) ]
-
-    else
-        []
-
-
-profileMenu : Model -> Element Msg
-profileMenu model =
-    Ui.menuCard model.theme
-        { width = 240
-        , children = profileMenuContent model
-        }
-
-
-initial : String -> String
-initial value =
-    value
-        |> String.uncons
-        |> Maybe.map (\( c, _ ) -> String.fromChar c |> String.toUpper)
-        |> Maybe.withDefault "?"
-
-
-screenMeta : Element.Device -> Session -> Route -> ScreenMeta
-screenMeta device session route =
-    let
-        phoneNonAdmin : Bool
-        phoneNonAdmin =
-            Ui.isSmall device && not (Session.isAdmin session)
-    in
-    case route of
-        Root ->
-            { title = "Diary"
-            , leading =
-                if phoneNonAdmin then
-                    ShowAppIcon
-
-                else
-                    OpenMenu
-            }
-
-        DiaryDay _ ->
-            { title = "Diary"
-            , leading =
-                if phoneNonAdmin then
-                    ShowAppIcon
-
-                else
-                    OpenMenu
-            }
-
-        AdminDashboard ->
-            { title = "Admin", leading = OpenMenu }
-
-        AdminCreateUser ->
-            { title = "Create User", leading = GoBack AdminDashboard }
-
-        AdminEditUser _ ->
-            { title = "Edit User", leading = GoBack AdminDashboard }
-
-        GoalSettings ->
-            { title = "Goals", leading = GoBack (DiaryDay Nothing) }
-
-        FoodSearch maybeDate maybeSlot ->
-            { title =
-                case maybeSlot of
-                    Just slot ->
-                        "Add to " ++ MealSlot.label slot
-
-                    Nothing ->
-                        "Search Foods"
-            , leading = GoBack (DiaryDay maybeDate)
-            }
-
-        FoodShow _ maybeDate maybeSlot ->
-            { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
-
-        FoodLogEntry _ ->
-            { title = "Edit Log", leading = GoBack (DiaryDay Nothing) }
-
-        CustomFoodCreate ->
-            { title = "Create Food", leading = GoBack CustomFoodList }
-
-        CustomFoodEdit _ ->
-            { title = "Edit Food", leading = GoBack CustomFoodList }
-
-        CustomFoodShow _ ->
-            { title = "Food", leading = GoBack CustomFoodList }
-
-        CustomFoodList ->
-            { title = "My Foods"
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing)
-            }
-
-        MealList ->
-            { title = "My Meals"
-            , leading =
-                if phoneNonAdmin then
-                    NoLeadingAction
-
-                else
-                    GoBack (DiaryDay Nothing)
-            }
-
-        MealCreate ->
-            { title = "Create Meal", leading = GoBack MealList }
-
-        MealShow _ ->
-            { title = "Meal", leading = GoBack MealList }
-
-        MealEdit _ ->
-            { title = "Edit Meal", leading = GoBack MealList }
-
-        AuthLogin ->
-            { title = "Login", leading = NoLeadingAction }
-
-        BootstrapSetup ->
-            { title = "Setup", leading = NoLeadingAction }
-
-        NotFound ->
-            { title = "Diary", leading = OpenMenu }
-
-
-drawerOverlay : Model -> List (Element.Attribute Msg)
-drawerOverlay model =
-    if model.drawerOpen && showsAppChrome model then
-        [ Element.inFront
-            (Element.row
-                [ Element.width Element.fill
-                , Element.height Element.fill
-                ]
-                [ drawerView model
-                , Ui.scrimOverlay (Just DrawerClosed)
-                ]
-            )
-        ]
-
-    else
-        []
-
-
-drawerView : Model -> Element Msg
-drawerView model =
-    Ui.drawerPanel model.theme
-        (Element.row [ Element.spacing Ui.space8 ]
-            [ Ui.iconButton model.device
-                model.theme
-                { icon = Icon.Menu, title = "Close", onPress = DrawerClosed }
-            , Ui.sectionTitle model.theme "CalCo"
-            ]
-            :: Ui.hairline model.theme
-            :: drawerItems model
-        )
-
-
-drawerItems : Model -> List (Element Msg)
-drawerItems model =
-    if Session.isAdmin model.session then
-        [ drawerItem model.theme model.route Nothing "Admin" AdminDashboard ]
-
-    else
-        [ drawerItem model.theme
-            model.route
-            (Just Icon.Home)
-            "Diary"
-            (DiaryDay Nothing)
-        , drawerItem model.theme
-            model.route
-            (Just Icon.Search)
-            "Search Foods"
-            (FoodSearch Nothing Nothing)
-        , drawerItem model.theme
-            model.route
-            (Just Icon.Box)
-            "My Foods"
-            CustomFoodList
-        , drawerItem model.theme
-            model.route
-            (Just Icon.Utensils)
-            "My Meals"
-            MealList
-        ]
-
-
-drawerItem : Theme -> Route -> Maybe Icon -> String -> Route -> Element Msg
-drawerItem theme current icon label target =
-    let
-        selected : Bool
-        selected =
-            primaryRoute current == primaryRoute target
-    in
-    Ui.drawerItem theme
-        { icon = icon
-        , label = label
-        , selected = selected
-        , onPress = NavigateTo target
-        }
-
-
-primaryRoute : Route -> Route
-primaryRoute route =
-    case route of
-        FoodShow _ maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
-
-        CustomFoodCreate ->
-            CustomFoodList
-
-        CustomFoodEdit _ ->
-            CustomFoodList
-
-        CustomFoodShow _ ->
-            CustomFoodList
-
-        AdminCreateUser ->
-            AdminDashboard
-
-        AdminEditUser _ ->
-            AdminDashboard
-
-        MealCreate ->
-            MealList
-
-        MealShow _ ->
-            MealList
-
-        MealEdit _ ->
-            MealList
-
-        FoodLogEntry _ ->
-            DiaryDay Nothing
-
-        DiaryDay _ ->
-            DiaryDay Nothing
-
-        FoodSearch maybeDate maybeSlot ->
-            FoodSearch maybeDate maybeSlot
-
-        other ->
-            other
-
-
-profileMenuContent : Model -> List (Element Msg)
-profileMenuContent model =
-    [ Ui.mutedCaption model.theme
-        (case model.session of
-            Session.Authenticated identity ->
-                "Signed in as " ++ identity.username
-
-            _ ->
-                "Signed in"
-        )
-    , Ui.fullWidthGhostButton model.device model.theme "Goals" (NavigateTo GoalSettings)
-    , Ui.fullWidthDangerButton model.device model.theme "Logout" LogoutClicked
-    ]
-
-
 closeChrome : Model -> Model
 closeChrome model =
     { model | drawerOpen = False, profileOpen = False }
-
-
-updateBanner : Model -> Element Msg
-updateBanner model =
-    Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY Ui.space16 Ui.space12
-        , Background.color model.theme.brandBlueSoft
-        , Font.color model.theme.brandBlue
-        , Font.size 18
-        ]
-        { onPress = Just ReloadPageClicked
-        , label =
-            Element.row
-                [ Element.width Element.fill
-                , Element.spacing Ui.space8
-                ]
-                [ Element.el [ Element.centerY ] (Element.text "New version available")
-                , Element.el
-                    [ Element.alignRight
-                    , Element.centerY
-                    , Font.bold
-                    ]
-                    (Element.text "Tap to refresh")
-                ]
-        }
 
 
 pageView : Model -> Element Msg
@@ -2083,7 +1625,44 @@ pageProps model subModel =
 
 
 
--- Version check
+-- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.batch
+        [ localContextReceived GotLocalContext
+        , Browser.Events.onResize WindowResized
+        , Browser.Events.onVisibilityChange
+            (\visibility ->
+                case visibility of
+                    Browser.Events.Visible ->
+                        CheckForUpdate
+
+                    Browser.Events.Hidden ->
+                        NoOp
+            )
+        ]
+
+
+
+-- PORTS
+
+
+port requestLocalContext : () -> Cmd msg
+
+
+port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
+
+
+port persistThemeMode : String -> Cmd msg
+
+
+port reloadPage : () -> Cmd msg
+
+
+
+-- HELPERS
 
 
 fetchVersion : Int -> Cmd Msg
@@ -2097,3 +1676,50 @@ fetchVersion timestamp =
 versionDecoder : Decode.Decoder String
 versionDecoder =
     Decode.field "version" Decode.string
+
+
+
+-- Generic page-lifting helpers. Each page's `update` returns
+-- (subModel, Cmd subMsg, outMsg) and its `init` returns (subModel, outMsg).
+-- These lift those into Main's Model / Msg, removing per-page boilerplate.
+
+
+stepPage :
+    (subModel -> PageModel)
+    -> (subMsg -> Msg)
+    -> (outMsg -> Model -> ( Model, Cmd Msg ))
+    -> ( subModel, Cmd subMsg, outMsg )
+    -> Model
+    -> ( Model, Cmd Msg )
+stepPage toPage toMsg applyOut ( newSubModel, subCmd, outMsg ) model =
+    let
+        ( finalModel, outCmd ) =
+            applyOut outMsg { model | page = toPage newSubModel }
+    in
+    ( finalModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ] )
+
+
+initPage :
+    (subModel -> PageModel)
+    -> (outMsg -> Model -> ( Model, Cmd Msg ))
+    -> ( subModel, outMsg )
+    -> Model
+    -> ( Model, Cmd Msg )
+initPage toPage applyOut ( subModel, outMsg ) model =
+    applyOut outMsg { model | page = toPage subModel }
+
+
+
+-- MAIN
+
+
+main : Program Flags Model Msg
+main =
+    Browser.application
+        { init = init
+        , view = view
+        , update = update
+        , subscriptions = subscriptions
+        , onUrlRequest = LinkClicked
+        , onUrlChange = UrlChanged
+        }
