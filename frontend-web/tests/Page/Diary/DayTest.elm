@@ -164,6 +164,113 @@ tests =
                         |> first
                         |> Expect.equal emptyModel
             ]
+        , describe "repeat logging"
+            [ test "copy success appends returned logs without requesting reload" <|
+                \_ ->
+                    let
+                        model : DiaryDay.Model
+                        model =
+                            { emptyModel
+                                | diary =
+                                    DiaryDay.Loaded
+                                        { date = today
+                                        , logs = [ breakfastLog ]
+                                        , goal = goalSnapshot
+                                        }
+                                , latestSlots =
+                                    DiaryDay.LatestSlotsLoaded
+                                        today
+                                        [ dinnerSource, lunchSource ]
+                                , copyState = DiaryDay.Copying Dinner
+                            }
+
+                        ( next, _, outMsg ) =
+                            DiaryDay.update
+                                (DiaryDay.CopyLatestCompleted
+                                    today
+                                    (Ok { items = [ dinnerLog ] })
+                                )
+                                model
+                    in
+                    { diary = next.diary
+                    , latestSlots = next.latestSlots
+                    , copyState = next.copyState
+                    , outMsg = outMsg
+                    }
+                        |> Expect.equal
+                            { diary =
+                                DiaryDay.Loaded
+                                    { date = today
+                                    , logs = [ breakfastLog, dinnerLog ]
+                                    , goal = goalSnapshot
+                                    }
+                            , latestSlots =
+                                DiaryDay.LatestSlotsLoaded today [ lunchSource ]
+                            , copyState = DiaryDay.CopyIdle
+                            , outMsg = DiaryDay.NoOp
+                            }
+            , test "copy success preserves partial load and does not reload" <|
+                \_ ->
+                    let
+                        model : DiaryDay.Model
+                        model =
+                            { emptyModel
+                                | diary =
+                                    DiaryDay.Loading
+                                        { date = today
+                                        , logs = Just [ breakfastLog ]
+                                        , goal = Nothing
+                                        }
+                                , copyState = DiaryDay.Copying Dinner
+                            }
+
+                        ( next, _, outMsg ) =
+                            DiaryDay.update
+                                (DiaryDay.CopyLatestCompleted
+                                    today
+                                    (Ok { items = [ dinnerLog ] })
+                                )
+                                model
+                    in
+                    ( next.diary, next.copyState, outMsg )
+                        |> Expect.equal
+                            ( DiaryDay.Loading
+                                { date = today
+                                , logs = Just [ breakfastLog, dinnerLog ]
+                                , goal = Nothing
+                                }
+                            , DiaryDay.CopyIdle
+                            , DiaryDay.NoOp
+                            )
+            , test "copy success reloads when existing logs are unknown" <|
+                \_ ->
+                    let
+                        model : DiaryDay.Model
+                        model =
+                            { emptyModel | copyState = DiaryDay.Copying Dinner }
+
+                        ( next, _, outMsg ) =
+                            DiaryDay.update
+                                (DiaryDay.CopyLatestCompleted
+                                    today
+                                    (Ok { items = [ dinnerLog ] })
+                                )
+                                model
+                    in
+                    { diary = next.diary
+                    , latestSlots = next.latestSlots
+                    , copyState = next.copyState
+                    , outMsg = outMsg
+                    }
+                        |> Expect.equal
+                            { diary =
+                                DiaryDay.Loading
+                                    { date = today, logs = Nothing, goal = Nothing }
+                            , latestSlots = DiaryDay.LatestSlotsLoading today 4 []
+                            , copyState = DiaryDay.CopyIdle
+                            , outMsg = DiaryDay.RequestDiaryData today
+                            }
+            ]
         , describe "derived behavior"
             [ test "slot calories are summed from snapshots" <|
                 \_ ->
@@ -354,6 +461,32 @@ yesterdayLunchLog =
 breakfastLog : FoodLog
 breakfastLog =
     log "log-3" (Just "breakfast") productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
+
+
+dinnerLog : FoodLog
+dinnerLog =
+    log "log-4" (Just "dinner") productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
+
+
+dinnerSource : DiaryDay.LatestSlotSource
+dinnerSource =
+    { slot = Dinner
+    , sourceDate = yesterday
+    , logs = [ yesterdayDinnerLog ]
+    }
+
+
+lunchSource : DiaryDay.LatestSlotSource
+lunchSource =
+    { slot = Lunch
+    , sourceDate = yesterday
+    , logs = [ yesterdayLunchLog ]
+    }
+
+
+yesterdayDinnerLog : FoodLog
+yesterdayDinnerLog =
+    { dinnerLog | id = "log-yesterday-dinner", logDate = yesterday }
 
 
 summary : List NutrientAmount

@@ -251,15 +251,31 @@ update msg model =
 
             else
                 case result of
-                    Ok _ ->
-                        ( { model
-                            | copyState = CopyIdle
-                            , diary = loadingState requestDate
-                            , latestSlots = latestSlotsLoading requestDate
-                          }
-                        , Cmd.none
-                        , RequestDiaryData requestDate
-                        )
+                    Ok response ->
+                        case applyCopiedLogs requestDate response.items model.diary of
+                            Just diary ->
+                                ( { model
+                                    | copyState = CopyIdle
+                                    , diary = diary
+                                    , latestSlots =
+                                        removeLatestSlotSource
+                                            requestDate
+                                            (copiedSlotFromState model.copyState)
+                                            model.latestSlots
+                                  }
+                                , Cmd.none
+                                , NoOp
+                                )
+
+                            Nothing ->
+                                ( { model
+                                    | copyState = CopyIdle
+                                    , diary = loadingState requestDate
+                                    , latestSlots = latestSlotsLoading requestDate
+                                  }
+                                , Cmd.none
+                                , RequestDiaryData requestDate
+                                )
 
                     Err error ->
                         if Client.isUnauthorized error then
@@ -385,6 +401,34 @@ applyLatestSlotUnavailable requestDate state =
             state
 
 
+removeLatestSlotSource : LocalDate -> Maybe MealSlot -> LatestSlotsState -> LatestSlotsState
+removeLatestSlotSource requestDate maybeSlot state =
+    case maybeSlot of
+        Just slot ->
+            case state of
+                LatestSlotsLoading date remaining sources ->
+                    if LocalDate.equals date requestDate then
+                        LatestSlotsLoading date remaining (removeSource slot sources)
+
+                    else
+                        state
+
+                LatestSlotsLoaded date sources ->
+                    if LocalDate.equals date requestDate then
+                        LatestSlotsLoaded date (removeSource slot sources)
+
+                    else
+                        state
+
+        Nothing ->
+            state
+
+
+removeSource : MealSlot -> List LatestSlotSource -> List LatestSlotSource
+removeSource slot sources =
+    List.filter (\source -> source.slot /= slot) sources
+
+
 finishLatestSlotLoad : LocalDate -> Int -> List LatestSlotSource -> LatestSlotsState
 finishLatestSlotLoad date remaining sources =
     if remaining <= 0 then
@@ -432,6 +476,47 @@ copyRequestFromLog targetDate slot log =
     , quantity = log.quantity
     , notes = log.notes
     }
+
+
+copiedSlotFromState : CopyState -> Maybe MealSlot
+copiedSlotFromState copyState =
+    case copyState of
+        Copying slot ->
+            Just slot
+
+        _ ->
+            Nothing
+
+
+applyCopiedLogs : LocalDate -> List FoodLog -> DiaryState -> Maybe DiaryState
+applyCopiedLogs requestDate copiedLogs diary =
+    let
+        matchingLogs : List FoodLog
+        matchingLogs =
+            logsForDate requestDate copiedLogs
+    in
+    case diary of
+        Loaded loaded ->
+            if LocalDate.equals loaded.date requestDate then
+                Just (Loaded { loaded | logs = loaded.logs ++ matchingLogs })
+
+            else
+                Nothing
+
+        Loading loading ->
+            if LocalDate.equals loading.date requestDate then
+                loading.logs
+                    |> Maybe.map
+                        (\logs ->
+                            toLoadedOrLoading
+                                { loading | logs = Just (logs ++ matchingLogs) }
+                        )
+
+            else
+                Nothing
+
+        Failed _ _ ->
+            Nothing
 
 
 applyLogsLoaded : LocalDate -> List FoodLog -> DiaryState -> DiaryState
