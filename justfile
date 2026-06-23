@@ -96,6 +96,10 @@ frontend-web-lint: frontend-web-review
 frontend-web-test:
     cd frontend-web && elm-test
 
+# Run Elm frontend-web coverage
+frontend-web-coverage:
+    cd frontend-web && npm run coverage
+
 # ──────────────────────────────────────────────
 # Combined
 # ──────────────────────────────────────────────

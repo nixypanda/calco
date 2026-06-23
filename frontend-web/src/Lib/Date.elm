@@ -59,7 +59,7 @@ fromPosix zone posix =
 
 format : LocalDate -> String
 format (LocalDate date) =
-    String.fromInt date.year ++ "-" ++ pad2 date.month ++ "-" ++ pad2 date.day
+    pad4 date.year ++ "-" ++ pad2 date.month ++ "-" ++ pad2 date.day
 
 
 display : LocalDate -> String
@@ -154,6 +154,16 @@ pad2 value =
 
     else
         String.fromInt value
+
+
+pad4 : Int -> String
+pad4 value =
+    let
+        raw : String
+        raw =
+            String.fromInt value
+    in
+    String.repeat (max 0 (4 - String.length raw)) "0" ++ raw
 
 
 daysInMonth : Int -> Int -> Int

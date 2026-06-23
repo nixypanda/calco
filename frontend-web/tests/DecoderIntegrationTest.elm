@@ -8,10 +8,11 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition
 import Data.User as User
 import Expect
+import Fuzz exposing (Fuzzer)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Lib.Date as LocalDate exposing (LocalDate)
-import Test exposing (Test, describe, test)
+import Test exposing (Test, describe, fuzz, test)
 
 
 tests : Test
@@ -37,10 +38,24 @@ tests =
                 Decode.decodeString Nutrition.quantityDecoder
                     "{ \"amount\": \"1.5\", \"unit\": \"g\" }"
                     |> Expect.equal (Ok { amount = "1.5", unit = "g" })
+        , fuzz quantityFuzzer "quantity encoder and decoder round trip" <|
+            \quantity ->
+                quantity
+                    |> Nutrition.quantityEncoder
+                    |> Encode.encode 0
+                    |> Decode.decodeString Nutrition.quantityDecoder
+                    |> Expect.equal (Ok quantity)
         , test "decodes item ref" <|
             \_ ->
                 Decode.decodeString ItemRef.decoder "{ \"type\": \"product\", \"id\": \"p1\" }"
                     |> Expect.equal (Ok { itemType = ItemRef.Product, id = "p1" })
+        , fuzz itemRefFuzzer "item ref encoder and decoder round trip" <|
+            \item ->
+                item
+                    |> ItemRef.encoder
+                    |> Encode.encode 0
+                    |> Decode.decodeString ItemRef.decoder
+                    |> Expect.equal (Ok item)
         , test "decodes food search response" <|
             \_ ->
                 Decode.decodeString Foods.searchResponseDecoder searchResponseJson
@@ -364,3 +379,21 @@ date raw =
                 Nothing ->
                     -- Unreachable: 1970-01-01 is always valid.
                     today
+
+
+itemRefFuzzer : Fuzzer ItemRef.ItemRef
+itemRefFuzzer =
+    Fuzz.map2 ItemRef.ItemRef itemTypeFuzzer Fuzz.string
+
+
+itemTypeFuzzer : Fuzzer ItemRef.ItemType
+itemTypeFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.constant ItemRef.Product
+        , Fuzz.constant ItemRef.Meal
+        ]
+
+
+quantityFuzzer : Fuzzer Nutrition.Quantity
+quantityFuzzer =
+    Fuzz.map2 Nutrition.Quantity Fuzz.string Fuzz.string

@@ -26,7 +26,8 @@ buildNpmPackage {
       ]);
   };
 
-  npmDepsHash = "sha256-r8nQlU7455FEgJvhbGY2N2bFZyiXLtwOCMt6qWSxdiU=";
+  npmDepsHash = "sha256-yQFoDq3RMqNQWnqxoDNgqddOcObRFSKC//AiYL5K7Qo=";
+  npmRebuildFlags = [ "--ignore-scripts" ];
 
   nativeBuildInputs = [
     elmPackages.elm

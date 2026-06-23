@@ -8,9 +8,11 @@
     "predev": "npm run version:write",
     "dev": "vite",
     "build": "vite build",
+    "coverage": "elm-coverage src --tests tests --silent",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "elm-coverage": "^0.4.1",
     "vite": "^5.4.0",
     "vite-plugin-elm": "^3.0.0"
   }
