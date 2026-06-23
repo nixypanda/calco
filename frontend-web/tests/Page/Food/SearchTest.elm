@@ -203,6 +203,26 @@ tests =
                 FoodSearch.update FoodSearch.CreateCustomFoodClicked emptyModel
                     |> third
                     |> Expect.equal (FoodSearch.Navigate CustomFoodCreate)
+        , test "clear recent added removes matching added item" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.ClearRecentAdded "product:food-1" 1)
+                    { emptyModel
+                        | addedItems = [ { key = "product:food-1", token = 1 } ]
+                    }
+                    |> first
+                    |> .addedItems
+                    |> Expect.equal []
+        , test "clear recent added ignores stale token" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.ClearRecentAdded "product:food-1" 1)
+                    { emptyModel
+                        | addedItems = [ { key = "product:food-1", token = 2 } ]
+                    }
+                    |> first
+                    |> .addedItems
+                    |> Expect.equal [ { key = "product:food-1", token = 2 } ]
         ]
 
 

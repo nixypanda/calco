@@ -25,8 +25,10 @@ import Element.Input as Input
 import Html.Attributes
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
+import Process
+import Task
 import Ui
-import Ui.Icon as Icon
+import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 import View.Search as SearchView
 
@@ -42,7 +44,8 @@ type alias Model =
     , date : Maybe String
     , mealSlot : Maybe MealSlot
     , quickAdd : QuickAddState
-    , addedItems : List String
+    , addedItems : List { key : String, token : Int }
+    , addedToken : Int
     }
 
 
@@ -51,6 +54,12 @@ type QuickAddState
     | QuickAddRequestingContext Logs.RecentItem
     | QuickAddSubmitting Logs.RecentItem
     | QuickAddFailed String
+
+
+type QuickAddButtonState
+    = QuickAddCanAdd
+    | QuickAddAdding
+    | QuickAddAdded
 
 
 init : Maybe String -> Maybe MealSlot -> Model
@@ -68,6 +77,7 @@ init date mealSlot =
     , mealSlot = mealSlot
     , quickAdd = QuickAddIdle
     , addedItems = []
+    , addedToken = 0
     }
 
 
@@ -87,6 +97,7 @@ type Msg
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived { date : String, timezone : String }
     | QuickAddCompleted (Result Client.ApiError FoodLog)
+    | ClearRecentAdded String Int
     | ResultClicked String
     | CreateCustomFoodClicked
 
@@ -280,18 +291,31 @@ update msg model =
                         key =
                             quickAddItem model.quickAdd
                                 |> Maybe.map recentItemKey
+
+                        nextToken : Int
+                        nextToken =
+                            model.addedToken + 1
                     in
                     ( { model
                         | quickAdd = QuickAddIdle
+                        , addedToken = nextToken
                         , addedItems =
                             case key of
                                 Just value ->
-                                    value :: model.addedItems
+                                    { key = value, token = nextToken }
+                                        :: List.filter
+                                            (\addedItem -> addedItem.key /= value)
+                                            model.addedItems
 
                                 Nothing ->
                                     model.addedItems
                       }
-                    , Cmd.none
+                    , case key of
+                        Just value ->
+                            clearRecentAddedAfter value nextToken
+
+                        Nothing ->
+                            Cmd.none
                     , NoOp
                     )
 
@@ -312,6 +336,19 @@ update msg model =
                         , Cmd.none
                         , NoOp
                         )
+
+        ClearRecentAdded key token ->
+            ( { model
+                | addedItems =
+                    List.filter
+                        (\addedItem ->
+                            addedItem.key /= key || addedItem.token /= token
+                        )
+                        model.addedItems
+              }
+            , Cmd.none
+            , NoOp
+            )
 
         ResultClicked id ->
             ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot) )
@@ -399,6 +436,12 @@ canStartQuickAdd quickAdd =
 
         QuickAddFailed _ ->
             True
+
+
+clearRecentAddedAfter : String -> Int -> Cmd Msg
+clearRecentAddedAfter key token =
+    Process.sleep 500
+        |> Task.perform (\_ -> ClearRecentAdded key token)
 
 
 
@@ -524,7 +567,7 @@ recentItemRow theme device model item =
 
         added : Bool
         added =
-            List.member key model.addedItems
+            List.any (\addedItem -> addedItem.key == key) model.addedItems
 
         adding : Bool
         adding =
@@ -553,17 +596,15 @@ recentItemRow theme device model item =
             ]
         , trailing =
             [ quickAddButton theme
-                device
-                { label =
+                { state =
                     if adding then
-                        "Adding"
+                        QuickAddAdding
 
                     else if added then
-                        "Added"
+                        QuickAddAdded
 
                     else
-                        "Add"
-                , enabled = not adding
+                        QuickAddCanAdd
                 , onPress = RecentQuickAddClicked item
                 }
             ]
@@ -572,18 +613,21 @@ recentItemRow theme device model item =
 
 quickAddButton :
     Theme
-    -> Device
-    -> { label : String, enabled : Bool, onPress : Msg }
+    -> { state : QuickAddButtonState, onPress : Msg }
     -> Element Msg
-quickAddButton theme device config =
+quickAddButton theme config =
     let
-        isIdleAdd : Bool
-        isIdleAdd =
-            config.label == "Add"
+        enabled : Bool
+        enabled =
+            config.state /= QuickAddAdding
+
+        title : String
+        title =
+            quickAddButtonTitle config.state
     in
     Input.button
         [ Background.color
-            (if config.enabled then
+            (if enabled then
                 theme.brandBlue
 
              else
@@ -591,40 +635,53 @@ quickAddButton theme device config =
             )
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded Ui.radiusPill
-        , Element.width
-            (if isIdleAdd then
-                Element.px 44
-
-             else if Ui.isSmall device then
-                Element.px 88
-
-             else
-                Element.px 96
-            )
+        , Element.width (Element.px 44)
         , Element.height (Element.px 44)
         , Element.paddingEach { top = 10, right = 14, bottom = 10, left = 14 }
         , Font.center
         , Font.medium
-        , Element.htmlAttribute (Html.Attributes.title config.label)
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Element.htmlAttribute (Html.Attributes.title title)
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" title)
         ]
         { onPress =
-            if config.enabled then
+            if enabled then
                 Just config.onPress
 
             else
                 Nothing
         , label =
-            if isIdleAdd then
-                Icon.view
-                    { icon = Icon.Plus
-                    , size = 18
-                    , color = Element.rgb255 255 255 255
-                    }
-
-            else
-                Element.text config.label
+            Icon.view
+                { icon = quickAddButtonIcon config.state
+                , size = 18
+                , color = Element.rgb255 255 255 255
+                }
         }
+
+
+quickAddButtonTitle : QuickAddButtonState -> String
+quickAddButtonTitle state =
+    case state of
+        QuickAddCanAdd ->
+            "Add"
+
+        QuickAddAdding ->
+            "Adding"
+
+        QuickAddAdded ->
+            "Added"
+
+
+quickAddButtonIcon : QuickAddButtonState -> Icon
+quickAddButtonIcon state =
+    case state of
+        QuickAddCanAdd ->
+            Icon.Plus
+
+        QuickAddAdding ->
+            Icon.LoaderCircle
+
+        QuickAddAdded ->
+            Icon.Check
 
 
 quantityText : Nutrition.Quantity -> String
