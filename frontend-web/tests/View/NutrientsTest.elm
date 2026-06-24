@@ -1,23 +1,20 @@
 module View.NutrientsTest exposing (tests)
 
-{-| Tests for `View.Nutrients.nutrientLabel`. The label is a pure
-`String -> String` function, so this file exercises:
-
-  - the explicit lookup table (known backend codes), and
-  - the generic parser fallback for unknown codes.
-
+{-| Tests for `View.Nutrients` helpers: `nutrientLabel` and `macroColor`.
 -}
 
+import Data.Nutrition
 import Expect
 import Test exposing (Test, describe, test)
+import Ui.Theme as Theme exposing (Theme)
 import View.Nutrients
 
 
 tests : Test
 tests =
-    describe "View.Nutrients.nutrientLabel"
-        [ knownCodes
-        , genericFallback
+    describe "View.Nutrients"
+        [ nutrientLabelTests
+        , macroColorTests
         ]
 
 
@@ -25,6 +22,14 @@ assertCode : String -> String -> Expect.Expectation
 assertCode code expected =
     View.Nutrients.nutrientLabel code
         |> Expect.equal expected
+
+
+nutrientLabelTests : Test
+nutrientLabelTests =
+    describe "nutrientLabel"
+        [ knownCodes
+        , genericFallback
+        ]
 
 
 knownCodes : Test
@@ -80,4 +85,27 @@ genericFallback =
             \_ -> assertCode "MYSTERY" "Mystery"
         , test "case-insensitive unit suffix" <|
             \_ -> assertCode "riboflavin_mg" "Riboflavin (mg)"
+        ]
+
+
+macroColorTests : Test
+macroColorTests =
+    let
+        theme : Theme
+        theme =
+            Theme.light
+    in
+    describe "macroColor"
+        [ test "resolves Protein to the theme protein accent" <|
+            \_ ->
+                View.Nutrients.macroColor theme Data.Nutrition.Protein
+                    |> Expect.equal theme.proteinAccent
+        , test "resolves Carbs to the theme carbs accent" <|
+            \_ ->
+                View.Nutrients.macroColor theme Data.Nutrition.Carbs
+                    |> Expect.equal theme.carbsAccent
+        , test "resolves Fat to the theme fat accent" <|
+            \_ ->
+                View.Nutrients.macroColor theme Data.Nutrition.Fat
+                    |> Expect.equal theme.fatAccent
         ]

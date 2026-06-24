@@ -29,9 +29,12 @@ import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Page.FoodLog.Form as FoodLogForm
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
+import View.Product
 
 
 
@@ -639,7 +642,7 @@ loadedView theme device model =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space16
+        , Element.spacing DesignTokens.space16
         ]
         [ itemHeader theme model
         , Element.map FormMsg
@@ -725,8 +728,8 @@ itemHeader theme model =
                     Element.none
 
                 else
-                    Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                        [ Ui.macroDotGhost, Ui.chips theme food.categories ]
+                    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                        [ View.Product.macroDotGhost, Ui.chips theme food.categories ]
 
             Nothing ->
                 Element.none
@@ -742,7 +745,7 @@ itemTitle theme item =
                     Ui.skeletonBar theme
 
                 DetailLoaded food ->
-                    Ui.truncatedHeader theme food.name
+                    Typography.truncatedHeader theme food.name
 
                 DetailUnavailable fallback ->
                     Element.text fallback.name
@@ -753,7 +756,7 @@ itemTitle theme item =
                     Ui.skeletonBar theme
 
                 DetailLoaded meal ->
-                    Ui.truncatedHeader theme meal.name
+                    Typography.truncatedHeader theme meal.name
 
                 DetailUnavailable fallback ->
                     Element.text fallback.name
@@ -777,11 +780,11 @@ detailActionsView : Theme -> Device -> LoadedModel -> Element Msg
 detailActionsView theme device model =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space12
+        , Element.spacing DesignTokens.space12
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing Ui.space12
+            , Element.spacing DesignTokens.space12
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.primarySubmitButton device

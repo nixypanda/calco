@@ -11,7 +11,9 @@ import Html
 import Html.Events
 import Json.Decode as Decode
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 
 
@@ -45,7 +47,7 @@ searchInput :
         }
     -> Element msg
 searchInput theme device config =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
         [ Ui.searchInput theme
             { onChange = config.onChange
             , text = config.text
@@ -90,14 +92,14 @@ resultRow theme device config =
         searchItem =
             Element.column
                 [ Element.width Element.fill
-                , Element.spacing Ui.space4
+                , Element.spacing DesignTokens.space4
                 ]
                 [ if Ui.isSmall device then
-                    Ui.wrappedListItemTitle theme config.item.name
+                    Typography.wrappedListItemTitle theme config.item.name
 
                   else
-                    Ui.truncatedListItemTitle theme config.item.name
-                , Ui.mutedCaption theme (metaText config.query config.item)
+                    Typography.truncatedListItemTitle theme config.item.name
+                , Typography.mutedCaption theme (metaText config.query config.item)
                 ]
 
         categoryTags : Element msg
@@ -189,14 +191,14 @@ categoryPills theme device categories =
     else if Ui.isSmall device then
         Element.wrappedRow
             [ Element.width Element.fill
-            , Element.spacing Ui.space4
+            , Element.spacing DesignTokens.space4
             ]
             (List.map (categoryPill theme) pills)
 
     else
         Element.column
             [ Element.width (Element.px 160)
-            , Element.spacing Ui.space4
+            , Element.spacing DesignTokens.space4
             , Element.alignRight
             ]
             (pills
@@ -231,7 +233,7 @@ chunkPairs items =
 pillRow : Theme -> List String -> Element msg
 pillRow theme pills =
     Element.row
-        [ Element.spacing Ui.space4
+        [ Element.spacing DesignTokens.space4
         , Element.alignRight
         ]
         (List.map (categoryPill theme) pills)

@@ -28,8 +28,11 @@ import Lib.Loadable exposing (Loadable(..))
 import Process
 import Task
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
+import View.Product
 import View.Search as SearchView
 
 
@@ -484,14 +487,14 @@ bodyView theme model device =
             Ui.card theme [ Ui.skeletonLoading theme ]
 
         Failure error ->
-            Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Ui.errorBanner theme (Client.displayError error)
                 , Ui.emptyState theme "No foods found. Try a different search."
                 ]
 
         Success items ->
             if List.isEmpty items then
-                Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ Ui.emptyState theme "No foods found. Try a different search."
                     , Ui.primarySubmitButton device
                         theme
@@ -530,7 +533,7 @@ contentView theme device model =
 
 recentsView : Theme -> Device -> Model -> Element Msg
 recentsView theme device model =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Ui.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
@@ -548,8 +551,8 @@ recentsView theme device model =
 
                 else
                     Element.column
-                        [ Element.width Element.fill, Element.spacing Ui.space8 ]
-                        [ Ui.sectionTitle theme "Recent"
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                        [ Typography.sectionTitle theme "Recent"
                         , Ui.listCard theme
                             { rows = List.map (recentItemRow theme device model) items
                             , footer = Nothing
@@ -576,17 +579,17 @@ recentItemRow theme device model item =
         title : Element Msg
         title =
             if Ui.isSmall device then
-                Ui.wrappedListItemTitle theme item.item.name
+                Typography.wrappedListItemTitle theme item.item.name
 
             else
-                Ui.truncatedListItemTitle theme item.item.name
+                Typography.truncatedListItemTitle theme item.item.name
     in
     Ui.listRow
         { onSelect = RecentItemClicked item
-        , leading = [ Ui.macroDotGhost ]
+        , leading = [ View.Product.macroDotGhost ]
         , title = title
         , subtitle =
-            [ Ui.mutedCaption theme
+            [ Typography.mutedCaption theme
                 (Ui.dotSeparated
                     [ item.item.brand
                     , Just (Nutrition.quantityText item.quantity)
@@ -634,7 +637,7 @@ quickAddButton theme config =
                 theme.brandBlueDisabled
             )
         , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded Ui.radiusPill
+        , Border.rounded DesignTokens.radiusPill
         , Element.width (Element.px 44)
         , Element.height (Element.px 44)
         , Element.paddingEach { top = 10, right = 14, bottom = 10, left = 14 }

@@ -16,6 +16,7 @@ import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Ui
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 
@@ -296,8 +297,8 @@ view { model, device, theme } =
             Ready loaded ->
                 [ Ui.maybeErrorBanner theme (requestError loaded.saveState)
                 , Ui.card theme
-                    [ Ui.sectionTitle theme "Daily Targets"
-                    , Ui.mutedParagraph theme (statusMessage loaded.snapshot)
+                    [ Typography.sectionTitle theme "Daily Targets"
+                    , Typography.mutedParagraph theme (statusMessage loaded.snapshot)
                     , Ui.input theme
                         { label = "Calories"
                         , value = loaded.calorieTarget

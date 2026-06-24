@@ -1,13 +1,16 @@
 module View.Product exposing
     ( foodHeader
     , foodNutrientsPer100g
+    , macroDotGhost
     )
 
 import Api.Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 
 
@@ -23,7 +26,7 @@ foodHeader theme food extraMeta =
     Ui.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
-            , title = Ui.truncatedHeader theme food.name
+            , title = Typography.truncatedHeader theme food.name
             , subtitle = Just (metaText food extraMeta)
             , actions = []
             }
@@ -31,8 +34,8 @@ foodHeader theme food extraMeta =
             Element.none
 
           else
-            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
-                [ Ui.macroDotGhost, Ui.chips theme food.categories ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                [ macroDotGhost, Ui.chips theme food.categories ]
         ]
 
 
@@ -55,3 +58,12 @@ foodNutrientsPer100g food =
             }
         )
         food.nutrients
+
+
+macroDotGhost : Element msg
+macroDotGhost =
+    Element.el
+        [ Element.width (Element.px 4)
+        , Element.height (Element.px 24)
+        ]
+        Element.none

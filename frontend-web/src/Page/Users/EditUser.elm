@@ -16,7 +16,9 @@ import Data.User as User exposing (User)
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 
@@ -279,8 +281,8 @@ userInfoView theme model =
 resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
 resetPasswordView device theme model =
     [ Ui.card theme
-        [ Element.el [ Font.medium, Ui.body ] (Element.text "Reset Password")
-        , Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
+        [ Element.el [ Font.medium, Typography.body ] (Element.text "Reset Password")
+        , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
             [ Ui.passwordInput theme
                 { label = "New password"
                 , value = currentPassword model.status
@@ -398,14 +400,14 @@ problemMessage problem =
 userSummaryCard : Theme -> User -> Element msg
 userSummaryCard theme user =
     Ui.card theme
-        [ Element.column [ Element.spacing Ui.space8, Element.width Element.fill ]
-            [ Ui.listItemTitle theme (Element.text user.username)
+        [ Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
+            [ Typography.listItemTitle theme (Element.text user.username)
             , Ui.detailRow theme
                 "Display Name"
-                (Element.el [ Ui.caption ] (Element.text user.displayName))
+                (Element.el [ Typography.caption ] (Element.text user.displayName))
             , Ui.detailRow theme "Status" (Ui.statusBadge theme user.status)
             , Ui.detailRow theme
                 "Created"
-                (Element.el [ Ui.caption ] (Element.text user.createdAt))
+                (Element.el [ Typography.caption ] (Element.text user.createdAt))
             ]
         ]

@@ -17,14 +17,16 @@ we:
 
 -}
 
-import Data.Nutrition
 import Element
 import Expect
 import String
 import Test exposing (Test, describe, test)
 import Ui
+import Ui.Css as Css
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
 import Ui.Theme as Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Charts
 
 
@@ -79,22 +81,22 @@ cssVariables =
                 let
                     cssVars : String
                     cssVars =
-                        Ui.themeCssVariables theme
+                        Css.themeCssVariables theme
                 in
                 Expect.all
                     [ \_ ->
                         String.contains
-                            ("--ui-chip-selected-bg: " ++ Ui.toCssColor theme.chipSelectedBg)
+                            ("--ui-chip-selected-bg: " ++ Css.toCssColor theme.chipSelectedBg)
                             cssVars
                             |> Expect.equal True
                     , \_ ->
                         String.contains
-                            ("--ui-chip-selected-fg: " ++ Ui.toCssColor theme.chipSelectedFg)
+                            ("--ui-chip-selected-fg: " ++ Css.toCssColor theme.chipSelectedFg)
                             cssVars
                             |> Expect.equal True
                     , \_ ->
                         String.contains
-                            ("--ui-focus-ring: " ++ Ui.toCssColor theme.focusRing)
+                            ("--ui-focus-ring: " ++ Css.toCssColor theme.focusRing)
                             cssVars
                             |> Expect.equal True
                     ]
@@ -150,10 +152,10 @@ truncationHelpers =
         , test "truncatedText renders an empty string" <|
             \_ -> Ui.truncatedText phone "" |> pass
         , test "truncatedHeader renders a long heading on phone" <|
-            \_ -> Ui.truncatedHeader theme "Roasted Sweet Potato With Cumin Yogurt" |> pass
+            \_ -> Typography.truncatedHeader theme "Roasted Sweet Potato With Cumin Yogurt" |> pass
         , test "truncatedListItemTitle renders a long label on phone" <|
             \_ ->
-                Ui.truncatedListItemTitle theme "Roasted Sweet Potato With Cumin Yogurt"
+                Typography.truncatedListItemTitle theme "Roasted Sweet Potato With Cumin Yogurt"
                     |> pass
         ]
 
@@ -186,12 +188,12 @@ renderingSmoke =
         , test "fieldLabel renders with a label" <|
             \_ -> Ui.fieldLabel theme "Amount" |> pass
         , test "accentDot produces a value for any color" <|
-            \_ -> Ui.accentDot Ui.accentPink |> pass
+            \_ -> Ui.accentDot DesignTokens.accentPink |> pass
         , test "coloredPill uses the provided bg and fg" <|
             \_ ->
                 Ui.coloredPill
                     { label = "Active"
-                    , bg = Ui.accentSoftGreen
+                    , bg = DesignTokens.accentSoftGreen
                     , fg = Element.rgb255 50 110 60
                     }
                     |> pass
@@ -247,18 +249,6 @@ renderingSmoke =
                     , { label = "Delete", onPress = (), tone = Ui.DangerAction }
                     ]
                     |> pass
-        , test "macroColor resolves Protein to the theme protein accent" <|
-            \_ ->
-                Ui.macroColor theme Data.Nutrition.Protein
-                    |> Expect.equal theme.proteinAccent
-        , test "macroColor resolves Carbs to the theme carbs accent" <|
-            \_ ->
-                Ui.macroColor theme Data.Nutrition.Carbs
-                    |> Expect.equal theme.carbsAccent
-        , test "macroColor resolves Fat to the theme fat accent" <|
-            \_ ->
-                Ui.macroColor theme Data.Nutrition.Fat
-                    |> Expect.equal theme.fatAccent
         ]
 
 
@@ -283,8 +273,8 @@ chartSmoke =
             \_ ->
                 View.Charts.verticalBarChart
                     { baselineColor = theme.divider }
-                    [ { label = "M", value = 10, color = Ui.accentPink }
-                    , { label = "T", value = 20, color = Ui.accentYellow }
+                    [ { label = "M", value = 10, color = DesignTokens.accentPink }
+                    , { label = "T", value = 20, color = DesignTokens.accentYellow }
                     ]
                     |> pass
         ]

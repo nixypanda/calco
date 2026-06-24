@@ -4,6 +4,7 @@ import Api.Foods exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Device, Element)
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 
 
@@ -23,7 +24,7 @@ dropdown :
         }
     -> Element msg
 dropdown theme device config =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.input theme
             { label = config.amountLabel
             , value = config.amount

@@ -26,6 +26,7 @@ import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -256,7 +257,7 @@ view : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> Eleme
 view theme device food units model =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space16
+        , Element.spacing DesignTokens.space16
         ]
         [ Ui.maybeErrorBanner theme (submitError model.submitState)
         , Ui.card theme

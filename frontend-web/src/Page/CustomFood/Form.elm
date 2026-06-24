@@ -35,8 +35,10 @@ import Element exposing (Device, Element)
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.QuantityInput
 
 
@@ -692,7 +694,7 @@ addCategoryTag raw selected =
 
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view theme device nutrients units form =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard theme device form
         , portionInfoCard theme device form units
@@ -740,13 +742,13 @@ nutrientsCard theme device form nutrients =
     Ui.section theme
         { header =
             Just
-                (Element.column [ Element.spacing Ui.space8 ]
-                    [ Ui.subsectionTitle theme "Nutrients", addRowHint theme ]
+                (Element.column [ Element.spacing DesignTokens.space8 ]
+                    [ Typography.subsectionTitle theme "Nutrients", addRowHint theme ]
                 )
         , body =
             [ Element.column
                 [ Element.width Element.fill
-                , Element.spacing Ui.space8
+                , Element.spacing DesignTokens.space8
                 ]
                 (List.indexedMap
                     (nutrientRowView theme device nutrients form.openDropdown)
@@ -760,14 +762,14 @@ nutrientsCard theme device form nutrients =
 servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 servingsCard theme device form units =
     Ui.section theme
-        { header = Just (Ui.subsectionTitle theme "Servings")
+        { header = Just (Typography.subsectionTitle theme "Servings")
         , body =
             [ Element.column
                 [ Element.width Element.fill
-                , Element.spacing Ui.space12
+                , Element.spacing DesignTokens.space12
                 ]
                 (if List.isEmpty form.servings then
-                    [ Ui.mutedParagraph theme
+                    [ Typography.mutedParagraph theme
                         "Add a serving to define portions in cups, pieces, or other units."
                     ]
 
@@ -784,9 +786,9 @@ servingsCard theme device form units =
 categoryInputView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
 categoryInputView theme device open input =
     Element.column [ Element.width Element.fill ]
-        [ Element.row [ Element.spacing Ui.space4 ]
+        [ Element.row [ Element.spacing DesignTokens.space4 ]
             [ Ui.fieldLabel theme "Categories"
-            , Ui.mutedCaption theme "Enter (or click Add) to tag this food."
+            , Typography.mutedCaption theme "Enter (or click Add) to tag this food."
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
@@ -798,7 +800,7 @@ categoryInputView theme device open input =
                 )
             , Element.el
                 [ Element.paddingEach
-                    { top = Ui.space4, left = Ui.space4, bottom = 0, right = 0 }
+                    { top = DesignTokens.space4, left = DesignTokens.space4, bottom = 0, right = 0 }
                 ]
                 (addCategoryButton theme device input)
             ]
@@ -817,13 +819,13 @@ addCategoryButton theme device input =
 chipRowView : Theme -> Device -> List String -> Element Msg
 chipRowView theme device tags =
     if List.isEmpty tags then
-        Ui.mutedCaption theme "No categories yet"
+        Typography.mutedCaption theme "No categories yet"
 
     else
         Element.wrappedRow
             [ Element.width Element.fill
-            , Element.paddingXY 0 Ui.space4
-            , Element.spacing Ui.space8
+            , Element.paddingXY 0 DesignTokens.space4
+            , Element.spacing DesignTokens.space8
             ]
             (List.map (chipView theme device) tags)
 
@@ -871,7 +873,7 @@ suggestionRow theme device s =
     Ui.optionRow device
         theme
         { label = s.value
-        , trailing = Just (Ui.mutedCaption theme (String.fromInt s.count ++ " uses"))
+        , trailing = Just (Typography.mutedCaption theme (String.fromInt s.count ++ " uses"))
         , selected = False
         , onPress = AcceptCategorySuggestion s.value
         }
@@ -913,12 +915,12 @@ nutrientRowView theme device nutrients openDropdown index row =
     if Ui.isSmall device then
         Element.column
             [ Element.width Element.fill
-            , Element.spacing Ui.space8
+            , Element.spacing DesignTokens.space8
             ]
             [ selector
             , Element.row
                 [ Element.width Element.fill
-                , Element.spacing Ui.space8
+                , Element.spacing DesignTokens.space8
                 ]
                 [ amountInputWithUnit theme index row
                 , removeButton
@@ -928,7 +930,7 @@ nutrientRowView theme device nutrients openDropdown index row =
     else
         Element.row
             [ Element.width Element.fill
-            , Element.spacing Ui.space8
+            , Element.spacing DesignTokens.space8
             ]
             [ selector
             , amountInputWithUnit theme index row
@@ -970,7 +972,7 @@ servingRowView :
 servingRowView theme device units openDropdown index row =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space8
+        , Element.spacing DesignTokens.space8
         ]
         [ Ui.input theme
             { label = "Label"
@@ -979,7 +981,7 @@ servingRowView theme device units openDropdown index row =
             }
         , Element.row
             [ Element.width Element.fill
-            , Element.spacing Ui.space8
+            , Element.spacing DesignTokens.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Ui.input theme
@@ -1025,11 +1027,11 @@ rowActionButton :
 rowActionButton theme device config =
     Element.el
         [ Element.width (Element.px 44)
-        , Element.paddingEach { top = Ui.space16, right = 0, bottom = 0, left = 0 }
+        , Element.paddingEach { top = DesignTokens.space16, right = 0, bottom = 0, left = 0 }
         ]
         (Ui.dangerIconButton device theme config)
 
 
 addRowHint : Theme -> Element msg
 addRowHint theme =
-    Ui.mutedCaption theme "Enter calories and macros (per 100g) to save."
+    Typography.mutedCaption theme "Enter calories and macros (per 100g) to save."

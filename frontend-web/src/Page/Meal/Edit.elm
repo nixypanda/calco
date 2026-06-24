@@ -18,6 +18,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import View.Nutrients
     exposing
@@ -414,6 +415,6 @@ view { model, device, theme } =
 
 nutritionView : Theme -> Device -> LoadedModel -> Element Msg
 nutritionView theme device loaded =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ View.Nutrients.preview theme device loaded.nutrition
         ]

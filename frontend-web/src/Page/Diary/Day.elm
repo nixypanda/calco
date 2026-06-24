@@ -31,8 +31,11 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Css as Css
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
 import Ui.Theme exposing (Mode(..), Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 
 
@@ -637,7 +640,7 @@ dateCard theme model device =
     Ui.card theme
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing Ui.space12
+            , Element.spacing DesignTokens.space12
             ]
             [ Ui.iconButton device
                 theme
@@ -646,7 +649,7 @@ dateCard theme model device =
                 [ Element.width Element.fill
                 , Font.center
                 ]
-                (Ui.sectionTitle theme (LocalDate.display model.currentDate))
+                (Typography.sectionTitle theme (LocalDate.display model.currentDate))
             , if canGoNext then
                 Ui.iconButton device
                     theme
@@ -658,7 +661,7 @@ dateCard theme model device =
         , Ui.hairline theme
         , Element.column
             [ Element.width Element.fill
-            , Element.paddingEach { top = Ui.space8, right = 0, bottom = 0, left = 0 }
+            , Element.paddingEach { top = DesignTokens.space8, right = 0, bottom = 0, left = 0 }
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
@@ -672,29 +675,29 @@ dateCard theme model device =
 
 totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
 totalsView theme targets summary =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
-        [ Ui.macroBar theme
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ View.Nutrients.macroBar theme
             { label = "Calories"
             , value = Nutrition.caloriesFrom summary
             , unit = "kcal"
             , color = theme.calorieAccent
             , max = targets.calorieTarget
             }
-        , Ui.macroBar theme
+        , View.Nutrients.macroBar theme
             { label = "Protein"
             , value = summaryAmount "PROTEIN_G" summary
             , unit = "g"
             , color = theme.proteinAccent
             , max = targets.proteinTargetG
             }
-        , Ui.macroBar theme
+        , View.Nutrients.macroBar theme
             { label = "Carbs"
             , value = summaryAmount "CARBS_G" summary
             , unit = "g"
             , color = theme.carbsAccent
             , max = targets.carbsTargetG
             }
-        , Ui.macroBar theme
+        , View.Nutrients.macroBar theme
             { label = "Fat"
             , value = summaryAmount "FAT_G" summary
             , unit = "g"
@@ -803,7 +806,7 @@ logGroupsView theme device model logs =
         otherSection =
             section Other
     in
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ slotView theme device model (section Breakfast)
         , slotView theme device model (section Lunch)
         , slotView theme device model (section Dinner)
@@ -877,7 +880,7 @@ emptySlotBody : Element Msg -> Element Msg
 emptySlotBody content =
     Element.el
         [ Element.width Element.fill
-        , Element.padding Ui.space12
+        , Element.padding DesignTokens.space12
         ]
         (Element.el
             [ Element.width Element.fill
@@ -892,7 +895,7 @@ latestSlotButton device theme label msg =
     Input.button
         [ Element.width Element.fill
         , Element.height (Element.px 24)
-        , Border.rounded Ui.radiusPill
+        , Border.rounded DesignTokens.radiusPill
         , Font.color theme.brandBlue
         , Font.medium
         , Font.center
@@ -943,17 +946,17 @@ mealSlotHeader theme macroMode section totals =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.padding Ui.space12
-        , Element.spacing Ui.space12
+        , Element.padding DesignTokens.space12
+        , Element.spacing DesignTokens.space12
         ]
-        [ Element.column [ Element.width Element.fill, Element.spacing Ui.space4 ]
-            [ Ui.sectionTitle theme (MealSlot.label section.slot)
+        [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+            [ Typography.sectionTitle theme (MealSlot.label section.slot)
             , Input.button []
                 { onPress = Just MacroModeToggled
-                , label = Ui.mutedCaption theme (macroSummary macroMode totals)
+                , label = Typography.mutedCaption theme (macroSummary macroMode totals)
                 }
             ]
-        , Ui.mutedCaption theme
+        , Typography.mutedCaption theme
             (String.fromInt (round sectionKcal) ++ " kcal")
         ]
 
@@ -981,7 +984,7 @@ mealSlotFade theme =
                         ++ "rgba(0,0,0,0.25) 0%, "
                         ++ "rgba(0,0,0,0.55) 45%, "
                         ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ Ui.toCssColor theme.cardBg
+                        ++ Css.toCssColor theme.cardBg
                         ++ " 100%)"
     in
     Element.el
@@ -1098,21 +1101,21 @@ logRow : Theme -> FoodLog -> Element Msg
 logRow theme log =
     Input.button
         [ Element.width Element.fill
-        , Element.padding Ui.space12
+        , Element.padding DesignTokens.space12
         ]
         { onPress = Just (LogClicked log.id)
         , label =
-            Element.row [ Element.width Element.fill, Element.spacing Ui.space12 ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ View.Nutrients.macroDot theme log.nutrients
                 , Element.el
                     [ Element.width Element.fill
                     , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
                     ]
-                    (Ui.wrappedListItemTitle theme log.item.name)
+                    (Typography.wrappedListItemTitle theme log.item.name)
                 , Element.row
-                    [ Element.alignRight, Element.spacing Ui.space12 ]
-                    [ Ui.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
-                    , Ui.mutedCaption theme
+                    [ Element.alignRight, Element.spacing DesignTokens.space12 ]
+                    [ Typography.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
+                    , Typography.mutedCaption theme
                         (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal")
                     ]
                 ]

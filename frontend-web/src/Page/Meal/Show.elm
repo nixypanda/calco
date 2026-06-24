@@ -21,7 +21,9 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients exposing (NutritionInput, NutritionState(..), defaultNutritionInput)
 import View.QuantityInput
@@ -307,7 +309,7 @@ nextProductNameRequest completedId loaded =
 componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
-        Ui.listItemTitle theme
+        Typography.listItemTitle theme
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -498,7 +500,7 @@ view { model, device, theme } =
                     Loaded loaded ->
                         case loaded.meal.notes of
                             Just notes ->
-                                Ui.mutedParagraph theme notes
+                                Typography.mutedParagraph theme notes
 
                             Nothing ->
                                 Element.none
@@ -542,20 +544,20 @@ headerView theme model =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
                             (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
-                , title = Ui.truncatedHeader theme loaded.meal.name
+                , title = Typography.truncatedHeader theme loaded.meal.name
                 , subtitle = Nothing
                 , actions = []
                 }
 
         _ ->
-            Ui.pageTitle theme "Meal"
+            Typography.pageTitle theme "Meal"
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Ui.section theme
-            { header = Just (Ui.subsectionTitle theme "Components")
+            { header = Just (Typography.subsectionTitle theme "Components")
             , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
             }
@@ -596,17 +598,17 @@ componentView theme loaded component =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.spacing Ui.space12
+        , Element.spacing DesignTokens.space12
         ]
         [ Element.el
             [ Element.width (Element.px 12)
-            , Element.paddingEach { top = Ui.space2, right = 0, bottom = 0, left = 0 }
+            , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
             , Element.alignTop
             ]
             macroDot
         , Element.column
             [ Element.width Element.fill
-            , Element.spacing Ui.space4
+            , Element.spacing DesignTokens.space4
             , Element.alignTop
             ]
             [ componentNameView theme loaded component.item.id
@@ -624,7 +626,7 @@ nutritionView theme device loaded =
         input =
             nutritionInput loaded.nutrition
     in
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.card theme
             [ View.QuantityInput.dropdown theme
                 device

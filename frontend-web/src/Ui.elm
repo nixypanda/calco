@@ -4,15 +4,10 @@ module Ui exposing
     , SubmitButtonConfig
     , SubmitState(..)
     , accentDot
-    , accentPink
-    , accentSoftGreen
-    , accentYellow
     , badge
-    , body
     , bottomActionButtons
     , bottomNavBar
     , bottomNavTab
-    , caption
     , card
     , chip
     , chipBackground
@@ -41,58 +36,32 @@ module Ui exposing
     , layout
     , linearProgress
     , listCard
-    , listItemTitle
     , listRow
     , loading
-    , macroBar
-    , macroColor
-    , macroDotGhost
     , maybeErrorBanner
-    , maybeMutedParagraph
     , menuCard
     , modalOverlay
-    , mutedBody
-    , mutedCaption
-    , mutedParagraph
     , optionRow
     , pageContainer
     , pageHeader
-    , pageTitle
     , passwordInput
     , primarySubmitButton
-    , radiusPill
-    , radiusTight
     , removableChip
     , scrimOverlay
     , searchInput
     , section
-    , sectionTitle
     , selectDropdown
     , skeletonBar
     , skeletonLoading
-    , space12
-    , space16
-    , space2
-    , space24
-    , space4
-    , space8
     , statBlock
     , statBlockGroup
     , statusBadge
     , submittingOrIdle
-    , subsectionTitle
     , suggestionList
-    , tableHeader
-    , themeCssVariables
-    , toCssColor
     , toggleSwitch
-    , truncatedHeader
-    , truncatedListItemTitle
     , truncatedText
-    , wrappedListItemTitle
     )
 
-import Data.Nutrition
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
@@ -103,222 +72,35 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
+import Ui.DesignTokens
+    exposing
+        ( radiusCard
+        , radiusControl
+        , radiusHairline
+        , radiusHero
+        , radiusPill
+        , radiusSmall
+        , space12
+        , space16
+        , space2
+        , space20
+        , space4
+        , space8
+        )
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
-
-
-
--- Accent palette for non-semantic decorative use
-
-
-accentPink : Element.Color
-accentPink =
-    Element.rgb255 255 138 170
-
-
-accentYellow : Element.Color
-accentYellow =
-    Element.rgb255 255 210 80
-
-
-accentSoftGreen : Element.Color
-accentSoftGreen =
-    Element.rgb255 200 235 200
-
-
-
--- Spacing scale
-
-
-space2 : Int
-space2 =
-    2
-
-
-space4 : Int
-space4 =
-    4
-
-
-space8 : Int
-space8 =
-    8
-
-
-space12 : Int
-space12 =
-    12
-
-
-space16 : Int
-space16 =
-    16
-
-
-space20 : Int
-space20 =
-    20
-
-
-space24 : Int
-space24 =
-    24
-
-
-
--- Border radius scale
-
-
-radiusHairline : Int
-radiusHairline =
-    2
-
-
-radiusTight : Int
-radiusTight =
-    4
-
-
-radiusSmall : Int
-radiusSmall =
-    8
-
-
-radiusControl : Int
-radiusControl =
-    12
-
-
-radiusCard : Int
-radiusCard =
-    20
-
-
-radiusHero : Int
-radiusHero =
-    24
-
-
-radiusPill : Int
-radiusPill =
-    999
-
-
-
--- Typography
-
-
-body : Element.Attribute msg
-body =
-    Font.size 16
-
-
-caption : Element.Attribute msg
-caption =
-    Font.size 13
-
-
-sizePageTitle : Element.Attribute msg
-sizePageTitle =
-    Font.size 32
-
-
-sizeSectionTitle : Element.Attribute msg
-sizeSectionTitle =
-    Font.size 24
-
-
-sizeSubsectionTitle : Element.Attribute msg
-sizeSubsectionTitle =
-    Font.size 20
-
-
-pageTitle : Theme -> String -> Element msg
-pageTitle theme text =
-    Element.el
-        [ sizePageTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 1
-        ]
-        (Element.text text)
-
-
-sectionTitle : Theme -> String -> Element msg
-sectionTitle theme text =
-    Element.el
-        [ sizeSectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 2
-        ]
-        (Element.text text)
-
-
-subsectionTitle : Theme -> String -> Element msg
-subsectionTitle theme text =
-    Element.el
-        [ sizeSubsectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 3
-        ]
-        (Element.text text)
-
-
-listItemTitle : Theme -> Element msg -> Element msg
-listItemTitle theme child =
-    Element.el
-        [ body
-        , Font.bold
-        , Font.color theme.textPrimary
-        ]
-        child
-
-
-truncatedListItemTitle : Theme -> String -> Element msg
-truncatedListItemTitle theme name =
-    Element.el
-        [ Element.width Element.fill ]
-        (listItemTitle theme
-            (Element.el
-                [ Element.width Element.fill
-                , Element.clip
-                , uiClass "ui-text-ellipsis"
-                ]
-                (Element.text name)
-            )
+import Ui.Typography
+    exposing
+        ( body
+        , caption
+        , minWidthZero
+        , mutedBody
+        , mutedParagraph
+        , sectionTitle
+        , sizePageTitle
+        , subsectionTitle
+        , uiClass
         )
-
-
-wrappedListItemTitle : Theme -> String -> Element msg
-wrappedListItemTitle theme name =
-    listItemTitle theme
-        (Element.paragraph
-            [ Element.width Element.fill
-            , minWidthZero
-            ]
-            [ Element.text name ]
-        )
-
-
-mutedCaption : Theme -> String -> Element msg
-mutedCaption theme text =
-    Element.el
-        [ caption
-        , Font.color theme.textMuted
-        ]
-        (Element.text text)
-
-
-tableHeader : Theme -> String -> Element msg
-tableHeader theme text =
-    Element.el
-        [ body
-        , Font.bold
-        , Font.color theme.textMuted
-        ]
-        (Element.text text)
 
 
 
@@ -390,16 +172,6 @@ hoverEffect device attrs =
 
     else
         Element.mouseOver attrs
-
-
-uiClass : String -> Element.Attribute msg
-uiClass className =
-    Element.htmlAttribute (Html.Attributes.class className)
-
-
-minWidthZero : Element.Attribute msg
-minWidthZero =
-    Element.htmlAttribute (Html.Attributes.style "min-width" "0")
 
 
 truncatedText : Device -> String -> Element msg
@@ -553,15 +325,6 @@ pageHeader theme config =
         , minWidthZero
         ]
         [ leadingElement, titleColumn, actionsRow ]
-
-
-macroDotGhost : Element msg
-macroDotGhost =
-    Element.el
-        [ Element.width (Element.px 4)
-        , Element.height (Element.px 24)
-        ]
-        Element.none
 
 
 section :
@@ -1119,34 +882,6 @@ inputWithSuffix theme config =
 -- Display
 
 
-mutedBody : Theme -> String -> Element msg
-mutedBody theme text =
-    Element.el
-        [ Font.color theme.textMuted
-        , body
-        ]
-        (Element.text text)
-
-
-mutedParagraph : Theme -> String -> Element msg
-mutedParagraph theme text =
-    Element.paragraph
-        [ Font.color theme.textMuted
-        , body
-        ]
-        [ Element.text text ]
-
-
-maybeMutedParagraph : Theme -> Maybe String -> Element msg
-maybeMutedParagraph theme maybeText =
-    case maybeText of
-        Just text ->
-            mutedParagraph theme text
-
-        Nothing ->
-            Element.none
-
-
 modalOverlay :
     Theme
     ->
@@ -1537,78 +1272,6 @@ selectDropdown device theme config =
         ]
 
 
-macroColor : Theme -> Data.Nutrition.Macro -> Element.Color
-macroColor theme m =
-    case m of
-        Data.Nutrition.Protein ->
-            theme.proteinAccent
-
-        Data.Nutrition.Carbs ->
-            theme.carbsAccent
-
-        Data.Nutrition.Fat ->
-            theme.fatAccent
-
-
-macroBar :
-    Theme
-    ->
-        { label : String
-        , value : Float
-        , unit : String
-        , color : Element.Color
-        , max : Float
-        }
-    -> Element msg
-macroBar theme config =
-    let
-        pct : Float
-        pct =
-            if config.max > 0 then
-                min 1.0 (config.value / config.max)
-
-            else
-                0
-
-        filled : Int
-        filled =
-            max 0 (round (pct * 100))
-
-        remaining : Int
-        remaining =
-            max 0 (100 - filled)
-    in
-    Element.column [ Element.width Element.fill, Element.spacing space4 ]
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.el
-                [ Font.bold, body, Font.color theme.textPrimary ]
-                (Element.text config.label)
-            , Element.el
-                [ body
-                , Font.color theme.textMuted
-                , Element.alignRight
-                ]
-                (Element.text (String.fromInt (round config.value) ++ " " ++ config.unit))
-            ]
-        , Element.row
-            [ Element.width Element.fill
-            , Element.height (Element.px 10)
-            , Background.color theme.inputFill
-            , Border.rounded radiusPill
-            , Element.clip
-            ]
-            [ Element.el
-                [ Element.width (Element.fillPortion filled)
-                , Element.height Element.fill
-                , Background.color config.color
-                , Border.rounded radiusPill
-                ]
-                Element.none
-            , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
-            ]
-        ]
-
-
 skeletonLoading : Theme -> Element msg
 skeletonLoading theme =
     Element.column [ Element.width Element.fill, Element.spacing space12 ]
@@ -1628,19 +1291,6 @@ skeletonBar theme =
         , uiClass "ui-skeleton"
         ]
         Element.none
-
-
-truncatedHeader : Theme -> String -> Element msg
-truncatedHeader theme heading =
-    Element.paragraph
-        [ sizeSectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 2
-        , Element.width Element.fill
-        , minWidthZero
-        ]
-        [ Element.text heading ]
 
 
 iconButton : Device -> Theme -> { icon : Icon, title : String, onPress : msg } -> Element msg
@@ -1820,55 +1470,6 @@ removableChip device theme config =
                         }
                     )
             }
-        ]
-
-
-toCssColor : Element.Color -> String
-toCssColor color =
-    let
-        { red, green, blue, alpha } =
-            Element.toRgb color
-    in
-    "rgba("
-        ++ String.fromInt (round (red * 255))
-        ++ ", "
-        ++ String.fromInt (round (green * 255))
-        ++ ", "
-        ++ String.fromInt (round (blue * 255))
-        ++ ", "
-        ++ String.fromFloat alpha
-        ++ ")"
-
-
-themeCssVariables : Theme -> String
-themeCssVariables theme =
-    String.join "; "
-        [ "--ui-page-bg: " ++ toCssColor theme.pageBg
-        , "--ui-card-bg: " ++ toCssColor theme.cardBg
-        , "--ui-text-primary: " ++ toCssColor theme.textPrimary
-        , "--ui-text-muted: " ++ toCssColor theme.textMuted
-        , "--ui-text-medium: " ++ toCssColor theme.textMedium
-        , "--ui-divider: " ++ toCssColor theme.divider
-        , "--ui-input-fill: " ++ toCssColor theme.inputFill
-        , "--ui-brand-blue: " ++ toCssColor theme.brandBlue
-        , "--ui-brand-blue-pressed: " ++ toCssColor theme.brandBluePressed
-        , "--ui-brand-blue-soft: " ++ toCssColor theme.brandBlueSoft
-        , "--ui-brand-blue-disabled: " ++ toCssColor theme.brandBlueDisabled
-        , "--ui-danger-bg: " ++ toCssColor theme.dangerBg
-        , "--ui-danger-fg: " ++ toCssColor theme.dangerFg
-        , "--ui-danger-solid: " ++ toCssColor theme.dangerSolid
-        , "--ui-drawer-selection-bg: " ++ toCssColor theme.drawerSelectionBg
-        , "--ui-status-green: " ++ toCssColor theme.statusGreen
-        , "--ui-status-red: " ++ toCssColor theme.statusRed
-        , "--ui-status-active-bg: " ++ toCssColor theme.statusActiveBg
-        , "--ui-status-disabled-bg: " ++ toCssColor theme.statusDisabledBg
-        , "--ui-card-shadow: " ++ theme.cardShadow
-        , "--ui-chip-bg: " ++ toCssColor theme.chipBg
-        , "--ui-chip-border: " ++ toCssColor theme.chipBorder
-        , "--ui-chip-fg: " ++ toCssColor theme.textPrimary
-        , "--ui-chip-selected-bg: " ++ toCssColor theme.chipSelectedBg
-        , "--ui-chip-selected-fg: " ++ toCssColor theme.chipSelectedFg
-        , "--ui-focus-ring: " ++ toCssColor theme.focusRing
         ]
 
 

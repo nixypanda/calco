@@ -13,6 +13,7 @@ import Data.User exposing (User)
 import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 
@@ -111,7 +112,7 @@ userListRow theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Ui.listItemTitle theme (Element.text config.user.username)
-        , subtitle = [ Ui.mutedBody theme config.user.displayName ]
+        , title = Typography.listItemTitle theme (Element.text config.user.username)
+        , subtitle = [ Typography.mutedBody theme config.user.displayName ]
         , trailing = [ Ui.statusBadge theme config.user.status ]
         }

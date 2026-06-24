@@ -2,6 +2,8 @@ module View.Nutrients exposing
     ( NutritionInput
     , NutritionState(..)
     , defaultNutritionInput
+    , macroBar
+    , macroColor
     , macroDot
     , mapNutritionInput
     , nutrientLabel
@@ -17,7 +19,9 @@ import Element.Border as Border
 import Element.Font as Font
 import Lib.Number as Number
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 type alias NutritionInput =
@@ -134,7 +138,7 @@ nutrientLabel code =
 
 macroDot : Theme -> List NutrientAmount -> Element msg
 macroDot theme nutrients =
-    case nutrients |> Nutrition.dominantMacro |> Maybe.map (Ui.macroColor theme) of
+    case nutrients |> Nutrition.dominantMacro |> Maybe.map (macroColor theme) of
         Just c ->
             Ui.accentDot c
 
@@ -241,7 +245,7 @@ skeletonPreview theme =
 
 preview : Theme -> Device -> NutritionState -> Element msg
 preview theme device state =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
                 skeletonPreview theme
@@ -304,7 +308,7 @@ macroBreakdownView theme device nutrients =
         portions =
             macroPortions nutrients
     in
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ macroBarRow theme 24 portions
         , if Ui.isSmall device then
             Element.none
@@ -362,7 +366,7 @@ macroBarRow theme height portions =
         [ Element.width Element.fill
         , Element.height (Element.px height)
         , Background.color theme.divider
-        , Border.rounded Ui.radiusPill
+        , Border.rounded DesignTokens.radiusPill
         , Element.clip
         ]
         [ barSegment theme.proteinAccent portions.proteinPct
@@ -384,20 +388,20 @@ barSegment color pct =
 macroLegend : Theme -> MacroPortions -> Element msg
 macroLegend theme portions =
     Element.row
-        [ Element.width Element.fill, Element.spacing Ui.space16 ]
-        [ Element.row [ Element.spacing Ui.space4 ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Element.row [ Element.spacing DesignTokens.space4 ]
             [ legendDot theme.proteinAccent
-            , Element.el [ Ui.body ]
+            , Element.el [ Typography.body ]
                 (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
             ]
-        , Element.row [ Element.spacing Ui.space4 ]
+        , Element.row [ Element.spacing DesignTokens.space4 ]
             [ legendDot theme.carbsAccent
-            , Element.el [ Ui.body ]
+            , Element.el [ Typography.body ]
                 (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
             ]
-        , Element.row [ Element.spacing Ui.space4 ]
+        , Element.row [ Element.spacing DesignTokens.space4 ]
             [ legendDot theme.fatAccent
-            , Element.el [ Ui.body ]
+            , Element.el [ Typography.body ]
                 (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
             ]
         ]
@@ -409,7 +413,7 @@ legendDot color =
         [ Element.width (Element.px 10)
         , Element.height (Element.px 10)
         , Background.color color
-        , Border.rounded Ui.radiusPill
+        , Border.rounded DesignTokens.radiusPill
         ]
         Element.none
 
@@ -423,44 +427,44 @@ nutrientsTableInner theme nutrients =
         { data = nutrients
         , columns =
             [ { header =
-                    Element.el [ Element.paddingXY 0 Ui.space8 ]
-                        (Ui.tableHeader theme "Nutrient")
+                    Element.el [ Element.paddingXY 0 DesignTokens.space8 ]
+                        (Typography.tableHeader theme "Nutrient")
               , width = Element.fill
               , view =
                     \n ->
                         Element.el
-                            [ Ui.body, Element.paddingXY 0 Ui.space8 ]
+                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
                             (Element.text (nutrientLabel n.code))
               }
             , { header =
                     Element.el
                         [ Font.alignRight
                         , Element.paddingEach
-                            { top = Ui.space8, bottom = Ui.space8, left = 0, right = Ui.space8 }
+                            { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = DesignTokens.space8 }
                         ]
-                        (Ui.tableHeader theme "Amount")
+                        (Typography.tableHeader theme "Amount")
               , width = Element.shrink
               , view =
                     \n ->
                         Element.el
-                            [ Ui.body
+                            [ Typography.body
                             , Font.alignRight
                             , Element.paddingEach
-                                { top = Ui.space8, bottom = Ui.space8, left = 0, right = Ui.space8 }
+                                { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = DesignTokens.space8 }
                             ]
                             (Element.text (formatAmount n.amount))
               }
             , { header =
                     Element.el
                         [ Element.paddingEach
-                            { top = Ui.space8, bottom = Ui.space8, left = 0, right = 0 }
+                            { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = 0 }
                         ]
-                        (Ui.tableHeader theme "Unit")
+                        (Typography.tableHeader theme "Unit")
               , width = Element.shrink
               , view =
                     \n ->
                         Element.el
-                            [ Ui.body, Element.paddingXY 0 Ui.space8 ]
+                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
                             (Element.text n.unit)
               }
             ]
@@ -474,7 +478,7 @@ the prior pattern of two stacked cards.
 nutritionCard : Theme -> Device -> List NutrientAmount -> Element msg
 nutritionCard theme device nutrients =
     Ui.section theme
-        { header = Just (Ui.subsectionTitle theme "Nutrition")
+        { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
             [ macroBreakdownView theme device nutrients
             , Ui.hairline theme
@@ -482,6 +486,78 @@ nutritionCard theme device nutrients =
             ]
         , footer = Nothing
         }
+
+
+macroColor : Theme -> Nutrition.Macro -> Element.Color
+macroColor theme m =
+    case m of
+        Nutrition.Protein ->
+            theme.proteinAccent
+
+        Nutrition.Carbs ->
+            theme.carbsAccent
+
+        Nutrition.Fat ->
+            theme.fatAccent
+
+
+macroBar :
+    Theme
+    ->
+        { label : String
+        , value : Float
+        , unit : String
+        , color : Element.Color
+        , max : Float
+        }
+    -> Element msg
+macroBar theme config =
+    let
+        pct : Float
+        pct =
+            if config.max > 0 then
+                min 1.0 (config.value / config.max)
+
+            else
+                0
+
+        filled : Int
+        filled =
+            max 0 (round (pct * 100))
+
+        remaining : Int
+        remaining =
+            max 0 (100 - filled)
+    in
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+        [ Element.row [ Element.width Element.fill ]
+            [ Element.el
+                [ Font.bold, Typography.body, Font.color theme.textPrimary ]
+                (Element.text config.label)
+            , Element.el
+                [ Typography.body
+                , Font.color theme.textMuted
+                , Element.alignRight
+                ]
+                (Element.text (String.fromInt (round config.value) ++ " " ++ config.unit))
+            ]
+        , Element.row
+            [ Element.width Element.fill
+            , Element.height (Element.px 10)
+            , Background.color theme.inputFill
+            , Border.rounded DesignTokens.radiusPill
+            , Element.clip
+            ]
+            [ Element.el
+                [ Element.width (Element.fillPortion filled)
+                , Element.height Element.fill
+                , Background.color config.color
+                , Border.rounded DesignTokens.radiusPill
+                ]
+                Element.none
+            , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
+            ]
+        ]
 
 
 formatAmount : String -> String

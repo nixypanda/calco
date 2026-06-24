@@ -16,6 +16,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
@@ -289,7 +290,7 @@ loadedView theme device loaded =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space16
+        , Element.spacing DesignTokens.space16
         ]
         [ View.Product.foodHeader theme food []
         , View.Nutrients.nutritionCard theme device nutrients

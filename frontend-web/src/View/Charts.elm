@@ -11,7 +11,7 @@ without growing into a kitchen sink.
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui
+import Ui.DesignTokens as DesignTokens
 
 
 {-| A stub vertical bar chart. Renders 5–7 colored bars above a thin
@@ -52,11 +52,11 @@ verticalBarChart config bars =
                 [ Element.width (Element.px barWidth)
                 , Element.height (Element.px (max 4 (round bar.value)))
                 , Background.color bar.color
-                , Border.rounded Ui.radiusTight
+                , Border.rounded DesignTokens.radiusTight
                 ]
                 Element.none
     in
-    Element.column [ Element.spacing Ui.space8 ]
+    Element.column [ Element.spacing DesignTokens.space8 ]
         [ Element.row [ Element.spacing barGap ]
             (List.map barElement bars)
         , baseline

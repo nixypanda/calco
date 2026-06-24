@@ -12,7 +12,9 @@ module Page.Users.CredentialForm exposing
 
 import Element exposing (Device, Element)
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 
@@ -140,11 +142,11 @@ view config { model, device, theme } =
         ]
         (Element.column
             [ Element.width Element.fill
-            , Element.spacing Ui.space16
+            , Element.spacing DesignTokens.space16
             ]
             [ Ui.card theme
-                [ Ui.subsectionTitle theme config.title
-                , Ui.maybeMutedParagraph theme config.description
+                [ Typography.subsectionTitle theme config.title
+                , Typography.maybeMutedParagraph theme config.description
                 , Ui.input theme
                     { label = "Username"
                     , value = form.username

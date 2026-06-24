@@ -17,6 +17,7 @@ import Page
 import Task
 import Time
 import Ui
+import Ui.Css as Css
 import Ui.Theme as Theme exposing (Mode, Theme)
 import Url exposing (Url)
 import Version
@@ -355,11 +356,11 @@ view model =
             []
             [ Html.text
                 ("html, body { background: "
-                    ++ Ui.toCssColor model.theme.pageBg
+                    ++ Css.toCssColor model.theme.pageBg
                     ++ "; } :root { background: "
-                    ++ Ui.toCssColor model.theme.pageBg
+                    ++ Css.toCssColor model.theme.pageBg
                     ++ "; "
-                    ++ Ui.themeCssVariables model.theme
+                    ++ Css.themeCssVariables model.theme
                     ++ "; }"
                 )
             ]

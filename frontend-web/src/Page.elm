@@ -44,6 +44,7 @@ import Page.Users.Dashboard as AdminDashboard
 import Page.Users.EditUser as AdminEditUser
 import Page.Users.Login as AuthLogin
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 
 
@@ -1173,7 +1174,7 @@ view props =
             Element.map GotMealDetailMsg (MealShow.view (pageProps props mealDetailModel))
 
         PlaceholderPage message ->
-            Element.el [ Element.padding Ui.space24 ] (Element.text message)
+            Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
 
 
 modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)

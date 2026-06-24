@@ -37,8 +37,10 @@ import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Search as SearchView
 
 
@@ -359,7 +361,7 @@ viewFormFields :
     -> FormFields
     -> Element msg
 viewFormFields theme device toMsg form =
-    Element.column [ Element.width Element.fill, Element.spacing Ui.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.section theme
             { header = Nothing
             , body =
@@ -386,7 +388,7 @@ viewFormFields theme device toMsg form =
             , footer = Nothing
             }
         , Ui.section theme
-            { header = Just (Ui.subsectionTitle theme "Components")
+            { header = Just (Typography.subsectionTitle theme "Components")
             , body =
                 List.intersperse (Ui.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
@@ -656,7 +658,7 @@ removeRow rowId rows =
 componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
 componentRowView theme device toMsg row =
     Element.column
-        [ Element.width Element.fill, Element.spacing Ui.space12 ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ SearchView.searchInput theme
             device
             { onChange = toMsg << ComponentSearchChanged row.rowId
@@ -694,7 +696,7 @@ componentRowView theme device toMsg row =
 
             NotAsked ->
                 Element.none
-        , Element.row [ Element.width Element.fill, Element.spacing Ui.space8 ]
+        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ quantityTextInput theme
                 device
                 { amountLabel = "Qty"
@@ -735,7 +737,7 @@ quantityTextInput theme device config =
      else
         Element.row
     )
-        [ Element.width Element.fill, Element.spacing Ui.space8 ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Ui.input theme
             { label = config.amountLabel
             , value = config.amount

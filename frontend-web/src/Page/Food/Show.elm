@@ -22,6 +22,7 @@ import Element exposing (Device, Element)
 import Html.Attributes
 import Page.FoodLog.Form as FoodLogForm
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import View.Nutrients
 import View.Product
@@ -453,7 +454,7 @@ loadedView theme device loaded =
     in
     Element.column
         [ Element.width Element.fill
-        , Element.spacing Ui.space16
+        , Element.spacing DesignTokens.space16
         ]
         [ View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)

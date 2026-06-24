@@ -20,8 +20,10 @@ import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme as Theme exposing (Mode, Theme)
+import Ui.Typography as Typography
 
 
 
@@ -100,8 +102,8 @@ topBarView config profile =
     Element.row
         [ Element.width Element.fill
         , Element.height (Element.px 58)
-        , Element.paddingXY Ui.space16 0
-        , Element.spacing Ui.space12
+        , Element.paddingXY DesignTokens.space16 0
+        , Element.spacing DesignTokens.space12
         , Background.color config.theme.cardBg
         , Font.color config.theme.textPrimary
         ]
@@ -115,16 +117,16 @@ topBarView config profile =
                 [ Element.width Element.fill
                 , Element.clip
                 ]
-                (Ui.subsectionTitle config.theme meta.title)
+                (Typography.subsectionTitle config.theme meta.title)
             , Element.el
-                [ Element.paddingEach { top = 0, right = Ui.space8, bottom = 0, left = 0 } ]
+                [ Element.paddingEach { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 } ]
                 (themeToggle config.theme config.themeMode config.onThemeToggle)
             , profileButton config.onProfileClick config.theme profile
             ]
 
          else
             [ Element.row
-                [ Element.spacing Ui.space8
+                [ Element.spacing DesignTokens.space8
                 , Element.centerY
                 ]
                 [ Element.image
@@ -134,7 +136,7 @@ topBarView config profile =
                     { src = "/android-chrome-192x192.png"
                     , description = "CalCo"
                     }
-                , Ui.pageTitle config.theme "CalCo"
+                , Typography.pageTitle config.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
             , themeToggle config.theme config.themeMode config.onThemeToggle
@@ -202,7 +204,7 @@ profileInitialButton onPress theme label =
         , Background.color theme.cardBg
         , Font.color theme.textPrimary
         , Font.center
-        , Border.rounded Ui.radiusPill
+        , Border.rounded DesignTokens.radiusPill
         , Border.width 1
         , Border.color theme.divider
         , Element.htmlAttribute (Html.Attributes.title "Profile")
@@ -221,7 +223,7 @@ updateBanner : Theme -> msg -> Element msg
 updateBanner theme onPress =
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY Ui.space16 Ui.space12
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
         , Background.color theme.brandBlueSoft
         , Font.color theme.brandBlue
         , Font.size 18
@@ -230,7 +232,7 @@ updateBanner theme onPress =
         , label =
             Element.row
                 [ Element.width Element.fill
-                , Element.spacing Ui.space8
+                , Element.spacing DesignTokens.space8
                 ]
                 [ Element.el [ Element.centerY ] (Element.text "New version available")
                 , Element.el
@@ -469,11 +471,11 @@ drawerView config =
             }
     in
     Ui.drawerPanel config.theme
-        (Element.row [ Element.spacing Ui.space8 ]
+        (Element.row [ Element.spacing DesignTokens.space8 ]
             [ Ui.iconButton config.device
                 config.theme
                 { icon = Icon.Menu, title = "Close", onPress = config.onClose }
-            , Ui.sectionTitle config.theme "CalCo"
+            , Typography.sectionTitle config.theme "CalCo"
             ]
             :: Ui.hairline config.theme
             :: drawerItems itemsConfig
@@ -562,7 +564,7 @@ profileMenuContent :
     }
     -> List (Element msg)
 profileMenuContent config =
-    [ Ui.mutedCaption config.theme
+    [ Typography.mutedCaption config.theme
         (case config.session of
             Auth.Authenticated identity ->
                 "Signed in as " ++ identity.username

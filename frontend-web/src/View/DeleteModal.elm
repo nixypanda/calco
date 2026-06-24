@@ -6,6 +6,7 @@ module View.DeleteModal exposing
 import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 
 
 type DeleteState
@@ -47,7 +48,7 @@ deleteModalContent theme device config maybeError deleting =
     Ui.modalOverlay theme
         { title = config.title
         , body =
-            [ Ui.mutedParagraph theme config.description
+            [ Typography.mutedParagraph theme config.description
             , Ui.maybeErrorBanner theme maybeError
             ]
         , actions =

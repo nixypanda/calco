@@ -15,6 +15,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 
 
@@ -135,9 +136,9 @@ foodRow theme _ food =
     Ui.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
-        , title = Ui.wrappedListItemTitle theme food.name
+        , title = Typography.wrappedListItemTitle theme food.name
         , subtitle =
-            [ Ui.mutedBody theme (foodSummaryText food)
+            [ Typography.mutedBody theme (foodSummaryText food)
             , Ui.chips theme food.categories
             ]
         , trailing = []

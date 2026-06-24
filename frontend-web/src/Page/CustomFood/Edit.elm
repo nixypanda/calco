@@ -23,6 +23,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.CustomFood.Form as Form
 import Ui
+import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 
 
@@ -351,7 +352,7 @@ bodyView : { model : Model, device : Device, theme : Theme } -> Element Msg
 bodyView { model, device, theme } =
     case model of
         Loaded loaded ->
-            Element.column [ Element.width Element.fill, Element.spacing Ui.space16 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
                     (Form.view theme device loaded.nutrients loaded.units loaded.form)
                 , Ui.primarySubmitButton device
