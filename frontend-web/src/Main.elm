@@ -11,7 +11,6 @@ import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Region as Region
 import Html
-import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Text as Text
 import Page
@@ -21,6 +20,7 @@ import Time
 import Ui
 import Ui.Theme as Theme exposing (Mode, Theme)
 import Url exposing (Url)
+import Version
 import View.Chrome as Chrome
 
 
@@ -49,9 +49,7 @@ type alias Model =
     , device : Element.Device
     , themeMode : Mode
     , theme : Theme
-    , currentVersion : Maybe String
-    , updateAvailable : Bool
-    , versionError : Maybe String
+    , version : Version.Model
     }
 
 
@@ -65,6 +63,9 @@ init flags url key =
         themeMode : Mode
         themeMode =
             Theme.modeFromString flags.themeMode
+
+        ( versionModel, versionCmd ) =
+            Version.init
     in
     ( { key = key
       , route = Data.Route.fromUrl url
@@ -83,16 +84,14 @@ init flags url key =
                 }
       , themeMode = themeMode
       , theme = Theme.forMode themeMode
-      , currentVersion = Nothing
-      , updateAvailable = False
-      , versionError = Nothing
+      , version = versionModel
       }
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
         , Task.perform GotLocalDate
             (Task.map2 LocalDate.fromPosix Time.here Time.now)
-        , Task.perform GotVersionCheckTime Time.now
+        , Cmd.map GotVersionMsg versionCmd
         ]
     )
 
@@ -117,11 +116,7 @@ type Msg
     | GotPageMsg Page.Msg
     | GotLocalContext { date : String, timezone : String }
     | ThemeToggleClicked
-    | GotVersionCheck (Result Client.ApiError String)
-    | GotVersionCheckTime Time.Posix
-    | ReloadPageClicked
-    | CheckForUpdate
-    | NoOp
+    | GotVersionMsg Version.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -187,43 +182,21 @@ update msg model =
             , persistThemeMode (Theme.modeToString nextMode)
             )
 
-        GotVersionCheck result ->
-            case result of
-                Ok version ->
-                    let
-                        isNew : Bool
-                        isNew =
-                            case model.currentVersion of
-                                Nothing ->
-                                    False
-
-                                Just current ->
-                                    current /= version
-                    in
-                    ( { model
-                        | currentVersion = Just version
-                        , updateAvailable = isNew && model.currentVersion /= Nothing
-                        , versionError = Nothing
-                      }
-                    , Cmd.none
+        GotVersionMsg versionMsg ->
+            let
+                ( newVersion, versionCmd, outMsg ) =
+                    Version.update versionMsg model.version
+            in
+            case outMsg of
+                Version.NoOutMsg ->
+                    ( { model | version = newVersion }
+                    , Cmd.map GotVersionMsg versionCmd
                     )
 
-                Err error ->
-                    ( { model | versionError = Just (Client.displayError error) }
-                    , Cmd.none
+                Version.ReloadPage ->
+                    ( { model | version = newVersion }
+                    , reloadPage ()
                     )
-
-        ReloadPageClicked ->
-            ( model, reloadPage () )
-
-        CheckForUpdate ->
-            ( model, Task.perform GotVersionCheckTime Time.now )
-
-        GotVersionCheckTime posix ->
-            ( model, fetchVersion (Time.posixToMillis posix) )
-
-        NoOp ->
-            ( model, Cmd.none )
 
         GotLocalContext context ->
             stepPageUpdate (Page.localContextReceived (pageContext model) context model.page) model
@@ -510,8 +483,8 @@ appFrame model =
             { profileLabel = profileLetter
             , profileMenu = profileMenuEl
             }
-            :: (if model.updateAvailable then
-                    [ Chrome.updateBanner model.theme ReloadPageClicked ]
+            :: (if model.version.updateAvailable then
+                    [ Chrome.updateBanner model.theme (GotVersionMsg Version.ReloadPageRequested) ]
 
                 else
                     []
@@ -558,15 +531,7 @@ subscriptions _ =
     Sub.batch
         [ localContextReceived GotLocalContext
         , Browser.Events.onResize WindowResized
-        , Browser.Events.onVisibilityChange
-            (\visibility ->
-                case visibility of
-                    Browser.Events.Visible ->
-                        CheckForUpdate
-
-                    Browser.Events.Hidden ->
-                        NoOp
-            )
+        , Sub.map GotVersionMsg Version.subscriptions
         ]
 
 
@@ -584,23 +549,6 @@ port persistThemeMode : String -> Cmd msg
 
 
 port reloadPage : () -> Cmd msg
-
-
-
--- HELPERS
-
-
-fetchVersion : Int -> Cmd Msg
-fetchVersion timestamp =
-    Client.get
-        ("/version.json?v=" ++ String.fromInt timestamp)
-        versionDecoder
-        GotVersionCheck
-
-
-versionDecoder : Decode.Decoder String
-versionDecoder =
-    Decode.field "version" Decode.string
 
 
 
