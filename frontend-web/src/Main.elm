@@ -1,20 +1,12 @@
 port module Main exposing (Flags, Model, Msg, PageModel, main)
 
 import Access
-import Api.Admin
 import Api.Auth
 import Api.Client as Client
-import Api.Foods
-import Api.Goals
-import Api.Logs
-import Api.Meals
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
 import Data.Auth as Auth
-import Data.ItemRef as ItemRef
-import Data.MealSlot as MealSlot exposing (MealSlot)
-import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Region as Region
@@ -22,25 +14,7 @@ import Html
 import Json.Decode as Decode
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Text as Text
-import Page.CustomFood.Create as CustomFoodCreate
-import Page.CustomFood.Edit as CustomFoodEdit
-import Page.CustomFood.List as CustomFoodList
-import Page.CustomFood.Show as CustomFoodShow
-import Page.Diary.Day as DiaryDay
-import Page.Food.Search as FoodSearch
-import Page.Food.Show as FoodShow
-import Page.FoodLog.Entry as FoodLogEntry
-import Page.Goals.Settings as GoalsSettings
-import Page.Meal.Create as MealCreate
-import Page.Meal.Edit as MealEdit
-import Page.Meal.Form as MealForm
-import Page.Meal.List as MealList
-import Page.Meal.Show as MealShow
-import Page.Users.BootstrapSetup as BootstrapSetup
-import Page.Users.CreateUser as AdminCreateUser
-import Page.Users.Dashboard as AdminDashboard
-import Page.Users.EditUser as AdminEditUser
-import Page.Users.Login as AuthLogin
+import Page
 import Session exposing (Session)
 import Task
 import Time
@@ -81,27 +55,8 @@ type alias Model =
     }
 
 
-type PageModel
-    = LoadingPage
-    | LoginPage AuthLogin.Model
-    | SetupPage BootstrapSetup.Model
-    | AdminPage AdminDashboard.Model
-    | AdminCreateUserPage AdminCreateUser.Model
-    | AdminEditUserPage AdminEditUser.Model
-    | DiaryPage DiaryDay.Model
-    | GoalsSettingsPage GoalsSettings.Model
-    | FoodSearchPage FoodSearch.Model
-    | FoodDetailPage FoodShow.Model
-    | FoodLogDetailPage FoodLogEntry.Model
-    | CustomFoodCreatePage CustomFoodCreate.Model
-    | CustomFoodEditPage CustomFoodEdit.Model
-    | CustomFoodShowPage CustomFoodShow.Model
-    | CustomFoodsPage CustomFoodList.Model
-    | MealsPage MealList.Model
-    | MealCreatePage MealCreate.Model
-    | MealEditPage MealEdit.Model
-    | MealDetailPage MealShow.Model
-    | PlaceholderPage String
+type alias PageModel =
+    Page.Model
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -118,7 +73,7 @@ init flags url key =
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
       , today = Nothing
-      , page = LoadingPage
+      , page = Page.LoadingPage
       , drawerOpen = False
       , profileOpen = False
       , device =
@@ -159,24 +114,7 @@ type Msg
     | ProfileClicked
     | NavigateTo Route
     | WindowResized Int Int
-    | GotLoginMsg AuthLogin.Msg
-    | GotSetupMsg BootstrapSetup.Msg
-    | GotAdminMsg AdminDashboard.Msg
-    | GotAdminCreateUserMsg AdminCreateUser.Msg
-    | GotAdminEditUserMsg AdminEditUser.Msg
-    | GotDiaryMsg DiaryDay.Msg
-    | GotGoalsSettingsMsg GoalsSettings.Msg
-    | GotFoodSearchMsg FoodSearch.Msg
-    | GotFoodDetailMsg FoodShow.Msg
-    | GotFoodLogDetailMsg FoodLogEntry.Msg
-    | GotCustomFoodCreateMsg CustomFoodCreate.Msg
-    | GotCustomFoodEditMsg CustomFoodEdit.Msg
-    | GotCustomFoodShowMsg CustomFoodShow.Msg
-    | GotCustomFoodsMsg CustomFoodList.Msg
-    | GotMealsMsg MealList.Msg
-    | GotMealCreateMsg MealCreate.Msg
-    | GotMealEditMsg MealEdit.Msg
-    | GotMealDetailMsg MealShow.Msg
+    | GotPageMsg Page.Msg
     | GotLocalContext { date : String, timezone : String }
     | ThemeToggleClicked
     | GotVersionCheck (Result Client.ApiError String)
@@ -287,248 +225,11 @@ update msg model =
         NoOp ->
             ( model, Cmd.none )
 
-        GotLoginMsg subMsg ->
-            case model.page of
-                LoginPage sub ->
-                    stepPage LoginPage
-                        GotLoginMsg
-                        applyLoginOutMsg
-                        (AuthLogin.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotSetupMsg subMsg ->
-            case model.page of
-                SetupPage sub ->
-                    stepPage SetupPage
-                        GotSetupMsg
-                        applySetupOutMsg
-                        (BootstrapSetup.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotAdminMsg subMsg ->
-            case model.page of
-                AdminPage sub ->
-                    stepPage AdminPage
-                        GotAdminMsg
-                        applyAdminOutMsg
-                        (AdminDashboard.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotAdminCreateUserMsg subMsg ->
-            case model.page of
-                AdminCreateUserPage sub ->
-                    stepPage AdminCreateUserPage
-                        GotAdminCreateUserMsg
-                        applyAdminCreateUserOutMsg
-                        (AdminCreateUser.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotAdminEditUserMsg subMsg ->
-            case model.page of
-                AdminEditUserPage sub ->
-                    stepPage AdminEditUserPage
-                        GotAdminEditUserMsg
-                        applyAdminEditUserOutMsg
-                        (AdminEditUser.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotDiaryMsg subMsg ->
-            case model.page of
-                DiaryPage sub ->
-                    stepPage DiaryPage
-                        GotDiaryMsg
-                        applyDiaryOutMsg
-                        (DiaryDay.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotGoalsSettingsMsg subMsg ->
-            case model.page of
-                GoalsSettingsPage sub ->
-                    stepPage GoalsSettingsPage
-                        GotGoalsSettingsMsg
-                        applyGoalsSettingsOutMsg
-                        (GoalsSettings.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotFoodSearchMsg subMsg ->
-            case model.page of
-                FoodSearchPage sub ->
-                    stepPage FoodSearchPage
-                        GotFoodSearchMsg
-                        applyFoodSearchOutMsg
-                        (FoodSearch.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotFoodDetailMsg subMsg ->
-            stepFoodDetail subMsg model
-
-        GotFoodLogDetailMsg subMsg ->
-            case model.page of
-                FoodLogDetailPage sub ->
-                    stepPage FoodLogDetailPage
-                        GotFoodLogDetailMsg
-                        applyFoodLogDetailOutMsg
-                        (FoodLogEntry.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
         GotLocalContext context ->
-            case model.page of
-                FoodDetailPage _ ->
-                    stepFoodDetail (FoodShow.LocalContextReceived context) model
+            stepPageUpdate (Page.localContextReceived (pageContext model) context model.page) model
 
-                FoodSearchPage sub ->
-                    stepPage FoodSearchPage
-                        GotFoodSearchMsg
-                        applyFoodSearchOutMsg
-                        (FoodSearch.update (FoodSearch.LocalContextReceived context) sub)
-                        model
-
-                GoalsSettingsPage sub ->
-                    stepPage GoalsSettingsPage
-                        GotGoalsSettingsMsg
-                        applyGoalsSettingsOutMsg
-                        (GoalsSettings.update (GoalsSettings.LocalContextReceived context) sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotCustomFoodCreateMsg subMsg ->
-            case model.page of
-                CustomFoodCreatePage sub ->
-                    stepPage CustomFoodCreatePage
-                        GotCustomFoodCreateMsg
-                        applyCustomFoodCreateOutMsg
-                        (CustomFoodCreate.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotCustomFoodEditMsg subMsg ->
-            case model.page of
-                CustomFoodEditPage sub ->
-                    stepPage CustomFoodEditPage
-                        GotCustomFoodEditMsg
-                        applyCustomFoodEditOutMsg
-                        (CustomFoodEdit.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotCustomFoodsMsg subMsg ->
-            case model.page of
-                CustomFoodsPage sub ->
-                    stepPage CustomFoodsPage
-                        GotCustomFoodsMsg
-                        applyCustomFoodsOutMsg
-                        (CustomFoodList.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotCustomFoodShowMsg subMsg ->
-            case model.page of
-                CustomFoodShowPage sub ->
-                    stepPage CustomFoodShowPage
-                        GotCustomFoodShowMsg
-                        applyCustomFoodShowOutMsg
-                        (CustomFoodShow.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotMealsMsg subMsg ->
-            case model.page of
-                MealsPage sub ->
-                    stepPage MealsPage
-                        GotMealsMsg
-                        applyMealsOutMsg
-                        (MealList.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotMealCreateMsg subMsg ->
-            case model.page of
-                MealCreatePage sub ->
-                    stepPage MealCreatePage
-                        GotMealCreateMsg
-                        applyMealCreateOutMsg
-                        (MealCreate.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotMealEditMsg subMsg ->
-            case model.page of
-                MealEditPage sub ->
-                    stepPage MealEditPage
-                        GotMealEditMsg
-                        applyMealEditOutMsg
-                        (MealEdit.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-        GotMealDetailMsg subMsg ->
-            case model.page of
-                MealDetailPage sub ->
-                    stepPage MealDetailPage
-                        GotMealDetailMsg
-                        applyMealDetailOutMsg
-                        (MealShow.update subMsg sub)
-                        model
-
-                _ ->
-                    ( model, Cmd.none )
-
-
-stepFoodDetail : FoodShow.Msg -> Model -> ( Model, Cmd Msg )
-stepFoodDetail subMsg model =
-    case model.page of
-        FoodDetailPage sub ->
-            stepPage FoodDetailPage
-                GotFoodDetailMsg
-                applyFoodDetailOutMsg
-                (FoodShow.update subMsg sub)
-                model
-
-        _ ->
-            ( model, Cmd.none )
+        GotPageMsg pageMsg ->
+            stepPageUpdate (Page.update (pageContext model) pageMsg model.page) model
 
 
 applyBootstrapProgress : Model -> ( Model, Cmd Msg )
@@ -571,153 +272,55 @@ changeRouteTo route model =
 
 loadPage : Route -> Model -> ( Model, Cmd Msg )
 loadPage route model =
-    case route of
-        AuthLogin ->
-            ( { model | page = LoginPage AuthLogin.init }, Cmd.none )
-
-        BootstrapSetup ->
-            ( { model | page = SetupPage BootstrapSetup.init }, Cmd.none )
-
-        AdminDashboard ->
-            initPage AdminPage applyAdminOutMsg AdminDashboard.init model
-
-        AdminCreateUser ->
-            ( { model | page = AdminCreateUserPage AdminCreateUser.init }, Cmd.none )
-
-        AdminEditUser userId ->
-            initPage AdminEditUserPage applyAdminEditUserOutMsg (AdminEditUser.init userId) model
-
-        DiaryDay dateParam ->
-            case model.today of
-                Just today ->
-                    initPage DiaryPage
-                        applyDiaryOutMsg
-                        (DiaryDay.init { dateParam = dateParam, today = today })
-                        model
-
-                Nothing ->
-                    ( { model | page = LoadingPage }, Cmd.none )
-
-        GoalSettings ->
-            case model.today of
-                Just today ->
-                    initPage GoalsSettingsPage
-                        applyGoalsSettingsOutMsg
-                        (GoalsSettings.init today)
-                        model
-
-                Nothing ->
-                    ( { model | page = LoadingPage }, Cmd.none )
-
-        FoodSearch dateParam mealSlot ->
-            let
-                searchModel : FoodSearch.Model
-                searchModel =
-                    FoodSearch.init dateParam mealSlot
-            in
-            ( { model | page = FoodSearchPage searchModel }
-            , case recentItemsRequest dateParam mealSlot of
-                Just request ->
-                    Api.Logs.recentItems
-                        request
-                        (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded)
-
-                Nothing ->
-                    Cmd.none
-            )
-
-        FoodShow productId dateParam mealSlot ->
-            initPage
-                FoodDetailPage
-                applyFoodDetailOutMsg
-                (FoodShow.init productId dateParam mealSlot)
-                model
-
-        FoodLogEntry logId ->
-            initPage FoodLogDetailPage applyFoodLogDetailOutMsg (FoodLogEntry.init logId) model
-
-        CustomFoodCreate ->
-            initPage CustomFoodCreatePage applyCustomFoodCreateOutMsg CustomFoodCreate.init model
-
-        CustomFoodEdit productId ->
-            initPage CustomFoodEditPage
-                applyCustomFoodEditOutMsg
-                (CustomFoodEdit.init productId)
-                model
-
-        CustomFoodShow productId ->
-            initPage CustomFoodShowPage
-                applyCustomFoodShowOutMsg
-                (CustomFoodShow.init productId)
-                model
-
-        CustomFoodList ->
-            initPage CustomFoodsPage applyCustomFoodsOutMsg CustomFoodList.init model
-
-        MealList ->
-            initPage MealsPage applyMealsOutMsg MealList.init model
-
-        MealCreate ->
-            initPage MealCreatePage applyMealCreateOutMsg MealCreate.init model
-
-        MealEdit mealId ->
-            initPage MealEditPage applyMealEditOutMsg (MealEdit.init mealId) model
-
-        MealShow mealId ->
-            initPage MealDetailPage applyMealDetailOutMsg (MealShow.init mealId) model
-
-        _ ->
-            ( { model | page = PlaceholderPage "This route is not migrated yet." }, Cmd.none )
+    let
+        ( page, pageCmd, outMsg ) =
+            Page.init { route = route, today = model.today }
+    in
+    stepPageResult ( page, pageCmd, outMsg ) model
 
 
-recentItemsRequest :
-    Maybe String
-    -> Maybe MealSlot
-    -> Maybe Api.Logs.RecentItemsRequest
-recentItemsRequest maybeDate maybeSlot =
-    maybeDate
-        |> Maybe.andThen LocalDate.fromString
-        |> Maybe.map
-            (\toDate ->
-                { fromDate = LocalDate.addDays -30 toDate
-                , toDate = toDate
-                , mealSlot = Maybe.map MealSlot.toString maybeSlot
-                }
-            )
+stepPageUpdate : Maybe ( Page.Model, Cmd Page.Msg, Page.OutMsg ) -> Model -> ( Model, Cmd Msg )
+stepPageUpdate maybePageResult model =
+    case maybePageResult of
+        Just pageResult ->
+            stepPageResult pageResult model
 
-
-lastUsedProductDefaultCmd : Route -> String -> List (Cmd Msg)
-lastUsedProductDefaultCmd route productId =
-    case route of
-        FoodShow _ maybeDate maybeSlot ->
-            case recentItemsRequest maybeDate maybeSlot of
-                Just request ->
-                    [ Api.Logs.lastUsedItems
-                        { fromDate = request.fromDate
-                        , toDate = request.toDate
-                        , mealSlot = request.mealSlot
-                        , items = [ { itemType = ItemRef.Product, id = productId } ]
-                        }
-                        (GotFoodDetailMsg << FoodShow.LastUsedLoaded)
-                    ]
-
-                Nothing ->
-                    []
-
-        _ ->
-            []
-
-
-applyLoginOutMsg : AuthLogin.OutMsg -> Model -> ( Model, Cmd Msg )
-applyLoginOutMsg outMsg model =
-    case outMsg of
-        AuthLogin.NoOp ->
+        Nothing ->
             ( model, Cmd.none )
 
-        AuthLogin.RequestLogin request ->
-            ( model, Api.Auth.login request (GotLoginMsg << AuthLogin.LoginCompleted) )
 
-        AuthLogin.LoginSucceeded loginSession ->
+stepPageResult : ( Page.Model, Cmd Page.Msg, Page.OutMsg ) -> Model -> ( Model, Cmd Msg )
+stepPageResult ( page, pageCmd, outMsg ) model =
+    let
+        ( finalModel, outCmd ) =
+            applyPageOutMsg outMsg { model | page = page }
+    in
+    ( finalModel, Cmd.batch [ Cmd.map GotPageMsg pageCmd, outCmd ] )
+
+
+pageContext : Model -> Page.InitContext
+pageContext model =
+    { route = model.route, today = model.today }
+
+
+applyPageOutMsg : Page.OutMsg -> Model -> ( Model, Cmd Msg )
+applyPageOutMsg outMsg model =
+    case outMsg of
+        Page.NoOutMsg ->
+            ( model, Cmd.none )
+
+        Page.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        Page.SessionExpired ->
+            ( { model | session = Session.clear model.session }
+            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
+            )
+
+        Page.RequestLocalContext ->
+            ( model, requestLocalContext () )
+
+        Page.LoginSucceeded loginSession ->
             let
                 nextSession : Session
                 nextSession =
@@ -727,19 +330,7 @@ applyLoginOutMsg outMsg model =
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
             )
 
-
-applySetupOutMsg : BootstrapSetup.OutMsg -> Model -> ( Model, Cmd Msg )
-applySetupOutMsg outMsg model =
-    case outMsg of
-        BootstrapSetup.NoOp ->
-            ( model, Cmd.none )
-
-        BootstrapSetup.RequestCreateAdmin request ->
-            ( model
-            , Api.Auth.createAdmin request (GotSetupMsg << BootstrapSetup.CreateAdminCompleted)
-            )
-
-        BootstrapSetup.CreateAdminSucceeded loginSession ->
+        Page.SetupSucceeded loginSession ->
             let
                 nextSession : Session
                 nextSession =
@@ -747,588 +338,6 @@ applySetupOutMsg outMsg model =
             in
             ( { model | session = nextSession, adminExists = True }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
-            )
-
-
-applyAdminOutMsg : AdminDashboard.OutMsg -> Model -> ( Model, Cmd Msg )
-applyAdminOutMsg outMsg model =
-    case outMsg of
-        AdminDashboard.NoOp ->
-            ( model, Cmd.none )
-
-        AdminDashboard.RequestUsers ->
-            ( model, Api.Admin.listUsers (GotAdminMsg << AdminDashboard.UsersLoaded) )
-
-        AdminDashboard.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        AdminDashboard.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyAdminCreateUserOutMsg : AdminCreateUser.OutMsg -> Model -> ( Model, Cmd Msg )
-applyAdminCreateUserOutMsg outMsg model =
-    case outMsg of
-        AdminCreateUser.NoOp ->
-            ( model, Cmd.none )
-
-        AdminCreateUser.RequestCreateUser request ->
-            ( model
-            , Api.Admin.createUser request (GotAdminCreateUserMsg << AdminCreateUser.Completed)
-            )
-
-        AdminCreateUser.CreateSucceeded ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
-
-        AdminCreateUser.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyAdminEditUserOutMsg : AdminEditUser.OutMsg -> Model -> ( Model, Cmd Msg )
-applyAdminEditUserOutMsg outMsg model =
-    case outMsg of
-        AdminEditUser.NoOp ->
-            ( model, Cmd.none )
-
-        AdminEditUser.RequestUser userId ->
-            ( model, Api.Admin.getUser userId (GotAdminEditUserMsg << AdminEditUser.UserLoaded) )
-
-        AdminEditUser.RequestResetPassword userId request ->
-            ( model
-            , Api.Admin.resetPassword
-                userId
-                request
-                (GotAdminEditUserMsg << AdminEditUser.ResetCompleted)
-            )
-
-        AdminEditUser.RequestDisableUser userId ->
-            ( model
-            , Api.Admin.disableUser userId (GotAdminEditUserMsg << AdminEditUser.DisableCompleted)
-            )
-
-        AdminEditUser.RequestEnableUser userId ->
-            ( model
-            , Api.Admin.enableUser userId (GotAdminEditUserMsg << AdminEditUser.EnableCompleted)
-            )
-
-        AdminEditUser.UpdateSucceeded ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath AdminDashboard) )
-
-        AdminEditUser.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyDiaryOutMsg : DiaryDay.OutMsg -> Model -> ( Model, Cmd Msg )
-applyDiaryOutMsg outMsg model =
-    case outMsg of
-        DiaryDay.NoOp ->
-            ( model, Cmd.none )
-
-        DiaryDay.RequestDiaryData date ->
-            ( model
-            , Cmd.batch
-                (Cmd.map GotDiaryMsg (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
-                    :: Cmd.map GotDiaryMsg (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
-                    :: latestSlotRequests date
-                )
-            )
-
-        DiaryDay.RequestCopyLatestSlot date requests ->
-            ( model
-            , Api.Logs.createLogsBatch
-                requests
-                (GotDiaryMsg << DiaryDay.CopyLatestCompleted date)
-            )
-
-        DiaryDay.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        DiaryDay.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-latestSlotRequests : LocalDate -> List (Cmd Msg)
-latestSlotRequests date =
-    [ MealSlot.Breakfast, MealSlot.Lunch, MealSlot.Dinner, MealSlot.Snack ]
-        |> List.map
-            (\slot ->
-                Cmd.map GotDiaryMsg
-                    (Api.Logs.latestSlot
-                        { mealSlot = MealSlot.toString slot
-                        , before = date
-                        , lookbackDays = 30
-                        }
-                        (DiaryDay.LatestSlotLoaded date slot)
-                    )
-            )
-
-
-applyGoalsSettingsOutMsg : GoalsSettings.OutMsg -> Model -> ( Model, Cmd Msg )
-applyGoalsSettingsOutMsg outMsg model =
-    case outMsg of
-        GoalsSettings.NoOp ->
-            ( model, Cmd.none )
-
-        GoalsSettings.RequestGoal date ->
-            ( model
-            , Api.Goals.getGoal date (GotGoalsSettingsMsg << GoalsSettings.GoalLoaded)
-            )
-
-        GoalsSettings.RequestLocalContext ->
-            ( model, requestLocalContext () )
-
-        GoalsSettings.RequestSaveGoal request ->
-            ( model
-            , Api.Goals.saveGoal request
-                (GotGoalsSettingsMsg << GoalsSettings.SaveCompleted)
-            )
-
-        GoalsSettings.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyFoodSearchOutMsg : FoodSearch.OutMsg -> Model -> ( Model, Cmd Msg )
-applyFoodSearchOutMsg outMsg model =
-    case outMsg of
-        FoodSearch.NoOp ->
-            ( model, Cmd.none )
-
-        FoodSearch.RequestSearch token request ->
-            ( model
-            , Api.Foods.searchFoods
-                request
-                (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
-            )
-
-        FoodSearch.RequestCategorySuggestions token request ->
-            ( model
-            , Api.Foods.listCategorySuggestions
-                request
-                (GotFoodSearchMsg << FoodSearch.CategorySuggestionsCompleted token)
-            )
-
-        FoodSearch.RequestLocalContext ->
-            ( model, requestLocalContext () )
-
-        FoodSearch.RequestCreateLog request ->
-            ( model, Api.Logs.createLog request (GotFoodSearchMsg << FoodSearch.QuickAddCompleted) )
-
-        FoodSearch.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        FoodSearch.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyFoodDetailOutMsg : FoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
-applyFoodDetailOutMsg outMsg model =
-    case outMsg of
-        FoodShow.NoOp ->
-            ( model, Cmd.none )
-
-        FoodShow.RequestInitialData productId ->
-            ( model
-            , Cmd.batch
-                ([ Api.Foods.getFoodDetail productId (GotFoodDetailMsg << FoodShow.FoodLoaded)
-                 , Api.Foods.listUnits (GotFoodDetailMsg << FoodShow.UnitsLoaded)
-                 ]
-                    ++ lastUsedProductDefaultCmd model.route productId
-                )
-            )
-
-        FoodShow.RequestLocalContext ->
-            ( model, requestLocalContext () )
-
-        FoodShow.RequestCreateLog request ->
-            ( model, Api.Logs.createLog request (GotFoodDetailMsg << FoodShow.LogCompleted) )
-
-        FoodShow.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        FoodShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyFoodLogDetailOutMsg : FoodLogEntry.OutMsg -> Model -> ( Model, Cmd Msg )
-applyFoodLogDetailOutMsg outMsg model =
-    case outMsg of
-        FoodLogEntry.NoOp ->
-            ( model, Cmd.none )
-
-        FoodLogEntry.RequestInitialData logId ->
-            ( model
-            , Cmd.batch
-                [ Api.Logs.getLog logId (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded)
-                , Api.Foods.listUnits (GotFoodLogDetailMsg << FoodLogEntry.UnitsLoaded)
-                ]
-            )
-
-        FoodLogEntry.RequestProductDetail productId ->
-            ( model
-            , Api.Foods.getFoodDetail
-                productId
-                (GotFoodLogDetailMsg << FoodLogEntry.ProductDetailLoaded)
-            )
-
-        FoodLogEntry.RequestMealName mealId ->
-            ( model
-            , Api.Meals.getMealName
-                mealId
-                (GotFoodLogDetailMsg << FoodLogEntry.MealNameLoaded)
-            )
-
-        FoodLogEntry.RequestUpdateLog logId request ->
-            ( model
-            , Api.Logs.updateLog
-                logId
-                request
-                (GotFoodLogDetailMsg << FoodLogEntry.UpdateCompleted)
-            )
-
-        FoodLogEntry.RequestDeleteLog logId ->
-            ( model
-            , Api.Logs.deleteLog
-                logId
-                (GotFoodLogDetailMsg << FoodLogEntry.DeleteCompleted)
-            )
-
-        FoodLogEntry.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        FoodLogEntry.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyCustomFoodCreateOutMsg : CustomFoodCreate.OutMsg -> Model -> ( Model, Cmd Msg )
-applyCustomFoodCreateOutMsg outMsg model =
-    case outMsg of
-        CustomFoodCreate.NoOp ->
-            ( model, Cmd.none )
-
-        CustomFoodCreate.RequestInitialData ->
-            ( model
-            , Cmd.batch
-                [ Api.Foods.listNutrients
-                    (GotCustomFoodCreateMsg << CustomFoodCreate.NutrientsLoaded)
-                , Api.Foods.listUnits (GotCustomFoodCreateMsg << CustomFoodCreate.UnitsLoaded)
-                ]
-            )
-
-        CustomFoodCreate.RequestCreateFood request ->
-            ( model
-            , Api.Foods.createCustomFood
-                request
-                (GotCustomFoodCreateMsg << CustomFoodCreate.SaveCompleted)
-            )
-
-        CustomFoodCreate.RequestCategorySuggestions token request ->
-            ( model
-            , Api.Foods.listCategorySuggestions
-                request
-                (GotCustomFoodCreateMsg << CustomFoodCreate.CategorySuggestionsLoaded token)
-            )
-
-        CustomFoodCreate.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        CustomFoodCreate.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyCustomFoodEditOutMsg : CustomFoodEdit.OutMsg -> Model -> ( Model, Cmd Msg )
-applyCustomFoodEditOutMsg outMsg model =
-    case outMsg of
-        CustomFoodEdit.NoOp ->
-            ( model, Cmd.none )
-
-        CustomFoodEdit.RequestInitialData productId ->
-            ( model
-            , Cmd.batch
-                [ Api.Foods.getFoodDetail
-                    productId
-                    (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
-                , Api.Foods.listNutrients (GotCustomFoodEditMsg << CustomFoodEdit.NutrientsLoaded)
-                , Api.Foods.listUnits (GotCustomFoodEditMsg << CustomFoodEdit.UnitsLoaded)
-                ]
-            )
-
-        CustomFoodEdit.RequestUpdateFood productId request ->
-            ( model
-            , Api.Foods.updateCustomFood
-                productId
-                request
-                (GotCustomFoodEditMsg << CustomFoodEdit.SaveCompleted)
-            )
-
-        CustomFoodEdit.RequestCategorySuggestions token request ->
-            ( model
-            , Api.Foods.listCategorySuggestions
-                request
-                (GotCustomFoodEditMsg << CustomFoodEdit.CategorySuggestionsLoaded token)
-            )
-
-        CustomFoodEdit.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        CustomFoodEdit.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyCustomFoodsOutMsg : CustomFoodList.OutMsg -> Model -> ( Model, Cmd Msg )
-applyCustomFoodsOutMsg outMsg model =
-    case outMsg of
-        CustomFoodList.NoOp ->
-            ( model, Cmd.none )
-
-        CustomFoodList.RequestFoods ->
-            ( model
-            , Api.Foods.listCustomFoods (GotCustomFoodsMsg << CustomFoodList.FoodsLoaded)
-            )
-
-        CustomFoodList.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        CustomFoodList.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyCustomFoodShowOutMsg : CustomFoodShow.OutMsg -> Model -> ( Model, Cmd Msg )
-applyCustomFoodShowOutMsg outMsg model =
-    case outMsg of
-        CustomFoodShow.NoOp ->
-            ( model, Cmd.none )
-
-        CustomFoodShow.RequestInitialData productId ->
-            ( model
-            , Cmd.batch
-                [ Api.Foods.getFoodDetail productId
-                    (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded)
-                , Api.Foods.listUnits
-                    (GotCustomFoodShowMsg << CustomFoodShow.UnitsLoaded)
-                ]
-            )
-
-        CustomFoodShow.RequestDeleteCustomFood productId ->
-            ( model
-            , Api.Foods.deleteCustomFood
-                productId
-                (GotCustomFoodShowMsg << CustomFoodShow.DeleteCompleted)
-            )
-
-        CustomFoodShow.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        CustomFoodShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyMealsOutMsg : MealList.OutMsg -> Model -> ( Model, Cmd Msg )
-applyMealsOutMsg outMsg model =
-    case outMsg of
-        MealList.NoOp ->
-            ( model, Cmd.none )
-
-        MealList.RequestMeals ->
-            ( model, Api.Meals.listMeals (GotMealsMsg << MealList.MealsLoaded) )
-
-        MealList.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        MealList.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyMealCreateOutMsg : MealCreate.OutMsg -> Model -> ( Model, Cmd Msg )
-applyMealCreateOutMsg outMsg model =
-    case outMsg of
-        MealCreate.NoOp ->
-            ( model, Cmd.none )
-
-        MealCreate.FormOutMsg formOutMsg ->
-            applyMealFormOutMsg
-                { toPageMsg = GotMealCreateMsg << MealCreate.FormMsg }
-                formOutMsg
-                model
-
-        MealCreate.RequestCreateMeal request ->
-            ( model, Api.Meals.createMeal request (GotMealCreateMsg << MealCreate.SaveCompleted) )
-
-        MealCreate.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        MealCreate.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyMealEditOutMsg : MealEdit.OutMsg -> Model -> ( Model, Cmd Msg )
-applyMealEditOutMsg outMsg model =
-    case outMsg of
-        MealEdit.NoOp ->
-            ( model, Cmd.none )
-
-        MealEdit.FormOutMsg formOutMsg ->
-            applyMealFormOutMsg
-                { toPageMsg = GotMealEditMsg << MealEdit.FormMsg }
-                formOutMsg
-                model
-
-        MealEdit.RequestMeal mealId ->
-            ( model
-            , Cmd.batch
-                [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded)
-                , Api.Meals.getMealNutrients
-                    { mealId = mealId, amount = "100", unit = defaultCode }
-                    (GotMealEditMsg << MealEdit.NutrientPreviewLoaded)
-                ]
-            )
-
-        MealEdit.RequestUpdateMeal mealId request ->
-            ( model
-            , Api.Meals.updateMeal
-                mealId
-                request
-                (GotMealEditMsg << MealEdit.SaveCompleted)
-            )
-
-        MealEdit.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        MealEdit.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyMealFormOutMsg :
-    { toPageMsg : MealForm.FormFieldMsg -> Msg }
-    -> MealForm.FormFieldOutMsg
-    -> Model
-    -> ( Model, Cmd Msg )
-applyMealFormOutMsg { toPageMsg } outMsg model =
-    case outMsg of
-        MealForm.RequestProductName productId ->
-            ( model
-            , Api.Foods.getFoodDetail
-                productId
-                (toPageMsg << MealForm.ProductNameLoaded productId)
-            )
-
-        MealForm.RequestProductSearch rowId token request ->
-            ( model
-            , Api.Foods.searchFoods
-                request
-                (toPageMsg
-                    << MealForm.ComponentSearchCompleted
-                        rowId
-                        token
-                )
-            )
-
-        MealForm.RequestCategorySuggestions rowId token request ->
-            ( model
-            , Api.Foods.listCategorySuggestions
-                request
-                (toPageMsg
-                    << MealForm.ComponentCategoriesCompleted
-                        rowId
-                        token
-                )
-            )
-
-        MealForm.RequestProductAndCats requests ->
-            ( model
-            , Cmd.batch
-                [ Api.Foods.searchFoods
-                    requests.searchRequest
-                    (toPageMsg
-                        << MealForm.ComponentSearchCompleted
-                            requests.rowId
-                            requests.searchToken
-                    )
-                , Api.Foods.listCategorySuggestions
-                    requests.categoryRequest
-                    (toPageMsg
-                        << MealForm.ComponentCategoriesCompleted
-                            requests.rowId
-                            requests.categoryToken
-                    )
-                ]
-            )
-
-        MealForm.FormSessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
-            )
-
-
-applyMealDetailOutMsg : MealShow.OutMsg -> Model -> ( Model, Cmd Msg )
-applyMealDetailOutMsg outMsg model =
-    case outMsg of
-        MealShow.NoOp ->
-            ( model, Cmd.none )
-
-        MealShow.RequestInitialData mealId ->
-            ( model
-            , Cmd.batch
-                [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded)
-                , Api.Foods.listUnits (GotMealDetailMsg << MealShow.UnitsLoaded)
-                , Api.Meals.getMealNutrients
-                    { mealId = mealId, amount = "100", unit = defaultCode }
-                    (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
-                ]
-            )
-
-        MealShow.RequestNutrientPreview mealId amount unit ->
-            ( model
-            , Api.Meals.getMealNutrients
-                { mealId = mealId, amount = amount, unit = unit }
-                (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
-            )
-
-        MealShow.RequestProductDetail productId ->
-            ( model
-            , Api.Foods.getFoodDetail
-                productId
-                (GotMealDetailMsg << MealShow.ProductDetailLoaded productId)
-            )
-
-        MealShow.RequestDeleteMeal mealId ->
-            ( model, Api.Meals.deleteMeal mealId (GotMealDetailMsg << MealShow.DeleteCompleted) )
-
-        MealShow.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
-
-        MealShow.SessionExpired ->
-            ( { model | session = Session.clear model.session }
-            , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
 
@@ -1341,7 +350,7 @@ view model =
     let
         isLoadingPage : Bool
         isLoadingPage =
-            model.page == LoadingPage
+            Page.isLoading model.page
 
         useBottomNav : Bool
         useBottomNav =
@@ -1401,9 +410,9 @@ view model =
 
 layoutAttrs : Model -> List (Element.Attribute Msg)
 layoutAttrs model =
-    case pageModalView model of
+    case Page.modalView (pageProps model) of
         Just modal ->
-            [ Element.inFront modal ]
+            [ Element.inFront (Element.map GotPageMsg modal) ]
 
         Nothing ->
             []
@@ -1414,7 +423,7 @@ appFrame model =
     let
         isLoadingPage : Bool
         isLoadingPage =
-            model.page == LoadingPage
+            Page.isLoading model.page
 
         useBottomNav : Bool
         useBottomNav =
@@ -1529,96 +538,12 @@ pageView model =
         Ui.skeletonLoading model.theme
 
     else
-        let
-            props : subModel -> { model : subModel, device : Element.Device, theme : Theme }
-            props =
-                pageProps model
-        in
-        case model.page of
-            LoadingPage ->
-                Ui.skeletonLoading model.theme
-
-            LoginPage loginModel ->
-                Element.map GotLoginMsg (AuthLogin.view (props loginModel))
-
-            SetupPage setupModel ->
-                Element.map GotSetupMsg (BootstrapSetup.view (props setupModel))
-
-            AdminPage adminModel ->
-                Element.map GotAdminMsg (AdminDashboard.view (props adminModel))
-
-            AdminCreateUserPage createUserModel ->
-                Element.map GotAdminCreateUserMsg (AdminCreateUser.view (props createUserModel))
-
-            AdminEditUserPage editUserModel ->
-                Element.map GotAdminEditUserMsg (AdminEditUser.view (props editUserModel))
-
-            DiaryPage diaryModel ->
-                Element.map GotDiaryMsg (DiaryDay.view (props diaryModel))
-
-            GoalsSettingsPage goalsSettingsModel ->
-                Element.map GotGoalsSettingsMsg (GoalsSettings.view (props goalsSettingsModel))
-
-            FoodSearchPage foodSearchModel ->
-                Element.map GotFoodSearchMsg (FoodSearch.view (props foodSearchModel))
-
-            FoodDetailPage foodDetailModel ->
-                Element.map GotFoodDetailMsg (FoodShow.view (props foodDetailModel))
-
-            FoodLogDetailPage foodLogDetailModel ->
-                Element.map GotFoodLogDetailMsg (FoodLogEntry.view (props foodLogDetailModel))
-
-            CustomFoodCreatePage customFoodCreateModel ->
-                Element.map GotCustomFoodCreateMsg
-                    (CustomFoodCreate.view (props customFoodCreateModel))
-
-            CustomFoodEditPage customFoodEditModel ->
-                Element.map GotCustomFoodEditMsg (CustomFoodEdit.view (props customFoodEditModel))
-
-            CustomFoodShowPage customFoodShowModel ->
-                Element.map GotCustomFoodShowMsg (CustomFoodShow.view (props customFoodShowModel))
-
-            CustomFoodsPage customFoodsModel ->
-                Element.map GotCustomFoodsMsg (CustomFoodList.view (props customFoodsModel))
-
-            MealsPage mealsModel ->
-                Element.map GotMealsMsg (MealList.view (props mealsModel))
-
-            MealCreatePage mealCreateModel ->
-                Element.map GotMealCreateMsg (MealCreate.view (props mealCreateModel))
-
-            MealEditPage mealEditModel ->
-                Element.map GotMealEditMsg (MealEdit.view (props mealEditModel))
-
-            MealDetailPage mealDetailModel ->
-                Element.map GotMealDetailMsg (MealShow.view (props mealDetailModel))
-
-            PlaceholderPage message ->
-                Element.el [ Element.padding Ui.space24 ] (Element.text message)
+        Element.map GotPageMsg (Page.view (pageProps model))
 
 
-pageModalView : Model -> Maybe (Element Msg)
-pageModalView model =
-    case model.page of
-        FoodLogDetailPage foodLogDetailModel ->
-            FoodLogEntry.modalView (pageProps model foodLogDetailModel)
-                |> Maybe.map (Element.map GotFoodLogDetailMsg)
-
-        CustomFoodShowPage customFoodShowModel ->
-            CustomFoodShow.modalView (pageProps model customFoodShowModel)
-                |> Maybe.map (Element.map GotCustomFoodShowMsg)
-
-        MealDetailPage mealDetailModel ->
-            MealShow.modalView (pageProps model mealDetailModel)
-                |> Maybe.map (Element.map GotMealDetailMsg)
-
-        _ ->
-            Nothing
-
-
-pageProps : Model -> subModel -> { model : subModel, device : Element.Device, theme : Theme }
-pageProps model subModel =
-    { model = subModel
+pageProps : Model -> { model : Page.Model, device : Element.Device, theme : Theme }
+pageProps model =
+    { model = model.page
     , device = model.device
     , theme = model.theme
     }
@@ -1676,37 +601,6 @@ fetchVersion timestamp =
 versionDecoder : Decode.Decoder String
 versionDecoder =
     Decode.field "version" Decode.string
-
-
-
--- Generic page-lifting helpers. Each page's `update` returns
--- (subModel, Cmd subMsg, outMsg) and its `init` returns (subModel, outMsg).
--- These lift those into Main's Model / Msg, removing per-page boilerplate.
-
-
-stepPage :
-    (subModel -> PageModel)
-    -> (subMsg -> Msg)
-    -> (outMsg -> Model -> ( Model, Cmd Msg ))
-    -> ( subModel, Cmd subMsg, outMsg )
-    -> Model
-    -> ( Model, Cmd Msg )
-stepPage toPage toMsg applyOut ( newSubModel, subCmd, outMsg ) model =
-    let
-        ( finalModel, outCmd ) =
-            applyOut outMsg { model | page = toPage newSubModel }
-    in
-    ( finalModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ] )
-
-
-initPage :
-    (subModel -> PageModel)
-    -> (outMsg -> Model -> ( Model, Cmd Msg ))
-    -> ( subModel, outMsg )
-    -> Model
-    -> ( Model, Cmd Msg )
-initPage toPage applyOut ( subModel, outMsg ) model =
-    applyOut outMsg { model | page = toPage subModel }
 
 
 
