@@ -10,6 +10,7 @@ module View.Chrome exposing
     , updateBanner
     )
 
+import Data.Auth as Auth exposing (Session)
 import Data.MealSlot as MealSlot
 import Data.Route exposing (Route(..), primaryRoute)
 import Element exposing (Device, Element)
@@ -18,7 +19,6 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
-import Session exposing (Session)
 import Ui
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme as Theme exposing (Mode, Theme)
@@ -47,7 +47,7 @@ type alias ScreenMeta =
 
 showsAppChrome : Session -> Bool -> Route -> Bool
 showsAppChrome session isLoadingPage route =
-    Session.isAuthenticated session
+    Auth.isAuthenticated session
         && not isLoadingPage
         && (case route of
                 AuthLogin ->
@@ -65,7 +65,7 @@ showBottomNav : Device -> Session -> Bool -> Route -> Bool
 showBottomNav device session isLoadingPage route =
     Ui.isSmall device
         && showsAppChrome session isLoadingPage route
-        && not (Session.isAdmin session)
+        && not (Auth.isAdmin session)
 
 
 
@@ -174,7 +174,11 @@ leadingButton device theme leading onMenuClick onNavigate =
                 }
 
 
-profileButton : msg -> Theme -> { profileLabel : String, profileMenu : Maybe (Element msg) } -> Element msg
+profileButton :
+    msg
+    -> Theme
+    -> { profileLabel : String, profileMenu : Maybe (Element msg) }
+    -> Element msg
 profileButton onPress theme profile =
     let
         anchor : List (Element.Attribute msg)
@@ -248,7 +252,7 @@ screenMeta device session route =
     let
         phoneNonAdmin : Bool
         phoneNonAdmin =
-            Ui.isSmall device && not (Session.isAdmin session)
+            Ui.isSmall device && not (Auth.isAdmin session)
     in
     case route of
         Root ->
@@ -412,7 +416,14 @@ drawerOverlay config =
         isLoadingPage =
             False
 
-        viewConfig : { device : Device, theme : Theme, session : Session, route : Route, onClose : msg, onNavigate : Route -> msg }
+        viewConfig :
+            { device : Device
+            , theme : Theme
+            , session : Session
+            , route : Route
+            , onClose : msg
+            , onNavigate : Route -> msg
+            }
         viewConfig =
             { device = config.device
             , theme = config.theme
@@ -477,7 +488,7 @@ drawerItems :
     }
     -> List (Element msg)
 drawerItems config =
-    if Session.isAdmin config.session then
+    if Auth.isAdmin config.session then
         [ drawerItem config.theme config.route config.onNavigate Nothing "Admin" AdminDashboard ]
 
     else
@@ -553,7 +564,7 @@ profileMenuContent :
 profileMenuContent config =
     [ Ui.mutedCaption config.theme
         (case config.session of
-            Session.Authenticated identity ->
+            Auth.Authenticated identity ->
                 "Signed in as " ++ identity.username
 
             _ ->

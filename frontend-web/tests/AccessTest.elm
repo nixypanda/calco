@@ -1,10 +1,9 @@
 module AccessTest exposing (tests)
 
 import Access exposing (RouteDecision(..))
-import Data.Auth as Auth
+import Data.Auth as Auth exposing (Session(..))
 import Data.Route exposing (Route(..))
 import Expect
-import Session exposing (Session(..))
 import Test exposing (Test, describe, test)
 
 

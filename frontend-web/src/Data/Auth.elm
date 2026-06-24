@@ -5,12 +5,19 @@ module Data.Auth exposing
     , LoginSession
     , Profile
     , Role(..)
+    , Session(..)
+    , applyAuthResult
     , bootstrapAdminEncoder
     , bootstrapStatusDecoder
+    , clearSession
+    , initSession
+    , isAdmin
+    , isAuthenticated
     , loginRequestEncoder
     , loginSessionDecoder
     )
 
+import Api.Client exposing (ApiError)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 
@@ -107,3 +114,53 @@ loginRequestEncoder request =
 bootstrapAdminEncoder : LoginRequest -> Encode.Value
 bootstrapAdminEncoder =
     loginRequestEncoder
+
+
+
+-- SESSION
+
+
+type Session
+    = Loading
+    | Authenticated Identity
+    | Unauthenticated
+
+
+initSession : Session
+initSession =
+    Loading
+
+
+applyAuthResult : Result ApiError LoginSession -> Session -> Session
+applyAuthResult result _ =
+    case result of
+        Ok loginSession ->
+            Authenticated loginSession.identity
+
+        Err _ ->
+            Unauthenticated
+
+
+clearSession : Session -> Session
+clearSession _ =
+    Unauthenticated
+
+
+isAuthenticated : Session -> Bool
+isAuthenticated session =
+    case session of
+        Authenticated _ ->
+            True
+
+        _ ->
+            False
+
+
+isAdmin : Session -> Bool
+isAdmin session =
+    case session of
+        Authenticated identity ->
+            identity.role == Admin
+
+        _ ->
+            False

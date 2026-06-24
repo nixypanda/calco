@@ -6,7 +6,7 @@ import Api.Client as Client
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
-import Data.Auth as Auth
+import Data.Auth as Auth exposing (Session)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Region as Region
@@ -14,7 +14,6 @@ import Html
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Text as Text
 import Page
-import Session exposing (Session)
 import Task
 import Time
 import Ui
@@ -69,7 +68,7 @@ init flags url key =
     in
     ( { key = key
       , route = Data.Route.fromUrl url
-      , session = Session.init
+      , session = Auth.initSession
       , adminExists = True
       , pendingSession = Nothing
       , pendingBootstrap = Nothing
@@ -151,7 +150,7 @@ update msg model =
             ( closeChrome model, Api.Auth.logout (\_ -> LogoutCompleted) )
 
         LogoutCompleted ->
-            ( { model | session = Session.clear model.session }
+            ( { model | session = Auth.clearSession model.session }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
@@ -212,7 +211,7 @@ applyBootstrapProgress model =
             let
                 nextSession : Session
                 nextSession =
-                    Session.applyAuthResult sessionResult model.session
+                    Auth.applyAuthResult sessionResult model.session
 
                 adminExists : Bool
                 adminExists =
@@ -286,7 +285,7 @@ applyPageOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         Page.SessionExpired ->
-            ( { model | session = Session.clear model.session }
+            ( { model | session = Auth.clearSession model.session }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
@@ -297,7 +296,7 @@ applyPageOutMsg outMsg model =
             let
                 nextSession : Session
                 nextSession =
-                    Session.applyAuthResult (Ok loginSession) model.session
+                    Auth.applyAuthResult (Ok loginSession) model.session
             in
             ( { model | session = nextSession }
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
@@ -307,7 +306,7 @@ applyPageOutMsg outMsg model =
             let
                 nextSession : Session
                 nextSession =
-                    Session.applyAuthResult (Ok loginSession) model.session
+                    Auth.applyAuthResult (Ok loginSession) model.session
             in
             ( { model | session = nextSession, adminExists = True }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
@@ -440,7 +439,7 @@ appFrame model =
         profileLetter : String
         profileLetter =
             case model.session of
-                Session.Authenticated identity ->
+                Auth.Authenticated identity ->
                     Text.initial identity.username
 
                 _ ->
@@ -502,7 +501,7 @@ pageView : Model -> Element Msg
 pageView model =
     if
         model.session
-            == Session.Loading
+            == Auth.Loading
             || model.pendingSession
             == Nothing
             || model.pendingBootstrap

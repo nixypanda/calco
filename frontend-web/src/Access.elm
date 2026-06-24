@@ -1,7 +1,7 @@
 module Access exposing (RouteDecision(..), resolveRoute)
 
+import Data.Auth as Auth exposing (Session)
 import Data.Route exposing (Route(..))
-import Session exposing (Session)
 
 
 type RouteDecision
@@ -13,7 +13,7 @@ type RouteDecision
 resolveRoute : Session -> Bool -> Route -> RouteDecision
 resolveRoute session adminExists route =
     case session of
-        Session.Loading ->
+        Auth.Loading ->
             Hold
 
         _ ->
@@ -30,7 +30,7 @@ resolveKnownSession session adminExists route =
             _ ->
                 Navigate BootstrapSetup
 
-    else if Session.isAdmin session then
+    else if Auth.isAdmin session then
         case route of
             AdminDashboard ->
                 Render AdminDashboard
@@ -44,7 +44,7 @@ resolveKnownSession session adminExists route =
             _ ->
                 Navigate AdminDashboard
 
-    else if not (Session.isAuthenticated session) then
+    else if not (Auth.isAuthenticated session) then
         case route of
             AuthLogin ->
                 Render AuthLogin

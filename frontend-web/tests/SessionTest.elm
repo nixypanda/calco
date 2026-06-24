@@ -3,7 +3,6 @@ module SessionTest exposing (tests)
 import Api.Client as Client
 import Data.Auth as Auth
 import Expect
-import Session
 import Test exposing (Test, describe, test)
 
 
@@ -12,22 +11,22 @@ tests =
     describe "Session"
         [ test "init starts loading" <|
             \_ ->
-                Session.init
-                    |> Expect.equal Session.Loading
+                Auth.initSession
+                    |> Expect.equal Auth.Loading
         , test "auth success stores identity and profile" <|
             \_ ->
-                case Session.applyAuthResult (Ok loginSession) Session.init of
-                    Session.Authenticated identity ->
+                case Auth.applyAuthResult (Ok loginSession) Auth.initSession of
+                    Auth.Authenticated identity ->
                         Expect.equal loginSession.identity identity
 
                     _ ->
                         Expect.fail "expected Authenticated"
         , test "auth failure clears identity" <|
             \_ ->
-                Session.init
-                    |> Session.applyAuthResult (Ok loginSession)
-                    |> Session.applyAuthResult (Err Client.NetworkError)
-                    |> Expect.equal Session.Unauthenticated
+                Auth.initSession
+                    |> Auth.applyAuthResult (Ok loginSession)
+                    |> Auth.applyAuthResult (Err Client.NetworkError)
+                    |> Expect.equal Auth.Unauthenticated
         ]
 
 
