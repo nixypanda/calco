@@ -22,7 +22,7 @@ import Html.Attributes
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
-import Ui.Theme as Theme exposing (Mode, Theme)
+import Ui.Theme as Theme exposing (Theme)
 import Ui.Typography as Typography
 
 
@@ -77,7 +77,6 @@ showBottomNav device session isLoadingPage route =
 topBarView :
     { device : Device
     , theme : Theme
-    , themeMode : Mode
     , session : Session
     , route : Route
     , profileOpen : Bool
@@ -119,8 +118,14 @@ topBarView config profile =
                 ]
                 (Typography.subsectionTitle config.theme meta.title)
             , Element.el
-                [ Element.paddingEach { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 } ]
-                (themeToggle config.theme config.themeMode config.onThemeToggle)
+                [ Element.paddingEach
+                    { top = 0
+                    , right = DesignTokens.space8
+                    , bottom = 0
+                    , left = 0
+                    }
+                ]
+                (themeToggle config.theme config.onThemeToggle)
             , profileButton config.onProfileClick config.theme profile
             ]
 
@@ -139,15 +144,15 @@ topBarView config profile =
                 , Typography.pageTitle config.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle config.theme config.themeMode config.onThemeToggle
+            , themeToggle config.theme config.onThemeToggle
             ]
         )
 
 
-themeToggle : Theme -> Mode -> msg -> Element msg
-themeToggle theme themeMode onToggle =
+themeToggle : Theme -> msg -> Element msg
+themeToggle theme onToggle =
     Ui.toggleSwitch theme
-        { isActive = themeMode == Theme.Dark
+        { isActive = theme.mode == Theme.Dark
         , onToggle = onToggle
         }
 

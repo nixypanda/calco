@@ -1,4 +1,4 @@
-port module Main exposing (Flags, Model, Msg, PageModel, main)
+port module Main exposing (BootstrapState, Flags, Model, Msg, PageModel, main)
 
 import Access
 import Api.Auth
@@ -6,22 +6,21 @@ import Api.Client as Client
 import Browser
 import Browser.Events
 import Browser.Navigation as Nav
+import Chrome
 import Data.Auth as Auth exposing (Session)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
-import Element.Region as Region
 import Html
 import Lib.Date as LocalDate exposing (LocalDate)
-import Lib.Text as Text
 import Page
 import Task
 import Time
 import Ui
 import Ui.Css as Css
-import Ui.Theme as Theme exposing (Mode, Theme)
+import Ui.Theme as Theme exposing (Theme)
 import Url exposing (Url)
 import Version
-import View.Chrome as Chrome
+import View.Chrome
 
 
 
@@ -38,16 +37,11 @@ type alias Flags =
 type alias Model =
     { key : Nav.Key
     , route : Route
-    , session : Session
-    , adminExists : Bool
-    , pendingSession : Maybe (Result Client.ApiError Auth.LoginSession)
-    , pendingBootstrap : Maybe (Result Client.ApiError Auth.BootstrapStatus)
+    , bootstrap : BootstrapState
     , today : Maybe LocalDate
     , page : PageModel
-    , drawerOpen : Bool
-    , profileOpen : Bool
+    , chrome : Chrome.Model
     , device : Element.Device
-    , themeMode : Mode
     , theme : Theme
     , version : Version.Model
     }
@@ -57,33 +51,45 @@ type alias PageModel =
     Page.Model
 
 
+type BootstrapState
+    = Bootstrapping BootstrapProgress
+    | Bootstrapped BootstrapModel
+
+
+type alias BootstrapProgress =
+    { session : Maybe (Result Client.ApiError Auth.LoginSession)
+    , status : Maybe (Result Client.ApiError Auth.BootstrapStatus)
+    }
+
+
+type alias BootstrapModel =
+    { session : Session
+    , adminExists : Bool
+    }
+
+
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     let
-        themeMode : Mode
-        themeMode =
-            Theme.modeFromString flags.themeMode
-
         ( versionModel, versionCmd ) =
             Version.init
     in
     ( { key = key
       , route = Data.Route.fromUrl url
-      , session = Auth.initSession
-      , adminExists = True
-      , pendingSession = Nothing
-      , pendingBootstrap = Nothing
+      , bootstrap =
+            Bootstrapping
+                { session = Nothing
+                , status = Nothing
+                }
       , today = Nothing
       , page = Page.LoadingPage
-      , drawerOpen = False
-      , profileOpen = False
+      , chrome = Chrome.init
       , device =
             Element.classifyDevice
                 { width = flags.windowWidth
                 , height = flags.windowHeight
                 }
-      , themeMode = themeMode
-      , theme = Theme.forMode themeMode
+      , theme = Theme.forMode (Theme.modeFromString flags.themeMode)
       , version = versionModel
       }
     , Cmd.batch
@@ -106,16 +112,11 @@ type Msg
     | GotSession (Result Client.ApiError Auth.LoginSession)
     | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
     | GotLocalDate LocalDate
-    | LogoutClicked
     | LogoutCompleted
-    | MenuClicked
-    | DrawerClosed
-    | ProfileClicked
-    | NavigateTo Route
     | WindowResized Int Int
     | GotPageMsg Page.Msg
     | GotLocalContext { date : String, timezone : String }
-    | ThemeToggleClicked
+    | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
 
 
@@ -125,7 +126,9 @@ update msg model =
         LinkClicked request ->
             case request of
                 Browser.Internal url ->
-                    ( closeChrome model, Nav.pushUrl model.key (Url.toString url) )
+                    ( { model | chrome = Chrome.close model.chrome }
+                    , Nav.pushUrl model.key (Url.toString url)
+                    )
 
                 Browser.External href ->
                     ( model, Nav.load href )
@@ -136,50 +139,32 @@ update msg model =
                 route =
                     Data.Route.fromUrl url
             in
-            changeRouteTo route { model | route = route, drawerOpen = False, profileOpen = False }
+            changeRouteTo route { model | route = route, chrome = Chrome.close model.chrome }
 
         GotSession result ->
-            applyBootstrapProgress { model | pendingSession = Just result }
+            updateBootstrapProgress
+                (\progress -> { progress | session = Just result })
+                model
 
         GotBootstrapStatus result ->
-            applyBootstrapProgress { model | pendingBootstrap = Just result }
+            updateBootstrapProgress
+                (\progress -> { progress | status = Just result })
+                model
 
         GotLocalDate today ->
             changeRouteTo model.route { model | today = Just today }
 
-        LogoutClicked ->
-            ( closeChrome model, Api.Auth.logout (\_ -> LogoutCompleted) )
-
         LogoutCompleted ->
-            ( { model | session = Auth.clearSession model.session }
+            ( { model
+                | bootstrap =
+                    setSession (Auth.clearSession (currentSession model)) model.bootstrap
+              }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
-
-        MenuClicked ->
-            ( { model | drawerOpen = not model.drawerOpen, profileOpen = False }, Cmd.none )
-
-        DrawerClosed ->
-            ( { model | drawerOpen = False }, Cmd.none )
-
-        ProfileClicked ->
-            ( { model | profileOpen = not model.profileOpen, drawerOpen = False }, Cmd.none )
-
-        NavigateTo route ->
-            ( closeChrome model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         WindowResized width height ->
             ( { model | device = Element.classifyDevice { width = width, height = height } }
             , Cmd.none
-            )
-
-        ThemeToggleClicked ->
-            let
-                nextMode : Mode
-                nextMode =
-                    Theme.toggle model.themeMode
-            in
-            ( { model | themeMode = nextMode, theme = Theme.forMode nextMode }
-            , persistThemeMode (Theme.modeToString nextMode)
             )
 
         GotVersionMsg versionMsg ->
@@ -204,19 +189,74 @@ update msg model =
         GotPageMsg pageMsg ->
             stepPageUpdate (Page.update (pageContext model) pageMsg model.page) model
 
+        GotChromeMsg chromeMsg ->
+            stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
 
-applyBootstrapProgress : Model -> ( Model, Cmd Msg )
-applyBootstrapProgress model =
-    case ( model.pendingSession, model.pendingBootstrap ) of
-        ( Just sessionResult, Just bootstrapResult ) ->
+
+stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
+stepChromeUpdate ( chrome, outMsg ) model =
+    applyChromeOutMsg outMsg { model | chrome = chrome }
+
+
+applyChromeOutMsg : Chrome.OutMsg -> Model -> ( Model, Cmd Msg )
+applyChromeOutMsg outMsg model =
+    case outMsg of
+        Chrome.NoOutMsg ->
+            ( model, Cmd.none )
+
+        Chrome.Navigate route ->
+            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+
+        Chrome.Logout ->
+            ( model, Api.Auth.logout (\_ -> LogoutCompleted) )
+
+        Chrome.ToggleTheme ->
+            let
+                nextMode : Theme.Mode
+                nextMode =
+                    Theme.toggle model.theme.mode
+            in
+            ( { model | theme = Theme.forMode nextMode }
+            , persistThemeMode (Theme.modeToString nextMode)
+            )
+
+
+updateBootstrapProgress : (BootstrapProgress -> BootstrapProgress) -> Model -> ( Model, Cmd Msg )
+updateBootstrapProgress apply model =
+    case model.bootstrap of
+        Bootstrapping progress ->
+            resolveBootstrapProgress { model | bootstrap = Bootstrapping (apply progress) }
+
+        Bootstrapped _ ->
+            ( model, Cmd.none )
+
+
+resolveBootstrapProgress : Model -> ( Model, Cmd Msg )
+resolveBootstrapProgress model =
+    case model.bootstrap of
+        Bootstrapping { session, status } ->
+            resolveBootstrapResults model session status
+
+        Bootstrapped _ ->
+            ( model, Cmd.none )
+
+
+resolveBootstrapResults :
+    Model
+    -> Maybe (Result Client.ApiError Auth.LoginSession)
+    -> Maybe (Result Client.ApiError Auth.BootstrapStatus)
+    -> ( Model, Cmd Msg )
+resolveBootstrapResults model maybeSessionResult maybeStatusResult =
+    case ( maybeSessionResult, maybeStatusResult ) of
+        ( Just sessionResult, Just statusResult ) ->
             let
                 nextSession : Session
                 nextSession =
-                    Auth.applyAuthResult sessionResult model.session
+                    Auth.applyAuthResult sessionResult Auth.initSession
 
                 adminExists : Bool
                 adminExists =
-                    case bootstrapResult of
+                    case statusResult of
                         Ok status ->
                             status.adminExists
 
@@ -224,7 +264,13 @@ applyBootstrapProgress model =
                             True
             in
             changeRouteTo model.route
-                { model | session = nextSession, adminExists = adminExists }
+                { model
+                    | bootstrap =
+                        Bootstrapped
+                            { session = nextSession
+                            , adminExists = adminExists
+                            }
+                }
 
         _ ->
             ( model, Cmd.none )
@@ -232,7 +278,7 @@ applyBootstrapProgress model =
 
 changeRouteTo : Route -> Model -> ( Model, Cmd Msg )
 changeRouteTo route model =
-    case Access.resolveRoute model.session model.adminExists route of
+    case Access.resolveRoute (currentSession model) (currentAdminExists model) route of
         Access.Hold ->
             ( model, Cmd.none )
 
@@ -286,7 +332,10 @@ applyPageOutMsg outMsg model =
             ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
 
         Page.SessionExpired ->
-            ( { model | session = Auth.clearSession model.session }
+            ( { model
+                | bootstrap =
+                    setSession (Auth.clearSession (currentSession model)) model.bootstrap
+              }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
@@ -297,9 +346,9 @@ applyPageOutMsg outMsg model =
             let
                 nextSession : Session
                 nextSession =
-                    Auth.applyAuthResult (Ok loginSession) model.session
+                    Auth.applyAuthResult (Ok loginSession) (currentSession model)
             in
-            ( { model | session = nextSession }
+            ( { model | bootstrap = setSession nextSession model.bootstrap }
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
             )
 
@@ -307,9 +356,15 @@ applyPageOutMsg outMsg model =
             let
                 nextSession : Session
                 nextSession =
-                    Auth.applyAuthResult (Ok loginSession) model.session
+                    Auth.applyAuthResult (Ok loginSession) (currentSession model)
             in
-            ( { model | session = nextSession, adminExists = True }
+            ( { model
+                | bootstrap =
+                    Bootstrapped
+                        { session = nextSession
+                        , adminExists = True
+                        }
+              }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
             )
 
@@ -321,34 +376,13 @@ applyPageOutMsg outMsg model =
 view : Model -> Browser.Document Msg
 view model =
     let
+        session : Session
+        session =
+            currentSession model
+
         isLoadingPage : Bool
         isLoadingPage =
             Page.isLoading model.page
-
-        useBottomNav : Bool
-        useBottomNav =
-            Chrome.showBottomNav model.device model.session isLoadingPage model.route
-
-        bottomNavEl : List (Element.Attribute Msg)
-        bottomNavEl =
-            if useBottomNav then
-                [ Element.inFront
-                    (Element.el
-                        [ Element.width Element.fill
-                        , Element.alignBottom
-                        ]
-                        (Chrome.bottomNavBar
-                            { theme = model.theme
-                            , session = model.session
-                            , route = model.route
-                            , onNavigate = NavigateTo
-                            }
-                        )
-                    )
-                ]
-
-            else
-                []
     in
     { title = "CalCo"
     , body =
@@ -373,10 +407,39 @@ view model =
                     }
                 ]
             }
-            (layoutAttrs model ++ bottomNavEl)
+            (layoutAttrs model
+                ++ Chrome.bottomNavLayoutAttrs
+                    { model = model.chrome
+                    , device = model.device
+                    , theme = model.theme
+                    , session = session
+                    , route = model.route
+                    , isLoadingPage = isLoadingPage
+                    , toMsg = GotChromeMsg
+                    }
+            )
           <|
             Ui.layout model.theme <|
-                appFrame model
+                Chrome.viewFrame
+                    { model = model.chrome
+                    , device = model.device
+                    , theme = model.theme
+                    , session = session
+                    , route = model.route
+                    , isLoadingPage = isLoadingPage
+                    , updateBanner =
+                        if model.version.updateAvailable then
+                            Just
+                                (View.Chrome.updateBanner
+                                    model.theme
+                                    (GotVersionMsg Version.ReloadPageRequested)
+                                )
+
+                        else
+                            Nothing
+                    , page = pageView model
+                    , toMsg = GotChromeMsg
+                    }
         ]
     }
 
@@ -391,123 +454,9 @@ layoutAttrs model =
             []
 
 
-appFrame : Model -> Element Msg
-appFrame model =
-    let
-        isLoadingPage : Bool
-        isLoadingPage =
-            Page.isLoading model.page
-
-        useBottomNav : Bool
-        useBottomNav =
-            Chrome.showBottomNav model.device model.session isLoadingPage model.route
-
-        bottomNavClearance : Int
-        bottomNavClearance =
-            56
-
-        chromeAttrs : List (Element.Attribute Msg)
-        chromeAttrs =
-            if useBottomNav then
-                []
-
-            else
-                Chrome.drawerOverlay
-                    { device = model.device
-                    , theme = model.theme
-                    , session = model.session
-                    , route = model.route
-                    , drawerOpen = model.drawerOpen
-                    , onClose = DrawerClosed
-                    , onNavigate = NavigateTo
-                    }
-
-        pageAttrs : List (Element.Attribute Msg)
-        pageAttrs =
-            [ Element.width Element.fill
-            , Element.height Element.fill
-            , Region.mainContent
-            ]
-                ++ (if useBottomNav then
-                        [ Element.paddingEach
-                            { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
-                        ]
-
-                    else
-                        []
-                   )
-
-        profileLetter : String
-        profileLetter =
-            case model.session of
-                Auth.Authenticated identity ->
-                    Text.initial identity.username
-
-                _ ->
-                    "?"
-
-        profileMenuEl : Maybe (Element Msg)
-        profileMenuEl =
-            if
-                model.profileOpen
-                    && Chrome.showsAppChrome model.session isLoadingPage model.route
-            then
-                Just
-                    (Chrome.profileMenu
-                        { device = model.device
-                        , theme = model.theme
-                        , session = model.session
-                        , onNavigate = NavigateTo
-                        , onLogout = LogoutClicked
-                        }
-                    )
-
-            else
-                Nothing
-    in
-    Element.column
-        ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
-        (Chrome.topBarView
-            { device = model.device
-            , theme = model.theme
-            , themeMode = model.themeMode
-            , session = model.session
-            , route = model.route
-            , profileOpen = model.profileOpen
-            , isLoadingPage = isLoadingPage
-            , onMenuClick = MenuClicked
-            , onProfileClick = ProfileClicked
-            , onThemeToggle = ThemeToggleClicked
-            , onNavigate = NavigateTo
-            }
-            { profileLabel = profileLetter
-            , profileMenu = profileMenuEl
-            }
-            :: (if model.version.updateAvailable then
-                    [ Chrome.updateBanner model.theme (GotVersionMsg Version.ReloadPageRequested) ]
-
-                else
-                    []
-               )
-            ++ [ Element.el pageAttrs (pageView model) ]
-        )
-
-
-closeChrome : Model -> Model
-closeChrome model =
-    { model | drawerOpen = False, profileOpen = False }
-
-
 pageView : Model -> Element Msg
 pageView model =
-    if
-        model.session
-            == Auth.Loading
-            || model.pendingSession
-            == Nothing
-            || model.pendingBootstrap
-            == Nothing
-    then
+    if not (isBootstrapped model.bootstrap) then
         Ui.skeletonLoading model.theme
 
     else
@@ -520,6 +469,49 @@ pageProps model =
     , device = model.device
     , theme = model.theme
     }
+
+
+currentSession : Model -> Session
+currentSession model =
+    case model.bootstrap of
+        Bootstrapping _ ->
+            Auth.Loading
+
+        Bootstrapped bootstrap ->
+            bootstrap.session
+
+
+currentAdminExists : Model -> Bool
+currentAdminExists model =
+    case model.bootstrap of
+        Bootstrapping _ ->
+            True
+
+        Bootstrapped bootstrap ->
+            bootstrap.adminExists
+
+
+setSession : Session -> BootstrapState -> BootstrapState
+setSession session bootstrap =
+    case bootstrap of
+        Bootstrapping _ ->
+            Bootstrapped
+                { session = session
+                , adminExists = True
+                }
+
+        Bootstrapped model ->
+            Bootstrapped { model | session = session }
+
+
+isBootstrapped : BootstrapState -> Bool
+isBootstrapped bootstrap =
+    case bootstrap of
+        Bootstrapping _ ->
+            False
+
+        Bootstrapped _ ->
+            True
 
 
 
