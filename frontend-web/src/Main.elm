@@ -1,4 +1,12 @@
-port module Main exposing (BootstrapState, Flags, Model, Msg, PageModel, main)
+port module Main exposing
+    ( BootstrapState
+    , Flags
+    , Model
+    , Msg
+    , PageModel
+    , main
+    , normalizeChromeNavigation
+    )
 
 import Access
 import Api.Auth
@@ -205,7 +213,10 @@ applyChromeOutMsg outMsg model =
             ( model, Cmd.none )
 
         Chrome.Navigate route ->
-            ( model, Nav.pushUrl model.key (Data.Route.routeToPath route) )
+            ( model
+            , Nav.pushUrl model.key
+                (Data.Route.routeToPath (normalizeChromeNavigation model.route route))
+            )
 
         Chrome.Logout ->
             ( model, Api.Auth.logout (\_ -> LogoutCompleted) )
@@ -219,6 +230,16 @@ applyChromeOutMsg outMsg model =
             ( { model | theme = Theme.forMode nextMode }
             , persistThemeMode (Theme.modeToString nextMode)
             )
+
+
+normalizeChromeNavigation : Route -> Route -> Route
+normalizeChromeNavigation current target =
+    case ( current, target ) of
+        ( DiaryDay (Just date), FoodSearch Nothing Nothing ) ->
+            FoodSearch (Just date) Nothing
+
+        _ ->
+            target
 
 
 updateBootstrapProgress : (BootstrapProgress -> BootstrapProgress) -> Model -> ( Model, Cmd Msg )
