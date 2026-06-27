@@ -31,6 +31,20 @@ def _food_row(**overrides: str) -> dict[str, str]:
         "protein_g": "12.56",
         "carbs_g": "0.72",
         "fat_g": "9.51",
+        "fiber_g": "0",
+        "sugar_g": "0.37",
+        "saturated_fat_g": "3.126",
+        "trans_fat_g": "0",
+        "monounsaturated_fat_g": "3.659",
+        "polyunsaturated_fat_g": "1.911",
+        "cholesterol_mg": "372",
+        "sodium_mg": "142",
+        "calcium_mg": "56",
+        "potassium_mg": "138",
+        "vitamin_d_pct_daily_value": "20",
+        "iron_pct_daily_value": "9.72222",
+        "vitamin_a_pct_daily_value": "6",
+        "vitamin_c_pct_daily_value": "0",
     }
     row.update(overrides)
     return row
@@ -112,6 +126,18 @@ class ImportHistoryTests(unittest.TestCase):
             f"imported_from=myfitnesspal mfp_import_fingerprint={first}"
         )
         self.assertEqual(extracted, first)
+
+    def test_fingerprint_changes_when_added_nutrient_changes(self) -> None:
+        first = fingerprint_for_food_row(_food_row())
+        second = fingerprint_for_food_row(_food_row(sodium_mg="143"))
+        self.assertNotEqual(first, second)
+
+    def test_fingerprint_changes_when_percent_daily_value_changes(self) -> None:
+        first = fingerprint_for_food_row(_food_row())
+        second = fingerprint_for_food_row(
+            _food_row(vitamin_d_pct_daily_value="25%")
+        )
+        self.assertNotEqual(first, second)
 
 
 if __name__ == "__main__":

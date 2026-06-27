@@ -7,17 +7,15 @@ downstream import planning.
 
 import csv
 from collections import Counter, defaultdict
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
 from steps import load_csv
+from mfp_nutrients import MFP_NUTRIENT_SPECS, parse_decimal, parse_mfp_nutrient_amount
 
 
 def _to_decimal(s: str) -> Decimal | None:
-    try:
-        return Decimal(s.strip())
-    except (InvalidOperation, ValueError, AttributeError):
-        return None
+    return parse_decimal(s)
 
 
 def _per_unit(nutrient: str, value: Decimal) -> Decimal | None:
@@ -102,10 +100,7 @@ def run(
         "row_count",
         "serving_mode",
         "reference_basis",
-        "reference_calories",
-        "reference_protein_g",
-        "reference_carbs_g",
-        "reference_fat_g",
+        *[spec.reference_column for spec in MFP_NUTRIENT_SPECS],
         "example_value",
         "example_unit",
         "example_serving",
@@ -140,10 +135,9 @@ def run(
             multiplier = Decimal(1)
             current_serving_grams = existing_row.get("current_serving_grams", "")
 
-        cal_vals: list[Decimal] = []
-        prot_vals: list[Decimal] = []
-        carbs_vals: list[Decimal] = []
-        fat_vals: list[Decimal] = []
+        nutrient_values: dict[str, list[Decimal]] = {
+            spec.reference_column: [] for spec in MFP_NUTRIENT_SPECS
+        }
         serving_strs: list[str] = []
         value_strs: list[str] = []
         unit_strs: list[str] = []
@@ -152,18 +146,13 @@ def run(
             v = _to_decimal(e.get("value", ""))
             if v is None or v == Decimal(0):
                 continue
-            cal = _per_unit(e.get("calories", ""), v)
-            prot = _per_unit(e.get("protein_g", ""), v)
-            carbs = _per_unit(e.get("carbs_g", ""), v)
-            fat = _per_unit(e.get("fat_g", ""), v)
-            if cal is not None:
-                cal_vals.append(cal * multiplier)
-            if prot is not None:
-                prot_vals.append(prot * multiplier)
-            if carbs is not None:
-                carbs_vals.append(carbs * multiplier)
-            if fat is not None:
-                fat_vals.append(fat * multiplier)
+            for spec in MFP_NUTRIENT_SPECS:
+                amount = parse_mfp_nutrient_amount(e, spec)
+                if amount is None:
+                    continue
+                per_unit = _per_unit(str(amount), v)
+                if per_unit is not None:
+                    nutrient_values[spec.reference_column].append(per_unit * multiplier)
             serving_strs.append(e.get("serving", ""))
             value_strs.append(e.get("value", ""))
             unit_strs.append(e.get("unit", ""))
@@ -176,15 +165,11 @@ def run(
                 return str(int(d))
             return f"{d:.1f}"
 
-        review_rows.append({
+        review_row = {
             "description": desc,
             "row_count": str(len(entries)),
             "serving_mode": serving_mode,
             "reference_basis": reference_basis,
-            "reference_calories": _fmt(_median(cal_vals)),
-            "reference_protein_g": _fmt(_median(prot_vals)),
-            "reference_carbs_g": _fmt(_median(carbs_vals)),
-            "reference_fat_g": _fmt(_median(fat_vals)),
             "example_value": _modal(value_strs),
             "example_unit": _modal(unit_strs),
             "example_serving": _modal(serving_strs),
@@ -192,7 +177,12 @@ def run(
             "corrected_serving_grams": existing_row.get("corrected_serving_grams", ""),
             "confidence": existing_row.get("confidence", ""),
             "notes": existing_row.get("notes", ""),
-        })
+        }
+        for spec in MFP_NUTRIENT_SPECS:
+            review_row[spec.reference_column] = _fmt(
+                _median(nutrient_values[spec.reference_column]),
+            )
+        review_rows.append(review_row)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w", newline="", encoding="utf-8") as f:

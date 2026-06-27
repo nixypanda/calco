@@ -8,6 +8,8 @@ import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from mfp_nutrients import MFP_NUTRIENT_MAPPINGS
+
 BRANDED_COMMERCIAL_DESCRIPTIONS = (
     "multi-protein bread",
     "48 gms protein bread",
@@ -54,12 +56,6 @@ POLICY_COLUMN_ORDER = (
     "corrected_serving_grams",
     "confidence",
     "notes",
-)
-NUTRIENT_COLUMNS = (
-    ("ENERGY_KCAL", "reference_calories"),
-    ("PROTEIN_G", "reference_protein_g"),
-    ("CARBS_G", "reference_carbs_g"),
-    ("FAT_G", "reference_fat_g"),
 )
 SPACE_RE = re.compile(r"\s+")
 MFP_BRAND = "MyFitnessPal"
@@ -193,11 +189,12 @@ def _build_record(row: dict[str, str], input_path: str | Path) -> dict[str, obje
     serving_grams = _basis_serving_grams(row)
     nutrients = []
     reference_nutrients: dict[str, int | float] = {}
-    for code, column in NUTRIENT_COLUMNS:
-        reference_amount = _parse_decimal(row.get(column, ""))
+    for mapping in MFP_NUTRIENT_MAPPINGS:
+        code = mapping.nutrient_code
+        reference_amount = _parse_decimal(row.get(mapping.review_column, ""))
         if reference_amount is None:
             continue
-        per_100g_amount = _amount_per_100g(row, column)
+        per_100g_amount = _amount_per_100g(row, mapping.review_column)
         if per_100g_amount is None:
             continue
         nutrients.append(

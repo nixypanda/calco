@@ -16,16 +16,14 @@ from steps.generate_food_match_review import (
     _search_terms,
     run,
 )
+from mfp_nutrients import REQUIRED_REVIEW_REFERENCE_COLUMNS
 
 BASE_FIELDS = [
     "description",
     "row_count",
     "serving_mode",
     "reference_basis",
-    "reference_calories",
-    "reference_protein_g",
-    "reference_carbs_g",
-    "reference_fat_g",
+    *REQUIRED_REVIEW_REFERENCE_COLUMNS,
     "example_value",
     "example_unit",
     "example_serving",
@@ -437,6 +435,29 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         assert result["preserved_existing_matches"] == 1
         assert rows[0]["matched_food_id"] == "food-9"
         assert self._read_jsonl()[0]["matched_food_id"] == "food-9"
+
+    def test_rejects_legacy_review_csv_without_full_nutrient_columns(self) -> None:
+        legacy_fields = [field for field in BASE_FIELDS if field != "reference_fiber_g"]
+        legacy_row = {
+            field: value
+            for field, value in _base_row().items()
+            if field in legacy_fields
+        }
+        self.input_path = _write_csv([legacy_row], legacy_fields)
+        self.output_path = _temp_path(".csv")
+        self.jsonl_path = _temp_path(".jsonl")
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "missing required full-nutrient columns",
+        ):
+            run(
+                self.input_path,
+                self.output_path,
+                matches_jsonl_path=self.jsonl_path,
+                repo=FakeRepo({}),
+                barcode_hints={},
+            )
 
     def test_normalize_description_is_stable(self) -> None:
         assert _normalize_description("AS Protein Bread (48 gms)") == "as protein bread"

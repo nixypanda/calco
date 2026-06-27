@@ -23,6 +23,20 @@ FIELDS = [
     "reference_protein_g",
     "reference_carbs_g",
     "reference_fat_g",
+    "reference_fiber_g",
+    "reference_sugar_g",
+    "reference_saturated_fat_g",
+    "reference_trans_fat_g",
+    "reference_monounsaturated_fat_g",
+    "reference_polyunsaturated_fat_g",
+    "reference_cholesterol_mg",
+    "reference_sodium_mg",
+    "reference_calcium_mg",
+    "reference_potassium_mg",
+    "reference_vitamin_d_ug",
+    "reference_iron_mg",
+    "reference_vitamin_a_ug",
+    "reference_vitamin_c_mg",
     "example_value",
     "example_unit",
     "example_serving",
@@ -142,6 +156,74 @@ class GenerateFoodsToCreateTests(unittest.TestCase):
             },
         ]
         assert records[0]["provenance"]["policy_bucket"] == "raw_basic"
+
+    def test_emits_full_mapped_nutrients_and_reference_provenance(self) -> None:
+        self._run(
+            [
+                _row(
+                    reference_fiber_g="0",
+                    reference_sugar_g="2",
+                    reference_saturated_fat_g="0.25",
+                    reference_trans_fat_g="0",
+                    reference_monounsaturated_fat_g="0.5",
+                    reference_polyunsaturated_fat_g="0.75",
+                    reference_cholesterol_mg="15",
+                    reference_sodium_mg="150",
+                    reference_calcium_mg="110",
+                    reference_potassium_mg="200",
+                    reference_vitamin_d_ug="2",
+                    reference_iron_mg="1.8",
+                    reference_vitamin_a_ug="90",
+                    reference_vitamin_c_mg="9",
+                )
+            ]
+        )
+        record = self._read_jsonl()[0]
+
+        nutrients_by_code = {
+            nutrient["code"]: nutrient["amount_per_100g"]
+            for nutrient in record["nutrients"]
+        }
+        assert nutrients_by_code == {
+            "ENERGY_KCAL": 400,
+            "PROTEIN_G": 80,
+            "CARBS_G": 10,
+            "FAT_G": 3.3333,
+            "FIBER_G": 0,
+            "SUGAR_G": 6.6667,
+            "SATURATED_FAT_G": 0.8333,
+            "TRANS_FAT_G": 0,
+            "MONOUNSATURATED_FAT_G": 1.6667,
+            "POLYUNSATURATED_FAT_G": 2.5,
+            "CHOLESTEROL_MG": 50,
+            "SODIUM_MG": 500,
+            "CALCIUM_MG": 366.6667,
+            "POTASSIUM_MG": 666.6667,
+            "VITAMIN_D_UG": 6.6667,
+            "IRON_MG": 6,
+            "VITAMIN_A_UG": 300,
+            "VITAMIN_C_MG": 30,
+        }
+        assert record["provenance"]["reference_nutrients"] == {
+            "ENERGY_KCAL": 120,
+            "PROTEIN_G": 24,
+            "CARBS_G": 3,
+            "FAT_G": 1,
+            "FIBER_G": 0,
+            "SUGAR_G": 2,
+            "SATURATED_FAT_G": 0.25,
+            "TRANS_FAT_G": 0,
+            "MONOUNSATURATED_FAT_G": 0.5,
+            "POLYUNSATURATED_FAT_G": 0.75,
+            "CHOLESTEROL_MG": 15,
+            "SODIUM_MG": 150,
+            "CALCIUM_MG": 110,
+            "POTASSIUM_MG": 200,
+            "VITAMIN_D_UG": 2,
+            "IRON_MG": 1.8,
+            "VITAMIN_A_UG": 90,
+            "VITAMIN_C_MG": 9,
+        }
 
     def test_normalizes_whitespace_for_approved_branded_rows(self) -> None:
         result = self._run(

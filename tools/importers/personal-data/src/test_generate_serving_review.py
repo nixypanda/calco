@@ -6,11 +6,17 @@ import tempfile
 import unittest
 
 from steps.generate_serving_review import run
+from mfp_nutrients import REQUIRED_REVIEW_REFERENCE_COLUMNS
 
 
 BASE = [
     "item_type", "date", "description", "value", "unit", "serving", "meal",
     "calories", "fat_g", "carbs_g", "protein_g",
+    "fiber_g", "sugar_g", "saturated_fat_g", "trans_fat_g",
+    "monounsaturated_fat_g", "polyunsaturated_fat_g", "cholesterol_mg",
+    "sodium_mg", "calcium_mg", "potassium_mg",
+    "vitamin_d_pct_daily_value", "iron_pct_daily_value",
+    "vitamin_a_pct_daily_value", "vitamin_c_pct_daily_value",
 ]
 
 
@@ -101,6 +107,68 @@ class GenerateServingReviewTests(unittest.TestCase):
         self.assertEqual(out[0]["reference_basis"], "per_serving")
         self.assertEqual(out[0]["reference_calories"], "71.5")
         self.assertEqual(out[0]["example_unit"], "serving")
+
+    def test_outputs_all_reference_columns_and_converts_daily_values(self) -> None:
+        self._run([
+            _row(
+                description="Fortified Oats",
+                value="50",
+                unit="g",
+                serving="50.0 g",
+                calories="190",
+                fat_g="5",
+                carbs_g="33",
+                protein_g="7",
+                fiber_g="8",
+                sugar_g="2",
+                saturated_fat_g="1",
+                trans_fat_g="0",
+                monounsaturated_fat_g="1.5",
+                polyunsaturated_fat_g="2",
+                cholesterol_mg="0",
+                sodium_mg="120",
+                calcium_mg="260",
+                potassium_mg="180",
+                vitamin_d_pct_daily_value="10%",
+                iron_pct_daily_value="25",
+                vitamin_a_pct_daily_value="15.0",
+                vitamin_c_pct_daily_value="8",
+            ),
+        ])
+        out = self._read_output()
+        self.assertEqual(set(REQUIRED_REVIEW_REFERENCE_COLUMNS), set(out[0]).intersection(REQUIRED_REVIEW_REFERENCE_COLUMNS))
+        self.assertEqual(out[0]["reference_fiber_g"], "16")
+        self.assertEqual(out[0]["reference_sugar_g"], "4")
+        self.assertEqual(out[0]["reference_saturated_fat_g"], "2")
+        self.assertEqual(out[0]["reference_trans_fat_g"], "0")
+        self.assertEqual(out[0]["reference_monounsaturated_fat_g"], "3")
+        self.assertEqual(out[0]["reference_polyunsaturated_fat_g"], "4")
+        self.assertEqual(out[0]["reference_cholesterol_mg"], "0")
+        self.assertEqual(out[0]["reference_sodium_mg"], "240")
+        self.assertEqual(out[0]["reference_calcium_mg"], "520")
+        self.assertEqual(out[0]["reference_potassium_mg"], "360")
+        self.assertEqual(out[0]["reference_vitamin_d_ug"], "4")
+        self.assertEqual(out[0]["reference_iron_mg"], "9")
+        self.assertEqual(out[0]["reference_vitamin_a_ug"], "270")
+        self.assertEqual(out[0]["reference_vitamin_c_mg"], "14.4")
+
+    def test_scales_daily_value_conversion_for_volume_basis(self) -> None:
+        self._run([
+            _row(
+                description="Fortified Juice",
+                value="250",
+                unit="ml",
+                serving="250.0 ml",
+                calories="100",
+                fat_g="0",
+                carbs_g="24",
+                protein_g="0",
+                vitamin_d_pct_daily_value="25%",
+            ),
+        ])
+        out = self._read_output()
+        self.assertEqual(out[0]["serving_mode"], "volume")
+        self.assertEqual(out[0]["reference_vitamin_d_ug"], "2")
 
     def test_existing_review_values_are_preserved(self) -> None:
         existing = [{

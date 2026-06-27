@@ -13,6 +13,11 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from urllib.parse import urlparse
 
+from mfp_nutrients import (
+    MACRO_NUTRIENT_SPECS,
+    REQUIRED_REVIEW_REFERENCE_COLUMNS,
+)
+
 MACRO_CODES = ("ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G")
 NUTRIENT_CODE_SQL = "', '".join(MACRO_CODES)
 MATCH_COLUMNS = [
@@ -488,17 +493,11 @@ def _target_serving_grams(row: dict[str, str]) -> Decimal | None:
 
 
 def _lookup_reference_macros(row: dict[str, str]) -> dict[str, Decimal]:
-    mapping = {
-        "ENERGY_KCAL": row.get("reference_calories", ""),
-        "PROTEIN_G": row.get("reference_protein_g", ""),
-        "CARBS_G": row.get("reference_carbs_g", ""),
-        "FAT_G": row.get("reference_fat_g", ""),
-    }
     result: dict[str, Decimal] = {}
-    for code, raw_value in mapping.items():
-        decimal = _to_decimal(raw_value)
+    for spec in MACRO_NUTRIENT_SPECS:
+        decimal = _to_decimal(row.get(spec.reference_column, ""))
         if decimal is not None:
-            result[code] = decimal
+            result[spec.nutrient_code] = decimal
     return result
 
 
@@ -761,6 +760,19 @@ def _best_unmatched_note(evaluations: list[CandidateEvaluation]) -> str:
 def _load_review_rows(path: str | Path) -> list[dict[str, str]]:
     with open(path, newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            return []
+        missing_columns = [
+            column
+            for column in REQUIRED_REVIEW_REFERENCE_COLUMNS
+            if column not in reader.fieldnames
+        ]
+        if missing_columns:
+            missing = ", ".join(missing_columns)
+            raise ValueError(
+                "review CSV is missing required full-nutrient columns; "
+                f"regenerate step-9 serving review before matching: {missing}",
+            )
         return [
             {key: value or "" for key, value in row.items()}
             for row in reader

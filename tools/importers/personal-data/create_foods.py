@@ -18,6 +18,10 @@ from typing import Any
 import requests
 
 ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT / "src"))
+
+from mfp_nutrients import REQUIRED_MACRO_CODES
+
 DATA_DIR = ROOT / "data"
 DEFAULT_INPUT = DATA_DIR / "foods_to_create.jsonl"
 DEFAULT_REVIEW_CSV = DATA_DIR / "step-10-out-food-match-review-merged.csv"
@@ -31,7 +35,6 @@ DEFAULT_USER_PASSWORD = "testpassword"
 
 IMPORT_SOURCE = "USER"
 IMPORT_SOURCE_PREFIX = "mfp-personal-data"
-REQUIRED_NUTRIENT_CODES = ("ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G")
 REVIEW_FINAL_COLUMNS = (
     "created_food_id",
     "created_food_name",
@@ -286,7 +289,7 @@ def _custom_payload(record: dict[str, Any]) -> dict[str, Any]:
     }
     seen_codes = {nutrient["code"] for nutrient in payload.get("nutrients", [])}
     nutrients = list(payload.get("nutrients", []))
-    for code in REQUIRED_NUTRIENT_CODES:
+    for code in REQUIRED_MACRO_CODES:
         if code not in seen_codes:
             nutrients.append(
                 {

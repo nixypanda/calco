@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from mfp_nutrients import MFP_NUTRIENT_MAPPINGS
 from steps import load_csv, parse_serving
 
 DEFAULT_API_URL = "http://127.0.0.1:3001"
@@ -151,11 +152,9 @@ def fingerprint_for_food_row(food_row: dict[str, str]) -> str:
         "value": _clean_text(food_row.get("value", "")),
         "unit": _clean_text(food_row.get("unit", "")),
         "serving": _clean_text(food_row.get("serving", "")),
-        "calories": _clean_text(food_row.get("calories", "")),
-        "protein_g": _clean_text(food_row.get("protein_g", "")),
-        "carbs_g": _clean_text(food_row.get("carbs_g", "")),
-        "fat_g": _clean_text(food_row.get("fat_g", "")),
     }
+    for mapping in MFP_NUTRIENT_MAPPINGS:
+        payload[mapping.source_column] = _clean_text(food_row.get(mapping.source_column, ""))
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

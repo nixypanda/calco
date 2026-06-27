@@ -29,6 +29,11 @@ basis and the current gram assumption used for downstream conversion. This CSV
 becomes the central review artifact for food matching, creation, and historical
 log import.
 
+The maintained contract is that `reference_*` columns cover the full mapped MFP
+nutrient set, not only the four required macros. `%DV` fields are converted to
+absolute units using the FDA Daily Values documented below before they appear in
+the review CSV.
+
 Reruns preserve any existing edits already present in
 `data/step-9-out-serving-review.csv`.
 
@@ -44,6 +49,20 @@ Reruns preserve any existing edits already present in
 | `reference_protein_g` | Protein on the reference basis |
 | `reference_carbs_g` | Carbs on the reference basis |
 | `reference_fat_g` | Fat on the reference basis |
+| `reference_fiber_g` | Fiber on the reference basis |
+| `reference_sugar_g` | Sugar on the reference basis |
+| `reference_saturated_fat_g` | Saturated fat on the reference basis |
+| `reference_trans_fat_g` | Trans fat on the reference basis |
+| `reference_monounsaturated_fat_g` | Monounsaturated fat on the reference basis |
+| `reference_polyunsaturated_fat_g` | Polyunsaturated fat on the reference basis |
+| `reference_cholesterol_mg` | Cholesterol on the reference basis |
+| `reference_sodium_mg` | Sodium on the reference basis |
+| `reference_calcium_mg` | Calcium on the reference basis |
+| `reference_potassium_mg` | Potassium on the reference basis |
+| `reference_vitamin_d_ug` | Vitamin D on the reference basis |
+| `reference_iron_mg` | Iron on the reference basis |
+| `reference_vitamin_a_ug` | Vitamin A on the reference basis |
+| `reference_vitamin_c_mg` | Vitamin C on the reference basis |
 | `example_value` | Representative `value` from the CSV |
 | `example_unit` | Representative `unit` from the CSV |
 | `example_serving` | Representative `serving` from the CSV |
@@ -58,6 +77,8 @@ Reruns preserve any existing edits already present in
 2. Group rows by `description`.
 3. For each group, determine `serving_mode` from canonical units.
 4. Compute a reference nutrient snapshot on the correct basis.
+   Convert `%DV` source values to absolute units first, then scale them like
+   the directly mapped nutrients.
 5. Preserve prior review edits when the output file already exists.
 6. Write one CSV row per distinct food.
 
@@ -217,6 +238,8 @@ The current practical mode is:
 - authenticate with a `calco_session` cookie value
 - target the running backend at `http://127.0.0.1:3001` in the current local
   dev setup
+- forward the full mapped nutrient set from `foods_to_create.jsonl`, including
+  nutrients derived from `%DV` source fields
 
 For compatibility with the custom-food API, the script backfills any missing
 required macro nutrient codes with `0`:
@@ -300,7 +323,10 @@ the unmatched-food creation path and should be equivalent to
     {"code": "ENERGY_KCAL", "amount_per_100g": 76.99, "source": "mfp", "confidence": "derived"},
     {"code": "PROTEIN_G",   "amount_per_100g": 2.66,  "source": "mfp", "confidence": "derived"},
     {"code": "FAT_G",       "amount_per_100g": 3.54,  "source": "mfp", "confidence": "derived"},
-    {"code": "CARBS_G",     "amount_per_100g": 10.18, "source": "mfp", "confidence": "derived"}
+    {"code": "CARBS_G",     "amount_per_100g": 10.18, "source": "mfp", "confidence": "derived"},
+    {"code": "FIBER_G",     "amount_per_100g": 3.10,  "source": "mfp", "confidence": "derived"},
+    {"code": "SODIUM_MG",   "amount_per_100g": 222.0, "source": "mfp", "confidence": "derived"},
+    {"code": "IRON_MG",     "amount_per_100g": 2.70,  "source": "mfp", "confidence": "derived"}
   ],
   "servings": [
     {"label": "1 g", "quantity": 1, "unit": "g", "grams": 1}
@@ -326,23 +352,45 @@ the unmatched-food creation path and should be equivalent to
 | CSV column | Nutrient code |
 |---|---|
 | `calories` | `ENERGY_KCAL` |
-| `fat_g` | `FAT_G` |
-| `saturated_fat_g` | `SATURATED_FAT_G` |
-| `trans_fat_g` | `TRANS_FAT_G` |
-| `polyunsaturated_fat_g` | `POLYUNSATURATED_FAT_G` |
-| `monounsaturated_fat_g` | `MONOUNSATURATED_FAT_G` |
-| `cholesterol_mg` | `CHOLESTEROL_MG` |
-| `sodium_mg` | `SODIUM_MG` |
+| `protein_g` | `PROTEIN_G` |
 | `carbs_g` | `CARBS_G` |
+| `fat_g` | `FAT_G` |
 | `fiber_g` | `FIBER_G` |
 | `sugar_g` | `SUGAR_G` |
-| `protein_g` | `PROTEIN_G` |
+| `saturated_fat_g` | `SATURATED_FAT_G` |
+| `trans_fat_g` | `TRANS_FAT_G` |
+| `monounsaturated_fat_g` | `MONOUNSATURATED_FAT_G` |
+| `polyunsaturated_fat_g` | `POLYUNSATURATED_FAT_G` |
+| `cholesterol_mg` | `CHOLESTEROL_MG` |
+| `sodium_mg` | `SODIUM_MG` |
 | `calcium_mg` | `CALCIUM_MG` |
 | `potassium_mg` | `POTASSIUM_MG` |
+| `vitamin_d_pct_daily_value` | `VITAMIN_D_UG` |
+| `iron_pct_daily_value` | `IRON_MG` |
+| `vitamin_a_pct_daily_value` | `VITAMIN_A_UG` |
+| `vitamin_c_pct_daily_value` | `VITAMIN_C_MG` |
 
-Unsupported columns (`added_sugar_g`, `sugar_alcohols_g`,
-`vitamin_d_pct_daily_value`, `iron_pct_daily_value`,
-`vitamin_a_pct_daily_value`, `vitamin_c_pct_daily_value`) are skipped.
+Unsupported columns remain limited to fields with no current CalCo nutrient
+code or no approved conversion policy, such as `added_sugar_g` and
+`sugar_alcohols_g`.
+
+#### FDA %DV Conversion Policy
+
+Converted `%DV` fields use current FDA Daily Values:
+
+| CSV column | Daily Value | Stored formula |
+|---|---|---|
+| `vitamin_d_pct_daily_value` | `20 mcg` | `pct / 100 * 20` |
+| `iron_pct_daily_value` | `18 mg` | `pct / 100 * 18` |
+| `vitamin_a_pct_daily_value` | `900 mcg RAE` | `pct / 100 * 900` |
+| `vitamin_c_pct_daily_value` | `90 mg` | `pct / 100 * 90` |
+
+Rules:
+
+- `%DV` inputs are percentages, not fractions
+- `15`, `15.0`, and `15%` are interpreted identically
+- blank values are skipped
+- explicit `0` values are preserved
 
 ---
 

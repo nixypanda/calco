@@ -3,6 +3,54 @@
 This directory centers on the structured MFP cleaning pipeline under `src/`
 and the generated review artifacts under `data/`.
 
+## MFP Nutrient Mapping Contract
+
+The maintained MFP custom-food import path preserves every MFP nutrient value
+that maps to an existing CalCo nutrient code.
+
+Direct mappings:
+
+| MFP column | CalCo nutrient code |
+| --- | --- |
+| `calories` | `ENERGY_KCAL` |
+| `protein_g` | `PROTEIN_G` |
+| `carbs_g` | `CARBS_G` |
+| `fat_g` | `FAT_G` |
+| `fiber_g` | `FIBER_G` |
+| `sugar_g` | `SUGAR_G` |
+| `saturated_fat_g` | `SATURATED_FAT_G` |
+| `trans_fat_g` | `TRANS_FAT_G` |
+| `monounsaturated_fat_g` | `MONOUNSATURATED_FAT_G` |
+| `polyunsaturated_fat_g` | `POLYUNSATURATED_FAT_G` |
+| `cholesterol_mg` | `CHOLESTEROL_MG` |
+| `sodium_mg` | `SODIUM_MG` |
+| `calcium_mg` | `CALCIUM_MG` |
+| `potassium_mg` | `POTASSIUM_MG` |
+
+`%DV` conversions use current FDA Daily Values and are converted to absolute
+units before storage:
+
+| MFP column | CalCo nutrient code | Formula |
+| --- | --- | --- |
+| `vitamin_d_pct_daily_value` | `VITAMIN_D_UG` | `pct / 100 * 20` |
+| `iron_pct_daily_value` | `IRON_MG` | `pct / 100 * 18` |
+| `vitamin_a_pct_daily_value` | `VITAMIN_A_UG` | `pct / 100 * 900` |
+| `vitamin_c_pct_daily_value` | `VITAMIN_C_MG` | `pct / 100 * 90` |
+
+Conversion policy:
+
+- `%DV` values are interpreted as percentages, not fractions.
+- `15`, `15.0`, and `15%` all mean `15%`.
+- blank nutrient fields are skipped
+- explicit `0` values are preserved
+- `VITAMIN_A_UG` is treated as compatible with imported values derived from
+  `mcg RAE`
+
+The four required macros remain a backend validation requirement, so
+`create_foods.py` still backfills missing required macro nutrient codes with
+`0` only when they are absent. That backfill is a safety net, not the intended
+shape of the payload.
+
 ## Current Workflow
 
 Run the cleaning pipeline:
@@ -83,7 +131,7 @@ log import.
 
 - `serving_mode`: `mass`, `volume`, or `serving_unit`
 - `reference_basis`: `per_100g`, `per_100ml`, or `per_serving`
-- `reference_*` nutrient columns on that basis
+- `reference_*` nutrient columns on that basis for the full mapped nutrient set
 - `example_value`, `example_unit`, `example_serving`
 - `current_serving_grams`
 - `corrected_serving_grams`
@@ -154,6 +202,8 @@ Notes:
 
 - the current backend dev default is `127.0.0.1:3001`
 - this script makes one `POST /api/foods/custom` call per unmatched food
+- it forwards the full mapped MFP nutrient set, including FDA `%DV`
+  conversions, into the custom-food payload
 - it writes `created_food_id`, `final_food_id`, `final_action`, and
   `ready_for_log_import` back into
   `data/step-10-out-food-match-review-merged.csv`
