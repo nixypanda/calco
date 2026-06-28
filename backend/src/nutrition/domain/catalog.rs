@@ -278,13 +278,15 @@ pub struct ServingLabel(pub String);
 pub struct AmountPer100g(Decimal);
 
 impl AmountPer100g {
+    const SCALE: u32 = 6;
+
     pub fn new(amount: Decimal) -> Result<Self, NutritionError> {
         if amount < Decimal::ZERO {
             return Err(NutritionError::Validation(
                 "nutrient amount must be non-negative".into(),
             ));
         }
-        Ok(Self(amount))
+        Ok(Self(amount.round_dp(Self::SCALE)))
     }
 
     pub fn value(&self) -> Decimal {
@@ -786,6 +788,14 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn amount_per_100g_rounds_to_storage_scale() {
+        let amount = AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap())
+            .unwrap();
+
+        assert_eq!(amount.value(), Decimal::new(83333, 6));
     }
 
     #[test]
