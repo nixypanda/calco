@@ -1,46 +1,18 @@
-# Personal Data Import Agent Instructions
+# Personal Data Import Agent Guardrails
 
-This directory contains tools for cleaning and preparing personal nutrition
-data for import into CalCo. Also read `../../AGENTS.md`,
-`../../docs/imports.md`, and `README.md` before changing import behavior.
+Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
+`../../../docs/imports.md` before changing this importer.
 
-## Shape
+- This directory handles private user import workflows, currently centered on
+  MyFitnessPal exports.
+- Raw exports and review CSVs can contain private food, diary, and account
+  information. Do not log or document personal values unless the task requires
+  a specific local review artifact.
+- Keep transformations explicit and reproducible through the numbered pipeline
+  outputs.
+- Review state belongs in pipeline-owned CSV/JSONL files under `data/`.
+- Use user-facing CalCo APIs for food creation and diary import.
+- Do not overwrite finalized review CSVs blindly; write a new output and
+  compare before merging decisions.
 
-- Python 3.12 project managed with `uv`.
-- The maintained workflow is a step-based CSV cleaning pipeline under `src/`.
-- The main generated artifacts live under `data/`.
-- Custom-food API verification tooling lives in `../../verification/mfp/`.
-- There is no maintained legacy importer path here; use the step-based
-  pipeline under `src/` and the review artifacts under `data/`.
-
-## Import Boundaries
-
-- Imports are CLI workflows, not browser UI.
-- The workflow is CLI-driven, not browser UI.
-- Keep transformations explicit and reproducible as numbered pipeline steps.
-- Review state should live in pipeline-owned CSVs under `data/`.
-
-## Active Pipeline Outputs
-
-- `src/clean.py` produces `data/step-0...step-8` outputs.
-- `generate_serving_review.py` produces `data/step-9-out-serving-review.csv`.
-- `step-9-out-serving-review.csv` is the maintained manual review contract.
-- The raw MFP export can contain personal account fields. Avoid logging or
-  documenting those values.
-
-## Checks
-
-Run from this directory:
-
-```bash
-nix develop ../../.. --command uv run ruff check .
-nix develop ../../.. --command uv run ty check .
-nix develop ../../.. --command uv run python -m unittest discover -s src -p 'test_*.py'
-```
-
-Useful smoke test:
-
-```bash
-python3 src/clean.py --data-dir data
-python3 generate_serving_review.py
-```
+Run the checks documented in `README.md` before handing off importer changes.

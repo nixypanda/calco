@@ -192,9 +192,7 @@ The maintained MyFitnessPal workflow lives at
 - cleaning the raw export into reviewable pipeline CSVs
 - generating `data/step-9-out-serving-review.csv` for manual review
 
-See `tools/importers/personal-data/README.md` for the active workflow and
-`tools/importers/personal-data/docs/mfp-jsonl-import-plan.md` for the planned
-post-review import steps.
+See `tools/importers/personal-data/README.md` for the active workflow.
 
 ## Data Loss Tradeoff
 

@@ -1,32 +1,18 @@
-# Data Sources Agent Instructions
+# Data Sources Agent Guardrails
 
-This directory contains the catalog dataset import pipeline for CalCo. Also
-read `../../../AGENTS.md`, `../../../docs/imports.md`, and `README.md` before
-changing importer behavior.
+Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
+`../../../docs/imports.md` before changing this importer.
 
-## Shape
+- This is the public catalog dataset pipeline for USDA, IFCT, INDB, and Open
+  Food Facts.
+- Keep converters focused on projecting source datasets into the current CalCo
+  product and nutrient model.
+- Use uppercase source codes such as `USDA`, `IFCT`, `INDB`, and `OFF` in
+  normalized rows.
+- Adding new product fields such as ingredients or allergens requires backend
+  schema/domain work, not just converter flags.
+- Prefer the backend import API over direct database writes.
+- Do not commit downloaded source archives, generated processed data, or local
+  caches.
 
-- Python 3.12 project managed with `uv`.
-- Dataset converters produce normalized JSONL rows for the backend import API.
-- `calco_import` package: fetch raw data, convert to JSONL, merge sources with
-  dedup, upload via the backend import pipeline.
-
-## Import Boundaries
-
-- Imports are CLI workflows, not browser UI.
-- Converters intentionally project raw datasets into CalCo's current product
-  model. Adding fields such as ingredients or allergens is a backend schema and
-  domain change, not a converter-only flag.
-- Backend catalog import rows should use uppercase source codes such as `OFF`,
-  `USDA`, `IFCT`, and `INDB`.
-- Import scripts should prefer existing CalCo APIs over direct database writes.
-
-## Checks
-
-Run from this directory:
-
-```bash
-nix develop ../../.. --command uv run ruff check src/
-nix develop ../../.. --command uv run ty check src/
-nix develop ../../.. --command uv run python -m unittest discover -s . -p 'test_*.py'
-```
+Run the checks documented in `README.md` before handing off converter changes.

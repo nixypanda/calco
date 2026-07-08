@@ -1,40 +1,22 @@
-# Tools Agent Instructions
+# Tools Agent Guardrails
 
-This directory contains operational tooling for CalCo. Also read the repository
-root `AGENTS.md` and the relevant docs in `../docs/` before changing tools.
+Read the repository root `AGENTS.md` and the relevant README before changing
+anything in this directory.
 
-## Scope
+## Boundaries
 
-- Tooling should support local operations, data conversion, imports, or
-  verification workflows.
-- Keep application business behavior in `../backend` or `../frontend-web`;
-  tools should call existing APIs or produce normalized inputs unless a schema
-  or domain change is explicitly required.
-- Avoid committing generated caches or local data artifacts. `.ruff_cache/` is
-  not source.
+- Keep application business behavior in `../backend` or `../frontend-web`.
+- Tools should support local operations, data conversion, or imports.
+- Prefer existing CalCo APIs over direct database writes.
+- Do not commit generated caches, raw personal exports, local scratch data, or
+  private review artifacts.
 
-## Import Tools
+## Where To Start
 
-Import tooling lives under `importers/` in two subdirectories:
+- `README.md` explains the tools tree.
+- `importers/README.md` explains catalog and personal-data importers.
+- `../docs/imports.md` explains the backend import API and normalized row
+  contracts.
 
-- **`importers/data-sources/`** — catalog dataset pipeline (USDA, IFCT, INDB,
-  OFF). Produces normalized JSONL for the backend import API.
-- **`importers/personal-data/`** — user personal data import from other apps
-  (MyFitnessPal, etc.). Creates private foods and diary entries via
-  user-facing APIs.
-
-Read `importers/data-sources/AGENTS.md` or `importers/personal-data/AGENTS.md`
-and `../docs/imports.md` before changing import behavior.
-
-## Checks
-
-Use repository-level `just` commands when they apply:
-
-```bash
-just test
-just build
-```
-
-For importer-specific Python checks, see the individual `AGENTS.md` files in
-each subdirectory under `importers/`.
-
+Use repository-level `just` checks when they apply, and importer-specific
+checks from each importer README when touching Python tooling.
