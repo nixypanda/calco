@@ -783,16 +783,17 @@ def _load_existing_matches(path: str | Path) -> dict[str, dict[str, str]]:
     review_path = Path(path)
     if not review_path.exists():
         return {}
-    rows = _load_review_rows(review_path)
     existing: dict[str, dict[str, str]] = {}
-    for row in rows:
-        description = row.get("description", "").strip()
-        if not description:
-            continue
-        existing[description] = {
-            column: row.get(column, "")
-            for column in MATCH_COLUMNS
-        }
+    with open(review_path, newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        for row in reader:
+            description = row.get("description", "").strip()
+            if not description:
+                continue
+            existing[description] = {
+                column: row.get(column, "") or ""
+                for column in MATCH_COLUMNS
+            }
     return existing
 
 

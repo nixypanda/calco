@@ -446,6 +446,17 @@ For each CSV row where `item_type == "Foods"`:
 
 7. Report nutrient mismatches to `mfp-history-mismatches.csv`.
 
+Historical import stays product-id plus quantity based. The maintained path is
+the user-facing API importer in `import_history.py`, which computes stable MFP
+fingerprints, skips already imported rows, and posts logs through `/api/logs`.
+Custom-food nutrient equivalence is verified separately with
+`tools/verification/mfp/verify_custom_foods.py`.
+
+The old direct-SQL repair workflow has been removed. Re-run the isolated API
+verification documented in
+`tools/verification/mfp/docs/mfp-import-flow-verification-plan.md` when checking
+future importer changes or another database/user.
+
 ---
 
 ## File Layout
@@ -476,6 +487,12 @@ tools/importers/personal-data/
 ├── csv_to_jsonl.py                                (future step)
 ├── upload_foods.py                                (future step)
 └── import_history.py                              (future step)
+
+tools/verification/mfp/
+├── docs/
+│   ├── mfp-import-flow-verification-plan.md
+│   └── mfp-verify-cleanup.sql
+└── verify_custom_foods.py
 ```
 
 ## Dependencies

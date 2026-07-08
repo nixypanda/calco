@@ -9,6 +9,7 @@ data for import into CalCo. Also read `../../AGENTS.md`,
 - Python 3.12 project managed with `uv`.
 - The maintained workflow is a step-based CSV cleaning pipeline under `src/`.
 - The main generated artifacts live under `data/`.
+- Custom-food API verification tooling lives in `../../verification/mfp/`.
 - There is no maintained legacy importer path here; use the step-based
   pipeline under `src/` and the review artifacts under `data/`.
 

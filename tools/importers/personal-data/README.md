@@ -266,6 +266,38 @@ Current working output:
   - now has `282` populated `final_food_id` values
   - now has `282` rows marked `ready_for_log_import=true`
 
+## Historical Log Import
+
+Use the API importer for diary history. It reads the finalized review CSV,
+skips fingerprints that already exist for the target date, and posts each log
+through the user-facing logs API.
+
+Dry-run first:
+
+```bash
+python3 import_history.py \
+  --api-url http://127.0.0.1:3001 \
+  --history-csv data/step-8-out-canonicalize_food_descriptions.csv \
+  --review-csv data/step-10-out-food-match-review-merged.csv \
+  --session-token <calco_session_cookie_value> \
+  --dry-run
+```
+
+Apply only after the dry-run counts are expected:
+
+```bash
+python3 import_history.py \
+  --api-url http://127.0.0.1:3001 \
+  --history-csv data/step-8-out-canonicalize_food_descriptions.csv \
+  --review-csv data/step-10-out-food-match-review-merged.csv \
+  --session-token <calco_session_cookie_value>
+```
+
+The old direct-SQL database repair path has been removed. Use
+`../../verification/mfp/docs/mfp-import-flow-verification-plan.md` and
+`../../verification/mfp/verify_custom_foods.py` for repeatable verification of
+the API flow.
+
 ## Checks
 
 Run from this directory:

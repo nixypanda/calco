@@ -436,6 +436,26 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         assert rows[0]["matched_food_id"] == "food-9"
         assert self._read_jsonl()[0]["matched_food_id"] == "food-9"
 
+    def test_preserves_existing_manual_match_from_legacy_review_columns(self) -> None:
+        repo = FakeRepo({})
+        existing_rows = [
+            {
+                "description": "Rice",
+                "matched_food_id": "food-9",
+                "matched_food_name": "Rice, cooked",
+                "match_confidence": "high",
+                "match_basis": "manual",
+                "match_notes": "preserved",
+            },
+        ]
+
+        result = self._run([_base_row()], repo, existing_rows=existing_rows)
+        rows = self._read_csv()
+
+        assert result["preserved_existing_matches"] == 1
+        assert rows[0]["matched_food_id"] == "food-9"
+        assert rows[0]["matched_food_name"] == "Rice, cooked"
+
     def test_rejects_legacy_review_csv_without_full_nutrient_columns(self) -> None:
         legacy_fields = [field for field in BASE_FIELDS if field != "reference_fiber_g"]
         legacy_row = {
