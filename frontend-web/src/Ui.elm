@@ -1,6 +1,7 @@
 module Ui exposing
     ( BottomActionTone(..)
     , InputConfig
+    , PageHeaderSubtitle(..)
     , SubmitButtonConfig
     , SubmitState(..)
     , accentDot
@@ -110,6 +111,11 @@ import Ui.Typography
 cardShadow : Theme -> Element.Attribute msg
 cardShadow _ =
     uiClass "ui-card-shadow"
+
+
+type PageHeaderSubtitle
+    = SubtitleText String
+    | SubtitleMeta { items : List String, separator : String }
 
 
 layout : Theme -> Element msg -> Element msg
@@ -279,7 +285,7 @@ pageHeader :
     ->
         { leading : Maybe (Element msg)
         , title : Element msg
-        , subtitle : Maybe String
+        , subtitle : Maybe PageHeaderSubtitle
         , actions : List (Element msg)
         }
     -> Element msg
@@ -303,8 +309,8 @@ pageHeader theme config =
                 ]
                 (config.title
                     :: (case config.subtitle of
-                            Just text ->
-                                [ mutedBody theme text ]
+                            Just subtitle ->
+                                [ pageHeaderSubtitle theme subtitle ]
 
                             Nothing ->
                                 []
@@ -325,6 +331,29 @@ pageHeader theme config =
         , minWidthZero
         ]
         [ leadingElement, titleColumn, actionsRow ]
+
+
+pageHeaderSubtitle : Theme -> PageHeaderSubtitle -> Element msg
+pageHeaderSubtitle theme subtitle =
+    case subtitle of
+        SubtitleText text ->
+            mutedBody theme text
+
+        SubtitleMeta meta ->
+            Element.paragraph
+                [ Font.color theme.textMuted
+                , body
+                , Element.width Element.fill
+                , minWidthZero
+                ]
+                (separatedInline meta)
+
+
+separatedInline : { items : List String, separator : String } -> List (Element msg)
+separatedInline meta =
+    meta.items
+        |> List.map Element.text
+        |> List.intersperse (Element.text meta.separator)
 
 
 section :
@@ -940,10 +969,14 @@ scrimOverlay onPress =
 
 detailRow : Theme -> String -> Element msg -> Element msg
 detailRow theme label value =
-    Element.row [ Element.spacing space4 ]
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing space4
+        , minWidthZero
+        ]
         [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (label ++ ":"))
-        , value
+        , Element.el [ Element.width Element.fill, minWidthZero ] value
         ]
 
 

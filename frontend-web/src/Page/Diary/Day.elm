@@ -1114,7 +1114,8 @@ logRow theme log =
                     (Typography.wrappedListItemTitle theme log.item.name)
                 , Element.row
                     [ Element.alignRight, Element.spacing DesignTokens.space12 ]
-                    [ Typography.mutedCaption theme (log.quantity.amount ++ " " ++ log.quantity.unit)
+                    [ Typography.mutedCaption theme
+                        (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Typography.mutedCaption theme
                         (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal")
                     ]

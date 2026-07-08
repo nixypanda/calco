@@ -589,7 +589,7 @@ recentItemRow theme device model item =
         , leading = [ View.Product.macroDotGhost ]
         , title = title
         , subtitle =
-            [ Typography.mutedCaption theme
+            [ Typography.mutedCaptionParagraph theme
                 (Ui.dotSeparated
                     [ item.item.brand
                     , Just (Nutrition.quantityText item.quantity)

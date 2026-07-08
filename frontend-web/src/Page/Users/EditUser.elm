@@ -401,10 +401,10 @@ userSummaryCard : Theme -> User -> Element msg
 userSummaryCard theme user =
     Ui.card theme
         [ Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-            [ Typography.listItemTitle theme (Element.text user.username)
+            [ Typography.wrappedListItemTitle theme user.username
             , Ui.detailRow theme
                 "Display Name"
-                (Element.el [ Typography.caption ] (Element.text user.displayName))
+                (Typography.mutedCaptionParagraph theme user.displayName)
             , Ui.detailRow theme "Status" (Ui.statusBadge theme user.status)
             , Ui.detailRow theme
                 "Created"

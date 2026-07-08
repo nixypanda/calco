@@ -440,7 +440,11 @@ nutrientsTableInner theme nutrients =
                     Element.el
                         [ Font.alignRight
                         , Element.paddingEach
-                            { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = DesignTokens.space8 }
+                            { top = DesignTokens.space8
+                            , bottom = DesignTokens.space8
+                            , left = 0
+                            , right = DesignTokens.space8
+                            }
                         ]
                         (Typography.tableHeader theme "Amount")
               , width = Element.shrink
@@ -450,14 +454,22 @@ nutrientsTableInner theme nutrients =
                             [ Typography.body
                             , Font.alignRight
                             , Element.paddingEach
-                                { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = DesignTokens.space8 }
+                                { top = DesignTokens.space8
+                                , bottom = DesignTokens.space8
+                                , left = 0
+                                , right = DesignTokens.space8
+                                }
                             ]
                             (Element.text (formatAmount n.amount))
               }
             , { header =
                     Element.el
                         [ Element.paddingEach
-                            { top = DesignTokens.space8, bottom = DesignTokens.space8, left = 0, right = 0 }
+                            { top = DesignTokens.space8
+                            , bottom = DesignTokens.space8
+                            , left = 0
+                            , right = 0
+                            }
                         ]
                         (Typography.tableHeader theme "Unit")
               , width = Element.shrink

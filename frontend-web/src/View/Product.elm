@@ -27,7 +27,13 @@ foodHeader theme food extraMeta =
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
             , title = Typography.truncatedHeader theme food.name
-            , subtitle = Just (metaText food extraMeta)
+            , subtitle =
+                Just
+                    (Ui.SubtitleMeta
+                        { items = metaItems food extraMeta
+                        , separator = " ⋅ "
+                        }
+                    )
             , actions = []
             }
         , if List.isEmpty food.categories then
@@ -39,13 +45,13 @@ foodHeader theme food extraMeta =
         ]
 
 
-metaText : ProductDetail -> List (Maybe String) -> String
-metaText food extraItems =
+metaItems : ProductDetail -> List (Maybe String) -> List String
+metaItems food extraItems =
     [ food.brand
     , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
     ]
         ++ extraItems
-        |> Ui.dotSeparated
+        |> List.filterMap identity
 
 
 foodNutrientsPer100g : ProductDetail -> List Nutrition.NutrientAmount

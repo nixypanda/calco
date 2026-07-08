@@ -99,7 +99,7 @@ resultRow theme device config =
 
                   else
                     Typography.truncatedListItemTitle theme config.item.name
-                , Typography.mutedCaption theme (metaText config.query config.item)
+                , Typography.mutedCaptionParagraph theme (metaText config.query config.item)
                 ]
 
         categoryTags : Element msg

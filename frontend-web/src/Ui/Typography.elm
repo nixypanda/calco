@@ -5,7 +5,9 @@ module Ui.Typography exposing
     , maybeMutedParagraph
     , minWidthZero
     , mutedBody
+    , mutedBodyParagraph
     , mutedCaption
+    , mutedCaptionParagraph
     , mutedParagraph
     , pageTitle
     , sectionTitle
@@ -129,6 +131,17 @@ mutedCaption theme text =
         (Element.text text)
 
 
+mutedCaptionParagraph : Theme -> String -> Element msg
+mutedCaptionParagraph theme text =
+    Element.paragraph
+        [ caption
+        , Font.color theme.textMuted
+        , Element.width Element.fill
+        , minWidthZero
+        ]
+        [ Element.text text ]
+
+
 tableHeader : Theme -> String -> Element msg
 tableHeader theme text =
     Element.el
@@ -159,6 +172,17 @@ mutedBody theme text =
         , body
         ]
         (Element.text text)
+
+
+mutedBodyParagraph : Theme -> String -> Element msg
+mutedBodyParagraph theme text =
+    Element.paragraph
+        [ Font.color theme.textMuted
+        , body
+        , Element.width Element.fill
+        , minWidthZero
+        ]
+        [ Element.text text ]
 
 
 mutedParagraph : Theme -> String -> Element msg

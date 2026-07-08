@@ -138,7 +138,7 @@ foodRow theme _ food =
         , leading = [ macroDot ]
         , title = Typography.wrappedListItemTitle theme food.name
         , subtitle =
-            [ Typography.mutedBody theme (foodSummaryText food)
+            [ Typography.mutedBodyParagraph theme (foodSummaryText food)
             , Ui.chips theme food.categories
             ]
         , trailing = []

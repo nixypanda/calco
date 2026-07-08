@@ -719,7 +719,7 @@ itemHeader theme model =
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme model.item
-            , subtitle = Just (metaText maybeFood model.log)
+            , subtitle = Just (metaSubtitle maybeFood model.log)
             , actions = []
             }
         , case maybeFood of
@@ -762,18 +762,22 @@ itemTitle theme item =
                     Element.text fallback.name
 
 
-metaText : Maybe ProductDetail -> FoodLog -> String
-metaText maybeFood log =
+metaSubtitle : Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
+metaSubtitle maybeFood log =
     case maybeFood of
         Just food ->
-            [ food.brand
-            , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-            , Just ("Logged " ++ LocalDate.display log.logDate)
-            ]
-                |> Ui.dotSeparated
+            Ui.SubtitleMeta
+                { items =
+                    [ food.brand
+                    , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
+                    , Just ("Logged " ++ LocalDate.display log.logDate)
+                    ]
+                        |> List.filterMap identity
+                , separator = " ⋅ "
+                }
 
         Nothing ->
-            "Logged " ++ LocalDate.display log.logDate
+            Ui.SubtitleText ("Logged " ++ LocalDate.display log.logDate)
 
 
 detailActionsView : Theme -> Device -> LoadedModel -> Element Msg

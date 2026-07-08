@@ -138,7 +138,7 @@ mealRow theme _ meal =
         , leading = macroDot
         , title = Typography.wrappedListItemTitle theme meal.name
         , subtitle =
-            [ Typography.mutedBody theme (mealSummaryText meal)
+            [ Typography.mutedBodyParagraph theme (mealSummaryText meal)
             ]
         , trailing = []
         }

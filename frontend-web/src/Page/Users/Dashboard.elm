@@ -112,7 +112,7 @@ userListRow theme config =
     Ui.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
-        , title = Typography.listItemTitle theme (Element.text config.user.username)
-        , subtitle = [ Typography.mutedBody theme config.user.displayName ]
+        , title = Typography.wrappedListItemTitle theme config.user.username
+        , subtitle = [ Typography.mutedBodyParagraph theme config.user.displayName ]
         , trailing = [ Ui.statusBadge theme config.user.status ]
         }
