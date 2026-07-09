@@ -5,6 +5,52 @@ use common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
+async fn create_custom_product(
+    router: &axum::Router,
+    user: &str,
+    name: &str,
+    brand: &str,
+    categories: &[&str],
+    energy_kcal: i64,
+) -> String {
+    let payload = json!({
+        "name": name,
+        "brand": brand,
+        "categories": categories,
+        "serving_size_g": 100,
+        "default_quantity": 1,
+        "default_unit": "serving",
+        "nutrients": [
+            { "code": "ENERGY_KCAL", "amount_per_100g": energy_kcal },
+            { "code": "PROTEIN_G", "amount_per_100g": 1 },
+            { "code": "CARBS_G", "amount_per_100g": 10 },
+            { "code": "FAT_G", "amount_per_100g": 1 }
+        ],
+        "servings": [
+            { "label": "1 serving", "quantity": 1, "unit": "serving", "grams": 100 }
+        ]
+    });
+    let created: Value = post_json(
+        router,
+        "/api/foods/custom",
+        user,
+        &payload,
+        StatusCode::CREATED,
+    )
+    .await;
+    created["id"].as_str().expect("id missing").to_string()
+}
+
+async fn log_product(router: &axum::Router, user: &str, product_id: &str, log_date: &str) {
+    let payload = json!({
+        "log_date": log_date,
+        "meal_slot": "breakfast",
+        "item": { "type": "product", "id": product_id },
+        "quantity": { "amount": 100, "unit": "g" }
+    });
+    let _: Value = post_json(router, "/api/logs", user, &payload, StatusCode::CREATED).await;
+}
+
 #[sqlx::test]
 async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     let router = app(pool).await;
@@ -160,6 +206,134 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         0,
         "deleted custom food should not appear in the listing"
     );
+}
+
+#[sqlx::test]
+async fn product_search_scopes_filter_and_order_results(pool: PgPool) {
+    let router = app(pool).await;
+    let admin = bootstrap_admin(&router).await;
+    let user = create_user_session(&router, &admin, "scope_user", "testpassword").await;
+    let other_user = create_user_session(&router, &admin, "scope_other", "testpassword").await;
+
+    let oats_id = create_custom_product(
+        &router,
+        &user,
+        "Scope Oats",
+        "Morning Lab",
+        &["breakfast", "grain"],
+        390,
+    )
+    .await;
+    let yogurt_id = create_custom_product(
+        &router,
+        &user,
+        "Scope Yogurt",
+        "Dairy Lab",
+        &["fermented", "dairy"],
+        80,
+    )
+    .await;
+    let other_id = create_custom_product(
+        &router,
+        &other_user,
+        "Scope Oats Other",
+        "Other Lab",
+        &["breakfast"],
+        410,
+    )
+    .await;
+
+    let default_search: Value = get_json(&router, "/api/foods/search?q=scope", &user).await;
+    let default_items = default_search["items"].as_array().expect("items missing");
+    assert!(default_items.iter().any(|item| item["id"] == oats_id));
+    assert!(default_items.iter().any(|item| item["id"] == yogurt_id));
+    assert!(
+        !default_items.iter().any(|item| item["id"] == other_id),
+        "all scope should not include another user's private product"
+    );
+
+    let custom_search: Value =
+        get_json(&router, "/api/foods/search?q=scope&scope=custom", &user).await;
+    let custom_items = custom_search["items"].as_array().expect("items missing");
+    assert!(custom_items.iter().any(|item| item["id"] == oats_id));
+    assert!(custom_items.iter().any(|item| item["id"] == yogurt_id));
+    assert!(!custom_items.iter().any(|item| item["id"] == other_id));
+    assert_eq!(
+        custom_items
+            .iter()
+            .find(|item| item["id"] == oats_id)
+            .expect("oats missing")["nutrition_summary"]["per_100g"]["energy_kcal"],
+        "390"
+    );
+
+    let empty_history: Value =
+        get_json(&router, "/api/foods/search?q=scope&scope=history", &user).await;
+    assert!(empty_history["items"].as_array().unwrap().is_empty());
+
+    log_product(&router, &user, &oats_id, "2026-06-01").await;
+    log_product(&router, &user, &yogurt_id, "2026-06-03").await;
+    log_product(&router, &user, &oats_id, "2026-06-02").await;
+
+    let history: Value = get_json(&router, "/api/foods/search?q=scope&scope=history", &user).await;
+    let history_items = history["items"].as_array().expect("items missing");
+    let history_ids: Vec<&str> = history_items
+        .iter()
+        .map(|item| item["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(history_ids, vec![yogurt_id.as_str(), oats_id.as_str()]);
+
+    let category_history: Value =
+        get_json(&router, "/api/foods/search?q=dairy&scope=history", &user).await;
+    let category_items = category_history["items"].as_array().expect("items missing");
+    assert_eq!(category_items.len(), 1);
+    assert_eq!(category_items[0]["id"], yogurt_id);
+
+    let unknown_scope_req = common::empty_request(
+        Method::GET,
+        "/api/foods/search?q=scope&scope=private",
+        Some(&user),
+    );
+    let (status, _headers, body) = common::send(&router, unknown_scope_req).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let error: Value = common::parse_json(&body);
+    assert_eq!(error["error"]["code"], "validation");
+}
+
+#[sqlx::test]
+async fn barcode_lookup_does_not_expose_other_users_private_foods(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let admin = bootstrap_admin(&router).await;
+    let owner = create_user_session(&router, &admin, "barcode_owner", "testpassword").await;
+    let other = create_user_session(&router, &admin, "barcode_other", "testpassword").await;
+
+    let product_id = create_custom_product(
+        &router,
+        &owner,
+        "Private Barcode Cereal",
+        "Hidden Brand",
+        &["breakfast"],
+        320,
+    )
+    .await;
+    sqlx::query("UPDATE products SET barcode = $1 WHERE id = $2")
+        .bind("private-barcode-123")
+        .bind(uuid::Uuid::parse_str(&product_id).expect("product id uuid"))
+        .execute(&pool)
+        .await
+        .expect("set barcode");
+
+    let owner_lookup: Value =
+        get_json(&router, "/api/foods/barcode/private-barcode-123", &owner).await;
+    assert_eq!(owner_lookup["id"], product_id);
+    assert_eq!(
+        owner_lookup["nutrition_summary"]["per_100g"]["energy_kcal"],
+        "320"
+    );
+
+    let (status, body) =
+        get_status(&router, "/api/foods/barcode/private-barcode-123", &other).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"]["code"], "not_found");
 }
 
 fn assert_amount(value: &Value, expected: f64) {

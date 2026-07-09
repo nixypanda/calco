@@ -1,6 +1,6 @@
 module Page.Meal.CreateTest exposing (tests)
 
-import Api.Foods exposing (SearchResult)
+import Api.Foods exposing (SearchResult, SearchScope(..))
 import Api.Meals exposing (Meal)
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition
@@ -151,7 +151,8 @@ tests =
                             (Common.RequestProductAndCats
                                 { rowId = 1
                                 , searchToken = 1
-                                , searchRequest = { query = "category:foo" }
+                                , searchRequest =
+                                    { query = "category:foo", scope = SearchAll }
                                 , categoryToken = 2
                                 , categoryRequest = { query = "foo", limit = 8 }
                                 }

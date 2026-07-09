@@ -490,7 +490,7 @@ onComponentSearchChanged rowId query form =
                 Nothing
 
             else
-                Just { query = query }
+                Just { query = query, scope = Foods.SearchAll }
     in
     case ( searchRequest, categoryReq ) of
         ( Just productRequest, Just cat ) ->

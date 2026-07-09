@@ -39,6 +39,26 @@ impl ProductSearchSpec {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProductSearchScope {
+    All,
+    Custom,
+    History,
+}
+
+impl ProductSearchScope {
+    pub fn parse(input: Option<&str>) -> Result<Self, NutritionError> {
+        match input.unwrap_or("all") {
+            "all" => Ok(Self::All),
+            "custom" => Ok(Self::Custom),
+            "history" => Ok(Self::History),
+            other => Err(NutritionError::Validation(format!(
+                "unknown food search scope: {other}"
+            ))),
+        }
+    }
+}
+
 fn tokenize_search_input(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -579,6 +599,7 @@ pub trait ProductRepository: Send + Sync {
     async fn search(
         &self,
         spec: ProductSearchSpec,
+        scope: ProductSearchScope,
         user_id: Option<Uuid>,
     ) -> Result<Vec<Product>, NutritionError>;
     async fn list_categories(
@@ -589,7 +610,11 @@ pub trait ProductRepository: Send + Sync {
     ) -> Result<Vec<CategorySuggestion>, NutritionError>;
     async fn find_by_id(&self, id: ProductId) -> Result<Option<Product>, NutritionError>;
     async fn existing_ids(&self, ids: &[ProductId]) -> Result<HashSet<ProductId>, NutritionError>;
-    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError>;
+    async fn find_by_barcode(
+        &self,
+        barcode: &str,
+        user_id: Option<Uuid>,
+    ) -> Result<Option<Product>, NutritionError>;
     async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Product>, NutritionError>;
     async fn create(&self, product: &Product) -> Result<(), NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
@@ -623,6 +648,38 @@ mod tests {
             parsed.exclude_categories,
             vec![Category("processed food".into())]
         );
+    }
+
+    #[test]
+    fn product_search_scope_defaults_to_all() {
+        assert_eq!(
+            ProductSearchScope::parse(None).unwrap(),
+            ProductSearchScope::All
+        );
+    }
+
+    #[test]
+    fn product_search_scope_parse_accepts_supported_values() {
+        assert_eq!(
+            ProductSearchScope::parse(Some("all")).unwrap(),
+            ProductSearchScope::All
+        );
+        assert_eq!(
+            ProductSearchScope::parse(Some("custom")).unwrap(),
+            ProductSearchScope::Custom
+        );
+        assert_eq!(
+            ProductSearchScope::parse(Some("history")).unwrap(),
+            ProductSearchScope::History
+        );
+    }
+
+    #[test]
+    fn product_search_scope_parse_rejects_unknown_values() {
+        assert!(matches!(
+            ProductSearchScope::parse(Some("private")),
+            Err(NutritionError::Validation(_))
+        ));
     }
 
     #[test]
@@ -792,8 +849,8 @@ mod tests {
 
     #[test]
     fn amount_per_100g_rounds_to_storage_scale() {
-        let amount = AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap())
-            .unwrap();
+        let amount =
+            AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap()).unwrap();
 
         assert_eq!(amount.value(), Decimal::new(83333, 6));
     }

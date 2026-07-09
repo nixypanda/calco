@@ -242,6 +242,7 @@ pub struct CategoryItemDto {
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: String,
+    pub scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -269,9 +270,14 @@ async fn search_products_handler(
     State(state): State<AppState>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
+    let scope = match ProductSearchScope::parse(query.scope.as_deref()) {
+        Ok(scope) => scope,
+        Err(e) => return e.into_response(),
+    };
+
     match state
         .product_repo
-        .search(ProductSearchSpec::parse(&query.q), Some(auth.0.id))
+        .search(ProductSearchSpec::parse(&query.q), scope, Some(auth.0.id))
         .await
     {
         Ok(items) => Json(products_to_search_response(items)).into_response(),
@@ -317,11 +323,15 @@ async fn list_custom_foods_handler(
 }
 
 async fn barcode_lookup_handler(
-    _auth: AuthUser,
+    auth: AuthUser,
     State(state): State<AppState>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
-    let product = match state.product_repo.find_by_barcode(&barcode).await {
+    let product = match state
+        .product_repo
+        .find_by_barcode(&barcode, Some(auth.0.id))
+        .await
+    {
         Ok(Some(p)) => p,
         Ok(None) => {
             return error_response(

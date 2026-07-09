@@ -3,6 +3,7 @@ module Page.Food.Search exposing
     , Msg(..)
     , OutMsg(..)
     , QuickAddState
+    , SearchScope(..)
     , init
     , update
     , view
@@ -23,6 +24,8 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
+import Html.Events
+import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
 import Process
@@ -42,7 +45,11 @@ import View.Search as SearchView
 
 type alias Model =
     { search : QueryState
+    , scope : SearchScope
     , results : Loadable Client.ApiError (List Foods.SearchResult)
+    , barcodeQuery : String
+    , barcodeLookup : Loadable Client.ApiError Foods.ProductDetail
+    , barcodeToken : Int
     , recentItems : Loadable Client.ApiError (List Logs.RecentItem)
     , date : Maybe String
     , mealSlot : Maybe MealSlot
@@ -50,6 +57,13 @@ type alias Model =
     , addedItems : List { key : String, token : Int }
     , addedToken : Int
     }
+
+
+type SearchScope
+    = All
+    | History
+    | Custom
+    | Barcode
 
 
 type QuickAddState
@@ -68,7 +82,11 @@ type QuickAddButtonState
 init : Maybe String -> Maybe MealSlot -> Model
 init date mealSlot =
     { search = Search.empty
+    , scope = All
     , results = NotAsked
+    , barcodeQuery = ""
+    , barcodeLookup = NotAsked
+    , barcodeToken = 0
     , recentItems =
         case date |> Maybe.andThen LocalDate.fromString of
             Just _ ->
@@ -90,6 +108,10 @@ init date mealSlot =
 
 type Msg
     = QueryChanged String
+    | ScopeSelected SearchScope
+    | BarcodeChanged String
+    | BarcodeSubmitted
+    | BarcodeLookupCompleted Int (Result Client.ApiError Foods.ProductDetail)
     | CategorySuggestionsCompleted Int (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
@@ -108,6 +130,7 @@ type Msg
 type OutMsg
     = NoOp
     | RequestSearch Int Foods.SearchRequest
+    | RequestBarcodeLookup Int String
     | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | RequestLocalContext
     | RequestCreateLog Logs.CreateLogRequest
@@ -147,11 +170,128 @@ applyQueryChange rawQuery model =
     )
 
 
+applyScopeChange : SearchScope -> Model -> ( Model, Cmd Msg, OutMsg )
+applyScopeChange scope model =
+    if scope == model.scope then
+        ( model, Cmd.none, NoOp )
+
+    else
+        let
+            query : String
+            query =
+                String.trim model.search.query
+
+            priorSearch : QueryState
+            priorSearch =
+                model.search
+
+            nextSearch : QueryState
+            nextSearch =
+                { priorSearch
+                    | searchToken = priorSearch.searchToken + 1
+                    , categorySuggestions = []
+                }
+
+            nextModel : Model
+            nextModel =
+                { model
+                    | scope = scope
+                    , search = nextSearch
+                    , results =
+                        if isTextScope scope && not (String.isEmpty query) then
+                            Loading
+
+                        else
+                            NotAsked
+                    , barcodeLookup = NotAsked
+                    , barcodeToken = model.barcodeToken + 1
+                }
+        in
+        if isTextScope scope && not (String.isEmpty query) then
+            ( nextModel
+            , Cmd.none
+            , RequestSearch nextSearch.searchToken
+                { query = query, scope = searchRequestScope scope }
+            )
+
+        else
+            ( nextModel, Cmd.none, NoOp )
+
+
+applyBarcodeSubmit : Model -> ( Model, Cmd Msg, OutMsg )
+applyBarcodeSubmit model =
+    let
+        barcode : String
+        barcode =
+            String.trim model.barcodeQuery
+
+        nextToken : Int
+        nextToken =
+            model.barcodeToken + 1
+    in
+    if String.isEmpty barcode then
+        ( { model | barcodeLookup = NotAsked, barcodeToken = nextToken }
+        , Cmd.none
+        , NoOp
+        )
+
+    else
+        ( { model | barcodeLookup = Loading, barcodeToken = nextToken }
+        , Cmd.none
+        , RequestBarcodeLookup nextToken barcode
+        )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         QueryChanged rawQuery ->
             applyQueryChange rawQuery model
+
+        ScopeSelected scope ->
+            applyScopeChange scope model
+
+        BarcodeChanged rawBarcode ->
+            ( { model
+                | barcodeQuery = rawBarcode
+                , barcodeLookup =
+                    if String.isEmpty (String.trim rawBarcode) then
+                        NotAsked
+
+                    else
+                        model.barcodeLookup
+              }
+            , Cmd.none
+            , NoOp
+            )
+
+        BarcodeSubmitted ->
+            applyBarcodeSubmit model
+
+        BarcodeLookupCompleted token result ->
+            if token /= model.barcodeToken then
+                ( model, Cmd.none, NoOp )
+
+            else
+                case result of
+                    Ok product ->
+                        ( { model | barcodeLookup = Success product }
+                        , Cmd.none
+                        , Navigate (FoodShow product.id model.date model.mealSlot)
+                        )
+
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( { model | barcodeLookup = Failure error }
+                            , Cmd.none
+                            , SessionExpired
+                            )
+
+                        else
+                            ( { model | barcodeLookup = Failure error }
+                            , Cmd.none
+                            , NoOp
+                            )
 
         CategorySuggestionsCompleted token result ->
             if token /= model.search.categoryToken then
@@ -210,7 +350,11 @@ update msg model =
 
         DebounceElapsed token query ->
             if token == model.search.searchToken then
-                ( model, Cmd.none, RequestSearch token { query = query } )
+                ( model
+                , Cmd.none
+                , RequestSearch token
+                    { query = query, scope = searchRequestScope model.scope }
+                )
 
             else
                 ( model, Cmd.none, NoOp )
@@ -461,6 +605,19 @@ view { model, device, theme } =
 
 searchInputView : Theme -> Device -> Model -> Element Msg
 searchInputView theme device model =
+    Element.column
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ scopeControl theme device model.scope
+        , if model.scope == Barcode then
+            barcodeInputView theme device model
+
+          else
+            textSearchInputView theme device model
+        ]
+
+
+textSearchInputView : Theme -> Device -> Model -> Element Msg
+textSearchInputView theme device model =
     let
         options : List Completion
         options =
@@ -470,10 +627,132 @@ searchInputView theme device model =
         device
         { onChange = QueryChanged
         , text = model.search.query
-        , label = "Search for a food"
+        , label = searchLabel model.scope
         , completions = options
         , onTabComplete = CompleteFirstSuggestion
         , onCompletionClick = CompletionClicked
+        }
+
+
+barcodeInputView : Theme -> Device -> Model -> Element Msg
+barcodeInputView theme device model =
+    let
+        input : Element Msg
+        input =
+            Ui.searchInput theme
+                { onChange = BarcodeChanged
+                , text = model.barcodeQuery
+                , label = "Enter barcode"
+                , extraAttrs = [ onEnterSubmit BarcodeSubmitted ]
+                }
+
+        button : Element Msg
+        button =
+            Ui.primarySubmitButton device
+                theme
+                { state =
+                    if model.barcodeLookup == Loading then
+                        Ui.Submitting
+
+                    else if String.isEmpty (String.trim model.barcodeQuery) then
+                        Ui.Disabled
+
+                    else
+                        Ui.Idle
+                , idleLabel = "Search"
+                , submittingLabel = "Searching"
+                , onPress = BarcodeSubmitted
+                }
+    in
+    if Ui.isSmall device then
+        Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ input, button ]
+
+    else
+        Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            , Element.alignBottom
+            ]
+            [ input
+            , Element.el
+                [ Element.width (Element.px 160)
+                , Element.alignBottom
+                ]
+                button
+            ]
+
+
+scopeControl : Theme -> Device -> SearchScope -> Element Msg
+scopeControl theme device selectedScope =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space4
+        , Element.padding DesignTokens.space4
+        , Background.color theme.inputFill
+        , Border.width 1
+        , Border.color theme.chipBorder
+        , Border.rounded DesignTokens.radiusControl
+        ]
+        (List.map (scopeSegment theme device selectedScope) searchScopes)
+
+
+scopeSegment : Theme -> Device -> SearchScope -> SearchScope -> Element Msg
+scopeSegment theme device selectedScope scope =
+    let
+        selected : Bool
+        selected =
+            scope == selectedScope
+
+        foreground : Element.Color
+        foreground =
+            if selected then
+                Element.rgb255 255 255 255
+
+            else
+                theme.textMedium
+
+        background : Element.Color
+        background =
+            if selected then
+                theme.brandBlue
+
+            else
+                theme.inputFill
+    in
+    Input.button
+        [ Element.width (Element.fillPortion 1)
+        , Element.height
+            (Element.px
+                (if Ui.isSmall device then
+                    40
+
+                 else
+                    36
+                )
+            )
+        , Background.color background
+        , Border.rounded DesignTokens.radiusControl
+        , Font.color foreground
+        , Font.medium
+        , Font.size 14
+        , Typography.uiClass "ui-motion ui-pressable"
+        , if selected then
+            Element.mouseOver []
+
+          else
+            Element.mouseOver [ Background.color theme.brandBlueSoft ]
+        ]
+        { onPress = Just (ScopeSelected scope)
+        , label =
+            Element.el
+                [ Element.centerX
+                , Element.centerY
+                , Element.clip
+                , Typography.uiClass "ui-text-ellipsis"
+                ]
+                (Element.text (scopeLabel scope))
         }
 
 
@@ -494,16 +773,7 @@ bodyView theme model device =
 
         Success items ->
             if List.isEmpty items then
-                Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                    [ Ui.emptyState theme "No foods found. Try a different search."
-                    , Ui.primarySubmitButton device
-                        theme
-                        { state = Ui.Idle
-                        , idleLabel = "Create Custom Food"
-                        , submittingLabel = "Create Custom Food"
-                        , onPress = CreateCustomFoodClicked
-                        }
-                    ]
+                textEmptyState theme device model.scope
 
             else
                 Ui.listCard theme
@@ -524,11 +794,163 @@ bodyView theme model device =
 
 contentView : Theme -> Device -> Model -> Element Msg
 contentView theme device model =
-    if hasActiveSearch model then
+    if model.scope == Barcode then
+        if hasActiveSearch model then
+            barcodeBodyView theme device model
+
+        else
+            recentsView theme device model
+
+    else if hasActiveSearch model then
         bodyView theme model device
 
     else
         recentsView theme device model
+
+
+barcodeBodyView : Theme -> Device -> Model -> Element Msg
+barcodeBodyView theme device model =
+    case model.barcodeLookup of
+        NotAsked ->
+            Ui.emptyState theme "Enter a barcode to look up a food."
+
+        Loading ->
+            Ui.card theme [ Ui.skeletonLoading theme ]
+
+        Failure error ->
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                [ Ui.errorBanner theme (barcodeErrorMessage error)
+                , Ui.emptyState theme "No food found for that barcode."
+                , Ui.primarySubmitButton device
+                    theme
+                    { state = Ui.Idle
+                    , idleLabel = "Create Custom Food"
+                    , submittingLabel = "Create Custom Food"
+                    , onPress = CreateCustomFoodClicked
+                    }
+                ]
+
+        Success _ ->
+            Ui.emptyState theme "Opening food."
+
+
+textEmptyState : Theme -> Device -> SearchScope -> Element Msg
+textEmptyState theme device scope =
+    let
+        message : String
+        message =
+            case scope of
+                History ->
+                    "No logged foods found. Try a different search."
+
+                Custom ->
+                    "No custom foods found. Try a different search."
+
+                _ ->
+                    "No foods found. Try a different search."
+
+        canCreate : Bool
+        canCreate =
+            scope /= History
+    in
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        (Ui.emptyState theme message
+            :: (if canCreate then
+                    [ Ui.primarySubmitButton device
+                        theme
+                        { state = Ui.Idle
+                        , idleLabel = "Create Custom Food"
+                        , submittingLabel = "Create Custom Food"
+                        , onPress = CreateCustomFoodClicked
+                        }
+                    ]
+
+                else
+                    []
+               )
+        )
+
+
+searchScopes : List SearchScope
+searchScopes =
+    [ All, History, Custom, Barcode ]
+
+
+scopeLabel : SearchScope -> String
+scopeLabel scope =
+    case scope of
+        All ->
+            "All"
+
+        History ->
+            "History"
+
+        Custom ->
+            "Custom"
+
+        Barcode ->
+            "Barcode"
+
+
+searchLabel : SearchScope -> String
+searchLabel scope =
+    case scope of
+        All ->
+            "Search for a food"
+
+        History ->
+            "Search your logged foods"
+
+        Custom ->
+            "Search your custom foods"
+
+        Barcode ->
+            "Enter barcode"
+
+
+isTextScope : SearchScope -> Bool
+isTextScope scope =
+    scope /= Barcode
+
+
+searchRequestScope : SearchScope -> Foods.SearchScope
+searchRequestScope scope =
+    case scope of
+        History ->
+            Foods.SearchHistory
+
+        Custom ->
+            Foods.SearchCustom
+
+        _ ->
+            Foods.SearchAll
+
+
+barcodeErrorMessage : Client.ApiError -> String
+barcodeErrorMessage error =
+    case error of
+        Client.BadStatus 404 _ _ ->
+            "No food matched that barcode."
+
+        _ ->
+            Client.displayError error
+
+
+onEnterSubmit : msg -> Element.Attribute msg
+onEnterSubmit submitMsg =
+    Element.htmlAttribute
+        (Html.Events.preventDefaultOn "keydown"
+            (Decode.field "key" Decode.string
+                |> Decode.andThen
+                    (\key ->
+                        if key == "Enter" then
+                            Decode.succeed ( submitMsg, True )
+
+                        else
+                            Decode.fail "not handled"
+                    )
+            )
+        )
 
 
 recentsView : Theme -> Device -> Model -> Element Msg
@@ -689,7 +1111,25 @@ quickAddButtonIcon state =
 
 hasActiveSearch : Model -> Bool
 hasActiveSearch model =
-    if not (String.isEmpty (String.trim model.search.query)) then
+    if model.scope == Barcode then
+        if not (String.isEmpty (String.trim model.barcodeQuery)) then
+            True
+
+        else
+            case model.barcodeLookup of
+                NotAsked ->
+                    False
+
+                Loading ->
+                    True
+
+                Failure _ ->
+                    True
+
+                Success _ ->
+                    True
+
+    else if not (String.isEmpty (String.trim model.search.query)) then
         True
 
     else

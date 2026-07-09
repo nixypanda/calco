@@ -708,6 +708,12 @@ applyFoodSearchOutMsg _ outMsg =
             , NoOutMsg
             )
 
+        FoodSearch.RequestBarcodeLookup token barcode ->
+            ( Api.Foods.lookupBarcode barcode
+                (GotFoodSearchMsg << FoodSearch.BarcodeLookupCompleted token)
+            , NoOutMsg
+            )
+
         FoodSearch.RequestCategorySuggestions token request ->
             ( Api.Foods.listCategorySuggestions request
                 (GotFoodSearchMsg << FoodSearch.CategorySuggestionsCompleted token)

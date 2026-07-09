@@ -84,8 +84,16 @@ tests =
                     |> Expect.equal (Ok [ "g" ])
         , test "builds food search path with encoded query" <|
             \_ ->
-                Foods.searchPath { query = "peanut butter" }
-                    |> Expect.equal "/api/foods/search?q=peanut%20butter"
+                Foods.searchPath { query = "peanut butter", scope = Foods.SearchAll }
+                    |> Expect.equal "/api/foods/search?q=peanut%20butter&scope=all"
+        , test "builds history food search path with scope" <|
+            \_ ->
+                Foods.searchPath { query = "apple", scope = Foods.SearchHistory }
+                    |> Expect.equal "/api/foods/search?q=apple&scope=history"
+        , test "builds barcode lookup path" <|
+            \_ ->
+                Foods.barcodePath "890 123"
+                    |> Expect.equal "/api/foods/barcode/890%20123"
         , test "builds category suggestion path with encoded query and limit" <|
             \_ ->
                 Foods.categorySuggestionPath { query = "food and", limit = 8 }

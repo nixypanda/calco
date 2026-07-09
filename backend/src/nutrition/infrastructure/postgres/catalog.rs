@@ -145,6 +145,7 @@ impl ProductRepository for PostgresProductRepository {
     async fn search(
         &self,
         query: ProductSearchSpec,
+        scope: ProductSearchScope,
         user_id: Option<Uuid>,
     ) -> Result<Vec<Product>, NutritionError> {
         let include: Vec<String> = query
@@ -157,46 +158,153 @@ impl ProductRepository for PostgresProductRepository {
             .iter()
             .map(|c| c.0.clone())
             .collect();
-        let rows = sqlx::query_as::<_, ProductRow>(
-            r#"
-            SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g,
-                   created_at, updated_at
-            FROM products
-            WHERE deleted_at IS NULL
-              AND (visibility = 'global' OR user_id = $2)
-              AND ($1 = ''
-                   OR name ILIKE '%' || $1 || '%'
-                   OR brand ILIKE '%' || $1 || '%'
-                   OR barcode ILIKE '%' || $1 || '%'
-                   OR lower(name) % lower($1)
-                   OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-              AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
-              AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
-            ORDER BY
-                CASE
-                    WHEN barcode = $1 THEN 0
-                    WHEN barcode ILIKE $1 || '%' THEN 1
-                    WHEN name ILIKE $1 || '%' THEN 2
-                    WHEN name ILIKE '%' || $1 || '%' THEN 3
-                    WHEN brand ILIKE $1 || '%' THEN 4
-                    WHEN brand ILIKE '%' || $1 || '%' THEN 5
-                    ELSE 6
-                END,
-                GREATEST(
-                    similarity(lower(name), lower($1)),
-                    similarity(lower(COALESCE(brand, '')), lower($1))
-                ) DESC,
-                lower(name)
-            LIMIT 50
-            "#,
-        )
-        .bind(&query.text)
-        .bind(user_id)
-        .bind(&include)
-        .bind(&exclude)
-        .fetch_all(&self.pool)
-        .await?;
+
+        let rows = match scope {
+            ProductSearchScope::All => {
+                sqlx::query_as::<_, ProductRow>(
+                    r#"
+                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
+                           categories, default_quantity, default_unit, serving_size_g,
+                           created_at, updated_at
+                    FROM products
+                    WHERE deleted_at IS NULL
+                      AND (visibility = 'global' OR user_id = $2)
+                      AND ($1 = ''
+                           OR name ILIKE '%' || $1 || '%'
+                           OR brand ILIKE '%' || $1 || '%'
+                           OR barcode ILIKE '%' || $1 || '%'
+                           OR lower(name) % lower($1)
+                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
+                      AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
+                      AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
+                    ORDER BY
+                        CASE
+                            WHEN barcode = $1 THEN 0
+                            WHEN barcode ILIKE $1 || '%' THEN 1
+                            WHEN name ILIKE $1 || '%' THEN 2
+                            WHEN name ILIKE '%' || $1 || '%' THEN 3
+                            WHEN brand ILIKE $1 || '%' THEN 4
+                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
+                            ELSE 6
+                        END,
+                        GREATEST(
+                            similarity(lower(name), lower($1)),
+                            similarity(lower(COALESCE(brand, '')), lower($1))
+                        ) DESC,
+                        lower(name)
+                    LIMIT 50
+                    "#,
+                )
+                .bind(&query.text)
+                .bind(user_id)
+                .bind(&include)
+                .bind(&exclude)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            ProductSearchScope::Custom => {
+                sqlx::query_as::<_, ProductRow>(
+                    r#"
+                    SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
+                           categories, default_quantity, default_unit, serving_size_g,
+                           created_at, updated_at
+                    FROM products
+                    WHERE deleted_at IS NULL
+                      AND visibility = 'user_private'
+                      AND user_id = $2
+                      AND ($1 = ''
+                           OR name ILIKE '%' || $1 || '%'
+                           OR brand ILIKE '%' || $1 || '%'
+                           OR barcode ILIKE '%' || $1 || '%'
+                           OR lower(name) % lower($1)
+                           OR (brand IS NOT NULL AND lower(brand) % lower($1)))
+                      AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
+                      AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
+                    ORDER BY
+                        CASE
+                            WHEN barcode = $1 THEN 0
+                            WHEN barcode ILIKE $1 || '%' THEN 1
+                            WHEN name ILIKE $1 || '%' THEN 2
+                            WHEN name ILIKE '%' || $1 || '%' THEN 3
+                            WHEN brand ILIKE $1 || '%' THEN 4
+                            WHEN brand ILIKE '%' || $1 || '%' THEN 5
+                            ELSE 6
+                        END,
+                        GREATEST(
+                            similarity(lower(name), lower($1)),
+                            similarity(lower(COALESCE(brand, '')), lower($1))
+                        ) DESC,
+                        lower(name)
+                    LIMIT 50
+                    "#,
+                )
+                .bind(&query.text)
+                .bind(user_id)
+                .bind(&include)
+                .bind(&exclude)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            ProductSearchScope::History => {
+                sqlx::query_as::<_, ProductRow>(
+                    r#"
+                    WITH latest_logs AS (
+                        SELECT item_product_id AS product_id,
+                               MAX(log_date) AS last_log_date,
+                               MAX(created_at) AS last_logged_at
+                        FROM food_logs
+                        WHERE user_id = $2
+                          AND item_product_id IS NOT NULL
+                        GROUP BY item_product_id
+                    )
+                    SELECT p.id, p.source, p.source_id, p.user_id, p.visibility, p.barcode,
+                           p.name, p.brand, p.categories, p.default_quantity, p.default_unit,
+                           p.serving_size_g, p.created_at, p.updated_at
+                    FROM products p
+                    JOIN latest_logs l ON l.product_id = p.id
+                    WHERE p.deleted_at IS NULL
+                      AND (p.visibility = 'global' OR p.user_id = $2)
+                      AND ($1 = ''
+                           OR p.name ILIKE '%' || $1 || '%'
+                           OR p.brand ILIKE '%' || $1 || '%'
+                           OR p.barcode ILIKE '%' || $1 || '%'
+                           OR EXISTS (
+                               SELECT 1 FROM unnest(p.categories) AS category
+                               WHERE category ILIKE '%' || $1 || '%'
+                                  OR lower(category) % lower($1)
+                           )
+                           OR lower(p.name) % lower($1)
+                           OR (p.brand IS NOT NULL AND lower(p.brand) % lower($1)))
+                      AND (cardinality($3::text[]) = 0 OR p.categories @> $3::text[])
+                      AND (cardinality($4::text[]) = 0 OR NOT p.categories && $4::text[])
+                    ORDER BY
+                        l.last_log_date DESC,
+                        l.last_logged_at DESC,
+                        CASE
+                            WHEN p.barcode = $1 THEN 0
+                            WHEN p.barcode ILIKE $1 || '%' THEN 1
+                            WHEN p.name ILIKE $1 || '%' THEN 2
+                            WHEN p.name ILIKE '%' || $1 || '%' THEN 3
+                            WHEN p.brand ILIKE $1 || '%' THEN 4
+                            WHEN p.brand ILIKE '%' || $1 || '%' THEN 5
+                            ELSE 6
+                        END,
+                        GREATEST(
+                            similarity(lower(p.name), lower($1)),
+                            similarity(lower(COALESCE(p.brand, '')), lower($1))
+                        ) DESC,
+                        lower(p.name)
+                    LIMIT 50
+                    "#,
+                )
+                .bind(&query.text)
+                .bind(user_id)
+                .bind(&include)
+                .bind(&exclude)
+                .fetch_all(&self.pool)
+                .await?
+            }
+        };
 
         let product_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
         let summary_nutrients_by_product = if product_ids.is_empty() {
@@ -324,16 +432,24 @@ impl ProductRepository for PostgresProductRepository {
         Ok(rows.into_iter().map(|(id,)| ProductId(id)).collect())
     }
 
-    async fn find_by_barcode(&self, barcode: &str) -> Result<Option<Product>, NutritionError> {
+    async fn find_by_barcode(
+        &self,
+        barcode: &str,
+        user_id: Option<Uuid>,
+    ) -> Result<Option<Product>, NutritionError> {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
                    categories, default_quantity, default_unit, serving_size_g,
                    created_at, updated_at
-            FROM products WHERE barcode = $1 AND deleted_at IS NULL
+            FROM products
+            WHERE barcode = $1
+              AND deleted_at IS NULL
+              AND (visibility = 'global' OR user_id = $2)
             "#,
         )
         .bind(barcode)
+        .bind(user_id)
         .fetch_optional(&self.pool)
         .await?;
 

@@ -15,9 +15,11 @@ module Api.Foods exposing
     , SearchRequest
     , SearchResponse
     , SearchResult
+    , SearchScope(..)
     , ServingEntry
     , UnitItem
     , UnitListResponse
+    , barcodePath
     , categorySuggestionPath
     , categorySuggestionResponseDecoder
     , createCustomFood
@@ -27,6 +29,7 @@ module Api.Foods exposing
     , listCustomFoods
     , listNutrients
     , listUnits
+    , lookupBarcode
     , productDetailDecoder
     , searchFoods
     , searchPath
@@ -40,6 +43,7 @@ import Data.Nutrition as Nutrition exposing (NutritionSummary)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Lib.Json as Json
+import Url
 import Url.Builder as Builder
 
 
@@ -148,7 +152,14 @@ type alias CustomFoodListResponse =
 
 type alias SearchRequest =
     { query : String
+    , scope : SearchScope
     }
+
+
+type SearchScope
+    = SearchAll
+    | SearchHistory
+    | SearchCustom
 
 
 type alias SearchResponse =
@@ -220,6 +231,14 @@ searchFoods request toMsg =
         toMsg
 
 
+lookupBarcode : String -> (Result Client.ApiError ProductDetail -> msg) -> Cmd msg
+lookupBarcode barcode toMsg =
+    Client.get
+        (barcodePath barcode)
+        productDetailDecoder
+        toMsg
+
+
 listCategorySuggestions :
     CategorySuggestionRequest
     -> (Result Client.ApiError CategorySuggestionResponse -> msg)
@@ -276,7 +295,27 @@ deleteCustomFood id toMsg =
 searchPath : SearchRequest -> String
 searchPath request =
     Builder.absolute [ "api", "foods", "search" ]
-        [ Builder.string "q" request.query ]
+        [ Builder.string "q" request.query
+        , Builder.string "scope" (searchScopeToString request.scope)
+        ]
+
+
+searchScopeToString : SearchScope -> String
+searchScopeToString scope =
+    case scope of
+        SearchAll ->
+            "all"
+
+        SearchHistory ->
+            "history"
+
+        SearchCustom ->
+            "custom"
+
+
+barcodePath : String -> String
+barcodePath barcode =
+    Builder.absolute [ "api", "foods", "barcode", Url.percentEncode barcode ] []
 
 
 categorySuggestionPath : CategorySuggestionRequest -> String

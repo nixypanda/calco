@@ -165,6 +165,7 @@ impl ProductRepository for MockProductRepo {
     async fn search(
         &self,
         _query: ProductSearchSpec,
+        _scope: ProductSearchScope,
         _user_id: Option<Uuid>,
     ) -> Result<Vec<Product>, NutritionError> {
         unimplemented!("not used in test")
@@ -179,7 +180,11 @@ impl ProductRepository for MockProductRepo {
         unimplemented!("not used in test")
     }
 
-    async fn find_by_barcode(&self, _barcode: &str) -> Result<Option<Product>, NutritionError> {
+    async fn find_by_barcode(
+        &self,
+        _barcode: &str,
+        _user_id: Option<Uuid>,
+    ) -> Result<Option<Product>, NutritionError> {
         unimplemented!("not used in test")
     }
 

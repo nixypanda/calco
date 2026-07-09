@@ -6,6 +6,7 @@ import Api.Foods
         ( ProductDetail
         , SearchResponse
         , SearchResult
+        , SearchScope(..)
         )
 import Api.Meals as Meals
 import Data.ItemNameLookup as ItemNameLookup
@@ -165,6 +166,7 @@ tests =
                             Expect.all
                                 [ \_ -> rowId |> Expect.equal 1
                                 , \_ -> req.query |> Expect.equal "milk"
+                                , \_ -> req.scope |> Expect.equal SearchAll
                                 ]
                                 ()
 

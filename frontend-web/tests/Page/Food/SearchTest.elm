@@ -1,7 +1,7 @@
 module Page.Food.SearchTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods exposing (SearchResult)
+import Api.Foods as Foods exposing (ProductDetail, SearchResult)
 import Api.Logs as Logs
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
@@ -203,7 +203,104 @@ tests =
                                 emptyModel.search
                     }
                     |> third
-                    |> Expect.equal (FoodSearch.RequestSearch 2 { query = "apple" })
+                    |> Expect.equal
+                        (FoodSearch.RequestSearch 2
+                            { query = "apple", scope = Foods.SearchAll }
+                        )
+        , test "history scope change immediately searches existing query" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.ScopeSelected FoodSearch.History)
+                    { emptyModel | search = Search.withQuery "apple" emptyModel.search }
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.RequestSearch 1
+                            { query = "apple", scope = Foods.SearchHistory }
+                        )
+        , test "custom scope debounce uses custom scope" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.DebounceElapsed 2 "apple")
+                    { emptyModel
+                        | scope = FoodSearch.Custom
+                        , search = Search.withSearchToken 2 emptyModel.search
+                    }
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.RequestSearch 2
+                            { query = "apple", scope = Foods.SearchCustom }
+                        )
+        , test "barcode input change does not request lookup" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeChanged "12345")
+                    { emptyModel | scope = FoodSearch.Barcode }
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "barcode submit requests lookup without debounce" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.BarcodeSubmitted
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = " 12345 "
+                    }
+                    |> third
+                    |> Expect.equal (FoodSearch.RequestBarcodeLookup 1 "12345")
+        , test "empty barcode submit is ignored" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.BarcodeSubmitted
+                    { emptyModel | scope = FoodSearch.Barcode, barcodeQuery = "   " }
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "barcode lookup success navigates to food detail with context" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeLookupCompleted 1 (Ok appleDetail))
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeToken = 1
+                        , date = Just "2026-05-29"
+                        , mealSlot = Just Lunch
+                    }
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.Navigate
+                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch))
+                        )
+        , test "barcode lookup failure keeps error on page" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeLookupCompleted 1 (Err Client.NetworkError))
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeToken = 1
+                    }
+                    |> (\( updated, _, outMsg ) -> ( updated.barcodeLookup, outMsg ))
+                    |> Expect.equal ( Failure Client.NetworkError, FoodSearch.NoOp )
+        , test "barcode lookup unauthorized expires session" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeLookupCompleted 1
+                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                    )
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeToken = 1
+                    }
+                    |> third
+                    |> Expect.equal FoodSearch.SessionExpired
+        , test "stale barcode lookup is ignored" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeLookupCompleted 1 (Ok appleDetail))
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeToken = 2
+                    }
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
         , test "debounce for stale token is ignored" <|
             \_ ->
                 FoodSearch.update
@@ -547,6 +644,26 @@ apple =
     , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
     , energyKcalPer100g = Just "52"
     , energyKcalPerServing = Nothing
+    }
+
+
+appleDetail : ProductDetail
+appleDetail =
+    { id = "food-1"
+    , source = "USER"
+    , sourceId = Nothing
+    , visibility = "private"
+    , barcode = Just "12345"
+    , name = "Apple"
+    , brand = Just "Local"
+    , categories = [ "fruit" ]
+    , defaultQuantity = Just "1"
+    , defaultUnit = Just "g"
+    , servingSizeG = Just "100"
+    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutrients = []
+    , servings = []
+    , allowedUnits = []
     }
 
 
