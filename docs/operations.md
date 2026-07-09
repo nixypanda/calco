@@ -137,7 +137,17 @@ Imports are run from CLI tooling in two locations:
 - **Data sources** (`tools/importers/data-sources/`) — public food datasets via the catalog import API.
 - **Personal data** (`tools/importers/personal-data/`) — user data from other apps via user-facing APIs.
 
-See [imports.md](imports.md) for full workflows.
+Public catalog imports require a running, migrated backend and an admin
+`calco_session` token. To upload the existing processed merged catalog JSONL:
+
+```bash
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+nix develop -c just -f tools/justfile data-sources-upload merged data
+```
+
+See [imports.md](imports.md) for full workflows, including raw dataset
+fetching and merging.
 
 ## Backup Notes
 

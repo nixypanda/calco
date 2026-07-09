@@ -127,10 +127,26 @@ Options:
 | `--data-dir`      | `CALCO_DATA_DIR`      | `./data`                |
 | `--dry-run`       | —                     | Skip upload             |
 
+The importer appends `/imports` to the API base URL. For the current backend,
+set `CALCO_API_URL` to the API prefix:
+
+```bash
+export CALCO_API_URL=http://127.0.0.1:3001/api
+```
+
+Uploads are admin-only. `CALCO_SESSION_TOKEN` must be the value of an admin
+`calco_session` cookie.
+
 ### Examples
 
 ```bash
-# Fetch and convert all sources
+# Upload the existing processed merged catalog JSONL.
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+nix develop -c just -f tools/justfile data-sources-upload merged data
+
+# Fetch and convert all sources. This downloads large raw datasets,
+# including Open Food Facts.
 calco-import fetch usda
 calco-import fetch off
 calco-import fetch ifct
@@ -140,14 +156,19 @@ calco-import fetch indb
 calco-import merge
 
 # Upload a dataset
-CALCO_SESSION_TOKEN=<token> calco-import upload merged
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+calco-import upload merged
 
 # Full pipeline when session token is set
-CALCO_SESSION_TOKEN=<token> calco-import import ifct
-CALCO_SESSION_TOKEN=<token> calco-import import indb
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+calco-import import ifct
 
-# Full pipeline for merged (fetches all, then merges, then uploads)
-CALCO_SESSION_TOKEN=<token> calco-import import merged
+# Full pipeline for merged fetches all sources, merges, then uploads.
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+nix develop -c just -f tools/justfile data-sources-import merged
 
 # Dry-run check
 calco-import --dry-run fetch ifct

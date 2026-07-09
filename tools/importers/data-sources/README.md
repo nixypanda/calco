@@ -49,13 +49,29 @@ Common options:
 | `--data-dir` | `CALCO_DATA_DIR` | `./data` |
 | `--dry-run` | none | skip upload side effects |
 
+The uploader appends `/imports` to the API base URL. For the current CalCo
+backend, use the API prefix:
+
+```bash
+export CALCO_API_URL=http://127.0.0.1:3001/api
+```
+
+Uploads require an admin session token. Set `CALCO_SESSION_TOKEN` to the value
+of an admin `calco_session` cookie.
+
 ## Examples
 
 ```bash
+# Upload the existing processed merged catalog JSONL.
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+nix develop -c just -f tools/justfile data-sources-upload merged data
+
 # Convert one source into processed JSONL.
 uv run calco-import fetch ifct
 
-# Convert all public sources and merge them.
+# Convert all public sources and merge them. This downloads large raw
+# datasets, including Open Food Facts.
 uv run calco-import fetch usda
 uv run calco-import fetch off
 uv run calco-import fetch ifct
@@ -63,7 +79,14 @@ uv run calco-import fetch indb
 uv run calco-import merge
 
 # Upload a merged dataset to a running backend.
-CALCO_SESSION_TOKEN=<token> uv run calco-import upload merged
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+uv run calco-import upload merged
+
+# Run the full merged workflow through the tools justfile.
+CALCO_API_URL=http://127.0.0.1:3001/api \
+CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
+nix develop -c just -f tools/justfile data-sources-import merged
 ```
 
 For local checks without writing into the working tree, set a temporary data

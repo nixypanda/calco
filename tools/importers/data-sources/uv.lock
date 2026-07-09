@@ -12,7 +12,7 @@ wheels = [
 ]
 
 [[package]]
-name = "calco-importers"
+name = "calco-data-sources"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [

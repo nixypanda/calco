@@ -26,6 +26,7 @@ result-*
 
 # Import pipeline data
 data/
+data-fixed*/
 !frontend-web/src/Data/
 !frontend-web/src/Data/*.elm
 

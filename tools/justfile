@@ -1,0 +1,53 @@
+# CalCo tools command runner
+#
+# Run from this directory with:
+#   nix develop .. -c just <recipe>
+#
+# Or from the repository root with:
+#   nix develop -c just -f tools/justfile <recipe>
+
+# Show available tool recipes
+default:
+    @just --list
+
+# ──────────────────────────────────────────────
+# Public catalog data-source imports
+# ──────────────────────────────────────────────
+
+# Lint and type-check data-source import tools
+data-sources-check:
+    cd importers/data-sources && uv run ruff check src/ && uv run ty check src/
+
+# Run data-source importer syntax/import checks
+data-sources-test:
+    cd importers/data-sources && uv run python -m compileall -q src test_merge_quick.py
+
+# Run all data-source importer checks
+data-sources-verify: data-sources-check data-sources-test
+
+# Fetch one public catalog source into processed JSONL
+data-sources-fetch dataset data_dir="/tmp/calco-import":
+    cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import fetch "{{dataset}}"
+
+# Merge processed public catalog sources
+data-sources-merge data_dir="/tmp/calco-import":
+    cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import merge
+
+# Upload a public catalog dataset to the backend import API
+data-sources-upload dataset="merged" data_dir="/tmp/calco-import":
+    cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import upload "{{dataset}}"
+
+# Run the full public catalog import workflow
+data-sources-import dataset="merged" data_dir="/tmp/calco-import":
+    cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import import "{{dataset}}"
+
+# Dry-run the full public catalog import workflow without upload side effects
+data-sources-dry-run dataset="merged" data_dir="/tmp/calco-import-dry-run":
+    cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import --dry-run import "{{dataset}}"
+
+# Run the IFCT/INDB merge smoke test after those sources have been fetched
+data-sources-merge-smoke:
+    cd importers/data-sources && uv run python test_merge_quick.py
+
+# Run all public catalog importer checks
+importers-verify: data-sources-verify
