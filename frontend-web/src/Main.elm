@@ -55,6 +55,13 @@ type alias Model =
     }
 
 
+type alias BarcodeScannerEvent =
+    { event : String
+    , barcode : Maybe String
+    , message : Maybe String
+    }
+
+
 type alias PageModel =
     Page.Model
 
@@ -124,6 +131,7 @@ type Msg
     | WindowResized Int Int
     | GotPageMsg Page.Msg
     | GotLocalContext { date : String, timezone : String }
+    | GotBarcodeScannerEvent BarcodeScannerEvent
     | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
 
@@ -193,6 +201,11 @@ update msg model =
 
         GotLocalContext context ->
             stepPageUpdate (Page.localContextReceived (pageContext model) context model.page) model
+
+        GotBarcodeScannerEvent event ->
+            stepPageUpdate
+                (Page.barcodeScannerEventReceived (pageContext model) event model.page)
+                model
 
         GotPageMsg pageMsg ->
             stepPageUpdate (Page.update (pageContext model) pageMsg model.page) model
@@ -362,6 +375,12 @@ applyPageOutMsg outMsg model =
 
         Page.RequestLocalContext ->
             ( model, requestLocalContext () )
+
+        Page.RequestBarcodeScanStart ->
+            ( model, requestBarcodeScanStart () )
+
+        Page.RequestBarcodeScanStop ->
+            ( model, requestBarcodeScanStop () )
 
         Page.LoginSucceeded loginSession ->
             let
@@ -543,6 +562,7 @@ subscriptions : Model -> Sub Msg
 subscriptions _ =
     Sub.batch
         [ localContextReceived GotLocalContext
+        , barcodeScannerEvent GotBarcodeScannerEvent
         , Browser.Events.onResize WindowResized
         , Sub.map GotVersionMsg Version.subscriptions
         ]
@@ -556,6 +576,15 @@ port requestLocalContext : () -> Cmd msg
 
 
 port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
+
+
+port requestBarcodeScanStart : () -> Cmd msg
+
+
+port requestBarcodeScanStop : () -> Cmd msg
+
+
+port barcodeScannerEvent : (BarcodeScannerEvent -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg

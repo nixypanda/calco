@@ -26,7 +26,7 @@ buildNpmPackage {
       ]);
   };
 
-  npmDepsHash = "sha256-yQFoDq3RMqNQWnqxoDNgqddOcObRFSKC//AiYL5K7Qo=";
+  npmDepsHash = "sha256-wQ/wjmwl0a/k68JpHd3BnLFe5c5i2UB6qjaKbwoRU8I=";
   npmRebuildFlags = [ "--ignore-scripts" ];
 
   nativeBuildInputs = [

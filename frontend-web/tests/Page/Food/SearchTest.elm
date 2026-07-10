@@ -247,6 +247,105 @@ tests =
                     }
                     |> third
                     |> Expect.equal (FoodSearch.RequestBarcodeLookup 1 "12345")
+        , test "barcode scan click requests scanner start" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.BarcodeScanClicked
+                    { emptyModel | scope = FoodSearch.Barcode }
+                    |> (\( updated, _, outMsg ) ->
+                            ( updated.barcodeScanner, outMsg )
+                       )
+                    |> Expect.equal
+                        ( FoodSearch.ScannerStarting
+                        , FoodSearch.RequestBarcodeScanStart
+                        )
+        , test "barcode scan cancel requests scanner stop" <|
+            \_ ->
+                FoodSearch.update
+                    FoodSearch.BarcodeScanCancelClicked
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeScanner = FoodSearch.ScannerActive
+                    }
+                    |> (\( updated, _, outMsg ) ->
+                            ( updated.barcodeScanner, outMsg )
+                       )
+                    |> Expect.equal
+                        ( FoodSearch.ScannerIdle
+                        , FoodSearch.RequestBarcodeScanStop
+                        )
+        , test "barcode scanner started event marks scanner active" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeScannerEventReceived
+                        { event = "started", barcode = Nothing, message = Nothing }
+                    )
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeScanner = FoodSearch.ScannerStarting
+                    }
+                    |> first
+                    |> .barcodeScanner
+                    |> Expect.equal FoodSearch.ScannerActive
+        , test "barcode scanner failed event stores error" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeScannerEventReceived
+                        { event = "failed"
+                        , barcode = Nothing
+                        , message = Just "Camera permission was denied."
+                        }
+                    )
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeScanner = FoodSearch.ScannerStarting
+                    }
+                    |> first
+                    |> .barcodeScanner
+                    |> Expect.equal
+                        (FoodSearch.ScannerFailed "Camera permission was denied.")
+        , test "barcode scanner detected event submits detected barcode" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.BarcodeScannerEventReceived
+                        { event = "detected"
+                        , barcode = Just " 12345 "
+                        , message = Nothing
+                        }
+                    )
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeScanner = FoodSearch.ScannerActive
+                    }
+                    |> (\( updated, _, outMsg ) ->
+                            { barcodeQuery = updated.barcodeQuery
+                            , scanner = updated.barcodeScanner
+                            , lookup = updated.barcodeLookup
+                            , outMsg = outMsg
+                            }
+                       )
+                    |> Expect.equal
+                        { barcodeQuery = "12345"
+                        , scanner = FoodSearch.ScannerIdle
+                        , lookup = Loading
+                        , outMsg = FoodSearch.RequestBarcodeLookup 1 "12345"
+                        }
+        , test "switching away from barcode scope requests scanner stop" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.ScopeSelected FoodSearch.All)
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeScanner = FoodSearch.ScannerActive
+                    }
+                    |> (\( updated, _, outMsg ) ->
+                            ( updated.scope, updated.barcodeScanner, outMsg )
+                       )
+                    |> Expect.equal
+                        ( FoodSearch.All
+                        , FoodSearch.ScannerIdle
+                        , FoodSearch.RequestBarcodeScanStop
+                        )
         , test "empty barcode submit is ignored" <|
             \_ ->
                 FoodSearch.update

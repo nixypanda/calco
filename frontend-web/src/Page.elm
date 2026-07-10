@@ -3,6 +3,7 @@ module Page exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , barcodeScannerEventReceived
     , init
     , isLoading
     , localContextReceived
@@ -86,6 +87,8 @@ type OutMsg
     | Navigate Route
     | SessionExpired
     | RequestLocalContext
+    | RequestBarcodeScanStart
+    | RequestBarcodeScanStop
     | LoginSucceeded Auth.LoginSession
     | SetupSucceeded Auth.LoginSession
 
@@ -502,6 +505,26 @@ localContextReceived pageContext context model =
             Nothing
 
 
+barcodeScannerEventReceived :
+    InitContext
+    -> { event : String, barcode : Maybe String, message : Maybe String }
+    -> Model
+    -> Maybe ( Model, Cmd Msg, OutMsg )
+barcodeScannerEventReceived pageContext event model =
+    case model of
+        FoodSearchPage sub ->
+            Just
+                (stepPage pageContext
+                    FoodSearchPage
+                    GotFoodSearchMsg
+                    applyFoodSearchOutMsg
+                    (FoodSearch.update (FoodSearch.BarcodeScannerEventReceived event) sub)
+                )
+
+        _ ->
+            Nothing
+
+
 stepFoodDetail : InitContext -> FoodShow.Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 stepFoodDetail context subMsg model =
     case model of
@@ -708,6 +731,12 @@ applyFoodSearchOutMsg _ outMsg =
             , NoOutMsg
             )
 
+        FoodSearch.RequestBarcodeScanStopAndSearch token request ->
+            ( Api.Foods.searchFoods request
+                (GotFoodSearchMsg << FoodSearch.SearchCompleted token)
+            , RequestBarcodeScanStop
+            )
+
         FoodSearch.RequestBarcodeLookup token barcode ->
             ( Api.Foods.lookupBarcode barcode
                 (GotFoodSearchMsg << FoodSearch.BarcodeLookupCompleted token)
@@ -722,6 +751,12 @@ applyFoodSearchOutMsg _ outMsg =
 
         FoodSearch.RequestLocalContext ->
             ( Cmd.none, RequestLocalContext )
+
+        FoodSearch.RequestBarcodeScanStart ->
+            ( Cmd.none, RequestBarcodeScanStart )
+
+        FoodSearch.RequestBarcodeScanStop ->
+            ( Cmd.none, RequestBarcodeScanStop )
 
         FoodSearch.RequestCreateLog request ->
             ( Api.Logs.createLog request

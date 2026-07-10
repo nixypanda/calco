@@ -1,5 +1,6 @@
 module Page.Food.Search exposing
-    ( Model
+    ( BarcodeScannerState(..)
+    , Model
     , Msg(..)
     , OutMsg(..)
     , QuickAddState
@@ -23,6 +24,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Json.Decode as Decode
@@ -50,6 +52,7 @@ type alias Model =
     , barcodeQuery : String
     , barcodeLookup : Loadable Client.ApiError Foods.ProductDetail
     , barcodeToken : Int
+    , barcodeScanner : BarcodeScannerState
     , recentItems : Loadable Client.ApiError (List Logs.RecentItem)
     , date : Maybe String
     , mealSlot : Maybe MealSlot
@@ -64,6 +67,13 @@ type SearchScope
     | History
     | Custom
     | Barcode
+
+
+type BarcodeScannerState
+    = ScannerIdle
+    | ScannerStarting
+    | ScannerActive
+    | ScannerFailed String
 
 
 type QuickAddState
@@ -87,6 +97,7 @@ init date mealSlot =
     , barcodeQuery = ""
     , barcodeLookup = NotAsked
     , barcodeToken = 0
+    , barcodeScanner = ScannerIdle
     , recentItems =
         case date |> Maybe.andThen LocalDate.fromString of
             Just _ ->
@@ -111,6 +122,9 @@ type Msg
     | ScopeSelected SearchScope
     | BarcodeChanged String
     | BarcodeSubmitted
+    | BarcodeScanClicked
+    | BarcodeScanCancelClicked
+    | BarcodeScannerEventReceived { event : String, barcode : Maybe String, message : Maybe String }
     | BarcodeLookupCompleted Int (Result Client.ApiError Foods.ProductDetail)
     | CategorySuggestionsCompleted Int (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
@@ -130,7 +144,10 @@ type Msg
 type OutMsg
     = NoOp
     | RequestSearch Int Foods.SearchRequest
+    | RequestBarcodeScanStopAndSearch Int Foods.SearchRequest
     | RequestBarcodeLookup Int String
+    | RequestBarcodeScanStart
+    | RequestBarcodeScanStop
     | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | RequestLocalContext
     | RequestCreateLog Logs.CreateLogRequest
@@ -177,6 +194,10 @@ applyScopeChange scope model =
 
     else
         let
+            leavingBarcode : Bool
+            leavingBarcode =
+                model.scope == Barcode && scope /= Barcode
+
             query : String
             query =
                 String.trim model.search.query
@@ -205,14 +226,28 @@ applyScopeChange scope model =
                             NotAsked
                     , barcodeLookup = NotAsked
                     , barcodeToken = model.barcodeToken + 1
+                    , barcodeScanner =
+                        if leavingBarcode then
+                            ScannerIdle
+
+                        else
+                            model.barcodeScanner
                 }
         in
         if isTextScope scope && not (String.isEmpty query) then
             ( nextModel
             , Cmd.none
-            , RequestSearch nextSearch.searchToken
-                { query = query, scope = searchRequestScope scope }
+            , if leavingBarcode then
+                RequestBarcodeScanStopAndSearch nextSearch.searchToken
+                    { query = query, scope = searchRequestScope scope }
+
+              else
+                RequestSearch nextSearch.searchToken
+                    { query = query, scope = searchRequestScope scope }
             )
+
+        else if leavingBarcode then
+            ( nextModel, Cmd.none, RequestBarcodeScanStop )
 
         else
             ( nextModel, Cmd.none, NoOp )
@@ -267,6 +302,35 @@ update msg model =
 
         BarcodeSubmitted ->
             applyBarcodeSubmit model
+
+        BarcodeScanClicked ->
+            case model.barcodeScanner of
+                ScannerStarting ->
+                    ( model, Cmd.none, NoOp )
+
+                ScannerActive ->
+                    ( model, Cmd.none, NoOp )
+
+                ScannerIdle ->
+                    ( { model | barcodeScanner = ScannerStarting }
+                    , Cmd.none
+                    , RequestBarcodeScanStart
+                    )
+
+                ScannerFailed _ ->
+                    ( { model | barcodeScanner = ScannerStarting }
+                    , Cmd.none
+                    , RequestBarcodeScanStart
+                    )
+
+        BarcodeScanCancelClicked ->
+            ( { model | barcodeScanner = ScannerIdle }
+            , Cmd.none
+            , RequestBarcodeScanStop
+            )
+
+        BarcodeScannerEventReceived event ->
+            applyBarcodeScannerEvent event model
 
         BarcodeLookupCompleted token result ->
             if token /= model.barcodeToken then
@@ -504,6 +568,51 @@ update msg model =
             ( model, Cmd.none, Navigate CustomFoodCreate )
 
 
+applyBarcodeScannerEvent :
+    { event : String, barcode : Maybe String, message : Maybe String }
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+applyBarcodeScannerEvent event model =
+    case event.event of
+        "started" ->
+            ( { model | barcodeScanner = ScannerActive }, Cmd.none, NoOp )
+
+        "stopped" ->
+            ( { model | barcodeScanner = ScannerIdle }, Cmd.none, NoOp )
+
+        "failed" ->
+            ( { model
+                | barcodeScanner =
+                    ScannerFailed
+                        (Maybe.withDefault
+                            "Could not start barcode scanner."
+                            event.message
+                        )
+              }
+            , Cmd.none
+            , NoOp
+            )
+
+        "detected" ->
+            case event.barcode |> Maybe.map String.trim of
+                Just barcode ->
+                    if String.isEmpty barcode then
+                        ( model, Cmd.none, NoOp )
+
+                    else
+                        applyBarcodeSubmit
+                            { model
+                                | barcodeQuery = barcode
+                                , barcodeScanner = ScannerIdle
+                            }
+
+                Nothing ->
+                    ( model, Cmd.none, NoOp )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
 quickAddRequest :
     { date : String, timezone : String }
     -> Model
@@ -646,9 +755,9 @@ barcodeInputView theme device model =
                 , extraAttrs = [ onEnterSubmit BarcodeSubmitted ]
                 }
 
-        button : Element Msg
-        button =
-            Ui.primarySubmitButton device
+        searchButton : Element Msg
+        searchButton =
+            Ui.secondarySubmitButton device
                 theme
                 { state =
                     if model.barcodeLookup == Loading then
@@ -663,25 +772,158 @@ barcodeInputView theme device model =
                 , submittingLabel = "Searching"
                 , onPress = BarcodeSubmitted
                 }
-    in
-    if Ui.isSmall device then
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            [ input, button ]
 
-    else
-        Element.row
+        scanButton : Element Msg
+        scanButton =
+            case model.barcodeScanner of
+                ScannerStarting ->
+                    Ui.primarySubmitButton device
+                        theme
+                        { state = Ui.Submitting
+                        , idleLabel = "Scan"
+                        , submittingLabel = "Starting"
+                        , onPress = BarcodeScanClicked
+                        }
+
+                ScannerActive ->
+                    Ui.fullWidthDangerButton device theme "Cancel" BarcodeScanCancelClicked
+
+                _ ->
+                    Ui.primarySubmitButton device
+                        theme
+                        { state = Ui.Idle
+                        , idleLabel = "Scan"
+                        , submittingLabel = "Starting"
+                        , onPress = BarcodeScanClicked
+                        }
+
+        controls : Element Msg
+        controls =
+            if Ui.isSmall device then
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space8
+                    ]
+                    [ scanButton, searchButton ]
+
+            else
+                Element.row
+                    [ Element.width (Element.px 280)
+                    , Element.spacing DesignTokens.space8
+                    , Element.alignBottom
+                    ]
+                    [ scanButton, searchButton ]
+
+        inputRow : Element Msg
+        inputRow =
+            if Ui.isSmall device then
+                Element.column
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                    [ input, controls ]
+
+            else
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space8
+                    , Element.alignBottom
+                    ]
+                    [ input, controls ]
+    in
+    Element.column
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        (inputRow :: barcodeScannerStateView theme device model.barcodeScanner)
+
+
+barcodeScannerStateView : Theme -> Device -> BarcodeScannerState -> List (Element Msg)
+barcodeScannerStateView theme device scanner =
+    case scanner of
+        ScannerIdle ->
+            []
+
+        ScannerFailed message ->
+            [ Ui.errorBanner theme message ]
+
+        ScannerStarting ->
+            [ barcodeScannerPreview theme device "Starting camera..." ]
+
+        ScannerActive ->
+            [ barcodeScannerPreview theme device "Center the barcode on the guide." ]
+
+
+barcodeScannerPreview : Theme -> Device -> String -> Element Msg
+barcodeScannerPreview theme device caption =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space8
+        , Element.padding DesignTokens.space8
+        , Background.color theme.cardBg
+        , Border.width 1
+        , Border.color theme.chipBorder
+        , Border.rounded DesignTokens.radiusCard
+        ]
+        [ Element.el
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            , Element.alignBottom
+            , Element.height
+                (Element.px
+                    (if Ui.isSmall device then
+                        380
+
+                     else
+                        320
+                    )
+                )
+            , Border.rounded DesignTokens.radiusCard
+            , Element.clip
+            , Background.color (Element.rgb255 0 0 0)
+            , Element.inFront (barcodeScannerGuide theme)
             ]
-            [ input
-            , Element.el
-                [ Element.width (Element.px 160)
-                , Element.alignBottom
-                ]
-                button
+            (Element.html barcodeScannerVideo)
+        , Typography.mutedCaptionParagraph theme caption
+        ]
+
+
+barcodeScannerGuide : Theme -> Element Msg
+barcodeScannerGuide theme =
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.paddingXY DesignTokens.space16 0
+        ]
+        (Element.el
+            [ Element.centerY
+            , Element.width Element.fill
+            , Element.height (Element.px 96)
+            , Border.rounded DesignTokens.radiusControl
+            , Border.color theme.focusRing
+            , Border.widthEach
+                { top = 2
+                , right = 0
+                , bottom = 2
+                , left = 0
+                }
             ]
+            Element.none
+        )
+
+
+barcodeScannerVideo : Html Msg
+barcodeScannerVideo =
+    Html.video
+        [ Html.Attributes.id barcodeScannerVideoId
+        , Html.Attributes.attribute "autoplay" ""
+        , Html.Attributes.attribute "playsinline" ""
+        , Html.Attributes.attribute "muted" ""
+        , Html.Attributes.style "display" "block"
+        , Html.Attributes.style "width" "100%"
+        , Html.Attributes.style "height" "100%"
+        , Html.Attributes.style "object-fit" "contain"
+        ]
+        []
+
+
+barcodeScannerVideoId : String
+barcodeScannerVideoId =
+    "calco-barcode-scanner-video"
 
 
 scopeControl : Theme -> Device -> SearchScope -> Element Msg

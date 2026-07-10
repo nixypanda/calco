@@ -50,6 +50,7 @@ module Ui exposing
     , removableChip
     , scrimOverlay
     , searchInput
+    , secondarySubmitButton
     , section
     , selectDropdown
     , skeletonBar
@@ -590,6 +591,58 @@ primarySubmitButton device theme config =
         , uiClass "ui-motion ui-pressable"
         , if active then
             hoverEffect device [ Background.color theme.brandBluePressed ]
+
+          else
+            hoverEffect device []
+        ]
+        { onPress =
+            if active then
+                Just config.onPress
+
+            else
+                Nothing
+        , label = Element.text label
+        }
+
+
+secondarySubmitButton : Device -> Theme -> SubmitButtonConfig msg -> Element msg
+secondarySubmitButton device theme config =
+    let
+        label : String
+        label =
+            case config.state of
+                Submitting ->
+                    config.submittingLabel
+
+                _ ->
+                    config.idleLabel
+
+        active : Bool
+        active =
+            config.state == Idle
+
+        foreground : Element.Color
+        foreground =
+            if active then
+                theme.brandBlue
+
+            else
+                theme.brandBlueDisabled
+    in
+    Input.button
+        [ Background.color theme.cardBg
+        , Border.width 1
+        , Border.color foreground
+        , Border.rounded radiusPill
+        , Font.color foreground
+        , Element.width Element.fill
+        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.paddingEach { top = 13, right = 20, bottom = 13, left = 20 }
+        , Font.medium
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , if active then
+            hoverEffect device [ Background.color theme.brandBlueSoft ]
 
           else
             hoverEffect device []

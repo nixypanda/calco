@@ -185,6 +185,26 @@ renderingSmoke =
                     theme
                     { icon = Icon.Close, title = "Delete", onPress = () }
                     |> pass
+        , test "secondarySubmitButton renders idle state" <|
+            \_ ->
+                Ui.secondarySubmitButton phone
+                    theme
+                    { state = Ui.Idle
+                    , idleLabel = "Search"
+                    , submittingLabel = "Searching"
+                    , onPress = ()
+                    }
+                    |> pass
+        , test "secondarySubmitButton renders disabled state" <|
+            \_ ->
+                Ui.secondarySubmitButton phone
+                    theme
+                    { state = Ui.Disabled
+                    , idleLabel = "Search"
+                    , submittingLabel = "Searching"
+                    , onPress = ()
+                    }
+                    |> pass
         , test "fieldLabel renders with a label" <|
             \_ -> Ui.fieldLabel theme "Amount" |> pass
         , test "accentDot produces a value for any color" <|
