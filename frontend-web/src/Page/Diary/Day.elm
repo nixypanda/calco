@@ -17,6 +17,7 @@ module Page.Diary.Day exposing
 
 import Api.Client as Client
 import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotResponse)
+import Data.DiaryPreferences as DiaryPreferences exposing (DiaryPreferences)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot, GoalTargets)
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
@@ -75,6 +76,7 @@ type alias Model =
     , latestSlots : LatestSlotsState
     , copyState : CopyState
     , macroMode : MacroMode
+    , preferences : Maybe DiaryPreferences
     }
 
 
@@ -112,6 +114,7 @@ init args =
       , latestSlots = latestSlotsLoading currentDate
       , copyState = CopyIdle
       , macroMode = Grams
+      , preferences = Nothing
       }
     , RequestDiaryData currentDate
     )
@@ -125,6 +128,7 @@ type Msg
     = LoadStarted
     | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
+    | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
     | LatestSlotLoaded LocalDate MealSlot (Result Client.ApiError LatestSlotResponse)
     | CopyLatestClicked LatestSlotSource
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
@@ -202,6 +206,14 @@ update msg model =
 
                     Err error ->
                         failure requestDate error model
+
+        PreferencesLoaded result ->
+            case result of
+                Ok preferences ->
+                    ( { model | preferences = Just preferences }, Cmd.none, NoOp )
+
+                Err error ->
+                    failure model.currentDate error model
 
         LatestSlotLoaded requestDate slot result ->
             if not (LocalDate.equals requestDate model.currentDate) then
@@ -364,7 +376,7 @@ latestSlotsLoading date =
 
 repeatableSlots : List MealSlot
 repeatableSlots =
-    [ Breakfast, Lunch, Dinner, Snack ]
+    MealSlot.all
 
 
 applyLatestSlotLoaded :
@@ -807,16 +819,28 @@ logGroupsView theme device model logs =
             section Other
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ slotView theme device model (section Breakfast)
-        , slotView theme device model (section Lunch)
-        , slotView theme device model (section Dinner)
-        , slotView theme device model (section Snack)
-        , if List.isEmpty otherSection.logs then
-            Element.none
+        (List.map section MealSlot.all
+            |> List.filter (shouldShowSection model.preferences)
+            |> List.map (slotView theme device model)
+            |> (\sections ->
+                    sections
+                        ++ [ if List.isEmpty otherSection.logs then
+                                Element.none
 
-          else
-            slotView theme device model otherSection
-        ]
+                             else
+                                slotView theme device model otherSection
+                           ]
+               )
+        )
+
+
+shouldShowSection : Maybe DiaryPreferences -> SlotSection -> Bool
+shouldShowSection maybePreferences section =
+    not (List.isEmpty section.logs)
+        || (maybePreferences
+                |> Maybe.map (DiaryPreferences.isEnabled section.slot)
+                |> Maybe.withDefault False
+           )
 
 
 slotView : Theme -> Device -> Model -> SlotSection -> Element Msg
@@ -975,9 +999,10 @@ mealSlotFade theme =
                 Light ->
                     "linear-gradient(to bottom, "
                         ++ "rgba(255,255,255,0) 0%, "
-                        ++ "rgba(255,255,255,0) 55%, "
+                        ++ "rgba(255,255,255,0) 25%, "
                         ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ "white 100%)"
+                        ++ Css.toCssColor theme.cardBg
+                        ++ " 100%)"
 
                 Dark ->
                     "linear-gradient(to bottom, "
@@ -1070,6 +1095,9 @@ mealSlotImage slot =
 
         Snack ->
             Just { url = "/assets/snacks.png", focusX = "82%" }
+
+        LateNightSnack ->
+            Just { url = "/assets/late-night-snack.png", focusX = "73%" }
 
         Other ->
             Nothing

@@ -294,6 +294,9 @@ screenMeta device session route =
         GoalSettings ->
             { title = "Goals", leading = GoBack (DiaryDay Nothing) }
 
+        DiarySettings ->
+            { title = "Diary settings", leading = GoBack (DiaryDay Nothing) }
+
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
@@ -578,5 +581,9 @@ profileMenuContent config =
                 "Signed in"
         )
     , Ui.fullWidthGhostButton config.device config.theme "Goals" (config.onNavigate GoalSettings)
+    , Ui.fullWidthGhostButton config.device
+        config.theme
+        "Meal slots"
+        (config.onNavigate DiarySettings)
     , Ui.fullWidthDangerButton config.device config.theme "Logout" config.onLogout
     ]

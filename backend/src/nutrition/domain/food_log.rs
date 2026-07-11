@@ -31,21 +31,31 @@ impl From<Uuid> for FoodLogId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MealSlot {
     Breakfast,
     Lunch,
     Dinner,
     Snack,
+    LateNightSnack,
 }
 
 impl MealSlot {
+    pub const ALL: [Self; 5] = [
+        Self::Breakfast,
+        Self::Lunch,
+        Self::Dinner,
+        Self::Snack,
+        Self::LateNightSnack,
+    ];
+
     pub fn as_str(&self) -> &'static str {
         match self {
             MealSlot::Breakfast => "breakfast",
             MealSlot::Lunch => "lunch",
             MealSlot::Dinner => "dinner",
             MealSlot::Snack => "snack",
+            MealSlot::LateNightSnack => "late_night_snack",
         }
     }
 }
@@ -59,6 +69,7 @@ impl FromStr for MealSlot {
             "lunch" => Ok(MealSlot::Lunch),
             "dinner" => Ok(MealSlot::Dinner),
             "snack" => Ok(MealSlot::Snack),
+            "late_night_snack" => Ok(MealSlot::LateNightSnack),
             _ => Err(format!("invalid meal slot: {s}")),
         }
     }

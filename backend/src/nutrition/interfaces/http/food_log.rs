@@ -73,6 +73,7 @@ pub enum MealSlotDto {
     Lunch,
     Dinner,
     Snack,
+    LateNightSnack,
 }
 
 impl From<MealSlot> for MealSlotDto {
@@ -82,6 +83,7 @@ impl From<MealSlot> for MealSlotDto {
             MealSlot::Lunch => MealSlotDto::Lunch,
             MealSlot::Dinner => MealSlotDto::Dinner,
             MealSlot::Snack => MealSlotDto::Snack,
+            MealSlot::LateNightSnack => MealSlotDto::LateNightSnack,
         }
     }
 }

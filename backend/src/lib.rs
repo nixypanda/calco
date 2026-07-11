@@ -21,10 +21,12 @@ use crate::import::application::ImportServices;
 use crate::import::domain::ImportRepository;
 use crate::import::infrastructure::postgres::PostgresImportRepository;
 use crate::import::interfaces::http::import_routes;
+use crate::nutrition::application::diary_preferences::DiaryPreferencesServices;
 use crate::nutrition::application::food_log::{FoodLogHistoryServices, FoodLogServices};
 use crate::nutrition::application::goal_target::GoalTargetServices;
 use crate::nutrition::application::meal::MealServices;
 use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
+use crate::nutrition::domain::diary_preferences::DiaryPreferencesRepository;
 use crate::nutrition::domain::food_log::FoodLogRepository;
 use crate::nutrition::domain::goal_target::GoalTargetRepository;
 use crate::nutrition::domain::meal::MealRepository;
@@ -32,10 +34,12 @@ use crate::nutrition::domain::units::UnitConverter;
 use crate::nutrition::infrastructure::postgres::catalog::{
     PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
 };
+use crate::nutrition::infrastructure::postgres::diary_preferences::PostgresDiaryPreferencesRepository;
 use crate::nutrition::infrastructure::postgres::food_log::PostgresFoodLogRepository;
 use crate::nutrition::infrastructure::postgres::goal_target::PostgresGoalTargetRepository;
 use crate::nutrition::infrastructure::postgres::meal::PostgresMealRepository;
 use crate::nutrition::interfaces::http::catalog::catalog_routes;
+use crate::nutrition::interfaces::http::diary_preferences::diary_preferences_routes;
 use crate::nutrition::interfaces::http::food_log::food_log_routes;
 use crate::nutrition::interfaces::http::goal_target::goal_target_routes;
 use crate::nutrition::interfaces::http::meal::meal_routes;
@@ -53,10 +57,12 @@ pub struct AppState {
     pub unit_repo: Arc<dyn UnitRepository>,
     pub unit_converter: Arc<UnitConverter>,
     pub food_log_repo: Arc<dyn FoodLogRepository>,
+    pub diary_preferences_repo: Arc<dyn DiaryPreferencesRepository>,
     pub meal_repo: Arc<dyn MealRepository>,
     pub goal_target_repo: Arc<dyn GoalTargetRepository>,
     pub import_repo: Arc<dyn ImportRepository>,
     pub food_log_services: FoodLogServices,
+    pub diary_preferences_services: DiaryPreferencesServices,
     pub food_log_history_services: FoodLogHistoryServices,
     pub meal_services: MealServices,
     pub goal_target_services: GoalTargetServices,
@@ -96,6 +102,8 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
 
     let food_log_repo =
         Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
+    let diary_preferences_repo = Arc::new(PostgresDiaryPreferencesRepository::new(pool.clone()))
+        as Arc<dyn DiaryPreferencesRepository>;
     let meal_repo = Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
     let goal_target_repo =
         Arc::new(PostgresGoalTargetRepository::new(pool.clone())) as Arc<dyn GoalTargetRepository>;
@@ -107,6 +115,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         meal_repo.clone(),
     );
     let food_log_history_services = FoodLogHistoryServices::new(food_log_repo.clone());
+    let diary_preferences_services = DiaryPreferencesServices::new(diary_preferences_repo.clone());
 
     let meal_services = MealServices::new(
         meal_repo.clone(),
@@ -129,10 +138,12 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         unit_repo,
         unit_converter,
         food_log_repo,
+        diary_preferences_repo,
         meal_repo,
         goal_target_repo,
         import_repo,
         food_log_services,
+        diary_preferences_services,
         food_log_history_services,
         meal_services,
         goal_target_services,
@@ -150,6 +161,7 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
         .merge(auth_routes(auth_state.clone()))
         .merge(catalog_routes(auth_state.clone()))
         .merge(food_log_routes(auth_state.clone()))
+        .merge(diary_preferences_routes(auth_state.clone()))
         .merge(meal_routes(auth_state.clone()))
         .merge(goal_target_routes(auth_state.clone()))
         .merge(import_routes(auth_state));

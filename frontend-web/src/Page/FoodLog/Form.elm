@@ -301,6 +301,7 @@ mealSlotDropdown theme device model =
             , ( Just Lunch, MealSlot.label Lunch )
             , ( Just Dinner, MealSlot.label Dinner )
             , ( Just Snack, MealSlot.label Snack )
+            , ( Just LateNightSnack, MealSlot.label LateNightSnack )
             ]
         , onChange = MealSlotChanged
         , isOpen = model.openDropdown == MealSlotDropdownOpen

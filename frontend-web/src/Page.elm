@@ -14,6 +14,7 @@ module Page exposing
 
 import Api.Admin
 import Api.Auth
+import Api.DiaryPreferences
 import Api.Foods
 import Api.Goals
 import Api.Logs
@@ -30,6 +31,7 @@ import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
 import Page.CustomFood.Show as CustomFoodShow
 import Page.Diary.Day as DiaryDay
+import Page.Diary.Settings as DiarySettings
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
 import Page.FoodLog.Entry as FoodLogEntry
@@ -62,6 +64,7 @@ type Model
     | AdminEditUserPage AdminEditUser.Model
     | DiaryPage DiaryDay.Model
     | GoalsSettingsPage GoalsSettings.Model
+    | DiarySettingsPage DiarySettings.Model
     | FoodSearchPage FoodSearch.Model
     | FoodDetailPage FoodShow.Model
     | FoodLogDetailPage FoodLogEntry.Model
@@ -141,6 +144,12 @@ init context =
                 Nothing ->
                     ( LoadingPage, Cmd.none, NoOutMsg )
 
+        DiarySettings ->
+            initPage context
+                DiarySettingsPage
+                applyDiarySettingsOutMsg
+                DiarySettings.init
+
         FoodSearch dateParam mealSlot ->
             ( FoodSearchPage (FoodSearch.init dateParam mealSlot)
             , case recentItemsRequest dateParam mealSlot of
@@ -215,6 +224,7 @@ type Msg
     | GotAdminEditUserMsg AdminEditUser.Msg
     | GotDiaryMsg DiaryDay.Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
+    | GotDiarySettingsMsg DiarySettings.Msg
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodShow.Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
@@ -324,6 +334,20 @@ update context msg model =
                             GotGoalsSettingsMsg
                             applyGoalsSettingsOutMsg
                             (GoalsSettings.update subMsg sub)
+                        )
+
+                _ ->
+                    Nothing
+
+        GotDiarySettingsMsg subMsg ->
+            case model of
+                DiarySettingsPage sub ->
+                    Just
+                        (stepPage context
+                            DiarySettingsPage
+                            GotDiarySettingsMsg
+                            applyDiarySettingsOutMsg
+                            (DiarySettings.update subMsg sub)
                         )
 
                 _ ->
@@ -659,6 +683,8 @@ applyDiaryOutMsg _ outMsg =
                     (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
                     :: Cmd.map GotDiaryMsg
                         (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
+                    :: Cmd.map GotDiaryMsg
+                        (Api.DiaryPreferences.get DiaryDay.PreferencesLoaded)
                     :: latestSlotRequests date
                 )
             , NoOutMsg
@@ -680,7 +706,7 @@ applyDiaryOutMsg _ outMsg =
 
 latestSlotRequests : LocalDate -> List (Cmd Msg)
 latestSlotRequests date =
-    [ MealSlot.Breakfast, MealSlot.Lunch, MealSlot.Dinner, MealSlot.Snack ]
+    MealSlot.all
         |> List.map
             (\slot ->
                 Cmd.map GotDiaryMsg
@@ -692,6 +718,28 @@ latestSlotRequests date =
                         (DiaryDay.LatestSlotLoaded date slot)
                     )
             )
+
+
+applyDiarySettingsOutMsg : InitContext -> DiarySettings.OutMsg -> ( Cmd Msg, OutMsg )
+applyDiarySettingsOutMsg _ outMsg =
+    case outMsg of
+        DiarySettings.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        DiarySettings.RequestPreferences ->
+            ( Api.DiaryPreferences.get
+                (GotDiarySettingsMsg << DiarySettings.PreferencesLoaded)
+            , NoOutMsg
+            )
+
+        DiarySettings.RequestSave preferences ->
+            ( Api.DiaryPreferences.put preferences
+                (GotDiarySettingsMsg << DiarySettings.SaveCompleted)
+            , NoOutMsg
+            )
+
+        DiarySettings.SessionExpired ->
+            ( Cmd.none, SessionExpired )
 
 
 applyGoalsSettingsOutMsg : InitContext -> GoalsSettings.OutMsg -> ( Cmd Msg, OutMsg )
@@ -1177,6 +1225,10 @@ view props =
         GoalsSettingsPage goalsSettingsModel ->
             Element.map GotGoalsSettingsMsg
                 (GoalsSettings.view (pageProps props goalsSettingsModel))
+
+        DiarySettingsPage diarySettingsModel ->
+            Element.map GotDiarySettingsMsg
+                (DiarySettings.view (pageProps props diarySettingsModel))
 
         FoodSearchPage foodSearchModel ->
             Element.map GotFoodSearchMsg (FoodSearch.view (pageProps props foodSearchModel))

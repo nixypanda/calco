@@ -21,6 +21,22 @@ tests =
             \_ ->
                 MealSlot.toString Dinner
                     |> Expect.equal "dinner"
+        , test "supports late-night snack" <|
+            \_ ->
+                ( MealSlot.fromString "late_night_snack"
+                , MealSlot.toString LateNightSnack
+                , MealSlot.label LateNightSnack
+                )
+                    |> Expect.equal
+                        ( Just LateNightSnack
+                        , "late_night_snack"
+                        , "Late-night Snack"
+                        )
+        , test "catalogue has canonical fixed order" <|
+            \_ ->
+                MealSlot.all
+                    |> Expect.equal
+                        [ Breakfast, Lunch, Dinner, Snack, LateNightSnack ]
         , fuzz mealSlotFuzzer "formats and parses slots round trip" <|
             \slot ->
                 slot
@@ -44,5 +60,6 @@ mealSlotFuzzer =
         , Fuzz.constant Lunch
         , Fuzz.constant Dinner
         , Fuzz.constant Snack
+        , Fuzz.constant LateNightSnack
         , Fuzz.constant Other
         ]

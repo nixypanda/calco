@@ -311,7 +311,8 @@ impl FoodLogRepository for PostgresFoodLogRepository {
                 WHEN 'lunch' THEN 2
                 WHEN 'dinner' THEN 3
                 WHEN 'snack' THEN 4
-                ELSE 5
+                WHEN 'late_night_snack' THEN 5
+                ELSE 6
             END, created_at DESC
             "#,
         )

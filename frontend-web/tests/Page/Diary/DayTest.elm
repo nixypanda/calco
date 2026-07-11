@@ -240,7 +240,7 @@ tests =
                         |> Expect.equal
                             ( DiaryDay.Loading
                                 { date = yesterday, logs = Nothing, goal = Nothing }
-                            , DiaryDay.LatestSlotsLoading yesterday 4 []
+                            , DiaryDay.LatestSlotsLoading yesterday 5 []
                             , DiaryDay.CopyIdle
                             )
             , test "latest slot success accumulates source while loading" <|
@@ -455,7 +455,7 @@ tests =
                             { diary =
                                 DiaryDay.Loading
                                     { date = today, logs = Nothing, goal = Nothing }
-                            , latestSlots = DiaryDay.LatestSlotsLoading today 4 []
+                            , latestSlots = DiaryDay.LatestSlotsLoading today 5 []
                             , copyState = DiaryDay.CopyIdle
                             , outMsg = DiaryDay.RequestDiaryData today
                             }
@@ -591,6 +591,7 @@ emptyModel =
     , latestSlots = DiaryDay.LatestSlotsLoaded today []
     , copyState = DiaryDay.CopyIdle
     , macroMode = DiaryDay.Grams
+    , preferences = Nothing
     }
 
 

@@ -1,5 +1,6 @@
 module Data.MealSlot exposing
     ( MealSlot(..)
+    , all
     , fromString
     , label
     , matches
@@ -12,7 +13,13 @@ type MealSlot
     | Lunch
     | Dinner
     | Snack
+    | LateNightSnack
     | Other
+
+
+all : List MealSlot
+all =
+    [ Breakfast, Lunch, Dinner, Snack, LateNightSnack ]
 
 
 fromString : String -> Maybe MealSlot
@@ -29,6 +36,9 @@ fromString raw =
 
         "snack" ->
             Just Snack
+
+        "late_night_snack" ->
+            Just LateNightSnack
 
         "other" ->
             Just Other
@@ -52,6 +62,9 @@ toString slot =
         Snack ->
             "snack"
 
+        LateNightSnack ->
+            "late_night_snack"
+
         Other ->
             "other"
 
@@ -70,6 +83,9 @@ label slot =
 
         Snack ->
             "Snack"
+
+        LateNightSnack ->
+            "Late-night Snack"
 
         Other ->
             "Other"
