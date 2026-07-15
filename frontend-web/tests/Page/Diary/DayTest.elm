@@ -562,7 +562,10 @@ tests =
                 \_ ->
                     DiaryDay.update (DiaryDay.LogClicked "log-1") emptyModel
                         |> third
-                        |> Expect.equal (DiaryDay.Navigate (FoodLogEntry "log-1"))
+                        |> Expect.equal
+                            (DiaryDay.Navigate
+                                (FoodLogEntry "log-1" (Just "2026-05-30"))
+                            )
             , test "meals menu action navigates to meals" <|
                 \_ ->
                     DiaryDay.update DiaryDay.MealsClicked emptyModel

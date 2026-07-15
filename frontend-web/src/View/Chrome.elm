@@ -311,8 +311,8 @@ screenMeta device session route =
         FoodShow _ maybeDate maybeSlot ->
             { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
-        FoodLogEntry _ ->
-            { title = "Edit Log", leading = GoBack (DiaryDay Nothing) }
+        FoodLogEntry _ maybeDate ->
+            { title = "Edit Log", leading = GoBack (DiaryDay maybeDate) }
 
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }

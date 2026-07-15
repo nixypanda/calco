@@ -21,7 +21,7 @@ type Route
     | DiaryDay (Maybe String)
     | GoalSettings
     | DiarySettings
-    | FoodLogEntry String
+    | FoodLogEntry String (Maybe String)
     | FoodSearch (Maybe String) (Maybe MealSlot)
     | FoodShow String (Maybe String) (Maybe MealSlot)
     | CustomFoodList
@@ -53,7 +53,7 @@ routeParser =
         , Parser.map DiaryDay (s "home" <?> Query.string "date")
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
-        , Parser.map FoodLogEntry (s "logs" </> string)
+        , Parser.map FoodLogEntry (s "logs" </> string <?> Query.string "date")
         , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
@@ -103,7 +103,7 @@ primaryRoute route =
         MealEdit _ ->
             MealList
 
-        FoodLogEntry _ ->
+        FoodLogEntry _ _ ->
             DiaryDay Nothing
 
         DiaryDay _ ->
@@ -151,8 +151,8 @@ routeToPath route =
         DiarySettings ->
             "/settings/diary"
 
-        FoodLogEntry id ->
-            "/logs/" ++ id
+        FoodLogEntry id maybeDate ->
+            withDateContext ("/logs/" ++ id) maybeDate
 
         FoodSearch maybeDate maybeSlot ->
             withFoodContext "/search" maybeDate maybeSlot
@@ -203,3 +203,13 @@ withFoodContext path maybeDate maybeSlot =
 
     else
         path ++ "?" ++ String.join "&" params
+
+
+withDateContext : String -> Maybe String -> String
+withDateContext path maybeDate =
+    case maybeDate of
+        Just date ->
+            path ++ "?date=" ++ Url.percentEncode date
+
+        Nothing ->
+            path

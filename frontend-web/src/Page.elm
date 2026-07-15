@@ -169,7 +169,7 @@ init context =
                 applyFoodDetailOutMsg
                 (FoodShow.init productId dateParam mealSlot)
 
-        FoodLogEntry logId ->
+        FoodLogEntry logId _ ->
             initPage context
                 FoodLogDetailPage
                 applyFoodLogDetailOutMsg

@@ -345,7 +345,10 @@ update msg model =
             )
 
         LogClicked id ->
-            ( model, Cmd.none, Navigate (FoodLogEntry id) )
+            ( model
+            , Cmd.none
+            , Navigate (FoodLogEntry id (Just (LocalDate.format model.currentDate)))
+            )
 
         MealsClicked ->
             ( model, Cmd.none, Navigate MealList )

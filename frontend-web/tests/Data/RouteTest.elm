@@ -17,7 +17,9 @@ tests =
         , parses "/home" (DiaryDay Nothing)
         , parses "/home?date=2026-06-04" (DiaryDay (Just "2026-06-04"))
         , parses "/settings/goals" GoalSettings
-        , parses "/logs/abc" (FoodLogEntry "abc")
+        , parses "/logs/abc" (FoodLogEntry "abc" Nothing)
+        , parses "/logs/abc?date=2026-06-04"
+            (FoodLogEntry "abc" (Just "2026-06-04"))
         , parses "/search" (FoodSearch Nothing Nothing)
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
         , parses "/search?date=2026-06-04&meal_slot=breakfast"
@@ -69,7 +71,7 @@ routeFuzzer =
         , Fuzz.map AdminEditUser safeSegmentFuzzer
         , Fuzz.map DiaryDay maybeDateFuzzer
         , Fuzz.constant GoalSettings
-        , Fuzz.map FoodLogEntry safeSegmentFuzzer
+        , Fuzz.map2 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.map3 FoodShow safeSegmentFuzzer maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.constant CustomFoodList
