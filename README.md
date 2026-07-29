@@ -4,6 +4,14 @@ CalCo is a self-hosted food and nutrition tracker for a small homelab/household 
 
 The app is intentionally simple: search or create foods, log what was eaten, snapshot nutrients at log time, and review the selected day. It also supports reusable meals/recipes and CLI-driven catalog imports from external food datasets.
 
+## Mobile Showcase
+
+| Daily diary and macro progress | Catalog search |
+| :---: | :---: |
+| <img src="docs/images/readme/mobile-diary.jpg" alt="CalCo mobile diary showing daily calorie and macro progress" width="320"> | <img src="docs/images/readme/mobile-food-search.jpg" alt="CalCo mobile food catalog search results" width="320"> |
+| **Quantity-aware nutrition and logging** | **Reusable meal builder** |
+| <img src="docs/images/readme/mobile-food-nutrition.jpg" alt="CalCo mobile food logging form with calculated nutrition" width="320"> | <img src="docs/images/readme/mobile-meal-builder.jpg" alt="CalCo mobile reusable meal builder" width="320"> |
+
 ## Stack
 
 - Backend: Rust, axum, sqlx, PostgreSQL
@@ -16,7 +24,7 @@ The app is intentionally simple: search or create foods, log what was eaten, sna
 Implemented:
 
 - Username/password auth with bootstrap admin and admin user management
-- Food catalog search/detail, barcode lookup API, custom food CRUD
+- Food catalog search/detail, camera and manual barcode lookup, custom food CRUD
 - Food logs with nutrient snapshots and daily summaries
 - Meal/recipe CRUD and meal logging
 - Responsive web frontend for daily tracking

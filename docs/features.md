@@ -14,9 +14,9 @@ Search/select food -> log quantity -> snapshot nutrients -> review daily totals
 ```
 
 The frontend currently implements auth, admin user management, diary, goal
-settings, food search/detail, custom food create/edit/show, log detail/edit,
-meals, and responsive layouts. The product goal is a simple food tracker, not an
-analytics or trend platform.
+settings, food search/detail, manual and camera-based barcode lookup, custom
+food create/edit/show, log detail/edit, meals, and responsive layouts. The
+product goal is a simple food tracker, not an analytics or trend platform.
 
 ## MVP User Stories
 
@@ -152,14 +152,18 @@ capabilities. They are grouped by theme so they can be ranked later.
 
 ### Barcode And Capture
 
-- [ ] As a user, I want to scan a barcode with my phone camera so that I can
-      find packaged foods faster.
-- [ ] As a user, I want to enter a barcode manually when camera scanning is not
+- [x] As a user, I want to scan a barcode with my phone camera so that I can
+      find packaged foods faster. The responsive search page uses the device
+      camera to scan EAN and UPC barcodes, confirms a detection before accepting
+      it, and opens the matching food.
+- [x] As a user, I want to enter a barcode manually when camera scanning is not
       practical so that barcode lookup still works on desktop or with poor
-      camera conditions.
-- [ ] As a user, I want the app to take me directly into create or import flows
+      camera conditions. Barcode search accepts manual input and opens an exact
+      catalog match.
+- [x] As a user, I want the app to take me directly into create or import flows
       when a barcode is not found so that missing packaged foods are quick to
-      add.
+      add. A failed lookup offers a direct action to the custom-food creation
+      form.
 
 ### Editing And Diary Cleanup
 
@@ -176,8 +180,6 @@ capabilities. They are grouped by theme so they can be ranked later.
       vitamins and minerals in my diet. Nutrients are modeled generically and
       logged/summarized from snapshots; a dedicated micronutrient dashboard is
       still not present.
-- [ ] As a user, I want to scan a barcode with my phone camera so that I can
-      find packaged foods faster.
 - [ ] As a user, I want recent foods and today's logs cached offline so that
       brief network loss does not stop logging.
 - [ ] As a user, I want to export my logs and custom foods so that I can back up
