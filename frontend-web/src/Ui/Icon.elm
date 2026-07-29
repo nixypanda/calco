@@ -74,11 +74,9 @@ shapes icon =
             ]
 
         Utensils ->
-            [ path [ SvgA.d "M4 3v7a3 3 0 0 0 3 3v8" ] []
-            , line [ SvgA.x1 "4", SvgA.y1 "7", SvgA.x2 "10", SvgA.y2 "7" ] []
-            , line [ SvgA.x1 "7", SvgA.y1 "3", SvgA.x2 "7", SvgA.y2 "7" ] []
-            , path [ SvgA.d "M16 3v18" ] []
-            , path [ SvgA.d "M16 3c2.5 0 4 2.2 4 5v2h-4" ] []
+            [ path [ SvgA.d "M3 2v7a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V2" ] []
+            , path [ SvgA.d "M7 2v20" ] []
+            , path [ SvgA.d "M21 15V2a5 5 0 0 0-5 5v6a2 2 0 0 0 2 2h3Zm0 0v7" ] []
             ]
 
         Menu ->
