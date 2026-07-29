@@ -21,9 +21,11 @@ tests =
         , parses "/calendar" (DiaryCalendar Nothing)
         , parses "/calendar?month=2026-06" (DiaryCalendar (Just "2026-06"))
         , parses "/settings/goals" GoalSettings
-        , parses "/logs/abc" (FoodLogEntry "abc" Nothing)
+        , parses "/logs/abc" (FoodLogEntry "abc" Nothing Nothing)
         , parses "/logs/abc?date=2026-06-04"
-            (FoodLogEntry "abc" (Just "2026-06-04"))
+            (FoodLogEntry "abc" (Just "2026-06-04") Nothing)
+        , parses "/logs/abc?date=2026-06-04&calendar_month=2026-06"
+            (FoodLogEntry "abc" (Just "2026-06-04") (Just "2026-06"))
         , parses "/search" (FoodSearch Nothing Nothing)
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
         , parses "/search?date=2026-06-04&meal_slot=breakfast"
@@ -76,7 +78,7 @@ routeFuzzer =
         , Fuzz.map2 DiaryDay maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map DiaryCalendar maybeMonthFuzzer
         , Fuzz.constant GoalSettings
-        , Fuzz.map2 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer
+        , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.map3 FoodShow safeSegmentFuzzer maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.constant CustomFoodList

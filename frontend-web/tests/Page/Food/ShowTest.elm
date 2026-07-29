@@ -228,12 +228,14 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
-        , test "log success navigates back to selected diary day" <|
+        , test "log success returns to contextual search" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
                     |> third
                     |> Expect.equal
-                        (FoodShow.Navigate (DiaryDay (Just "2026-05-29") Nothing))
+                        (FoodShow.Navigate
+                            (FoodSearch (Just "2026-05-29") (Just Lunch))
+                        )
         , test "log failure keeps form state and stores error" <|
             \_ ->
                 let

@@ -22,7 +22,7 @@ type Route
     | DiaryCalendar (Maybe String)
     | GoalSettings
     | DiarySettings
-    | FoodLogEntry String (Maybe String)
+    | FoodLogEntry String (Maybe String) (Maybe String)
     | FoodSearch (Maybe String) (Maybe MealSlot)
     | FoodShow String (Maybe String) (Maybe MealSlot)
     | CustomFoodList
@@ -56,7 +56,12 @@ routeParser =
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
-        , Parser.map FoodLogEntry (s "logs" </> string <?> Query.string "date")
+        , Parser.map FoodLogEntry
+            (s "logs"
+                </> string
+                <?> Query.string "date"
+                <?> Query.string "calendar_month"
+            )
         , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
@@ -106,7 +111,7 @@ primaryRoute route =
         MealEdit _ ->
             MealList
 
-        FoodLogEntry _ _ ->
+        FoodLogEntry _ _ _ ->
             DiaryDay Nothing Nothing
 
         DiaryDay _ _ ->
@@ -161,8 +166,13 @@ routeToPath route =
         DiarySettings ->
             "/settings/diary"
 
-        FoodLogEntry id maybeDate ->
-            withDateContext ("/logs/" ++ id) maybeDate
+        FoodLogEntry id maybeDate maybeCalendarMonth ->
+            withQueryParams ("/logs/" ++ id)
+                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                , Maybe.map
+                    (\month -> "calendar_month=" ++ Url.percentEncode month)
+                    maybeCalendarMonth
+                ]
 
         FoodSearch maybeDate maybeSlot ->
             withFoodContext "/search" maybeDate maybeSlot
@@ -213,16 +223,6 @@ withFoodContext path maybeDate maybeSlot =
 
     else
         path ++ "?" ++ String.join "&" params
-
-
-withDateContext : String -> Maybe String -> String
-withDateContext path maybeDate =
-    case maybeDate of
-        Just date ->
-            path ++ "?date=" ++ Url.percentEncode date
-
-        Nothing ->
-            path
 
 
 withQueryParams : String -> List (Maybe String) -> String

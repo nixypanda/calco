@@ -564,7 +564,7 @@ tests =
                         |> third
                         |> Expect.equal
                             (DiaryDay.Navigate
-                                (FoodLogEntry "log-1" (Just "2026-05-30"))
+                                (FoodLogEntry "log-1" (Just "2026-05-30") Nothing)
                             )
             , test "meals menu action navigates to meals" <|
                 \_ ->

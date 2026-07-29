@@ -327,7 +327,9 @@ loadPage : Route -> Model -> ( Model, Cmd Msg )
 loadPage route model =
     let
         ( page, pageCmd, outMsg ) =
-            Page.init { route = route, today = model.today }
+            Page.initPreserving
+                { route = route, today = model.today }
+                model.page
     in
     stepPageResult ( page, pageCmd, outMsg ) model
 

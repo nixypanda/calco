@@ -10,6 +10,7 @@ module Page.FoodLog.Entry exposing
     , OutMsg(..)
     , ProductState
     , RequestState(..)
+    , contentView
     , init
     , modalView
     , nutrientsForDisplay
@@ -587,6 +588,15 @@ modelLogId model =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
         [ case pageError model of
             Just message ->
                 Ui.errorBanner theme message

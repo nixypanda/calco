@@ -5,6 +5,7 @@ module Page.Food.Show exposing
     , Msg(..)
     , OutMsg(..)
     , RequestState(..)
+    , contentView
     , foodNutrientsForDisplay
     , init
     , update
@@ -205,7 +206,10 @@ update msg model =
                     if loaded.request == Saving then
                         case result of
                             Ok _ ->
-                                ( model, Cmd.none, Navigate (DiaryDay loaded.logDate Nothing) )
+                                ( model
+                                , Cmd.none
+                                , Navigate (FoodSearch loaded.logDate loaded.mealSlot)
+                                )
 
                             Err error ->
                                 Client.failure
@@ -411,6 +415,15 @@ applyLoadedError message model =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
         [ case model of
             LoadFailed message ->
                 Ui.errorBanner theme message

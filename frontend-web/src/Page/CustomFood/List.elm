@@ -2,6 +2,7 @@ module Page.CustomFood.List exposing
     ( Model(..)
     , Msg(..)
     , OutMsg(..)
+    , contentView
     , foodSummaryText
     , init
     , update
@@ -89,6 +90,15 @@ failure =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing 16
+        ]
         [ case model of
             Loaded _ ->
                 Element.none

@@ -5,6 +5,7 @@ module Page.Food.Search exposing
     , OutMsg(..)
     , QuickAddState
     , SearchScope(..)
+    , contentView
     , init
     , update
     , view
@@ -707,8 +708,17 @@ clearRecentAddedAfter key token =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
         [ searchInputView theme device model
-        , contentView theme device model
+        , searchContentView theme device model
         ]
 
 
@@ -1034,8 +1044,8 @@ bodyView theme model device =
                     }
 
 
-contentView : Theme -> Device -> Model -> Element Msg
-contentView theme device model =
+searchContentView : Theme -> Device -> Model -> Element Msg
+searchContentView theme device model =
     if model.scope == Barcode then
         if hasActiveSearch model then
             barcodeBodyView theme device model

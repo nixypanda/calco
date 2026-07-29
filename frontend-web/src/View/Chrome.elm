@@ -289,12 +289,7 @@ screenMeta device session route =
 
         DiaryCalendar _ ->
             { title = "Calendar"
-            , leading =
-                if phoneNonAdmin then
-                    ShowAppIcon
-
-                else
-                    OpenMenu
+            , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
         AdminDashboard ->
@@ -326,8 +321,10 @@ screenMeta device session route =
         FoodShow _ maybeDate maybeSlot ->
             { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
-        FoodLogEntry _ maybeDate ->
-            { title = "Edit Log", leading = GoBack (DiaryDay maybeDate Nothing) }
+        FoodLogEntry _ maybeDate maybeCalendarMonth ->
+            { title = "Edit Log"
+            , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
+            }
 
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }

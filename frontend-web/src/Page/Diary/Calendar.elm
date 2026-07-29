@@ -4,6 +4,7 @@ module Page.Diary.Calendar exposing
     , OutMsg(..)
     , Status(..)
     , compactCalories
+    , contentViewWithSelection
     , init
     , update
     , view
@@ -221,6 +222,23 @@ requestForMonths oldest newest today =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView =
+    contentViewWithSelection Nothing
+
+
+contentViewWithSelection :
+    Maybe String
+    -> { model : Model, device : Device, theme : Theme }
+    -> Element Msg
+contentViewWithSelection selectedDate { model, device, theme } =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
         (case model.status of
             Loading ->
                 [ Ui.loading theme "Loading calendar" ]
@@ -230,7 +248,7 @@ view { model, device, theme } =
 
             Ready ->
                 monthRange model.newestMonth model.oldestMonth
-                    |> List.map (monthView theme device model)
+                    |> List.map (monthView theme device model selectedDate)
                     |> (\months ->
                             months
                                 ++ [ loadEarlierButton theme device model.loadingEarlier ]
@@ -247,8 +265,8 @@ monthRange newest oldest =
         newest :: monthRange (Calendar.shiftMonth -1 newest) oldest
 
 
-monthView : Theme -> Device -> Model -> String -> Element Msg
-monthView theme device model month =
+monthView : Theme -> Device -> Model -> Maybe String -> String -> Element Msg
+monthView theme device model selectedDate month =
     Ui.card theme
         [ Typography.sectionTitle theme (Calendar.monthLabel month)
         , MonthCalendar.view
@@ -261,7 +279,7 @@ monthView theme device model month =
 
                 else
                     76
-            , viewDay = dayView theme model month
+            , viewDay = dayView theme model selectedDate month
             }
         ]
 
@@ -269,11 +287,12 @@ monthView theme device model month =
 dayView :
     Theme
     -> Model
+    -> Maybe String
     -> String
     -> Int
     -> List (Element.Attribute Msg)
     -> Element Msg
-dayView theme model month day attributes =
+dayView theme model selectedDate month day attributes =
     let
         date : String
         date =
@@ -305,9 +324,25 @@ dayView theme model month day attributes =
     else
         Input.button
             (Border.rounded DesignTokens.radiusSmall
-                :: Background.color (Element.rgba 0 0 0 0)
+                :: Background.color
+                    (if selectedDate == Just date then
+                        theme.brandBlueSoft
+
+                     else
+                        Element.rgba 0 0 0 0
+                    )
                 :: Element.htmlAttribute
                     (Attr.attribute "aria-label" (dayAriaLabel date maybeSummary))
+                :: Element.htmlAttribute
+                    (Attr.attribute
+                        "aria-pressed"
+                        (if selectedDate == Just date then
+                            "true"
+
+                         else
+                            "false"
+                        )
+                    )
                 :: attributes
             )
             { onPress = Just (DayClicked month date)

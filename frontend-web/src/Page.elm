@@ -5,6 +5,7 @@ module Page exposing
     , OutMsg(..)
     , barcodeScannerEventReceived
     , init
+    , initPreserving
     , isLoading
     , localContextReceived
     , modalView
@@ -50,6 +51,7 @@ import Page.Users.Login as AuthLogin
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Workspace as Workspace
 
 
 
@@ -61,23 +63,31 @@ type Model
     | LoginPage AuthLogin.Model
     | SetupPage BootstrapSetup.Model
     | AdminPage AdminDashboard.Model
-    | AdminCreateUserPage AdminCreateUser.Model
-    | AdminEditUserPage AdminEditUser.Model
+    | AdminCreateUserWorkspace AdminDashboard.Model AdminCreateUser.Model
+    | AdminEditUserWorkspace AdminDashboard.Model AdminEditUser.Model
     | DiaryPage DiaryDay.Model
     | DiaryCalendarPage DiaryCalendar.Model
+    | DiaryCalendarWorkspace DiaryCalendar.Model DiaryDay.Model
     | GoalsSettingsPage GoalsSettings.Model
     | DiarySettingsPage DiarySettings.Model
     | FoodSearchPage FoodSearch.Model
+    | DiarySearchWorkspace DiaryDay.Model FoodSearch.Model
     | FoodDetailPage FoodShow.Model
+    | SearchFoodWorkspace FoodSearch.Model FoodShow.Model
+    | DiarySearchFoodWorkspace DiaryDay.Model FoodSearch.Model FoodShow.Model
+    | SearchCreateFoodWorkspace FoodSearch.Model CustomFoodCreate.Model
+    | DiarySearchCreateFoodWorkspace DiaryDay.Model FoodSearch.Model CustomFoodCreate.Model
     | FoodLogDetailPage FoodLogEntry.Model
-    | CustomFoodCreatePage CustomFoodCreate.Model
-    | CustomFoodEditPage CustomFoodEdit.Model
-    | CustomFoodShowPage CustomFoodShow.Model
+    | DiaryLogWorkspace DiaryDay.Model FoodLogEntry.Model
+    | CalendarDiaryLogWorkspace DiaryCalendar.Model DiaryDay.Model FoodLogEntry.Model
+    | CustomFoodCreateWorkspace CustomFoodList.Model CustomFoodCreate.Model
+    | CustomFoodEditWorkspace CustomFoodList.Model CustomFoodEdit.Model
+    | CustomFoodShowWorkspace CustomFoodList.Model CustomFoodShow.Model
     | CustomFoodsPage CustomFoodList.Model
     | MealsPage MealList.Model
-    | MealCreatePage MealCreate.Model
-    | MealEditPage MealEdit.Model
-    | MealDetailPage MealShow.Model
+    | MealCreateWorkspace MealList.Model MealCreate.Model
+    | MealEditWorkspace MealList.Model MealEdit.Model
+    | MealDetailWorkspace MealList.Model MealShow.Model
     | PlaceholderPage String
 
 
@@ -116,26 +126,28 @@ init context =
             initPage context AdminPage applyAdminOutMsg AdminDashboard.init
 
         AdminCreateUser ->
-            ( AdminCreateUserPage AdminCreateUser.init, Cmd.none, NoOutMsg )
+            initAdminCreateWorkspace context
 
         AdminEditUser userId ->
-            initPage context
-                AdminEditUserPage
-                applyAdminEditUserOutMsg
-                (AdminEditUser.init userId)
+            initAdminEditWorkspace context userId
 
         DiaryDay dateParam calendarMonth ->
             case context.today of
                 Just today ->
-                    initPage context
-                        DiaryPage
-                        applyDiaryOutMsg
-                        (DiaryDay.init
-                            { dateParam = dateParam
-                            , calendarMonth = calendarMonth
-                            , today = today
-                            }
-                        )
+                    case calendarMonth of
+                        Just month ->
+                            initCalendarDiaryWorkspace context today dateParam month
+
+                        Nothing ->
+                            initPage context
+                                DiaryPage
+                                applyDiaryOutMsg
+                                (DiaryDay.init
+                                    { dateParam = dateParam
+                                    , calendarMonth = Nothing
+                                    , today = today
+                                    }
+                                )
 
                 Nothing ->
                     ( LoadingPage, Cmd.none, NoOutMsg )
@@ -173,47 +185,22 @@ init context =
                 DiarySettings.init
 
         FoodSearch dateParam mealSlot ->
-            ( FoodSearchPage (FoodSearch.init dateParam mealSlot)
-            , case recentItemsRequest dateParam mealSlot of
-                Just request ->
-                    Api.Logs.recentItems
-                        request
-                        (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded)
-
-                Nothing ->
-                    Cmd.none
-            , NoOutMsg
-            )
+            initDiarySearchWorkspace context dateParam mealSlot
 
         FoodShow productId dateParam mealSlot ->
-            initPage context
-                FoodDetailPage
-                applyFoodDetailOutMsg
-                (FoodShow.init productId dateParam mealSlot)
+            initDiarySearchFoodWorkspace context productId dateParam mealSlot
 
-        FoodLogEntry logId _ ->
-            initPage context
-                FoodLogDetailPage
-                applyFoodLogDetailOutMsg
-                (FoodLogEntry.init logId)
+        FoodLogEntry logId dateParam calendarMonth ->
+            initDiaryLogWorkspace context logId dateParam calendarMonth
 
         CustomFoodCreate ->
-            initPage context
-                CustomFoodCreatePage
-                applyCustomFoodCreateOutMsg
-                CustomFoodCreate.init
+            initCustomFoodCreateWorkspace context
 
         CustomFoodEdit productId ->
-            initPage context
-                CustomFoodEditPage
-                applyCustomFoodEditOutMsg
-                (CustomFoodEdit.init productId)
+            initCustomFoodEditWorkspace context productId
 
         CustomFoodShow productId ->
-            initPage context
-                CustomFoodShowPage
-                applyCustomFoodShowOutMsg
-                (CustomFoodShow.init productId)
+            initCustomFoodShowWorkspace context productId
 
         CustomFoodList ->
             initPage context CustomFoodsPage applyCustomFoodsOutMsg CustomFoodList.init
@@ -222,16 +209,651 @@ init context =
             initPage context MealsPage applyMealsOutMsg MealList.init
 
         MealCreate ->
-            initPage context MealCreatePage applyMealCreateOutMsg MealCreate.init
+            initMealCreateWorkspace context
 
         MealEdit mealId ->
-            initPage context MealEditPage applyMealEditOutMsg (MealEdit.init mealId)
+            initMealEditWorkspace context mealId
 
         MealShow mealId ->
-            initPage context MealDetailPage applyMealDetailOutMsg (MealShow.init mealId)
+            initMealDetailWorkspace context mealId
 
         _ ->
             ( PlaceholderPage "This route is not migrated yet.", Cmd.none, NoOutMsg )
+
+
+initPreserving : InitContext -> Model -> ( Model, Cmd Msg, OutMsg )
+initPreserving context current =
+    case ( context.route, context.today, current ) of
+        ( DiaryDay dateParam (Just month), Just today, DiaryCalendarPage calendar ) ->
+            initDiaryWithCalendar context today dateParam month calendar
+
+        ( DiaryDay dateParam (Just month), Just today, DiaryCalendarWorkspace calendar _ ) ->
+            initDiaryWithCalendar context today dateParam month calendar
+
+        ( FoodSearch dateParam mealSlot, Just today, DiarySearchFoodWorkspace _ search _ ) ->
+            initDiarySearchWithModels context today dateParam mealSlot search
+
+        ( FoodSearch _ _, _, SearchFoodWorkspace search _ ) ->
+            ( FoodSearchPage search, Cmd.none, NoOutMsg )
+
+        ( FoodSearch dateParam mealSlot, _, DiaryPage diary ) ->
+            ( DiarySearchWorkspace diary (FoodSearch.init dateParam mealSlot)
+            , initialFoodSearchCmd dateParam mealSlot
+            , NoOutMsg
+            )
+
+        ( FoodSearch dateParam mealSlot, _, DiaryCalendarWorkspace _ diary ) ->
+            ( DiarySearchWorkspace diary (FoodSearch.init dateParam mealSlot)
+            , initialFoodSearchCmd dateParam mealSlot
+            , NoOutMsg
+            )
+
+        ( FoodLogEntry logId _ _, _, DiaryPage diary ) ->
+            initLogWithDiary context logId diary
+
+        ( FoodLogEntry logId _ _, _, DiaryCalendarWorkspace calendar diary ) ->
+            initLogWithCalendarDiary context logId calendar diary
+
+        ( FoodShow productId dateParam mealSlot, _, DiarySearchWorkspace diary search ) ->
+            let
+                ( detail, detailOut ) =
+                    FoodShow.init productId dateParam mealSlot
+            in
+            finishInitial
+                (DiarySearchFoodWorkspace diary search detail)
+                [ applyFoodDetailOutMsg context detailOut ]
+
+        ( FoodShow productId dateParam mealSlot, _, FoodSearchPage search ) ->
+            initSearchFood context productId dateParam mealSlot search
+
+        ( FoodShow productId dateParam mealSlot, _, SearchCreateFoodWorkspace search _ ) ->
+            initSearchFood context productId dateParam mealSlot search
+
+        ( FoodShow id date slot, _, DiarySearchCreateFoodWorkspace diary search _ ) ->
+            let
+                ( detail, detailOut ) =
+                    FoodShow.init id date slot
+            in
+            finishInitial
+                (DiarySearchFoodWorkspace diary search detail)
+                [ applyFoodDetailOutMsg context detailOut ]
+
+        ( FoodShow productId dateParam mealSlot, _, DiarySearchFoodWorkspace diary search _ ) ->
+            let
+                ( detail, detailOut ) =
+                    FoodShow.init productId dateParam mealSlot
+            in
+            finishInitial
+                (DiarySearchFoodWorkspace diary search detail)
+                [ applyFoodDetailOutMsg context detailOut ]
+
+        ( CustomFoodCreate, _, FoodSearchPage search ) ->
+            initSearchCreateFood context search
+
+        ( CustomFoodCreate, _, DiarySearchWorkspace diary search ) ->
+            initDiarySearchCreateFood context diary search
+
+        ( CustomFoodCreate, _, DiarySearchFoodWorkspace diary search _ ) ->
+            initDiarySearchCreateFood context diary search
+
+        ( CustomFoodShow productId, _, CustomFoodsPage list ) ->
+            initCustomFoodShowWithList context productId list
+
+        ( CustomFoodShow productId, _, CustomFoodShowWorkspace list _ ) ->
+            initCustomFoodShowWithList context productId list
+
+        ( CustomFoodEdit productId, _, CustomFoodShowWorkspace list _ ) ->
+            initCustomFoodEditWithList context productId list
+
+        ( CustomFoodEdit productId, _, CustomFoodEditWorkspace list _ ) ->
+            initCustomFoodEditWithList context productId list
+
+        ( CustomFoodCreate, _, CustomFoodsPage list ) ->
+            initCustomFoodCreateWithList context list
+
+        ( MealShow mealId, _, MealsPage list ) ->
+            initMealDetailWithList context mealId list
+
+        ( MealShow mealId, _, MealDetailWorkspace list _ ) ->
+            initMealDetailWithList context mealId list
+
+        ( MealEdit mealId, _, MealDetailWorkspace list _ ) ->
+            initMealEditWithList context mealId list
+
+        ( MealEdit mealId, _, MealEditWorkspace list _ ) ->
+            initMealEditWithList context mealId list
+
+        ( MealCreate, _, MealsPage list ) ->
+            initMealCreateWithList context list
+
+        ( AdminEditUser userId, _, AdminPage list ) ->
+            initAdminEditWithList context userId list
+
+        ( AdminEditUser userId, _, AdminEditUserWorkspace list _ ) ->
+            initAdminEditWithList context userId list
+
+        ( AdminCreateUser, _, AdminPage list ) ->
+            ( AdminCreateUserWorkspace list AdminCreateUser.init, Cmd.none, NoOutMsg )
+
+        _ ->
+            init context
+
+
+initSearchCreateFood :
+    InitContext
+    -> FoodSearch.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initSearchCreateFood context search =
+    let
+        ( detail, detailOut ) =
+            CustomFoodCreate.init
+    in
+    finishInitial
+        (SearchCreateFoodWorkspace search detail)
+        [ applyCustomFoodCreateOutMsg context detailOut ]
+
+
+initSearchFood :
+    InitContext
+    -> String
+    -> Maybe String
+    -> Maybe MealSlot
+    -> FoodSearch.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initSearchFood context productId dateParam mealSlot search =
+    let
+        ( detail, detailOut ) =
+            FoodShow.init productId dateParam mealSlot
+    in
+    finishInitial
+        (SearchFoodWorkspace search detail)
+        [ applyFoodDetailOutMsg context detailOut ]
+
+
+initDiarySearchCreateFood :
+    InitContext
+    -> DiaryDay.Model
+    -> FoodSearch.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initDiarySearchCreateFood context diary search =
+    let
+        ( detail, detailOut ) =
+            CustomFoodCreate.init
+    in
+    finishInitial
+        (DiarySearchCreateFoodWorkspace diary search detail)
+        [ applyCustomFoodCreateOutMsg context detailOut ]
+
+
+initDiarySearchWithModels :
+    InitContext
+    -> LocalDate
+    -> Maybe String
+    -> Maybe MealSlot
+    -> FoodSearch.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initDiarySearchWithModels context today dateParam _ search =
+    let
+        ( diary, diaryOut ) =
+            DiaryDay.init
+                { dateParam = dateParam
+                , calendarMonth = Nothing
+                , today = today
+                }
+    in
+    finishInitial
+        (DiarySearchWorkspace diary search)
+        [ applyDiaryOutMsg context diaryOut ]
+
+
+initLogWithDiary :
+    InitContext
+    -> String
+    -> DiaryDay.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initLogWithDiary context logId diary =
+    let
+        ( detail, detailOut ) =
+            FoodLogEntry.init logId
+    in
+    finishInitial
+        (DiaryLogWorkspace diary detail)
+        [ applyFoodLogDetailOutMsg context detailOut ]
+
+
+initLogWithCalendarDiary :
+    InitContext
+    -> String
+    -> DiaryCalendar.Model
+    -> DiaryDay.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initLogWithCalendarDiary context logId calendar diary =
+    let
+        ( detail, detailOut ) =
+            FoodLogEntry.init logId
+    in
+    finishInitial
+        (CalendarDiaryLogWorkspace calendar diary detail)
+        [ applyFoodLogDetailOutMsg context detailOut ]
+
+
+initDiaryWithCalendar :
+    InitContext
+    -> LocalDate
+    -> Maybe String
+    -> String
+    -> DiaryCalendar.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initDiaryWithCalendar context today dateParam month calendar =
+    let
+        ( diary, diaryOut ) =
+            DiaryDay.init
+                { dateParam = dateParam
+                , calendarMonth = Just month
+                , today = today
+                }
+    in
+    finishInitial
+        (DiaryCalendarWorkspace calendar diary)
+        [ applyDiaryOutMsg context diaryOut ]
+
+
+initCalendarDiaryWorkspace :
+    InitContext
+    -> LocalDate
+    -> Maybe String
+    -> String
+    -> ( Model, Cmd Msg, OutMsg )
+initCalendarDiaryWorkspace context today dateParam month =
+    let
+        ( calendar, calendarOut ) =
+            DiaryCalendar.init { monthParam = Just month, today = today }
+
+        ( diary, diaryOut ) =
+            DiaryDay.init
+                { dateParam = dateParam
+                , calendarMonth = Just month
+                , today = today
+                }
+    in
+    finishInitial
+        (DiaryCalendarWorkspace calendar diary)
+        [ applyDiaryCalendarOutMsg context calendarOut
+        , applyDiaryOutMsg context diaryOut
+        ]
+
+
+initDiarySearchWorkspace :
+    InitContext
+    -> Maybe String
+    -> Maybe MealSlot
+    -> ( Model, Cmd Msg, OutMsg )
+initDiarySearchWorkspace context dateParam mealSlot =
+    let
+        search : FoodSearch.Model
+        search =
+            FoodSearch.init dateParam mealSlot
+    in
+    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
+        ( Just today, Just _ ) ->
+            let
+                ( diary, diaryOut ) =
+                    DiaryDay.init
+                        { dateParam = dateParam
+                        , calendarMonth = Nothing
+                        , today = today
+                        }
+            in
+            finishInitial
+                (DiarySearchWorkspace diary search)
+                [ applyDiaryOutMsg context diaryOut
+                , ( initialFoodSearchCmd dateParam mealSlot, NoOutMsg )
+                ]
+
+        _ ->
+            ( FoodSearchPage search
+            , initialFoodSearchCmd dateParam mealSlot
+            , NoOutMsg
+            )
+
+
+initDiarySearchFoodWorkspace :
+    InitContext
+    -> String
+    -> Maybe String
+    -> Maybe MealSlot
+    -> ( Model, Cmd Msg, OutMsg )
+initDiarySearchFoodWorkspace context productId dateParam mealSlot =
+    let
+        ( detail, detailOut ) =
+            FoodShow.init productId dateParam mealSlot
+    in
+    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
+        ( Just today, Just _ ) ->
+            let
+                ( diary, diaryOut ) =
+                    DiaryDay.init
+                        { dateParam = dateParam
+                        , calendarMonth = Nothing
+                        , today = today
+                        }
+            in
+            finishInitial
+                (DiarySearchFoodWorkspace
+                    diary
+                    (FoodSearch.init dateParam mealSlot)
+                    detail
+                )
+                [ applyDiaryOutMsg context diaryOut
+                , ( initialFoodSearchCmd dateParam mealSlot, NoOutMsg )
+                , applyFoodDetailOutMsg context detailOut
+                ]
+
+        _ ->
+            initPage context FoodDetailPage applyFoodDetailOutMsg ( detail, detailOut )
+
+
+initDiaryLogWorkspace :
+    InitContext
+    -> String
+    -> Maybe String
+    -> Maybe String
+    -> ( Model, Cmd Msg, OutMsg )
+initDiaryLogWorkspace context logId dateParam calendarMonth =
+    let
+        ( detail, detailOut ) =
+            FoodLogEntry.init logId
+    in
+    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
+        ( Just today, Just _ ) ->
+            let
+                ( diary, diaryOut ) =
+                    DiaryDay.init
+                        { dateParam = dateParam
+                        , calendarMonth = calendarMonth
+                        , today = today
+                        }
+            in
+            case calendarMonth of
+                Just month ->
+                    let
+                        ( calendar, calendarOut ) =
+                            DiaryCalendar.init
+                                { monthParam = Just month
+                                , today = today
+                                }
+                    in
+                    finishInitial
+                        (CalendarDiaryLogWorkspace calendar diary detail)
+                        [ applyDiaryCalendarOutMsg context calendarOut
+                        , applyDiaryOutMsg context diaryOut
+                        , applyFoodLogDetailOutMsg context detailOut
+                        ]
+
+                Nothing ->
+                    finishInitial
+                        (DiaryLogWorkspace diary detail)
+                        [ applyDiaryOutMsg context diaryOut
+                        , applyFoodLogDetailOutMsg context detailOut
+                        ]
+
+        _ ->
+            initPage context FoodLogDetailPage applyFoodLogDetailOutMsg ( detail, detailOut )
+
+
+initCustomFoodCreateWorkspace : InitContext -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodCreateWorkspace context =
+    let
+        ( list, listOut ) =
+            CustomFoodList.init
+
+        ( detail, detailOut ) =
+            CustomFoodCreate.init
+    in
+    finishInitial
+        (CustomFoodCreateWorkspace list detail)
+        [ applyCustomFoodsOutMsg context listOut
+        , applyCustomFoodCreateOutMsg context detailOut
+        ]
+
+
+initCustomFoodCreateWithList :
+    InitContext
+    -> CustomFoodList.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodCreateWithList context list =
+    let
+        ( detail, detailOut ) =
+            CustomFoodCreate.init
+    in
+    finishInitial
+        (CustomFoodCreateWorkspace list detail)
+        [ applyCustomFoodCreateOutMsg context detailOut ]
+
+
+initCustomFoodEditWorkspace : InitContext -> String -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodEditWorkspace context productId =
+    let
+        ( list, listOut ) =
+            CustomFoodList.init
+
+        ( detail, detailOut ) =
+            CustomFoodEdit.init productId
+    in
+    finishInitial
+        (CustomFoodEditWorkspace list detail)
+        [ applyCustomFoodsOutMsg context listOut
+        , applyCustomFoodEditOutMsg context detailOut
+        ]
+
+
+initCustomFoodEditWithList :
+    InitContext
+    -> String
+    -> CustomFoodList.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodEditWithList context productId list =
+    let
+        ( detail, detailOut ) =
+            CustomFoodEdit.init productId
+    in
+    finishInitial
+        (CustomFoodEditWorkspace list detail)
+        [ applyCustomFoodEditOutMsg context detailOut ]
+
+
+initCustomFoodShowWorkspace : InitContext -> String -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodShowWorkspace context productId =
+    let
+        ( list, listOut ) =
+            CustomFoodList.init
+
+        ( detail, detailOut ) =
+            CustomFoodShow.init productId
+    in
+    finishInitial
+        (CustomFoodShowWorkspace list detail)
+        [ applyCustomFoodsOutMsg context listOut
+        , applyCustomFoodShowOutMsg context detailOut
+        ]
+
+
+initCustomFoodShowWithList :
+    InitContext
+    -> String
+    -> CustomFoodList.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initCustomFoodShowWithList context productId list =
+    let
+        ( detail, detailOut ) =
+            CustomFoodShow.init productId
+    in
+    finishInitial
+        (CustomFoodShowWorkspace list detail)
+        [ applyCustomFoodShowOutMsg context detailOut ]
+
+
+initMealCreateWorkspace : InitContext -> ( Model, Cmd Msg, OutMsg )
+initMealCreateWorkspace context =
+    let
+        ( list, listOut ) =
+            MealList.init
+
+        ( detail, detailOut ) =
+            MealCreate.init
+    in
+    finishInitial
+        (MealCreateWorkspace list detail)
+        [ applyMealsOutMsg context listOut
+        , applyMealCreateOutMsg context detailOut
+        ]
+
+
+initMealCreateWithList : InitContext -> MealList.Model -> ( Model, Cmd Msg, OutMsg )
+initMealCreateWithList context list =
+    let
+        ( detail, detailOut ) =
+            MealCreate.init
+    in
+    finishInitial
+        (MealCreateWorkspace list detail)
+        [ applyMealCreateOutMsg context detailOut ]
+
+
+initMealEditWorkspace : InitContext -> String -> ( Model, Cmd Msg, OutMsg )
+initMealEditWorkspace context mealId =
+    let
+        ( list, listOut ) =
+            MealList.init
+
+        ( detail, detailOut ) =
+            MealEdit.init mealId
+    in
+    finishInitial
+        (MealEditWorkspace list detail)
+        [ applyMealsOutMsg context listOut
+        , applyMealEditOutMsg context detailOut
+        ]
+
+
+initMealEditWithList :
+    InitContext
+    -> String
+    -> MealList.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initMealEditWithList context mealId list =
+    let
+        ( detail, detailOut ) =
+            MealEdit.init mealId
+    in
+    finishInitial
+        (MealEditWorkspace list detail)
+        [ applyMealEditOutMsg context detailOut ]
+
+
+initMealDetailWorkspace : InitContext -> String -> ( Model, Cmd Msg, OutMsg )
+initMealDetailWorkspace context mealId =
+    let
+        ( list, listOut ) =
+            MealList.init
+
+        ( detail, detailOut ) =
+            MealShow.init mealId
+    in
+    finishInitial
+        (MealDetailWorkspace list detail)
+        [ applyMealsOutMsg context listOut
+        , applyMealDetailOutMsg context detailOut
+        ]
+
+
+initMealDetailWithList :
+    InitContext
+    -> String
+    -> MealList.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initMealDetailWithList context mealId list =
+    let
+        ( detail, detailOut ) =
+            MealShow.init mealId
+    in
+    finishInitial
+        (MealDetailWorkspace list detail)
+        [ applyMealDetailOutMsg context detailOut ]
+
+
+initAdminCreateWorkspace : InitContext -> ( Model, Cmd Msg, OutMsg )
+initAdminCreateWorkspace context =
+    let
+        ( list, listOut ) =
+            AdminDashboard.init
+    in
+    finishInitial
+        (AdminCreateUserWorkspace list AdminCreateUser.init)
+        [ applyAdminOutMsg context listOut ]
+
+
+initAdminEditWorkspace : InitContext -> String -> ( Model, Cmd Msg, OutMsg )
+initAdminEditWorkspace context userId =
+    let
+        ( list, listOut ) =
+            AdminDashboard.init
+
+        ( detail, detailOut ) =
+            AdminEditUser.init userId
+    in
+    finishInitial
+        (AdminEditUserWorkspace list detail)
+        [ applyAdminOutMsg context listOut
+        , applyAdminEditUserOutMsg context detailOut
+        ]
+
+
+initAdminEditWithList :
+    InitContext
+    -> String
+    -> AdminDashboard.Model
+    -> ( Model, Cmd Msg, OutMsg )
+initAdminEditWithList context userId list =
+    let
+        ( detail, detailOut ) =
+            AdminEditUser.init userId
+    in
+    finishInitial
+        (AdminEditUserWorkspace list detail)
+        [ applyAdminEditUserOutMsg context detailOut ]
+
+
+initialFoodSearchCmd : Maybe String -> Maybe MealSlot -> Cmd Msg
+initialFoodSearchCmd dateParam mealSlot =
+    case recentItemsRequest dateParam mealSlot of
+        Just request ->
+            Api.Logs.recentItems
+                request
+                (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded)
+
+        Nothing ->
+            Cmd.none
+
+
+finishInitial : Model -> List ( Cmd Msg, OutMsg ) -> ( Model, Cmd Msg, OutMsg )
+finishInitial model results =
+    ( model
+    , results |> List.map Tuple.first |> Cmd.batch
+    , results
+        |> List.map Tuple.second
+        |> List.foldl preferOutMsg NoOutMsg
+    )
+
+
+preferOutMsg : OutMsg -> OutMsg -> OutMsg
+preferOutMsg candidate current =
+    case candidate of
+        NoOutMsg ->
+            current
+
+        _ ->
+            candidate
 
 
 
@@ -303,33 +925,47 @@ update context msg model =
                             (AdminDashboard.update subMsg sub)
                         )
 
+                AdminCreateUserWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotAdminMsg
+                        applyAdminOutMsg
+                        (AdminDashboard.update subMsg list)
+                        |> mapEmbedded (\next -> AdminCreateUserWorkspace next detail)
+
+                AdminEditUserWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotAdminMsg
+                        applyAdminOutMsg
+                        (AdminDashboard.update subMsg list)
+                        |> mapEmbedded (\next -> AdminEditUserWorkspace next detail)
+
                 _ ->
                     Nothing
 
         GotAdminCreateUserMsg subMsg ->
             case model of
-                AdminCreateUserPage sub ->
-                    Just
-                        (stepPage context
-                            AdminCreateUserPage
-                            GotAdminCreateUserMsg
-                            applyAdminCreateUserOutMsg
-                            (AdminCreateUser.update subMsg sub)
-                        )
+                AdminCreateUserWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotAdminCreateUserMsg
+                        applyAdminCreateUserOutMsg
+                        (AdminCreateUser.update subMsg detail)
+                        |> mapEmbedded (AdminCreateUserWorkspace list)
 
                 _ ->
                     Nothing
 
         GotAdminEditUserMsg subMsg ->
             case model of
-                AdminEditUserPage sub ->
-                    Just
-                        (stepPage context
-                            AdminEditUserPage
-                            GotAdminEditUserMsg
-                            applyAdminEditUserOutMsg
-                            (AdminEditUser.update subMsg sub)
-                        )
+                AdminEditUserWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotAdminEditUserMsg
+                        applyAdminEditUserOutMsg
+                        (AdminEditUser.update subMsg detail)
+                        |> mapEmbedded (AdminEditUserWorkspace list)
 
                 _ ->
                     Nothing
@@ -345,6 +981,56 @@ update context msg model =
                             (DiaryDay.update subMsg sub)
                         )
 
+                DiaryCalendarWorkspace calendar diary ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded (DiaryCalendarWorkspace calendar)
+
+                DiarySearchWorkspace diary search ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded (\next -> DiarySearchWorkspace next search)
+
+                DiarySearchFoodWorkspace diary search detail ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded (\next -> DiarySearchFoodWorkspace next search detail)
+
+                DiarySearchCreateFoodWorkspace diary search detail ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded
+                            (\next -> DiarySearchCreateFoodWorkspace next search detail)
+
+                DiaryLogWorkspace diary detail ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded (\next -> DiaryLogWorkspace next detail)
+
+                CalendarDiaryLogWorkspace calendar diary detail ->
+                    embeddedStep
+                        context
+                        GotDiaryMsg
+                        applyDiaryOutMsg
+                        (DiaryDay.update subMsg diary)
+                        |> mapEmbedded
+                            (\next -> CalendarDiaryLogWorkspace calendar next detail)
+
                 _ ->
                     Nothing
 
@@ -358,6 +1044,23 @@ update context msg model =
                             applyDiaryCalendarOutMsg
                             (DiaryCalendar.update subMsg sub)
                         )
+
+                DiaryCalendarWorkspace calendar diary ->
+                    embeddedStep
+                        context
+                        GotDiaryCalendarMsg
+                        applyDiaryCalendarOutMsg
+                        (DiaryCalendar.update subMsg calendar)
+                        |> mapEmbedded (\next -> DiaryCalendarWorkspace next diary)
+
+                CalendarDiaryLogWorkspace calendar diary detail ->
+                    embeddedStep
+                        context
+                        GotDiaryCalendarMsg
+                        applyDiaryCalendarOutMsg
+                        (DiaryCalendar.update subMsg calendar)
+                        |> mapEmbedded
+                            (\next -> CalendarDiaryLogWorkspace next diary detail)
 
                 _ ->
                     Nothing
@@ -401,6 +1104,50 @@ update context msg model =
                             (FoodSearch.update subMsg sub)
                         )
 
+                DiarySearchWorkspace diary search ->
+                    stepDiarySearch
+                        context
+                        subMsg
+                        diary
+                        search
+                        DiarySearchWorkspace
+
+                SearchFoodWorkspace search detail ->
+                    embeddedStep
+                        context
+                        GotFoodSearchMsg
+                        applyFoodSearchOutMsg
+                        (FoodSearch.update subMsg search)
+                        |> mapEmbedded (\next -> SearchFoodWorkspace next detail)
+
+                DiarySearchFoodWorkspace diary search detail ->
+                    stepDiarySearch
+                        context
+                        subMsg
+                        diary
+                        search
+                        (\nextDiary nextSearch ->
+                            DiarySearchFoodWorkspace nextDiary nextSearch detail
+                        )
+
+                SearchCreateFoodWorkspace search detail ->
+                    embeddedStep
+                        context
+                        GotFoodSearchMsg
+                        applyFoodSearchOutMsg
+                        (FoodSearch.update subMsg search)
+                        |> mapEmbedded (\next -> SearchCreateFoodWorkspace next detail)
+
+                DiarySearchCreateFoodWorkspace diary search detail ->
+                    stepDiarySearch
+                        context
+                        subMsg
+                        diary
+                        search
+                        (\nextDiary nextSearch ->
+                            DiarySearchCreateFoodWorkspace nextDiary nextSearch detail
+                        )
+
                 _ ->
                     Nothing
 
@@ -418,33 +1165,63 @@ update context msg model =
                             (FoodLogEntry.update subMsg sub)
                         )
 
+                DiaryLogWorkspace diary detail ->
+                    embeddedStep
+                        context
+                        GotFoodLogDetailMsg
+                        applyFoodLogDetailOutMsg
+                        (FoodLogEntry.update subMsg detail)
+                        |> mapEmbedded (DiaryLogWorkspace diary)
+
+                CalendarDiaryLogWorkspace calendar diary detail ->
+                    embeddedStep
+                        context
+                        GotFoodLogDetailMsg
+                        applyFoodLogDetailOutMsg
+                        (FoodLogEntry.update subMsg detail)
+                        |> mapEmbedded (CalendarDiaryLogWorkspace calendar diary)
+
                 _ ->
                     Nothing
 
         GotCustomFoodCreateMsg subMsg ->
             case model of
-                CustomFoodCreatePage sub ->
-                    Just
-                        (stepPage context
-                            CustomFoodCreatePage
-                            GotCustomFoodCreateMsg
-                            applyCustomFoodCreateOutMsg
-                            (CustomFoodCreate.update subMsg sub)
-                        )
+                CustomFoodCreateWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodCreateMsg
+                        applyCustomFoodCreateOutMsg
+                        (CustomFoodCreate.update subMsg detail)
+                        |> mapEmbedded (CustomFoodCreateWorkspace list)
+
+                SearchCreateFoodWorkspace search detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodCreateMsg
+                        (applySearchCreateFoodOutMsg search)
+                        (CustomFoodCreate.update subMsg detail)
+                        |> mapEmbedded (SearchCreateFoodWorkspace search)
+
+                DiarySearchCreateFoodWorkspace diary search detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodCreateMsg
+                        (applySearchCreateFoodOutMsg search)
+                        (CustomFoodCreate.update subMsg detail)
+                        |> mapEmbedded (DiarySearchCreateFoodWorkspace diary search)
 
                 _ ->
                     Nothing
 
         GotCustomFoodEditMsg subMsg ->
             case model of
-                CustomFoodEditPage sub ->
-                    Just
-                        (stepPage context
-                            CustomFoodEditPage
-                            GotCustomFoodEditMsg
-                            applyCustomFoodEditOutMsg
-                            (CustomFoodEdit.update subMsg sub)
-                        )
+                CustomFoodEditWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodEditMsg
+                        applyCustomFoodEditOutMsg
+                        (CustomFoodEdit.update subMsg detail)
+                        |> mapEmbedded (CustomFoodEditWorkspace list)
 
                 _ ->
                     Nothing
@@ -460,19 +1237,42 @@ update context msg model =
                             (CustomFoodList.update subMsg sub)
                         )
 
+                CustomFoodCreateWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodsMsg
+                        applyCustomFoodsOutMsg
+                        (CustomFoodList.update subMsg list)
+                        |> mapEmbedded (\next -> CustomFoodCreateWorkspace next detail)
+
+                CustomFoodEditWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodsMsg
+                        applyCustomFoodsOutMsg
+                        (CustomFoodList.update subMsg list)
+                        |> mapEmbedded (\next -> CustomFoodEditWorkspace next detail)
+
+                CustomFoodShowWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodsMsg
+                        applyCustomFoodsOutMsg
+                        (CustomFoodList.update subMsg list)
+                        |> mapEmbedded (\next -> CustomFoodShowWorkspace next detail)
+
                 _ ->
                     Nothing
 
         GotCustomFoodShowMsg subMsg ->
             case model of
-                CustomFoodShowPage sub ->
-                    Just
-                        (stepPage context
-                            CustomFoodShowPage
-                            GotCustomFoodShowMsg
-                            applyCustomFoodShowOutMsg
-                            (CustomFoodShow.update subMsg sub)
-                        )
+                CustomFoodShowWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotCustomFoodShowMsg
+                        applyCustomFoodShowOutMsg
+                        (CustomFoodShow.update subMsg detail)
+                        |> mapEmbedded (CustomFoodShowWorkspace list)
 
                 _ ->
                     Nothing
@@ -488,47 +1288,68 @@ update context msg model =
                             (MealList.update subMsg sub)
                         )
 
+                MealCreateWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealsMsg
+                        applyMealsOutMsg
+                        (MealList.update subMsg list)
+                        |> mapEmbedded (\next -> MealCreateWorkspace next detail)
+
+                MealEditWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealsMsg
+                        applyMealsOutMsg
+                        (MealList.update subMsg list)
+                        |> mapEmbedded (\next -> MealEditWorkspace next detail)
+
+                MealDetailWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealsMsg
+                        applyMealsOutMsg
+                        (MealList.update subMsg list)
+                        |> mapEmbedded (\next -> MealDetailWorkspace next detail)
+
                 _ ->
                     Nothing
 
         GotMealCreateMsg subMsg ->
             case model of
-                MealCreatePage sub ->
-                    Just
-                        (stepPage context
-                            MealCreatePage
-                            GotMealCreateMsg
-                            applyMealCreateOutMsg
-                            (MealCreate.update subMsg sub)
-                        )
+                MealCreateWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealCreateMsg
+                        applyMealCreateOutMsg
+                        (MealCreate.update subMsg detail)
+                        |> mapEmbedded (MealCreateWorkspace list)
 
                 _ ->
                     Nothing
 
         GotMealEditMsg subMsg ->
             case model of
-                MealEditPage sub ->
-                    Just
-                        (stepPage context
-                            MealEditPage
-                            GotMealEditMsg
-                            applyMealEditOutMsg
-                            (MealEdit.update subMsg sub)
-                        )
+                MealEditWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealEditMsg
+                        applyMealEditOutMsg
+                        (MealEdit.update subMsg detail)
+                        |> mapEmbedded (MealEditWorkspace list)
 
                 _ ->
                     Nothing
 
         GotMealDetailMsg subMsg ->
             case model of
-                MealDetailPage sub ->
-                    Just
-                        (stepPage context
-                            MealDetailPage
-                            GotMealDetailMsg
-                            applyMealDetailOutMsg
-                            (MealShow.update subMsg sub)
-                        )
+                MealDetailWorkspace list detail ->
+                    embeddedStep
+                        context
+                        GotMealDetailMsg
+                        applyMealDetailOutMsg
+                        (MealShow.update subMsg detail)
+                        |> mapEmbedded (MealDetailWorkspace list)
 
                 _ ->
                     Nothing
@@ -544,6 +1365,12 @@ localContextReceived pageContext context model =
         FoodDetailPage _ ->
             stepFoodDetail pageContext (FoodShow.LocalContextReceived context) model
 
+        SearchFoodWorkspace _ _ ->
+            stepFoodDetail pageContext (FoodShow.LocalContextReceived context) model
+
+        DiarySearchFoodWorkspace _ _ _ ->
+            stepFoodDetail pageContext (FoodShow.LocalContextReceived context) model
+
         FoodSearchPage sub ->
             Just
                 (stepPage pageContext
@@ -552,6 +1379,14 @@ localContextReceived pageContext context model =
                     applyFoodSearchOutMsg
                     (FoodSearch.update (FoodSearch.LocalContextReceived context) sub)
                 )
+
+        DiarySearchWorkspace diary search ->
+            embeddedStep
+                pageContext
+                GotFoodSearchMsg
+                applyFoodSearchOutMsg
+                (FoodSearch.update (FoodSearch.LocalContextReceived context) search)
+                |> mapEmbedded (DiarySearchWorkspace diary)
 
         GoalsSettingsPage sub ->
             Just
@@ -582,6 +1417,22 @@ barcodeScannerEventReceived pageContext event model =
                     (FoodSearch.update (FoodSearch.BarcodeScannerEventReceived event) sub)
                 )
 
+        DiarySearchWorkspace diary search ->
+            embeddedStep
+                pageContext
+                GotFoodSearchMsg
+                applyFoodSearchOutMsg
+                (FoodSearch.update (FoodSearch.BarcodeScannerEventReceived event) search)
+                |> mapEmbedded (DiarySearchWorkspace diary)
+
+        DiarySearchFoodWorkspace diary search detail ->
+            embeddedStep
+                pageContext
+                GotFoodSearchMsg
+                applyFoodSearchOutMsg
+                (FoodSearch.update (FoodSearch.BarcodeScannerEventReceived event) search)
+                |> mapEmbedded (\next -> DiarySearchFoodWorkspace diary next detail)
+
         _ ->
             Nothing
 
@@ -598,8 +1449,70 @@ stepFoodDetail context subMsg model =
                     (FoodShow.update subMsg sub)
                 )
 
+        SearchFoodWorkspace search detail ->
+            embeddedStep
+                context
+                GotFoodDetailMsg
+                applyFoodDetailOutMsg
+                (FoodShow.update subMsg detail)
+                |> mapEmbedded (SearchFoodWorkspace search)
+
+        DiarySearchFoodWorkspace diary search detail ->
+            embeddedStep
+                context
+                GotFoodDetailMsg
+                applyFoodDetailOutMsg
+                (FoodShow.update subMsg detail)
+                |> mapEmbedded (DiarySearchFoodWorkspace diary search)
+
         _ ->
             Nothing
+
+
+stepDiarySearch :
+    InitContext
+    -> FoodSearch.Msg
+    -> DiaryDay.Model
+    -> FoodSearch.Model
+    -> (DiaryDay.Model -> FoodSearch.Model -> Model)
+    -> Maybe ( Model, Cmd Msg, OutMsg )
+stepDiarySearch context subMsg diary search toPage =
+    let
+        ( nextSearch, searchSubCmd, searchOut ) =
+            FoodSearch.update subMsg search
+
+        ( searchCmd, searchAppOut ) =
+            applyFoodSearchOutMsg context searchOut
+    in
+    case subMsg of
+        FoodSearch.QuickAddCompleted (Ok _) ->
+            let
+                ( nextDiary, diaryOut ) =
+                    DiaryDay.init
+                        { dateParam = Just (LocalDate.format diary.currentDate)
+                        , calendarMonth = diary.calendarMonth
+                        , today = diary.today
+                        }
+
+                ( diaryCmd, diaryAppOut ) =
+                    applyDiaryOutMsg context diaryOut
+            in
+            Just
+                ( toPage nextDiary nextSearch
+                , Cmd.batch
+                    [ Cmd.map GotFoodSearchMsg searchSubCmd
+                    , searchCmd
+                    , diaryCmd
+                    ]
+                , preferOutMsg diaryAppOut searchAppOut
+                )
+
+        _ ->
+            Just
+                ( toPage diary nextSearch
+                , Cmd.batch [ Cmd.map GotFoodSearchMsg searchSubCmd, searchCmd ]
+                , searchAppOut
+                )
 
 
 applyLoginOutMsg : InitContext -> AuthLogin.OutMsg -> ( Cmd Msg, OutMsg )
@@ -1008,6 +1921,22 @@ applyCustomFoodCreateOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
+applySearchCreateFoodOutMsg :
+    FoodSearch.Model
+    -> InitContext
+    -> CustomFoodCreate.OutMsg
+    -> ( Cmd Msg, OutMsg )
+applySearchCreateFoodOutMsg search context outMsg =
+    case outMsg of
+        CustomFoodCreate.Navigate (CustomFoodShow productId) ->
+            ( Cmd.none
+            , Navigate (FoodShow productId search.date search.mealSlot)
+            )
+
+        _ ->
+            applyCustomFoodCreateOutMsg context outMsg
+
+
 applyCustomFoodEditOutMsg : InitContext -> CustomFoodEdit.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodEditOutMsg _ outMsg =
     case outMsg of
@@ -1283,12 +2212,19 @@ view props =
         AdminPage adminModel ->
             Element.map GotAdminMsg (AdminDashboard.view (pageProps props adminModel))
 
-        AdminCreateUserPage createUserModel ->
-            Element.map GotAdminCreateUserMsg
-                (AdminCreateUser.view (pageProps props createUserModel))
+        AdminCreateUserWorkspace adminModel createUserModel ->
+            Workspace.view props.device
+                [ Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props adminModel))
+                , Element.map GotAdminCreateUserMsg
+                    (AdminCreateUser.view (pageProps props createUserModel))
+                ]
 
-        AdminEditUserPage editUserModel ->
-            Element.map GotAdminEditUserMsg (AdminEditUser.view (pageProps props editUserModel))
+        AdminEditUserWorkspace adminModel editUserModel ->
+            Workspace.view props.device
+                [ Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props adminModel))
+                , Element.map GotAdminEditUserMsg
+                    (AdminEditUser.view (pageProps props editUserModel))
+                ]
 
         DiaryPage diaryModel ->
             Element.map GotDiaryMsg (DiaryDay.view (pageProps props diaryModel))
@@ -1296,6 +2232,16 @@ view props =
         DiaryCalendarPage diaryCalendarModel ->
             Element.map GotDiaryCalendarMsg
                 (DiaryCalendar.view (pageProps props diaryCalendarModel))
+
+        DiaryCalendarWorkspace calendarModel diaryModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryCalendarMsg
+                    (DiaryCalendar.contentViewWithSelection
+                        (Just (LocalDate.format diaryModel.currentDate))
+                        (pageProps props calendarModel)
+                    )
+                , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                ]
 
         GoalsSettingsPage goalsSettingsModel ->
             Element.map GotGoalsSettingsMsg
@@ -1308,23 +2254,93 @@ view props =
         FoodSearchPage foodSearchModel ->
             Element.map GotFoodSearchMsg (FoodSearch.view (pageProps props foodSearchModel))
 
+        DiarySearchWorkspace diaryModel searchModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                , Element.map GotFoodSearchMsg
+                    (FoodSearch.contentView (pageProps props searchModel))
+                ]
+
         FoodDetailPage foodDetailModel ->
             Element.map GotFoodDetailMsg (FoodShow.view (pageProps props foodDetailModel))
+
+        SearchFoodWorkspace searchModel foodModel ->
+            Workspace.view props.device
+                [ Element.map GotFoodSearchMsg
+                    (FoodSearch.contentView (pageProps props searchModel))
+                , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                ]
+
+        DiarySearchFoodWorkspace diaryModel searchModel foodModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                , Element.map GotFoodSearchMsg
+                    (FoodSearch.contentView (pageProps props searchModel))
+                , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                ]
+
+        SearchCreateFoodWorkspace searchModel createModel ->
+            Workspace.view props.device
+                [ Element.map GotFoodSearchMsg
+                    (FoodSearch.contentView (pageProps props searchModel))
+                , Element.map GotCustomFoodCreateMsg
+                    (CustomFoodCreate.view (pageProps props createModel))
+                ]
+
+        DiarySearchCreateFoodWorkspace diaryModel searchModel createModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                , Element.map GotFoodSearchMsg
+                    (FoodSearch.contentView (pageProps props searchModel))
+                , Element.map GotCustomFoodCreateMsg
+                    (CustomFoodCreate.view (pageProps props createModel))
+                ]
 
         FoodLogDetailPage foodLogDetailModel ->
             Element.map GotFoodLogDetailMsg (FoodLogEntry.view (pageProps props foodLogDetailModel))
 
-        CustomFoodCreatePage customFoodCreateModel ->
-            Element.map GotCustomFoodCreateMsg
-                (CustomFoodCreate.view (pageProps props customFoodCreateModel))
+        DiaryLogWorkspace diaryModel logModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                , Element.map GotFoodLogDetailMsg
+                    (FoodLogEntry.contentView (pageProps props logModel))
+                ]
 
-        CustomFoodEditPage customFoodEditModel ->
-            Element.map GotCustomFoodEditMsg
-                (CustomFoodEdit.view (pageProps props customFoodEditModel))
+        CalendarDiaryLogWorkspace calendarModel diaryModel logModel ->
+            Workspace.view props.device
+                [ Element.map GotDiaryCalendarMsg
+                    (DiaryCalendar.contentViewWithSelection
+                        (Just (LocalDate.format diaryModel.currentDate))
+                        (pageProps props calendarModel)
+                    )
+                , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                , Element.map GotFoodLogDetailMsg
+                    (FoodLogEntry.contentView (pageProps props logModel))
+                ]
 
-        CustomFoodShowPage customFoodShowModel ->
-            Element.map GotCustomFoodShowMsg
-                (CustomFoodShow.view (pageProps props customFoodShowModel))
+        CustomFoodCreateWorkspace listModel createModel ->
+            Workspace.view props.device
+                [ Element.map GotCustomFoodsMsg
+                    (CustomFoodList.contentView (pageProps props listModel))
+                , Element.map GotCustomFoodCreateMsg
+                    (CustomFoodCreate.view (pageProps props createModel))
+                ]
+
+        CustomFoodEditWorkspace listModel editModel ->
+            Workspace.view props.device
+                [ Element.map GotCustomFoodsMsg
+                    (CustomFoodList.contentView (pageProps props listModel))
+                , Element.map GotCustomFoodEditMsg
+                    (CustomFoodEdit.view (pageProps props editModel))
+                ]
+
+        CustomFoodShowWorkspace listModel showModel ->
+            Workspace.view props.device
+                [ Element.map GotCustomFoodsMsg
+                    (CustomFoodList.contentView (pageProps props listModel))
+                , Element.map GotCustomFoodShowMsg
+                    (CustomFoodShow.view (pageProps props showModel))
+                ]
 
         CustomFoodsPage customFoodsModel ->
             Element.map GotCustomFoodsMsg (CustomFoodList.view (pageProps props customFoodsModel))
@@ -1332,14 +2348,23 @@ view props =
         MealsPage mealsModel ->
             Element.map GotMealsMsg (MealList.view (pageProps props mealsModel))
 
-        MealCreatePage mealCreateModel ->
-            Element.map GotMealCreateMsg (MealCreate.view (pageProps props mealCreateModel))
+        MealCreateWorkspace listModel createModel ->
+            Workspace.view props.device
+                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                , Element.map GotMealCreateMsg (MealCreate.view (pageProps props createModel))
+                ]
 
-        MealEditPage mealEditModel ->
-            Element.map GotMealEditMsg (MealEdit.view (pageProps props mealEditModel))
+        MealEditWorkspace listModel editModel ->
+            Workspace.view props.device
+                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                , Element.map GotMealEditMsg (MealEdit.view (pageProps props editModel))
+                ]
 
-        MealDetailPage mealDetailModel ->
-            Element.map GotMealDetailMsg (MealShow.view (pageProps props mealDetailModel))
+        MealDetailWorkspace listModel detailModel ->
+            Workspace.view props.device
+                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                , Element.map GotMealDetailMsg (MealShow.view (pageProps props detailModel))
+                ]
 
         PlaceholderPage message ->
             Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
@@ -1352,11 +2377,19 @@ modalView props =
             FoodLogEntry.modalView (pageProps props foodLogDetailModel)
                 |> Maybe.map (Element.map GotFoodLogDetailMsg)
 
-        CustomFoodShowPage customFoodShowModel ->
+        DiaryLogWorkspace _ foodLogDetailModel ->
+            FoodLogEntry.modalView (pageProps props foodLogDetailModel)
+                |> Maybe.map (Element.map GotFoodLogDetailMsg)
+
+        CalendarDiaryLogWorkspace _ _ foodLogDetailModel ->
+            FoodLogEntry.modalView (pageProps props foodLogDetailModel)
+                |> Maybe.map (Element.map GotFoodLogDetailMsg)
+
+        CustomFoodShowWorkspace _ customFoodShowModel ->
             CustomFoodShow.modalView (pageProps props customFoodShowModel)
                 |> Maybe.map (Element.map GotCustomFoodShowMsg)
 
-        MealDetailPage mealDetailModel ->
+        MealDetailWorkspace _ mealDetailModel ->
             MealShow.modalView (pageProps props mealDetailModel)
                 |> Maybe.map (Element.map GotMealDetailMsg)
 
@@ -1406,6 +2439,28 @@ stepPage context toPage toMsg applyOut ( subModel, subCmd, outMsg ) =
             applyOut context outMsg
     in
     ( toPage subModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ], appOutMsg )
+
+
+embeddedStep :
+    InitContext
+    -> (subMsg -> Msg)
+    -> (InitContext -> outMsg -> ( Cmd Msg, OutMsg ))
+    -> ( subModel, Cmd subMsg, outMsg )
+    -> ( subModel, Cmd Msg, OutMsg )
+embeddedStep context toMsg applyOut ( subModel, subCmd, outMsg ) =
+    let
+        ( outCmd, appOutMsg ) =
+            applyOut context outMsg
+    in
+    ( subModel, Cmd.batch [ Cmd.map toMsg subCmd, outCmd ], appOutMsg )
+
+
+mapEmbedded :
+    (subModel -> Model)
+    -> ( subModel, Cmd Msg, OutMsg )
+    -> Maybe ( Model, Cmd Msg, OutMsg )
+mapEmbedded toPage ( subModel, cmd, outMsg ) =
+    Just ( toPage subModel, cmd, outMsg )
 
 
 lastUsedProductDefaultCmd : Route -> String -> List (Cmd Msg)

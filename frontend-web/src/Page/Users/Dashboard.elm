@@ -2,6 +2,7 @@ module Page.Users.Dashboard exposing
     ( Model(..)
     , Msg(..)
     , OutMsg(..)
+    , contentView
     , init
     , update
     , view
@@ -79,8 +80,12 @@ update msg model =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
-        [ bodyView device theme model
-        ]
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
+    bodyView device theme model
 
 
 bodyView : Device -> Theme -> Model -> Element Msg

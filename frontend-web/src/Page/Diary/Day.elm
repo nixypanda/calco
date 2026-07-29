@@ -9,6 +9,7 @@ module Page.Diary.Day exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , contentView
     , init
     , slotCalories
     , update
@@ -362,7 +363,12 @@ update msg model =
         LogClicked id ->
             ( model
             , Cmd.none
-            , Navigate (FoodLogEntry id (Just (LocalDate.format model.currentDate)))
+            , Navigate
+                (FoodLogEntry
+                    id
+                    (Just (LocalDate.format model.currentDate))
+                    model.calendarMonth
+                )
             )
 
         MealsClicked ->
@@ -638,12 +644,21 @@ slotCalories slot logs =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
+    Ui.pageContainer device
+        [ contentView { model = model, device = device, theme = theme } ]
+
+
+contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
+contentView { model, device, theme } =
     let
         logs : List FoodLog
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Ui.pageContainer device
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
         (dateCard theme model device
             :: (case activeDiaryError model.currentDate model.diary of
                     Just message ->

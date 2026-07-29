@@ -87,7 +87,7 @@ resolveKnownSession session adminExists route =
             DiarySettings ->
                 Render route
 
-            FoodLogEntry _ _ ->
+            FoodLogEntry _ _ _ ->
                 Render route
 
             FoodSearch _ _ ->
