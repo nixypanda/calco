@@ -94,7 +94,7 @@ tools/importers/data-sources/
   calco-import                    ← executable wrapper
   src/calco_import/               ← Python package
     cli.py                        ← typer CLI, dispatch
-    fetch.py                      ← download + convert per dataset
+    fetch/                        ← download + convert per dataset
     merge.py                      ← dedup logic
     pipeline.py                   ← upload logic
     util.py                       ← shared helpers
@@ -211,12 +211,18 @@ The maintained MyFitnessPal workflow lives at
 `tools/importers/personal-data/` and currently covers:
 
 - cleaning the raw export into reviewable pipeline CSVs
-- generating `data/step-9-out-serving-review.csv` for manual review
+- manual serving and food-match review
+- creating unresolved private foods through the CalCo API
+- importing the reviewed history through the logs API
 
 See `tools/importers/personal-data/README.md` for the active workflow.
 
 ## Data Loss Tradeoff
 
-Converters intentionally project raw datasets into the current CalCo product model. Many source-specific fields are dropped, and source category strings are normalized into `categories`. This is accepted for now and tracked in [known issues](known_issues.md).
+Converters intentionally project raw datasets into the current CalCo product
+model. Many source-specific fields are dropped, source category strings are
+normalized into `categories`, and committed rows do not retain a raw source
+payload. Keep the original source archives when future reprocessing may be
+needed.
 
 Adding fields such as ingredients or allergens is a schema/domain change, not a converter flag.

@@ -47,7 +47,12 @@ interfaces/http -> application -> domain
 infrastructure/postgres -> domain ports
 ```
 
-The domain layer owns business concepts, invariants, and repository ports. It does not depend on HTTP, JSON DTOs, sqlx, or PostgreSQL. The application layer composes domain operations into use cases. Infrastructure implements the domain ports. HTTP handlers translate request/response DTOs into application or repository calls.
+The domain layer owns business concepts, invariants, and repository ports. It
+does not own HTTP or JSON DTOs. Infrastructure implements the ports, and the
+application layer composes domain operations into use cases without issuing
+SQL directly. The shared domain error enums currently carry `sqlx::Error`
+variants as a pragmatic adapter leak; new domain behavior should not deepen
+that coupling.
 
 ## Bounded Contexts
 
@@ -65,12 +70,14 @@ Admin identities are for account recovery and import operations. They do not own
 
 ### Nutrition
 
-Nutrition is one bounded context with four aggregate roots:
+Nutrition is one bounded context with five aggregate roots:
 
 - `Product` (catalog): owns `ProductNutrient` and `ProductServing` as child values. Imported global foods and user-private custom foods share this model via `source`, `source_id`, `visibility`, and `user_id`.
 - `Meal`: user-owned. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
 - `FoodLog`: user-owned. Records timestamp, meal slot, logged item, quantity, notes, and nutrient snapshots. `LoggedItem` supports `Product(ProductId)` and `Meal(MealId)`.
 - `GoalTarget`: user-owned. Stores calorie and macro targets effective from a local date, so diary views can resolve the latest saved target for any selected day while falling back to defaults if no saved row exists.
+- `DiaryPreferences`: user-owned. Stores the enabled meal slots that shape the
+  diary while ensuring at least one known slot remains enabled.
 
 These aggregates share one error type (`NutritionError`) and depend on each other directly via repositories — they are not separate contexts. The shared ubiquitous language ("nutrient", "quantity", "unit"), shared lifecycle, and lack of concept translation at the seams motivated unifying them.
 
@@ -96,8 +103,9 @@ Imports are an anti-corruption/staging layer around external food datasets.
 - Goal target save upserts the current local day's version for a user.
 - Import commit is a batch database transaction that upserts products, nutrients, and servings.
 - Summary reads aggregate `food_log_nutrients`, never live catalog nutrients.
-
-Known accepted consistency risks are tracked in [known issues](known_issues.md).
+- Food-log writes are transactional. Food-log reads load headers and nutrient
+  snapshots separately, so a concurrent update could theoretically produce a
+  mixed read. This is an accepted tradeoff for the current homelab scale.
 
 ## API Surface
 
@@ -112,6 +120,7 @@ Major route groups:
 - `/units`
 - `/logs`
 - `/goal`
+- `/diary-preferences`
 - `/meals`
 - `/imports`
 

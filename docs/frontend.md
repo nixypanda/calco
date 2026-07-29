@@ -11,12 +11,15 @@ frontend-web/
     Data/
     Lib/
     Page/
+    Ui/
     View/
-    Main.elm
-    Session.elm
     Access.elm
+    Chrome.elm
+    Main.elm
+    Page.elm
     Ui.elm
-    Ui/Theme.elm
+    barcodeScanner.js
+    index.js
   tests/
   index.html
   vite.config.js
@@ -34,7 +37,8 @@ The legacy React frontend has been removed. All active frontend work lives in
 The frontend follows a strict ownership model:
 
 ```text
-Main -> Access / Session / Data.Route / Page
+Main -> Access / Chrome / Data.Route / Page
+Chrome -> View.Chrome / Data / Ui
 Page -> Data / Api / Ui / View / Lib
 View -> Ui / Data / Lib
 Api -> Api.Client / Data decoders / Lib.Json
@@ -58,9 +62,11 @@ prevents domain shaping from drifting into transport or presentation layers.
 
 - URL changes and browser navigation.
 - session/bootstrap loading.
-- page lifting and `Cmd.map`.
-- top-level device, drawer, profile, and theme state.
+- coordination between app chrome and the active page.
 - routing into the correct page model.
+
+`Chrome.elm` coordinates top-level device, navigation, profile, and theme
+state. `View.Chrome` renders the responsive shell.
 
 `Access.elm` is the single route-access policy point. It decides whether a
 route should render, redirect, or wait for session/bootstrap state.
@@ -77,9 +83,9 @@ errors. They do not own business interpretation beyond transport concerns.
 `Data.*` modules own domain-facing frontend types and pure helpers. They should
 be safe to test in isolation without HTTP or page wiring.
 
-`Ui.elm`, `Ui.Theme`, and `View.*` own shared presentation primitives. Pages
-compose them, but should not copy their look-and-feel logic locally unless the
-pattern is truly one-off.
+`Ui.elm`, the focused `Ui.*` modules, and `View.*` own shared presentation
+primitives. Pages compose them, but should not copy their look-and-feel logic
+locally unless the pattern is truly one-off.
 
 ## Page Structure
 
@@ -340,6 +346,7 @@ Current routes are defined in `frontend-web/src/Data/Route.elm`:
 /home
 /home?date=YYYY-MM-DD
 /settings/goals
+/settings/diary
 /logs/:id
 /search
 /search?date=YYYY-MM-DD
@@ -388,11 +395,11 @@ API modules live in `frontend-web/src/Api/`:
 - `Auth.elm`
 - `Admin.elm`
 - `Foods.elm`
+- `DiaryPreferences.elm`
 - `Goals.elm`
 - `Logs.elm`
 - `Meals.elm`
 - `Client.elm`
-- `Result.elm`
 
 `Api.Client` centralizes request construction and API error handling. The
 frontend uses server-managed browser sessions, so requests rely on the browser
@@ -423,13 +430,16 @@ in `Data` and `Page`, app coordination in `Main`.
 
 ## Runtime Shape
 
-`frontend-web/index.html` loads the compiled Elm bundle from `dist/main.js`
-and owns the small JavaScript bridge for the local date and IANA timezone:
+`frontend-web/src/index.js` is the Vite entry point. It initializes Elm and
+owns the JavaScript ports for:
 
-- Elm calls the `requestLocalContext` port.
-- JavaScript replies through `localContextReceived` with a `{ date, timezone }`
-  record where `date` is the local `YYYY-MM-DD` and `timezone` is the resolved
-  IANA zone.
+- local date and IANA timezone.
+- persisted theme preference.
+- requested page reloads.
+- camera barcode scanning through `barcodeScanner.js`.
+
+The scanner uses ZXing for EAN/UPC detection and stops camera tracks when the
+scan completes or is cancelled.
 
 Vite serves the frontend and proxies `/api/*` to the backend during local
 development. Defaults:
@@ -442,7 +452,8 @@ API target: http://localhost:3001
 Override with:
 
 ```bash
-cd frontend-web && PORT=1235 API_TARGET=http://localhost:3001 npm run dev
+cd frontend-web
+API_TARGET=http://localhost:3001 npm run dev -- --host 127.0.0.1 --port 1235
 ```
 
 ## Pages
@@ -470,10 +481,13 @@ It provides:
   selected day.
 - meal-slot grouped logs.
 - add-food actions per meal slot.
-- app navigation drawer and profile/logout menu.
+- recent-item quick add and latest-slot repeat actions.
+- bottom navigation on phones and a drawer on larger screens.
 
 Users can inspect previous days with the diary date selector. A separate
 history/trends screen is out of scope.
+
+`Page.Diary.Settings` lets users select which meal slots appear in their diary.
 
 ### Goals
 
@@ -491,6 +505,9 @@ macro targets for the current local day.
 
 Custom foods use the same catalog model as imported/global foods, scoped by
 user ownership.
+
+Food search supports exact manual barcode lookup and camera scanning on
+compatible devices.
 
 ### Logs
 
@@ -554,26 +571,26 @@ Current visual language:
 - muted gray text for captions and secondary content.
 - macro colors: protein pink/red, carbs green, fat amber.
 
-Typography tokens in `Ui.elm` are intentionally restrained:
+Typography tokens in `Ui.Typography` are intentionally restrained:
 
 ```text
-page     28px desktop / 24px phone
-section  22px desktop / 18px phone
-subhead  17px desktop / 15px phone
-body     14px
-caption  12px
+page     32px
+section  24px
+subhead  20px
+body     16px
+caption  13px
 ```
 
 Control conventions:
 
-- use `Ui.button`, `Ui.submitButton`, `Ui.dangerButton`, and `Ui.smallButton`
-  for actions.
-- use `Ui.input`, `Ui.passwordInput`, `Ui.select`, or `Ui.selectDropdown` for
+- use `Ui.primarySubmitButton`, `Ui.secondarySubmitButton`,
+  `Ui.fullWidthDangerButton`, and icon-button helpers for actions.
+- use `Ui.input`, `Ui.passwordInput`, and `Ui.selectDropdown` for
   form fields.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and
   `Ui.skeletonLoading` for common states.
 - use `Ui.badge` for compact metadata.
-- use `Ui.macroBar` for macro summaries.
+- use `Ui.statBlockGroup` and progress helpers for nutrition summaries.
 
 Rules:
 
@@ -624,8 +641,7 @@ Or directly:
 
 ```bash
 cd frontend-web
-mkdir -p dist
-elm make src/Main.elm --output=dist/main.js
+npm run build
 ```
 
 No browser e2e suite is configured at the moment.

@@ -23,21 +23,25 @@ backend/src/
       error.rs           # NutritionError
       units.rs           # UnitConverter
       catalog.rs
+      diary_preferences.rs
       goal_target.rs
       meal.rs
       food_log.rs
     application/
+      diary_preferences.rs
       goal_target.rs
       meal.rs
-      food_log.rs        # catalog has no application service; handlers call repos directly
+      food_log/
     infrastructure/postgres/
       catalog.rs
+      diary_preferences.rs
       goal_target.rs
       meal.rs
       food_log.rs
     interfaces/http/
       mod.rs             # NutritionError -> IntoResponse, error_response, internal_error
       catalog.rs
+      diary_preferences.rs
       goal_target.rs
       meal.rs
       food_log.rs
@@ -56,7 +60,11 @@ interfaces/http -> application -> domain
 infrastructure/postgres -> domain ports
 ```
 
-Repository traits are defined in `domain`. PostgreSQL repositories implement them. The application layer composes domain operations and repositories into use cases. This keeps domain types independent of persistence concerns and keeps use cases independent of sqlx.
+Repository traits are defined in `domain`. PostgreSQL repositories implement
+them. The application layer composes domain operations and repositories into
+use cases without issuing SQL. Shared domain error enums currently contain
+`sqlx::Error` variants, so persistence is not yet fully absent from domain
+types; avoid extending that coupling.
 
 ### Repository Ports
 
@@ -103,7 +111,7 @@ Allowed examples:
 find_by_id(id)
 find_by_username(username)
 list_by_user(user_id)
-list_by_user_and_range(user_id, range)
+list_by_filter(user_id, filter)
 update(&entity)
 update_many(&entities)
 delete(id)
@@ -141,6 +149,8 @@ These notes capture endpoint choices surfaced during feature mapping.
 - Goal targets use `GET /goal?date=YYYY-MM-DD` to resolve the effective targets
   for a selected day and `PUT /goal` to create or overwrite the current day's
   saved targets.
+- Diary preferences use `GET /diary-preferences` and
+  `PUT /diary-preferences` to read or replace a user's enabled meal slots.
 - Meals use aggregate-shaped endpoints: `POST /meals`, `GET /meals`,
   `GET /meals/{id}`, `PUT /meals/{id}`, `DELETE /meals/{id}`, and
   `GET /meals/{id}/nutrients?quantity=&unit=`.
@@ -179,6 +189,7 @@ Current aggregate roots:
 - `FoodLog` for logged entries and nutrient snapshots.
 - `Meal` for reusable user-defined meals.
 - `GoalTarget` for user calorie and macro targets effective from a local date.
+- `DiaryPreferences` for a user's enabled diary meal slots.
 - `ImportJob` for staging and committing external catalog data.
 
 Owned child values:
@@ -186,6 +197,7 @@ Owned child values:
 - `ProductNutrient` and `ProductServing` belong to `Product`.
 - `FoodLogNutrientSnapshot` belongs to `FoodLog`.
 - `MealComponent` belongs to `Meal`.
+- `EnabledMealSlots` belongs to `DiaryPreferences`.
 - Staged product/nutrient/serving rows and import errors belong to `ImportJob`.
 
 Child values are not exposed as independently mutable resources. They are changed through their parent aggregate.
@@ -243,6 +255,7 @@ Admin user management:
 ```text
 GET  /admin/users
 POST /admin/users
+GET  /admin/users/{id}
 POST /admin/users/{id}/reset-password
 POST /admin/users/{id}/disable
 POST /admin/users/{id}/enable
@@ -277,8 +290,12 @@ Food detail includes product nutrients and servings. There are no separate publi
 
 ```text
 POST   /logs
+POST   /logs/batch
+POST   /logs/last-used
+GET    /logs/recent-items?from_date=&to_date=&meal_slot=
+GET    /logs/latest-slot?meal_slot=&before=&lookback_days=
 GET    /logs/{id}
-GET    /logs?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET    /logs?log_date=YYYY-MM-DD
 PUT    /logs/{id}
 DELETE /logs/{id}
 GET    /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...
@@ -328,6 +345,16 @@ fat_target_g
 
 The backend validates that `local_date` matches today's date in `device_timezone` and that calories equal `protein*4 + carbs*4 + fat*9`.
 
+### Diary Preferences
+
+```text
+GET /diary-preferences
+PUT /diary-preferences
+```
+
+The update replaces the authenticated user's enabled meal slots. At least one
+known slot must remain enabled.
+
 ### Imports
 
 Admin-only:
@@ -363,6 +390,7 @@ Important tables:
 - Logs: `food_logs`, `food_log_nutrients`
 - Meals: `meals`, `meal_components`
 - Goals: `goal_target_versions`
+- Diary preferences: `diary_preferences`
 - Imports: `imports`, `staging_products`, `staging_product_nutrients`, `staging_product_servings`, `import_errors`
 
 Search uses PostgreSQL full-text search and trigram indexes.

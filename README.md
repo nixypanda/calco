@@ -6,11 +6,9 @@ The app is intentionally simple: search or create foods, log what was eaten, sna
 
 ## Mobile Showcase
 
-| Daily diary and macro progress | Catalog search |
-| :---: | :---: |
-| <img src="docs/images/readme/mobile-diary.jpg" alt="CalCo mobile diary showing daily calorie and macro progress" width="320"> | <img src="docs/images/readme/mobile-food-search.jpg" alt="CalCo mobile food catalog search results" width="320"> |
-| **Quantity-aware nutrition and logging** | **Reusable meal builder** |
-| <img src="docs/images/readme/mobile-food-nutrition.jpg" alt="CalCo mobile food logging form with calculated nutrition" width="320"> | <img src="docs/images/readme/mobile-meal-builder.jpg" alt="CalCo mobile reusable meal builder" width="320"> |
+| Daily diary and macro progress | Catalog search | Quantity-aware nutrition and logging | Reusable meal builder |
+| :---: | :---: | :---: | :---: |
+| <img src="docs/images/readme/mobile-diary.jpg" alt="CalCo mobile diary showing daily calorie and macro progress" width="240"> | <img src="docs/images/readme/mobile-food-search.jpg" alt="CalCo mobile food catalog search results" width="240"> | <img src="docs/images/readme/mobile-food-nutrition.jpg" alt="CalCo mobile food logging form with calculated nutrition" width="240"> | <img src="docs/images/readme/mobile-meal-builder.jpg" alt="CalCo mobile reusable meal builder" width="240"> |
 
 ## Stack
 
@@ -25,9 +23,10 @@ Implemented:
 
 - Username/password auth with bootstrap admin and admin user management
 - Food catalog search/detail, camera and manual barcode lookup, custom food CRUD
-- Food logs with nutrient snapshots and daily summaries
+- Food logs with nutrient snapshots, daily summaries, recent-item defaults, and
+  latest-slot repeat
 - Meal/recipe CRUD and meal logging
-- Responsive web frontend for daily tracking
+- Responsive web frontend with configurable diary meal slots
 - CLI import pipeline for USDA SR Legacy, Open Food Facts India, IFCT 2017, and INDB 2024 data
 
 Not the goal right now:
@@ -88,4 +87,5 @@ nix develop -c just frontend-web-build
 - [Frontend](docs/frontend.md): frontend routes, UI structure, and design rules
 - [Imports](docs/imports.md): CLI import pipeline and source merging
 - [Operations](docs/operations.md): local operations, env vars, database, tests
-- [Known Issues](docs/known_issues.md): accepted risks and cleanup items
+- [Testing](docs/testing.md): automated test layout and commands
+- [QA Runbook](docs/qa-runbook.md): end-to-end browser release checks

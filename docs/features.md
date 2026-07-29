@@ -5,9 +5,9 @@
 This document captures product features as user stories before mapping them into
 granular implementation features and API calls.
 
-Current implementation covers the core food diary plus meals/recipes, repeat
-meal-slot logging, admin import staging/commit APIs, and Python dataset import
-tooling:
+Current implementation covers the core food diary plus configurable meal slots,
+meals/recipes, repeat and recent-item logging, admin import staging/commit APIs,
+and Python dataset import tooling:
 
 ```text
 Search/select food -> log quantity -> snapshot nutrients -> review daily totals
@@ -106,6 +106,9 @@ product goal is a simple food tracker, not an analytics or trend platform.
       so that the app does not unexpectedly copy stale eating patterns.
       Implemented with a bounded lookback window; the frontend requests 30 days
       and the backend validates 1-90 days.
+- [x] As a user, I want to choose which meal slots appear in my diary so that
+      the diary matches how I organize my day. Preferences are saved per user
+      and editable from diary settings.
 
 ## Next User Stories
 
@@ -119,18 +122,14 @@ capabilities. They are grouped by theme so they can be ranked later.
 
 ### Repeat Behavior And Faster Logging
 
-- [x] As a user, I want to copy the most recent non-empty log set for a meal
-      slot into today so that I can repeat common breakfasts, lunches, and
-      dinners even when I skipped logging for a few days.
-- [x] As a user, I want repeated meal-slot logging to ignore very old history
-      so that the app does not unexpectedly copy stale eating patterns.
 - [x] As a user, I want to see recent foods and recent meals first when adding
       to a meal slot so that I can log repeat items before searching the broader
       catalog. The search page shows recent items before a query is active, then
       replaces that list with search loading, errors, empty states, or results
       once the user searches.
-- [ ] As a user, I want foods and meals to remember my last-used quantity and
+- [x] As a user, I want foods and meals to remember my last-used quantity and
       unit so that repeat logging defaults to how I actually consume them.
+      Recent-item quick add uses the latest logged quantity and unit.
 - [ ] As a user, I want to duplicate an existing log to another meal slot or
       another day so that fixing or repeating entries is faster than re-entering
       them.

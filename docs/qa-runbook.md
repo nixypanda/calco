@@ -4,7 +4,9 @@
 
 Use this runbook to exercise CalCo end to end against the existing test database. Do not reset, truncate, reseed, or replace the database. The run creates uniquely named food, meal, log, and optional admin-user records so they cannot be confused with existing data.
 
-Run the checklist in the in-app browser. Camera-based barcode scanning is out of scope; manual barcode lookup is covered.
+Run the checklist in a browser. Test camera barcode scanning on a compatible
+phone or secure browser context; record it as not run when the environment
+cannot expose a camera.
 
 Randomize the viewport before each numbered flow. Choose one of these three viewport presets and record the selected preset in the execution notes:
 
@@ -20,7 +22,7 @@ Use an unbiased random choice for each flow rather than cycling through the pres
 
 - PostgreSQL: existing CalCo test database from `docker-compose.yml`
 - Backend: `http://localhost:3001`
-- Frontend: use the active CalCo Vite URL; this run used `http://127.0.0.1:5174`
+- Frontend: use the active CalCo Vite URL (`http://127.0.0.1:1234` by default)
 - Regular user: `me` / `mepass123`
 - Admin user: `admin` / `adminpass123`
 
@@ -91,13 +93,17 @@ Before starting each numbered section below:
 4. Expand each meal's macro summary and verify it agrees with visible entries.
 5. Check an empty meal slot. Verify it shows `No items` and `+ Add Food`.
 
-### 3. Goals
+### 3. Goals and diary preferences
 
 1. Open `/settings/goals` and record the existing values.
 2. Enter calories that do not equal `protein*4 + carbs*4 + fat*9` and save.
 3. Verify the form rejects the values with a clear validation message.
 4. Enter a valid set and save. Reload the page and verify persistence.
 5. Restore the original goal values and save again.
+6. Open `/settings/diary` and record the enabled meal slots.
+7. Change the enabled slots, save, and reload. Verify the diary shows exactly
+   the saved slots.
+8. Restore the original meal-slot preferences.
 
 ### 4. Custom food lifecycle
 
@@ -122,13 +128,17 @@ Before starting each numbered section below:
 8. Verify the newly logged food is returned. Also verify it appears in recent items where that section is available.
 9. Search a query with no matches and verify the empty state offers custom-food creation.
 
-### 6. Manual barcode lookup
+### 6. Barcode lookup and scanning
 
 1. Select Barcode search.
 2. Enter the generated invalid barcode and press Search.
 3. Verify a single clear not-found state is shown and `Create Custom Food` is available.
 4. Enter a known barcode from an existing catalog fixture and verify it opens the correct food detail.
-5. Do not press Scan and do not grant camera permission in this run.
+5. On a compatible camera-enabled device, press Scan, grant permission, and
+   scan a known EAN or UPC barcode.
+6. Verify the detected barcode opens the correct food and the camera stops
+   after detection or cancellation. If no camera is available, mark these
+   steps as not run rather than passed.
 
 ### 7. Food log lifecycle and snapshots
 
@@ -152,8 +162,6 @@ Before starting each numbered section below:
 7. Delete any meal-created logs before deleting the meal.
 8. Delete the meal and verify it disappears from `/meals`.
 
-If step 5 has no visible action, record it as a blocking product defect. Do not bypass the missing UI by writing directly to the API during an end-to-end UI run.
-
 ### 9. Latest-slot repeat
 
 1. On the previous day, log at least one uniquely tagged item to an otherwise identifiable meal slot.
@@ -176,7 +184,8 @@ There is currently no user-delete flow. A created admin QA user cannot be fully 
 
 ### 11. Responsive and failure states
 
-1. Review the execution record and verify iPhone SE, iPad, and Desktop were each selected at least once by the randomized flow assignments.
+1. Review the run notes and verify iPhone SE, iPad, and Desktop were each
+   selected at least once by the randomized flow assignments.
 2. Repeat login, diary, search, food form, meal form, and confirmation-modal checks at any preset they did not already run against.
 3. Run diary, search, food logging, and destructive confirmation dialogs at all three viewport presets before release sign-off.
 4. Verify controls do not overlap, text does not clip, modals remain reachable, and dropdowns remain usable.
@@ -217,32 +226,3 @@ Console/network evidence:
 Screenshot or recording:
 Cleanup status:
 ```
-
-## Execution Record: 2026-07-10
-
-Run ID: `QA-20260710-36970`
-
-Passed in the in-app browser:
-
-- Regular-user and admin login
-- Diary load and nutrition totals
-- Goals formula validation
-- Custom food create, detail, search, and delete
-- Custom and History search scopes
-- Manual invalid-barcode lookup
-- Product log create, edit quantity, move Breakfast to Lunch, update notes, and delete
-- Diary total recalculation after create, edit, and delete
-- Meal create, nutrient preview, edit, list, and delete
-- Admin list, existing-user detail, and create-user validation
-- Cleanup of the generated log, meal, and custom food
-
-Defects and gaps found:
-
-1. **Medium: duplicate barcode not-found messaging.** A single lookup displayed both `No food matched that barcode.` and `No food found for that barcode.` before the create-food action. The empty state should present one message.
-2. **High: saved meals cannot be logged through the visible UI.** Meal create, detail, edit, list, and delete work, but neither the meal detail nor the diary/search flow exposes a `Log Meal` action. This blocks the advertised meal-logging flow and prevents UI coverage of atomic component logging.
-3. **Low/Performance risk: My Foods renders a very large unfiltered list.** The existing test account produced a page with hundreds of interactive food rows and no list-level search or pagination. Validate responsiveness and keyboard usability with production-sized datasets.
-
-Environment observations that are not product defects:
-
-- Port `1234` was serving another local app, so CalCo was run on `5174`.
-- A stale login page reported `Network error` while both CalCo dev servers were stopped. Login succeeded after the services were restarted with the API proxy pointed to `127.0.0.1:3001`.
