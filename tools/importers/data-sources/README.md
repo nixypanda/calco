@@ -15,6 +15,12 @@ and uploads them through the backend import API.
 The importer emits normalized food, nutrient, and serving JSONL rows compatible
 with the backend import API documented in `../../../docs/imports.md`.
 
+The Open Food Facts converter includes products with the exact `en:india`
+country tag as well as GTINs allocated under GS1 India's `890` prefix. For
+GTIN-14, the packaging indicator digit before the GS1 prefix is handled
+separately. Products must still have positive energy, protein, carbohydrate,
+and fat values to be imported.
+
 ## CLI
 
 Run commands from this directory:

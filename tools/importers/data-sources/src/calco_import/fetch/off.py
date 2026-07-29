@@ -25,6 +25,10 @@ REQUIRED_OFF_FIELDS = [
     "carbohydrates_100g",
     "fat_100g",
 ]
+GTIN_8_LENGTH = 8
+GTIN_13_LENGTH = 13
+GTIN_14_LENGTH = 14
+GS1_INDIA_PREFIX = "890"
 
 
 class OffIndices(NamedTuple):
@@ -32,7 +36,7 @@ class OffIndices(NamedTuple):
     product: int
     brands: int
     categories: int
-    countries: int
+    countries_tags: int
     serving_qty: int
     serving_size: int
 
@@ -54,8 +58,18 @@ def categories_from_csv(value: str | None) -> list[str]:
     return cats
 
 
+def has_gs1_india_prefix(code: str) -> bool:
+    if not code.isdigit():
+        return False
+    if len(code) == GTIN_14_LENGTH:
+        return code[1:4] == GS1_INDIA_PREFIX
+    return len(code) in (GTIN_8_LENGTH, GTIN_13_LENGTH) and code.startswith(
+        GS1_INDIA_PREFIX
+    )
+
+
 def _parse_off_header(header: list[str]) -> tuple[OffIndices, dict[str, int]]:
-    idx_countries = header.index("countries_en")
+    idx_countries_tags = header.index("countries_tags")
     idx_code = header.index("code")
     idx_product = header.index("product_name")
     idx_brands = header.index("brands")
@@ -68,7 +82,7 @@ def _parse_off_header(header: list[str]) -> tuple[OffIndices, dict[str, int]]:
         product=idx_product,
         brands=idx_brands,
         categories=idx_categories,
-        countries=idx_countries,
+        countries_tags=idx_countries_tags,
         serving_qty=idx_serving_qty,
         serving_size=idx_serving_size,
     )
@@ -87,10 +101,14 @@ def _parse_off_header(header: list[str]) -> tuple[OffIndices, dict[str, int]]:
 
 def _keep_off_row(
     row: list[str],
-    idx_countries: int,
+    indices: OffIndices,
     required_indices: list[int],
 ) -> bool:
-    if not row[idx_countries] or "india" not in row[idx_countries].lower():
+    country_tags = {
+        tag.strip().lower() for tag in row[indices.countries_tags].split(",")
+    }
+    code = row[indices.code].strip()
+    if "en:india" not in country_tags and not has_gs1_india_prefix(code):
         return False
     for idx in required_indices:
         v = parse_amount(row[idx])
@@ -170,11 +188,12 @@ def fetch_off(data_dir: str) -> None:
     # Use zcat + grep instead of Python's csv.DictReader or csv.reader on the
     # raw gz. The full OFF dump is 1.2 GB compressed; reading it entirely into
     # Python would be slow. zcat streams decompressed data through grep which
-    # filters to India rows in C before Python ever sees them. A minimal
-    # csv.reader then parses only the filtered ~6k India rows (~2 MB).
+    # filters to exact India-tag candidates and 890-prefix candidates in C
+    # before Python ever sees them. Python then validates the country tag,
+    # barcode prefix, and required nutrients.
     pipe_cmd = (
         f"zcat {shlex.quote(gz_path)}"
-        ' | { read -r header; echo "$header"; grep -i india; }'
+        ' | { read -r header; echo "$header"; grep -Ei "(en:india|^[0-9]?890)"; }'
     )
 
     proc = subprocess.Popen(
@@ -199,7 +218,7 @@ def fetch_off(data_dir: str) -> None:
 
     with open(out_path, "w") as out:
         for row in reader:
-            if not _keep_off_row(row, indices.countries, required_indices):
+            if not _keep_off_row(row, indices, required_indices):
                 continue
 
             code = row[indices.code].strip()

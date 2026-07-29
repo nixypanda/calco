@@ -18,9 +18,10 @@ default:
 data-sources-check:
     cd importers/data-sources && uv run ruff check src/ && uv run ty check src/
 
-# Run data-source importer syntax/import checks
+# Run data-source importer tests and syntax/import checks
 data-sources-test:
-    cd importers/data-sources && uv run python -m compileall -q src test_merge_quick.py
+    cd importers/data-sources && uv run python -m compileall -q src test_merge_quick.py test_off.py
+    cd importers/data-sources && uv run python -m unittest test_off.py
 
 # Run all data-source importer checks
 data-sources-verify: data-sources-check data-sources-test
