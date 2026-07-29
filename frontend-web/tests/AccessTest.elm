@@ -25,7 +25,7 @@ tests =
         , test "root redirects to home for normal user" <|
             \_ ->
                 Access.resolveRoute normalUser True Root
-                    |> Expect.equal (Navigate (DiaryDay Nothing))
+                    |> Expect.equal (Navigate (DiaryDay Nothing Nothing))
         , test "food routes reject signed-out users" <|
             \_ ->
                 Access.resolveRoute Unauthenticated True (FoodSearch Nothing Nothing)
@@ -37,7 +37,7 @@ tests =
         , test "admin route rejects normal users" <|
             \_ ->
                 Access.resolveRoute normalUser True AdminDashboard
-                    |> Expect.equal (Navigate (DiaryDay Nothing))
+                    |> Expect.equal (Navigate (DiaryDay Nothing Nothing))
         , test "goal settings route allows authenticated users" <|
             \_ ->
                 Access.resolveRoute normalUser True GoalSettings
@@ -56,7 +56,7 @@ tests =
                     |> Expect.equal Hold
         , test "Loading session holds for Diary when admin exists" <|
             \_ ->
-                Access.resolveRoute Loading True (DiaryDay Nothing)
+                Access.resolveRoute Loading True (DiaryDay Nothing Nothing)
                     |> Expect.equal Hold
         , test "Loading session holds when no admin exists" <|
             \_ ->

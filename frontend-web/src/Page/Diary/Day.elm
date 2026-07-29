@@ -72,6 +72,7 @@ type alias LoadedState =
 type alias Model =
     { currentDate : LocalDate
     , today : LocalDate
+    , calendarMonth : Maybe String
     , diary : DiaryState
     , latestSlots : LatestSlotsState
     , copyState : CopyState
@@ -98,7 +99,12 @@ type alias LatestSlotSource =
     }
 
 
-init : { dateParam : Maybe String, today : LocalDate } -> ( Model, OutMsg )
+init :
+    { dateParam : Maybe String
+    , calendarMonth : Maybe String
+    , today : LocalDate
+    }
+    -> ( Model, OutMsg )
 init args =
     let
         currentDate : LocalDate
@@ -110,6 +116,7 @@ init args =
     in
     ( { currentDate = currentDate
       , today = args.today
+      , calendarMonth = args.calendarMonth
       , diary = loadingState currentDate
       , latestSlots = latestSlotsLoading currentDate
       , copyState = CopyIdle
@@ -316,7 +323,11 @@ update msg model =
                 , copyState = CopyIdle
               }
             , Cmd.none
-            , Navigate (DiaryDay (Just (LocalDate.format previous)))
+            , Navigate
+                (DiaryDay
+                    (Just (LocalDate.format previous))
+                    model.calendarMonth
+                )
             )
 
         NextDayClicked ->
@@ -329,7 +340,11 @@ update msg model =
                         , copyState = CopyIdle
                       }
                     , Cmd.none
-                    , Navigate (DiaryDay (Just (LocalDate.format next)))
+                    , Navigate
+                        (DiaryDay
+                            (Just (LocalDate.format next))
+                            model.calendarMonth
+                        )
                     )
 
                 Nothing ->

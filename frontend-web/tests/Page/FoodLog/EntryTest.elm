@@ -165,7 +165,7 @@ tests =
                     (FoodLogEntry.DeleteCompleted (Ok ()))
                     deletingModel
                     |> third
-                    |> Expect.equal (FoodLogEntry.Navigate (DiaryDay Nothing))
+                    |> Expect.equal (FoodLogEntry.Navigate (DiaryDay Nothing Nothing))
         , test "delete failure keeps modal open and stores error" <|
             \_ ->
                 FoodLogEntry.update

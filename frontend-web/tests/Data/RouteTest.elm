@@ -14,8 +14,12 @@ tests =
         [ parses "/setup" BootstrapSetup
         , parses "/login" AuthLogin
         , parses "/admin" AdminDashboard
-        , parses "/home" (DiaryDay Nothing)
-        , parses "/home?date=2026-06-04" (DiaryDay (Just "2026-06-04"))
+        , parses "/home" (DiaryDay Nothing Nothing)
+        , parses "/home?date=2026-06-04" (DiaryDay (Just "2026-06-04") Nothing)
+        , parses "/home?date=2026-06-04&calendar_month=2026-06"
+            (DiaryDay (Just "2026-06-04") (Just "2026-06"))
+        , parses "/calendar" (DiaryCalendar Nothing)
+        , parses "/calendar?month=2026-06" (DiaryCalendar (Just "2026-06"))
         , parses "/settings/goals" GoalSettings
         , parses "/logs/abc" (FoodLogEntry "abc" Nothing)
         , parses "/logs/abc?date=2026-06-04"
@@ -69,7 +73,8 @@ routeFuzzer =
         , Fuzz.constant AdminDashboard
         , Fuzz.constant AdminCreateUser
         , Fuzz.map AdminEditUser safeSegmentFuzzer
-        , Fuzz.map DiaryDay maybeDateFuzzer
+        , Fuzz.map2 DiaryDay maybeDateFuzzer maybeMonthFuzzer
+        , Fuzz.map DiaryCalendar maybeMonthFuzzer
         , Fuzz.constant GoalSettings
         , Fuzz.map2 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
@@ -90,6 +95,16 @@ maybeDateFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Nothing
         , Fuzz.map Just dateStringFuzzer
+        ]
+
+
+maybeMonthFuzzer : Fuzzer (Maybe String)
+maybeMonthFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.map
+            (\value -> Just ("2026-" ++ pad2 value))
+            (Fuzz.intRange 1 12)
         ]
 
 

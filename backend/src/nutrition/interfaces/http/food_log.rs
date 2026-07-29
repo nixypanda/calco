@@ -29,6 +29,7 @@ pub fn food_log_routes(state: AppState) -> Router {
         .route("/logs/last-used", post(last_used_items_handler))
         .route("/logs/recent-items", get(recent_items_handler))
         .route("/logs/latest-slot", get(latest_slot_handler))
+        .route("/logs/summary", get(summary_handler))
         .route(
             "/logs/{id}",
             get(get_log_handler)
@@ -143,6 +144,20 @@ pub struct RecentItemsResponse {
 }
 
 #[derive(Serialize)]
+pub struct LogSummaryResponse {
+    pub days: Vec<LogDaySummaryResponse>,
+}
+
+#[derive(Serialize)]
+pub struct LogDaySummaryResponse {
+    pub date: NaiveDate,
+    pub energy_kcal: Decimal,
+    pub protein_g: Decimal,
+    pub carbs_g: Decimal,
+    pub fat_g: Decimal,
+}
+
+#[derive(Serialize)]
 pub struct RecentItemResponse {
     pub item: ItemDto,
     pub last_used_date: NaiveDate,
@@ -181,6 +196,12 @@ pub struct RecentItemsQuery {
     pub from_date: String,
     pub to_date: String,
     pub meal_slot: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SummaryQuery {
+    pub from_date: String,
+    pub to_date: String,
 }
 
 #[derive(Deserialize)]
@@ -313,6 +334,42 @@ async fn recent_items_handler(
     {
         Ok(items) => Json(RecentItemsResponse {
             items: items.iter().map(recent_item_to_response).collect(),
+        })
+        .into_response(),
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn summary_handler(
+    auth: AuthUser,
+    State(state): State<AppState>,
+    Query(query): Query<SummaryQuery>,
+) -> impl IntoResponse {
+    let from_date = match parse_log_date(&query.from_date) {
+        Ok(date) => date,
+        Err(err) => return err.into_response(),
+    };
+    let to_date = match parse_log_date(&query.to_date) {
+        Ok(date) => date,
+        Err(err) => return err.into_response(),
+    };
+
+    match state
+        .food_log_history_services
+        .summarize_by_date(auth.0.id, from_date, to_date)
+        .await
+    {
+        Ok(days) => Json(LogSummaryResponse {
+            days: days
+                .into_iter()
+                .map(|summary| LogDaySummaryResponse {
+                    date: summary.log_date,
+                    energy_kcal: summary.energy_kcal,
+                    protein_g: summary.protein_g,
+                    carbs_g: summary.carbs_g,
+                    fat_g: summary.fat_g,
+                })
+                .collect(),
         })
         .into_response(),
         Err(err) => err.into_response(),

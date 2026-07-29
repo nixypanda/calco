@@ -62,7 +62,7 @@ tests =
             \_ ->
                 MealList.update MealList.BackClicked (Tuple.first MealList.init)
                     |> third
-                    |> Expect.equal (MealList.Navigate (DiaryDay Nothing))
+                    |> Expect.equal (MealList.Navigate (DiaryDay Nothing Nothing))
         ]
 
 

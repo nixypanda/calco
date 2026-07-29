@@ -1,4 +1,6 @@
 use chrono::{Duration, NaiveDate};
+use rust_decimal::Decimal;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -7,6 +9,15 @@ use crate::nutrition::domain::food_log::*;
 #[derive(Clone)]
 pub struct FoodLogHistoryServices {
     food_log_repo: Arc<dyn FoodLogRepository>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FoodLogDaySummary {
+    pub log_date: NaiveDate,
+    pub energy_kcal: Decimal,
+    pub protein_g: Decimal,
+    pub carbs_g: Decimal,
+    pub fat_g: Decimal,
 }
 
 impl FoodLogHistoryServices {
@@ -71,6 +82,31 @@ impl FoodLogHistoryServices {
         Ok(recent_items_from_logs(logs))
     }
 
+    pub async fn summarize_by_date(
+        &self,
+        user_id: Uuid,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+    ) -> Result<Vec<FoodLogDaySummary>, NutritionError> {
+        if to_date.signed_duration_since(from_date).num_days() > 366 {
+            return Err(NutritionError::Validation(
+                "summary date range cannot exceed 366 days".into(),
+            ));
+        }
+
+        let logs = self
+            .food_log_repo
+            .list_by_filter(FoodLogListFilter {
+                user_id,
+                date_range: DateRange::inclusive(from_date, to_date)?,
+                meal_slot: None,
+                items: Vec::new(),
+            })
+            .await?;
+
+        Ok(summarize_logs_by_date(logs))
+    }
+
     pub async fn find_last_used_items(
         &self,
         user_id: Uuid,
@@ -95,6 +131,34 @@ impl FoodLogHistoryServices {
 
         Ok(recent_items_from_logs(logs))
     }
+}
+
+fn summarize_logs_by_date(logs: Vec<FoodLog>) -> Vec<FoodLogDaySummary> {
+    let mut summaries = BTreeMap::<NaiveDate, FoodLogDaySummary>::new();
+
+    for log in logs {
+        let summary = summaries
+            .entry(log.log_date)
+            .or_insert_with(|| FoodLogDaySummary {
+                log_date: log.log_date,
+                energy_kcal: Decimal::ZERO,
+                protein_g: Decimal::ZERO,
+                carbs_g: Decimal::ZERO,
+                fat_g: Decimal::ZERO,
+            });
+
+        for snapshot in log.nutrient_snapshots {
+            match snapshot.nutrient_code.0.as_str() {
+                "ENERGY_KCAL" => summary.energy_kcal += snapshot.amount,
+                "PROTEIN_G" => summary.protein_g += snapshot.amount,
+                "CARBS_G" => summary.carbs_g += snapshot.amount,
+                "FAT_G" => summary.fat_g += snapshot.amount,
+                _ => {}
+            }
+        }
+    }
+
+    summaries.into_values().collect()
 }
 
 fn recent_items_from_logs(mut logs: Vec<FoodLog>) -> Vec<RecentFoodLogItem> {
@@ -305,6 +369,45 @@ mod tests {
 
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].meal_slot, Some(MealSlot::Breakfast));
+    }
+
+    #[tokio::test]
+    async fn history_summarizes_logs_by_date_for_requested_user() {
+        let services = make_services(Some(sample_product()));
+        let history_services = history_services_for(&services);
+        let user_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
+        log_test_product(&services, user_id, friday, MealSlot::Lunch, 150).await;
+        log_test_product(&services, user_id, monday, MealSlot::Dinner, 200).await;
+        log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 500).await;
+
+        let summaries = history_services
+            .summarize_by_date(user_id, friday, monday)
+            .await
+            .unwrap();
+
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].log_date, friday);
+        assert_eq!(summaries[0].energy_kcal, Decimal::new(250, 0));
+        assert_eq!(summaries[1].log_date, monday);
+        assert_eq!(summaries[1].energy_kcal, Decimal::new(200, 0));
+    }
+
+    #[tokio::test]
+    async fn history_rejects_summary_ranges_over_366_days() {
+        let history_services = empty_history_services();
+        let from_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let to_date = NaiveDate::from_ymd_opt(2026, 1, 3).unwrap();
+
+        let result = history_services
+            .summarize_by_date(Uuid::new_v4(), from_date, to_date)
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
     }
 
     #[tokio::test]

@@ -55,7 +55,7 @@ resolveKnownSession session adminExists route =
     else
         case route of
             Root ->
-                Navigate (DiaryDay Nothing)
+                Navigate (DiaryDay Nothing Nothing)
 
             NotFound ->
                 Navigate Root
@@ -67,15 +67,18 @@ resolveKnownSession session adminExists route =
                 Navigate Root
 
             AdminDashboard ->
-                Navigate (DiaryDay Nothing)
+                Navigate (DiaryDay Nothing Nothing)
 
             AdminCreateUser ->
-                Navigate (DiaryDay Nothing)
+                Navigate (DiaryDay Nothing Nothing)
 
             AdminEditUser _ ->
-                Navigate (DiaryDay Nothing)
+                Navigate (DiaryDay Nothing Nothing)
 
-            DiaryDay _ ->
+            DiaryDay _ _ ->
+                Render route
+
+            DiaryCalendar _ ->
                 Render route
 
             GoalSettings ->

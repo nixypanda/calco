@@ -205,7 +205,7 @@ update msg model =
                     if loaded.request == Saving then
                         case result of
                             Ok _ ->
-                                ( model, Cmd.none, Navigate (DiaryDay loaded.logDate) )
+                                ( model, Cmd.none, Navigate (DiaryDay loaded.logDate Nothing) )
 
                             Err error ->
                                 Client.failure

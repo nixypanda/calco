@@ -6,6 +6,7 @@ module Api.Logs exposing
     , RecentItem
     , RecentItemsRequest
     , RecentItemsResponse
+    , SummaryRequest
     , UpdateLogRequest
     , createLog
     , createLogRequestEncoder
@@ -17,6 +18,7 @@ module Api.Logs exposing
     , listLogs
     , recentItems
     , recentItemsResponseDecoder
+    , summary
     , updateLog
     , updateLogRequestEncoder
     )
@@ -24,6 +26,7 @@ module Api.Logs exposing
 import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef exposing (ItemRef)
+import Data.LogSummary as LogSummary exposing (DaySummary)
 import Data.Nutrition as Nutrition
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -74,6 +77,12 @@ type alias RecentItemsRequest =
     { fromDate : LocalDate
     , toDate : LocalDate
     , mealSlot : Maybe String
+    }
+
+
+type alias SummaryRequest =
+    { fromDate : LocalDate
+    , toDate : LocalDate
     }
 
 
@@ -170,6 +179,22 @@ recentItems request toMsg =
             )
         )
         recentItemsResponseDecoder
+        toMsg
+
+
+summary :
+    SummaryRequest
+    -> (Result Client.ApiError (List DaySummary) -> msg)
+    -> Cmd msg
+summary request toMsg =
+    Client.get
+        (Builder.absolute
+            [ "api", "logs", "summary" ]
+            [ Builder.string "from_date" (LocalDate.format request.fromDate)
+            , Builder.string "to_date" (LocalDate.format request.toDate)
+            ]
+        )
+        LogSummary.listDecoder
         toMsg
 
 

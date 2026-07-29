@@ -18,7 +18,8 @@ type Route
     | AdminDashboard
     | AdminCreateUser
     | AdminEditUser String
-    | DiaryDay (Maybe String)
+    | DiaryDay (Maybe String) (Maybe String)
+    | DiaryCalendar (Maybe String)
     | GoalSettings
     | DiarySettings
     | FoodLogEntry String (Maybe String)
@@ -50,7 +51,9 @@ routeParser =
         , Parser.map AdminDashboard (s "admin")
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
         , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
-        , Parser.map DiaryDay (s "home" <?> Query.string "date")
+        , Parser.map DiaryDay
+            (s "home" <?> Query.string "date" <?> Query.string "calendar_month")
+        , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map FoodLogEntry (s "logs" </> string <?> Query.string "date")
@@ -104,10 +107,13 @@ primaryRoute route =
             MealList
 
         FoodLogEntry _ _ ->
-            DiaryDay Nothing
+            DiaryDay Nothing Nothing
 
-        DiaryDay _ ->
-            DiaryDay Nothing
+        DiaryDay _ _ ->
+            DiaryDay Nothing Nothing
+
+        DiaryCalendar _ ->
+            DiaryDay Nothing Nothing
 
         FoodSearch maybeDate maybeSlot ->
             FoodSearch maybeDate maybeSlot
@@ -137,13 +143,17 @@ routeToPath route =
         AdminEditUser id ->
             "/admin/users/" ++ id ++ "/edit"
 
-        DiaryDay maybeDate ->
-            case maybeDate of
-                Just date ->
-                    "/home?date=" ++ date
+        DiaryDay maybeDate maybeCalendarMonth ->
+            withQueryParams "/home"
+                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                , Maybe.map
+                    (\month -> "calendar_month=" ++ Url.percentEncode month)
+                    maybeCalendarMonth
+                ]
 
-                Nothing ->
-                    "/home"
+        DiaryCalendar maybeMonth ->
+            withQueryParams "/calendar"
+                [ Maybe.map (\month -> "month=" ++ Url.percentEncode month) maybeMonth ]
 
         GoalSettings ->
             "/settings/goals"
@@ -213,3 +223,17 @@ withDateContext path maybeDate =
 
         Nothing ->
             path
+
+
+withQueryParams : String -> List (Maybe String) -> String
+withQueryParams path maybeParams =
+    let
+        params : List String
+        params =
+            List.filterMap identity maybeParams
+    in
+    if List.isEmpty params then
+        path
+
+    else
+        path ++ "?" ++ String.join "&" params

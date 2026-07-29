@@ -262,7 +262,8 @@ tests =
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
                     |> third
-                    |> Expect.equal (FoodShow.Navigate (DiaryDay (Just "2026-05-29")))
+                    |> Expect.equal
+                        (FoodShow.Navigate (DiaryDay (Just "2026-05-29") Nothing))
         , test "log failure keeps form state and stores error" <|
             \_ ->
                 let

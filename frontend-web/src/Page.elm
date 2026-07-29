@@ -30,6 +30,7 @@ import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
 import Page.CustomFood.Show as CustomFoodShow
+import Page.Diary.Calendar as DiaryCalendar
 import Page.Diary.Day as DiaryDay
 import Page.Diary.Settings as DiarySettings
 import Page.Food.Search as FoodSearch
@@ -63,6 +64,7 @@ type Model
     | AdminCreateUserPage AdminCreateUser.Model
     | AdminEditUserPage AdminEditUser.Model
     | DiaryPage DiaryDay.Model
+    | DiaryCalendarPage DiaryCalendar.Model
     | GoalsSettingsPage GoalsSettings.Model
     | DiarySettingsPage DiarySettings.Model
     | FoodSearchPage FoodSearch.Model
@@ -122,13 +124,33 @@ init context =
                 applyAdminEditUserOutMsg
                 (AdminEditUser.init userId)
 
-        DiaryDay dateParam ->
+        DiaryDay dateParam calendarMonth ->
             case context.today of
                 Just today ->
                     initPage context
                         DiaryPage
                         applyDiaryOutMsg
-                        (DiaryDay.init { dateParam = dateParam, today = today })
+                        (DiaryDay.init
+                            { dateParam = dateParam
+                            , calendarMonth = calendarMonth
+                            , today = today
+                            }
+                        )
+
+                Nothing ->
+                    ( LoadingPage, Cmd.none, NoOutMsg )
+
+        DiaryCalendar monthParam ->
+            case context.today of
+                Just today ->
+                    initPage context
+                        DiaryCalendarPage
+                        applyDiaryCalendarOutMsg
+                        (DiaryCalendar.init
+                            { monthParam = monthParam
+                            , today = today
+                            }
+                        )
 
                 Nothing ->
                     ( LoadingPage, Cmd.none, NoOutMsg )
@@ -223,6 +245,7 @@ type Msg
     | GotAdminCreateUserMsg AdminCreateUser.Msg
     | GotAdminEditUserMsg AdminEditUser.Msg
     | GotDiaryMsg DiaryDay.Msg
+    | GotDiaryCalendarMsg DiaryCalendar.Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotDiarySettingsMsg DiarySettings.Msg
     | GotFoodSearchMsg FoodSearch.Msg
@@ -320,6 +343,20 @@ update context msg model =
                             GotDiaryMsg
                             applyDiaryOutMsg
                             (DiaryDay.update subMsg sub)
+                        )
+
+                _ ->
+                    Nothing
+
+        GotDiaryCalendarMsg subMsg ->
+            case model of
+                DiaryCalendarPage sub ->
+                    Just
+                        (stepPage context
+                            DiaryCalendarPage
+                            GotDiaryCalendarMsg
+                            applyDiaryCalendarOutMsg
+                            (DiaryCalendar.update subMsg sub)
                         )
 
                 _ ->
@@ -701,6 +738,40 @@ applyDiaryOutMsg _ outMsg =
             ( Cmd.none, Navigate route )
 
         DiaryDay.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
+applyDiaryCalendarOutMsg :
+    InitContext
+    -> DiaryCalendar.OutMsg
+    -> ( Cmd Msg, OutMsg )
+applyDiaryCalendarOutMsg _ outMsg =
+    case outMsg of
+        DiaryCalendar.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        DiaryCalendar.RequestSummary fromDate toDate ->
+            ( Api.Logs.summary
+                { fromDate = fromDate
+                , toDate = toDate
+                }
+                (GotDiaryCalendarMsg << DiaryCalendar.SummaryLoaded)
+            , NoOutMsg
+            )
+
+        DiaryCalendar.RequestEarlierSummary fromDate toDate ->
+            ( Api.Logs.summary
+                { fromDate = fromDate
+                , toDate = toDate
+                }
+                (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded)
+            , NoOutMsg
+            )
+
+        DiaryCalendar.Navigate route ->
+            ( Cmd.none, Navigate route )
+
+        DiaryCalendar.SessionExpired ->
             ( Cmd.none, SessionExpired )
 
 
@@ -1221,6 +1292,10 @@ view props =
 
         DiaryPage diaryModel ->
             Element.map GotDiaryMsg (DiaryDay.view (pageProps props diaryModel))
+
+        DiaryCalendarPage diaryCalendarModel ->
+            Element.map GotDiaryCalendarMsg
+                (DiaryCalendar.view (pageProps props diaryCalendarModel))
 
         GoalsSettingsPage goalsSettingsModel ->
             Element.map GotGoalsSettingsMsg

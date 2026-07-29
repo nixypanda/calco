@@ -272,8 +272,23 @@ screenMeta device session route =
                     OpenMenu
             }
 
-        DiaryDay _ ->
+        DiaryDay _ maybeCalendarMonth ->
             { title = "Diary"
+            , leading =
+                case maybeCalendarMonth of
+                    Just month ->
+                        GoBack (DiaryCalendar (Just month))
+
+                    Nothing ->
+                        if phoneNonAdmin then
+                            ShowAppIcon
+
+                        else
+                            OpenMenu
+            }
+
+        DiaryCalendar _ ->
+            { title = "Calendar"
             , leading =
                 if phoneNonAdmin then
                     ShowAppIcon
@@ -292,10 +307,10 @@ screenMeta device session route =
             { title = "Edit User", leading = GoBack AdminDashboard }
 
         GoalSettings ->
-            { title = "Goals", leading = GoBack (DiaryDay Nothing) }
+            { title = "Goals", leading = GoBack (DiaryDay Nothing Nothing) }
 
         DiarySettings ->
-            { title = "Diary settings", leading = GoBack (DiaryDay Nothing) }
+            { title = "Diary settings", leading = GoBack (DiaryDay Nothing Nothing) }
 
         FoodSearch maybeDate maybeSlot ->
             { title =
@@ -305,14 +320,14 @@ screenMeta device session route =
 
                     Nothing ->
                         "Search Foods"
-            , leading = GoBack (DiaryDay maybeDate)
+            , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
         FoodShow _ maybeDate maybeSlot ->
             { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
         FoodLogEntry _ maybeDate ->
-            { title = "Edit Log", leading = GoBack (DiaryDay maybeDate) }
+            { title = "Edit Log", leading = GoBack (DiaryDay maybeDate Nothing) }
 
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }
@@ -330,7 +345,7 @@ screenMeta device session route =
                     NoLeadingAction
 
                 else
-                    GoBack (DiaryDay Nothing)
+                    GoBack (DiaryDay Nothing Nothing)
             }
 
         MealList ->
@@ -340,7 +355,7 @@ screenMeta device session route =
                     NoLeadingAction
 
                 else
-                    GoBack (DiaryDay Nothing)
+                    GoBack (DiaryDay Nothing Nothing)
             }
 
         MealCreate ->
@@ -375,7 +390,7 @@ bottomNavBar :
     -> Element msg
 bottomNavBar config =
     Ui.bottomNavBar config.theme
-        [ tabButton config "Diary" (DiaryDay Nothing) Icon.Home
+        [ tabButton config "Diary" (DiaryDay Nothing Nothing) Icon.Home
         , tabButton config "Search" (FoodSearch Nothing Nothing) Icon.Search
         , tabButton config "Foods" CustomFoodList Icon.Box
         , tabButton config "Meals" MealList Icon.Utensils
@@ -507,7 +522,7 @@ drawerItems config =
             config.onNavigate
             (Just Icon.Home)
             "Diary"
-            (DiaryDay Nothing)
+            (DiaryDay Nothing Nothing)
         , drawerItem config.theme
             config.route
             config.onNavigate
@@ -580,6 +595,10 @@ profileMenuContent config =
             _ ->
                 "Signed in"
         )
+    , Ui.fullWidthGhostButton config.device
+        config.theme
+        "Calendar"
+        (config.onNavigate (DiaryCalendar Nothing))
     , Ui.fullWidthGhostButton config.device config.theme "Goals" (config.onNavigate GoalSettings)
     , Ui.fullWidthGhostButton config.device
         config.theme

@@ -51,7 +51,7 @@ tests =
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
                             ( "2026-05-29"
-                            , DiaryDay.Navigate (DiaryDay (Just "2026-05-29"))
+                            , DiaryDay.Navigate (DiaryDay (Just "2026-05-29") Nothing)
                             )
             , test "next day increments selected date" <|
                 \_ ->
@@ -62,7 +62,7 @@ tests =
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
                             ( "2026-05-30"
-                            , DiaryDay.Navigate (DiaryDay (Just "2026-05-30"))
+                            , DiaryDay.Navigate (DiaryDay (Just "2026-05-30") Nothing)
                             )
             , test "next day does nothing when selected date is today" <|
                 \_ ->
@@ -577,7 +577,11 @@ tests =
 
 initModel : Maybe String -> DiaryDay.Model
 initModel dateParam =
-    DiaryDay.init { dateParam = dateParam, today = today }
+    DiaryDay.init
+        { dateParam = dateParam
+        , calendarMonth = Nothing
+        , today = today
+        }
         |> Tuple.first
 
 
@@ -585,6 +589,7 @@ emptyModel : DiaryDay.Model
 emptyModel =
     { currentDate = date "2026-05-30"
     , today = today
+    , calendarMonth = Nothing
     , diary =
         DiaryDay.Loading
             { date = today

@@ -255,7 +255,7 @@ update msg model =
                     if loaded.delete == Deleting then
                         case result of
                             Ok _ ->
-                                ( model, Cmd.none, Navigate (DiaryDay Nothing) )
+                                ( model, Cmd.none, Navigate (DiaryDay Nothing Nothing) )
 
                             Err error ->
                                 Client.failure

@@ -248,7 +248,7 @@ applyChromeOutMsg outMsg model =
 normalizeChromeNavigation : Route -> Route -> Route
 normalizeChromeNavigation current target =
     case ( current, target ) of
-        ( DiaryDay (Just date), FoodSearch Nothing Nothing ) ->
+        ( DiaryDay (Just date) _, FoodSearch Nothing Nothing ) ->
             FoodSearch (Just date) Nothing
 
         _ ->

@@ -51,7 +51,7 @@ tests =
             \_ ->
                 CustomFoodList.update CustomFoodList.BackClicked (Tuple.first CustomFoodList.init)
                     |> third
-                    |> Expect.equal (CustomFoodList.Navigate (DiaryDay Nothing))
+                    |> Expect.equal (CustomFoodList.Navigate (DiaryDay Nothing Nothing))
         , test "food summary omits brand and kcal when missing" <|
             \_ ->
                 CustomFoodList.foodSummaryText food
