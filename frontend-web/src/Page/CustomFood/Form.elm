@@ -804,7 +804,7 @@ categoryInputView theme device open input =
                 ]
                 (addCategoryButton theme device input)
             ]
-        , suggestionRowView theme device open input
+        , suggestionRowView theme open input
         , chipRowView theme device input.selected
         ]
 
@@ -839,8 +839,8 @@ chipView theme device tag =
         }
 
 
-suggestionRowView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
-suggestionRowView theme device open input =
+suggestionRowView : Theme -> Bool -> CategoryInput -> Element Msg
+suggestionRowView theme open input =
     let
         open_ : Bool
         open_ =
@@ -865,13 +865,12 @@ suggestionRowView theme device open input =
         Element.none
 
     else
-        Ui.suggestionList theme (List.map (suggestionRow theme device) matching)
+        Ui.suggestionList theme (List.map (suggestionRow theme) matching)
 
 
-suggestionRow : Theme -> Device -> CategorySuggestion -> Element Msg
-suggestionRow theme device s =
-    Ui.optionRow device
-        theme
+suggestionRow : Theme -> CategorySuggestion -> Element Msg
+suggestionRow theme s =
+    Ui.optionRow theme
         { label = s.value
         , trailing = Just (Typography.mutedCaption theme (String.fromInt s.count ++ " uses"))
         , selected = False

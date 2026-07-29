@@ -402,7 +402,7 @@ view { model, device, theme } =
             Ui.pageContainer device
                 [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
-                , nutritionView theme device loaded
+                , nutritionView theme loaded
                 , Ui.primarySubmitButton device
                     theme
                     { state = Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit)
@@ -413,8 +413,8 @@ view { model, device, theme } =
                 ]
 
 
-nutritionView : Theme -> Device -> LoadedModel -> Element Msg
-nutritionView theme device loaded =
+nutritionView : Theme -> LoadedModel -> Element Msg
+nutritionView theme loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ View.Nutrients.preview theme device loaded.nutrition
+        [ View.Nutrients.preview theme loaded.nutrition
         ]

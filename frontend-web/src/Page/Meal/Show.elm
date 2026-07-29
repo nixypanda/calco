@@ -641,7 +641,7 @@ nutritionView theme device loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.Nutrients.preview theme device loaded.nutrition
+        , View.Nutrients.preview theme loaded.nutrition
         ]
 
 

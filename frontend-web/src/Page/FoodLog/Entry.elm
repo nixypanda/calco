@@ -658,7 +658,7 @@ loadedView theme device model =
         , Element.map FormMsg
             (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
         , detailActionsView theme device model
-        , View.Nutrients.nutritionCard theme device nutrients
+        , View.Nutrients.nutritionCard theme nutrients
         ]
 
 

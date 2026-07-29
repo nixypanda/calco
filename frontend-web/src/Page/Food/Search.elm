@@ -726,7 +726,7 @@ searchInputView : Theme -> Device -> Model -> Element Msg
 searchInputView theme device model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ scopeControl theme device model.scope
+        [ scopeControl theme model.scope
         , if model.scope == Barcode then
             barcodeInputView theme device model
 
@@ -809,43 +809,25 @@ barcodeInputView theme device model =
 
         controls : Element Msg
         controls =
-            if Ui.isSmall device then
-                Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space8
-                    ]
-                    [ scanButton, searchButton ]
-
-            else
-                Element.row
-                    [ Element.width (Element.px 280)
-                    , Element.spacing DesignTokens.space8
-                    , Element.alignBottom
-                    ]
-                    [ scanButton, searchButton ]
+            Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                ]
+                [ scanButton, searchButton ]
 
         inputRow : Element Msg
         inputRow =
-            if Ui.isSmall device then
-                Element.column
-                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                    [ input, controls ]
-
-            else
-                Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space8
-                    , Element.alignBottom
-                    ]
-                    [ input, controls ]
+            Element.column
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                [ input, controls ]
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        (inputRow :: barcodeScannerStateView theme device model.barcodeScanner)
+        (inputRow :: barcodeScannerStateView theme model.barcodeScanner)
 
 
-barcodeScannerStateView : Theme -> Device -> BarcodeScannerState -> List (Element Msg)
-barcodeScannerStateView theme device scanner =
+barcodeScannerStateView : Theme -> BarcodeScannerState -> List (Element Msg)
+barcodeScannerStateView theme scanner =
     case scanner of
         ScannerIdle ->
             []
@@ -854,14 +836,14 @@ barcodeScannerStateView theme device scanner =
             [ Ui.errorBanner theme message ]
 
         ScannerStarting ->
-            [ barcodeScannerPreview theme device "Starting camera..." ]
+            [ barcodeScannerPreview theme "Starting camera..." ]
 
         ScannerActive ->
-            [ barcodeScannerPreview theme device "Center the barcode on the guide." ]
+            [ barcodeScannerPreview theme "Center the barcode on the guide." ]
 
 
-barcodeScannerPreview : Theme -> Device -> String -> Element Msg
-barcodeScannerPreview theme device caption =
+barcodeScannerPreview : Theme -> String -> Element Msg
+barcodeScannerPreview theme caption =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
@@ -873,15 +855,7 @@ barcodeScannerPreview theme device caption =
         ]
         [ Element.el
             [ Element.width Element.fill
-            , Element.height
-                (Element.px
-                    (if Ui.isSmall device then
-                        380
-
-                     else
-                        320
-                    )
-                )
+            , Element.height (Element.px 380)
             , Border.rounded DesignTokens.radiusCard
             , Element.clip
             , Background.color (Element.rgb255 0 0 0)
@@ -936,8 +910,8 @@ barcodeScannerVideoId =
     "calco-barcode-scanner-video"
 
 
-scopeControl : Theme -> Device -> SearchScope -> Element Msg
-scopeControl theme device selectedScope =
+scopeControl : Theme -> SearchScope -> Element Msg
+scopeControl theme selectedScope =
     Element.row
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space4
@@ -947,11 +921,11 @@ scopeControl theme device selectedScope =
         , Border.color theme.chipBorder
         , Border.rounded DesignTokens.radiusControl
         ]
-        (List.map (scopeSegment theme device selectedScope) searchScopes)
+        (List.map (scopeSegment theme selectedScope) searchScopes)
 
 
-scopeSegment : Theme -> Device -> SearchScope -> SearchScope -> Element Msg
-scopeSegment theme device selectedScope scope =
+scopeSegment : Theme -> SearchScope -> SearchScope -> Element Msg
+scopeSegment theme selectedScope scope =
     let
         selected : Bool
         selected =
@@ -975,15 +949,7 @@ scopeSegment theme device selectedScope scope =
     in
     Input.button
         [ Element.width (Element.fillPortion 1)
-        , Element.height
-            (Element.px
-                (if Ui.isSmall device then
-                    40
-
-                 else
-                    36
-                )
-            )
+        , Element.height (Element.px 40)
         , Background.color background
         , Border.rounded DesignTokens.radiusControl
         , Font.color foreground
@@ -1051,13 +1017,13 @@ searchContentView theme device model =
             barcodeBodyView theme device model
 
         else
-            recentsView theme device model
+            recentsView theme model
 
     else if hasActiveSearch model then
         bodyView theme model device
 
     else
-        recentsView theme device model
+        recentsView theme model
 
 
 barcodeBodyView : Theme -> Device -> Model -> Element Msg
@@ -1205,8 +1171,8 @@ onEnterSubmit submitMsg =
         )
 
 
-recentsView : Theme -> Device -> Model -> Element Msg
-recentsView theme device model =
+recentsView : Theme -> Model -> Element Msg
+recentsView theme model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Ui.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
@@ -1228,15 +1194,15 @@ recentsView theme device model =
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Typography.sectionTitle theme "Recent"
                         , Ui.listCard theme
-                            { rows = List.map (recentItemRow theme device model) items
+                            { rows = List.map (recentItemRow theme model) items
                             , footer = Nothing
                             }
                         ]
         ]
 
 
-recentItemRow : Theme -> Device -> Model -> Logs.RecentItem -> Element Msg
-recentItemRow theme device model item =
+recentItemRow : Theme -> Model -> Logs.RecentItem -> Element Msg
+recentItemRow theme model item =
     let
         key : String
         key =
@@ -1252,11 +1218,7 @@ recentItemRow theme device model item =
 
         title : Element Msg
         title =
-            if Ui.isSmall device then
-                Typography.wrappedListItemTitle theme item.item.name
-
-            else
-                Typography.truncatedListItemTitle theme item.item.name
+            Typography.wrappedListItemTitle theme item.item.name
     in
     Ui.listRow
         { onSelect = RecentItemClicked item

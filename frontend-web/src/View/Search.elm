@@ -30,7 +30,7 @@ completionDropdown theme device config options =
     else
         Ui.completionDropdown theme
             { height = completionDropdownHeight device options
-            , rows = List.map (completionRow theme device config.onSelect) options
+            , rows = List.map (completionRow theme config.onSelect) options
             }
 
 
@@ -138,10 +138,9 @@ completionDropdownHeight device options =
         min 224 (8 + List.length options * 38)
 
 
-completionRow : Theme -> Device -> (Completion -> msg) -> Completion -> Element msg
-completionRow theme device onSelect completion =
-    Ui.completionRow device
-        theme
+completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
+completionRow theme onSelect completion =
+    Ui.completionRow theme
         { label = Search.completionLabel completion
         , trailing =
             case completion of

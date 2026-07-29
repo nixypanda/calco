@@ -125,20 +125,12 @@ view config { model, device, theme } =
         form : Form
         form =
             currentForm model
-
-        outerPadding : Int
-        outerPadding =
-            if Ui.isSmall device then
-                16
-
-            else
-                24
     in
     Element.el
         [ Element.centerX
         , Element.centerY
         , Element.width (Element.fill |> Element.maximum 420)
-        , Element.padding outerPadding
+        , Element.padding DesignTokens.space16
         ]
         (Element.column
             [ Element.width Element.fill

@@ -13,7 +13,7 @@ module View.Nutrients exposing
     )
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -243,15 +243,15 @@ skeletonPreview theme =
         }
 
 
-preview : Theme -> Device -> NutritionState -> Element msg
-preview theme device state =
+preview : Theme -> NutritionState -> Element msg
+preview theme state =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
                 skeletonPreview theme
 
             NutritionLoaded _ nutrients ->
-                nutritionCard theme device nutrients
+                nutritionCard theme nutrients
 
             NutritionFailed _ errMsg ->
                 Ui.errorBanner theme errMsg
@@ -301,8 +301,8 @@ mapNutritionInput transform state =
             NutritionUnavailable input
 
 
-macroBreakdownView : Theme -> Device -> List NutrientAmount -> Element msg
-macroBreakdownView theme device nutrients =
+macroBreakdownView : Theme -> List NutrientAmount -> Element msg
+macroBreakdownView theme nutrients =
     let
         portions : MacroPortions
         portions =
@@ -310,11 +310,7 @@ macroBreakdownView theme device nutrients =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ macroBarRow theme 24 portions
-        , if Ui.isSmall device then
-            Element.none
-
-          else
-            macroLegend theme portions
+        , macroLegend theme portions
         ]
 
 
@@ -487,12 +483,12 @@ nutrientsTableInner theme nutrients =
 then the full nutrients table below — all inside a single card. Replaces
 the prior pattern of two stacked cards.
 -}
-nutritionCard : Theme -> Device -> List NutrientAmount -> Element msg
-nutritionCard theme device nutrients =
+nutritionCard : Theme -> List NutrientAmount -> Element msg
+nutritionCard theme nutrients =
     Ui.section theme
         { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
-            [ macroBreakdownView theme device nutrients
+            [ macroBreakdownView theme nutrients
             , Ui.hairline theme
             , nutrientsTableInner theme nutrients
             ]

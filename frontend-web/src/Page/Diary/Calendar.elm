@@ -234,7 +234,7 @@ contentViewWithSelection :
     Maybe String
     -> { model : Model, device : Device, theme : Theme }
     -> Element Msg
-contentViewWithSelection selectedDate { model, device, theme } =
+contentViewWithSelection selectedDate { model, theme } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -248,10 +248,10 @@ contentViewWithSelection selectedDate { model, device, theme } =
 
             Ready ->
                 monthRange model.newestMonth model.oldestMonth
-                    |> List.map (monthView theme device model selectedDate)
+                    |> List.map (monthView theme model selectedDate)
                     |> (\months ->
                             months
-                                ++ [ loadEarlierButton theme device model.loadingEarlier ]
+                                ++ [ loadEarlierButton theme model.loadingEarlier ]
                        )
         )
 
@@ -265,20 +265,15 @@ monthRange newest oldest =
         newest :: monthRange (Calendar.shiftMonth -1 newest) oldest
 
 
-monthView : Theme -> Device -> Model -> Maybe String -> String -> Element Msg
-monthView theme device model selectedDate month =
+monthView : Theme -> Model -> Maybe String -> String -> Element Msg
+monthView theme model selectedDate month =
     Ui.card theme
         [ Typography.sectionTitle theme (Calendar.monthLabel month)
         , MonthCalendar.view
             { period = month
             , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
             , weekdayColor = theme.textMuted
-            , cellHeight =
-                if Ui.isSmall device then
-                    68
-
-                else
-                    76
+            , cellHeight = 68
             , viewDay = dayView theme model selectedDate month
             }
         ]
@@ -472,16 +467,10 @@ dayAriaLabel date maybeSummary =
             date ++ ", no food logged"
 
 
-loadEarlierButton : Theme -> Device -> Bool -> Element Msg
-loadEarlierButton theme device loading =
+loadEarlierButton : Theme -> Bool -> Element Msg
+loadEarlierButton theme loading =
     Input.button
-        [ Element.width
-            (if Ui.isSmall device then
-                Element.fill
-
-             else
-                Element.px 220
-            )
+        [ Element.width Element.fill
         , Element.centerX
         , Element.paddingXY DesignTokens.space16 DesignTokens.space12
         , Background.color theme.brandBlueSoft

@@ -134,25 +134,16 @@ layout theme content =
 
 
 pageContainer : Device -> List (Element msg) -> Element msg
-pageContainer device children =
-    let
-        horizontalPadding : Int
-        horizontalPadding =
-            if isSmall device then
-                16
-
-            else
-                24
-    in
+pageContainer _ children =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing space16
         , Element.paddingEach
-            { top = horizontalPadding
-            , right = horizontalPadding
-            , bottom = horizontalPadding
-            , left = horizontalPadding
+            { top = space16
+            , right = space16
+            , bottom = space16
+            , left = space16
             }
         ]
         children
@@ -161,15 +152,6 @@ pageContainer device children =
 isSmall : Device -> Bool
 isSmall device =
     device.class == Element.Phone
-
-
-onPhone : Device -> a -> a -> a
-onPhone device phoneValue desktopValue =
-    if isSmall device then
-        phoneValue
-
-    else
-        desktopValue
 
 
 hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg
@@ -584,7 +566,7 @@ primarySubmitButton device theme config =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded radiusPill
         , Element.width Element.fill
-        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.height (Element.px 56)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
@@ -636,7 +618,7 @@ secondarySubmitButton device theme config =
         , Border.rounded radiusPill
         , Font.color foreground
         , Element.width Element.fill
-        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.height (Element.px 56)
         , Element.paddingEach { top = 13, right = 20, bottom = 13, left = 20 }
         , Font.medium
         , Font.center
@@ -715,7 +697,7 @@ primaryActionButton device theme label msg =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded radiusPill
         , Element.width Element.fill
-        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.height (Element.px 56)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
@@ -734,7 +716,7 @@ fullWidthDangerButton device theme label msg =
         , Font.color (Element.rgb255 255 255 255)
         , Border.rounded radiusPill
         , Element.width Element.fill
-        , onPhone device (Element.height (Element.px 56)) (Element.padding 0)
+        , Element.height (Element.px 56)
         , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
         , Font.medium
         , Font.center
@@ -750,6 +732,7 @@ fullWidthGhostButton : Device -> Theme -> String -> msg -> Element msg
 fullWidthGhostButton device theme label msg =
     Input.button
         [ Element.width Element.fill
+        , Element.height (Element.px 56)
         , Element.paddingEach { top = 14, right = 16, bottom = 14, left = 16 }
         , Border.rounded radiusPill
         , Font.color theme.brandBlue
@@ -1175,17 +1158,15 @@ optionList theme config =
 
 
 completionRow :
-    Device
-    -> Theme
+    Theme
     ->
         { label : String
         , trailing : Maybe (Element msg)
         , onPress : msg
         }
     -> Element msg
-completionRow device theme config =
-    optionRow device
-        theme
+completionRow theme config =
+    optionRow theme
         { label = config.label
         , trailing = config.trailing
         , selected = False
@@ -1194,8 +1175,7 @@ completionRow device theme config =
 
 
 optionRow :
-    Device
-    -> Theme
+    Theme
     ->
         { label : String
         , trailing : Maybe (Element msg)
@@ -1203,7 +1183,7 @@ optionRow :
         , onPress : msg
         }
     -> Element msg
-optionRow device theme config =
+optionRow theme config =
     let
         itemColor : Element.Color
         itemColor =
@@ -1215,11 +1195,7 @@ optionRow device theme config =
     in
     Input.button
         [ Element.width Element.fill
-        , if isSmall device then
-            Element.paddingXY space12 10
-
-          else
-            Element.paddingXY 12 10
+        , Element.paddingXY space12 10
         , Border.rounded radiusControl
         , Background.color
             (if config.selected then
@@ -1282,8 +1258,7 @@ selectDropdown device theme config =
 
         renderOption : ( a, String ) -> Element msg
         renderOption ( val, lbl ) =
-            optionRow device
-                theme
+            optionRow theme
                 { label = lbl
                 , trailing = Nothing
                 , selected = isSelected val
@@ -1515,11 +1490,7 @@ removableChip device theme config =
     let
         removeSize : Int
         removeSize =
-            if isSmall device then
-                28
-
-            else
-                18
+            28
     in
     Element.row
         [ Background.color (chipBackground theme False)

@@ -20,7 +20,6 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Html.Attributes
 import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.DesignTokens as DesignTokens
@@ -472,7 +471,7 @@ loadedView theme device loaded =
         [ View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request
-        , View.Nutrients.nutritionCard theme device nutrients
+        , View.Nutrients.nutritionCard theme nutrients
         ]
 
 
@@ -485,20 +484,6 @@ submitActionView theme device requestState =
         , submittingLabel = "Logging..."
         , onPress = SubmitClicked
         }
-        |> (\button ->
-                if Ui.isSmall device then
-                    Element.el
-                        [ Element.width Element.fill
-                        , Element.htmlAttribute
-                            (Html.Attributes.style "padding-bottom"
-                                "calc(14px + env(safe-area-inset-bottom))"
-                            )
-                        ]
-                        button
-
-                else
-                    button
-           )
 
 
 foodNutrientsForDisplay : ProductDetail -> FoodLogForm.Model -> List Nutrition.NutrientAmount
