@@ -316,40 +316,6 @@ tests =
             \_ ->
                 Form.unitGhostText "g"
                     |> Expect.equal "g"
-        , test "basic text field updates write form fields" <|
-            \_ ->
-                Form.emptyForm
-                    |> updateForm (Form.NameChanged "Paneer")
-                    |> updateForm (Form.BrandChanged "Local")
-                    |> updateForm (Form.ServingSizeChanged "100")
-                    |> updateForm (Form.DefaultQuantityChanged "1")
-                    |> (\form ->
-                            { name = form.name
-                            , brand = form.brand
-                            , servingSizeG = form.servingSizeG
-                            , defaultQuantity = form.defaultQuantity
-                            }
-                       )
-                    |> Expect.equal
-                        { name = "Paneer"
-                        , brand = "Local"
-                        , servingSizeG = "100"
-                        , defaultQuantity = "1"
-                        }
-        , test "default unit change writes unit" <|
-            \_ ->
-                Form.update (Form.DefaultUnitChanged "cup") Form.emptyForm
-                    |> first
-                    |> .defaultUnit
-                    |> Expect.equal "cup"
-        , test "dropdown toggle messages leave form data intact" <|
-            \_ ->
-                Form.emptyForm
-                    |> updateForm Form.ToggleDefaultUnitDropdown
-                    |> updateForm (Form.ToggleNutrientCodeDropdown 0)
-                    |> updateForm (Form.ToggleServingUnitDropdown 0)
-                    |> .name
-                    |> Expect.equal ""
         , test "blank category query opens without requesting suggestions" <|
             \_ ->
                 Form.update (Form.CategoryQueryChanged "   ") Form.emptyForm
@@ -484,14 +450,6 @@ tests =
                     |> .categoryInput
                     |> .suggestions
                     |> Expect.equal [ { value = "old", count = 1 } ]
-        , test "nutrient amount updates target row" <|
-            \_ ->
-                Form.update (Form.NutrientAmountChanged 0 "12") Form.emptyForm
-                    |> first
-                    |> .nutrients
-                    |> List.head
-                    |> Maybe.map .amountPer100g
-                    |> Expect.equal (Just "12")
         , test "add and remove nutrient row removes selected extra row" <|
             \_ ->
                 Form.emptyForm

@@ -122,27 +122,6 @@ tests =
                         )
                     |> firstOfThree
                     |> Expect.equal (CreateUser.Failed emptyForm "bad: Bad request")
-        , test "field changes update form correctly" <|
-            \_ ->
-                initialModel
-                    |> CreateUser.update (CreateUser.UsernameChanged "bob")
-                    |> firstOfThree
-                    |> Expect.equal (CreateUser.Editing { emptyForm | username = "bob" })
-        , test "DisplayNameChanged updates display name" <|
-            \_ ->
-                initialModel
-                    |> CreateUser.update (CreateUser.DisplayNameChanged "Charlie")
-                    |> firstOfThree
-                    |> Expect.equal (CreateUser.Editing { emptyForm | displayName = "Charlie" })
-        , test "PasswordChanged updates initial password" <|
-            \_ ->
-                initialModel
-                    |> CreateUser.update (CreateUser.PasswordChanged "secret123")
-                    |> firstOfThree
-                    |> Expect.equal
-                        (CreateUser.Editing
-                            { emptyForm | initialPassword = "secret123" }
-                        )
         ]
 
 

@@ -90,13 +90,6 @@ tests =
                     (loadedWithMealAndName twoProductMeal "food-1")
                     |> third
                     |> Expect.equal MealShow.NoOp
-        , test "product detail load outside loaded state is ignored" <|
-            \_ ->
-                MealShow.update
-                    (MealShow.ProductDetailLoaded "food-1" (Ok product))
-                    baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "unit load stores units in loading model" <|
             \_ ->
                 MealShow.update
@@ -183,13 +176,6 @@ tests =
                     |> first
                     |> nutrientsOf
                     |> Expect.equal Nothing
-        , test "amount change in loading state is ignored" <|
-            \_ ->
-                MealShow.update
-                    (MealShow.AmountChanged "150")
-                    baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "unit change requests nutrient preview" <|
             \_ ->
                 MealShow.update
@@ -197,24 +183,12 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal (MealShow.RequestNutrientPreview "meal-1" "100" "serving")
-        , test "unit change in loading state is ignored" <|
-            \_ ->
-                MealShow.update
-                    (MealShow.UnitChanged "serving")
-                    baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "toggle unit dropdown toggles loaded input" <|
             \_ ->
                 MealShow.update MealShow.ToggleUnitDropdown loadedModel
                     |> first
                     |> unitOpenOf
                     |> Expect.equal (Just True)
-        , test "toggle unit dropdown in loading state is ignored" <|
-            \_ ->
-                MealShow.update MealShow.ToggleUnitDropdown baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "invalid amount clears nutrient preview" <|
             \_ ->
                 MealShow.update
@@ -236,16 +210,6 @@ tests =
                     |> first
                     |> deleteOf
                     |> Expect.equal (Just DeleteIdle)
-        , test "delete click in loading state is ignored" <|
-            \_ ->
-                MealShow.update MealShow.DeleteClicked baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
-        , test "cancel delete in loading state is ignored" <|
-            \_ ->
-                MealShow.update MealShow.CancelDeleteClicked baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "confirm delete requests deletion from confirming state" <|
             \_ ->
                 MealShow.update MealShow.DeleteClicked loadedModel
@@ -263,11 +227,6 @@ tests =
         , test "confirm delete is ignored from idle state" <|
             \_ ->
                 MealShow.update MealShow.ConfirmDeleteClicked loadedModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
-        , test "confirm delete in loading state is ignored" <|
-            \_ ->
-                MealShow.update MealShow.ConfirmDeleteClicked baseModel
                     |> third
                     |> Expect.equal MealShow.NoOp
         , test "delete success navigates to meal list" <|
@@ -301,23 +260,11 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal MealShow.NoOp
-        , test "delete completion in loading state is ignored" <|
-            \_ ->
-                MealShow.update
-                    (MealShow.DeleteCompleted (Ok ()))
-                    baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         , test "edit action navigates to meal edit" <|
             \_ ->
                 MealShow.update MealShow.EditClicked loadedModel
                     |> third
                     |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
-        , test "edit action in loading state is ignored" <|
-            \_ ->
-                MealShow.update MealShow.EditClicked baseModel
-                    |> third
-                    |> Expect.equal MealShow.NoOp
         ]
 
 

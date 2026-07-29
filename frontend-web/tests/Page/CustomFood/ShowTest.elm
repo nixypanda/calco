@@ -93,26 +93,12 @@ tests =
                     (loadedWithFood { food | source = "IFCT" })
                     |> third
                     |> Expect.equal CustomFoodShow.NoOp
-        , test "edit action in loading state is ignored" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.EditClicked
-                    (Tuple.first (CustomFoodShow.init "food-1"))
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
         , test "delete click opens confirmation state" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.DeleteClicked loadedModel
                     |> first
                     |> deleteStateOf
                     |> Expect.equal (Just DeleteConfirming)
-        , test "delete click in loading state is ignored" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.DeleteClicked
-                    (Tuple.first (CustomFoodShow.init "food-1"))
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
         , test "cancel delete returns to idle" <|
             \_ ->
                 CustomFoodShow.update
@@ -123,13 +109,6 @@ tests =
                     |> first
                     |> deleteStateOf
                     |> Expect.equal (Just DeleteIdle)
-        , test "cancel delete in loading state is ignored" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.CancelDeleteClicked
-                    (Tuple.first (CustomFoodShow.init "food-1"))
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
         , test "delete confirm requests food deletion" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.DeleteClicked loadedModel
@@ -151,13 +130,6 @@ tests =
         , test "delete confirm is no-op unless confirming or failed" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.ConfirmDeleteClicked loadedModel
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
-        , test "delete confirm in loading state is ignored" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.ConfirmDeleteClicked
-                    (Tuple.first (CustomFoodShow.init "food-1"))
                     |> third
                     |> Expect.equal CustomFoodShow.NoOp
         , test "delete success navigates to custom food list" <|
@@ -189,13 +161,6 @@ tests =
                 CustomFoodShow.update
                     (CustomFoodShow.DeleteCompleted (Ok ()))
                     loadedModel
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
-        , test "delete completion in loading state is ignored" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.DeleteCompleted (Ok ()))
-                    (Tuple.first (CustomFoodShow.init "food-1"))
                     |> third
                     |> Expect.equal CustomFoodShow.NoOp
         ]

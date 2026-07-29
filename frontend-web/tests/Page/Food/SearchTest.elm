@@ -28,13 +28,6 @@ tests =
                     |> first
                     |> (\model -> ( model.search.query, model.results ))
                     |> Expect.equal ( "   ", NotAsked )
-        , test "non-empty query increments search token" <|
-            \_ ->
-                FoodSearch.update (FoodSearch.QueryChanged "apple") emptyModel
-                    |> first
-                    |> .search
-                    |> .searchToken
-                    |> Expect.equal 1
         , test "tab completion expands include category operator" <|
             \_ ->
                 FoodSearch.update

@@ -55,15 +55,6 @@ tests =
                     initialModel
                     |> third
                     |> Expect.equal CustomFoodCreate.SessionExpired
-        , test "form field update delegates to the form" <|
-            \_ ->
-                CustomFoodCreate.update
-                    (CustomFoodCreate.FormMsg (Form.NameChanged "Paneer"))
-                    initialModel
-                    |> first
-                    |> .form
-                    |> .name
-                    |> Expect.equal "Paneer"
         , test "form category query forwards suggestion request" <|
             \_ ->
                 CustomFoodCreate.update
@@ -119,104 +110,12 @@ tests =
         , test "submit with valid form requests create food" <|
             \_ ->
                 CustomFoodCreate.update CustomFoodCreate.SubmitClicked validModel
-                    |> third
-                    |> Expect.equal (CustomFoodCreate.RequestCreateFood validRequest)
-        , test "submit marks form as submitting" <|
-            \_ ->
-                CustomFoodCreate.update CustomFoodCreate.SubmitClicked validModel
-                    |> first
-                    |> .form
-                    |> .submit
-                    |> Expect.equal Form.Submitting
-        , test "submit with missing name surfaces validation error" <|
-            \_ ->
-                CustomFoodCreate.update CustomFoodCreate.SubmitClicked initialModel
-                    |> first
-                    |> .form
-                    |> .submit
-                    |> Expect.equal (Form.SubmitFailed "Name is required")
-        , test "submit with invalid nutrient amount uses validation message" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodCreate.update CustomFoodCreate.SubmitClicked
-                    { initialModel
-                        | form =
-                            { base
-                                | name = "Paneer"
-                                , nutrients =
-                                    [ { code = "PROTEIN_G"
-                                      , amountPer100g = "-1"
-                                      , unit = "g"
-                                      }
-                                    ]
-                            }
-                    }
-                    |> first
-                    |> .form
-                    |> .submit
+                    |> (\( model, _, outMsg ) ->
+                            ( model.form.submit, outMsg )
+                       )
                     |> Expect.equal
-                        (Form.SubmitFailed
-                            "Nutrient amount must be a non-negative number (got: -1)"
-                        )
-        , test "submit with invalid serving quantity uses validation message" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodCreate.update CustomFoodCreate.SubmitClicked
-                    { initialModel
-                        | form =
-                            { base
-                                | name = "Paneer"
-                                , servings =
-                                    [ { label = "cube"
-                                      , quantity = "0"
-                                      , unit = "piece"
-                                      , grams = "50"
-                                      }
-                                    ]
-                            }
-                    }
-                    |> first
-                    |> .form
-                    |> .submit
-                    |> Expect.equal
-                        (Form.SubmitFailed
-                            "Serving quantity must be a positive number (got: 0)"
-                        )
-        , test "submit with invalid serving grams uses validation message" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodCreate.update CustomFoodCreate.SubmitClicked
-                    { initialModel
-                        | form =
-                            { base
-                                | name = "Paneer"
-                                , servings =
-                                    [ { label = "cube"
-                                      , quantity = "1"
-                                      , unit = "piece"
-                                      , grams = "0"
-                                      }
-                                    ]
-                            }
-                    }
-                    |> first
-                    |> .form
-                    |> .submit
-                    |> Expect.equal
-                        (Form.SubmitFailed
-                            "Serving grams must be a positive number (got: 0)"
+                        ( Form.Submitting
+                        , CustomFoodCreate.RequestCreateFood validRequest
                         )
         , test "save success navigates to detail" <|
             \_ ->

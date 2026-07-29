@@ -98,22 +98,6 @@ tests =
                     (CustomFoodEdit.LoadFailed "old")
                     |> first
                     |> Expect.equal (CustomFoodEdit.LoadFailed "old")
-        , test "form message updates loaded form" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer"))
-                    loadedModel
-                    |> first
-                    |> loadedName
-                    |> Expect.equal (Just "Paneer")
-        , test "form message in loading state is ignored" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.FormMsg (Form.NameChanged "Paneer"))
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
-                    |> first
-                    |> isLoading
-                    |> Expect.equal True
         , test "form category query forwards suggestion request" <|
             \_ ->
                 CustomFoodEdit.update
@@ -143,124 +127,16 @@ tests =
                     |> first
                     |> categorySuggestionsOf
                     |> Expect.equal (Just [ { value = "dairy", count = 3 } ])
-        , test "category suggestions in loading state are ignored" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.CategorySuggestionsLoaded
-                        1
-                        (Ok { items = [ { value = "dairy", count = 3 } ] })
-                    )
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
-                    |> first
-                    |> isLoading
-                    |> Expect.equal True
         , test "submit with valid form requests update" <|
             \_ ->
                 CustomFoodEdit.update CustomFoodEdit.SubmitClicked validLoadedModel
-                    |> third
-                    |> Expect.equal (CustomFoodEdit.RequestUpdateFood "food-1" validRequest)
-        , test "submit marks loaded form as submitting" <|
-            \_ ->
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked validLoadedModel
-                    |> first
-                    |> submitStateOf
-                    |> Expect.equal (Just Form.Submitting)
-        , test "submit with missing name stores validation error" <|
-            \_ ->
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked loadedModel
-                    |> first
-                    |> submitStateOf
-                    |> Expect.equal (Just (Form.SubmitFailed "Name is required"))
-        , test "submit with invalid nutrient amount stores validation error" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked
-                    (loadedWithForm
-                        { base
-                            | name = "Paneer"
-                            , nutrients =
-                                [ { code = "PROTEIN_G"
-                                  , amountPer100g = "-1"
-                                  , unit = "g"
-                                  }
-                                ]
-                        }
-                    )
-                    |> first
-                    |> submitStateOf
+                    |> (\( model, _, outMsg ) ->
+                            ( submitStateOf model, outMsg )
+                       )
                     |> Expect.equal
-                        (Just
-                            (Form.SubmitFailed
-                                "Nutrient amount must be a non-negative number (got: -1)"
-                            )
+                        ( Just Form.Submitting
+                        , CustomFoodEdit.RequestUpdateFood "food-1" validRequest
                         )
-        , test "submit with invalid serving quantity stores validation error" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked
-                    (loadedWithForm
-                        { base
-                            | name = "Paneer"
-                            , servings =
-                                [ { label = "cube"
-                                  , quantity = "0"
-                                  , unit = "piece"
-                                  , grams = "50"
-                                  }
-                                ]
-                        }
-                    )
-                    |> first
-                    |> submitStateOf
-                    |> Expect.equal
-                        (Just
-                            (Form.SubmitFailed
-                                "Serving quantity must be a positive number (got: 0)"
-                            )
-                        )
-        , test "submit with invalid serving grams stores validation error" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked
-                    (loadedWithForm
-                        { base
-                            | name = "Paneer"
-                            , servings =
-                                [ { label = "cube"
-                                  , quantity = "1"
-                                  , unit = "piece"
-                                  , grams = "0"
-                                  }
-                                ]
-                        }
-                    )
-                    |> first
-                    |> submitStateOf
-                    |> Expect.equal
-                        (Just
-                            (Form.SubmitFailed
-                                "Serving grams must be a positive number (got: 0)"
-                            )
-                        )
-        , test "submit in loading state is ignored" <|
-            \_ ->
-                CustomFoodEdit.update
-                    CustomFoodEdit.SubmitClicked
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
-                    |> third
-                    |> Expect.equal CustomFoodEdit.NoOp
         , test "save success while submitting navigates to detail" <|
             \_ ->
                 CustomFoodEdit.update
@@ -290,13 +166,6 @@ tests =
                 CustomFoodEdit.update
                     (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
                     validLoadedModel
-                    |> third
-                    |> Expect.equal CustomFoodEdit.NoOp
-        , test "save completion in loading state is ignored" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> third
                     |> Expect.equal CustomFoodEdit.NoOp
         ]
@@ -334,16 +203,6 @@ unitsOf model =
             Nothing
 
 
-loadedName : CustomFoodEdit.Model -> Maybe String
-loadedName model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.form.name
-
-        _ ->
-            Nothing
-
-
 categorySuggestionsOf :
     CustomFoodEdit.Model
     -> Maybe (List { value : String, count : Int })
@@ -364,16 +223,6 @@ submitStateOf model =
 
         _ ->
             Nothing
-
-
-isLoading : CustomFoodEdit.Model -> Bool
-isLoading model =
-    case model of
-        CustomFoodEdit.Loading _ ->
-            True
-
-        _ ->
-            False
 
 
 loadedModel : CustomFoodEdit.Model

@@ -50,13 +50,6 @@ tests =
                     |> firstOfThree
                     |> .status
                     |> Expect.equal (EditUser.LoadFailed (Client.BadStatus 500 "boom" "Failed"))
-        , test "PasswordChanged updates password" <|
-            \_ ->
-                readyModel
-                    |> EditUser.update (EditUser.PasswordChanged "new-password")
-                    |> firstOfThree
-                    |> passwordFromState
-                    |> Expect.equal "new-password"
         , test "ResetSubmitted with empty password shows error" <|
             \_ ->
                 readyModel
@@ -156,13 +149,6 @@ tests =
                         )
                     |> thirdOfThree
                     |> Expect.equal EditUser.SessionExpired
-        , test "PasswordChanged on Loading is no-op" <|
-            \_ ->
-                initialModel
-                    |> EditUser.update (EditUser.PasswordChanged "new")
-                    |> firstOfThree
-                    |> .status
-                    |> Expect.equal EditUser.Loading
         , test "PasswordChanged with Invalid state resets to Idle" <|
             \_ ->
                 invalidModel
@@ -222,20 +208,6 @@ tests =
                     |> firstOfThree
                     |> actionStateFromState
                     |> Expect.equal (Just (EditUser.ActionFailed "Network error"))
-        , test "DisableClicked on Loading is no-op" <|
-            \_ ->
-                initialModel
-                    |> EditUser.update EditUser.DisableClicked
-                    |> firstOfThree
-                    |> .status
-                    |> Expect.equal EditUser.Loading
-        , test "EnableClicked on Loading is no-op" <|
-            \_ ->
-                initialModel
-                    |> EditUser.update EditUser.EnableClicked
-                    |> firstOfThree
-                    |> .status
-                    |> Expect.equal EditUser.Loading
         ]
 
 

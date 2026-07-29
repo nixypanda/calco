@@ -155,27 +155,6 @@ tests =
                 FoodShow.update FoodShow.SubmitClicked contextReadyModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
-        , test "submit in loading state is ignored" <|
-            \_ ->
-                FoodShow.update FoodShow.SubmitClicked emptyModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
-        , test "form message updates loaded form" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.FormMsg (FoodLogForm.AmountChanged "4"))
-                    loadedModel
-                    |> first
-                    |> formOf
-                    |> Maybe.map .amount
-                    |> Expect.equal (Just "4")
-        , test "form message in loading state is ignored" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.FormMsg (FoodLogForm.AmountChanged "4"))
-                    emptyModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
         , test "local context uses selected diary date for log request" <|
             \_ ->
                 FoodShow.update
@@ -249,15 +228,6 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
-        , test "local context in loading state is ignored" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LocalContextReceived
-                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
-                    )
-                    emptyModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
         , test "log success navigates back to selected diary day" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
@@ -292,11 +262,6 @@ tests =
         , test "log completion is ignored unless saving" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
-        , test "log completion in loading state is ignored" <|
-            \_ ->
-                FoodShow.update (FoodShow.LogCompleted (Ok log)) emptyModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
         ]

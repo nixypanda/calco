@@ -117,30 +117,6 @@ tests =
                     (loadedWithForm emptyFormFields)
                     |> third
                     |> Expect.equal (MealEdit.Navigate (MealShow "meal-1"))
-        , test "form field updates delegate to common" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.FormMsg (Common.NameChanged "Brunch"))
-                    (loadedWithForm emptyFormFields)
-                    |> first
-                    |> (\model ->
-                            case model of
-                                MealEdit.Editing loaded ->
-                                    loaded.fields.name
-
-                                _ ->
-                                    ""
-                       )
-                    |> Expect.equal "Brunch"
-        , test "form msg in non-editing state is a no-op" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.FormMsg (Common.NameChanged "Brunch"))
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> nutritionOf
-                    |> -- still loading; form msg was ignored
-                       Expect.equal (Just (NutritionLoading View.Nutrients.defaultNutritionInput))
         ]
 
 

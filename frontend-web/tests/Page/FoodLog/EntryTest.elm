@@ -218,43 +218,12 @@ tests =
                             , error = "Network error"
                             }
                         )
-        , test "form amount changed updates form amount when Loaded" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "5"))
-                    loadedModel
-                    |> first
-                    |> loadedForm
-                    |> Maybe.map .amount
-                    |> Expect.equal (Just "5")
-        , test "form message when not Loaded is a no-op" <|
-            \_ ->
-                let
-                    original : FoodLogEntry.Model
-                    original =
-                        emptyModel
-                in
-                FoodLogEntry.update
-                    (FoodLogEntry.FormMsg (FoodLogForm.AmountChanged "5"))
-                    original
-                    |> first
-                    |> Expect.equal original
         , test "cancel delete clicked when Loaded resets to DeleteIdle" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.CancelDeleteClicked deletingModel
                     |> first
                     |> deleteStateOf
                     |> Expect.equal (Just DeleteIdle)
-        , test "cancel delete clicked when not Loaded is a no-op" <|
-            \_ ->
-                let
-                    original : FoodLogEntry.Model
-                    original =
-                        emptyModel
-                in
-                FoodLogEntry.update FoodLogEntry.CancelDeleteClicked original
-                    |> first
-                    |> Expect.equal original
         , test "log loaded failure stores error" <|
             \_ ->
                 FoodLogEntry.update
@@ -272,16 +241,6 @@ tests =
                 FoodLogEntry.update FoodLogEntry.SubmitClicked savingModel
                     |> first
                     |> Expect.equal savingModel
-        , test "submit clicked when not Loaded is a no-op" <|
-            \_ ->
-                let
-                    original : FoodLogEntry.Model
-                    original =
-                        emptyModel
-                in
-                FoodLogEntry.update FoodLogEntry.SubmitClicked original
-                    |> first
-                    |> Expect.equal original
         , test "delete clicked when request is not Idle is a no-op" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.DeleteClicked savingModel

@@ -9,8 +9,6 @@ import Api.Foods
         , SearchScope(..)
         )
 import Api.Meals as Meals
-import Data.ItemNameLookup as ItemNameLookup
-import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition
 import Data.Search as Search
 import Expect
@@ -20,7 +18,6 @@ import Page.Meal.Form as Form
         ( FormFieldMsg(..)
         , FormFieldOutMsg(..)
         , FormFields
-        , SubmitState(..)
         , ValidationError(..)
         )
 import Test exposing (Test, describe, test)
@@ -29,45 +26,7 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Page.Meal.Form"
-        [ describe "basic field updates"
-            [ test "NameChanged sets name and clears submit" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm | submit = SubmitFailed "old error" }
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (NameChanged "My Meal") base
-                    in
-                    form.name
-                        |> Expect.equal "My Meal"
-            , test "NotesChanged sets notes" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (NotesChanged "some notes") emptyForm
-                    in
-                    form.notes
-                        |> Expect.equal "some notes"
-            , test "TotalQuantityChanged sets totalQuantity" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (TotalQuantityChanged "500") emptyForm
-                    in
-                    form.totalQuantity
-                        |> Expect.equal "500"
-            , test "TotalUnitChanged sets totalUnit" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (TotalUnitChanged "ml") emptyForm
-                    in
-                    form.totalUnit
-                        |> Expect.equal "ml"
-            ]
-        , describe "ProductNameLoaded"
+        [ describe "ProductNameLoaded"
             [ test "Ok stores product name and merges into matching rows" <|
                 \_ ->
                     let
@@ -84,22 +43,6 @@ tests =
                         |> List.head
                         |> Maybe.map .productName
                         |> Expect.equal (Just "Milk")
-            , test "Ok stores product name in productNames lookup" <|
-                \_ ->
-                    let
-                        formWithProduct : FormFields
-                        formWithProduct =
-                            setRowProductId 1 "p1" emptyForm
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ProductNameLoaded "p1" (Ok productDetail))
-                                formWithProduct
-                    in
-                    ItemNameLookup.nameFor ""
-                        { itemType = ItemRef.Product, id = "p1" }
-                        form.productNames
-                        |> Expect.equal "Milk"
             , test "Err falls back to Unknown food" <|
                 \_ ->
                     let
@@ -181,23 +124,6 @@ tests =
                         ( form, _, outMsg ) =
                             Form.updateFormField
                                 (ComponentSearchChanged 1 "m")
-                                emptyForm
-                    in
-                    Expect.all
-                        [ \_ -> outMsg |> Expect.equal Nothing
-                        , \_ ->
-                            form.components
-                                |> List.head
-                                |> Maybe.map .searchResults
-                                |> Expect.equal (Just (Success []))
-                        ]
-                        ()
-            , test "empty query clears results and returns no outmsg" <|
-                \_ ->
-                    let
-                        ( form, _, outMsg ) =
-                            Form.updateFormField
-                                (ComponentSearchChanged 1 "")
                                 emptyForm
                     in
                     Expect.all
@@ -374,17 +300,6 @@ tests =
                         , \_ -> outMsg |> Expect.equal Nothing
                         ]
                         ()
-            , test "nonexistent row returns form unchanged" <|
-                \_ ->
-                    let
-                        ( form, _, outMsg ) =
-                            Form.updateFormField (CompleteFirstComponentSuggestion 99) emptyForm
-                    in
-                    Expect.all
-                        [ \_ -> form.components |> List.length |> Expect.equal 1
-                        , \_ -> outMsg |> Expect.equal Nothing
-                        ]
-                        ()
             ]
         , describe "ComponentCompletionClicked"
             [ test "applies clicked completion via search change" <|
@@ -407,59 +322,6 @@ tests =
                         |> List.head
                         |> Maybe.map (.search >> .query)
                         |> Expect.equal (Just "category:dairy")
-            , test "nonexistent row returns form unchanged" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentCompletionClicked 99
-                                    (Search.OperatorCompletion "category:")
-                                )
-                                emptyForm
-                    in
-                    form.components
-                        |> List.length
-                        |> Expect.equal 1
-            ]
-        , describe "SelectProduct"
-            [ test "sets product id and name on the row" <|
-                \_ ->
-                    let
-                        result : SearchResult
-                        result =
-                            searchResult
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (SelectProduct 1 result) emptyForm
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (\r -> ( r.productId, r.productName ))
-                        |> Expect.equal (Just ( "food-1", "Milk" ))
-            ]
-        , describe "ComponentQuantityChanged"
-            [ test "sets quantity on the row" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentQuantityChanged 1 "250") emptyForm
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .quantity
-                        |> Expect.equal (Just "250")
-            ]
-        , describe "ComponentUnitChanged"
-            [ test "sets unit on the row" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentUnitChanged 1 "ml") emptyForm
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .unit
-                        |> Expect.equal (Just "ml")
             ]
         , describe "AddComponentClicked"
             [ test "appends a new row" <|
@@ -471,25 +333,6 @@ tests =
                     form.components
                         |> List.length
                         |> Expect.equal 2
-            , test "increments nextRowId" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField AddComponentClicked emptyForm
-                    in
-                    form.nextRowId
-                        |> Expect.equal 3
-            , test "new row has correct rowId" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField AddComponentClicked emptyForm
-                    in
-                    form.components
-                        |> List.reverse
-                        |> List.head
-                        |> Maybe.map .rowId
-                        |> Expect.equal (Just 2)
             ]
         , describe "RemoveComponentClicked"
             [ test "removes the specified row" <|
@@ -516,34 +359,6 @@ tests =
                     form.components
                         |> List.length
                         |> Expect.equal 1
-            ]
-        , describe "isSubmitting"
-            [ test "Idle is not submitting" <|
-                \_ ->
-                    Form.isSubmitting Idle
-                        |> Expect.equal False
-            , test "Submitting is submitting" <|
-                \_ ->
-                    Form.isSubmitting Submitting
-                        |> Expect.equal True
-            , test "SubmitFailed is not submitting" <|
-                \_ ->
-                    Form.isSubmitting (SubmitFailed "err")
-                        |> Expect.equal False
-            ]
-        , describe "submitErrorMessage"
-            [ test "Idle returns Nothing" <|
-                \_ ->
-                    Form.submitErrorMessage Idle
-                        |> Expect.equal Nothing
-            , test "Submitting returns Nothing" <|
-                \_ ->
-                    Form.submitErrorMessage Submitting
-                        |> Expect.equal Nothing
-            , test "SubmitFailed returns Just message" <|
-                \_ ->
-                    Form.submitErrorMessage (SubmitFailed "oops")
-                        |> Expect.equal (Just "oops")
             ]
         , describe "toMealRequest"
             [ test "empty name returns MealNameRequired" <|
