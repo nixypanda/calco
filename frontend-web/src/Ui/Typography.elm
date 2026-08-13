@@ -1,6 +1,7 @@
 module Ui.Typography exposing
     ( body
     , caption
+    , heroStat
     , listItemTitle
     , maybeMutedParagraph
     , minWidthZero
@@ -42,6 +43,11 @@ sizePageTitle =
     Font.size 32
 
 
+sizeHeroStat : Element.Attribute msg
+sizeHeroStat =
+    Font.size 44
+
+
 sizeSectionTitle : Element.Attribute msg
 sizeSectionTitle =
     Font.size 24
@@ -59,6 +65,16 @@ pageTitle theme text =
         , Font.bold
         , Font.color theme.textPrimary
         , Region.heading 1
+        ]
+        (Element.text text)
+
+
+heroStat : Theme -> String -> Element msg
+heroStat theme text =
+    Element.el
+        [ sizeHeroStat
+        , Font.bold
+        , Font.color theme.textPrimary
         ]
         (Element.text text)
 

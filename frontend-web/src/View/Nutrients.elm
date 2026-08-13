@@ -2,7 +2,6 @@ module View.Nutrients exposing
     ( NutritionInput
     , NutritionState(..)
     , defaultNutritionInput
-    , macroBar
     , macroColor
     , macroDot
     , mapNutritionInput
@@ -507,65 +506,6 @@ macroColor theme m =
 
         Nutrition.Fat ->
             theme.fatAccent
-
-
-macroBar :
-    Theme
-    ->
-        { label : String
-        , value : Float
-        , unit : String
-        , color : Element.Color
-        , max : Float
-        }
-    -> Element msg
-macroBar theme config =
-    let
-        pct : Float
-        pct =
-            if config.max > 0 then
-                min 1.0 (config.value / config.max)
-
-            else
-                0
-
-        filled : Int
-        filled =
-            max 0 (round (pct * 100))
-
-        remaining : Int
-        remaining =
-            max 0 (100 - filled)
-    in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.el
-                [ Font.bold, Typography.body, Font.color theme.textPrimary ]
-                (Element.text config.label)
-            , Element.el
-                [ Typography.body
-                , Font.color theme.textMuted
-                , Element.alignRight
-                ]
-                (Element.text (String.fromInt (round config.value) ++ " " ++ config.unit))
-            ]
-        , Element.row
-            [ Element.width Element.fill
-            , Element.height (Element.px 10)
-            , Background.color theme.inputFill
-            , Border.rounded DesignTokens.radiusPill
-            , Element.clip
-            ]
-            [ Element.el
-                [ Element.width (Element.fillPortion filled)
-                , Element.height Element.fill
-                , Background.color config.color
-                , Border.rounded DesignTokens.radiusPill
-                ]
-                Element.none
-            , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
-            ]
-        ]
 
 
 formatAmount : String -> String

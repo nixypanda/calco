@@ -720,36 +720,371 @@ dateCard theme model device =
 
 totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
 totalsView theme targets summary =
+    let
+        calories : Float
+        calories =
+            Nutrition.caloriesFrom summary
+    in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ View.Nutrients.macroBar theme
-            { label = "Calories"
-            , value = Nutrition.caloriesFrom summary
-            , unit = "kcal"
-            , color = theme.calorieAccent
-            , max = targets.calorieTarget
-            }
-        , View.Nutrients.macroBar theme
-            { label = "Protein"
-            , value = summaryAmount "PROTEIN_G" summary
-            , unit = "g"
-            , color = theme.proteinAccent
-            , max = targets.proteinTargetG
-            }
-        , View.Nutrients.macroBar theme
-            { label = "Carbs"
-            , value = summaryAmount "CARBS_G" summary
-            , unit = "g"
-            , color = theme.carbsAccent
-            , max = targets.carbsTargetG
-            }
-        , View.Nutrients.macroBar theme
-            { label = "Fat"
-            , value = summaryAmount "FAT_G" summary
-            , unit = "g"
-            , color = theme.fatAccent
-            , max = targets.fatTargetG
-            }
+        [ calorieHero theme calories targets.calorieTarget
+        , Ui.hairline theme
+        , macroSummaryRow theme
+            [ { label = "Protein"
+              , value = summaryAmount "PROTEIN_G" summary
+              , color = theme.proteinAccent
+              , target = targets.proteinTargetG
+              , tolerance = macroTolerance targets.proteinTargetG
+              }
+            , { label = "Carbs"
+              , value = summaryAmount "CARBS_G" summary
+              , color = theme.carbsAccent
+              , target = targets.carbsTargetG
+              , tolerance = macroTolerance targets.carbsTargetG
+              }
+            , { label = "Fat"
+              , value = summaryAmount "FAT_G" summary
+              , color = theme.fatAccent
+              , target = targets.fatTargetG
+              , tolerance = macroTolerance targets.fatTargetG
+              }
+            ]
         ]
+
+
+calorieHero : Theme -> Float -> Float -> Element msg
+calorieHero theme calories target =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space12
+            , Element.centerY
+            ]
+            [ Element.column
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space2
+                ]
+                [ Element.el
+                    [ Font.bold
+                    , Font.color theme.textMedium
+                    , Typography.caption
+                    ]
+                    (Element.text "CALORIES")
+                , Typography.heroStat theme (formatWhole calories)
+                , Element.el
+                    [ Typography.body, Font.color theme.textMuted ]
+                    (Element.text "kcal eaten")
+                ]
+            , calorieBalancePill theme target calories
+            ]
+        , progressBar
+            theme
+            (if target > 0 && calories > target then
+                theme.dangerSolid
+
+             else
+                theme.calorieAccent
+            )
+            DesignTokens.space12
+            calories
+            target
+        , if target > 0 then
+            Element.el
+                [ Typography.body
+                , Font.color theme.textMuted
+                , Element.alignRight
+                ]
+                (Element.text ("of " ++ formatWhole target ++ " kcal"))
+
+          else
+            Element.none
+        ]
+
+
+calorieBalancePill : Theme -> Float -> Float -> Element msg
+calorieBalancePill theme target calories =
+    if target <= 0 then
+        Element.none
+
+    else
+        let
+            difference : Int
+            difference =
+                round (target - calories)
+
+            statusColor : Element.Color
+            statusColor =
+                goalScaleColor
+                    theme
+                    (calorieTolerance target)
+                    calories
+                    target
+
+            label : String
+            label =
+                if difference > 0 then
+                    formatWhole (toFloat difference) ++ " kcal left"
+
+                else if difference < 0 then
+                    formatWhole (toFloat (abs difference)) ++ " kcal over"
+
+                else
+                    "Goal met"
+        in
+        Element.el
+            [ Background.color (withAlpha 0.2 statusColor)
+            , Font.color statusColor
+            , Border.rounded DesignTokens.radiusPill
+            , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+            , Typography.body
+            , Font.bold
+            , Element.alignRight
+            ]
+            (Element.text label)
+
+
+type alias MacroSummary =
+    { label : String
+    , value : Float
+    , color : Element.Color
+    , target : Float
+    , tolerance : Float
+    }
+
+
+macroSummaryRow : Theme -> List MacroSummary -> Element msg
+macroSummaryRow theme macros =
+    let
+        divider : Element msg
+        divider =
+            Element.el
+                [ Element.width (Element.px 1)
+                , Element.height Element.fill
+                , Background.color theme.divider
+                ]
+                Element.none
+    in
+    macros
+        |> List.map (macroSummaryItem theme)
+        |> List.intersperse divider
+        |> Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+
+
+macroSummaryItem : Theme -> MacroSummary -> Element msg
+macroSummaryItem theme macro =
+    Element.column
+        [ Element.width (Element.fillPortion 1)
+        , Element.spacing DesignTokens.space8
+        ]
+        [ Element.el
+            [ Font.bold
+            , Font.color theme.textPrimary
+            , Typography.body
+            ]
+            (Element.text macro.label)
+        , Element.el
+            ([ Font.bold
+             , Typography.body
+             ]
+                ++ (if macro.target > 0 then
+                        [ Font.color
+                            (goalScaleColor
+                                theme
+                                macro.tolerance
+                                macro.value
+                                macro.target
+                            )
+                        ]
+
+                    else
+                        [ Font.color theme.textMuted ]
+                   )
+            )
+            (Element.text (macroAmountLabel macro))
+        , progressBar
+            theme
+            macro.color
+            DesignTokens.space8
+            macro.value
+            macro.target
+        ]
+
+
+macroAmountLabel : MacroSummary -> String
+macroAmountLabel macro =
+    if macro.target > 0 then
+        formatWhole macro.value ++ " / " ++ formatWhole macro.target ++ " g"
+
+    else
+        formatWhole macro.value ++ " g"
+
+
+progressBar : Theme -> Element.Color -> Int -> Float -> Float -> Element msg
+progressBar theme color height value target =
+    let
+        filled : Int
+        filled =
+            if target > 0 then
+                value
+                    / target
+                    |> clamp 0 1
+                    |> (*) 100
+                    |> round
+
+            else
+                0
+
+        remaining : Int
+        remaining =
+            100 - filled
+    in
+    Element.row
+        [ Element.width Element.fill
+        , Element.height (Element.px height)
+        , Background.color theme.inputFill
+        , Border.rounded DesignTokens.radiusPill
+        , Element.clip
+        ]
+        [ Element.el
+            [ Element.width (Element.fillPortion filled)
+            , Element.height Element.fill
+            , Background.color color
+            , Border.rounded DesignTokens.radiusPill
+            ]
+            Element.none
+        , Element.el [ Element.width (Element.fillPortion remaining) ] Element.none
+        ]
+
+
+goalScaleColor : Theme -> Float -> Float -> Float -> Element.Color
+goalScaleColor theme tolerance value target =
+    let
+        lowerBound : Float
+        lowerBound =
+            max 0 (target - tolerance)
+
+        upperBound : Float
+        upperBound =
+            target + tolerance
+
+        underProgress : Float
+        underProgress =
+            if lowerBound > 0 then
+                clamp 0 1 (value / lowerBound)
+
+            else
+                1
+
+        overProgress : Float
+        overProgress =
+            clamp 0 1 ((value - upperBound) / tolerance)
+    in
+    if value < lowerBound then
+        mixColor (goalUnderColor theme) theme.statusGreen underProgress
+
+    else if value <= upperBound then
+        theme.statusGreen
+
+    else
+        mixColor
+            theme.statusGreen
+            theme.dangerFg
+            overProgress
+
+
+calorieTolerance : Float -> Float
+calorieTolerance target =
+    clamp 30 75 (target * 0.025)
+
+
+macroTolerance : Float -> Float
+macroTolerance target =
+    max 2 (target * 0.05)
+
+
+goalUnderColor : Theme -> Element.Color
+goalUnderColor theme =
+    case theme.mode of
+        Light ->
+            Element.rgb255 0 135 145
+
+        Dark ->
+            theme.calorieAccent
+
+
+mixColor : Element.Color -> Element.Color -> Float -> Element.Color
+mixColor from to amount =
+    let
+        start : { red : Float, green : Float, blue : Float, alpha : Float }
+        start =
+            Element.toRgb from
+
+        finish : { red : Float, green : Float, blue : Float, alpha : Float }
+        finish =
+            Element.toRgb to
+
+        mix : Float -> Float -> Float
+        mix a b =
+            a + (b - a) * amount
+    in
+    Element.rgba
+        (mix start.red finish.red)
+        (mix start.green finish.green)
+        (mix start.blue finish.blue)
+        (mix start.alpha finish.alpha)
+
+
+withAlpha : Float -> Element.Color -> Element.Color
+withAlpha alpha color =
+    let
+        rgb : { red : Float, green : Float, blue : Float, alpha : Float }
+        rgb =
+            Element.toRgb color
+    in
+    Element.rgba rgb.red rgb.green rgb.blue alpha
+
+
+formatWhole : Float -> String
+formatWhole value =
+    let
+        number : Int
+        number =
+            round value
+
+        digits : String
+        digits =
+            String.fromInt (abs number)
+
+        sign : String
+        sign =
+            if number < 0 then
+                "-"
+
+            else
+                ""
+    in
+    sign ++ groupThousands digits
+
+
+groupThousands : String -> String
+groupThousands digits =
+    if String.length digits <= 3 then
+        digits
+
+    else
+        let
+            splitAt : Int
+            splitAt =
+                String.length digits - 3
+        in
+        groupThousands (String.left splitAt digits)
+            ++ ","
+            ++ String.dropLeft splitAt digits
 
 
 summaryAmount : String -> List NutrientAmount -> Float
