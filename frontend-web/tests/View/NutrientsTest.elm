@@ -51,6 +51,8 @@ knownCodes =
             \_ -> assertCode "POLYUNSATURATED_FAT_G" "Polyunsaturated Fat"
         , test "TRANS_FAT_G → Trans Fat" <|
             \_ -> assertCode "TRANS_FAT_G" "Trans Fat"
+        , test "ADDED_SUGAR_G → Added Sugars" <|
+            \_ -> assertCode "ADDED_SUGAR_G" "Added Sugars"
         , test "MAGNESIUM_MG → Magnesium" <|
             \_ -> assertCode "MAGNESIUM_MG" "Magnesium"
         , test "ZINC_MG → Zinc" <|

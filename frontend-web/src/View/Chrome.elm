@@ -292,6 +292,11 @@ screenMeta device session route =
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
+        NutritionDetails maybeDate ->
+            { title = "Nutrition details"
+            , leading = GoBack (DiaryDay maybeDate Nothing)
+            }
+
         AdminDashboard ->
             { title = "Admin", leading = OpenMenu }
 

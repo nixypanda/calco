@@ -5,4 +5,5 @@ pub mod error;
 pub mod food_log;
 pub mod goal_target;
 pub mod meal;
+pub mod nutrient_guidance;
 pub mod units;

@@ -20,6 +20,7 @@ type Route
     | AdminEditUser String
     | DiaryDay (Maybe String) (Maybe String)
     | DiaryCalendar (Maybe String)
+    | NutritionDetails (Maybe String)
     | GoalSettings
     | DiarySettings
     | FoodLogEntry String (Maybe String) (Maybe String)
@@ -54,6 +55,7 @@ routeParser =
         , Parser.map DiaryDay
             (s "home" <?> Query.string "date" <?> Query.string "calendar_month")
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
+        , Parser.map NutritionDetails (s "details" <?> Query.string "date")
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map FoodLogEntry
@@ -120,6 +122,9 @@ primaryRoute route =
         DiaryCalendar _ ->
             DiaryDay Nothing Nothing
 
+        NutritionDetails _ ->
+            DiaryDay Nothing Nothing
+
         FoodSearch maybeDate maybeSlot ->
             FoodSearch maybeDate maybeSlot
 
@@ -159,6 +164,10 @@ routeToPath route =
         DiaryCalendar maybeMonth ->
             withQueryParams "/calendar"
                 [ Maybe.map (\month -> "month=" ++ Url.percentEncode month) maybeMonth ]
+
+        NutritionDetails maybeDate ->
+            withQueryParams "/details"
+                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate ]
 
         GoalSettings ->
             "/settings/goals"

@@ -20,6 +20,7 @@ import Api.Foods
 import Api.Goals
 import Api.Logs
 import Api.Meals
+import Api.NutritionDetails
 import Data.Auth as Auth
 import Data.ItemRef as ItemRef
 import Data.MealSlot as MealSlot exposing (MealSlot)
@@ -43,6 +44,7 @@ import Page.Meal.Edit as MealEdit
 import Page.Meal.Form as MealForm
 import Page.Meal.List as MealList
 import Page.Meal.Show as MealShow
+import Page.NutritionDetails as NutritionDetails
 import Page.Users.BootstrapSetup as BootstrapSetup
 import Page.Users.CreateUser as AdminCreateUser
 import Page.Users.Dashboard as AdminDashboard
@@ -68,6 +70,7 @@ type Model
     | DiaryPage DiaryDay.Model
     | DiaryCalendarPage DiaryCalendar.Model
     | DiaryCalendarWorkspace DiaryCalendar.Model DiaryDay.Model
+    | NutritionDetailsPage NutritionDetails.Model
     | GoalsSettingsPage GoalsSettings.Model
     | DiarySettingsPage DiarySettings.Model
     | FoodSearchPage FoodSearch.Model
@@ -163,6 +166,17 @@ init context =
                             , today = today
                             }
                         )
+
+                Nothing ->
+                    ( LoadingPage, Cmd.none, NoOutMsg )
+
+        NutritionDetails dateParam ->
+            case context.today of
+                Just today ->
+                    initPage context
+                        NutritionDetailsPage
+                        applyNutritionDetailsOutMsg
+                        (NutritionDetails.init { dateParam = dateParam, today = today })
 
                 Nothing ->
                     ( LoadingPage, Cmd.none, NoOutMsg )
@@ -868,6 +882,7 @@ type Msg
     | GotAdminEditUserMsg AdminEditUser.Msg
     | GotDiaryMsg DiaryDay.Msg
     | GotDiaryCalendarMsg DiaryCalendar.Msg
+    | GotNutritionDetailsMsg NutritionDetails.Msg
     | GotGoalsSettingsMsg GoalsSettings.Msg
     | GotDiarySettingsMsg DiarySettings.Msg
     | GotFoodSearchMsg FoodSearch.Msg
@@ -1061,6 +1076,20 @@ update context msg model =
                         (DiaryCalendar.update subMsg calendar)
                         |> mapEmbedded
                             (\next -> CalendarDiaryLogWorkspace next diary detail)
+
+                _ ->
+                    Nothing
+
+        GotNutritionDetailsMsg subMsg ->
+            case model of
+                NutritionDetailsPage sub ->
+                    Just
+                        (stepPage context
+                            NutritionDetailsPage
+                            GotNutritionDetailsMsg
+                            applyNutritionDetailsOutMsg
+                            (NutritionDetails.update subMsg sub)
+                        )
 
                 _ ->
                     Nothing
@@ -1688,6 +1717,26 @@ applyDiaryCalendarOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
+applyNutritionDetailsOutMsg : InitContext -> NutritionDetails.OutMsg -> ( Cmd Msg, OutMsg )
+applyNutritionDetailsOutMsg _ outMsg =
+    case outMsg of
+        NutritionDetails.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        NutritionDetails.RequestNutritionDetails date ->
+            ( Api.NutritionDetails.get
+                date
+                (GotNutritionDetailsMsg << NutritionDetails.NutritionDetailsLoaded date)
+            , NoOutMsg
+            )
+
+        NutritionDetails.Navigate route ->
+            ( Cmd.none, Navigate route )
+
+        NutritionDetails.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
 latestSlotRequests : LocalDate -> List (Cmd Msg)
 latestSlotRequests date =
     MealSlot.all
@@ -2242,6 +2291,10 @@ view props =
                     )
                 , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
                 ]
+
+        NutritionDetailsPage detailsModel ->
+            Element.map GotNutritionDetailsMsg
+                (NutritionDetails.view (pageProps props detailsModel))
 
         GoalsSettingsPage goalsSettingsModel ->
             Element.map GotGoalsSettingsMsg

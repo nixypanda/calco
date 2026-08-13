@@ -83,6 +83,9 @@ nutrientLabel code =
         "SUGAR_G" ->
             "Sugar"
 
+        "ADDED_SUGAR_G" ->
+            "Added Sugars"
+
         "STARCH_G" ->
             "Starch"
 

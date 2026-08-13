@@ -5,6 +5,7 @@
   "fat_100g": "FAT_G",
   "fiber_100g": "FIBER_G",
   "sugars_100g": "SUGAR_G",
+  "added-sugars_100g": "ADDED_SUGAR_G",
   "saturated-fat_100g": "SATURATED_FAT_G",
   "trans-fat_100g": "TRANS_FAT_G",
   "monounsaturated-fat_100g": "MONOUNSATURATED_FAT_G",

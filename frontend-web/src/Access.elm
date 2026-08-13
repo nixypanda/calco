@@ -81,6 +81,9 @@ resolveKnownSession session adminExists route =
             DiaryCalendar _ ->
                 Render route
 
+            NutritionDetails _ ->
+                Render route
+
             GoalSettings ->
                 Render route
 

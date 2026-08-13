@@ -20,6 +20,8 @@ tests =
             (DiaryDay (Just "2026-06-04") (Just "2026-06"))
         , parses "/calendar" (DiaryCalendar Nothing)
         , parses "/calendar?month=2026-06" (DiaryCalendar (Just "2026-06"))
+        , parses "/details" (NutritionDetails Nothing)
+        , parses "/details?date=2026-06-04" (NutritionDetails (Just "2026-06-04"))
         , parses "/settings/goals" GoalSettings
         , parses "/logs/abc" (FoodLogEntry "abc" Nothing Nothing)
         , parses "/logs/abc?date=2026-06-04"
@@ -77,6 +79,7 @@ routeFuzzer =
         , Fuzz.map AdminEditUser safeSegmentFuzzer
         , Fuzz.map2 DiaryDay maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map DiaryCalendar maybeMonthFuzzer
+        , Fuzz.map NutritionDetails maybeDateFuzzer
         , Fuzz.constant GoalSettings
         , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer

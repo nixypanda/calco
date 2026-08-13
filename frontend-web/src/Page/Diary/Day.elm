@@ -142,6 +142,7 @@ type Msg
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
     | PreviousDayClicked
     | NextDayClicked
+    | DetailsClicked
     | MacroModeToggled
     | AddFoodClicked MealSlot
     | LogClicked String
@@ -350,6 +351,12 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
+
+        DetailsClicked ->
+            ( model
+            , Cmd.none
+            , Navigate (NutritionDetails (Just (LocalDate.format model.currentDate)))
+            )
 
         MacroModeToggled ->
             ( { model | macroMode = toggleMacroMode model.macroMode }, Cmd.none, NoOp )
@@ -748,7 +755,36 @@ totalsView theme targets summary =
               , tolerance = macroTolerance targets.fatTargetG
               }
             ]
+        , detailsAction theme
         ]
+
+
+detailsAction : Theme -> Element Msg
+detailsAction theme =
+    Input.button
+        [ Element.width Element.fill
+        , Element.height (Element.px 56)
+        , Element.paddingEach
+            { top = 14
+            , right = DesignTokens.space16
+            , bottom = 14
+            , left = DesignTokens.space16
+            }
+        , Background.color theme.brandBlueSoft
+        , Border.rounded DesignTokens.radiusPill
+        , Font.color theme.brandBlue
+        , Typography.body
+        , Font.medium
+        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
+        ]
+        { onPress = Just DetailsClicked
+        , label =
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+                [ Element.text "Details"
+                , Element.el [ Element.alignRight ]
+                    (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
+                ]
+        }
 
 
 calorieHero : Theme -> Float -> Float -> Element msg

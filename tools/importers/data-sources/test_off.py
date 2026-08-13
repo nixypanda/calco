@@ -1,10 +1,18 @@
+import json
 import os
 import sys
 import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from calco_import.fetch.off import OffIndices, _keep_off_row, has_gs1_india_prefix
+from calco_import.fetch import MAPPING_DIR
+from calco_import.fetch.off import (
+    OffIndices,
+    _build_off_nutrient_rows,
+    _keep_off_row,
+    _parse_off_header,
+    has_gs1_india_prefix,
+)
 
 
 class KeepOffRowTests(unittest.TestCase):
@@ -70,6 +78,39 @@ class KeepOffRowTests(unittest.TestCase):
 class Gs1IndiaPrefixTests(unittest.TestCase):
     def test_rejects_non_numeric_off_identifier(self) -> None:
         self.assertFalse(has_gs1_india_prefix("890example"))
+
+
+class OffNutrientMappingTests(unittest.TestCase):
+    def test_added_sugars_field_is_mapped_to_calco_added_sugars(self) -> None:
+        with open(f"{MAPPING_DIR}/off_fields.json") as mapping_file:
+            source_mapping = json.load(mapping_file)
+        header = [
+            "code",
+            "product_name",
+            "brands",
+            "categories",
+            "countries_tags",
+            "serving_quantity",
+            "serving_size",
+            *source_mapping.keys(),
+        ]
+
+        _, nutrient_indices = _parse_off_header(header)
+        row = [""] * len(header)
+        row[header.index("added-sugars_100g")] = "12.5"
+
+        nutrient_rows = list(_build_off_nutrient_rows(row, nutrient_indices, "890123"))
+
+        self.assertIn(
+            {
+                "type": "nutrient",
+                "source": "OFF",
+                "source_id": "890123",
+                "nutrient_code": "ADDED_SUGAR_G",
+                "amount_per_100g": 12.5,
+            },
+            nutrient_rows,
+        )
 
 
 if __name__ == "__main__":

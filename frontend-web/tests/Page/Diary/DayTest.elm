@@ -76,6 +76,12 @@ tests =
                     in
                     ( next.currentDate, outMsg )
                         |> Expect.equal ( model.currentDate, DiaryDay.NoOp )
+            , test "details action carries the selected date" <|
+                \_ ->
+                    DiaryDay.update DiaryDay.DetailsClicked (initModel (Just "2026-05-29"))
+                        |> third
+                        |> Expect.equal
+                            (DiaryDay.Navigate (NutritionDetails (Just "2026-05-29")))
             ]
         , describe "loading"
             [ test "load started marks diary data as loading" <|
