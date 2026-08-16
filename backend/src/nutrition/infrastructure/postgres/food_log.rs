@@ -88,17 +88,6 @@ impl PostgresFoodLogRepository {
         Ok(results)
     }
 
-    async fn load_by_filter(
-        &self,
-        filter: FoodLogListFilter,
-    ) -> Result<Vec<FoodLog>, NutritionError> {
-        let mut query = food_log_filter_query(filter);
-        let rows = query
-            .build_query_as::<FoodLogRow>()
-            .fetch_all(&self.pool)
-            .await?;
-        self.rows_to_food_logs(rows).await
-    }
 }
 
 fn food_log_filter_query(filter: FoodLogListFilter) -> QueryBuilder<'static, Postgres> {
@@ -328,7 +317,12 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         &self,
         filter: FoodLogListFilter,
     ) -> Result<Vec<FoodLog>, NutritionError> {
-        self.load_by_filter(filter).await
+        let mut query = food_log_filter_query(filter);
+        let rows = query
+            .build_query_as::<FoodLogRow>()
+            .fetch_all(&self.pool)
+            .await?;
+        self.rows_to_food_logs(rows).await
     }
 
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {

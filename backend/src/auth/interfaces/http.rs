@@ -275,7 +275,7 @@ async fn bootstrap_create_admin_handler(
         .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
-    let resp = login_result_to_response(result);
+    let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::CREATED, [cookie], Json(resp)))
 }
@@ -291,7 +291,7 @@ async fn login_handler(
         .map_err(|e| auth_error_to_response(&e))?;
 
     let cookie = build_session_cookie(&result.session_token.0, &state.config);
-    let resp = login_result_to_response(result);
+    let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::OK, [cookie], Json(resp)))
 }
@@ -465,10 +465,6 @@ fn forbidden_auth_error_response() -> AuthErrorResponse {
             },
         },
     }
-}
-
-fn login_result_to_response(result: LoginResult) -> LoginSessionResponse {
-    identity_and_profile_to_response(result.identity, result.profile)
 }
 
 fn identity_and_profile_to_response(
