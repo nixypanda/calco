@@ -542,6 +542,18 @@ Search, diary, and logging surfaces should prioritize compact, scannable
 controls and rows. Avoid oversized cards, large text that truncates early, or
 layouts that only work comfortably on desktop widths.
 
+### Responsive Design Rule
+
+Keep a consistent, fluid default and introduce a breakpoint only when the
+information architecture or interaction model must materially change.
+
+Prefer shared spacing, control sizes, wrapping, and visible content across
+viewport sizes. Use responsive branches for structural changes such as pane
+count, navigation mode, or fields that must stack to remain usable. Do not use
+device size as a proxy for input capabilities such as touch, hover, or pointer
+precision; handle those with the corresponding browser capability where
+needed.
+
 ### Repeat Logging UI
 
 - Empty meal-slot cards should show a compact repeat action when the backend

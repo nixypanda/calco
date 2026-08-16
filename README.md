@@ -10,6 +10,14 @@ The app is intentionally simple: search or create foods, log what was eaten, sna
 | :---: | :---: | :---: | :---: |
 | <img src="docs/images/readme/mobile-diary.jpg" alt="CalCo mobile diary showing daily calorie and macro progress" width="240"> | <img src="docs/images/readme/mobile-food-search.jpg" alt="CalCo mobile food catalog search results" width="240"> | <img src="docs/images/readme/mobile-food-nutrition.jpg" alt="CalCo mobile food logging form with calculated nutrition" width="240"> | <img src="docs/images/readme/mobile-meal-builder.jpg" alt="CalCo mobile reusable meal builder" width="240"> |
 
+## Desktop Showcase
+
+The diary and food search stay visible together on wider screens.
+
+<p align="center">
+  <img src="docs/images/readme/desktop-diary-search.jpg" alt="CalCo desktop workspace showing the daily diary and food search side by side" width="1200">
+</p>
+
 ## Stack
 
 - Backend: Rust, axum, sqlx, PostgreSQL
