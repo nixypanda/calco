@@ -324,23 +324,23 @@ pub(super) fn sample_log_date() -> NaiveDate {
     NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()
 }
 
-pub(super) fn make_services(product: Option<Product>) -> FoodLogServices {
+pub(super) fn make_services(product: Option<Product>) -> FoodLogService {
     build_services(product, None)
 }
 
-pub(super) fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogServices {
+pub(super) fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogService {
     build_services(product, Some(meal))
 }
 
-pub(super) fn history_services_for(services: &FoodLogServices) -> FoodLogHistoryServices {
-    FoodLogHistoryServices::new(services.food_log_repo.clone())
+pub(super) fn history_services_for(services: &FoodLogService) -> FoodLogHistoryService {
+    FoodLogHistoryService::new(services.food_log_repo.clone())
 }
 
-pub(super) fn empty_history_services() -> FoodLogHistoryServices {
-    FoodLogHistoryServices::new(Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>)
+pub(super) fn empty_history_services() -> FoodLogHistoryService {
+    FoodLogHistoryService::new(Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>)
 }
 
-fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogServices {
+fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogService {
     let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
     let product_repo = match product {
         Some(p) => Arc::new(MockProductRepo::with_product(p)) as Arc<dyn ProductRepository>,
@@ -350,7 +350,7 @@ fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogServic
         Some(m) => Arc::new(MockMealRepo::with_meal(m)) as Arc<dyn MealRepository>,
         None => Arc::new(MockMealRepo::empty()) as Arc<dyn MealRepository>,
     };
-    FoodLogServices::new(
+    FoodLogService::new(
         food_log_repo,
         product_repo,
         sample_unit_converter(),

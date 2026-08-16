@@ -26,13 +26,13 @@ pub struct CreatedUser {
 }
 
 #[derive(Clone)]
-pub struct AuthBootstrapServices {
+pub struct AuthBootstrapService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     config: AppConfig,
 }
 
-impl AuthBootstrapServices {
+impl AuthBootstrapService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
@@ -94,14 +94,14 @@ impl AuthBootstrapServices {
 }
 
 #[derive(Clone)]
-pub struct AuthSessionServices {
+pub struct AuthSessionService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
     config: AppConfig,
 }
 
-impl AuthSessionServices {
+impl AuthSessionService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
@@ -208,13 +208,13 @@ impl AuthSessionServices {
 }
 
 #[derive(Clone)]
-pub struct AdminUserServices {
+pub struct AdminUserService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
 }
 
-impl AdminUserServices {
+impl AdminUserService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,

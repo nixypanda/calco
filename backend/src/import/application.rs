@@ -3,11 +3,11 @@ use std::sync::Arc;
 use crate::import::domain::*;
 
 #[derive(Clone)]
-pub struct ImportServices {
+pub struct ImportService {
     repo: Arc<dyn ImportRepository>,
 }
 
-impl ImportServices {
+impl ImportService {
     pub fn new(repo: Arc<dyn ImportRepository>) -> Self {
         Self { repo }
     }
@@ -327,18 +327,18 @@ mod tests {
         }
     }
 
-    fn make_services() -> ImportServices {
+    fn make_services() -> ImportService {
         let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
-        ImportServices::new(repo)
+        ImportService::new(repo)
     }
 
-    fn make_services_with_result(result: ImportCommitResult) -> ImportServices {
+    fn make_services_with_result(result: ImportCommitResult) -> ImportService {
         let repo =
             Arc::new(MockImportRepo::with_commit_result(result)) as Arc<dyn ImportRepository>;
-        ImportServices::new(repo)
+        ImportService::new(repo)
     }
 
-    async fn make_pending_job(services: &ImportServices, source: &str) -> ImportJob {
+    async fn make_pending_job(services: &ImportService, source: &str) -> ImportJob {
         let job = ImportJob::new(source.into(), None);
         services.repo.create_job(&job).await.unwrap();
         job
@@ -551,7 +551,7 @@ mod tests {
         job.status = ImportStatus::Committed;
         repo.create_job(&job).await.unwrap();
 
-        let services = ImportServices::new(repo);
+        let services = ImportService::new(repo);
 
         let err = services
             .stage_foods(

@@ -28,14 +28,14 @@ pub struct UpdateFoodInput {
 }
 
 #[derive(Clone)]
-pub struct FoodLogServices {
+pub struct FoodLogService {
     pub food_log_repo: Arc<dyn FoodLogRepository>,
     pub product_repo: Arc<dyn ProductRepository>,
     pub unit_converter: Arc<UnitConverter>,
     pub meal_repo: Arc<dyn MealRepository>,
 }
 
-impl FoodLogServices {
+impl FoodLogService {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
         product_repo: Arc<dyn ProductRepository>,

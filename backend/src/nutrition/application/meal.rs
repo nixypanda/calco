@@ -44,13 +44,13 @@ pub struct MealNutrientEntry {
 }
 
 #[derive(Clone)]
-pub struct MealServices {
+pub struct MealService {
     pub meal_repo: Arc<dyn MealRepository>,
     pub product_repo: Arc<dyn ProductRepository>,
     pub unit_converter: Arc<UnitConverter>,
 }
 
-impl MealServices {
+impl MealService {
     pub fn new(
         meal_repo: Arc<dyn MealRepository>,
         product_repo: Arc<dyn ProductRepository>,
@@ -357,7 +357,7 @@ mod tests {
         }
     }
 
-    fn make_services(product: Option<Product>) -> MealServices {
+    fn make_services(product: Option<Product>) -> MealService {
         let meal_repo = Arc::new(MockMealRepo::new()) as Arc<dyn MealRepository>;
         let product_repo = match product {
             Some(p) => Arc::new(MockProductRepo::with_product(p)) as Arc<dyn ProductRepository>,
@@ -367,7 +367,7 @@ mod tests {
             ("g".to_string(), Decimal::new(1, 0)),
             ("kg".to_string(), Decimal::new(1000, 0)),
         ]));
-        MealServices::new(meal_repo, product_repo, unit_converter)
+        MealService::new(meal_repo, product_repo, unit_converter)
     }
 
     fn sample_component() -> CreateMealComponentInput {

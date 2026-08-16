@@ -9,11 +9,11 @@ use crate::nutrition::domain::goal_target::{
 };
 
 #[derive(Clone)]
-pub struct GoalTargetServices {
+pub struct GoalTargetService {
     repo: Arc<dyn GoalTargetRepository>,
 }
 
-impl GoalTargetServices {
+impl GoalTargetService {
     pub fn new(repo: Arc<dyn GoalTargetRepository>) -> Self {
         Self { repo }
     }
@@ -165,7 +165,7 @@ mod tests {
 
     #[tokio::test]
     async fn no_saved_rows_returns_defaults() {
-        let services = GoalTargetServices::new(Arc::new(MockGoalTargetRepo::new(vec![])));
+        let services = GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![])));
         let user_id = Uuid::new_v4();
         let requested_date = NaiveDate::from_ymd_opt(2026, 6, 16).unwrap();
 
@@ -183,7 +183,7 @@ mod tests {
     async fn multiple_saved_rows_resolve_latest_effective_date() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
-        let services = GoalTargetServices::new(Arc::new(MockGoalTargetRepo::new(vec![
+        let services = GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![
             GoalTarget::create(
                 user_id,
                 NaiveDate::from_ymd_opt(2026, 6, 10).unwrap(),
@@ -225,7 +225,7 @@ mod tests {
             sample_targets(2100, 150, 240, 60),
             now,
         )]));
-        let services = GoalTargetServices::new(repo.clone());
+        let services = GoalTargetService::new(repo.clone());
 
         let snapshot = services
             .save_goal_for_today(
@@ -249,7 +249,7 @@ mod tests {
 
     #[tokio::test]
     async fn save_rejects_non_today_local_date() {
-        let services = GoalTargetServices::new(Arc::new(MockGoalTargetRepo::new(vec![])));
+        let services = GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![])));
         let user_id = Uuid::new_v4();
         let timezone = "Asia/Kolkata";
         let local_date = Utc::now()

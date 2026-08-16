@@ -10,22 +10,22 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::auth::application::{AdminUserServices, AuthBootstrapServices, AuthSessionServices};
+use crate::auth::application::{AdminUserService, AuthBootstrapService, AuthSessionService};
 use crate::auth::domain::{IdentityRepository, SessionRepository, UserProfileRepository};
 use crate::auth::infrastructure::postgres::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
 };
 use crate::auth::interfaces::http::auth_routes;
 use crate::config::AppConfig;
-use crate::import::application::ImportServices;
+use crate::import::application::ImportService;
 use crate::import::domain::ImportRepository;
 use crate::import::infrastructure::postgres::PostgresImportRepository;
 use crate::import::interfaces::http::import_routes;
-use crate::nutrition::application::diary_preferences::DiaryPreferencesServices;
-use crate::nutrition::application::food_log::{FoodLogHistoryServices, FoodLogServices};
-use crate::nutrition::application::goal_target::GoalTargetServices;
-use crate::nutrition::application::meal::MealServices;
-use crate::nutrition::application::nutrition_details::NutritionDetailsServices;
+use crate::nutrition::application::diary_preferences::DiaryPreferencesService;
+use crate::nutrition::application::food_log::{FoodLogHistoryService, FoodLogService};
+use crate::nutrition::application::goal_target::GoalTargetService;
+use crate::nutrition::application::meal::MealService;
+use crate::nutrition::application::nutrition_details::NutritionDetailsService;
 use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::nutrition::domain::diary_preferences::DiaryPreferencesRepository;
 use crate::nutrition::domain::food_log::FoodLogRepository;
@@ -53,9 +53,9 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
-    pub auth_bootstrap: AuthBootstrapServices,
-    pub auth_sessions: AuthSessionServices,
-    pub admin_users: AdminUserServices,
+    pub auth_bootstrap: AuthBootstrapService,
+    pub auth_sessions: AuthSessionService,
+    pub admin_users: AdminUserService,
     pub product_repo: Arc<dyn ProductRepository>,
     pub nutrient_repo: Arc<dyn NutrientRepository>,
     pub unit_repo: Arc<dyn UnitRepository>,
@@ -66,13 +66,13 @@ pub struct AppState {
     pub meal_repo: Arc<dyn MealRepository>,
     pub goal_target_repo: Arc<dyn GoalTargetRepository>,
     pub import_repo: Arc<dyn ImportRepository>,
-    pub food_log_services: FoodLogServices,
-    pub diary_preferences_services: DiaryPreferencesServices,
-    pub nutrition_details_services: NutritionDetailsServices,
-    pub food_log_history_services: FoodLogHistoryServices,
-    pub meal_services: MealServices,
-    pub goal_target_services: GoalTargetServices,
-    pub import_services: ImportServices,
+    pub food_log_services: FoodLogService,
+    pub diary_preferences_services: DiaryPreferencesService,
+    pub nutrition_details_services: NutritionDetailsService,
+    pub food_log_history_services: FoodLogHistoryService,
+    pub meal_services: MealService,
+    pub goal_target_services: GoalTargetService,
+    pub import_services: ImportService,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
@@ -84,14 +84,14 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         as Arc<dyn UserProfileRepository>;
 
     let auth_bootstrap =
-        AuthBootstrapServices::new(identity_repo.clone(), session_repo.clone(), config.clone());
-    let auth_sessions = AuthSessionServices::new(
+        AuthBootstrapService::new(identity_repo.clone(), session_repo.clone(), config.clone());
+    let auth_sessions = AuthSessionService::new(
         identity_repo.clone(),
         session_repo.clone(),
         profile_repo.clone(),
         config.clone(),
     );
-    let admin_users = AdminUserServices::new(
+    let admin_users = AdminUserService::new(
         identity_repo.clone(),
         session_repo.clone(),
         profile_repo.clone(),
@@ -116,27 +116,27 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let goal_target_repo =
         Arc::new(PostgresGoalTargetRepository::new(pool.clone())) as Arc<dyn GoalTargetRepository>;
 
-    let food_log_services = FoodLogServices::new(
+    let food_log_services = FoodLogService::new(
         food_log_repo.clone(),
         product_repo.clone(),
         unit_converter.clone(),
         meal_repo.clone(),
     );
-    let food_log_history_services = FoodLogHistoryServices::new(food_log_repo.clone());
-    let diary_preferences_services = DiaryPreferencesServices::new(diary_preferences_repo.clone());
+    let food_log_history_services = FoodLogHistoryService::new(food_log_repo.clone());
+    let diary_preferences_services = DiaryPreferencesService::new(diary_preferences_repo.clone());
     let nutrition_details_services =
-        NutritionDetailsServices::new(food_log_repo.clone(), nutrient_guidance_repo.clone());
+        NutritionDetailsService::new(food_log_repo.clone(), nutrient_guidance_repo.clone());
 
-    let meal_services = MealServices::new(
+    let meal_services = MealService::new(
         meal_repo.clone(),
         product_repo.clone(),
         unit_converter.clone(),
     );
-    let goal_target_services = GoalTargetServices::new(goal_target_repo.clone());
+    let goal_target_services = GoalTargetService::new(goal_target_repo.clone());
 
     let import_repo =
         Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
-    let import_services = ImportServices::new(import_repo.clone());
+    let import_services = ImportService::new(import_repo.clone());
 
     Ok(AppState {
         config,

@@ -13,7 +13,7 @@ use crate::nutrition::domain::nutrient_guidance::{
 };
 
 #[derive(Clone)]
-pub struct NutritionDetailsServices {
+pub struct NutritionDetailsService {
     food_log_repo: Arc<dyn FoodLogRepository>,
     nutrient_guidance_repo: Arc<dyn NutrientGuidanceRepository>,
 }
@@ -51,7 +51,7 @@ pub struct NutritionDetails {
     pub nutrients: Vec<NutritionDetailsEntry>,
 }
 
-impl NutritionDetailsServices {
+impl NutritionDetailsService {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
         nutrient_guidance_repo: Arc<dyn NutrientGuidanceRepository>,

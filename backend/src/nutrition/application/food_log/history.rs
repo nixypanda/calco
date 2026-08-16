@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::nutrition::domain::food_log::*;
 
 #[derive(Clone)]
-pub struct FoodLogHistoryServices {
+pub struct FoodLogHistoryService {
     food_log_repo: Arc<dyn FoodLogRepository>,
 }
 
@@ -20,7 +20,7 @@ pub struct FoodLogDaySummary {
     pub fat_g: Decimal,
 }
 
-impl FoodLogHistoryServices {
+impl FoodLogHistoryService {
     pub fn new(food_log_repo: Arc<dyn FoodLogRepository>) -> Self {
         Self { food_log_repo }
     }
@@ -224,7 +224,7 @@ fn item_name(item: &FoodLogItemSnapshot) -> &str {
 #[cfg(test)]
 mod tests {
     use super::super::test_support::*;
-    use super::super::{FoodLogServices, LogFoodInput};
+    use super::super::{FoodLogService, LogFoodInput};
     use crate::nutrition::domain::calculation::Quantity;
     use crate::nutrition::domain::catalog::{ProductId, UnitCode};
     use crate::nutrition::domain::food_log::{FoodLog, FoodLogItemRef, MealSlot, NutritionError};
@@ -436,7 +436,7 @@ mod tests {
     }
 
     async fn log_test_product(
-        services: &FoodLogServices,
+        services: &FoodLogService,
         user_id: Uuid,
         log_date: NaiveDate,
         meal_slot: MealSlot,

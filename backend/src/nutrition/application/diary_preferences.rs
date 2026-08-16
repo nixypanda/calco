@@ -8,11 +8,11 @@ use crate::nutrition::domain::diary_preferences::{
 use crate::nutrition::domain::error::NutritionError;
 
 #[derive(Clone)]
-pub struct DiaryPreferencesServices {
+pub struct DiaryPreferencesService {
     repo: Arc<dyn DiaryPreferencesRepository>,
 }
 
-impl DiaryPreferencesServices {
+impl DiaryPreferencesService {
     pub fn new(repo: Arc<dyn DiaryPreferencesRepository>) -> Self {
         Self { repo }
     }
