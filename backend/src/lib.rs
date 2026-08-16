@@ -3,163 +3,48 @@ pub mod config;
 pub mod import;
 pub mod nutrition;
 
-use std::sync::Arc;
-
 use axum::http::{HeaderValue, Method, header};
 use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::auth::application::{AdminUserService, AuthBootstrapService, AuthSessionService};
-use crate::auth::domain::{IdentityRepository, SessionRepository, UserProfileRepository};
-use crate::auth::infrastructure::postgres::{
-    PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
-};
 use crate::auth::interfaces::http::auth_routes;
+use crate::auth::module::AuthModule;
 use crate::config::AppConfig;
-use crate::import::application::ImportService;
-use crate::import::domain::ImportRepository;
-use crate::import::infrastructure::postgres::PostgresImportRepository;
 use crate::import::interfaces::http::import_routes;
-use crate::nutrition::application::diary_preferences::DiaryPreferencesService;
-use crate::nutrition::application::food_log::{FoodLogHistoryService, FoodLogService};
-use crate::nutrition::application::goal_target::GoalTargetService;
-use crate::nutrition::application::meal::MealService;
-use crate::nutrition::application::nutrition_details::NutritionDetailsService;
-use crate::nutrition::domain::catalog::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::nutrition::domain::diary_preferences::DiaryPreferencesRepository;
-use crate::nutrition::domain::food_log::FoodLogRepository;
-use crate::nutrition::domain::goal_target::GoalTargetRepository;
-use crate::nutrition::domain::meal::MealRepository;
-use crate::nutrition::domain::nutrient_guidance::NutrientGuidanceRepository;
-use crate::nutrition::domain::units::UnitConverter;
-use crate::nutrition::infrastructure::nutrient_guidance::StaticNutrientGuidanceRepository;
-use crate::nutrition::infrastructure::postgres::catalog::{
-    PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
-};
-use crate::nutrition::infrastructure::postgres::diary_preferences::PostgresDiaryPreferencesRepository;
-use crate::nutrition::infrastructure::postgres::food_log::PostgresFoodLogRepository;
-use crate::nutrition::infrastructure::postgres::goal_target::PostgresGoalTargetRepository;
-use crate::nutrition::infrastructure::postgres::meal::PostgresMealRepository;
+use crate::import::module::ImportModule;
 use crate::nutrition::interfaces::http::catalog::catalog_routes;
 use crate::nutrition::interfaces::http::diary_preferences::diary_preferences_routes;
 use crate::nutrition::interfaces::http::food_log::food_log_routes;
 use crate::nutrition::interfaces::http::goal_target::goal_target_routes;
 use crate::nutrition::interfaces::http::meal::meal_routes;
 use crate::nutrition::interfaces::http::nutrition_details::nutrition_details_routes;
+use crate::nutrition::module::NutritionModule;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
+/// The composition root: one bounded-context module per top-level domain.
+///
+/// Handlers extract the module they need via [`FromRef`], so each context stays
+/// decoupled from the others while sharing a single router state.
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
-    pub auth_bootstrap: AuthBootstrapService,
-    pub auth_sessions: AuthSessionService,
-    pub admin_users: AdminUserService,
-    pub product_repo: Arc<dyn ProductRepository>,
-    pub nutrient_repo: Arc<dyn NutrientRepository>,
-    pub unit_repo: Arc<dyn UnitRepository>,
-    pub unit_converter: Arc<UnitConverter>,
-    pub food_log_repo: Arc<dyn FoodLogRepository>,
-    pub diary_preferences_repo: Arc<dyn DiaryPreferencesRepository>,
-    pub nutrient_guidance_repo: Arc<dyn NutrientGuidanceRepository>,
-    pub meal_repo: Arc<dyn MealRepository>,
-    pub goal_target_repo: Arc<dyn GoalTargetRepository>,
-    pub import_repo: Arc<dyn ImportRepository>,
-    pub food_log_services: FoodLogService,
-    pub diary_preferences_services: DiaryPreferencesService,
-    pub nutrition_details_services: NutritionDetailsService,
-    pub food_log_history_services: FoodLogHistoryService,
-    pub meal_services: MealService,
-    pub goal_target_services: GoalTargetService,
-    pub import_services: ImportService,
+    pub auth: AuthModule,
+    pub nutrition: NutritionModule,
+    pub import: ImportModule,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
-    let identity_repo =
-        Arc::new(PostgresIdentityRepository::new(pool.clone())) as Arc<dyn IdentityRepository>;
-    let session_repo =
-        Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
-    let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
-        as Arc<dyn UserProfileRepository>;
-
-    let auth_bootstrap =
-        AuthBootstrapService::new(identity_repo.clone(), session_repo.clone(), config.clone());
-    let auth_sessions = AuthSessionService::new(
-        identity_repo.clone(),
-        session_repo.clone(),
-        profile_repo.clone(),
-        config.clone(),
-    );
-    let admin_users = AdminUserService::new(
-        identity_repo.clone(),
-        session_repo.clone(),
-        profile_repo.clone(),
-    );
-
-    let product_repo =
-        Arc::new(PostgresProductRepository::new(pool.clone())) as Arc<dyn ProductRepository>;
-    let nutrient_repo =
-        Arc::new(PostgresNutrientRepository::new(pool.clone())) as Arc<dyn NutrientRepository>;
-    let unit_repo = Arc::new(PostgresUnitRepository::new(pool.clone())) as Arc<dyn UnitRepository>;
-
-    let mass_factors = unit_repo.list_mass_factors().await?;
-    let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
-
-    let food_log_repo =
-        Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
-    let diary_preferences_repo = Arc::new(PostgresDiaryPreferencesRepository::new(pool.clone()))
-        as Arc<dyn DiaryPreferencesRepository>;
-    let nutrient_guidance_repo =
-        Arc::new(StaticNutrientGuidanceRepository::new()) as Arc<dyn NutrientGuidanceRepository>;
-    let meal_repo = Arc::new(PostgresMealRepository::new(pool.clone())) as Arc<dyn MealRepository>;
-    let goal_target_repo =
-        Arc::new(PostgresGoalTargetRepository::new(pool.clone())) as Arc<dyn GoalTargetRepository>;
-
-    let food_log_services = FoodLogService::new(
-        food_log_repo.clone(),
-        product_repo.clone(),
-        unit_converter.clone(),
-        meal_repo.clone(),
-    );
-    let food_log_history_services = FoodLogHistoryService::new(food_log_repo.clone());
-    let diary_preferences_services = DiaryPreferencesService::new(diary_preferences_repo.clone());
-    let nutrition_details_services =
-        NutritionDetailsService::new(food_log_repo.clone(), nutrient_guidance_repo.clone());
-
-    let meal_services = MealService::new(
-        meal_repo.clone(),
-        product_repo.clone(),
-        unit_converter.clone(),
-    );
-    let goal_target_services = GoalTargetService::new(goal_target_repo.clone());
-
-    let import_repo =
-        Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
-    let import_services = ImportService::new(import_repo.clone());
+    let auth = AuthModule::build(&pool, &config);
+    let nutrition = NutritionModule::build(&pool).await?;
+    let import = ImportModule::build(&pool);
 
     Ok(AppState {
         config,
-        auth_bootstrap,
-        auth_sessions,
-        admin_users,
-        product_repo,
-        nutrient_repo,
-        unit_repo,
-        unit_converter,
-        food_log_repo,
-        diary_preferences_repo,
-        nutrient_guidance_repo,
-        meal_repo,
-        goal_target_repo,
-        import_repo,
-        food_log_services,
-        diary_preferences_services,
-        nutrition_details_services,
-        food_log_history_services,
-        meal_services,
-        goal_target_services,
-        import_services,
+        auth,
+        nutrition,
+        import,
     })
 }
 
@@ -170,7 +55,7 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
     let api = Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
-        .merge(auth_routes(auth_state.clone()))
+        .merge(auth_routes(auth_state.auth.clone()))
         .merge(catalog_routes(auth_state.clone()))
         .merge(food_log_routes(auth_state.clone()))
         .merge(diary_preferences_routes(auth_state.clone()))

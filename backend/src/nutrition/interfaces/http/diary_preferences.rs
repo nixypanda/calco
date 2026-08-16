@@ -8,6 +8,7 @@ use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::domain::diary_preferences::{DiaryPreferences, EnabledMealSlots};
 use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::food_log::MealSlot;
+use crate::nutrition::module::NutritionModule;
 
 pub fn diary_preferences_routes(state: AppState) -> Router {
     Router::new()
@@ -30,7 +31,7 @@ pub struct DiaryPreferencesResponse {
 
 async fn get_preferences_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
 ) -> impl IntoResponse {
     match state.diary_preferences_services.get(auth.0.id).await {
         Ok(preferences) => Json(to_response(preferences)).into_response(),
@@ -40,7 +41,7 @@ async fn get_preferences_handler(
 
 async fn put_preferences_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(request): Json<PutDiaryPreferencesRequest>,
 ) -> impl IntoResponse {
     let slots = match parse_enabled_slots(request.enabled_meal_slots) {

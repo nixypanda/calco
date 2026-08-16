@@ -59,6 +59,16 @@ pub struct SessionToken(pub String);
 #[derive(Debug, Clone)]
 pub struct SessionTokenHash(pub String);
 
+/// The slice of configuration the auth context actually needs: how session
+/// cookies are named/secured and how long sessions live. Kept separate from the
+/// app-wide config so auth depends only on what it uses.
+#[derive(Debug, Clone)]
+pub struct SessionCookieConfig {
+    pub cookie_name: String,
+    pub cookie_secure: bool,
+    pub ttl_seconds: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdentityRole {
     User,

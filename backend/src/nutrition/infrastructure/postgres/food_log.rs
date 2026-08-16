@@ -87,7 +87,6 @@ impl PostgresFoodLogRepository {
         }
         Ok(results)
     }
-
 }
 
 fn food_log_filter_query(filter: FoodLogListFilter) -> QueryBuilder<'static, Postgres> {

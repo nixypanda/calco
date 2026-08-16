@@ -7,7 +7,6 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::auth::domain::*;
-use crate::config::AppConfig;
 
 pub struct LoginResult {
     pub identity: Identity,
@@ -29,14 +28,14 @@ pub struct CreatedUser {
 pub struct AuthBootstrapService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
-    config: AppConfig,
+    config: SessionCookieConfig,
 }
 
 impl AuthBootstrapService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
-        config: AppConfig,
+        config: SessionCookieConfig,
     ) -> Self {
         Self {
             identity_repo,
@@ -98,7 +97,7 @@ pub struct AuthSessionService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
-    config: AppConfig,
+    config: SessionCookieConfig,
 }
 
 impl AuthSessionService {
@@ -106,7 +105,7 @@ impl AuthSessionService {
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
         profile_repo: Arc<dyn UserProfileRepository>,
-        config: AppConfig,
+        config: SessionCookieConfig,
     ) -> Self {
         Self {
             identity_repo,
@@ -373,7 +372,7 @@ impl AdminUserService {
 
 fn create_session(
     identity: &Identity,
-    config: &AppConfig,
+    config: &SessionCookieConfig,
     now: DateTime<Utc>,
 ) -> Result<(SessionToken, Session), AuthError> {
     use rand::RngCore;
@@ -391,7 +390,7 @@ fn create_session(
         session_token_hash: token_hash,
         created_at: now,
         last_seen_at: now,
-        expires_at: now + chrono::Duration::seconds(config.session_ttl_seconds),
+        expires_at: now + chrono::Duration::seconds(config.ttl_seconds),
         revoked_at: None,
     };
 

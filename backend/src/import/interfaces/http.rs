@@ -13,6 +13,7 @@ use crate::AppState;
 use crate::auth::interfaces::http::AuthAdmin;
 use crate::import::application::StageResult;
 use crate::import::domain::*;
+use crate::import::module::ImportModule;
 use crate::nutrition::domain::catalog::Category;
 
 pub fn import_routes(state: AppState) -> Router {
@@ -72,11 +73,11 @@ struct CreateImportResponse {
 
 async fn create_import_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Json(req): Json<CreateImportRequest>,
 ) -> impl IntoResponse {
     let job = ImportJob::new(req.source, None);
-    match state.import_repo.create_job(&job).await {
+    match state.repo.create_job(&job).await {
         Ok(()) => (
             StatusCode::CREATED,
             Json(import_job_to_create_response(job)),
@@ -112,11 +113,11 @@ struct ImportStageResponse {
 
 async fn stage_foods_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<StageFoodsRequest>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
+    let services = &state.service;
 
     let foods = import_stage_foods_request_to_products(req);
 
@@ -142,11 +143,11 @@ struct ImportNutrientRowDto {
 
 async fn stage_nutrients_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<StageNutrientsRequest>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
+    let services = &state.service;
 
     let nutrients = import_stage_nutrients_request_to_nutrients(req);
 
@@ -174,11 +175,11 @@ struct ImportServingRowDto {
 
 async fn stage_servings_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<StageServingsRequest>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
+    let services = &state.service;
 
     let servings = import_stage_servings_request_to_servings(req);
 
@@ -200,10 +201,10 @@ struct ImportCommitResponse {
 
 async fn commit_import_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let services = &state.import_services;
+    let services = &state.service;
 
     match services.commit_job(ImportId(id)).await {
         Ok(result) => Json(import_commit_result_to_response(result)).into_response(),
@@ -223,10 +224,10 @@ struct ImportStatusResponse {
 
 async fn get_import_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match state.import_repo.find_job(ImportId(id)).await {
+    match state.repo.find_job(ImportId(id)).await {
         Ok(Some(job)) => Json(import_job_to_status_response(job)).into_response(),
         Ok(None) => import_not_found_response(id).into_response(),
         Err(e) => import_error_response(&e).into_response(),
@@ -246,10 +247,10 @@ struct ImportErrorItemDto {
 
 async fn get_import_errors_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<ImportModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match state.import_repo.get_errors(ImportId(id)).await {
+    match state.repo.get_errors(ImportId(id)).await {
         Ok(errors) => Json(import_errors_to_error_list_response(errors)).into_response(),
         Err(e) => import_error_response(&e).into_response(),
     }

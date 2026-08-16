@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::domain::catalog::*;
+use crate::nutrition::module::NutritionModule;
 
 // ─── Routes ────────────────────────────────────────────────────
 
@@ -267,7 +268,7 @@ struct CustomFoodParams {
 
 async fn search_products_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<SearchQuery>,
 ) -> impl IntoResponse {
     let scope = match ProductSearchScope::parse(query.scope.as_deref()) {
@@ -287,7 +288,7 @@ async fn search_products_handler(
 
 async fn list_categories_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<CategoryQuery>,
 ) -> impl IntoResponse {
     let limit = query.limit.unwrap_or(10).clamp(1, 50);
@@ -309,7 +310,7 @@ async fn list_categories_handler(
 
 async fn list_custom_foods_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
 ) -> impl IntoResponse {
     let products = match state.product_repo.list_by_user_id(auth.0.id).await {
         Ok(p) => p,
@@ -324,7 +325,7 @@ async fn list_custom_foods_handler(
 
 async fn barcode_lookup_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
     let product = match state
@@ -351,7 +352,7 @@ async fn barcode_lookup_handler(
 
 async fn product_detail_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let product = match state.product_repo.find_by_id(ProductId(id)).await {
@@ -374,7 +375,7 @@ async fn product_detail_handler(
 
 async fn create_custom_food_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
     let args = custom_food_request_to_params(req);
@@ -408,7 +409,7 @@ async fn create_custom_food_handler(
 
 async fn update_custom_food_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
@@ -454,7 +455,7 @@ async fn update_custom_food_handler(
 
 async fn delete_custom_food_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let existing = match state.product_repo.find_by_id(ProductId(id)).await {
@@ -477,7 +478,7 @@ async fn delete_custom_food_handler(
 
 async fn list_nutrients_handler(
     _auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
 ) -> impl IntoResponse {
     match state.nutrient_repo.list_all().await {
         Ok(nutrients) => {
@@ -491,7 +492,7 @@ async fn list_nutrients_handler(
 
 async fn get_nutrient_handler(
     _auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(code): Path<String>,
 ) -> impl IntoResponse {
     match state.nutrient_repo.find_by_code(&code).await {
@@ -503,7 +504,10 @@ async fn get_nutrient_handler(
     }
 }
 
-async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
+async fn list_units_handler(
+    _auth: AuthUser,
+    State(state): State<NutritionModule>,
+) -> impl IntoResponse {
     match state.unit_repo.list_all().await {
         Ok(units) => {
             let items: Vec<UnitItemDto> = units.into_iter().map(unit_tuple_to_item_dto).collect();
@@ -515,13 +519,13 @@ async fn list_units_handler(_auth: AuthUser, State(state): State<AppState>) -> i
 
 // ─── Helpers ───────────────────────────────────────────────────
 
-async fn load_nutrient_catalog(state: &AppState) -> Result<NutrientCatalog, NutritionError> {
+async fn load_nutrient_catalog(state: &NutritionModule) -> Result<NutrientCatalog, NutritionError> {
     let nutrients = state.nutrient_repo.list_all().await?;
     Ok(nutrients.into_iter().collect())
 }
 
 async fn load_allowed_units(
-    state: &AppState,
+    state: &NutritionModule,
     product: &Product,
 ) -> Result<Vec<(UnitCode, String, String)>, NutritionError> {
     let all_units = state.unit_repo.list_all().await?;
@@ -593,7 +597,7 @@ fn products_to_search_response(products: Vec<Product>) -> SearchListResponse {
 }
 
 async fn custom_foods_to_list_response(
-    state: &AppState,
+    state: &NutritionModule,
     products: &[Product],
 ) -> Result<CustomFoodListResponse, NutritionError> {
     let all_units = state.unit_repo.list_all().await?;

@@ -12,6 +12,7 @@ use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::goal_target::{GoalTargetSnapshot, GoalTargetSource, GoalTargets};
+use crate::nutrition::module::NutritionModule;
 
 pub fn goal_target_routes(state: AppState) -> Router {
     Router::new()
@@ -54,7 +55,7 @@ pub enum GoalSourceDto {
 
 async fn get_goal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<GoalQuery>,
 ) -> impl IntoResponse {
     let requested_date = match parse_date(&query.date, "date") {
@@ -74,7 +75,7 @@ async fn get_goal_handler(
 
 async fn put_goal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(request): Json<PutGoalRequest>,
 ) -> impl IntoResponse {
     let local_date = match parse_date(&request.local_date, "local_date") {

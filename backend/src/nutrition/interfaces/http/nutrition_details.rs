@@ -17,6 +17,7 @@ use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::nutrient_guidance::{
     NutrientDetailsSection, NutrientGuidanceKind, NutrientGuidanceSet,
 };
+use crate::nutrition::module::NutritionModule;
 
 pub fn nutrition_details_routes(state: AppState) -> Router {
     Router::new()
@@ -93,7 +94,7 @@ pub enum NutritionDetailsStatusDto {
 
 async fn get_nutrition_details_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<NutritionDetailsQuery>,
 ) -> impl IntoResponse {
     let date = match NaiveDate::parse_from_str(&query.date, "%Y-%m-%d") {

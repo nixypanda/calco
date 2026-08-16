@@ -34,10 +34,7 @@ impl PostgresMealRepository {
     }
 }
 
-fn meal_row_to_meal(
-    row: MealRow,
-    components: Vec<MealComponent>,
-) -> Result<Meal, NutritionError> {
+fn meal_row_to_meal(row: MealRow, components: Vec<MealComponent>) -> Result<Meal, NutritionError> {
     Ok(Meal {
         id: MealId(row.id),
         user_id: row.user_id,

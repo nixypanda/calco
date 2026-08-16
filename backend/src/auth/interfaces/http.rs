@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    extract::{FromRequestParts, Path, State},
+    extract::{FromRef, FromRequestParts, Path, State},
     http::{Response, StatusCode, header, request::Parts},
     response::{IntoResponse, Json},
     routing::{get, post},
@@ -8,12 +8,11 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::AppState;
 use crate::auth::application::*;
 use crate::auth::domain::*;
-use crate::config::AppConfig;
+use crate::auth::module::AuthModule;
 
-pub fn auth_routes(state: AppState) -> Router {
+pub fn auth_routes(state: AuthModule) -> Router {
     Router::new()
         .route("/auth/bootstrap/status", get(bootstrap_status_handler))
         .route(
@@ -44,14 +43,16 @@ pub fn auth_routes(state: AppState) -> Router {
 
 pub struct RawSessionToken(pub String);
 
-impl FromRequestParts<AppState> for RawSessionToken {
+impl<S> FromRequestParts<S> for RawSessionToken
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+{
     type Rejection = AuthErrorResponse;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
-        let token = extract_session_token(parts, &state.config)?;
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let config = SessionCookieConfig::from_ref(state);
+        let token = extract_session_token(parts, &config)?;
         Ok(RawSessionToken(token))
     }
 }
@@ -60,16 +61,19 @@ impl FromRequestParts<AppState> for RawSessionToken {
 
 pub struct AuthIdentity(pub Identity);
 
-impl FromRequestParts<AppState> for AuthIdentity {
+impl<S> FromRequestParts<S> for AuthIdentity
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
     type Rejection = AuthErrorResponse;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = state
-            .auth_sessions
+        let auth = AuthModule::from_ref(state);
+        let result = auth
+            .sessions
             .get_session(&token)
             .await
             .map_err(|e| auth_error_to_response(&e))?;
@@ -79,16 +83,19 @@ impl FromRequestParts<AppState> for AuthIdentity {
 
 pub struct AuthUser(pub UserProfile);
 
-impl FromRequestParts<AppState> for AuthUser {
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
     type Rejection = AuthErrorResponse;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = state
-            .auth_sessions
+        let auth = AuthModule::from_ref(state);
+        let result = auth
+            .sessions
             .get_session(&token)
             .await
             .map_err(|e| auth_error_to_response(&e))?;
@@ -105,16 +112,19 @@ impl FromRequestParts<AppState> for AuthUser {
 
 pub struct AuthAdmin;
 
-impl FromRequestParts<AppState> for AuthAdmin {
+impl<S> FromRequestParts<S> for AuthAdmin
+where
+    S: Send + Sync,
+    SessionCookieConfig: FromRef<S>,
+    AuthModule: FromRef<S>,
+{
     type Rejection = AuthErrorResponse;
 
-    async fn from_request_parts(
-        parts: &mut Parts,
-        state: &AppState,
-    ) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
         let RawSessionToken(token) = RawSessionToken::from_request_parts(parts, state).await?;
-        let result = state
-            .auth_sessions
+        let auth = AuthModule::from_ref(state);
+        let result = auth
+            .sessions
             .get_session(&token)
             .await
             .map_err(|e| auth_error_to_response(&e))?;
@@ -252,10 +262,10 @@ pub struct ResetPasswordRequest {
 // ─── Handlers ─────────────────────────────────────────────────
 
 async fn bootstrap_status_handler(
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
 ) -> Result<Json<BootstrapStatusResponse>, AuthErrorResponse> {
     let admin_exists = state
-        .auth_bootstrap
+        .bootstrap
         .admin_exists()
         .await
         .map_err(|e| auth_error_to_response(&e))?;
@@ -265,43 +275,43 @@ async fn bootstrap_status_handler(
 type CookieHeader = (header::HeaderName, String);
 
 async fn bootstrap_create_admin_handler(
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Json(body): Json<CreateAdminRequest>,
 ) -> Result<(StatusCode, [CookieHeader; 1], Json<LoginSessionResponse>), AuthErrorResponse> {
     let result = state
-        .auth_bootstrap
+        .bootstrap
         .create_bootstrap_admin(&body.username, &body.password)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.config);
+    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::CREATED, [cookie], Json(resp)))
 }
 
 async fn login_handler(
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Json(body): Json<LoginRequest>,
 ) -> Result<(StatusCode, [CookieHeader; 1], Json<LoginSessionResponse>), AuthErrorResponse> {
     let result = state
-        .auth_sessions
+        .sessions
         .login(&body.username, &body.password)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.config);
+    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::OK, [cookie], Json(resp)))
 }
 
 async fn session_handler(
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     RawSessionToken(token): RawSessionToken,
 ) -> Result<Json<LoginSessionResponse>, AuthErrorResponse> {
     let result = state
-        .auth_sessions
+        .sessions
         .get_session(&token)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
@@ -313,22 +323,22 @@ async fn session_handler(
 }
 
 async fn logout_handler(
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     RawSessionToken(token): RawSessionToken,
 ) -> Result<(StatusCode, [CookieHeader; 1]), AuthErrorResponse> {
     state
-        .auth_sessions
+        .sessions
         .logout(&token)
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let clear_cookie = build_clear_cookie(&state.config);
+    let clear_cookie = build_clear_cookie(&state.cookie_config);
     Ok((StatusCode::OK, [clear_cookie]))
 }
 
 async fn admin_create_user_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Json(body): Json<CreateUserRequest>,
 ) -> Result<(StatusCode, Json<LoginSessionResponse>), AuthErrorResponse> {
     let result = state
@@ -345,7 +355,7 @@ async fn admin_create_user_handler(
 
 async fn admin_get_user_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Path(user_id): Path<Uuid>,
 ) -> Result<Json<UserItemDto>, AuthErrorResponse> {
     let user = state
@@ -359,7 +369,7 @@ async fn admin_get_user_handler(
 
 async fn admin_list_users_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
 ) -> Result<Json<UserListResponse>, AuthErrorResponse> {
     let users = state
         .admin_users
@@ -372,7 +382,7 @@ async fn admin_list_users_handler(
 
 async fn admin_reset_password_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Path(user_id): Path<Uuid>,
     Json(body): Json<ResetPasswordRequest>,
 ) -> Result<StatusCode, AuthErrorResponse> {
@@ -387,7 +397,7 @@ async fn admin_reset_password_handler(
 
 async fn admin_disable_user_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {
     state
@@ -401,7 +411,7 @@ async fn admin_disable_user_handler(
 
 async fn admin_enable_user_handler(
     _admin: AuthAdmin,
-    State(state): State<AppState>,
+    State(state): State<AuthModule>,
     Path(user_id): Path<Uuid>,
 ) -> Result<StatusCode, AuthErrorResponse> {
     state
@@ -524,7 +534,10 @@ fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
 
 // ─── Helpers ──────────────────────────────────────────────────
 
-fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, AuthErrorResponse> {
+fn extract_session_token(
+    parts: &Parts,
+    config: &SessionCookieConfig,
+) -> Result<String, AuthErrorResponse> {
     let cookie_header = parts
         .headers
         .get(header::COOKIE)
@@ -533,7 +546,7 @@ fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, Au
 
     for pair in cookie_header.split(';') {
         let pair = pair.trim();
-        if let Some(value) = pair.strip_prefix(&format!("{}=", config.session_cookie_name)) {
+        if let Some(value) = pair.strip_prefix(&format!("{}=", config.cookie_name)) {
             return Ok(value.to_string());
         }
     }
@@ -541,23 +554,23 @@ fn extract_session_token(parts: &Parts, config: &AppConfig) -> Result<String, Au
     Err(auth_error_to_response(&AuthError::Unauthorized))
 }
 
-fn build_session_cookie(token: &str, config: &AppConfig) -> CookieHeader {
+fn build_session_cookie(token: &str, config: &SessionCookieConfig) -> CookieHeader {
     let mut cookie = format!(
         "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
-        config.session_cookie_name, token, config.session_ttl_seconds
+        config.cookie_name, token, config.ttl_seconds
     );
-    if config.session_cookie_secure {
+    if config.cookie_secure {
         cookie.push_str("; Secure");
     }
     (header::SET_COOKIE, cookie)
 }
 
-fn build_clear_cookie(config: &AppConfig) -> CookieHeader {
+fn build_clear_cookie(config: &SessionCookieConfig) -> CookieHeader {
     let mut cookie = format!(
         "{}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0",
-        config.session_cookie_name
+        config.cookie_name
     );
-    if config.session_cookie_secure {
+    if config.cookie_secure {
         cookie.push_str("; Secure");
     }
     (header::SET_COOKIE, cookie)

@@ -18,6 +18,7 @@ use crate::nutrition::domain::calculation::Quantity;
 use crate::nutrition::domain::catalog::{Product, ProductId, UnitCode};
 use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::meal::*;
+use crate::nutrition::module::NutritionModule;
 
 pub fn meal_routes(state: AppState) -> Router {
     Router::new()
@@ -127,7 +128,7 @@ pub struct UpdateMealRequest {
 
 async fn create_meal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(req): Json<CreateMealRequest>,
 ) -> impl IntoResponse {
     let services = &state.meal_services;
@@ -148,7 +149,7 @@ async fn create_meal_handler(
 
 async fn get_meal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.meal_repo.find_by_id(MealId(id)).await {
@@ -166,7 +167,10 @@ async fn get_meal_handler(
     }
 }
 
-async fn list_meals_handler(auth: AuthUser, State(state): State<AppState>) -> impl IntoResponse {
+async fn list_meals_handler(
+    auth: AuthUser,
+    State(state): State<NutritionModule>,
+) -> impl IntoResponse {
     match state.meal_repo.list_by_user_id(auth.0.id).await {
         Ok(meals) => match meals_to_list_response(&state, meals).await {
             Ok(resp) => Json(resp).into_response(),
@@ -178,7 +182,7 @@ async fn list_meals_handler(auth: AuthUser, State(state): State<AppState>) -> im
 
 async fn update_meal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateMealRequest>,
 ) -> impl IntoResponse {
@@ -200,7 +204,7 @@ async fn update_meal_handler(
 
 async fn delete_meal_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let services = &state.meal_services;
@@ -213,7 +217,7 @@ async fn delete_meal_handler(
 
 async fn meal_nutrients_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,
 ) -> impl IntoResponse {
@@ -308,7 +312,7 @@ fn meal_component_request_to_input(
 }
 
 async fn meals_to_list_response(
-    state: &AppState,
+    state: &NutritionModule,
     meals: Vec<Meal>,
 ) -> Result<MealListResponse, NutritionError> {
     let mut items = Vec::with_capacity(meals.len());
@@ -318,7 +322,10 @@ async fn meals_to_list_response(
     Ok(MealListResponse { items })
 }
 
-async fn meal_to_response(state: &AppState, meal: &Meal) -> Result<MealResponse, NutritionError> {
+async fn meal_to_response(
+    state: &NutritionModule,
+    meal: &Meal,
+) -> Result<MealResponse, NutritionError> {
     let products = load_meal_products(meal, state.product_repo.as_ref()).await?;
     Ok(meal_to_response_with_products(
         meal,

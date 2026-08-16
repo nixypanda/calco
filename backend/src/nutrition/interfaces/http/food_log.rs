@@ -21,6 +21,7 @@ use crate::nutrition::domain::catalog::{ProductId, UnitCode};
 use crate::nutrition::domain::error::NutritionError;
 use crate::nutrition::domain::food_log::*;
 use crate::nutrition::domain::meal::MealId;
+use crate::nutrition::module::NutritionModule;
 
 pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
@@ -224,7 +225,7 @@ use crate::nutrition::interfaces::http::{
 
 async fn create_log_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(req): Json<CreateLogRequest>,
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
@@ -245,7 +246,7 @@ async fn create_log_handler(
 
 async fn create_logs_batch_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(req): Json<CreateLogsBatchRequest>,
 ) -> impl IntoResponse {
     if req.items.is_empty() {
@@ -284,7 +285,7 @@ async fn create_logs_batch_handler(
 
 async fn latest_slot_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<LatestSlotQuery>,
 ) -> impl IntoResponse {
     let meal_slot = match parse_meal_slot(&query.meal_slot) {
@@ -317,7 +318,7 @@ async fn latest_slot_handler(
 
 async fn recent_items_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<RecentItemsQuery>,
 ) -> impl IntoResponse {
     let (from_date, to_date, meal_slot) =
@@ -342,7 +343,7 @@ async fn recent_items_handler(
 
 async fn summary_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<SummaryQuery>,
 ) -> impl IntoResponse {
     let from_date = match parse_log_date(&query.from_date) {
@@ -378,7 +379,7 @@ async fn summary_handler(
 
 async fn last_used_items_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Json(req): Json<LastUsedItemsRequest>,
 ) -> impl IntoResponse {
     let (from_date, to_date, meal_slot) =
@@ -411,7 +412,7 @@ async fn last_used_items_handler(
 
 async fn get_log_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match state.food_log_repo.find_by_id(FoodLogId(id)).await {
@@ -429,7 +430,7 @@ async fn get_log_handler(
 
 async fn list_logs_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Query(query): Query<LogQuery>,
 ) -> impl IntoResponse {
     let log_date = match food_log_query_to_date(query) {
@@ -449,7 +450,7 @@ async fn list_logs_handler(
 
 async fn update_log_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateLogRequest>,
 ) -> impl IntoResponse {
@@ -474,7 +475,7 @@ async fn update_log_handler(
 
 async fn delete_log_handler(
     auth: AuthUser,
-    State(state): State<AppState>,
+    State(state): State<NutritionModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
