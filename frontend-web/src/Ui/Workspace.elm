@@ -48,7 +48,12 @@ view device panes =
                 , Element.width (Element.fill |> Element.maximum 1520)
                 , Element.height Element.fill
                 , Element.spacing DesignTokens.space16
-                , Element.padding DesignTokens.space24
+                , Element.paddingEach
+                    { top = DesignTokens.space24
+                    , right = DesignTokens.space24
+                    , bottom = 0
+                    , left = DesignTokens.space24
+                    }
                 , Element.clip
                 , Element.htmlAttribute (Attr.class "ui-workspace")
                 , Element.htmlAttribute (Attr.style "min-height" "0")
