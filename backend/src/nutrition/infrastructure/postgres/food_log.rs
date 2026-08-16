@@ -40,7 +40,7 @@ impl PostgresFoodLogRepository {
             .into_iter()
             .map(|r| FoodLogNutrientSnapshot {
                 nutrient_code: NutrientCode(r.code),
-                amount: r.amount,
+                amount: r.amount.normalize(),
                 unit: UnitCode(r.unit),
             })
             .collect())
@@ -75,7 +75,7 @@ impl PostgresFoodLogRepository {
                 .or_default()
                 .push(FoodLogNutrientSnapshot {
                     nutrient_code: NutrientCode(s.code),
-                    amount: s.amount,
+                    amount: s.amount.normalize(),
                     unit: UnitCode(s.unit),
                 });
         }
