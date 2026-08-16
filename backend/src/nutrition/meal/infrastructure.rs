@@ -137,16 +137,15 @@ impl MealRepository for PostgresMealRepository {
         }
     }
 
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, NutritionError> {
+    async fn list_all(&self) -> Result<Vec<Meal>, NutritionError> {
         let rows = sqlx::query_as::<_, MealRow>(
             r#"
             SELECT id, user_id, name, notes, total_quantity_amount, total_quantity_unit,
                    created_at, updated_at
-            FROM meals WHERE user_id = $1
+            FROM meals
             ORDER BY created_at DESC
             "#,
         )
-        .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
 

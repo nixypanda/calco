@@ -168,15 +168,14 @@ impl ProductRepository for PostgresProductRepository {
                            created_at, updated_at
                     FROM products
                     WHERE deleted_at IS NULL
-                      AND (visibility = 'global' OR user_id = $2)
                       AND ($1 = ''
                            OR name ILIKE '%' || $1 || '%'
                            OR brand ILIKE '%' || $1 || '%'
                            OR barcode ILIKE '%' || $1 || '%'
                            OR lower(name) % lower($1)
                            OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
-                      AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
+                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
+                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
                     ORDER BY
                         CASE
                             WHEN barcode = $1 THEN 0
@@ -196,7 +195,6 @@ impl ProductRepository for PostgresProductRepository {
                     "#,
                 )
                 .bind(&query.text)
-                .bind(user_id)
                 .bind(&include)
                 .bind(&exclude)
                 .fetch_all(&self.pool)
@@ -210,16 +208,15 @@ impl ProductRepository for PostgresProductRepository {
                            created_at, updated_at
                     FROM products
                     WHERE deleted_at IS NULL
-                      AND visibility = 'user_private'
-                      AND user_id = $2
+                      AND source = 'USER'
                       AND ($1 = ''
                            OR name ILIKE '%' || $1 || '%'
                            OR brand ILIKE '%' || $1 || '%'
                            OR barcode ILIKE '%' || $1 || '%'
                            OR lower(name) % lower($1)
                            OR (brand IS NOT NULL AND lower(brand) % lower($1)))
-                      AND (cardinality($3::text[]) = 0 OR categories @> $3::text[])
-                      AND (cardinality($4::text[]) = 0 OR NOT categories && $4::text[])
+                      AND (cardinality($2::text[]) = 0 OR categories @> $2::text[])
+                      AND (cardinality($3::text[]) = 0 OR NOT categories && $3::text[])
                     ORDER BY
                         CASE
                             WHEN barcode = $1 THEN 0
@@ -239,7 +236,6 @@ impl ProductRepository for PostgresProductRepository {
                     "#,
                 )
                 .bind(&query.text)
-                .bind(user_id)
                 .bind(&include)
                 .bind(&exclude)
                 .fetch_all(&self.pool)
@@ -263,7 +259,6 @@ impl ProductRepository for PostgresProductRepository {
                     FROM products p
                     JOIN latest_logs l ON l.product_id = p.id
                     WHERE p.deleted_at IS NULL
-                      AND (p.visibility = 'global' OR p.user_id = $2)
                       AND ($1 = ''
                            OR p.name ILIKE '%' || $1 || '%'
                            OR p.brand ILIKE '%' || $1 || '%'
@@ -354,7 +349,7 @@ impl ProductRepository for PostgresProductRepository {
     async fn list_categories(
         &self,
         query: &str,
-        user_id: Option<Uuid>,
+        _user_id: Option<Uuid>,
         limit: i64,
     ) -> Result<Vec<CategorySuggestion>, NutritionError> {
         let rows = sqlx::query_as::<_, CategorySuggestionRow>(
@@ -363,7 +358,6 @@ impl ProductRepository for PostgresProductRepository {
             FROM products p
             CROSS JOIN LATERAL UNNEST(p.categories) AS category
             WHERE p.deleted_at IS NULL
-              AND (p.visibility = 'global' OR p.user_id = $2)
               AND ($1 = ''
                    OR category ILIKE $1 || '%'
                    OR category ILIKE '%' || $1 || '%'
@@ -378,11 +372,10 @@ impl ProductRepository for PostgresProductRepository {
                 COUNT(*) DESC,
                 similarity(lower(category), lower($1)) DESC,
                 category
-            LIMIT $3
+            LIMIT $2
             "#,
         )
         .bind(query)
-        .bind(user_id)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -435,7 +428,7 @@ impl ProductRepository for PostgresProductRepository {
     async fn find_by_barcode(
         &self,
         barcode: &str,
-        user_id: Option<Uuid>,
+        _user_id: Option<Uuid>,
     ) -> Result<Option<Product>, NutritionError> {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
@@ -445,11 +438,9 @@ impl ProductRepository for PostgresProductRepository {
             FROM products
             WHERE barcode = $1
               AND deleted_at IS NULL
-              AND (visibility = 'global' OR user_id = $2)
             "#,
         )
         .bind(barcode)
-        .bind(user_id)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -463,20 +454,18 @@ impl ProductRepository for PostgresProductRepository {
         }
     }
 
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Product>, NutritionError> {
+    async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
                    categories, default_quantity, default_unit, serving_size_g,
                    created_at, updated_at
             FROM products
-            WHERE user_id = $1
-              AND visibility = 'user_private'
+            WHERE source = 'USER'
               AND deleted_at IS NULL
             ORDER BY created_at DESC
             "#,
         )
-        .bind(user_id)
         .fetch_all(&self.pool)
         .await?;
 

@@ -52,6 +52,40 @@ async fn log_product(router: &axum::Router, user: &str, product_id: &str, log_da
 }
 
 #[sqlx::test]
+async fn imported_products_cannot_be_mutated_as_custom_foods(pool: PgPool) {
+    let product_id: uuid::Uuid = sqlx::query_scalar(
+        r#"
+        INSERT INTO products (source, source_id, visibility, name)
+        VALUES ('OFF', 'system-read-only-test', 'global', 'Imported Food')
+        RETURNING id
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    let router = app(pool).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let payload = json!({
+        "name": "Mutated Imported Food",
+        "categories": [],
+        "nutrients": [],
+        "servings": []
+    });
+
+    for method in [Method::PUT, Method::DELETE] {
+        let request = json_request(
+            method,
+            &format!("/api/foods/custom/{product_id}"),
+            Some(&user),
+            &payload,
+        );
+        let (status, _, body) = send(&router, request).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "body: {body:?}");
+    }
+}
+
+#[sqlx::test]
 async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     let router = app(pool).await;
     let (_admin, user) = bootstrap_and_user(&router).await;
@@ -88,7 +122,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     let detail: Value = get_json(&router, &format!("/api/foods/{id}"), &user).await;
     assert_eq!(detail["name"], "Test Granola");
     assert_eq!(detail["brand"], "BrandCo");
-    assert_eq!(detail["visibility"], "user_private");
+    assert_eq!(detail["visibility"], "global");
     assert_eq!(detail["serving_size_g"], "50");
     assert_eq!(
         detail["nutrition_summary"]["per_100g"]["energy_kcal"],
@@ -168,13 +202,13 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     assert_eq!(
         list_items.len(),
         1,
-        "expected only the caller's custom food, got: {list_items:?}"
+        "expected the shared custom food, got: {list_items:?}"
     );
     let listed = &list_items[0];
     assert_eq!(listed["id"], id);
     assert_eq!(listed["name"], "Test Granola (Honey)");
     assert_eq!(listed["brand"], "BrandCo");
-    assert_eq!(listed["visibility"], "user_private");
+    assert_eq!(listed["visibility"], "global");
     assert_eq!(listed["source"], "USER");
     assert_eq!(listed["serving_size_g"], "55");
     assert_eq!(
@@ -247,17 +281,14 @@ async fn product_search_scopes_filter_and_order_results(pool: PgPool) {
     let default_items = default_search["items"].as_array().expect("items missing");
     assert!(default_items.iter().any(|item| item["id"] == oats_id));
     assert!(default_items.iter().any(|item| item["id"] == yogurt_id));
-    assert!(
-        !default_items.iter().any(|item| item["id"] == other_id),
-        "all scope should not include another user's private product"
-    );
+    assert!(default_items.iter().any(|item| item["id"] == other_id));
 
     let custom_search: Value =
         get_json(&router, "/api/foods/search?q=scope&scope=custom", &user).await;
     let custom_items = custom_search["items"].as_array().expect("items missing");
     assert!(custom_items.iter().any(|item| item["id"] == oats_id));
     assert!(custom_items.iter().any(|item| item["id"] == yogurt_id));
-    assert!(!custom_items.iter().any(|item| item["id"] == other_id));
+    assert!(custom_items.iter().any(|item| item["id"] == other_id));
     assert_eq!(
         custom_items
             .iter()
@@ -300,7 +331,7 @@ async fn product_search_scopes_filter_and_order_results(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn barcode_lookup_does_not_expose_other_users_private_foods(pool: PgPool) {
+async fn barcode_lookup_returns_shared_custom_foods(pool: PgPool) {
     let router = app(pool.clone()).await;
     let admin = bootstrap_admin(&router).await;
     let owner = create_user_session(&router, &admin, "barcode_owner", "testpassword").await;
@@ -330,10 +361,9 @@ async fn barcode_lookup_does_not_expose_other_users_private_foods(pool: PgPool) 
         "320"
     );
 
-    let (status, body) =
-        get_status(&router, "/api/foods/barcode/private-barcode-123", &other).await;
-    assert_eq!(status, StatusCode::NOT_FOUND);
-    assert_eq!(body["error"]["code"], "not_found");
+    let other_lookup: Value =
+        get_json(&router, "/api/foods/barcode/private-barcode-123", &other).await;
+    assert_eq!(other_lookup["id"], product_id);
 }
 
 fn assert_amount(value: &Value, expected: f64) {

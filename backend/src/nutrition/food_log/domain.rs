@@ -395,6 +395,19 @@ pub trait FoodLogRepository: Send + Sync {
     async fn delete(&self, id: FoodLogId) -> Result<(), NutritionError>;
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FoodLogPolicy;
+
+impl FoodLogPolicy {
+    pub fn authorize_access(&self, actor_id: Uuid, log: &FoodLog) -> Result<(), NutritionError> {
+        if log.is_owned_by(actor_id) {
+            Ok(())
+        } else {
+            Err(NutritionError::NotFound("food log not found".into()))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,7 +424,7 @@ mod tests {
             source: Source::User,
             source_id: None,
             user_id: None,
-            visibility: ProductVisibility::UserPrivate,
+            visibility: ProductVisibility::Global,
             barcode: None,
             name: ProductName::new("Test").unwrap(),
             brand: None,

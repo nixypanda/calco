@@ -15,7 +15,6 @@ use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::{Product, ProductId, UnitCode};
 use crate::nutrition::error::NutritionError;
-use crate::nutrition::food_log::application::load_meal_products;
 use crate::nutrition::meal::application::*;
 use crate::nutrition::meal::domain::*;
 use crate::nutrition::module::MealModule;
@@ -34,8 +33,7 @@ pub fn meal_routes(state: AppState) -> Router {
 }
 
 use crate::nutrition::interfaces::{
-    NutrientSummaryDto, error_response, internal_error, is_summary_nutrient_code,
-    nutrient_summary_from_entries,
+    NutrientSummaryDto, internal_error, is_summary_nutrient_code, nutrient_summary_from_entries,
 };
 
 #[derive(Deserialize)]
@@ -133,13 +131,13 @@ async fn create_meal_handler(
 ) -> impl IntoResponse {
     let services = &state.meal_services;
 
-    let input = match meal_create_request_to_input(req, auth.0.id) {
+    let input = match meal_create_request_to_input(req) {
         Ok(input) => input,
         Err(err) => return err.into_response(),
     };
 
-    match services.create_meal(input).await {
-        Ok(meal) => match meal_to_response(&state, &meal).await {
+    match services.create_meal(auth.0.id, input).await {
+        Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => (StatusCode::CREATED, Json(resp)).into_response(),
             Err(e) => internal_error(e).into_response(),
         },
@@ -152,24 +150,18 @@ async fn get_meal_handler(
     State(state): State<MealModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match state.meal_repo.find_by_id(MealId(id)).await {
-        Ok(Some(meal)) => {
-            if !meal.is_owned_by(auth.0.id) {
-                return error_response("forbidden", "not your meal".into()).into_response();
-            }
-            match meal_to_response(&state, &meal).await {
-                Ok(resp) => Json(resp).into_response(),
-                Err(e) => internal_error(e).into_response(),
-            }
-        }
-        Ok(None) => error_response("not_found", "meal not found".into()).into_response(),
-        Err(e) => internal_error(e).into_response(),
+    match state.meal_services.get_meal(auth.0.id, MealId(id)).await {
+        Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
+            Ok(resp) => Json(resp).into_response(),
+            Err(e) => internal_error(e).into_response(),
+        },
+        Err(e) => e.into_response(),
     }
 }
 
 async fn list_meals_handler(auth: AuthUser, State(state): State<MealModule>) -> impl IntoResponse {
-    match state.meal_repo.list_by_user_id(auth.0.id).await {
-        Ok(meals) => match meals_to_list_response(&state, meals).await {
+    match state.meal_services.list_meals(auth.0.id).await {
+        Ok(meals) => match meals_to_list_response(&state.meal_services, auth.0.id, meals).await {
             Ok(resp) => Json(resp).into_response(),
             Err(e) => internal_error(e).into_response(),
         },
@@ -191,7 +183,7 @@ async fn update_meal_handler(
     };
 
     match services.update_meal(MealId(id), auth.0.id, input).await {
-        Ok(meal) => match meal_to_response(&state, &meal).await {
+        Ok(meal) => match meal_to_response(&state.meal_services, auth.0.id, &meal).await {
             Ok(resp) => Json(resp).into_response(),
             Err(e) => internal_error(e).into_response(),
         },
@@ -218,22 +210,15 @@ async fn meal_nutrients_handler(
     Path(id): Path<Uuid>,
     Query(query): Query<MealNutrientQuery>,
 ) -> impl IntoResponse {
-    match state.meal_repo.find_by_id(MealId(id)).await {
-        Ok(Some(meal)) => {
-            if !meal.is_owned_by(auth.0.id) {
-                return error_response("forbidden", "not your meal".into()).into_response();
-            }
-        }
-        Ok(None) => return error_response("not_found", "meal not found".into()).into_response(),
-        Err(e) => return internal_error(e).into_response(),
-    }
-
     let quantity = match Quantity::new(query.amount, UnitCode(query.unit)) {
         Ok(q) => q,
         Err(err) => return err.into_response(),
     };
     let services = &state.meal_services;
-    match services.get_meal_nutrients(MealId(id), quantity).await {
+    match services
+        .get_meal_nutrients(auth.0.id, MealId(id), quantity)
+        .await
+    {
         Ok(nutrition) => Json(meal_nutrition_to_response(nutrition)).into_response(),
         Err(e) => e.into_response(),
     }
@@ -254,12 +239,8 @@ fn parse_quantity_dto(q: &QuantityDto) -> Result<Quantity, NutritionError> {
     Quantity::new(q.amount, UnitCode(q.unit.clone()))
 }
 
-fn meal_create_request_to_input(
-    req: CreateMealRequest,
-    user_id: Uuid,
-) -> Result<CreateMealInput, NutritionError> {
+fn meal_create_request_to_input(req: CreateMealRequest) -> Result<CreateMealInput, NutritionError> {
     Ok(CreateMealInput {
-        user_id,
         name: req.name,
         notes: req.notes,
         total_quantity_amount: req.total_quantity.as_ref().map(|q| q.amount),
@@ -309,22 +290,27 @@ fn meal_component_request_to_input(
 }
 
 async fn meals_to_list_response(
-    state: &MealModule,
+    services: &MealService,
+    actor_id: Uuid,
     meals: Vec<Meal>,
 ) -> Result<MealListResponse, NutritionError> {
     let mut items = Vec::with_capacity(meals.len());
     for meal in &meals {
-        items.push(meal_to_response(state, meal).await?);
+        items.push(meal_to_response(services, actor_id, meal).await?);
     }
     Ok(MealListResponse { items })
 }
 
-async fn meal_to_response(state: &MealModule, meal: &Meal) -> Result<MealResponse, NutritionError> {
-    let products = load_meal_products(meal, state.catalog.product_repo.as_ref()).await?;
+async fn meal_to_response(
+    services: &MealService,
+    actor_id: Uuid,
+    meal: &Meal,
+) -> Result<MealResponse, NutritionError> {
+    let products = services.load_products(actor_id, meal).await?;
     Ok(meal_to_response_with_products(
         meal,
         &products,
-        &state.catalog.unit_converter,
+        services.unit_converter(),
     ))
 }
 

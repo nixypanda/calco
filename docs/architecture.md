@@ -80,14 +80,20 @@ Admin identities are for account recovery and import operations. They do not own
 
 Nutrition is one bounded context with five aggregate roots:
 
-- `Product` (catalog): owns `ProductNutrient` and `ProductServing` as child values. Imported global foods and user-private custom foods share this model via `source`, `source_id`, `visibility`, and `user_id`.
-- `Meal`: user-owned. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
+- `Product` (catalog): owns `ProductNutrient` and `ProductServing` as child values. Imported foods and custom foods are globally visible to authenticated users; custom-food writes remain creator-only. Both share this model via `source`, `source_id`, `visibility`, and `user_id`.
+- `Meal`: creator-owned for writes and globally visible to authenticated users. `MealComponent` values are edited through the aggregate; current components are product-only (no recursive meals). Nutrition is calculated from current components when previewing or logging.
 - `FoodLog`: user-owned. Records timestamp, meal slot, logged item, quantity, notes, and nutrient snapshots. `LoggedItem` supports `Product(ProductId)` and `Meal(MealId)`.
 - `GoalTarget`: user-owned. Stores calorie and macro targets effective from a local date, so diary views can resolve the latest saved target for any selected day while falling back to defaults if no saved row exists.
 - `DiaryPreferences`: user-owned. Stores the enabled meal slots that shape the
   diary while ensuring at least one known slot remains enabled.
 
-These aggregates share one error type (`NutritionError`) and depend on each other directly via repositories — they are not separate contexts. The shared ubiquitous language ("nutrient", "quantity", "unit"), shared lifecycle, and lack of concept translation at the seams motivated unifying them.
+These aggregates share one error type (`NutritionError`) and application-level
+read ports where one nutrition sub-context needs another. They are not separate
+bounded contexts: the shared ubiquitous language ("nutrient", "quantity",
+"unit"), shared lifecycle, and lack of concept translation at the seams
+motivated unifying them. Repository ports remain private dependencies of the
+application service that owns the aggregate; an HTTP interface or downstream
+sub-context never receives another aggregate's repository.
 
 Within the context, the aggregates are organized feature-first: one folder per sub-context (`catalog`, `meal`, `food_log`, `guidance`, `diary`, `goals`), each nesting the four layers inside. `catalog` holds the shared kernel (`units`, `calculation`) in its domain layer; `NutritionError` and the shared HTTP glue live at the nutrition root (`error.rs`, `interfaces.rs`). The composition root stays in `nutrition/module.rs`. Their dependency direction is a DAG rooted at the catalog kernel:
 
@@ -106,7 +112,30 @@ diary                         (island)
 goals                         (island)
 ```
 
-Edges are forced by the domain: `meal` and `food_log` both need catalog's `ProductRepository` and `UnitConverter`; `food_log` depends on `meal` (a `LoggedItem::Meal` resolves a saved meal into a food-log snapshot), never the reverse; `guidance` reads food logs and overlays its own nutrient guidance. `diary` and `goals` are standalone. A sub-module holds handles to the modules below it (typically the minimal repo port it uses), never above — so the internal graph stays acyclic.
+The concrete dependency graph is:
+
+```text
+HTTP interfaces
+  -> catalog application service -> CatalogPolicy -> catalog repositories
+  -> meal application service    -> MealPolicy    -> meal repository
+                                \-> CatalogReadPort
+  -> food-log application service -> FoodLogPolicy -> food-log repository
+                                    -> CatalogReadPort
+                                    -> MealReadPort
+  -> guidance application service -> FoodLogQueryPort
+                                    -> guidance repository
+  -> diary application service   -> diary repository
+  -> goals application service   -> goals repository
+```
+
+The cross-subcontext edges are use-case-shaped application ports:
+`CatalogReadPort` resolves shared, active catalog products; `MealReadPort`
+resolves a shared meal for logging after applying meal policy; and
+`FoodLogQueryPort` returns actor-scoped log data for derived views such as
+guidance. `UnitConverter` remains a catalog shared-kernel value. Concrete
+PostgreSQL repositories are constructed only in `nutrition/module.rs`, injected
+into their owning services, and are not retained by `NutritionModule` or any
+HTTP-extractable submodule state.
 
 Supporting domain pieces, all in `catalog/domain/` (the shared kernel), except the error at the nutrition root:
 

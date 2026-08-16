@@ -230,12 +230,12 @@ async fn create_log_handler(
 ) -> impl IntoResponse {
     let services = &state.food_log_services;
 
-    let input = match food_log_create_request_to_input(req, auth.0.id) {
+    let input = match food_log_create_request_to_input(req) {
         Ok(input) => input,
         Err(err) => return err.into_response(),
     };
 
-    match services.log_item(input).await {
+    match services.log_item(auth.0.id, input).await {
         Ok(log) => {
             let resp = food_log_to_response(&log);
             (StatusCode::CREATED, Json(resp)).into_response()
@@ -264,14 +264,14 @@ async fn create_logs_batch_handler(
     let inputs = match req
         .items
         .into_iter()
-        .map(|item| food_log_create_request_to_input(item, auth.0.id))
+        .map(food_log_create_request_to_input)
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(inputs) => inputs,
         Err(err) => return err.into_response(),
     };
 
-    match state.food_log_services.log_items(inputs).await {
+    match state.food_log_services.log_items(auth.0.id, inputs).await {
         Ok(created) => (
             StatusCode::CREATED,
             Json(BatchLogResponse {
@@ -415,16 +415,13 @@ async fn get_log_handler(
     State(state): State<FoodLogModule>,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    match state.food_log_repo.find_by_id(FoodLogId(id)).await {
-        Ok(Some(log)) => {
-            if !log.is_owned_by(auth.0.id) {
-                return error_response("forbidden", "not your food log".into()).into_response();
-            }
-            let resp = food_log_to_response(&log);
-            Json(resp).into_response()
-        }
-        Ok(None) => error_response("not_found", "food log not found".into()).into_response(),
-        Err(e) => internal_error(e).into_response(),
+    match state
+        .food_log_services
+        .get_food_log(FoodLogId(id), auth.0.id)
+        .await
+    {
+        Ok(log) => Json(food_log_to_response(&log)).into_response(),
+        Err(e) => e.into_response(),
     }
 }
 
@@ -439,8 +436,8 @@ async fn list_logs_handler(
     };
 
     match state
-        .food_log_repo
-        .list_by_user_and_date(auth.0.id, log_date)
+        .food_log_services
+        .list_food_logs(auth.0.id, log_date)
         .await
     {
         Ok(logs) => Json(food_logs_to_list_response(log_date, logs)).into_response(),
@@ -560,17 +557,13 @@ where
     Value::deserialize(deserializer).map(Some)
 }
 
-fn food_log_create_request_to_input(
-    req: CreateLogRequest,
-    user_id: Uuid,
-) -> Result<LogFoodInput, NutritionError> {
+fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInput, NutritionError> {
     let log_date = parse_log_date(&req.log_date)?;
     let meal_slot = req.meal_slot.as_deref().map(parse_meal_slot).transpose()?;
     let device_timezone = normalize_device_timezone(req.device_timezone)?;
     let item = parse_food_log_item_ref(&req.item)?;
     let quantity = parse_quantity(&req.quantity)?;
     Ok(LogFoodInput {
-        user_id,
         log_date,
         meal_slot,
         device_timezone,

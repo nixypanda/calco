@@ -274,7 +274,26 @@ pub use crate::nutrition::error::NutritionError;
 pub trait MealRepository: Send + Sync {
     async fn create(&self, meal: &Meal) -> Result<(), NutritionError>;
     async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError>;
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Meal>, NutritionError>;
+    async fn list_all(&self) -> Result<Vec<Meal>, NutritionError>;
     async fn update(&self, meal: &Meal) -> Result<(), NutritionError>;
     async fn delete(&self, id: MealId) -> Result<(), NutritionError>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MealPolicy;
+
+impl MealPolicy {
+    pub fn authorize_view(&self, _actor_id: Uuid, _meal: &Meal) -> Result<(), NutritionError> {
+        Ok(())
+    }
+
+    pub fn authorize_mutation(&self, actor_id: Uuid, meal: &Meal) -> Result<(), NutritionError> {
+        if meal.is_owned_by(actor_id) {
+            Ok(())
+        } else {
+            Err(NutritionError::Forbidden(
+                "only the creator may modify this meal".into(),
+            ))
+        }
+    }
 }

@@ -1,15 +1,15 @@
+use async_trait::async_trait;
 use chrono::NaiveDate;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use crate::nutrition::catalog::application::CatalogReadPort;
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
-use crate::nutrition::meal::domain::{Meal, MealComponentItem, MealRepository};
+use crate::nutrition::meal::application::MealReadPort;
 
 pub struct LogFoodInput {
-    pub user_id: Uuid,
     pub log_date: NaiveDate,
     pub meal_slot: Option<MealSlot>,
     pub device_timezone: Option<String>,
@@ -29,57 +29,68 @@ pub struct UpdateFoodInput {
 
 #[derive(Clone)]
 pub struct FoodLogService {
-    pub food_log_repo: Arc<dyn FoodLogRepository>,
-    pub product_repo: Arc<dyn ProductRepository>,
-    pub unit_converter: Arc<UnitConverter>,
-    pub meal_repo: Arc<dyn MealRepository>,
+    food_log_repo: Arc<dyn FoodLogRepository>,
+    catalog: Arc<dyn CatalogReadPort>,
+    unit_converter: Arc<UnitConverter>,
+    meals: Arc<dyn MealReadPort>,
+    policy: FoodLogPolicy,
 }
 
 impl FoodLogService {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
-        product_repo: Arc<dyn ProductRepository>,
+        catalog: Arc<dyn CatalogReadPort>,
         unit_converter: Arc<UnitConverter>,
-        meal_repo: Arc<dyn MealRepository>,
+        meals: Arc<dyn MealReadPort>,
     ) -> Self {
         Self {
             food_log_repo,
-            product_repo,
+            catalog,
             unit_converter,
-            meal_repo,
+            meals,
+            policy: FoodLogPolicy,
         }
     }
 
-    pub async fn log_item(&self, input: LogFoodInput) -> Result<FoodLog, NutritionError> {
-        let log = self.build_log(input).await?;
+    pub async fn log_item(
+        &self,
+        actor_id: Uuid,
+        input: LogFoodInput,
+    ) -> Result<FoodLog, NutritionError> {
+        let log = self.build_log(actor_id, input).await?;
         self.food_log_repo.create(&log).await?;
         Ok(log)
     }
 
     pub async fn log_items(
         &self,
+        actor_id: Uuid,
         inputs: Vec<LogFoodInput>,
     ) -> Result<Vec<FoodLog>, NutritionError> {
         let mut logs = Vec::with_capacity(inputs.len());
         for input in inputs {
-            logs.push(self.build_log(input).await?);
+            logs.push(self.build_log(actor_id, input).await?);
         }
         self.food_log_repo.create_many(&logs).await?;
         Ok(logs)
     }
 
-    async fn build_log(&self, input: LogFoodInput) -> Result<FoodLog, NutritionError> {
+    async fn build_log(
+        &self,
+        actor_id: Uuid,
+        input: LogFoodInput,
+    ) -> Result<FoodLog, NutritionError> {
         let log = match input.item {
             FoodLogItemRef::Product(product_id) => {
                 let product = self
-                    .product_repo
-                    .find_by_id(product_id)
+                    .catalog
+                    .resolve_products(actor_id, &[product_id])
                     .await?
-                    .ok_or_else(|| {
-                        NutritionError::NotFound(format!("product {} not found", product_id.0))
-                    })?;
+                    .into_iter()
+                    .find_map(|(id, product)| (id == product_id).then_some(product))
+                    .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
                 FoodLog::new_product_log(
-                    input.user_id,
+                    actor_id,
                     input.log_date,
                     input.meal_slot,
                     input.device_timezone,
@@ -90,18 +101,15 @@ impl FoodLogService {
                 )?
             }
             FoodLogItemRef::Meal(meal_id) => {
-                let meal = self.meal_repo.find_by_id(meal_id).await?.ok_or_else(|| {
-                    NutritionError::NotFound(format!("meal {} not found", meal_id.0))
-                })?;
-                let products = load_meal_products(&meal, self.product_repo.as_ref()).await?;
+                let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
                 FoodLog::new_meal_log(
-                    input.user_id,
+                    actor_id,
                     input.log_date,
                     input.meal_slot,
                     input.device_timezone,
-                    &meal,
+                    &resolved.meal,
                     input.quantity,
-                    &products,
+                    &resolved.products,
                     &self.unit_converter,
                     input.notes,
                 )?
@@ -113,18 +121,10 @@ impl FoodLogService {
     pub async fn update_food_log(
         &self,
         id: FoodLogId,
-        user_id: Uuid,
+        actor_id: Uuid,
         input: UpdateFoodInput,
     ) -> Result<FoodLog, NutritionError> {
-        let existing = self
-            .food_log_repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| NutritionError::NotFound("food log not found".into()))?;
-
-        if !existing.is_owned_by(user_id) {
-            return Err(NutritionError::Forbidden("not your food log".into()));
-        }
+        let existing = self.get_food_log(id, actor_id).await?;
 
         let item = input.item.unwrap_or_else(|| existing.item.as_ref());
         let quantity = input.quantity.unwrap_or_else(|| {
@@ -145,9 +145,11 @@ impl FoodLogService {
         let updated = match item {
             FoodLogItemRef::Product(product_id) => {
                 let product = self
-                    .product_repo
-                    .find_by_id(product_id)
+                    .catalog
+                    .resolve_products(actor_id, &[product_id])
                     .await?
+                    .into_iter()
+                    .find_map(|(id, product)| (id == product_id).then_some(product))
                     .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
                 existing.update_product_log(
                     log_date,
@@ -160,19 +162,14 @@ impl FoodLogService {
                 )?
             }
             FoodLogItemRef::Meal(meal_id) => {
-                let meal = self
-                    .meal_repo
-                    .find_by_id(meal_id)
-                    .await?
-                    .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
-                let products = load_meal_products(&meal, self.product_repo.as_ref()).await?;
+                let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
                 existing.update_meal_log(
                     log_date,
                     meal_slot,
                     device_timezone,
-                    &meal,
+                    &resolved.meal,
                     quantity,
-                    &products,
+                    &resolved.products,
                     &self.unit_converter,
                     notes,
                 )?
@@ -186,41 +183,55 @@ impl FoodLogService {
     pub async fn delete_food_log(
         &self,
         id: FoodLogId,
-        user_id: Uuid,
+        actor_id: Uuid,
     ) -> Result<(), NutritionError> {
-        let existing = self
+        self.get_food_log(id, actor_id).await?;
+        self.food_log_repo.delete(id).await
+    }
+
+    pub async fn get_food_log(
+        &self,
+        id: FoodLogId,
+        actor_id: Uuid,
+    ) -> Result<FoodLog, NutritionError> {
+        let log = self
             .food_log_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| NutritionError::NotFound("food log not found".into()))?;
+        self.policy.authorize_access(actor_id, &log)?;
+        Ok(log)
+    }
 
-        if !existing.is_owned_by(user_id) {
-            return Err(NutritionError::Forbidden("not your food log".into()));
-        }
-
-        self.food_log_repo.delete(id).await
+    pub async fn list_food_logs(
+        &self,
+        actor_id: Uuid,
+        log_date: NaiveDate,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        self.food_log_repo
+            .list_by_user_and_date(actor_id, log_date)
+            .await
     }
 }
 
-pub(crate) async fn load_meal_products(
-    meal: &Meal,
-    product_repo: &dyn ProductRepository,
-) -> Result<Vec<(ProductId, Product)>, NutritionError> {
-    let mut products = Vec::new();
-    for component in &meal.components {
-        match &component.item {
-            MealComponentItem::Product(product_id) => {
-                let product = product_repo.find_by_id(*product_id).await?.ok_or_else(|| {
-                    NutritionError::NotFound(format!(
-                        "product {} in meal {} not found",
-                        product_id.0, meal.id.0
-                    ))
-                })?;
-                products.push((*product_id, product));
-            }
-        }
+#[async_trait]
+pub trait FoodLogQueryPort: Send + Sync {
+    async fn list_logs_for_date(
+        &self,
+        actor_id: Uuid,
+        date: NaiveDate,
+    ) -> Result<Vec<FoodLog>, NutritionError>;
+}
+
+#[async_trait]
+impl FoodLogQueryPort for FoodLogService {
+    async fn list_logs_for_date(
+        &self,
+        actor_id: Uuid,
+        date: NaiveDate,
+    ) -> Result<Vec<FoodLog>, NutritionError> {
+        self.list_food_logs(actor_id, date).await
     }
-    Ok(products)
 }
 
 #[cfg(test)]
@@ -242,15 +253,18 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let result = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: Some("Asia/Kolkata".to_string()),
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: Some("Asia/Kolkata".to_string()),
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await;
 
         assert!(result.is_ok());
@@ -267,15 +281,18 @@ mod tests {
         let services = make_services(None);
 
         let result = services
-            .log_item(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                Uuid::new_v4(),
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::new_v4())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await;
 
         assert!(result.is_err());
@@ -287,52 +304,124 @@ mod tests {
 
     #[tokio::test]
     async fn test_delete_food_log_success() {
-        let services = make_services(Some(sample_product()));
+        let (services, food_log_repo) = make_services_with_repo(Some(sample_product()));
         let user_id = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: Some("Asia/Kolkata".to_string()),
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: Some("Asia/Kolkata".to_string()),
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
         assert!(services.delete_food_log(created.id, user_id).await.is_ok());
-        let still_there = services.food_log_repo.find_by_id(created.id).await.unwrap();
+        let still_there = food_log_repo.find_by_id(created.id).await.unwrap();
         assert!(still_there.is_none());
     }
 
     #[tokio::test]
-    async fn test_delete_food_log_forbidden() {
+    async fn test_delete_food_log_hides_another_users_log() {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
-                user_id: owner,
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Breakfast),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                owner,
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Breakfast),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
         let result = services.delete_food_log(created.id, other).await;
         assert!(result.is_err());
         match result.unwrap_err() {
-            NutritionError::Forbidden(_) => {}
-            _ => panic!("expected Forbidden"),
+            NutritionError::NotFound(_) => {}
+            _ => panic!("expected NotFound"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_get_food_log_hides_another_users_log() {
+        let services = make_services(Some(sample_product()));
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+
+        let created = services
+            .log_item(
+                owner,
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Breakfast),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            services.get_food_log(created.id, other).await,
+            Err(NutritionError::NotFound(_))
+        ));
+        assert!(services.get_food_log(created.id, owner).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn food_log_query_port_is_scoped_to_actor() {
+        let services = make_services(Some(sample_product()));
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+
+        services
+            .log_item(
+                owner,
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: None,
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            FoodLogQueryPort::list_logs_for_date(&services, owner, sample_log_date())
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            FoodLogQueryPort::list_logs_for_date(&services, other, sample_log_date())
+                .await
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[tokio::test]
@@ -354,15 +443,18 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
@@ -395,15 +487,18 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: Some("Asia/Kolkata".to_string()),
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: Some("clear me".to_string()),
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: Some("Asia/Kolkata".to_string()),
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: Some("clear me".to_string()),
+                },
+            )
             .await
             .unwrap();
 
@@ -433,15 +528,18 @@ mod tests {
         let services = make_services(Some(sample_product()));
 
         let log = services
-            .log_item(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: None,
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(2, 0), UnitCode("kg".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                Uuid::new_v4(),
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: None,
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(2, 0), UnitCode("kg".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
@@ -454,15 +552,18 @@ mod tests {
         let services = make_services(Some(sample_product()));
 
         let result = services
-            .log_item(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: None,
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(1, 0), UnitCode("cup".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                Uuid::new_v4(),
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: None,
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(1, 0), UnitCode("cup".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
@@ -473,15 +574,18 @@ mod tests {
         let services = make_services(Some(sample_product_with_serving()));
 
         let log = services
-            .log_item(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: None,
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(2, 0), UnitCode("slice".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                Uuid::new_v4(),
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: None,
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(2, 0), UnitCode("slice".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
@@ -489,21 +593,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_food_log_forbidden() {
+    async fn test_update_food_log_hides_another_users_log() {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
         let other = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
-                user_id: owner,
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                owner,
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
@@ -524,8 +631,8 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            NutritionError::Forbidden(_) => {}
-            _ => panic!("expected Forbidden"),
+            NutritionError::NotFound(_) => {}
+            _ => panic!("expected NotFound"),
         }
     }
 
@@ -535,15 +642,18 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let result = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Dinner),
-                item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string())).unwrap(),
-                notes: Some("meal note".to_string()),
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Dinner),
+                    item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(150, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: Some("meal note".to_string()),
+                },
+            )
             .await;
 
         assert!(result.is_ok());
@@ -562,15 +672,18 @@ mod tests {
         let user_id = Uuid::new_v4();
 
         let created = services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Dinner),
-                item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Dinner),
+                    item: FoodLogItemRef::Meal(MealId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap();
 
@@ -602,15 +715,18 @@ mod tests {
         let services = make_services_with_meal(Some(sample_product()), sample_meal());
 
         let result = services
-            .log_item(LogFoodInput {
-                user_id: Uuid::new_v4(),
-                log_date: sample_log_date(),
-                device_timezone: None,
-                meal_slot: Some(MealSlot::Lunch),
-                item: FoodLogItemRef::Meal(MealId::new()),
-                quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string())).unwrap(),
-                notes: None,
-            })
+            .log_item(
+                Uuid::new_v4(),
+                LogFoodInput {
+                    log_date: sample_log_date(),
+                    device_timezone: None,
+                    meal_slot: Some(MealSlot::Lunch),
+                    item: FoodLogItemRef::Meal(MealId::new()),
+                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await;
 
         assert!(result.is_err());

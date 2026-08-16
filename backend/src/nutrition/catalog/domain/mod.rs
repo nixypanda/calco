@@ -154,14 +154,12 @@ impl FromStr for Source {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProductVisibility {
     Global,
-    UserPrivate,
 }
 
 impl ProductVisibility {
     pub fn as_str(&self) -> &'static str {
         match self {
             ProductVisibility::Global => "global",
-            ProductVisibility::UserPrivate => "user_private",
         }
     }
 }
@@ -172,7 +170,6 @@ impl FromStr for ProductVisibility {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "global" => Ok(ProductVisibility::Global),
-            "user_private" => Ok(ProductVisibility::UserPrivate),
             _ => Err(format!("invalid visibility: {s}")),
         }
     }
@@ -428,7 +425,7 @@ impl Product {
             source: Source::User,
             source_id: None,
             user_id: Some(user_id),
-            visibility: ProductVisibility::UserPrivate,
+            visibility: ProductVisibility::Global,
             barcode: None,
             name,
             brand: brand.map(Brand),
@@ -479,14 +476,6 @@ impl Product {
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == Some(user_id)
-    }
-
-    pub fn assert_owned_by(&self, user_id: Uuid) -> Result<(), NutritionError> {
-        if self.is_owned_by(user_id) {
-            Ok(())
-        } else {
-            Err(NutritionError::Forbidden("not your custom food".into()))
-        }
     }
 
     pub fn quantity_to_grams(
@@ -687,10 +676,41 @@ pub trait ProductRepository: Send + Sync {
         barcode: &str,
         user_id: Option<Uuid>,
     ) -> Result<Option<Product>, NutritionError>;
-    async fn list_by_user_id(&self, user_id: Uuid) -> Result<Vec<Product>, NutritionError>;
+    async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError>;
     async fn create(&self, product: &Product) -> Result<(), NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
     async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CatalogPolicy;
+
+impl CatalogPolicy {
+    pub fn authorize_view(
+        &self,
+        _actor_id: Uuid,
+        _product: &Product,
+    ) -> Result<(), NutritionError> {
+        Ok(())
+    }
+
+    pub fn authorize_mutation(
+        &self,
+        actor_id: Uuid,
+        product: &Product,
+    ) -> Result<(), NutritionError> {
+        if product.source != Source::User {
+            return Err(NutritionError::Forbidden(
+                "system catalog products are read-only".into(),
+            ));
+        }
+        if !product.is_owned_by(actor_id) {
+            return Err(NutritionError::Forbidden(
+                "only the creator may modify this custom food".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -858,7 +878,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(product.source, Source::User);
-        assert_eq!(product.visibility, ProductVisibility::UserPrivate);
+        assert_eq!(product.visibility, ProductVisibility::Global);
         assert_eq!(product.name.as_str(), "Rice Bowl");
         assert_eq!(
             product
@@ -1237,5 +1257,59 @@ mod tests {
             }
             other => panic!("expected Validation error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn catalog_policy_shares_reads_but_limits_custom_food_writes_to_creator() {
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let product = Product::new_custom(
+            owner,
+            "Shared food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![],
+            &test_catalog(),
+            &test_converter(),
+        )
+        .unwrap();
+        let policy = CatalogPolicy;
+
+        assert!(policy.authorize_view(other, &product).is_ok());
+        assert!(policy.authorize_mutation(owner, &product).is_ok());
+        assert!(matches!(
+            policy.authorize_mutation(other, &product),
+            Err(NutritionError::Forbidden(_))
+        ));
+    }
+
+    #[test]
+    fn catalog_policy_keeps_imported_products_read_only() {
+        let actor = Uuid::new_v4();
+        let mut product = Product::new_custom(
+            actor,
+            "Imported food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![],
+            &test_catalog(),
+            &test_converter(),
+        )
+        .unwrap();
+        product.source = Source::Off;
+        product.user_id = None;
+
+        assert!(matches!(
+            CatalogPolicy.authorize_mutation(actor, &product),
+            Err(NutritionError::Forbidden(_))
+        ));
     }
 }

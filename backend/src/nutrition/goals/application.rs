@@ -20,12 +20,12 @@ impl GoalTargetService {
 
     pub async fn get_goal_for_date(
         &self,
-        user_id: uuid::Uuid,
+        actor_id: uuid::Uuid,
         requested_date: NaiveDate,
     ) -> Result<GoalTargetSnapshot, NutritionError> {
         match self
             .repo
-            .find_effective_for_date(user_id, requested_date)
+            .find_effective_for_date(actor_id, requested_date)
             .await?
         {
             Some(goal_target) => Ok(GoalTargetSnapshot {
@@ -45,7 +45,7 @@ impl GoalTargetService {
 
     pub async fn save_goal_for_today(
         &self,
-        user_id: uuid::Uuid,
+        actor_id: uuid::Uuid,
         local_date: NaiveDate,
         device_timezone: &str,
         targets: GoalTargets,
@@ -63,7 +63,7 @@ impl GoalTargetService {
 
         let saved = match self
             .repo
-            .find_by_user_id_and_effective_from(user_id, local_date)
+            .find_by_user_id_and_effective_from(actor_id, local_date)
             .await?
         {
             Some(existing) => {
@@ -72,7 +72,7 @@ impl GoalTargetService {
                 updated
             }
             None => {
-                let created = GoalTarget::create(user_id, local_date, targets, Utc::now());
+                let created = GoalTarget::create(actor_id, local_date, targets, Utc::now());
                 self.repo.create(&created).await?;
                 created
             }
@@ -212,6 +212,29 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn effective_goal_lookup_does_not_cross_user_boundaries() {
+        let actor_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let requested_date = NaiveDate::from_ymd_opt(2026, 6, 16).unwrap();
+        let other_users_targets = sample_targets(2290, 160, 255, 70);
+        let service =
+            GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![GoalTarget::create(
+                other_user_id,
+                NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+                other_users_targets,
+                Utc::now(),
+            )])));
+
+        let snapshot = service
+            .get_goal_for_date(actor_id, requested_date)
+            .await
+            .unwrap();
+
+        assert_eq!(snapshot.source, GoalTargetSource::Default);
+        assert_eq!(snapshot.targets, GoalTargets::defaults());
+    }
+
+    #[tokio::test]
     async fn save_same_day_overwrites_existing_row() {
         let user_id = Uuid::new_v4();
         let timezone = "Asia/Kolkata";
@@ -245,6 +268,42 @@ mod tests {
             .unwrap();
         assert_eq!(saved.targets, sample_targets(2290, 160, 255, 70));
         assert_eq!(repo.goal_targets.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn save_today_does_not_overwrite_another_users_goal() {
+        let actor_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let timezone = "Asia/Kolkata";
+        let local_date = Utc::now()
+            .with_timezone(&timezone.parse::<Tz>().unwrap())
+            .date_naive();
+        let other_users_targets = sample_targets(2100, 150, 240, 60);
+        let repo = Arc::new(MockGoalTargetRepo::new(vec![GoalTarget::create(
+            other_user_id,
+            local_date,
+            other_users_targets.clone(),
+            Utc::now() - Duration::days(1),
+        )]));
+        let service = GoalTargetService::new(repo.clone());
+
+        service
+            .save_goal_for_today(
+                actor_id,
+                local_date,
+                timezone,
+                sample_targets(2290, 160, 255, 70),
+            )
+            .await
+            .unwrap();
+
+        let other_users_goal = repo
+            .find_by_user_id_and_effective_from(other_user_id, local_date)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(other_users_goal.targets, other_users_targets);
+        assert_eq!(repo.goal_targets.lock().unwrap().len(), 2);
     }
 
     #[tokio::test]

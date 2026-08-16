@@ -5,16 +5,15 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::nutrition::error::NutritionError;
-use crate::nutrition::food_log::domain::{
-    DateRange, FoodLog, FoodLogItemSnapshot, FoodLogListFilter, FoodLogRepository,
-};
+use crate::nutrition::food_log::application::FoodLogQueryPort;
+use crate::nutrition::food_log::domain::{FoodLog, FoodLogItemSnapshot};
 use crate::nutrition::guidance::domain::{
     NutrientGuidance, NutrientGuidanceKind, NutrientGuidanceRepository, NutrientGuidanceSet,
 };
 
 #[derive(Clone)]
 pub struct NutritionDetailsService {
-    food_log_repo: Arc<dyn FoodLogRepository>,
+    food_logs: Arc<dyn FoodLogQueryPort>,
     nutrient_guidance_repo: Arc<dyn NutrientGuidanceRepository>,
 }
 
@@ -53,28 +52,20 @@ pub struct NutritionDetails {
 
 impl NutritionDetailsService {
     pub fn new(
-        food_log_repo: Arc<dyn FoodLogRepository>,
+        food_logs: Arc<dyn FoodLogQueryPort>,
         nutrient_guidance_repo: Arc<dyn NutrientGuidanceRepository>,
     ) -> Self {
         Self {
-            food_log_repo,
+            food_logs,
             nutrient_guidance_repo,
         }
     }
     pub async fn get_for_date(
         &self,
-        user_id: Uuid,
+        actor_id: Uuid,
         date: NaiveDate,
     ) -> Result<NutritionDetails, NutritionError> {
-        let logs = self
-            .food_log_repo
-            .list_by_filter(FoodLogListFilter {
-                user_id,
-                date_range: DateRange::inclusive(date, date)?,
-                meal_slot: None,
-                items: Vec::new(),
-            })
-            .await?;
+        let logs = self.food_logs.list_logs_for_date(actor_id, date).await?;
         Ok(nutrition_details_from_logs(
             date,
             self.nutrient_guidance_repo.current(),
@@ -174,6 +165,10 @@ fn status_for(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
+    use async_trait::async_trait;
+
     use super::*;
     use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
@@ -183,6 +178,29 @@ mod tests {
     use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
     use crate::nutrition::meal::domain::MealId;
     use chrono::Utc;
+
+    struct MockFoodLogQueryPort {
+        logs: Vec<FoodLog>,
+        requests: Mutex<Vec<(Uuid, NaiveDate)>>,
+    }
+
+    #[async_trait]
+    impl FoodLogQueryPort for MockFoodLogQueryPort {
+        async fn list_logs_for_date(
+            &self,
+            actor_id: Uuid,
+            date: NaiveDate,
+        ) -> Result<Vec<FoodLog>, NutritionError> {
+            self.requests.lock().unwrap().push((actor_id, date));
+            Ok(self
+                .logs
+                .iter()
+                .filter(|log| log.user_id == actor_id && log.log_date == date)
+                .cloned()
+                .collect())
+        }
+    }
+
     fn date() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()
     }
@@ -223,6 +241,37 @@ mod tests {
             .find(|entry| entry.guidance.nutrient_code().0 == code)
             .unwrap()
     }
+
+    #[tokio::test]
+    async fn details_query_is_scoped_to_the_authenticated_actor() {
+        let actor_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let mut actors_log = log(vec![("ENERGY_KCAL", Decimal::from(100), "kcal")]);
+        actors_log.user_id = actor_id;
+        let mut other_users_log = log(vec![("ENERGY_KCAL", Decimal::from(900), "kcal")]);
+        other_users_log.user_id = other_user_id;
+        let food_logs = Arc::new(MockFoodLogQueryPort {
+            logs: vec![actors_log, other_users_log],
+            requests: Mutex::new(Vec::new()),
+        });
+        let service = NutritionDetailsService::new(
+            food_logs.clone(),
+            Arc::new(StaticNutrientGuidanceRepository::new()),
+        );
+
+        let details = service.get_for_date(actor_id, date()).await.unwrap();
+
+        assert_eq!(details.logged_items, 1);
+        assert_eq!(
+            entry(&details, "ENERGY_KCAL").known_amount,
+            Some(Decimal::from(100))
+        );
+        assert_eq!(
+            *food_logs.requests.lock().unwrap(),
+            vec![(actor_id, date())]
+        );
+    }
+
     #[test]
     fn empty_day_is_no_data_for_every_entry() {
         let report = nutrition_details_from_logs(date(), set(), vec![]);

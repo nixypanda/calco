@@ -1,7 +1,9 @@
 use super::*;
+use crate::nutrition::catalog::application::CatalogReadPort;
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
+use crate::nutrition::meal::application::{MealReadPort, ResolvedMeal};
 use crate::nutrition::meal::domain::*;
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
@@ -129,11 +131,11 @@ fn log_item_matches(snapshot: &FoodLogItemSnapshot, item: &FoodLogItemRef) -> bo
     }
 }
 
-struct MockProductRepo {
+struct MockCatalogReadPort {
     product: Option<Product>,
 }
 
-impl MockProductRepo {
+impl MockCatalogReadPort {
     fn with_product(product: Product) -> Self {
         Self {
             product: Some(product),
@@ -146,71 +148,27 @@ impl MockProductRepo {
 }
 
 #[async_trait]
-impl ProductRepository for MockProductRepo {
-    async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, NutritionError> {
-        Ok(self.product.clone())
-    }
-
-    async fn existing_ids(
+impl CatalogReadPort for MockCatalogReadPort {
+    async fn resolve_products(
         &self,
+        _actor_id: Uuid,
         ids: &[ProductId],
-    ) -> Result<std::collections::HashSet<ProductId>, NutritionError> {
-        if self.product.is_some() {
-            Ok(ids.iter().copied().collect())
-        } else {
-            Ok(std::collections::HashSet::new())
-        }
-    }
-
-    async fn search(
-        &self,
-        _query: ProductSearchSpec,
-        _scope: ProductSearchScope,
-        _user_id: Option<Uuid>,
-    ) -> Result<Vec<Product>, NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn list_categories(
-        &self,
-        _query: &str,
-        _user_id: Option<Uuid>,
-        _limit: i64,
-    ) -> Result<Vec<CategorySuggestion>, NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn find_by_barcode(
-        &self,
-        _barcode: &str,
-        _user_id: Option<Uuid>,
-    ) -> Result<Option<Product>, NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn list_by_user_id(&self, _user_id: Uuid) -> Result<Vec<Product>, NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn create(&self, _product: &Product) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn delete(&self, _id: ProductId) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
+    ) -> Result<Vec<(ProductId, Product)>, NutritionError> {
+        Ok(self
+            .product
+            .clone()
+            .filter(|product| ids.contains(&product.id))
+            .map(|product| vec![(product.id, product)])
+            .unwrap_or_default())
     }
 }
 
-struct MockMealRepo {
+struct MockMealReadPort {
     meal_id: MealId,
     meal: Option<Meal>,
 }
 
-impl MockMealRepo {
+impl MockMealReadPort {
     fn with_meal(meal: Meal) -> Self {
         Self {
             meal_id: meal.id,
@@ -227,29 +185,24 @@ impl MockMealRepo {
 }
 
 #[async_trait]
-impl MealRepository for MockMealRepo {
-    async fn find_by_id(&self, id: MealId) -> Result<Option<Meal>, NutritionError> {
+impl MealReadPort for MockMealReadPort {
+    async fn resolve_loggable_meal(
+        &self,
+        _actor_id: Uuid,
+        id: MealId,
+    ) -> Result<ResolvedMeal, NutritionError> {
         if id == self.meal_id {
-            Ok(self.meal.clone())
+            let meal = self
+                .meal
+                .clone()
+                .ok_or_else(|| NutritionError::NotFound("meal not found".into()))?;
+            Ok(ResolvedMeal {
+                meal,
+                products: vec![(ProductId(Uuid::nil()), sample_product())],
+            })
         } else {
-            Ok(None)
+            Err(NutritionError::NotFound("meal not found".into()))
         }
-    }
-
-    async fn create(&self, _meal: &Meal) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn list_by_user_id(&self, _user_id: Uuid) -> Result<Vec<Meal>, NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn update(&self, _meal: &Meal) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
-    }
-
-    async fn delete(&self, _id: MealId) -> Result<(), NutritionError> {
-        unimplemented!("not used in test")
     }
 }
 
@@ -259,7 +212,7 @@ pub(super) fn sample_product() -> Product {
         source: Source::User,
         source_id: None,
         user_id: None,
-        visibility: ProductVisibility::UserPrivate,
+        visibility: ProductVisibility::Global,
         barcode: None,
         name: ProductName::new("Test Food").unwrap(),
         brand: None,
@@ -325,35 +278,50 @@ pub(super) fn sample_log_date() -> NaiveDate {
 }
 
 pub(super) fn make_services(product: Option<Product>) -> FoodLogService {
-    build_services(product, None)
+    build_services_with_repo(product, None).0
 }
 
 pub(super) fn make_services_with_meal(product: Option<Product>, meal: Meal) -> FoodLogService {
-    build_services(product, Some(meal))
+    build_services_with_repo(product, Some(meal)).0
 }
 
-pub(super) fn history_services_for(services: &FoodLogService) -> FoodLogHistoryService {
-    FoodLogHistoryService::new(services.food_log_repo.clone())
+pub(super) fn make_services_and_history(
+    product: Option<Product>,
+) -> (FoodLogService, FoodLogHistoryService) {
+    let (services, repo) = build_services_with_repo(product, None);
+    (services, FoodLogHistoryService::new(repo))
+}
+
+pub(super) fn make_services_with_repo(
+    product: Option<Product>,
+) -> (FoodLogService, Arc<dyn FoodLogRepository>) {
+    build_services_with_repo(product, None)
 }
 
 pub(super) fn empty_history_services() -> FoodLogHistoryService {
     FoodLogHistoryService::new(Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>)
 }
 
-fn build_services(product: Option<Product>, meal: Option<Meal>) -> FoodLogService {
+fn build_services_with_repo(
+    product: Option<Product>,
+    meal: Option<Meal>,
+) -> (FoodLogService, Arc<dyn FoodLogRepository>) {
     let food_log_repo = Arc::new(MockFoodLogRepo::new()) as Arc<dyn FoodLogRepository>;
     let product_repo = match product {
-        Some(p) => Arc::new(MockProductRepo::with_product(p)) as Arc<dyn ProductRepository>,
-        None => Arc::new(MockProductRepo::empty()) as Arc<dyn ProductRepository>,
+        Some(p) => Arc::new(MockCatalogReadPort::with_product(p)) as Arc<dyn CatalogReadPort>,
+        None => Arc::new(MockCatalogReadPort::empty()) as Arc<dyn CatalogReadPort>,
     };
     let meal_repo = match meal {
-        Some(m) => Arc::new(MockMealRepo::with_meal(m)) as Arc<dyn MealRepository>,
-        None => Arc::new(MockMealRepo::empty()) as Arc<dyn MealRepository>,
+        Some(m) => Arc::new(MockMealReadPort::with_meal(m)) as Arc<dyn MealReadPort>,
+        None => Arc::new(MockMealReadPort::empty()) as Arc<dyn MealReadPort>,
     };
-    FoodLogService::new(
+    (
+        FoodLogService::new(
+            food_log_repo.clone(),
+            product_repo,
+            sample_unit_converter(),
+            meal_repo,
+        ),
         food_log_repo,
-        product_repo,
-        sample_unit_converter(),
-        meal_repo,
     )
 }

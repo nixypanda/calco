@@ -245,8 +245,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_latest_slot_before_skips_empty_days_and_returns_whole_slot() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
@@ -273,8 +272,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_latest_slot_before_prefers_most_recent_prior_date() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let sunday = NaiveDate::from_ymd_opt(2026, 6, 21).unwrap();
@@ -297,8 +295,7 @@ mod tests {
 
     #[tokio::test]
     async fn find_latest_slot_before_respects_lookback_and_user() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();
         let old_date = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
@@ -364,8 +361,7 @@ mod tests {
 
     #[tokio::test]
     async fn history_lists_recent_items_through_repository() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
@@ -384,8 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn history_summarizes_logs_by_date_for_requested_user() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
@@ -455,8 +450,7 @@ mod tests {
 
     #[tokio::test]
     async fn history_finds_last_used_items_through_repository() {
-        let services = make_services(Some(sample_product()));
-        let history_services = history_services_for(&services);
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
@@ -486,16 +480,18 @@ mod tests {
         amount_g: i64,
     ) -> FoodLog {
         services
-            .log_item(LogFoodInput {
+            .log_item(
                 user_id,
-                log_date,
-                device_timezone: None,
-                meal_slot: Some(meal_slot),
-                item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                quantity: Quantity::new(Decimal::new(amount_g, 0), UnitCode("g".to_string()))
-                    .unwrap(),
-                notes: None,
-            })
+                LogFoodInput {
+                    log_date,
+                    device_timezone: None,
+                    meal_slot: Some(meal_slot),
+                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
+                    quantity: Quantity::new(Decimal::new(amount_g, 0), UnitCode("g".to_string()))
+                        .unwrap(),
+                    notes: None,
+                },
+            )
             .await
             .unwrap()
     }
