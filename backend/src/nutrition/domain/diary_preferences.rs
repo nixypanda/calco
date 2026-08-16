@@ -55,7 +55,7 @@ impl DiaryPreferences {
         }
     }
 
-    pub fn update(user_id: Uuid, enabled_meal_slots: EnabledMealSlots) -> Self {
+    pub fn new(user_id: Uuid, enabled_meal_slots: EnabledMealSlots) -> Self {
         Self {
             user_id,
             enabled_meal_slots,

@@ -66,7 +66,7 @@ fn row_to_domain(row: DiaryPreferencesRow) -> Result<DiaryPreferences, Nutrition
         .iter()
         .map(|slot| MealSlot::from_str(slot).map_err(NutritionError::Internal))
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(DiaryPreferences::update(
+    Ok(DiaryPreferences::new(
         row.user_id,
         EnabledMealSlots::new(slots)?,
     ))

@@ -30,7 +30,7 @@ impl DiaryPreferencesService {
         user_id: Uuid,
         enabled_meal_slots: EnabledMealSlots,
     ) -> Result<DiaryPreferences, NutritionError> {
-        let preferences = DiaryPreferences::update(user_id, enabled_meal_slots);
+        let preferences = DiaryPreferences::new(user_id, enabled_meal_slots);
         self.repo.save(&preferences).await?;
         Ok(preferences)
     }

@@ -187,10 +187,10 @@ impl MealService {
             }
         }
 
-        inputs
+        Ok(inputs
             .into_iter()
             .map(|input| MealComponent::new(input.item, input.quantity))
-            .collect()
+            .collect())
     }
 }
 

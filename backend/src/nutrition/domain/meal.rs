@@ -66,14 +66,14 @@ pub struct MealComponent {
 }
 
 impl MealComponent {
-    pub fn new(item: MealComponentItem, quantity: Quantity) -> Result<Self, NutritionError> {
+    pub fn new(item: MealComponentItem, quantity: Quantity) -> Self {
         let (quantity_amount, quantity_unit) = quantity.into_parts();
-        Ok(Self {
+        Self {
             id: Uuid::new_v4(),
             item,
             quantity_amount,
             quantity_unit,
-        })
+        }
     }
 }
 

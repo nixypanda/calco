@@ -204,24 +204,11 @@ impl FromStr for NutrientConfidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Nutrient(pub NutrientCode, pub String, pub UnitCode, pub String);
-
-impl Nutrient {
-    pub fn code(&self) -> &NutrientCode {
-        &self.0
-    }
-
-    pub fn name(&self) -> &str {
-        &self.1
-    }
-
-    pub fn unit(&self) -> &UnitCode {
-        &self.2
-    }
-
-    pub fn category(&self) -> &str {
-        &self.3
-    }
+pub struct Nutrient {
+    pub code: NutrientCode,
+    pub name: String,
+    pub unit: UnitCode,
+    pub category: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -240,7 +227,7 @@ impl FromIterator<Nutrient> for NutrientCatalog {
         Self {
             by_code: nutrients
                 .into_iter()
-                .map(|n| (n.code().0.clone(), n))
+                .map(|n| (n.code.0.clone(), n))
                 .collect(),
         }
     }
@@ -574,9 +561,9 @@ fn build_product_nutrients(
                 NutritionError::Validation(format!("unknown nutrient code: {}", nutrient.code))
             })?;
             Ok(ProductNutrient {
-                nutrient_code: reference.code().clone(),
+                nutrient_code: reference.code.clone(),
                 amount_per_100g,
-                unit: reference.unit().clone(),
+                unit: reference.unit.clone(),
                 source: nutrient.source,
                 confidence: nutrient
                     .confidence
@@ -740,30 +727,30 @@ mod tests {
 
     fn test_catalog() -> NutrientCatalog {
         [
-            Nutrient(
-                NutrientCode("ENERGY_KCAL".into()),
-                "Energy".into(),
-                UnitCode("kcal".into()),
-                "energy".into(),
-            ),
-            Nutrient(
-                NutrientCode("PROTEIN_G".into()),
-                "Protein".into(),
-                UnitCode("g".into()),
-                "macros".into(),
-            ),
-            Nutrient(
-                NutrientCode("CARBS_G".into()),
-                "Carbohydrates".into(),
-                UnitCode("g".into()),
-                "macros".into(),
-            ),
-            Nutrient(
-                NutrientCode("FAT_G".into()),
-                "Fat".into(),
-                UnitCode("g".into()),
-                "macros".into(),
-            ),
+            Nutrient {
+                code: NutrientCode("ENERGY_KCAL".into()),
+                name: "Energy".into(),
+                unit: UnitCode("kcal".into()),
+                category: "energy".into(),
+            },
+            Nutrient {
+                code: NutrientCode("PROTEIN_G".into()),
+                name: "Protein".into(),
+                unit: UnitCode("g".into()),
+                category: "macros".into(),
+            },
+            Nutrient {
+                code: NutrientCode("CARBS_G".into()),
+                name: "Carbohydrates".into(),
+                unit: UnitCode("g".into()),
+                category: "macros".into(),
+            },
+            Nutrient {
+                code: NutrientCode("FAT_G".into()),
+                name: "Fat".into(),
+                unit: UnitCode("g".into()),
+                category: "macros".into(),
+            },
         ]
         .into_iter()
         .collect()

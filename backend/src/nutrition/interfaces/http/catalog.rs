@@ -686,10 +686,10 @@ fn product_to_id_response(product: Product) -> ProductIdResponse {
 
 fn nutrient_to_item_dto(nutrient: Nutrient) -> NutrientItemDto {
     NutrientItemDto {
-        code: nutrient.code().0.clone(),
-        name: nutrient.name().to_string(),
-        unit: nutrient.unit().0.clone(),
-        category: nutrient.category().to_string(),
+        code: nutrient.code.0,
+        name: nutrient.name,
+        unit: nutrient.unit.0,
+        category: nutrient.category,
     }
 }
 

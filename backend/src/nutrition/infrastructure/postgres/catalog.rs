@@ -736,12 +736,12 @@ struct NutrientRow {
 }
 
 fn nutrient_row_to_nutrient(row: NutrientRow) -> Nutrient {
-    Nutrient(
-        NutrientCode(row.code),
-        row.name,
-        UnitCode(row.unit),
-        row.category,
-    )
+    Nutrient {
+        code: NutrientCode(row.code),
+        name: row.name,
+        unit: UnitCode(row.unit),
+        category: row.category,
+    }
 }
 
 // ─── Unit Repository ───────────────────────────────────────────
