@@ -12,7 +12,7 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
         "categories": ["fruit"],
         "serving_size_g": 100,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 52 },
             { "code": "PROTEIN_G", "amount_per_100g": 1 },
@@ -112,7 +112,7 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
         "categories": ["fruit"],
         "serving_size_g": 100,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 52 },
             { "code": "PROTEIN_G", "amount_per_100g": 1 },

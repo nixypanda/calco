@@ -396,6 +396,7 @@ async fn create_custom_food_handler(
         args.nutrients,
         args.servings,
         &catalog,
+        &state.unit_converter,
     ) {
         Ok(p) => p,
         Err(e) => return e.into_response(),
@@ -442,6 +443,7 @@ async fn update_custom_food_handler(
         args.nutrients,
         args.servings,
         &catalog,
+        &state.unit_converter,
     ) {
         Ok(p) => p,
         Err(e) => return e.into_response(),

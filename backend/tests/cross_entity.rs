@@ -19,7 +19,7 @@ async fn product_to_meal_to_log(pool: PgPool) {
         "categories": ["bakery"],
         "serving_size_g": 30,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 250 },
             { "code": "PROTEIN_G", "amount_per_100g": 9 },

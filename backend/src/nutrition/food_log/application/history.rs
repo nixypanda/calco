@@ -6,6 +6,17 @@ use uuid::Uuid;
 
 use crate::nutrition::food_log::domain::*;
 
+const MAX_HISTORY_RANGE_DAYS: i64 = 366;
+
+fn ensure_within_max_range(from_date: NaiveDate, to_date: NaiveDate) -> Result<(), NutritionError> {
+    if to_date.signed_duration_since(from_date).num_days() > MAX_HISTORY_RANGE_DAYS {
+        return Err(NutritionError::Validation(format!(
+            "date range cannot exceed {MAX_HISTORY_RANGE_DAYS} days"
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
 pub struct FoodLogHistoryService {
     food_log_repo: Arc<dyn FoodLogRepository>,
@@ -69,6 +80,8 @@ impl FoodLogHistoryService {
         to_date: NaiveDate,
         meal_slot: Option<MealSlot>,
     ) -> Result<Vec<RecentFoodLogItem>, NutritionError> {
+        ensure_within_max_range(from_date, to_date)?;
+
         let logs = self
             .food_log_repo
             .list_by_filter(FoodLogListFilter {
@@ -88,11 +101,7 @@ impl FoodLogHistoryService {
         from_date: NaiveDate,
         to_date: NaiveDate,
     ) -> Result<Vec<FoodLogDaySummary>, NutritionError> {
-        if to_date.signed_duration_since(from_date).num_days() > 366 {
-            return Err(NutritionError::Validation(
-                "summary date range cannot exceed 366 days".into(),
-            ));
-        }
+        ensure_within_max_range(from_date, to_date)?;
 
         let logs = self
             .food_log_repo
@@ -118,6 +127,8 @@ impl FoodLogHistoryService {
         if items.is_empty() {
             return Ok(Vec::new());
         }
+
+        ensure_within_max_range(from_date, to_date)?;
 
         let logs = self
             .food_log_repo
@@ -405,6 +416,38 @@ mod tests {
 
         let result = history_services
             .summarize_by_date(Uuid::new_v4(), from_date, to_date)
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn history_rejects_recent_items_ranges_over_366_days() {
+        let history_services = empty_history_services();
+        let from_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let to_date = NaiveDate::from_ymd_opt(2026, 1, 3).unwrap();
+
+        let result = history_services
+            .list_recent_items(Uuid::new_v4(), from_date, to_date, None)
+            .await;
+
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn history_rejects_last_used_ranges_over_366_days() {
+        let history_services = empty_history_services();
+        let from_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        let to_date = NaiveDate::from_ymd_opt(2026, 1, 3).unwrap();
+
+        let result = history_services
+            .find_last_used_items(
+                Uuid::new_v4(),
+                from_date,
+                to_date,
+                None,
+                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
+            )
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));

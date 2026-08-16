@@ -8,7 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::domain::calculation::{CalculatedNutrition, NutritionCalculator, Quantity};
+use crate::nutrition::catalog::domain::calculation::{
+    CalculatedNutrition, NutritionCalculator, Quantity,
+};
 use crate::nutrition::catalog::domain::units::UnitConverter;
 
 #[derive(Debug, Clone, Default)]
@@ -302,6 +304,62 @@ impl Category {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServingLabel(pub String);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServingSizeG(Decimal);
+
+impl ServingSizeG {
+    pub fn new(value: Option<Decimal>) -> Result<Option<Self>, NutritionError> {
+        match value {
+            None => Ok(None),
+            Some(grams) if grams > Decimal::ZERO => Ok(Some(Self(grams))),
+            Some(_) => Err(NutritionError::Validation(
+                "serving size (grams) must be positive".into(),
+            )),
+        }
+    }
+
+    pub fn value(&self) -> Decimal {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DefaultQuantity {
+    pub amount: Decimal,
+    pub unit: UnitCode,
+}
+
+impl DefaultQuantity {
+    pub fn new(
+        amount: Option<Decimal>,
+        unit: Option<String>,
+        converter: &UnitConverter,
+    ) -> Result<Option<Self>, NutritionError> {
+        match (amount, unit) {
+            (None, None) => Ok(None),
+            (Some(amount), Some(unit)) => {
+                if amount <= Decimal::ZERO {
+                    return Err(NutritionError::Validation(
+                        "default quantity must be positive".into(),
+                    ));
+                }
+                if !converter.mass_unit_codes().any(|code| code == unit) {
+                    return Err(NutritionError::Validation(format!(
+                        "unknown default unit: {unit}"
+                    )));
+                }
+                Ok(Some(Self {
+                    amount,
+                    unit: UnitCode(unit),
+                }))
+            }
+            _ => Err(NutritionError::Validation(
+                "default quantity and default unit must be provided together".into(),
+            )),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AmountPer100g(Decimal);
 
@@ -355,8 +413,11 @@ impl Product {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
+        converter: &UnitConverter,
     ) -> Result<Self, NutritionError> {
         let name = ProductName::new(&name)?;
+        let serving_size = ServingSizeG::new(serving_size_g)?;
+        let default_quantity = DefaultQuantity::new(default_quantity, default_unit, converter)?;
 
         let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
         validate_required_nutrients(&nutrients)?;
@@ -372,9 +433,9 @@ impl Product {
             name,
             brand: brand.map(Brand),
             categories: Category::normalize_list(categories),
-            default_quantity,
-            default_unit: default_unit.map(UnitCode),
-            serving_size_g,
+            default_quantity: default_quantity.as_ref().map(|q| q.amount),
+            default_unit: default_quantity.map(|q| q.unit),
+            serving_size_g: serving_size.map(|s| s.value()),
             nutrients,
             servings: build_product_servings(servings)?,
             created_at: now,
@@ -394,8 +455,11 @@ impl Product {
         nutrients: Vec<ProductNutrientInput>,
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
+        converter: &UnitConverter,
     ) -> Result<Self, NutritionError> {
         let name = ProductName::new(&name)?;
+        let serving_size = ServingSizeG::new(serving_size_g)?;
+        let default_quantity = DefaultQuantity::new(default_quantity, default_unit, converter)?;
 
         let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
         validate_required_nutrients(&nutrients)?;
@@ -404,9 +468,9 @@ impl Product {
             name,
             brand: brand.map(Brand),
             categories: Category::normalize_list(categories),
-            serving_size_g,
-            default_quantity,
-            default_unit: default_unit.map(UnitCode),
+            serving_size_g: serving_size.map(|s| s.value()),
+            default_quantity: default_quantity.as_ref().map(|q| q.amount),
+            default_unit: default_quantity.map(|q| q.unit),
             nutrients,
             servings: build_product_servings(servings)?,
             ..self.clone()
@@ -556,6 +620,7 @@ fn build_product_nutrients(
     nutrients: Vec<ProductNutrientInput>,
     catalog: &NutrientCatalog,
 ) -> Result<Vec<ProductNutrient>, NutritionError> {
+    let mut seen: HashSet<String> = HashSet::new();
     nutrients
         .into_iter()
         .map(|nutrient| {
@@ -563,6 +628,12 @@ fn build_product_nutrients(
             let reference = catalog.get(&nutrient.code).ok_or_else(|| {
                 NutritionError::Validation(format!("unknown nutrient code: {}", nutrient.code))
             })?;
+            if !seen.insert(reference.code.0.clone()) {
+                return Err(NutritionError::Validation(format!(
+                    "duplicate nutrient code: {}",
+                    reference.code.0
+                )));
+            }
             Ok(ProductNutrient {
                 nutrient_code: reference.code.clone(),
                 amount_per_100g,
@@ -759,6 +830,15 @@ mod tests {
         .collect()
     }
 
+    fn test_converter() -> UnitConverter {
+        UnitConverter::from_entries([
+            ("g".to_string(), Decimal::new(1, 0)),
+            ("kg".to_string(), Decimal::new(1000, 0)),
+            ("mg".to_string(), Decimal::new(1, 3)),
+            ("ug".to_string(), Decimal::new(1, 6)),
+        ])
+    }
+
     #[test]
     fn custom_product_creation_normalizes_and_builds_children() {
         let catalog = test_catalog();
@@ -769,10 +849,11 @@ mod tests {
             vec![" Meals ".into(), "meals".into(), "Dinner".into()],
             Some(Decimal::new(250, 0)),
             Some(Decimal::new(1, 0)),
-            Some("serving".into()),
+            Some("g".into()),
             required_nutrient_inputs(Decimal::new(120, 0)),
             vec![serving_input(Decimal::new(1, 0), Decimal::new(250, 0))],
             &catalog,
+            &test_converter(),
         )
         .unwrap();
 
@@ -811,6 +892,7 @@ mod tests {
                 vec![nutrient_input(Decimal::ZERO)],
                 vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
                 &catalog,
+                &test_converter(),
             )
             .is_err()
         );
@@ -827,6 +909,7 @@ mod tests {
                 vec![nutrient_input(Decimal::new(-1, 0))],
                 vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
                 &catalog,
+                &test_converter(),
             )
             .is_err()
         );
@@ -843,6 +926,7 @@ mod tests {
                 vec![nutrient_input(Decimal::ZERO)],
                 vec![serving_input(Decimal::ZERO, Decimal::new(100, 0))],
                 &catalog,
+                &test_converter(),
             )
             .is_err()
         );
@@ -876,6 +960,7 @@ mod tests {
             }],
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         );
         assert!(matches!(result, Err(NutritionError::Validation(_))));
     }
@@ -895,6 +980,7 @@ mod tests {
             required_nutrient_inputs(Decimal::new(10, 0)),
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         )
         .unwrap();
         product.source_id = Some("external-id".into());
@@ -907,10 +993,11 @@ mod tests {
                 vec!["New".into()],
                 Some(Decimal::new(50, 0)),
                 Some(Decimal::new(2, 0)),
-                Some("piece".into()),
+                Some("kg".into()),
                 required_nutrient_inputs(Decimal::new(20, 0)),
                 vec![serving_input(Decimal::new(2, 0), Decimal::new(50, 0))],
                 &catalog,
+                &test_converter(),
             )
             .unwrap();
 
@@ -922,7 +1009,7 @@ mod tests {
         assert_eq!(updated.barcode, product.barcode);
         assert_eq!(updated.name.as_str(), "Updated");
         assert_eq!(updated.brand.unwrap().0, "Brand");
-        assert_eq!(updated.default_unit.unwrap().0, "piece");
+        assert_eq!(updated.default_unit.unwrap().0, "kg");
     }
 
     #[test]
@@ -940,6 +1027,7 @@ mod tests {
             vec![nutrient_input(Decimal::new(100, 0))],
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         );
         match result {
             Err(NutritionError::Validation(msg)) => {
@@ -967,6 +1055,7 @@ mod tests {
             required_nutrient_inputs(Decimal::new(100, 0)),
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         )
         .unwrap();
 
@@ -980,12 +1069,140 @@ mod tests {
             vec![nutrient_input(Decimal::new(200, 0))],
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         );
         match result {
             Err(NutritionError::Validation(msg)) => {
                 assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
                 assert!(msg.contains("CARBS_G"), "msg: {msg}");
                 assert!(msg.contains("FAT_G"), "msg: {msg}");
+            }
+            other => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn custom_product_creation_rejects_non_positive_serving_size() {
+        let catalog = test_catalog();
+        let result = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            Some(Decimal::ZERO),
+            None,
+            None,
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        );
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn custom_product_creation_rejects_half_default_quantity_pair() {
+        let catalog = test_catalog();
+        let missing_unit = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            Some(Decimal::new(1, 0)),
+            None,
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        );
+        assert!(matches!(missing_unit, Err(NutritionError::Validation(_))));
+
+        let missing_quantity = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            Some("serving".into()),
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        );
+        assert!(matches!(
+            missing_quantity,
+            Err(NutritionError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn custom_product_creation_rejects_non_mass_default_unit() {
+        let catalog = test_catalog();
+        // "serving" is a seeded unit but not mass-convertible, so it is rejected
+        // as a default-quantity unit under the mass-only policy.
+        let result = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            Some(Decimal::new(1, 0)),
+            Some("serving".into()),
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        );
+        assert!(matches!(result, Err(NutritionError::Validation(_))));
+    }
+
+    #[test]
+    fn custom_product_creation_accepts_valid_serving_and_default_quantity() {
+        let catalog = test_catalog();
+        let product = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            Some(Decimal::new(250, 0)),
+            Some(Decimal::new(1, 0)),
+            Some("g".into()),
+            required_nutrient_inputs(Decimal::new(10, 0)),
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        )
+        .unwrap();
+        assert_eq!(product.serving_size_g, Some(Decimal::new(250, 0)));
+        assert_eq!(product.default_quantity, Some(Decimal::new(1, 0)));
+        assert_eq!(product.default_unit.unwrap().0, "g");
+    }
+
+    #[test]
+    fn custom_product_creation_rejects_duplicate_nutrient_codes() {
+        let catalog = test_catalog();
+        let mut nutrients = required_nutrient_inputs(Decimal::new(10, 0));
+        nutrients.push(nutrient_input_for("PROTEIN_G", Decimal::new(5, 0)));
+
+        let result = Product::new_custom(
+            Uuid::new_v4(),
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            None,
+            nutrients,
+            vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
+            &catalog,
+            &test_converter(),
+        );
+        match result {
+            Err(NutritionError::Validation(msg)) => {
+                assert!(msg.contains("duplicate"), "msg: {msg}");
+                assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
             }
             other => panic!("expected Validation error, got {other:?}"),
         }
@@ -1011,6 +1228,7 @@ mod tests {
             }],
             vec![serving_input(Decimal::new(1, 0), Decimal::new(100, 0))],
             &catalog,
+            &test_converter(),
         );
         match result {
             Err(NutritionError::Validation(msg)) => {

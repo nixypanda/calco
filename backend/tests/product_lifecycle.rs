@@ -19,7 +19,7 @@ async fn create_custom_product(
         "categories": categories,
         "serving_size_g": 100,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": energy_kcal },
             { "code": "PROTEIN_G", "amount_per_100g": 1 },
@@ -63,7 +63,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "categories": ["breakfast", "cereals"],
         "serving_size_g": 50,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 450 },
             { "code": "PROTEIN_G", "amount_per_100g": 9 },
@@ -116,7 +116,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "categories": ["breakfast"],
         "serving_size_g": 55,
         "default_quantity": 1,
-        "default_unit": "serving",
+        "default_unit": "g",
         "nutrients": [
             { "code": "ENERGY_KCAL", "amount_per_100g": 460 },
             { "code": "PROTEIN_G", "amount_per_100g": 10 },
