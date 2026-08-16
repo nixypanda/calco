@@ -6,9 +6,9 @@ use std::str::FromStr;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::calculation::{CalculatedNutrition, Quantity};
+use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::{NutrientCode, Product, ProductId, UnitCode};
 use crate::nutrition::meal::domain::{Meal, MealId};
-use crate::nutrition::catalog::domain::units::UnitConverter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FoodLogId(pub Uuid);

@@ -1,8 +1,8 @@
 use super::*;
+use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::domain::*;
-use crate::nutrition::catalog::domain::units::UnitConverter;
 use async_trait::async_trait;
 use chrono::{NaiveDate, Utc};
 use rust_decimal::Decimal;

@@ -179,9 +179,9 @@ mod tests {
     use crate::nutrition::food_log::domain::{
         FoodLogId, FoodLogItemSnapshot, FoodLogNutrientSnapshot,
     };
-    use crate::nutrition::meal::domain::MealId;
     use crate::nutrition::guidance::domain::NutrientGuidanceRepository;
     use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
+    use crate::nutrition::meal::domain::MealId;
     use chrono::Utc;
     fn date() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()

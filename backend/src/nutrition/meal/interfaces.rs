@@ -12,11 +12,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
-use crate::nutrition::food_log::application::load_meal_products;
-use crate::nutrition::meal::application::*;
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::{Product, ProductId, UnitCode};
 use crate::nutrition::error::NutritionError;
+use crate::nutrition::food_log::application::load_meal_products;
+use crate::nutrition::meal::application::*;
 use crate::nutrition::meal::domain::*;
 use crate::nutrition::module::MealModule;
 
@@ -167,10 +167,7 @@ async fn get_meal_handler(
     }
 }
 
-async fn list_meals_handler(
-    auth: AuthUser,
-    State(state): State<MealModule>,
-) -> impl IntoResponse {
+async fn list_meals_handler(auth: AuthUser, State(state): State<MealModule>) -> impl IntoResponse {
     match state.meal_repo.list_by_user_id(auth.0.id).await {
         Ok(meals) => match meals_to_list_response(&state, meals).await {
             Ok(resp) => Json(resp).into_response(),
@@ -322,10 +319,7 @@ async fn meals_to_list_response(
     Ok(MealListResponse { items })
 }
 
-async fn meal_to_response(
-    state: &MealModule,
-    meal: &Meal,
-) -> Result<MealResponse, NutritionError> {
+async fn meal_to_response(state: &MealModule, meal: &Meal) -> Result<MealResponse, NutritionError> {
     let products = load_meal_products(meal, state.catalog.product_repo.as_ref()).await?;
     Ok(meal_to_response_with_products(
         meal,

@@ -4,9 +4,9 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::calculation::Quantity;
+use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::meal::domain::*;
-use crate::nutrition::catalog::domain::units::UnitConverter;
 
 pub struct CreateMealInput {
     pub user_id: Uuid,

@@ -3,10 +3,10 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::calculation::Quantity;
+use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::domain::{Meal, MealComponentItem, MealRepository};
-use crate::nutrition::catalog::domain::units::UnitConverter;
 
 pub struct LogFoodInput {
     pub user_id: Uuid,

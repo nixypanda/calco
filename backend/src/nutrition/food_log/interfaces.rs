@@ -15,10 +15,10 @@ use std::str::FromStr;
 
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
-use crate::nutrition::food_log::application::*;
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::{ProductId, UnitCode};
 use crate::nutrition::error::NutritionError;
+use crate::nutrition::food_log::application::*;
 use crate::nutrition::food_log::domain::*;
 use crate::nutrition::meal::domain::MealId;
 use crate::nutrition::module::FoodLogModule;

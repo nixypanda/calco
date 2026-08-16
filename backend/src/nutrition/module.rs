@@ -5,25 +5,25 @@ use sqlx::PgPool;
 
 use crate::AppState;
 use crate::BoxError;
-use crate::nutrition::diary::application::DiaryPreferencesService;
-use crate::nutrition::food_log::application::{FoodLogHistoryService, FoodLogService};
-use crate::nutrition::goals::application::GoalTargetService;
-use crate::nutrition::meal::application::MealService;
-use crate::nutrition::guidance::application::NutritionDetailsService;
-use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository, UnitRepository};
-use crate::nutrition::diary::domain::DiaryPreferencesRepository;
-use crate::nutrition::food_log::domain::FoodLogRepository;
-use crate::nutrition::goals::domain::GoalTargetRepository;
-use crate::nutrition::meal::domain::MealRepository;
-use crate::nutrition::guidance::domain::NutrientGuidanceRepository;
 use crate::nutrition::catalog::domain::units::UnitConverter;
-use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
+use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::nutrition::catalog::infrastructure::{
     PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
 };
+use crate::nutrition::diary::application::DiaryPreferencesService;
+use crate::nutrition::diary::domain::DiaryPreferencesRepository;
 use crate::nutrition::diary::infrastructure::PostgresDiaryPreferencesRepository;
+use crate::nutrition::food_log::application::{FoodLogHistoryService, FoodLogService};
+use crate::nutrition::food_log::domain::FoodLogRepository;
 use crate::nutrition::food_log::infrastructure::PostgresFoodLogRepository;
+use crate::nutrition::goals::application::GoalTargetService;
+use crate::nutrition::goals::domain::GoalTargetRepository;
 use crate::nutrition::goals::infrastructure::PostgresGoalTargetRepository;
+use crate::nutrition::guidance::application::NutritionDetailsService;
+use crate::nutrition::guidance::domain::NutrientGuidanceRepository;
+use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
+use crate::nutrition::meal::application::MealService;
+use crate::nutrition::meal::domain::MealRepository;
 use crate::nutrition::meal::infrastructure::PostgresMealRepository;
 
 /// The catalog kernel: products, nutrients, units, and the unit converter.
@@ -108,7 +108,11 @@ pub struct FoodLogModule {
 }
 
 impl FoodLogModule {
-    pub fn build(pool: &PgPool, catalog: CatalogModule, meal_repo: Arc<dyn MealRepository>) -> Self {
+    pub fn build(
+        pool: &PgPool,
+        catalog: CatalogModule,
+        meal_repo: Arc<dyn MealRepository>,
+    ) -> Self {
         let food_log_repo =
             Arc::new(PostgresFoodLogRepository::new(pool.clone())) as Arc<dyn FoodLogRepository>;
         let food_log_services = FoodLogService::new(

@@ -10,10 +10,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
+use crate::nutrition::error::NutritionError;
 use crate::nutrition::guidance::application::{
     NutrientCoverage, NutritionDetails, NutritionDetailsEntry, NutritionDetailsStatus,
 };
-use crate::nutrition::error::NutritionError;
 use crate::nutrition::guidance::domain::{
     NutrientDetailsSection, NutrientGuidanceKind, NutrientGuidanceSet,
 };
