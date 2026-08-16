@@ -513,7 +513,7 @@ impl ProductRepository for PostgresProductRepository {
         .bind(product.user_id)
         .bind(product.visibility.as_str())
         .bind(product.barcode.as_ref().map(|b| &b.0))
-        .bind(&product.name.0)
+        .bind(product.name.as_str())
         .bind(product.brand.as_ref().map(|b| &b.0))
         .bind(
             product
@@ -546,7 +546,7 @@ impl ProductRepository for PostgresProductRepository {
             "#,
         )
         .bind(product.id.0)
-        .bind(&product.name.0)
+        .bind(product.name.as_str())
         .bind(product.brand.as_ref().map(|b| &b.0))
         .bind(
             product
@@ -677,7 +677,7 @@ fn product_row_to_product(
             .parse::<ProductVisibility>()
             .map_err(NutritionError::Internal)?,
         barcode: row.barcode.map(Barcode),
-        name: ProductName(row.name),
+        name: ProductName::new(&row.name)?,
         brand: row.brand.map(Brand),
         categories: row.categories.into_iter().map(Category).collect(),
         default_quantity: row.default_quantity,

@@ -34,18 +34,21 @@ impl PostgresMealRepository {
     }
 }
 
-fn meal_row_to_meal(row: MealRow, components: Vec<MealComponent>) -> Meal {
-    Meal {
+fn meal_row_to_meal(
+    row: MealRow,
+    components: Vec<MealComponent>,
+) -> Result<Meal, NutritionError> {
+    Ok(Meal {
         id: MealId(row.id),
         user_id: row.user_id,
-        name: MealName(row.name),
+        name: MealName::new(&row.name)?,
         notes: row.notes.map(MealNotes),
         total_quantity_amount: row.total_quantity_amount,
         total_quantity_unit: row.total_quantity_unit.map(UnitCode),
         components,
         created_at: row.created_at,
         updated_at: row.updated_at,
-    }
+    })
 }
 
 fn meal_component_row_to_component(row: MealComponentRow) -> Result<MealComponent, NutritionError> {
@@ -82,7 +85,7 @@ impl MealRepository for PostgresMealRepository {
         )
         .bind(meal.id.0)
         .bind(meal.user_id)
-        .bind(&meal.name.0)
+        .bind(meal.name.as_str())
         .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
         .bind(meal.total_quantity_amount)
         .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))
@@ -131,7 +134,7 @@ impl MealRepository for PostgresMealRepository {
         match row {
             Some(r) => {
                 let components = self.load_components(r.id).await?;
-                Ok(Some(meal_row_to_meal(r, components)))
+                Ok(Some(meal_row_to_meal(r, components)?))
             }
             None => Ok(None),
         }
@@ -153,7 +156,7 @@ impl MealRepository for PostgresMealRepository {
         let mut results = Vec::new();
         for r in rows {
             let components = self.load_components(r.id).await?;
-            results.push(meal_row_to_meal(r, components));
+            results.push(meal_row_to_meal(r, components)?);
         }
         Ok(results)
     }
@@ -169,7 +172,7 @@ impl MealRepository for PostgresMealRepository {
             "#,
         )
         .bind(meal.id.0)
-        .bind(&meal.name.0)
+        .bind(meal.name.as_str())
         .bind(meal.notes.as_ref().map(|n| n.0.as_str()))
         .bind(meal.total_quantity_amount)
         .bind(meal.total_quantity_unit.as_ref().map(|u| u.0.as_str()))

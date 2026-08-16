@@ -48,7 +48,7 @@ impl IdentityRepository for PostgresIdentityRepository {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(identity.id.0)
-        .bind(&identity.username.0)
+        .bind(identity.username.as_str())
         .bind(&identity.password_hash.0)
         .bind(identity.role.as_str())
         .bind(identity.status.as_str())
@@ -120,7 +120,7 @@ struct IdentityRow {
 fn identity_row_to_identity(row: IdentityRow) -> Result<Identity, AuthError> {
     Ok(Identity {
         id: IdentityId(row.id),
-        username: Username(row.username),
+        username: Username::new(&row.username)?,
         password_hash: PasswordHash(row.password_hash),
         role: row.role.parse::<IdentityRole>()?,
         status: row.status.parse::<IdentityStatus>()?,
@@ -395,7 +395,7 @@ fn profile_with_identity_row_to_user_with_profile(
     Ok(UserWithProfile {
         identity: Identity {
             id: IdentityId(row.identity_id),
-            username: Username(row.username),
+            username: Username::new(&row.username)?,
             password_hash: PasswordHash(row.password_hash),
             role: row.role.parse::<IdentityRole>()?,
             status: row.status.parse::<IdentityStatus>()?,

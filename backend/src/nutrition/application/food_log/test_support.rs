@@ -261,7 +261,7 @@ pub(super) fn sample_product() -> Product {
         user_id: None,
         visibility: ProductVisibility::UserPrivate,
         barcode: None,
-        name: ProductName("Test Food".to_string()),
+        name: ProductName::new("Test Food").unwrap(),
         brand: None,
         categories: vec![],
         default_quantity: Some(Decimal::new(100, 0)),
@@ -295,7 +295,7 @@ pub(super) fn sample_meal() -> Meal {
     Meal {
         id: MealId(Uuid::nil()),
         user_id: Uuid::nil(),
-        name: MealName("Test Meal".to_string()),
+        name: MealName::new("Test Meal").unwrap(),
         notes: None,
         total_quantity_amount: None,
         total_quantity_unit: None,

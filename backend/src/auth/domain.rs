@@ -25,7 +25,30 @@ impl From<uuid::Uuid> for IdentityId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Username(pub String);
+pub struct Username(String);
+
+impl Username {
+    const MAX_LEN: usize = 64;
+
+    pub fn new(raw: &str) -> Result<Self, AuthError> {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() || trimmed.len() > Self::MAX_LEN {
+            return Err(AuthError::InvalidCredentials);
+        }
+        if trimmed.chars().any(|c| c.is_control() || c.is_whitespace()) {
+            return Err(AuthError::InvalidCredentials);
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct PasswordHash(pub String);

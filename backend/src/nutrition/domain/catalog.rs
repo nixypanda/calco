@@ -256,7 +256,25 @@ pub struct UnitCode(pub String);
 pub struct Barcode(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProductName(pub String);
+pub struct ProductName(String);
+
+impl ProductName {
+    pub fn new(value: &str) -> Result<Self, NutritionError> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(NutritionError::Validation("food name is required".into()));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Brand(pub String);
@@ -348,7 +366,7 @@ impl Product {
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        Self::validate_name(&name)?;
+        let name = ProductName::new(&name)?;
 
         let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
         validate_required_nutrients(&nutrients)?;
@@ -361,7 +379,7 @@ impl Product {
             user_id: Some(user_id),
             visibility: ProductVisibility::UserPrivate,
             barcode: None,
-            name: ProductName(name.trim().to_string()),
+            name,
             brand: brand.map(Brand),
             categories: Category::normalize_list(categories),
             default_quantity,
@@ -387,13 +405,13 @@ impl Product {
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        Self::validate_name(&name)?;
+        let name = ProductName::new(&name)?;
 
         let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
         validate_required_nutrients(&nutrients)?;
 
         Ok(Self {
-            name: ProductName(name.trim().to_string()),
+            name,
             brand: brand.map(Brand),
             categories: Category::normalize_list(categories),
             serving_size_g,
@@ -403,13 +421,6 @@ impl Product {
             servings: build_product_servings(servings)?,
             ..self.clone()
         })
-    }
-
-    pub fn validate_name(name: &str) -> Result<(), NutritionError> {
-        if name.trim().is_empty() {
-            return Err(NutritionError::Validation("food name is required".into()));
-        }
-        Ok(())
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
@@ -777,7 +788,7 @@ mod tests {
 
         assert_eq!(product.source, Source::User);
         assert_eq!(product.visibility, ProductVisibility::UserPrivate);
-        assert_eq!(product.name.0, "Rice Bowl");
+        assert_eq!(product.name.as_str(), "Rice Bowl");
         assert_eq!(
             product
                 .categories
@@ -919,7 +930,7 @@ mod tests {
         assert_eq!(updated.user_id, product.user_id);
         assert_eq!(updated.visibility, product.visibility);
         assert_eq!(updated.barcode, product.barcode);
-        assert_eq!(updated.name.0, "Updated");
+        assert_eq!(updated.name.as_str(), "Updated");
         assert_eq!(updated.brand.unwrap().0, "Brand");
         assert_eq!(updated.default_unit.unwrap().0, "piece");
     }

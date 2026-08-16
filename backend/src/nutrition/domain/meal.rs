@@ -29,7 +29,25 @@ impl From<Uuid> for MealId {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct MealName(pub String);
+pub struct MealName(String);
+
+impl MealName {
+    pub fn new(value: &str) -> Result<Self, NutritionError> {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err(NutritionError::Validation("meal name is required".into()));
+        }
+        Ok(Self(trimmed.to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MealNotes(pub String);
@@ -82,13 +100,13 @@ impl Meal {
         components: Vec<MealComponent>,
         now: DateTime<Utc>,
     ) -> Result<Self, NutritionError> {
-        validate_meal_name(&name)?;
+        let name = MealName::new(&name)?;
         validate_meal_components(&components)?;
 
         Ok(Self {
             id: MealId::new(),
             user_id,
-            name: MealName(name),
+            name,
             notes: notes.map(MealNotes),
             total_quantity_amount,
             total_quantity_unit,
@@ -108,10 +126,7 @@ impl Meal {
         now: DateTime<Utc>,
     ) -> Result<Self, NutritionError> {
         let name = match name {
-            Some(name) => {
-                validate_meal_name(&name)?;
-                MealName(name)
-            }
+            Some(name) => MealName::new(&name)?,
             None => self.name.clone(),
         };
         let components = match components {
@@ -240,13 +255,6 @@ impl Meal {
                 .collect(),
         })
     }
-}
-
-fn validate_meal_name(name: &str) -> Result<(), NutritionError> {
-    if name.trim().is_empty() {
-        return Err(NutritionError::Validation("meal name is required".into()));
-    }
-    Ok(())
 }
 
 fn validate_meal_components(components: &[MealComponent]) -> Result<(), NutritionError> {

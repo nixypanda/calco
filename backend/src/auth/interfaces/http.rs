@@ -484,7 +484,7 @@ fn identity_and_profile_to_response(
 fn identity_to_dto(identity: Identity) -> IdentityDto {
     IdentityDto {
         id: identity.id.0,
-        username: identity.username.0,
+        username: identity.username.into_inner(),
         role: identity.role.into(),
         created_at: identity.created_at,
         updated_at: identity.updated_at,
@@ -519,7 +519,7 @@ fn users_to_list_response(users: Vec<UserWithProfile>) -> UserListResponse {
 fn user_with_profile_to_item_dto(user: UserWithProfile) -> UserItemDto {
     UserItemDto {
         id: user.profile.id,
-        username: user.identity.username.0,
+        username: user.identity.username.into_inner(),
         display_name: user.profile.display_name,
         status: user.identity.status.into(),
         created_at: user.profile.created_at,

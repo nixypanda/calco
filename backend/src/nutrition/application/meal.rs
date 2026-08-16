@@ -338,7 +338,7 @@ mod tests {
             user_id: None,
             visibility: ProductVisibility::UserPrivate,
             barcode: None,
-            name: ProductName("Test Food".to_string()),
+            name: ProductName::new("Test Food").unwrap(),
             brand: None,
             categories: vec![],
             default_quantity: Some(Decimal::new(100, 0)),
@@ -396,7 +396,7 @@ mod tests {
         assert!(result.is_ok());
         let meal = result.unwrap();
         assert_eq!(meal.user_id, user_id);
-        assert_eq!(meal.name.0, "Test Meal");
+        assert_eq!(meal.name.as_str(), "Test Meal");
         assert_eq!(meal.components.len(), 1);
     }
 
@@ -498,7 +498,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(updated.name.0, "Updated");
+        assert_eq!(updated.name.as_str(), "Updated");
         assert_eq!(
             updated.notes.as_ref().map(|n| n.0.as_str()),
             Some("new notes")

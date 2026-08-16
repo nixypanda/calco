@@ -98,7 +98,7 @@ impl FoodLogItemSnapshot {
     pub fn from_product(product: &Product) -> Self {
         Self::Product {
             id: product.id,
-            name: product.name.0.clone(),
+            name: product.name.as_str().to_string(),
             brand: product.brand.as_ref().map(|brand| brand.0.clone()),
         }
     }
@@ -106,7 +106,7 @@ impl FoodLogItemSnapshot {
     pub fn from_meal(meal: &Meal) -> Self {
         Self::Meal {
             id: meal.id,
-            name: meal.name.0.clone(),
+            name: meal.name.as_str().to_string(),
         }
     }
 
@@ -413,7 +413,7 @@ mod tests {
             user_id: None,
             visibility: ProductVisibility::UserPrivate,
             barcode: None,
-            name: ProductName("Test".into()),
+            name: ProductName::new("Test").unwrap(),
             brand: None,
             categories: vec![],
             default_quantity: None,
@@ -436,7 +436,7 @@ mod tests {
         Meal {
             id: MealId(Uuid::nil()),
             user_id: Uuid::nil(),
-            name: crate::nutrition::domain::meal::MealName("Test".into()),
+            name: crate::nutrition::domain::meal::MealName::new("Test").unwrap(),
             notes: None,
             total_quantity_amount: Some(Decimal::new(100, 0)),
             total_quantity_unit: Some(UnitCode("g".into())),

@@ -334,7 +334,7 @@ fn meal_to_response_with_products(
 ) -> MealResponse {
     MealResponse {
         id: meal.id.0,
-        name: meal.name.0.clone(),
+        name: meal.name.as_str().to_string(),
         notes: meal.notes.as_ref().map(|n| n.0.clone()),
         total_quantity: meal_total_quantity_to_dto(meal),
         nutrition_summary: meal_declared_nutrition_summary(meal, products, unit_converter),
