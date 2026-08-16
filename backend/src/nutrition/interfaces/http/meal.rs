@@ -439,9 +439,7 @@ fn meal_component_nutrition_summary(
     products: &[(ProductId, Product)],
     unit_converter: &crate::nutrition::domain::units::UnitConverter,
 ) -> Option<NutrientSummaryDto> {
-    let product_id = match component.item {
-        MealComponentItem::Product(product_id) => product_id,
-    };
+    let MealComponentItem::Product(product_id) = component.item;
     let product = products
         .iter()
         .find(|(id, _)| id == &product_id)

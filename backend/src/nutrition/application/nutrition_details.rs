@@ -92,8 +92,7 @@ pub fn nutrition_details_from_logs(
     let nutrients = guidance_set
         .guidance()
         .iter()
-        .cloned()
-        .map(|guidance| detail_entry_from_logs(&guidance, &logs))
+        .map(|guidance| detail_entry_from_logs(guidance, &logs))
         .collect();
     NutritionDetails {
         date,

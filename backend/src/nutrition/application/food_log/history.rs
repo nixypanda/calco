@@ -58,7 +58,7 @@ impl FoodLogHistoryServices {
         };
 
         logs.retain(|log| log.log_date == source_date);
-        logs.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+        logs.sort_by_key(|log| std::cmp::Reverse(log.created_at));
         Ok(Some((source_date, logs)))
     }
 

@@ -197,6 +197,7 @@ pub struct FoodLogListFilter {
 }
 
 impl FoodLog {
+    #[allow(clippy::too_many_arguments)]
     pub fn new_product_log(
         user_id: Uuid,
         log_date: NaiveDate,
@@ -249,6 +250,7 @@ impl FoodLog {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn update_product_log(
         &self,
         log_date: NaiveDate,
@@ -303,6 +305,7 @@ impl FoodLog {
         self.user_id == user_id
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn new(
         user_id: Uuid,
         log_date: NaiveDate,
@@ -331,6 +334,7 @@ impl FoodLog {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update(
         &self,
         log_date: NaiveDate,

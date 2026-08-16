@@ -602,8 +602,8 @@ async fn custom_foods_to_list_response(
         let allowed = product.allowed_unit_codes(&state.unit_converter);
         let allowed_units: Vec<(UnitCode, String, String)> = all_units
             .iter()
-            .cloned()
             .filter(|(code, _, _)| allowed.contains(&code.0))
+            .cloned()
             .collect();
         items.push(product_to_detail_response(product, allowed_units));
     }
