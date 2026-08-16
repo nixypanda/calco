@@ -1,5 +1,9 @@
-pub mod application;
-pub mod domain;
-pub mod infrastructure;
+pub mod catalog;
+pub mod diary;
+pub mod error;
+pub mod food_log;
+pub mod goals;
+pub mod guidance;
 pub mod interfaces;
+pub mod meal;
 pub mod module;

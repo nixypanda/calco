@@ -13,12 +13,12 @@ use crate::auth::module::AuthModule;
 use crate::config::AppConfig;
 use crate::import::interfaces::http::import_routes;
 use crate::import::module::ImportModule;
-use crate::nutrition::interfaces::http::catalog::catalog_routes;
-use crate::nutrition::interfaces::http::diary_preferences::diary_preferences_routes;
-use crate::nutrition::interfaces::http::food_log::food_log_routes;
-use crate::nutrition::interfaces::http::goal_target::goal_target_routes;
-use crate::nutrition::interfaces::http::meal::meal_routes;
-use crate::nutrition::interfaces::http::nutrition_details::nutrition_details_routes;
+use crate::nutrition::catalog::interfaces::catalog_routes;
+use crate::nutrition::diary::interfaces::diary_preferences_routes;
+use crate::nutrition::food_log::interfaces::food_log_routes;
+use crate::nutrition::goals::interfaces::goal_target_routes;
+use crate::nutrition::meal::interfaces::meal_routes;
+use crate::nutrition::guidance::interfaces::nutrition_details_routes;
 use crate::nutrition::module::NutritionModule;
 
 pub type BoxError = Box<dyn std::error::Error + Send + Sync>;

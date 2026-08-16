@@ -56,7 +56,15 @@ that coupling.
 
 ## Bounded Contexts
 
-Three bounded contexts: `auth`, `nutrition`, and `import`. Each lives under its own top-level module (`backend/src/{auth,nutrition,import}/`) with the four layers (`domain`, `application`, `infrastructure`, `interfaces`) nested inside.
+Three bounded contexts: `auth`, `nutrition`, and `import`. Each lives under its own top-level module (`backend/src/{auth,nutrition,import}/`). `auth` and `import` nest the four layers (`domain`, `application`, `infrastructure`, `interfaces`) directly. `nutrition` is organized feature-first (see below): one folder per sub-context, each nesting the four layers inside.
+
+Dependency direction between contexts:
+
+```text
+import -> nutrition -> auth
+```
+
+`auth` depends on nothing. `nutrition` depends on `auth` only at the interface edge (its HTTP handlers use the `AuthUser` extractor), never in domain or application. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
 
 ### Auth
 
@@ -81,11 +89,30 @@ Nutrition is one bounded context with five aggregate roots:
 
 These aggregates share one error type (`NutritionError`) and depend on each other directly via repositories — they are not separate contexts. The shared ubiquitous language ("nutrient", "quantity", "unit"), shared lifecycle, and lack of concept translation at the seams motivated unifying them.
 
-Supporting domain pieces in `nutrition/domain/`:
+Within the context, the aggregates are organized feature-first: one folder per sub-context (`catalog`, `meal`, `food_log`, `guidance`, `diary`, `goals`), each nesting the four layers inside. `catalog` holds the shared kernel (`units`, `calculation`) in its domain layer; `NutritionError` and the shared HTTP glue live at the nutrition root (`error.rs`, `interfaces.rs`). The composition root stays in `nutrition/module.rs`. Their dependency direction is a DAG rooted at the catalog kernel:
+
+```text
+catalog                       (kernel — no deps)
+  ^   ^
+  |   |
+meal  |                       meal -> catalog
+  ^   |
+  |   |
+food_log                      food_log -> catalog, meal
+  ^
+  |
+guidance                      guidance -> food_log
+diary                         (island)
+goals                         (island)
+```
+
+Edges are forced by the domain: `meal` and `food_log` both need catalog's `ProductRepository` and `UnitConverter`; `food_log` depends on `meal` (a `LoggedItem::Meal` resolves a saved meal into a food-log snapshot), never the reverse; `guidance` reads food logs and overlays its own nutrient guidance. `diary` and `goals` are standalone. A sub-module holds handles to the modules below it (typically the minimal repo port it uses), never above — so the internal graph stays acyclic.
+
+Supporting domain pieces, all in `catalog/domain/` (the shared kernel), except the error at the nutrition root:
 
 - `calculation.rs` — `Quantity`, `CalculatedNutrition`, and the `NutritionCalculator` service (`amount = amount_per_100g * grams / 100`).
 - `units.rs` — `UnitConverter`, data-driven from `units.canonical_grams`. Non-mass units (servings, cups) require product- or meal-specific serving definitions.
-- `error.rs` — `NutritionError`.
+- `error.rs` (at `nutrition/`) — `NutritionError`.
 
 The key data-integrity invariant is historical stability: `FoodLog` stores calculated nutrient snapshots at log time. Summaries aggregate snapshots, not current product data.
 

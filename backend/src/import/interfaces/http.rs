@@ -14,7 +14,7 @@ use crate::auth::interfaces::http::AuthAdmin;
 use crate::import::application::StageResult;
 use crate::import::domain::*;
 use crate::import::module::ImportModule;
-use crate::nutrition::domain::catalog::Category;
+use crate::nutrition::catalog::domain::Category;
 
 pub fn import_routes(state: AppState) -> Router {
     Router::new()
