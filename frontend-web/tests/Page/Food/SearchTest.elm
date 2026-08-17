@@ -64,14 +64,70 @@ tests =
                     |> .search
                     |> .query
                     |> Expect.equal "-category:"
-        , test "typing a category value requests suggestions" <|
+        , test "typing a category value does not request suggestions yet" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "settled category debounce requests suggestions" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
                     |> third
                     |> Expect.equal
                         (FoodSearch.RequestCategorySuggestions 1
                             { query = "foo", limit = 8 }
                         )
+        , test "a burst of keystrokes only requests suggestions for the settled query" <|
+            \_ ->
+                let
+                    typed : FoodSearch.Model
+                    typed =
+                        List.foldl
+                            (\query model ->
+                                FoodSearch.update (FoodSearch.QueryChanged query) model
+                                    |> first
+                            )
+                            emptyModel
+                            [ "category:c", "category:ch", "category:cho" ]
+                in
+                ( FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "c") typed
+                    |> third
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 2 "ch") typed
+                    |> third
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 3 "cho") typed
+                    |> third
+                )
+                    |> Expect.equal
+                        ( FoodSearch.NoOp
+                        , FoodSearch.NoOp
+                        , FoodSearch.RequestCategorySuggestions 3
+                            { query = "cho", limit = 8 }
+                        )
+        , test "scope change cancels a pending category debounce" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
+                    |> first
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "scope change drops an in-flight category response" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.CategorySuggestionsCompleted 1
+                            (Ok { items = [ { value = "food", count = 4 } ] })
+                        )
+                    |> first
+                    |> .search
+                    |> .categorySuggestions
+                    |> Expect.equal []
         , test "blank category query does not request suggestions" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "   ") emptyModel

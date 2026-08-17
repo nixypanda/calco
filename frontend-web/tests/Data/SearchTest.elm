@@ -5,6 +5,14 @@ import Expect
 import Test exposing (Test, describe, test)
 
 
+debounce : Search.Debounce ()
+debounce =
+    { delayMs = 0
+    , onSearchElapsed = \_ _ -> ()
+    , onCategoryElapsed = \_ _ -> ()
+    }
+
+
 tests : Test
 tests =
     describe "Data.Search"
@@ -61,78 +69,106 @@ tests =
         , test "onQueryChanged trims and bumps tokens for non-empty queries" <|
             \_ ->
                 let
-                    ( next, cmd, categoryReq ) =
-                        Search.onQueryChanged "apple" Search.empty Nothing
+                    ( next, categoryReq ) =
+                        Search.onQueryChanged "apple" Search.empty
                 in
                 { query = next.query
                 , searchToken = next.searchToken
                 , categoryToken = next.categoryToken
-                , hasCmd = cmd /= Cmd.none
                 , categoryReq = categoryReq
                 }
                     |> Expect.equal
                         { query = "apple"
                         , searchToken = 1
                         , categoryToken = 1
-                        , hasCmd = False
                         , categoryReq = Nothing
                         }
         , test "onQueryChanged clears category suggestions when not a category value" <|
             \_ ->
                 let
-                    ( next, _, _ ) =
+                    ( next, _ ) =
                         Search.onQueryChanged "apple"
                             { query = ""
                             , searchToken = 0
                             , categoryToken = 0
                             , categorySuggestions = [ { value = "fruit", count = 2 } ]
                             }
-                            Nothing
                 in
                 next.categorySuggestions
                     |> Expect.equal []
         , test "onQueryChanged keeps category suggestions while typing a category value" <|
             \_ ->
                 let
-                    ( next, _, _ ) =
+                    ( next, _ ) =
                         Search.onQueryChanged "category:foo"
                             { query = ""
                             , searchToken = 0
                             , categoryToken = 0
                             , categorySuggestions = [ { value = "fruit", count = 2 } ]
                             }
-                            Nothing
                 in
                 next.categorySuggestions
                     |> Expect.equal [ { value = "fruit", count = 2 } ]
         , test "onQueryChanged yields a category request when typing a category value" <|
             \_ ->
                 let
-                    ( _, _, categoryReq ) =
-                        Search.onQueryChanged "category:foo" Search.empty Nothing
+                    ( _, categoryReq ) =
+                        Search.onQueryChanged "category:foo" Search.empty
                 in
                 categoryReq
                     |> Expect.equal (Just { token = 1, query = "foo" })
-        , test "onQueryChanged produces a debounce cmd for non-empty queries when configured" <|
+        , test "onQueryChangedDebounced produces a cmd for non-empty queries" <|
             \_ ->
                 let
-                    ( _, cmd, _ ) =
-                        Search.onQueryChanged "apple"
-                            Search.empty
-                            (Just { delayMs = 0, onFire = \_ _ -> () })
+                    ( _, cmd ) =
+                        Search.onQueryChangedDebounced "apple" Search.empty debounce
                 in
                 cmd
                     |> Expect.notEqual Cmd.none
-        , test "onQueryChanged suppresses debounce for empty queries" <|
+        , test "onQueryChangedDebounced suppresses the cmd for empty queries" <|
             \_ ->
                 let
-                    ( _, cmd, _ ) =
-                        Search.onQueryChanged "   "
-                            Search.empty
-                            (Just { delayMs = 0, onFire = \_ _ -> () })
+                    ( _, cmd ) =
+                        Search.onQueryChangedDebounced "   " Search.empty debounce
                 in
                 cmd
                     |> Expect.equal Cmd.none
+        , test "onQueryChangedDebounced transitions state like onQueryChanged" <|
+            \_ ->
+                let
+                    ( debounced, _ ) =
+                        Search.onQueryChangedDebounced "category:foo" Search.empty debounce
+
+                    ( immediate, _ ) =
+                        Search.onQueryChanged "category:foo" Search.empty
+                in
+                debounced
+                    |> Expect.equal immediate
+        , test "a burst of query changes leaves only the settled category token live" <|
+            \_ ->
+                let
+                    settled : Search.QueryState
+                    settled =
+                        List.foldl
+                            (\query state ->
+                                let
+                                    ( next, _ ) =
+                                        Search.onQueryChangedDebounced query state debounce
+                                in
+                                next
+                            )
+                            Search.empty
+                            [ "category:c", "category:ch", "category:cho" ]
+                in
+                ( settled.categoryToken
+                , settled
+                    |> Search.setCategorySuggestions 3
+                        [ { value = "chocolate", count = 9 } ]
+                    |> Search.setCategorySuggestions 1
+                        [ { value = "stale", count = 1 } ]
+                    |> .categorySuggestions
+                )
+                    |> Expect.equal ( 3, [ { value = "chocolate", count = 9 } ] )
         , test "setCategorySuggestions drops stale responses" <|
             \_ ->
                 Search.setCategorySuggestions 1

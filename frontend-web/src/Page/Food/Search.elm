@@ -141,6 +141,7 @@ type Msg
     | CompleteFirstSuggestion
     | CompletionClicked Completion
     | DebounceElapsed Int String
+    | CategoryDebounceElapsed Int String
     | SearchCompleted Int (Result Client.ApiError Foods.SearchResponse)
     | RecentItemsLoaded (Result Client.ApiError Logs.RecentItemsResponse)
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
@@ -166,18 +167,24 @@ type OutMsg
     | SessionExpired
 
 
-debounceConfig : { delayMs : Int, onFire : Int -> String -> Msg }
+debounceConfig : Search.Debounce Msg
 debounceConfig =
     { delayMs = 300
-    , onFire = DebounceElapsed
+    , onSearchElapsed = DebounceElapsed
+    , onCategoryElapsed = CategoryDebounceElapsed
     }
+
+
+categorySuggestionsLimit : Int
+categorySuggestionsLimit =
+    8
 
 
 applyQueryChange : String -> Model -> ( Model, Cmd Msg, OutMsg )
 applyQueryChange rawQuery model =
     let
-        ( search, debounceCmd, categoryReq ) =
-            Search.onQueryChanged rawQuery model.search (Just debounceConfig)
+        ( search, debounceCmd ) =
+            Search.onQueryChangedDebounced rawQuery model.search debounceConfig
 
         results : Loadable Client.ApiError (List Foods.SearchResult)
         results =
@@ -189,12 +196,7 @@ applyQueryChange rawQuery model =
     in
     ( { model | search = search, results = results }
     , debounceCmd
-    , case categoryReq of
-        Just req ->
-            RequestCategorySuggestions req.token { query = req.query, limit = 8 }
-
-        Nothing ->
-            NoOp
+    , NoOp
     )
 
 
@@ -221,6 +223,11 @@ applyScopeChange scope model =
             nextSearch =
                 { priorSearch
                     | searchToken = priorSearch.searchToken + 1
+
+                    -- Bumping the category token invalidates both a pending
+                    -- suggestion debounce and an already in-flight response, so
+                    -- neither can repopulate the list after the scope changed.
+                    , categoryToken = priorSearch.categoryToken + 1
                     , categorySuggestions = []
                 }
 
@@ -429,6 +436,17 @@ update msg model =
                 , Cmd.none
                 , RequestSearch token
                     { query = query, scope = searchRequestScope model.scope }
+                )
+
+            else
+                ( model, Cmd.none, NoOp )
+
+        CategoryDebounceElapsed token query ->
+            if token == model.search.categoryToken then
+                ( model
+                , Cmd.none
+                , RequestCategorySuggestions token
+                    { query = query, limit = categorySuggestionsLimit }
                 )
 
             else

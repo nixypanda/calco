@@ -6,6 +6,7 @@ port module Main exposing
     , PageModel
     , main
     , normalizeChromeNavigation
+    , reclassifyDevice
     )
 
 import Access
@@ -179,9 +180,12 @@ update msg model =
             )
 
         WindowResized width height ->
-            ( { model | device = Element.classifyDevice { width = width, height = height } }
-            , Cmd.none
-            )
+            case reclassifyDevice width height model.device of
+                Just device ->
+                    ( { model | device = device }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         GotVersionMsg versionMsg ->
             let
@@ -212,6 +216,24 @@ update msg model =
 
         GotChromeMsg chromeMsg ->
             stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
+
+
+{-| A drag emits resize events continuously, but the app only renders from the
+classified device. Returning `Nothing` when the classification is unchanged
+leaves the model untouched so Elm can skip the re-render.
+-}
+reclassifyDevice : Int -> Int -> Element.Device -> Maybe Element.Device
+reclassifyDevice width height current =
+    let
+        next : Element.Device
+        next =
+            Element.classifyDevice { width = width, height = height }
+    in
+    if next == current then
+        Nothing
+
+    else
+        Just next
 
 
 stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )

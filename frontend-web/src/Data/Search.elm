@@ -2,6 +2,7 @@ module Data.Search exposing
     ( CategoryRequest
     , CategorySuggestion
     , Completion(..)
+    , Debounce
     , QueryState
     , applyCompletion
     , categoryQuery
@@ -9,6 +10,7 @@ module Data.Search exposing
     , completions
     , empty
     , onQueryChanged
+    , onQueryChangedDebounced
     , setCategorySuggestions
     , withCategoryToken
     , withQuery
@@ -54,20 +56,19 @@ empty =
     }
 
 
-onQueryChanged :
-    String
-    -> QueryState
-    -> Maybe { delayMs : Int, onFire : Int -> String -> msg }
-    -> ( QueryState, Cmd msg, Maybe CategoryRequest )
-onQueryChanged rawQuery state debounce =
-    let
-        trimmed : String
-        trimmed =
-            String.trim rawQuery
+type alias Debounce msg =
+    { delayMs : Int
+    , onSearchElapsed : Int -> String -> msg
+    , onCategoryElapsed : Int -> String -> msg
+    }
 
+
+onQueryChanged : String -> QueryState -> ( QueryState, Maybe CategoryRequest )
+onQueryChanged rawQuery state =
+    let
         isEmpty : Bool
         isEmpty =
-            String.isEmpty trimmed
+            String.isEmpty (String.trim rawQuery)
 
         nextSearchToken : Int
         nextSearchToken =
@@ -100,30 +101,55 @@ onQueryChanged rawQuery state debounce =
                     else
                         state.categorySuggestions
 
-        debounceCmd : Cmd msg
-        debounceCmd =
-            if isEmpty then
-                Cmd.none
-
-            else
-                case debounce of
-                    Nothing ->
-                        Cmd.none
-
-                    Just config ->
-                        debounceAfter config.delayMs
-                            nextSearchToken
-                            trimmed
-                            config.onFire
+        nextState : QueryState
+        nextState =
+            { state
+                | query = rawQuery
+                , searchToken = nextSearchToken
+                , categoryToken = nextCategoryToken
+                , categorySuggestions = nextCategorySuggestions
+            }
     in
-    ( { state
-        | query = rawQuery
-        , searchToken = nextSearchToken
-        , categoryToken = nextCategoryToken
-        , categorySuggestions = nextCategorySuggestions
-      }
-    , debounceCmd
-    , categoryReq
+    ( nextState, categoryReq )
+
+
+onQueryChangedDebounced :
+    String
+    -> QueryState
+    -> Debounce msg
+    -> ( QueryState, Cmd msg )
+onQueryChangedDebounced rawQuery state config =
+    let
+        trimmed : String
+        trimmed =
+            String.trim rawQuery
+
+        ( nextState, categoryReq ) =
+            onQueryChanged rawQuery state
+    in
+    ( nextState
+    , Cmd.batch
+        (List.filterMap identity
+            [ if String.isEmpty trimmed then
+                Nothing
+
+              else
+                Just
+                    (debounceAfter config.delayMs
+                        nextState.searchToken
+                        trimmed
+                        config.onSearchElapsed
+                    )
+            , categoryReq
+                |> Maybe.map
+                    (\req ->
+                        debounceAfter config.delayMs
+                            req.token
+                            req.query
+                            config.onCategoryElapsed
+                    )
+            ]
+        )
     )
 
 
