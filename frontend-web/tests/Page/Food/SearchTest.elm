@@ -191,7 +191,8 @@ tests =
                 FoodSearch.update
                     (FoodSearch.DebounceElapsed 2 "apple")
                     { emptyModel
-                        | search =
+                        | scope = FoodSearch.All
+                        , search =
                             Search.withSearchToken 2
                                 emptyModel.search
                     }
@@ -204,7 +205,10 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.ScopeSelected FoodSearch.History)
-                    { emptyModel | search = Search.withQuery "apple" emptyModel.search }
+                    { emptyModel
+                        | scope = FoodSearch.All
+                        , search = Search.withQuery "apple" emptyModel.search
+                    }
                     |> third
                     |> Expect.equal
                         (FoodSearch.RequestSearch 1

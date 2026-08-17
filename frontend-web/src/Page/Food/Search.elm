@@ -93,7 +93,7 @@ type QuickAddButtonState
 init : Maybe String -> Maybe MealSlot -> Model
 init date mealSlot =
     { search = Search.empty
-    , scope = All
+    , scope = History
     , results = NotAsked
     , barcodeQuery = ""
     , barcodeLookup = NotAsked
