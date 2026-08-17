@@ -303,6 +303,12 @@ GET    /summary?from=YYYY-MM-DD&to=YYYY-MM-DD&codes=...
 
 Use the same date for `from` and `to` for a single-day view.
 
+`GET /logs/recent-items` dedups logs to one entry per item and orders both the
+items and each item's `top_quantities` by time-decayed usage frequency. Log age
+is measured against the requested `to_date`, not today, so browsing a past day
+returns the ordering that applied then. `quantity` stays the item's most
+recently logged quantity, which `POST /logs/last-used` relies on for prefill.
+
 `POST /logs` accepts:
 
 ```text

@@ -150,6 +150,9 @@ pub struct RecentFoodLogItem {
     pub quantity_unit: UnitCode,
     pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
     pub top_quantities: Vec<QuantityUsage>,
+    /// Time-decayed usage weight, summed over every log of this item in the
+    /// requested range. Ranking input only; it is never serialized.
+    pub score: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +160,7 @@ pub struct QuantityUsage {
     pub amount: Decimal,
     pub unit: UnitCode,
     pub log_count: u32,
+    pub score: u32,
 }
 
 #[derive(Debug, Clone)]

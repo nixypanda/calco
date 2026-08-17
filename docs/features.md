@@ -126,10 +126,14 @@ capabilities. They are grouped by theme so they can be ranked later.
       to a meal slot so that I can log repeat items before searching the broader
       catalog. The search page shows recent items before a query is active, then
       replaces that list with search loading, errors, empty states, or results
-      once the user searches.
+      once the user searches. Recent items are ranked by time-decayed usage
+      frequency, scored against the requested day, so habits the user has
+      dropped sink on their own.
 - [x] As a user, I want foods and meals to remember my last-used quantity and
-      unit so that repeat logging defaults to how I actually consume them.
-      Recent-item quick add uses the latest logged quantity and unit.
+      unit so that repeat logging defaults to how I actually consume them. The
+      log form prefills the latest logged quantity and unit, and each recent row
+      offers up to five quick-add quantity chips ranked the same time-decayed
+      way.
 - [ ] As a user, I want to duplicate an existing log to another meal slot or
       another day so that fixing or repeating entries is faster than re-entering
       them.
