@@ -563,9 +563,11 @@ needed.
   `No items` state.
 - Keep `Add Food` as the path into search and manual selection.
 - Recent slot suggestions in the add/search flow are separate from `Log latest`:
-  show deduplicated foods and meals used in the same slot recently, using
-  last-used quantity and unit, so users can quickly log a subset without copying
-  the whole prior slot.
+  show deduplicated foods and meals used in the same slot recently, so users can
+  quickly log a subset without copying the whole prior slot.
+- Each recent row offers up to five quantity chips, ordered by how often that
+  quantity was logged for the item. Tapping a chip logs that quantity directly;
+  tapping the row still opens the full log form for any other quantity.
 
 ## Design System
 

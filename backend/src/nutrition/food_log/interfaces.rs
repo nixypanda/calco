@@ -165,6 +165,13 @@ pub struct RecentItemResponse {
     pub meal_slot: Option<MealSlotDto>,
     pub quantity: QuantityDto,
     pub nutrition_summary: NutrientSummaryDto,
+    pub top_quantities: Vec<QuantityUsageDto>,
+}
+
+#[derive(Serialize)]
+pub struct QuantityUsageDto {
+    pub quantity: QuantityDto,
+    pub log_count: u32,
 }
 
 #[derive(Deserialize)]
@@ -650,6 +657,18 @@ fn recent_item_to_response(item: &RecentFoodLogItem) -> RecentItemResponse {
                 .iter()
                 .map(|snapshot| (snapshot.nutrient_code.0.clone(), snapshot.amount)),
         ),
+        top_quantities: item
+            .top_quantities
+            .iter()
+            .map(quantity_usage_to_dto)
+            .collect(),
+    }
+}
+
+fn quantity_usage_to_dto(usage: &QuantityUsage) -> QuantityUsageDto {
+    QuantityUsageDto {
+        quantity: quantity_to_dto(usage.amount, usage.unit.0.clone()),
+        log_count: usage.log_count,
     }
 }
 

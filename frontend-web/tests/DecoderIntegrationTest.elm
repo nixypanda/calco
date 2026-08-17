@@ -153,6 +153,16 @@ tests =
                                 )
                         )
                     |> Expect.equal (Ok [ ( "175", "g", Just "91" ) ])
+        , test "decodes recent item top quantities" <|
+            \_ ->
+                Decode.decodeString Logs.recentItemsResponseDecoder recentItemsJson
+                    |> Result.map
+                        (.items
+                            >> List.concatMap .topQuantities
+                            >> List.map
+                                (\usage -> ( usage.quantity.amount, usage.logCount ))
+                        )
+                    |> Expect.equal (Ok [ ( "175", 4 ), ( "100", 1 ) ])
         , test "decodes admin user list" <|
             \_ ->
                 Decode.decodeString User.listUsersDecoder userListJson
@@ -349,6 +359,10 @@ recentItemsJson =
             , "fat_g": null
             , "fiber_g": null
             }
+         , "top_quantities":
+            [ { "quantity": { "amount": "175", "unit": "g" }, "log_count": 4 }
+            , { "quantity": { "amount": "100", "unit": "g" }, "log_count": 1 }
+            ]
          }]
     }
     """

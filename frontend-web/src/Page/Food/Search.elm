@@ -3,10 +3,13 @@ module Page.Food.Search exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , QuickAddButtonState(..)
     , QuickAddState
     , SearchScope(..)
     , contentView
     , init
+    , quickAddChipPressable
+    , quickAddChipState
     , update
     , view
     )
@@ -79,14 +82,21 @@ type BarcodeScannerState
 
 type QuickAddState
     = QuickAddIdle
-    | QuickAddRequestingContext Logs.RecentItem
-    | QuickAddSubmitting Logs.RecentItem
+    | QuickAddRequestingContext QuickAddTarget
+    | QuickAddSubmitting QuickAddTarget
     | QuickAddFailed String
+
+
+type alias QuickAddTarget =
+    { item : Logs.RecentItem
+    , quantity : Nutrition.Quantity
+    }
 
 
 type QuickAddButtonState
     = QuickAddCanAdd
     | QuickAddAdding
+    | QuickAddBlocked
     | QuickAddAdded
 
 
@@ -133,7 +143,7 @@ type Msg
     | DebounceElapsed Int String
     | SearchCompleted Int (Result Client.ApiError Foods.SearchResponse)
     | RecentItemsLoaded (Result Client.ApiError Logs.RecentItemsResponse)
-    | RecentQuickAddClicked Logs.RecentItem
+    | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived { date : String, timezone : String }
     | QuickAddCompleted (Result Client.ApiError FoodLog)
@@ -452,10 +462,11 @@ update msg model =
                     else
                         ( { model | recentItems = Failure error }, Cmd.none, NoOp )
 
-        RecentQuickAddClicked item ->
+        RecentQuickAddClicked item quantity ->
             if canStartQuickAdd model.quickAdd then
                 ( { model
-                    | quickAdd = QuickAddRequestingContext item
+                    | quickAdd =
+                        QuickAddRequestingContext { item = item, quantity = quantity }
                   }
                 , Cmd.none
                 , RequestLocalContext
@@ -474,10 +485,10 @@ update msg model =
 
         LocalContextReceived context ->
             case model.quickAdd of
-                QuickAddRequestingContext item ->
-                    case quickAddRequest context model item of
+                QuickAddRequestingContext target ->
+                    case quickAddRequest context model target of
                         Just request ->
-                            ( { model | quickAdd = QuickAddSubmitting item }
+                            ( { model | quickAdd = QuickAddSubmitting target }
                             , Cmd.none
                             , RequestCreateLog request
                             )
@@ -501,8 +512,8 @@ update msg model =
                     let
                         key : Maybe String
                         key =
-                            quickAddItem model.quickAdd
-                                |> Maybe.map recentItemKey
+                            quickAddTarget model.quickAdd
+                                |> Maybe.map quickAddTargetKey
 
                         nextToken : Int
                         nextToken =
@@ -617,9 +628,9 @@ applyBarcodeScannerEvent event model =
 quickAddRequest :
     { date : String, timezone : String }
     -> Model
-    -> Logs.RecentItem
+    -> QuickAddTarget
     -> Maybe Logs.CreateLogRequest
-quickAddRequest context model recentItem =
+quickAddRequest context model target =
     let
         rawDate : String
         rawDate =
@@ -632,31 +643,40 @@ quickAddRequest context model recentItem =
                 , deviceTimezone = Just context.timezone
                 , mealSlot = Maybe.map MealSlot.toString model.mealSlot
                 , item =
-                    { itemType = recentItem.item.itemType
-                    , id = recentItem.item.id
+                    { itemType = target.item.item.itemType
+                    , id = target.item.item.id
                     }
-                , quantity = recentItem.quantity
+                , quantity = target.quantity
                 , notes = Nothing
                 }
             )
 
 
-recentItemKey : Logs.RecentItem -> String
-recentItemKey item =
-    ItemRef.itemTypeToString item.item.itemType ++ ":" ++ item.item.id
+recentItemKey : Logs.RecentItem -> Nutrition.Quantity -> String
+recentItemKey item quantity =
+    ItemRef.itemTypeToString item.item.itemType
+        ++ ":"
+        ++ item.item.id
+        ++ ":"
+        ++ Nutrition.quantityText quantity
 
 
-quickAddItem : QuickAddState -> Maybe Logs.RecentItem
-quickAddItem quickAdd =
+quickAddTargetKey : QuickAddTarget -> String
+quickAddTargetKey target =
+    recentItemKey target.item target.quantity
+
+
+quickAddTarget : QuickAddState -> Maybe QuickAddTarget
+quickAddTarget quickAdd =
     case quickAdd of
         QuickAddIdle ->
             Nothing
 
-        QuickAddRequestingContext item ->
-            Just item
+        QuickAddRequestingContext target ->
+            Just target
 
-        QuickAddSubmitting item ->
-            Just item
+        QuickAddSubmitting target ->
+            Just target
 
         QuickAddFailed _ ->
             Nothing
@@ -665,8 +685,8 @@ quickAddItem quickAdd =
 quickAddAddingKey : QuickAddState -> Maybe String
 quickAddAddingKey quickAdd =
     quickAdd
-        |> quickAddItem
-        |> Maybe.map recentItemKey
+        |> quickAddTarget
+        |> Maybe.map quickAddTargetKey
 
 
 quickAddError : QuickAddState -> Maybe String
@@ -1203,97 +1223,170 @@ recentsView theme model =
 
 recentItemRow : Theme -> Model -> Logs.RecentItem -> Element Msg
 recentItemRow theme model item =
+    Element.column [ Element.width Element.fill ]
+        [ Ui.listRow
+            { onSelect = RecentItemClicked item
+            , leading = [ View.Product.macroDotGhost ]
+            , title = Typography.wrappedListItemTitle theme item.item.name
+            , subtitle =
+                [ Typography.mutedCaptionParagraph theme
+                    (Ui.dotSeparated
+                        [ item.item.brand
+                        , Nutrition.servingCaloriesText item
+                        ]
+                    )
+                ]
+            , trailing = []
+            }
+
+        -- Quick-add chips sit outside `Ui.listRow`, whose subtitle slot is
+        -- inside the row-select button and cannot hold nested buttons.
+        , quickAddChipRow theme model item
+        ]
+
+
+quickAddChipRow : Theme -> Model -> Logs.RecentItem -> Element Msg
+quickAddChipRow theme model item =
+    Element.wrappedRow
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space8
+        , Element.paddingEach
+            { top = 0
+            , right = DesignTokens.space16
+            , bottom = DesignTokens.space16
+            , left = DesignTokens.space16
+            }
+        ]
+        (List.map (quickAddChip theme model item) (quickAddQuantities item))
+
+
+quickAddQuantities : Logs.RecentItem -> List Nutrition.Quantity
+quickAddQuantities item =
+    case List.map .quantity item.topQuantities of
+        [] ->
+            [ item.quantity ]
+
+        quantities ->
+            quantities
+
+
+quickAddChipState : Model -> Logs.RecentItem -> Nutrition.Quantity -> QuickAddButtonState
+quickAddChipState model item quantity =
     let
         key : String
         key =
-            recentItemKey item
-
-        added : Bool
-        added =
-            List.any (\addedItem -> addedItem.key == key) model.addedItems
-
-        adding : Bool
-        adding =
-            quickAddAddingKey model.quickAdd == Just key
-
-        title : Element Msg
-        title =
-            Typography.wrappedListItemTitle theme item.item.name
+            recentItemKey item quantity
     in
-    Ui.listRow
-        { onSelect = RecentItemClicked item
-        , leading = [ View.Product.macroDotGhost ]
-        , title = title
-        , subtitle =
-            [ Typography.mutedCaptionParagraph theme
-                (Ui.dotSeparated
-                    [ item.item.brand
-                    , Just (Nutrition.quantityText item.quantity)
-                    , Nutrition.servingCaloriesText item
-                    ]
-                )
-            ]
-        , trailing =
-            [ quickAddButton theme
-                { state =
-                    if adding then
-                        QuickAddAdding
+    if quickAddAddingKey model.quickAdd == Just key then
+        QuickAddAdding
 
-                    else if added then
-                        QuickAddAdded
+    else if not (canStartQuickAdd model.quickAdd) then
+        -- A sibling chip is mid-flight, so this tap would be dropped by the
+        -- `canStartQuickAdd` guard. Show that the chip is unavailable instead.
+        QuickAddBlocked
 
-                    else
-                        QuickAddCanAdd
-                , onPress = RecentQuickAddClicked item
-                }
-            ]
-        }
+    else if List.any (\addedItem -> addedItem.key == key) model.addedItems then
+        QuickAddAdded
+
+    else
+        QuickAddCanAdd
 
 
-quickAddButton :
-    Theme
-    -> { state : QuickAddButtonState, onPress : Msg }
-    -> Element Msg
-quickAddButton theme config =
+quickAddChipPressable : QuickAddButtonState -> Bool
+quickAddChipPressable state =
+    case state of
+        QuickAddCanAdd ->
+            True
+
+        QuickAddAdded ->
+            True
+
+        QuickAddAdding ->
+            False
+
+        QuickAddBlocked ->
+            False
+
+
+quickAddChip : Theme -> Model -> Logs.RecentItem -> Nutrition.Quantity -> Element Msg
+quickAddChip theme model item quantity =
     let
-        enabled : Bool
-        enabled =
-            config.state /= QuickAddAdding
+        state : QuickAddButtonState
+        state =
+            quickAddChipState model item quantity
+
+        pressable : Bool
+        pressable =
+            quickAddChipPressable state
+
+        label : String
+        label =
+            Nutrition.quantityText quantity
 
         title : String
         title =
-            quickAddButtonTitle config.state
+            quickAddButtonTitle state ++ " " ++ label
+
+        foreground : Element.Color
+        foreground =
+            case state of
+                QuickAddAdded ->
+                    Element.rgb255 255 255 255
+
+                QuickAddBlocked ->
+                    theme.textMuted
+
+                QuickAddAdding ->
+                    theme.textPrimary
+
+                QuickAddCanAdd ->
+                    theme.textPrimary
     in
     Input.button
         [ Background.color
-            (if enabled then
+            (if state == QuickAddAdded then
                 theme.brandBlue
 
              else
-                theme.brandBlueDisabled
+                Ui.chipBackground theme False
             )
-        , Font.color (Element.rgb255 255 255 255)
+        , Font.color foreground
         , Border.rounded DesignTokens.radiusPill
-        , Element.width (Element.px 44)
+        , Border.width 1
+        , Border.color theme.chipBorder
         , Element.height (Element.px 44)
-        , Element.paddingEach { top = 10, right = 14, bottom = 10, left = 14 }
-        , Font.center
+        , Element.paddingXY DesignTokens.space12 0
         , Font.medium
         , Element.htmlAttribute (Html.Attributes.title title)
         , Element.htmlAttribute (Html.Attributes.attribute "aria-label" title)
+        , Element.htmlAttribute
+            (Html.Attributes.attribute "aria-disabled"
+                (if pressable then
+                    "false"
+
+                 else
+                    "true"
+                )
+            )
         ]
         { onPress =
-            if enabled then
-                Just config.onPress
+            if pressable then
+                Just (RecentQuickAddClicked item quantity)
 
             else
                 Nothing
         , label =
-            Icon.view
-                { icon = quickAddButtonIcon config.state
-                , size = 18
-                , color = Element.rgb255 255 255 255
-                }
+            Element.row
+                [ Element.spacing DesignTokens.space4
+                , Element.centerY
+                ]
+                [ Icon.view
+                    { icon = quickAddButtonIcon state
+                    , size = 16
+                    , color = foreground
+                    }
+                , Element.text label
+                ]
         }
 
 
@@ -1305,6 +1398,9 @@ quickAddButtonTitle state =
 
         QuickAddAdding ->
             "Adding"
+
+        QuickAddBlocked ->
+            "Add"
 
         QuickAddAdded ->
             "Added"
@@ -1318,6 +1414,9 @@ quickAddButtonIcon state =
 
         QuickAddAdding ->
             Icon.LoaderCircle
+
+        QuickAddBlocked ->
+            Icon.Plus
 
         QuickAddAdded ->
             Icon.Check

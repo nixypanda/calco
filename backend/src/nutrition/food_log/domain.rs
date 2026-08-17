@@ -149,6 +149,14 @@ pub struct RecentFoodLogItem {
     pub quantity_amount: Decimal,
     pub quantity_unit: UnitCode,
     pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
+    pub top_quantities: Vec<QuantityUsage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QuantityUsage {
+    pub amount: Decimal,
+    pub unit: UnitCode,
+    pub log_count: u32,
 }
 
 #[derive(Debug, Clone)]

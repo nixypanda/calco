@@ -3,6 +3,7 @@ module Api.Logs exposing
     , CreateLogRequest
     , LastUsedItemsRequest
     , LatestSlotResponse
+    , QuantityUsage
     , RecentItem
     , RecentItemsRequest
     , RecentItemsResponse
@@ -65,6 +66,13 @@ type alias RecentItem =
     , mealSlot : Maybe String
     , quantity : Nutrition.Quantity
     , nutritionSummary : Nutrition.NutritionSummary
+    , topQuantities : List QuantityUsage
+    }
+
+
+type alias QuantityUsage =
+    { quantity : Nutrition.Quantity
+    , logCount : Int
     }
 
 
@@ -297,12 +305,20 @@ recentItemsResponseDecoder =
 
 recentItemDecoder : Decode.Decoder RecentItem
 recentItemDecoder =
-    Decode.map5 RecentItem
+    Decode.map6 RecentItem
         (Decode.field "item" FoodLog.logItemDecoder)
         (Decode.field "last_used_date" dateFieldDecoder)
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
         (Decode.field "quantity" Nutrition.quantityDecoder)
         (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
+        (Decode.field "top_quantities" (Decode.list quantityUsageDecoder))
+
+
+quantityUsageDecoder : Decode.Decoder QuantityUsage
+quantityUsageDecoder =
+    Decode.map2 QuantityUsage
+        (Decode.field "quantity" Nutrition.quantityDecoder)
+        (Decode.field "log_count" Decode.int)
 
 
 maybeMealSlotQuery : Maybe String -> List Builder.QueryParameter

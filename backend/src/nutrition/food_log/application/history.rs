@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::nutrition::food_log::domain::*;
 
 const MAX_HISTORY_RANGE_DAYS: i64 = 366;
+const MAX_TOP_QUANTITIES: usize = 5;
 
 fn ensure_within_max_range(from_date: NaiveDate, to_date: NaiveDate) -> Result<(), NutritionError> {
     if to_date.signed_duration_since(from_date).num_days() > MAX_HISTORY_RANGE_DAYS {
@@ -180,15 +181,31 @@ fn recent_items_from_logs(mut logs: Vec<FoodLog>) -> Vec<RecentFoodLogItem> {
             .then_with(|| right.created_at.cmp(&left.created_at))
     });
 
-    let mut items = Vec::new();
+    let mut items: Vec<RecentFoodLogItem> = Vec::new();
     for log in logs {
-        if items
-            .iter()
-            .any(|item: &RecentFoodLogItem| same_item_snapshot(&item.item, &log.item))
+        let usage = QuantityUsage {
+            amount: log.quantity_amount.normalize(),
+            unit: log.quantity_unit.clone(),
+            log_count: 1,
+        };
+        match items
+            .iter_mut()
+            .find(|item| same_item_snapshot(&item.item, &log.item))
         {
-            continue;
+            Some(item) => record_quantity_usage(&mut item.top_quantities, usage),
+            None => {
+                let mut item = recent_item_from_log(log);
+                record_quantity_usage(&mut item.top_quantities, usage);
+                items.push(item);
+            }
         }
-        items.push(recent_item_from_log(log));
+    }
+
+    for item in &mut items {
+        // Logs arrive most-recent-first, so a stable sort leaves equal counts in recency order.
+        item.top_quantities
+            .sort_by_key(|usage| std::cmp::Reverse(usage.log_count));
+        item.top_quantities.truncate(MAX_TOP_QUANTITIES);
     }
 
     items.sort_by(|left, right| {
@@ -208,6 +225,17 @@ fn recent_item_from_log(log: FoodLog) -> RecentFoodLogItem {
         quantity_amount: log.quantity_amount,
         quantity_unit: log.quantity_unit,
         nutrient_snapshots: log.nutrient_snapshots,
+        top_quantities: Vec::new(),
+    }
+}
+
+fn record_quantity_usage(usages: &mut Vec<QuantityUsage>, usage: QuantityUsage) {
+    match usages
+        .iter_mut()
+        .find(|existing| existing.amount == usage.amount && existing.unit == usage.unit)
+    {
+        Some(existing) => existing.log_count += 1,
+        None => usages.push(usage),
     }
 }
 
@@ -236,11 +264,16 @@ fn item_name(item: &FoodLogItemSnapshot) -> &str {
 mod tests {
     use super::super::test_support::*;
     use super::super::{FoodLogService, LogFoodInput};
+    use super::recent_items_from_logs;
     use crate::nutrition::catalog::domain::calculation::Quantity;
     use crate::nutrition::catalog::domain::{ProductId, UnitCode};
-    use crate::nutrition::food_log::domain::{FoodLog, FoodLogItemRef, MealSlot, NutritionError};
-    use chrono::NaiveDate;
+    use crate::nutrition::food_log::domain::{
+        FoodLog, FoodLogId, FoodLogItemRef, FoodLogItemSnapshot, MealSlot, NutritionError,
+        QuantityUsage,
+    };
+    use chrono::{DateTime, NaiveDate};
     use rust_decimal::Decimal;
+    use std::str::FromStr;
     use uuid::Uuid;
 
     #[tokio::test]
@@ -470,6 +503,113 @@ mod tests {
 
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].quantity_amount, Decimal::new(100, 0));
+    }
+
+    #[test]
+    fn recent_items_rank_top_quantities_by_usage_count() {
+        let logs = vec![
+            quantity_log(3, "150"),
+            quantity_log(2, "100"),
+            quantity_log(1, "100"),
+            quantity_log(0, "100"),
+        ];
+
+        let items = recent_items_from_logs(logs);
+
+        assert_eq!(
+            items[0].top_quantities,
+            vec![usage("100", 3), usage("150", 1)]
+        );
+    }
+
+    #[test]
+    fn recent_items_break_top_quantity_ties_by_most_recent_use() {
+        let logs = vec![
+            quantity_log(2, "150"),
+            quantity_log(1, "200"),
+            quantity_log(0, "100"),
+        ];
+
+        let items = recent_items_from_logs(logs);
+
+        assert_eq!(
+            items[0].top_quantities,
+            vec![usage("150", 1), usage("200", 1), usage("100", 1)]
+        );
+    }
+
+    #[test]
+    fn recent_items_collapse_top_quantities_with_equivalent_decimals() {
+        let logs = vec![quantity_log(1, "100.0"), quantity_log(0, "100")];
+
+        let items = recent_items_from_logs(logs);
+
+        assert_eq!(items[0].top_quantities.len(), 1);
+        assert_eq!(items[0].top_quantities[0].log_count, 2);
+        assert_eq!(items[0].top_quantities[0].amount.to_string(), "100");
+    }
+
+    #[test]
+    fn recent_items_truncate_top_quantities_to_five() {
+        let logs = vec![
+            quantity_log(5, "10"),
+            quantity_log(4, "20"),
+            quantity_log(3, "30"),
+            quantity_log(2, "40"),
+            quantity_log(1, "50"),
+            quantity_log(0, "60"),
+        ];
+
+        let items = recent_items_from_logs(logs);
+
+        assert_eq!(
+            items[0].top_quantities,
+            vec![
+                usage("10", 1),
+                usage("20", 1),
+                usage("30", 1),
+                usage("40", 1),
+                usage("50", 1),
+            ]
+        );
+    }
+
+    #[test]
+    fn recent_items_keep_single_top_quantity_when_only_one_was_used() {
+        let logs = vec![quantity_log(0, "75")];
+
+        let items = recent_items_from_logs(logs);
+
+        assert_eq!(items[0].top_quantities, vec![usage("75", 1)]);
+    }
+
+    fn quantity_log(created_at_offset_secs: i64, amount: &str) -> FoodLog {
+        FoodLog {
+            id: FoodLogId::new(),
+            user_id: Uuid::nil(),
+            log_date: NaiveDate::from_ymd_opt(2026, 6, 19).unwrap(),
+            meal_slot: Some(MealSlot::Breakfast),
+            device_timezone: None,
+            item: FoodLogItemSnapshot::Product {
+                id: ProductId(Uuid::nil()),
+                name: "Test Food".to_string(),
+                brand: None,
+            },
+            quantity_amount: Decimal::from_str(amount).unwrap(),
+            quantity_unit: UnitCode("g".to_string()),
+            nutrient_snapshots: Vec::new(),
+            notes: None,
+            created_at: DateTime::from_timestamp(created_at_offset_secs, 0).unwrap(),
+            updated_at: DateTime::from_timestamp(created_at_offset_secs, 0).unwrap(),
+        }
+    }
+
+    fn usage(amount: &str, log_count: u32) -> QuantityUsage {
+        QuantityUsage {
+            amount: Decimal::from_str(amount).unwrap(),
+            unit: UnitCode("g".to_string()),
+            log_count,
+        }
     }
 
     async fn log_test_product(

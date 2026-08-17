@@ -509,23 +509,57 @@ tests =
         , test "recent quick add requests local context" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> third
                     |> Expect.equal FoodSearch.RequestLocalContext
         , test "second recent quick add is ignored while context is pending" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
-                    |> FoodSearch.update (FoodSearch.RecentQuickAddClicked recentMeal)
+                    |> FoodSearch.update
+                        (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
                     |> third
                     |> Expect.equal FoodSearch.NoOp
+        , test "sibling quantity chip click is ignored while another add submits" <|
+            \_ ->
+                submittingQuickAddModel
+                    |> FoodSearch.update
+                        (FoodSearch.RecentQuickAddClicked recentProduct siblingQuantity)
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "sibling quantity chip is blocked while another add submits" <|
+            \_ ->
+                FoodSearch.quickAddChipState submittingQuickAddModel
+                    recentProduct
+                    siblingQuantity
+                    |> Expect.equal FoodSearch.QuickAddBlocked
+        , test "blocked quantity chip is not pressable" <|
+            \_ ->
+                FoodSearch.quickAddChipPressable FoodSearch.QuickAddBlocked
+                    |> Expect.equal False
+        , test "submitting quantity chip keeps its own adding state" <|
+            \_ ->
+                FoodSearch.quickAddChipState submittingQuickAddModel
+                    recentProduct
+                    recentProduct.quantity
+                    |> Expect.equal FoodSearch.QuickAddAdding
+        , test "quantity chips become pressable again after a failed quick add" <|
+            \_ ->
+                submittingQuickAddModel
+                    |> FoodSearch.update
+                        (FoodSearch.QuickAddCompleted (Err Client.NetworkError))
+                    |> first
+                    |> (\model ->
+                            FoodSearch.quickAddChipState model recentProduct siblingQuantity
+                       )
+                    |> Expect.equal FoodSearch.QuickAddCanAdd
         , test "local context received creates log request for pending quick add" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     { emptyModel | date = Just "2026-05-29", mealSlot = Just Lunch }
                     |> first
                     |> FoodSearch.update
@@ -546,7 +580,7 @@ tests =
         , test "local context falls back to context date" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
                     |> FoodSearch.update
@@ -567,7 +601,7 @@ tests =
         , test "invalid selected quick add date does not create request" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     { emptyModel | date = Just "bad-date" }
                     |> first
                     |> FoodSearch.update
@@ -588,7 +622,7 @@ tests =
         , test "quick add success marks item as recently added" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
                     |> FoodSearch.update
@@ -600,14 +634,14 @@ tests =
                     |> first
                     |> (\model -> ( model.addedToken, model.addedItems ))
                     |> Expect.equal
-                        ( 1, [ { key = "product:food-1", token = 1 } ] )
+                        ( 1, [ { key = "product:food-1:2 serving", token = 1 } ] )
         , test "quick add success replaces previous added token for same item" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     { emptyModel
                         | addedToken = 1
-                        , addedItems = [ { key = "product:food-1", token = 1 } ]
+                        , addedItems = [ { key = "product:food-1:2 serving", token = 1 } ]
                     }
                     |> first
                     |> FoodSearch.update
@@ -618,7 +652,7 @@ tests =
                     |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
                     |> first
                     |> .addedItems
-                    |> Expect.equal [ { key = "product:food-1", token = 2 } ]
+                    |> Expect.equal [ { key = "product:food-1:2 serving", token = 2 } ]
         , test "quick add success with no pending item does not mark added" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog)) emptyModel
@@ -628,7 +662,7 @@ tests =
         , test "quick add failure keeps no added item" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
                     |> FoodSearch.update
@@ -643,7 +677,7 @@ tests =
         , test "quick add failure allows another quick add" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
                     |> FoodSearch.update
@@ -653,13 +687,14 @@ tests =
                     |> first
                     |> FoodSearch.update (FoodSearch.QuickAddCompleted (Err Client.NetworkError))
                     |> first
-                    |> FoodSearch.update (FoodSearch.RecentQuickAddClicked recentMeal)
+                    |> FoodSearch.update
+                        (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
                     |> third
                     |> Expect.equal FoodSearch.RequestLocalContext
         , test "quick add unauthorized expires session" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentQuickAddClicked recentProduct)
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     emptyModel
                     |> first
                     |> FoodSearch.update
@@ -694,9 +729,9 @@ tests =
         , test "clear recent added removes matching added item" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.ClearRecentAdded "product:food-1" 1)
+                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" 1)
                     { emptyModel
-                        | addedItems = [ { key = "product:food-1", token = 1 } ]
+                        | addedItems = [ { key = "product:food-1:2 serving", token = 1 } ]
                     }
                     |> first
                     |> .addedItems
@@ -704,13 +739,13 @@ tests =
         , test "clear recent added ignores stale token" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.ClearRecentAdded "product:food-1" 1)
+                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" 1)
                     { emptyModel
-                        | addedItems = [ { key = "product:food-1", token = 2 } ]
+                        | addedItems = [ { key = "product:food-1:2 serving", token = 2 } ]
                     }
                     |> first
                     |> .addedItems
-                    |> Expect.equal [ { key = "product:food-1", token = 2 } ]
+                    |> Expect.equal [ { key = "product:food-1:2 serving", token = 2 } ]
         ]
 
 
@@ -775,7 +810,29 @@ recentProduct =
     , mealSlot = Just "lunch"
     , quantity = { amount = "2", unit = "serving" }
     , nutritionSummary = Nutrition.emptySummary
+    , topQuantities =
+        [ { quantity = { amount = "2", unit = "serving" }, logCount = 3 }
+        , { quantity = { amount = "1", unit = "serving" }, logCount = 1 }
+        ]
     }
+
+
+siblingQuantity : Nutrition.Quantity
+siblingQuantity =
+    { amount = "1", unit = "serving" }
+
+
+submittingQuickAddModel : FoodSearch.Model
+submittingQuickAddModel =
+    FoodSearch.update
+        (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+        emptyModel
+        |> first
+        |> FoodSearch.update
+            (FoodSearch.LocalContextReceived
+                { date = "2026-06-01", timezone = "Asia/Kolkata" }
+            )
+        |> first
 
 
 recentMeal : Logs.RecentItem
