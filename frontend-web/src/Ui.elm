@@ -17,6 +17,8 @@ module Ui exposing
     , completionDropdown
     , completionRow
     , dangerIconButton
+    , decimalInput
+    , decimalInputWithSuffix
     , detailRow
     , disabledIconButton
     , dotSeparated
@@ -32,7 +34,6 @@ module Ui exposing
     , heroCard
     , iconButton
     , input
-    , inputWithSuffix
     , isSmall
     , layout
     , linearProgress
@@ -42,6 +43,7 @@ module Ui exposing
     , maybeErrorBanner
     , menuCard
     , modalOverlay
+    , numericInputMode
     , optionRow
     , pageContainer
     , pageHeader
@@ -74,6 +76,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Lib.ListExtra as ListExtra
+import Lib.Number as Number
 import Ui.DesignTokens
     exposing
         ( radiusCard
@@ -835,12 +838,42 @@ type alias InputConfig msg =
 
 input : Theme -> InputConfig msg -> Element msg
 input theme config =
+    textInput theme [] config
+
+
+{-| Amount field: shows the decimal keypad on mobile and folds a locale comma
+back to a period before the page ever sees the value.
+-}
+decimalInput : Theme -> InputConfig msg -> Element msg
+decimalInput theme config =
+    textInput theme
+        [ inputMode "decimal" ]
+        { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
+
+
+{-| Digits-only keypad for fields such as a barcode: no decimal separator. Passed
+through `searchInput`'s `extraAttrs` so other search fields keep their keyboard.
+-}
+numericInputMode : Element.Attribute msg
+numericInputMode =
+    inputMode "numeric"
+
+
+inputMode : String -> Element.Attribute msg
+inputMode mode =
+    Element.htmlAttribute (Html.Attributes.attribute "inputmode" mode)
+
+
+textInput : Theme -> List (Element.Attribute msg) -> InputConfig msg -> Element msg
+textInput theme extraAttrs config =
     Input.text
-        [ Border.rounded radiusControl
-        , Background.color theme.inputFill
-        , Element.padding 10
-        , uiClass "ui-motion"
-        ]
+        ([ Border.rounded radiusControl
+         , Background.color theme.inputFill
+         , Element.padding 10
+         , uiClass "ui-motion"
+         ]
+            ++ extraAttrs
+        )
         { onChange = config.onChange
         , text = config.value
         , placeholder = Nothing
@@ -899,7 +932,7 @@ fieldLabel theme label =
         (Element.text label)
 
 
-inputWithSuffix :
+decimalInputWithSuffix :
     Theme
     ->
         { label : String
@@ -908,7 +941,7 @@ inputWithSuffix :
         , onChange : String -> msg
         }
     -> Element msg
-inputWithSuffix theme config =
+decimalInputWithSuffix theme config =
     Element.column
         [ Element.width Element.fill
         , Element.spacing space4
@@ -933,8 +966,9 @@ inputWithSuffix theme config =
                 , Element.width Element.fill
                 , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
                 , uiClass "ui-motion"
+                , inputMode "decimal"
                 ]
-                { onChange = config.onChange
+                { onChange = config.onChange << Number.normalizeDecimalSeparator
                 , text = config.text
                 , placeholder = Nothing
                 , label = Input.labelHidden config.label

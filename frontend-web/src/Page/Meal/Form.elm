@@ -738,7 +738,7 @@ quantityTextInput theme device config =
         Element.row
     )
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Ui.input theme
+        [ Ui.decimalInput theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange

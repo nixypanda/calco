@@ -782,7 +782,7 @@ barcodeInputView theme device model =
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
                 , label = "Enter barcode"
-                , extraAttrs = [ onEnterSubmit BarcodeSubmitted ]
+                , extraAttrs = [ onEnterSubmit BarcodeSubmitted, Ui.numericInputMode ]
                 }
 
         searchButton : Element Msg

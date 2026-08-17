@@ -167,7 +167,17 @@ truncationHelpers =
 renderingSmoke : Test
 renderingSmoke =
     describe "new components (smoke)"
-        [ test "iconButton does not crash on valid icon" <|
+        [ test "decimalInput renders an amount field" <|
+            \_ ->
+                Ui.decimalInput theme
+                    { label = "Amount", value = "100", onChange = always () }
+                    |> pass
+        , test "decimalInputWithSuffix renders an amount field" <|
+            \_ ->
+                Ui.decimalInputWithSuffix theme
+                    { label = "Amount", text = "100", suffix = "g", onChange = always () }
+                    |> pass
+        , test "iconButton does not crash on valid icon" <|
             \_ ->
                 Ui.iconButton phone
                     theme

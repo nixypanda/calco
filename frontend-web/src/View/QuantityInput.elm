@@ -25,7 +25,7 @@ dropdown :
     -> Element msg
 dropdown theme device config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.input theme
+        [ Ui.decimalInput theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange

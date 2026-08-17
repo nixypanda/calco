@@ -717,7 +717,7 @@ portionInfoCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 portionInfoCard theme device form units =
     Ui.formSection theme
         "Portion Info"
-        [ Ui.input theme
+        [ Ui.decimalInput theme
             { label = "Serving Size (g)"
             , value = form.servingSizeG
             , onChange = ServingSizeChanged
@@ -939,7 +939,7 @@ nutrientRowView theme device nutrients openDropdown index row =
 
 amountInputWithUnit : Theme -> Int -> NutrientRow -> Element Msg
 amountInputWithUnit theme index row =
-    Ui.inputWithSuffix theme
+    Ui.decimalInputWithSuffix theme
         { label = "Amount"
         , text = row.amountPer100g
         , suffix = unitGhostText row.unit
@@ -983,7 +983,7 @@ servingRowView theme device units openDropdown index row =
             , Element.spacing DesignTokens.space8
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input theme
+                (Ui.decimalInput theme
                     { label = "Qty"
                     , value = row.quantity
                     , onChange = ServingQuantityChanged index
@@ -1002,7 +1002,7 @@ servingRowView theme device units openDropdown index row =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.input theme
+                (Ui.decimalInput theme
                     { label = "Grams"
                     , value = row.grams
                     , onChange = ServingGramsChanged index

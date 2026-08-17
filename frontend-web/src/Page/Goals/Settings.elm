@@ -299,22 +299,22 @@ view { model, device, theme } =
                 , Ui.card theme
                     [ Typography.sectionTitle theme "Daily Targets"
                     , Typography.mutedParagraph theme (statusMessage loaded.snapshot)
-                    , Ui.input theme
+                    , Ui.decimalInput theme
                         { label = "Calories"
                         , value = loaded.calorieTarget
                         , onChange = CalorieTargetChanged
                         }
-                    , Ui.input theme
+                    , Ui.decimalInput theme
                         { label = "Protein (g)"
                         , value = loaded.proteinTargetG
                         , onChange = ProteinTargetChanged
                         }
-                    , Ui.input theme
+                    , Ui.decimalInput theme
                         { label = "Carbs (g)"
                         , value = loaded.carbsTargetG
                         , onChange = CarbsTargetChanged
                         }
-                    , Ui.input theme
+                    , Ui.decimalInput theme
                         { label = "Fat (g)"
                         , value = loaded.fatTargetG
                         , onChange = FatTargetChanged
