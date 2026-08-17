@@ -161,10 +161,13 @@ These notes capture endpoint choices surfaced during feature mapping.
 ### Repeat Logging
 
 - Repeat logging uses a fetch plus batch-create flow:
-  `GET /logs/latest-slot` finds the latest prior date with one or more logs for
-  the requested user and meal slot, and `POST /logs/batch` creates copied logs
-  for the target date and same slot.
-- `GET /logs/latest-slot` should use a bounded lookback window. The frontend
+  `GET /logs/latest-slots` finds, for every meal slot at once, the latest prior
+  date with one or more logs for the requested user, and `POST /logs/batch`
+  creates copied logs for the target date and same slot.
+- `GET /logs/latest-slots` returns `{ "slots": [...] }`. Meal slots with no
+  logs inside the lookback window are absent from the array rather than present
+  with an empty item list.
+- `GET /logs/latest-slots` should use a bounded lookback window. The frontend
   currently requests 30 days.
 - `POST /logs/batch` should construct new logs through the same application
   service path as single log creation, so copied logs recalculate nutrient
@@ -293,7 +296,7 @@ POST   /logs
 POST   /logs/batch
 POST   /logs/last-used
 GET    /logs/recent-items?from_date=&to_date=&meal_slot=
-GET    /logs/latest-slot?meal_slot=&before=&lookback_days=
+GET    /logs/latest-slots?before=&lookback_days=
 GET    /logs/{id}
 GET    /logs?log_date=YYYY-MM-DD
 PUT    /logs/{id}

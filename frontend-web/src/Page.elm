@@ -1657,14 +1657,15 @@ applyDiaryOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         DiaryDay.RequestDiaryData date ->
-            ( Cmd.batch
-                (Cmd.map GotDiaryMsg
-                    (Api.Logs.listLogs date (DiaryDay.LogsLoaded date))
-                    :: Cmd.map GotDiaryMsg
-                        (Api.Goals.getGoal date (DiaryDay.GoalLoaded date))
-                    :: Cmd.map GotDiaryMsg
-                        (Api.DiaryPreferences.get DiaryDay.PreferencesLoaded)
-                    :: latestSlotRequests date
+            ( Cmd.map GotDiaryMsg
+                (Cmd.batch
+                    [ Api.Logs.listLogs date (DiaryDay.LogsLoaded date)
+                    , Api.Goals.getGoal date (DiaryDay.GoalLoaded date)
+                    , Api.DiaryPreferences.get DiaryDay.PreferencesLoaded
+                    , Api.Logs.latestSlots
+                        { before = date, lookbackDays = 30 }
+                        (DiaryDay.LatestSlotsReceived date)
+                    ]
                 )
             , NoOutMsg
             )
@@ -1735,22 +1736,6 @@ applyNutritionDetailsOutMsg _ outMsg =
 
         NutritionDetails.SessionExpired ->
             ( Cmd.none, SessionExpired )
-
-
-latestSlotRequests : LocalDate -> List (Cmd Msg)
-latestSlotRequests date =
-    MealSlot.all
-        |> List.map
-            (\slot ->
-                Cmd.map GotDiaryMsg
-                    (Api.Logs.latestSlot
-                        { mealSlot = MealSlot.toString slot
-                        , before = date
-                        , lookbackDays = 30
-                        }
-                        (DiaryDay.LatestSlotLoaded date slot)
-                    )
-            )
 
 
 applyDiarySettingsOutMsg : InitContext -> DiarySettings.OutMsg -> ( Cmd Msg, OutMsg )

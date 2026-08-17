@@ -1,6 +1,7 @@
 module Page.Diary.DayTest exposing (tests)
 
 import Api.Client as Client
+import Api.Logs
 import Data.FoodLog exposing (FoodLog, LogItem)
 import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Data.ItemRef as ItemRef
@@ -246,95 +247,80 @@ tests =
                         |> Expect.equal
                             ( DiaryDay.Loading
                                 { date = yesterday, logs = Nothing, goal = Nothing }
-                            , DiaryDay.LatestSlotsLoading yesterday 5 []
+                            , DiaryDay.LatestSlotsLoading
                             , DiaryDay.CopyIdle
                             )
-            , test "latest slot success accumulates source while loading" <|
+            , test "latest slots success replaces loading state with every source" <|
                 \_ ->
                     DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded
-                            today
-                            Dinner
+                        (DiaryDay.LatestSlotsReceived today
                             (Ok
-                                { sourceDate = yesterday
-                                , mealSlot = "dinner"
-                                , items = [ yesterdayDinnerLog ]
+                                { slots =
+                                    [ dinnerSlotResponse
+                                    , lunchSlotResponse
+                                    ]
                                 }
                             )
                         )
-                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 4 [] }
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading }
                         |> first
                         |> .latestSlots
                         |> Expect.equal
-                            (DiaryDay.LatestSlotsLoading today 3 [ dinnerSource ])
-            , test "latest slot success completes when remaining count reaches zero" <|
+                            (DiaryDay.LatestSlotsLoaded today [ dinnerSource, lunchSource ])
+            , test "latest slots success with no slots offers no suggestions" <|
                 \_ ->
                     DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded
-                            today
-                            Dinner
-                            (Ok
-                                { sourceDate = yesterday
-                                , mealSlot = "dinner"
-                                , items = [ yesterdayDinnerLog ]
-                                }
-                            )
-                        )
-                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 1 [] }
-                        |> first
-                        |> .latestSlots
-                        |> Expect.equal
-                            (DiaryDay.LatestSlotsLoaded today [ dinnerSource ])
-            , test "latest slot success appends to loaded state" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded
-                            today
-                            Dinner
-                            (Ok
-                                { sourceDate = yesterday
-                                , mealSlot = "dinner"
-                                , items = [ yesterdayDinnerLog ]
-                                }
-                            )
-                        )
-                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoaded today [] }
-                        |> first
-                        |> .latestSlots
-                        |> Expect.equal
-                            (DiaryDay.LatestSlotsLoaded today [ dinnerSource ])
-            , test "latest slot failure marks one slot unavailable" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded today Dinner (Err Client.NetworkError))
-                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading today 1 [] }
+                        (DiaryDay.LatestSlotsReceived today (Ok { slots = [] }))
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading }
                         |> first
                         |> .latestSlots
                         |> Expect.equal (DiaryDay.LatestSlotsLoaded today [])
-            , test "latest slot unauthorized expires session" <|
+            , test "unknown meal slot in response is dropped" <|
                 \_ ->
                     DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded
-                            today
-                            Dinner
+                        (DiaryDay.LatestSlotsReceived today
+                            (Ok
+                                { slots =
+                                    [ { dinnerSlotResponse | mealSlot = "brunch" }
+                                    , lunchSlotResponse
+                                    ]
+                                }
+                            )
+                        )
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal (DiaryDay.LatestSlotsLoaded today [ lunchSource ])
+            , test "latest slots transport failure degrades to no suggestions" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotsReceived today (Err Client.NetworkError))
+                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading }
+                        |> first
+                        |> .latestSlots
+                        |> Expect.equal DiaryDay.LatestSlotsFailed
+            , test "latest slots unauthorized expires session" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotsReceived today
                             (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                         )
                         emptyModel
                         |> third
                         |> Expect.equal DiaryDay.SessionExpired
-            , test "stale latest slot response is ignored" <|
+            , test "stale latest slots response is ignored" <|
                 \_ ->
                     DiaryDay.update
-                        (DiaryDay.LatestSlotLoaded
-                            yesterday
-                            Dinner
-                            (Ok
-                                { sourceDate = yesterday
-                                , mealSlot = "dinner"
-                                , items = [ yesterdayDinnerLog ]
-                                }
-                            )
+                        (DiaryDay.LatestSlotsReceived yesterday
+                            (Ok { slots = [ dinnerSlotResponse ] })
                         )
+                        emptyModel
+                        |> first
+                        |> Expect.equal emptyModel
+            , test "stale latest slots failure is ignored" <|
+                \_ ->
+                    DiaryDay.update
+                        (DiaryDay.LatestSlotsReceived yesterday (Err Client.NetworkError))
                         emptyModel
                         |> first
                         |> Expect.equal emptyModel
@@ -461,7 +447,7 @@ tests =
                             { diary =
                                 DiaryDay.Loading
                                     { date = today, logs = Nothing, goal = Nothing }
-                            , latestSlots = DiaryDay.LatestSlotsLoading today 5 []
+                            , latestSlots = DiaryDay.LatestSlotsLoading
                             , copyState = DiaryDay.CopyIdle
                             , outMsg = DiaryDay.RequestDiaryData today
                             }
@@ -698,6 +684,22 @@ breakfastLog =
 dinnerLog : FoodLog
 dinnerLog =
     log "log-4" (Just "dinner") productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
+
+
+dinnerSlotResponse : Api.Logs.LatestSlotResponse
+dinnerSlotResponse =
+    { sourceDate = yesterday
+    , mealSlot = "dinner"
+    , items = [ yesterdayDinnerLog ]
+    }
+
+
+lunchSlotResponse : Api.Logs.LatestSlotResponse
+lunchSlotResponse =
+    { sourceDate = yesterday
+    , mealSlot = "lunch"
+    , items = [ yesterdayLunchLog ]
+    }
 
 
 dinnerSource : DiaryDay.LatestSlotSource

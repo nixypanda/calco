@@ -163,6 +163,30 @@ tests =
                                 (\usage -> ( usage.quantity.amount, usage.logCount ))
                         )
                     |> Expect.equal (Ok [ ( "175", 4 ), ( "100", 1 ) ])
+        , test "decodes batched latest slots" <|
+            \_ ->
+                Decode.decodeString Logs.latestSlotsResponseDecoder latestSlotsJson
+                    |> Result.map
+                        (.slots
+                            >> List.map
+                                (\slot ->
+                                    ( LocalDate.format slot.sourceDate
+                                    , slot.mealSlot
+                                    , List.map .id slot.items
+                                    )
+                                )
+                        )
+                    |> Expect.equal
+                        (Ok
+                            [ ( "2026-06-03", "breakfast", [ "log-1" ] )
+                            , ( "2026-06-01", "late_night_snack", [ "log-1" ] )
+                            ]
+                        )
+        , test "decodes empty latest slots response" <|
+            \_ ->
+                Decode.decodeString Logs.latestSlotsResponseDecoder """{ "slots": [] }"""
+                    |> Result.map .slots
+                    |> Expect.equal (Ok [])
         , test "decodes admin user list" <|
             \_ ->
                 Decode.decodeString User.listUsersDecoder userListJson
@@ -364,6 +388,27 @@ recentItemsJson =
             , { "quantity": { "amount": "100", "unit": "g" }, "log_count": 1 }
             ]
          }]
+    }
+    """
+
+
+latestSlotsJson : String
+latestSlotsJson =
+    """
+    { "slots":
+        [ { "source_date": "2026-06-03"
+          , "meal_slot": "breakfast"
+          , "items": [ """
+        ++ foodLogJson
+        ++ """ ]
+          }
+        , { "source_date": "2026-06-01"
+          , "meal_slot": "late_night_snack"
+          , "items": [ """
+        ++ foodLogJson
+        ++ """ ]
+          }
+        ]
     }
     """
 

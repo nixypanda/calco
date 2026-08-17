@@ -100,7 +100,7 @@ product goal is a simple food tracker, not an analytics or trend platform.
 - [x] As a user, I want to copy the most recent non-empty log set for a meal
       slot into today so that I can repeat common breakfasts, lunches, and
       dinners even when I skipped logging for a few days. Implemented with
-      `GET /logs/latest-slot` plus `POST /logs/batch`, surfaced as `Log latest`
+      `GET /logs/latest-slots` plus `POST /logs/batch`, surfaced as `Log latest`
       actions on empty diary meal slots.
 - [x] As a user, I want repeated meal-slot logging to ignore very old history
       so that the app does not unexpectedly copy stale eating patterns.
