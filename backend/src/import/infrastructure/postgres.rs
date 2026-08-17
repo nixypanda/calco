@@ -186,35 +186,37 @@ impl ImportRepository for PostgresImportRepository {
     async fn commit_import(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
         let mut tx = self.pool.begin().await?;
 
-        self.update_job_status_in_tx(&mut tx, import_id, &ImportStatus::Running)
-            .await?;
+        // Claim the job conditionally so two concurrent commits can't both proceed:
+        // the loser sees zero rows affected and the transaction rolls back on return.
+        let claimed = sqlx::query(
+            r#"UPDATE imports SET status = 'running' WHERE id = $1 AND status = 'pending'"#,
+        )
+        .bind(import_id.0)
+        .execute(&mut *tx)
+        .await?;
+        if claimed.rows_affected() == 0 {
+            return Err(ImportError::InvalidStatus(
+                "import is no longer pending".into(),
+            ));
+        }
 
-        let created: (i64,) = sqlx::query_as(
-            r#"WITH inserted AS (
+        // Single upsert distinguishes inserts from updates via `xmax = 0` (true only for
+        // freshly inserted rows), so a brand-new import no longer counts rows as both.
+        let (created, updated): (i64, i64) = sqlx::query_as(
+            r#"WITH upserted AS (
                    INSERT INTO products (id, source, source_id, barcode, name, brand, categories, serving_size_g, visibility, created_at, updated_at)
                    SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.categories, sp.serving_size_g, 'global', NOW(), NOW()
                    FROM staging_products sp
                    WHERE sp.import_id = $1
-                     AND NOT EXISTS (SELECT 1 FROM products p WHERE p.source = sp.source AND p.source_id = sp.source_id)
-                   RETURNING 1 AS flag
+                   ON CONFLICT (source, source_id) DO UPDATE SET
+                       barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
+                       categories = EXCLUDED.categories, serving_size_g = EXCLUDED.serving_size_g, updated_at = NOW()
+                   RETURNING (xmax = 0) AS inserted
                )
-               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,
-        )
-        .bind(import_id.0)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        let updated: (i64,) = sqlx::query_as(
-            r#"WITH updated AS (
-                   UPDATE products p SET
-                       barcode = sp.barcode, name = sp.name, brand = sp.brand,
-                       categories = sp.categories, serving_size_g = sp.serving_size_g, updated_at = NOW()
-                   FROM staging_products sp
-                   WHERE sp.import_id = $1
-                     AND p.source = sp.source AND p.source_id = sp.source_id
-                   RETURNING 1 AS flag
-               )
-               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM updated"#,
+               SELECT
+                   COALESCE(SUM(CASE WHEN inserted THEN 1 ELSE 0 END), 0)::BIGINT,
+                   COALESCE(SUM(CASE WHEN inserted THEN 0 ELSE 1 END), 0)::BIGINT
+               FROM upserted"#,
         )
         .bind(import_id.0)
         .fetch_one(&mut *tx)
@@ -301,8 +303,8 @@ impl ImportRepository for PostgresImportRepository {
         tx.commit().await?;
 
         Ok(ImportCommitResult {
-            products_created: created.0,
-            products_updated: updated.0,
+            products_created: created,
+            products_updated: updated,
             nutrients_inserted: nutrients.0,
             servings_inserted: servings_count.0,
             errors_logged: errors.0,

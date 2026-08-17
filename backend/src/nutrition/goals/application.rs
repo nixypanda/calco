@@ -61,28 +61,14 @@ impl GoalTargetService {
             ));
         }
 
-        let saved = match self
-            .repo
-            .find_by_user_id_and_effective_from(actor_id, local_date)
-            .await?
-        {
-            Some(existing) => {
-                let updated = existing.update_targets(targets, Utc::now());
-                self.repo.update(&updated).await?;
-                updated
-            }
-            None => {
-                let created = GoalTarget::create(actor_id, local_date, targets, Utc::now());
-                self.repo.create(&created).await?;
-                created
-            }
-        };
+        let goal = GoalTarget::create(actor_id, local_date, targets, Utc::now());
+        self.repo.upsert(&goal).await?;
 
         Ok(GoalTargetSnapshot {
             requested_date: local_date,
-            effective_from: Some(saved.effective_from),
+            effective_from: Some(goal.effective_from),
             source: GoalTargetSource::Saved,
-            targets: saved.targets,
+            targets: goal.targets,
         })
     }
 }
@@ -125,6 +111,23 @@ mod tests {
                 .cloned())
         }
 
+        async fn upsert(&self, goal_target: &GoalTarget) -> Result<(), NutritionError> {
+            let mut goal_targets = self.goal_targets.lock().unwrap();
+            match goal_targets.iter_mut().find(|goal| {
+                goal.user_id == goal_target.user_id
+                    && goal.effective_from == goal_target.effective_from
+            }) {
+                Some(existing) => {
+                    existing.targets = goal_target.targets.clone();
+                    existing.updated_at = goal_target.updated_at;
+                }
+                None => goal_targets.push(goal_target.clone()),
+            }
+            Ok(())
+        }
+    }
+
+    impl MockGoalTargetRepo {
         async fn find_by_user_id_and_effective_from(
             &self,
             user_id: Uuid,
@@ -135,21 +138,6 @@ mod tests {
                 .iter()
                 .find(|goal| goal.user_id == user_id && goal.effective_from == effective_from)
                 .cloned())
-        }
-
-        async fn create(&self, goal_target: &GoalTarget) -> Result<(), NutritionError> {
-            self.goal_targets.lock().unwrap().push(goal_target.clone());
-            Ok(())
-        }
-
-        async fn update(&self, goal_target: &GoalTarget) -> Result<(), NutritionError> {
-            let mut goal_targets = self.goal_targets.lock().unwrap();
-            let existing = goal_targets
-                .iter_mut()
-                .find(|goal| goal.id == goal_target.id)
-                .expect("goal target should exist");
-            *existing = goal_target.clone();
-            Ok(())
         }
     }
 

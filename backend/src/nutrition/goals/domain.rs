@@ -105,17 +105,6 @@ impl GoalTarget {
             updated_at: now,
         }
     }
-
-    pub fn update_targets(&self, targets: GoalTargets, now: DateTime<Utc>) -> Self {
-        Self {
-            id: self.id,
-            user_id: self.user_id,
-            effective_from: self.effective_from,
-            targets,
-            created_at: self.created_at,
-            updated_at: now,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -133,13 +122,7 @@ pub trait GoalTargetRepository: Send + Sync {
         user_id: Uuid,
         requested_date: NaiveDate,
     ) -> Result<Option<GoalTarget>, NutritionError>;
-    async fn find_by_user_id_and_effective_from(
-        &self,
-        user_id: Uuid,
-        effective_from: NaiveDate,
-    ) -> Result<Option<GoalTarget>, NutritionError>;
-    async fn create(&self, goal_target: &GoalTarget) -> Result<(), NutritionError>;
-    async fn update(&self, goal_target: &GoalTarget) -> Result<(), NutritionError>;
+    async fn upsert(&self, goal_target: &GoalTarget) -> Result<(), NutritionError>;
 }
 
 #[cfg(test)]

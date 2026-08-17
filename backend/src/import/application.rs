@@ -1,6 +1,52 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::import::domain::*;
+use crate::nutrition::catalog::domain::{AmountPer100g, ServingSizeG, Source};
+
+fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
+    Source::from_str(&food.source)?;
+    if food.source_id.is_empty() {
+        return Err("source_id is required".into());
+    }
+    if food.name.is_empty() {
+        return Err("name is required".into());
+    }
+    ServingSizeG::new(food.serving_size_g).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn validate_staged_nutrient(nutrient: &StagedImportNutrient) -> Result<(), String> {
+    Source::from_str(&nutrient.source)?;
+    if nutrient.source_id.is_empty() {
+        return Err("source_id is required".into());
+    }
+    if nutrient.nutrient_code.is_empty() {
+        return Err("nutrient_code is required".into());
+    }
+    AmountPer100g::new(nutrient.amount_per_100g).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> {
+    Source::from_str(&serving.source)?;
+    if serving.source_id.is_empty() {
+        return Err("source_id is required".into());
+    }
+    if serving.label.is_empty() {
+        return Err("label is required".into());
+    }
+    if serving.unit.is_empty() {
+        return Err("unit is required".into());
+    }
+    if serving.quantity <= rust_decimal::Decimal::ZERO {
+        return Err("quantity must be positive".into());
+    }
+    if serving.grams <= rust_decimal::Decimal::ZERO {
+        return Err("grams must be positive".into());
+    }
+    Ok(())
+}
 
 #[derive(Clone)]
 pub struct ImportService {
@@ -29,27 +75,19 @@ impl ImportService {
             ));
         }
 
-        let mut accepted = 0i64;
-        let mut rejected = 0i64;
+        let mut valid_foods = Vec::new();
         let mut errors = Vec::new();
 
-        for food in &foods {
-            if food.source.is_empty() || food.source_id.is_empty() || food.name.is_empty() {
-                rejected += 1;
-                errors.push(ImportErrorRecord {
+        for food in foods {
+            match validate_staged_food(&food) {
+                Ok(()) => valid_foods.push(food),
+                Err(error) => errors.push(ImportErrorRecord {
                     row_number: food.row_number,
-                    error: "source, source_id, and name are required".into(),
+                    error,
                     raw_payload: food.raw_payload.clone(),
-                });
-                continue;
+                }),
             }
-            accepted += 1;
         }
-
-        let valid_foods: Vec<StagedImportProduct> = foods
-            .into_iter()
-            .filter(|f| !f.source.is_empty() && !f.source_id.is_empty() && !f.name.is_empty())
-            .collect();
 
         if !valid_foods.is_empty() {
             self.repo.stage_foods(import_id, &valid_foods).await?;
@@ -59,7 +97,10 @@ impl ImportService {
             self.repo.add_error(import_id, err).await?;
         }
 
-        Ok(StageResult { accepted, rejected })
+        Ok(StageResult {
+            accepted: valid_foods.len() as i64,
+            rejected: errors.len() as i64,
+        })
     }
 
     pub async fn stage_nutrients(
@@ -79,33 +120,19 @@ impl ImportService {
             ));
         }
 
-        let mut accepted = 0i64;
-        let mut rejected = 0i64;
+        let mut valid = Vec::new();
         let mut errors = Vec::new();
 
-        for nutrient in &nutrients {
-            if nutrient.nutrient_code.is_empty()
-                || nutrient.source.is_empty()
-                || nutrient.source_id.is_empty()
-            {
-                rejected += 1;
-                errors.push(ImportErrorRecord {
+        for nutrient in nutrients {
+            match validate_staged_nutrient(&nutrient) {
+                Ok(()) => valid.push(nutrient),
+                Err(error) => errors.push(ImportErrorRecord {
                     row_number: nutrient.row_number,
-                    error: "source, source_id, nutrient_code, and amount_per_100g are required"
-                        .into(),
+                    error,
                     raw_payload: nutrient.raw_payload.clone(),
-                });
-                continue;
+                }),
             }
-            accepted += 1;
         }
-
-        let valid: Vec<StagedImportNutrient> = nutrients
-            .into_iter()
-            .filter(|n| {
-                !n.nutrient_code.is_empty() && !n.source.is_empty() && !n.source_id.is_empty()
-            })
-            .collect();
 
         if !valid.is_empty() {
             self.repo.stage_nutrients(import_id, &valid).await?;
@@ -115,7 +142,10 @@ impl ImportService {
             self.repo.add_error(import_id, err).await?;
         }
 
-        Ok(StageResult { accepted, rejected })
+        Ok(StageResult {
+            accepted: valid.len() as i64,
+            rejected: errors.len() as i64,
+        })
     }
 
     pub async fn stage_servings(
@@ -135,40 +165,19 @@ impl ImportService {
             ));
         }
 
-        let mut accepted = 0i64;
-        let mut rejected = 0i64;
+        let mut valid = Vec::new();
         let mut errors = Vec::new();
 
-        for s in &servings {
-            let invalid = s.source.is_empty()
-                || s.source_id.is_empty()
-                || s.label.is_empty()
-                || s.unit.is_empty()
-                || s.quantity <= rust_decimal::Decimal::ZERO
-                || s.grams <= rust_decimal::Decimal::ZERO;
-            if invalid {
-                rejected += 1;
-                errors.push(ImportErrorRecord {
-                    row_number: s.row_number,
-                    error: "source, source_id, label, unit, positive quantity and positive grams are required".into(),
-                    raw_payload: s.raw_payload.clone(),
-                });
-                continue;
+        for serving in servings {
+            match validate_staged_serving(&serving) {
+                Ok(()) => valid.push(serving),
+                Err(error) => errors.push(ImportErrorRecord {
+                    row_number: serving.row_number,
+                    error,
+                    raw_payload: serving.raw_payload.clone(),
+                }),
             }
-            accepted += 1;
         }
-
-        let valid: Vec<StagedImportServing> = servings
-            .into_iter()
-            .filter(|s| {
-                !s.source.is_empty()
-                    && !s.source_id.is_empty()
-                    && !s.label.is_empty()
-                    && !s.unit.is_empty()
-                    && s.quantity > rust_decimal::Decimal::ZERO
-                    && s.grams > rust_decimal::Decimal::ZERO
-            })
-            .collect();
 
         if !valid.is_empty() {
             self.repo.stage_servings(import_id, &valid).await?;
@@ -178,7 +187,10 @@ impl ImportService {
             self.repo.add_error(import_id, err).await?;
         }
 
-        Ok(StageResult { accepted, rejected })
+        Ok(StageResult {
+            accepted: valid.len() as i64,
+            rejected: errors.len() as i64,
+        })
     }
 
     pub async fn commit_job(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {

@@ -42,28 +42,7 @@ impl GoalTargetRepository for PostgresGoalTargetRepository {
         row.map(goal_target_row_to_domain).transpose()
     }
 
-    async fn find_by_user_id_and_effective_from(
-        &self,
-        user_id: Uuid,
-        effective_from: NaiveDate,
-    ) -> Result<Option<GoalTarget>, crate::nutrition::error::NutritionError> {
-        let row = sqlx::query_as::<_, GoalTargetRow>(
-            r#"
-            SELECT id, user_id, effective_from, calorie_target, protein_target_g, carbs_target_g, fat_target_g,
-                   created_at, updated_at
-            FROM goal_target_versions
-            WHERE user_id = $1 AND effective_from = $2
-            "#,
-        )
-        .bind(user_id)
-        .bind(effective_from)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        row.map(goal_target_row_to_domain).transpose()
-    }
-
-    async fn create(
+    async fn upsert(
         &self,
         goal_target: &GoalTarget,
     ) -> Result<(), crate::nutrition::error::NutritionError> {
@@ -74,6 +53,12 @@ impl GoalTargetRepository for PostgresGoalTargetRepository {
                 created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (user_id, effective_from) DO UPDATE SET
+                calorie_target = EXCLUDED.calorie_target,
+                protein_target_g = EXCLUDED.protein_target_g,
+                carbs_target_g = EXCLUDED.carbs_target_g,
+                fat_target_g = EXCLUDED.fat_target_g,
+                updated_at = EXCLUDED.updated_at
             "#,
         )
         .bind(goal_target.id)
@@ -84,32 +69,6 @@ impl GoalTargetRepository for PostgresGoalTargetRepository {
         .bind(goal_target.targets.carbs_target_g)
         .bind(goal_target.targets.fat_target_g)
         .bind(goal_target.created_at)
-        .bind(goal_target.updated_at)
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    async fn update(
-        &self,
-        goal_target: &GoalTarget,
-    ) -> Result<(), crate::nutrition::error::NutritionError> {
-        sqlx::query(
-            r#"
-            UPDATE goal_target_versions
-            SET calorie_target = $2,
-                protein_target_g = $3,
-                carbs_target_g = $4,
-                fat_target_g = $5,
-                updated_at = $6
-            WHERE id = $1
-            "#,
-        )
-        .bind(goal_target.id)
-        .bind(goal_target.targets.calorie_target)
-        .bind(goal_target.targets.protein_target_g)
-        .bind(goal_target.targets.carbs_target_g)
-        .bind(goal_target.targets.fat_target_g)
         .bind(goal_target.updated_at)
         .execute(&self.pool)
         .await?;
