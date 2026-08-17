@@ -2263,16 +2263,26 @@ view props =
 
         AdminCreateUserWorkspace adminModel createUserModel ->
             Workspace.view props.device
-                [ Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props adminModel))
-                , Element.map GotAdminCreateUserMsg
-                    (AdminCreateUser.view (pageProps props createUserModel))
+                [ ( "admin-users"
+                  , Element.map GotAdminMsg
+                        (AdminDashboard.contentView (pageProps props adminModel))
+                  )
+                , ( "admin-create-user"
+                  , Element.map GotAdminCreateUserMsg
+                        (AdminCreateUser.view (pageProps props createUserModel))
+                  )
                 ]
 
         AdminEditUserWorkspace adminModel editUserModel ->
             Workspace.view props.device
-                [ Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props adminModel))
-                , Element.map GotAdminEditUserMsg
-                    (AdminEditUser.view (pageProps props editUserModel))
+                [ ( "admin-users"
+                  , Element.map GotAdminMsg
+                        (AdminDashboard.contentView (pageProps props adminModel))
+                  )
+                , ( "admin-edit-user"
+                  , Element.map GotAdminEditUserMsg
+                        (AdminEditUser.view (pageProps props editUserModel))
+                  )
                 ]
 
         DiaryPage diaryModel ->
@@ -2284,12 +2294,16 @@ view props =
 
         DiaryCalendarWorkspace calendarModel diaryModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryCalendarMsg
-                    (DiaryCalendar.contentViewWithSelection
-                        (Just (LocalDate.format diaryModel.currentDate))
-                        (pageProps props calendarModel)
-                    )
-                , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                [ ( "calendar"
+                  , Element.map GotDiaryCalendarMsg
+                        (DiaryCalendar.contentViewWithSelection
+                            (Just (LocalDate.format diaryModel.currentDate))
+                            (pageProps props calendarModel)
+                        )
+                  )
+                , ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
                 ]
 
         NutritionDetailsPage detailsModel ->
@@ -2309,9 +2323,13 @@ view props =
 
         DiarySearchWorkspace diaryModel searchModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
-                , Element.map GotFoodSearchMsg
-                    (FoodSearch.contentView (pageProps props searchModel))
+                [ ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
+                , ( "food-search"
+                  , Element.map GotFoodSearchMsg
+                        (FoodSearch.contentView (pageProps props searchModel))
+                  )
                 ]
 
         FoodDetailPage foodDetailModel ->
@@ -2319,34 +2337,54 @@ view props =
 
         SearchFoodWorkspace searchModel foodModel ->
             Workspace.view props.device
-                [ Element.map GotFoodSearchMsg
-                    (FoodSearch.contentView (pageProps props searchModel))
-                , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                [ ( "food-search"
+                  , Element.map GotFoodSearchMsg
+                        (FoodSearch.contentView (pageProps props searchModel))
+                  )
+                , ( "food-detail"
+                  , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                  )
                 ]
 
         DiarySearchFoodWorkspace diaryModel searchModel foodModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
-                , Element.map GotFoodSearchMsg
-                    (FoodSearch.contentView (pageProps props searchModel))
-                , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                [ ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
+                , ( "food-search"
+                  , Element.map GotFoodSearchMsg
+                        (FoodSearch.contentView (pageProps props searchModel))
+                  )
+                , ( "food-detail"
+                  , Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props foodModel))
+                  )
                 ]
 
         SearchCreateFoodWorkspace searchModel createModel ->
             Workspace.view props.device
-                [ Element.map GotFoodSearchMsg
-                    (FoodSearch.contentView (pageProps props searchModel))
-                , Element.map GotCustomFoodCreateMsg
-                    (CustomFoodCreate.view (pageProps props createModel))
+                [ ( "food-search"
+                  , Element.map GotFoodSearchMsg
+                        (FoodSearch.contentView (pageProps props searchModel))
+                  )
+                , ( "custom-food-create"
+                  , Element.map GotCustomFoodCreateMsg
+                        (CustomFoodCreate.view (pageProps props createModel))
+                  )
                 ]
 
         DiarySearchCreateFoodWorkspace diaryModel searchModel createModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
-                , Element.map GotFoodSearchMsg
-                    (FoodSearch.contentView (pageProps props searchModel))
-                , Element.map GotCustomFoodCreateMsg
-                    (CustomFoodCreate.view (pageProps props createModel))
+                [ ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
+                , ( "food-search"
+                  , Element.map GotFoodSearchMsg
+                        (FoodSearch.contentView (pageProps props searchModel))
+                  )
+                , ( "custom-food-create"
+                  , Element.map GotCustomFoodCreateMsg
+                        (CustomFoodCreate.view (pageProps props createModel))
+                  )
                 ]
 
         FoodLogDetailPage foodLogDetailModel ->
@@ -2354,45 +2392,67 @@ view props =
 
         DiaryLogWorkspace diaryModel logModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
-                , Element.map GotFoodLogDetailMsg
-                    (FoodLogEntry.contentView (pageProps props logModel))
+                [ ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
+                , ( "log-detail"
+                  , Element.map GotFoodLogDetailMsg
+                        (FoodLogEntry.contentView (pageProps props logModel))
+                  )
                 ]
 
         CalendarDiaryLogWorkspace calendarModel diaryModel logModel ->
             Workspace.view props.device
-                [ Element.map GotDiaryCalendarMsg
-                    (DiaryCalendar.contentViewWithSelection
-                        (Just (LocalDate.format diaryModel.currentDate))
-                        (pageProps props calendarModel)
-                    )
-                , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
-                , Element.map GotFoodLogDetailMsg
-                    (FoodLogEntry.contentView (pageProps props logModel))
+                [ ( "calendar"
+                  , Element.map GotDiaryCalendarMsg
+                        (DiaryCalendar.contentViewWithSelection
+                            (Just (LocalDate.format diaryModel.currentDate))
+                            (pageProps props calendarModel)
+                        )
+                  )
+                , ( "diary"
+                  , Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props diaryModel))
+                  )
+                , ( "log-detail"
+                  , Element.map GotFoodLogDetailMsg
+                        (FoodLogEntry.contentView (pageProps props logModel))
+                  )
                 ]
 
         CustomFoodCreateWorkspace listModel createModel ->
             Workspace.view props.device
-                [ Element.map GotCustomFoodsMsg
-                    (CustomFoodList.contentView (pageProps props listModel))
-                , Element.map GotCustomFoodCreateMsg
-                    (CustomFoodCreate.view (pageProps props createModel))
+                [ ( "custom-food-list"
+                  , Element.map GotCustomFoodsMsg
+                        (CustomFoodList.contentView (pageProps props listModel))
+                  )
+                , ( "custom-food-create"
+                  , Element.map GotCustomFoodCreateMsg
+                        (CustomFoodCreate.view (pageProps props createModel))
+                  )
                 ]
 
         CustomFoodEditWorkspace listModel editModel ->
             Workspace.view props.device
-                [ Element.map GotCustomFoodsMsg
-                    (CustomFoodList.contentView (pageProps props listModel))
-                , Element.map GotCustomFoodEditMsg
-                    (CustomFoodEdit.view (pageProps props editModel))
+                [ ( "custom-food-list"
+                  , Element.map GotCustomFoodsMsg
+                        (CustomFoodList.contentView (pageProps props listModel))
+                  )
+                , ( "custom-food-edit"
+                  , Element.map GotCustomFoodEditMsg
+                        (CustomFoodEdit.view (pageProps props editModel))
+                  )
                 ]
 
         CustomFoodShowWorkspace listModel showModel ->
             Workspace.view props.device
-                [ Element.map GotCustomFoodsMsg
-                    (CustomFoodList.contentView (pageProps props listModel))
-                , Element.map GotCustomFoodShowMsg
-                    (CustomFoodShow.view (pageProps props showModel))
+                [ ( "custom-food-list"
+                  , Element.map GotCustomFoodsMsg
+                        (CustomFoodList.contentView (pageProps props listModel))
+                  )
+                , ( "custom-food-detail"
+                  , Element.map GotCustomFoodShowMsg
+                        (CustomFoodShow.view (pageProps props showModel))
+                  )
                 ]
 
         CustomFoodsPage customFoodsModel ->
@@ -2403,20 +2463,32 @@ view props =
 
         MealCreateWorkspace listModel createModel ->
             Workspace.view props.device
-                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
-                , Element.map GotMealCreateMsg (MealCreate.view (pageProps props createModel))
+                [ ( "meal-list"
+                  , Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                  )
+                , ( "meal-create"
+                  , Element.map GotMealCreateMsg (MealCreate.view (pageProps props createModel))
+                  )
                 ]
 
         MealEditWorkspace listModel editModel ->
             Workspace.view props.device
-                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
-                , Element.map GotMealEditMsg (MealEdit.view (pageProps props editModel))
+                [ ( "meal-list"
+                  , Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                  )
+                , ( "meal-edit"
+                  , Element.map GotMealEditMsg (MealEdit.view (pageProps props editModel))
+                  )
                 ]
 
         MealDetailWorkspace listModel detailModel ->
             Workspace.view props.device
-                [ Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
-                , Element.map GotMealDetailMsg (MealShow.view (pageProps props detailModel))
+                [ ( "meal-list"
+                  , Element.map GotMealsMsg (MealList.contentView (pageProps props listModel))
+                  )
+                , ( "meal-detail"
+                  , Element.map GotMealDetailMsg (MealShow.view (pageProps props detailModel))
+                  )
                 ]
 
         PlaceholderPage message ->
