@@ -15,7 +15,7 @@ tests =
             \_ ->
                 GoalsSettings.init today
                     |> Tuple.second
-                    |> Expect.equal (GoalsSettings.RequestGoal today)
+                    |> Expect.equal GoalsSettings.RequestGoal
         , test "goal load success populates the form" <|
             \_ ->
                 GoalsSettings.update

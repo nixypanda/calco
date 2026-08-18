@@ -6,6 +6,7 @@ port module Main exposing
     , PageModel
     , main
     , normalizeChromeNavigation
+    , reclassifyDevice
     )
 
 import Access
@@ -97,7 +98,7 @@ init flags url key =
                 , status = Nothing
                 }
       , today = Nothing
-      , page = Page.LoadingPage
+      , page = Page.loading
       , chrome = Chrome.init
       , device =
             Element.classifyDevice
@@ -174,14 +175,18 @@ update msg model =
             ( { model
                 | bootstrap =
                     setSession (Auth.clearSession (currentSession model)) model.bootstrap
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
 
         WindowResized width height ->
-            ( { model | device = Element.classifyDevice { width = width, height = height } }
-            , Cmd.none
-            )
+            case reclassifyDevice width height model.device of
+                Just device ->
+                    ( { model | device = device }, Cmd.none )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         GotVersionMsg versionMsg ->
             let
@@ -214,6 +219,24 @@ update msg model =
             stepChromeUpdate (Chrome.update chromeMsg model.chrome) model
 
 
+{-| A drag emits resize events continuously, but the app only renders from the
+classified device. Returning `Nothing` when the classification is unchanged
+leaves the model untouched so Elm can skip the re-render.
+-}
+reclassifyDevice : Int -> Int -> Element.Device -> Maybe Element.Device
+reclassifyDevice width height current =
+    let
+        next : Element.Device
+        next =
+            Element.classifyDevice { width = width, height = height }
+    in
+    if next == current then
+        Nothing
+
+    else
+        Just next
+
+
 stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )
 stepChromeUpdate ( chrome, outMsg ) model =
     applyChromeOutMsg outMsg { model | chrome = chrome }
@@ -232,7 +255,9 @@ applyChromeOutMsg outMsg model =
             )
 
         Chrome.Logout ->
-            ( model, Api.Auth.logout (\_ -> LogoutCompleted) )
+            ( { model | page = Page.clearStore model.page }
+            , Api.Auth.logout (\_ -> LogoutCompleted)
+            )
 
         Chrome.ToggleTheme ->
             let
@@ -371,6 +396,7 @@ applyPageOutMsg outMsg model =
             ( { model
                 | bootstrap =
                     setSession (Auth.clearSession (currentSession model)) model.bootstrap
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
@@ -390,7 +416,10 @@ applyPageOutMsg outMsg model =
                 nextSession =
                     Auth.applyAuthResult (Ok loginSession) (currentSession model)
             in
-            ( { model | bootstrap = setSession nextSession model.bootstrap }
+            ( { model
+                | bootstrap = setSession nextSession model.bootstrap
+                , page = Page.clearStore model.page
+              }
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
             )
 
@@ -406,6 +435,7 @@ applyPageOutMsg outMsg model =
                         { session = nextSession
                         , adminExists = True
                         }
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
             )

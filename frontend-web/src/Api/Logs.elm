@@ -3,6 +3,7 @@ module Api.Logs exposing
     , CreateLogRequest
     , LastUsedItemsRequest
     , LatestSlotResponse
+    , LatestSlotsResponse
     , QuantityUsage
     , RecentItem
     , RecentItemsRequest
@@ -15,7 +16,8 @@ module Api.Logs exposing
     , deleteLog
     , getLog
     , lastUsedItems
-    , latestSlot
+    , latestSlots
+    , latestSlotsResponseDecoder
     , listLogs
     , recentItems
     , recentItemsResponseDecoder
@@ -57,6 +59,11 @@ type alias LatestSlotResponse =
     { sourceDate : LocalDate
     , mealSlot : String
     , items : List FoodLog
+    }
+
+
+type alias LatestSlotsResponse =
+    { slots : List LatestSlotResponse
     }
 
 
@@ -155,20 +162,19 @@ deleteLog id toMsg =
         toMsg
 
 
-latestSlot :
-    { mealSlot : String, before : LocalDate, lookbackDays : Int }
-    -> (Result Client.ApiError LatestSlotResponse -> msg)
+latestSlots :
+    { before : LocalDate, lookbackDays : Int }
+    -> (Result Client.ApiError LatestSlotsResponse -> msg)
     -> Cmd msg
-latestSlot query toMsg =
+latestSlots query toMsg =
     Client.get
         (Builder.absolute
-            [ "api", "logs", "latest-slot" ]
-            [ Builder.string "meal_slot" query.mealSlot
-            , Builder.string "before" (LocalDate.format query.before)
+            [ "api", "logs", "latest-slots" ]
+            [ Builder.string "before" (LocalDate.format query.before)
             , Builder.int "lookback_days" query.lookbackDays
             ]
         )
-        latestSlotResponseDecoder
+        latestSlotsResponseDecoder
         toMsg
 
 
@@ -281,6 +287,12 @@ deviceTimezoneField maybeTimezone =
 
         Nothing ->
             []
+
+
+latestSlotsResponseDecoder : Decode.Decoder LatestSlotsResponse
+latestSlotsResponseDecoder =
+    Decode.map LatestSlotsResponse
+        (Decode.field "slots" (Decode.list latestSlotResponseDecoder))
 
 
 latestSlotResponseDecoder : Decode.Decoder LatestSlotResponse

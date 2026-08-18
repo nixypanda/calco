@@ -28,6 +28,34 @@ tests =
                     |> first
                     |> (\model -> ( model.search.query, model.results ))
                     |> Expect.equal ( "   ", NotAsked )
+        , test "retarget preserves the query while changing logging context" <|
+            \_ ->
+                FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                    |> (\model ->
+                            { model
+                                | search = Search.withQuery "apple" model.search
+                            }
+                       )
+                    |> FoodSearch.retarget (Just "2026-06-01") (Just Dinner)
+                    |> (\( model, changed ) ->
+                            { query = model.search.query
+                            , date = model.date
+                            , mealSlot = model.mealSlot
+                            , changed = changed
+                            }
+                       )
+                    |> Expect.equal
+                        { query = "apple"
+                        , date = Just "2026-06-01"
+                        , mealSlot = Just Dinner
+                        , changed = True
+                        }
+        , test "retarget is inert when the logging context is unchanged" <|
+            \_ ->
+                FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                    |> FoodSearch.retarget (Just "2026-06-01") (Just Lunch)
+                    |> Tuple.second
+                    |> Expect.equal False
         , test "tab completion expands include category operator" <|
             \_ ->
                 FoodSearch.update
@@ -64,14 +92,70 @@ tests =
                     |> .search
                     |> .query
                     |> Expect.equal "-category:"
-        , test "typing a category value requests suggestions" <|
+        , test "typing a category value does not request suggestions yet" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "settled category debounce requests suggestions" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
                     |> third
                     |> Expect.equal
                         (FoodSearch.RequestCategorySuggestions 1
                             { query = "foo", limit = 8 }
                         )
+        , test "a burst of keystrokes only requests suggestions for the settled query" <|
+            \_ ->
+                let
+                    typed : FoodSearch.Model
+                    typed =
+                        List.foldl
+                            (\query model ->
+                                FoodSearch.update (FoodSearch.QueryChanged query) model
+                                    |> first
+                            )
+                            emptyModel
+                            [ "category:c", "category:ch", "category:cho" ]
+                in
+                ( FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "c") typed
+                    |> third
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 2 "ch") typed
+                    |> third
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 3 "cho") typed
+                    |> third
+                )
+                    |> Expect.equal
+                        ( FoodSearch.NoOp
+                        , FoodSearch.NoOp
+                        , FoodSearch.RequestCategorySuggestions 3
+                            { query = "cho", limit = 8 }
+                        )
+        , test "scope change cancels a pending category debounce" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
+                    |> first
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "scope change drops an in-flight category response" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
+                    |> first
+                    |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.CategorySuggestionsCompleted 1
+                            (Ok { items = [ { value = "food", count = 4 } ] })
+                        )
+                    |> first
+                    |> .search
+                    |> .categorySuggestions
+                    |> Expect.equal []
         , test "blank category query does not request suggestions" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "   ") emptyModel
@@ -467,7 +551,11 @@ tests =
         , test "recent items load success stores items" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentItemsLoaded (Ok { items = [ recentProduct ] }))
+                    (FoodSearch.RecentItemsLoaded
+                        Nothing
+                        Nothing
+                        (Ok { items = [ recentProduct ] })
+                    )
                     emptyModel
                     |> first
                     |> .recentItems
@@ -475,7 +563,7 @@ tests =
         , test "recent items failure stores error" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentItemsLoaded (Err Client.NetworkError))
+                    (FoodSearch.RecentItemsLoaded Nothing Nothing (Err Client.NetworkError))
                     emptyModel
                     |> first
                     |> .recentItems
@@ -484,11 +572,28 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.RecentItemsLoaded
+                        Nothing
+                        Nothing
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     emptyModel
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
+        , test "recent items ignore a response for an old logging context" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentItemsLoaded
+                        (Just "2026-05-29")
+                        (Just Lunch)
+                        (Ok { items = [ recentProduct ] })
+                    )
+                    { emptyModel
+                        | date = Just "2026-05-29"
+                        , mealSlot = Just Dinner
+                    }
+                    |> first
+                    |> .recentItems
+                    |> Expect.equal emptyModel.recentItems
         , test "recent product click navigates to food detail with context" <|
             \_ ->
                 FoodSearch.update
@@ -635,6 +740,20 @@ tests =
                     |> (\model -> ( model.addedToken, model.addedItems ))
                     |> Expect.equal
                         ( 1, [ { key = "product:food-1:2 serving", token = 1 } ] )
+        , test "quick add success reports the created log" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+                    emptyModel
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.LocalContextReceived
+                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        )
+                    |> first
+                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> third
+                    |> Expect.equal (FoodSearch.LogCreated productLog)
         , test "quick add success replaces previous added token for same item" <|
             \_ ->
                 FoodSearch.update

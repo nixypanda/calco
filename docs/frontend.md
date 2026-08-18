@@ -39,7 +39,8 @@ The frontend follows a strict ownership model:
 ```text
 Main -> Access / Chrome / Data.Route / Page
 Chrome -> View.Chrome / Data / Ui
-Page -> Data / Api / Ui / View / Lib
+Page -> Store / Data / Api / Ui / View / Lib
+Store -> Api.Client / Data / Lib
 View -> Ui / Data / Lib
 Api -> Api.Client / Data decoders / Lib.Json
 Data -> other Data / Lib
@@ -76,6 +77,39 @@ serialization. Query-param-backed navigation state belongs here.
 
 `Page.*` modules own page-local TEA, page-local loading/submitting/deleting
 state, and page-specific composition of shared UI and API calls.
+
+`Store.elm` owns session-scoped server data and date-keyed diary data. It lives
+at the top level because cached failures use `Api.Client.ApiError`; putting that
+dependency under `Data` would reverse the allowed dependency direction. The store
+is opaque: callers name a resource through `Store.Access` and reach it only via
+`request`, `settle`, `cached`, `seed` and `invalidate`, so which field or
+dictionary key backs a resource stays inside the module.
+
+`request` issues at most one in-flight request per resource and hands back an
+opaque `RequestToken`; recording a result requires redeeming that token through
+`settle`, which rejects a response from an earlier session, one whose request a
+mutation has since invalidated, and a duplicate of one already settled. Because
+the only way to write is to redeem, the staleness check cannot be omitted at a
+call site.
+
+`Page` orchestration describes each cached resource once — where it lives, how to
+fetch it, and which panes it feeds — and drives every one of them through the
+same generic ensure/settle/hydrate path. Newly initialized panes are hydrated
+from whatever is already cached; panes the reconcile reused are left alone.
+
+Top-level `Page.Model` owns an ordered stack of independently keyed panes.
+Route changes reconcile the desired stack by key: unchanged panes keep their
+local state and issue no initialization request, new identities initialize once,
+and panes absent from the destination are dropped. A pane key includes the
+entity or date context whenever reusing state across those values would be
+incorrect. A small context-selection layer preserves lineage-dependent
+workspaces, such as opening a food from search, because that lineage is not
+encoded in `Data.Route`.
+
+Successful food-log mutations explicitly invalidate matching diary and calendar
+panes, plus cached latest-slot suggestions whose lookback window may include the
+changed date. Do not rely on navigation to reinitialize a pane as a refresh
+mechanism.
 
 `Api.*` modules own request construction, response decoding, and transport
 errors. They do not own business interpretation beyond transport concerns.
@@ -174,8 +208,9 @@ subscriptions model =
 
 Rules:
 
-- Each page should expose and own `Model`, `Msg`, `init`, `update`, and
-  `view`.
+- Each page should own `Model`, `Msg`, `init`, `update`, and its view logic.
+  Pane modules expose `contentView` when the top-level workspace owns the page
+  container; standalone-only modules expose `view`.
 - Add `OutMsg` when the page must signal app-level effects such as navigation,
   session expiration, or startup orchestration.
 - Add `subscriptions` only when the page owns actual subscriptions.

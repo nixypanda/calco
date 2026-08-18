@@ -1,5 +1,6 @@
 module Page.Diary.Day exposing
-    ( CopyState(..)
+    ( CopyRefresh(..)
+    , CopyState(..)
     , DiaryState(..)
     , LatestSlotSource
     , LatestSlotsState(..)
@@ -10,14 +11,14 @@ module Page.Diary.Day exposing
     , Msg(..)
     , OutMsg(..)
     , contentView
+    , currentLogs
     , init
     , slotCalories
     , update
-    , view
     )
 
 import Api.Client as Client
-import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotResponse)
+import Api.Logs exposing (BatchLogResponse, CreateLogRequest, LatestSlotsResponse)
 import Data.DiaryPreferences as DiaryPreferences exposing (DiaryPreferences)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot, GoalTargets)
@@ -82,9 +83,14 @@ type alias Model =
     }
 
 
+{-| Only the loaded state carries a date: suggestions must not be rendered
+against a day other than the one they were requested for, and the user can page
+between days faster than the request completes.
+-}
 type LatestSlotsState
-    = LatestSlotsLoading LocalDate Int (List LatestSlotSource)
+    = LatestSlotsLoading
     | LatestSlotsLoaded LocalDate (List LatestSlotSource)
+    | LatestSlotsFailed
 
 
 type CopyState
@@ -119,13 +125,29 @@ init args =
       , today = args.today
       , calendarMonth = args.calendarMonth
       , diary = loadingState currentDate
-      , latestSlots = latestSlotsLoading currentDate
+      , latestSlots = LatestSlotsLoading
       , copyState = CopyIdle
       , macroMode = Grams
       , preferences = Nothing
       }
-    , RequestDiaryData currentDate
+    , RequestDiaryData
     )
+
+
+{-| A pane part-way through a reload still holds the logs it was showing
+before, which is why this is not simply the `Loaded` case.
+-}
+currentLogs : Model -> Maybe (List FoodLog)
+currentLogs model =
+    case model.diary of
+        Loaded loaded ->
+            Just loaded.logs
+
+        Loading loading ->
+            loading.logs
+
+        Failed _ _ ->
+            Nothing
 
 
 
@@ -133,11 +155,10 @@ init args =
 
 
 type Msg
-    = LoadStarted
-    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    = LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
     | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
-    | LatestSlotLoaded LocalDate MealSlot (Result Client.ApiError LatestSlotResponse)
+    | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
     | CopyLatestClicked LatestSlotSource
     | CopyLatestCompleted LocalDate (Result Client.ApiError BatchLogResponse)
     | PreviousDayClicked
@@ -151,41 +172,21 @@ type Msg
 
 type OutMsg
     = NoOp
-    | RequestDiaryData LocalDate
+    | RequestDiaryData
     | RequestCopyLatestSlot LocalDate (List CreateLogRequest)
+    | LogsCopied LocalDate CopyRefresh
     | Navigate Route
     | SessionExpired
+
+
+type CopyRefresh
+    = DiaryUpdated
+    | DiaryNeedsReload
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        LoadStarted ->
-            case model.diary of
-                Loading loading ->
-                    if LocalDate.equals loading.date model.currentDate then
-                        ( model, Cmd.none, NoOp )
-
-                    else
-                        ( { model
-                            | diary = loadingState model.currentDate
-                            , latestSlots = latestSlotsLoading model.currentDate
-                            , copyState = CopyIdle
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
-
-                _ ->
-                    ( { model
-                        | diary = loadingState model.currentDate
-                        , latestSlots = latestSlotsLoading model.currentDate
-                        , copyState = CopyIdle
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
-
         LogsLoaded requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
                 ( model, Cmd.none, NoOp )
@@ -224,7 +225,7 @@ update msg model =
                 Err error ->
                     failure model.currentDate error model
 
-        LatestSlotLoaded requestDate slot result ->
+        LatestSlotsReceived requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
                 ( model, Cmd.none, NoOp )
 
@@ -233,13 +234,9 @@ update msg model =
                     Ok response ->
                         ( { model
                             | latestSlots =
-                                applyLatestSlotLoaded
+                                LatestSlotsLoaded
                                     requestDate
-                                    { slot = slot
-                                    , sourceDate = response.sourceDate
-                                    , logs = response.items
-                                    }
-                                    model.latestSlots
+                                    (latestSlotSources response)
                           }
                         , Cmd.none
                         , NoOp
@@ -250,12 +247,7 @@ update msg model =
                             ( model, Cmd.none, SessionExpired )
 
                         else
-                            ( { model
-                                | latestSlots =
-                                    applyLatestSlotUnavailable
-                                        requestDate
-                                        model.latestSlots
-                              }
+                            ( { model | latestSlots = LatestSlotsFailed }
                             , Cmd.none
                             , NoOp
                             )
@@ -287,17 +279,17 @@ update msg model =
                                             model.latestSlots
                                   }
                                 , Cmd.none
-                                , NoOp
+                                , LogsCopied requestDate DiaryUpdated
                                 )
 
                             Nothing ->
                                 ( { model
                                     | copyState = CopyIdle
                                     , diary = loadingState requestDate
-                                    , latestSlots = latestSlotsLoading requestDate
+                                    , latestSlots = LatestSlotsLoading
                                   }
                                 , Cmd.none
-                                , RequestDiaryData requestDate
+                                , LogsCopied requestDate DiaryNeedsReload
                                 )
 
                     Err error ->
@@ -318,12 +310,7 @@ update msg model =
                 previous =
                     LocalDate.addDays -1 model.currentDate
             in
-            ( { model
-                | currentDate = previous
-                , diary = loadingState previous
-                , latestSlots = latestSlotsLoading previous
-                , copyState = CopyIdle
-              }
+            ( model
             , Cmd.none
             , Navigate
                 (DiaryDay
@@ -335,12 +322,7 @@ update msg model =
         NextDayClicked ->
             case LocalDate.nextOnOrBefore model.today model.currentDate of
                 Just next ->
-                    ( { model
-                        | currentDate = next
-                        , diary = loadingState next
-                        , latestSlots = latestSlotsLoading next
-                        , copyState = CopyIdle
-                      }
+                    ( model
                     , Cmd.none
                     , Navigate
                         (DiaryDay
@@ -400,72 +382,33 @@ loadingState date =
         }
 
 
-latestSlotsLoading : LocalDate -> LatestSlotsState
-latestSlotsLoading date =
-    LatestSlotsLoading date (List.length repeatableSlots) []
-
-
-repeatableSlots : List MealSlot
-repeatableSlots =
-    MealSlot.all
-
-
-applyLatestSlotLoaded :
-    LocalDate
-    -> LatestSlotSource
-    -> LatestSlotsState
-    -> LatestSlotsState
-applyLatestSlotLoaded requestDate source state =
-    case state of
-        LatestSlotsLoading date remaining sources ->
-            if LocalDate.equals date requestDate then
-                finishLatestSlotLoad date (remaining - 1) (source :: sources)
-
-            else
-                state
-
-        LatestSlotsLoaded date sources ->
-            if LocalDate.equals date requestDate then
-                LatestSlotsLoaded date (source :: sources)
-
-            else
-                state
-
-
-applyLatestSlotUnavailable : LocalDate -> LatestSlotsState -> LatestSlotsState
-applyLatestSlotUnavailable requestDate state =
-    case state of
-        LatestSlotsLoading date remaining sources ->
-            if LocalDate.equals date requestDate then
-                finishLatestSlotLoad date (remaining - 1) sources
-
-            else
-                state
-
-        LatestSlotsLoaded _ _ ->
-            state
+latestSlotSources : LatestSlotsResponse -> List LatestSlotSource
+latestSlotSources response =
+    response.slots
+        |> List.filterMap
+            (\slot ->
+                MealSlot.fromString slot.mealSlot
+                    |> Maybe.map
+                        (\parsed ->
+                            { slot = parsed
+                            , sourceDate = slot.sourceDate
+                            , logs = slot.items
+                            }
+                        )
+            )
 
 
 removeLatestSlotSource : LocalDate -> Maybe MealSlot -> LatestSlotsState -> LatestSlotsState
 removeLatestSlotSource requestDate maybeSlot state =
-    case maybeSlot of
-        Just slot ->
-            case state of
-                LatestSlotsLoading date remaining sources ->
-                    if LocalDate.equals date requestDate then
-                        LatestSlotsLoading date remaining (removeSource slot sources)
+    case ( maybeSlot, state ) of
+        ( Just slot, LatestSlotsLoaded date sources ) ->
+            if LocalDate.equals date requestDate then
+                LatestSlotsLoaded date (removeSource slot sources)
 
-                    else
-                        state
+            else
+                state
 
-                LatestSlotsLoaded date sources ->
-                    if LocalDate.equals date requestDate then
-                        LatestSlotsLoaded date (removeSource slot sources)
-
-                    else
-                        state
-
-        Nothing ->
+        _ ->
             state
 
 
@@ -474,39 +417,20 @@ removeSource slot sources =
     List.filter (\source -> source.slot /= slot) sources
 
 
-finishLatestSlotLoad : LocalDate -> Int -> List LatestSlotSource -> LatestSlotsState
-finishLatestSlotLoad date remaining sources =
-    if remaining <= 0 then
-        LatestSlotsLoaded date sources
-
-    else
-        LatestSlotsLoading date remaining sources
-
-
 latestSlotSourceFor : LocalDate -> MealSlot -> LatestSlotsState -> Maybe LatestSlotSource
 latestSlotSourceFor currentDate slot state =
-    let
-        matchingSource : List LatestSlotSource -> Maybe LatestSlotSource
-        matchingSource sources =
-            sources
-                |> List.filter
-                    (\source -> source.slot == slot)
-                |> List.head
-    in
     case state of
-        LatestSlotsLoading date _ sources ->
-            if LocalDate.equals date currentDate then
-                matchingSource sources
-
-            else
-                Nothing
-
         LatestSlotsLoaded date sources ->
             if LocalDate.equals date currentDate then
-                matchingSource sources
+                sources
+                    |> List.filter (\source -> source.slot == slot)
+                    |> List.head
 
             else
                 Nothing
+
+        _ ->
+            Nothing
 
 
 copyRequestFromLog : LocalDate -> MealSlot -> FoodLog -> CreateLogRequest
@@ -647,12 +571,6 @@ slotCalories slot logs =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

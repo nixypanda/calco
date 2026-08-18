@@ -29,7 +29,7 @@ pub fn food_log_routes(state: AppState) -> Router {
         .route("/logs/batch", post(create_logs_batch_handler))
         .route("/logs/last-used", post(last_used_items_handler))
         .route("/logs/recent-items", get(recent_items_handler))
-        .route("/logs/latest-slot", get(latest_slot_handler))
+        .route("/logs/latest-slots", get(latest_slots_handler))
         .route("/logs/summary", get(summary_handler))
         .route(
             "/logs/{id}",
@@ -140,6 +140,11 @@ pub struct LatestSlotResponse {
 }
 
 #[derive(Serialize)]
+pub struct LatestSlotsResponse {
+    pub slots: Vec<LatestSlotResponse>,
+}
+
+#[derive(Serialize)]
 pub struct RecentItemsResponse {
     pub items: Vec<RecentItemResponse>,
 }
@@ -193,8 +198,7 @@ pub struct LogQuery {
 }
 
 #[derive(Deserialize)]
-pub struct LatestSlotQuery {
-    pub meal_slot: String,
+pub struct LatestSlotsQuery {
     pub before: String,
     pub lookback_days: Option<i64>,
 }
@@ -290,15 +294,11 @@ async fn create_logs_batch_handler(
     }
 }
 
-async fn latest_slot_handler(
+async fn latest_slots_handler(
     auth: AuthUser,
     State(state): State<FoodLogModule>,
-    Query(query): Query<LatestSlotQuery>,
+    Query(query): Query<LatestSlotsQuery>,
 ) -> impl IntoResponse {
-    let meal_slot = match parse_meal_slot(&query.meal_slot) {
-        Ok(slot) => slot,
-        Err(err) => return err.into_response(),
-    };
     let before_date = match parse_log_date(&query.before) {
         Ok(date) => date,
         Err(err) => return err.into_response(),
@@ -307,18 +307,13 @@ async fn latest_slot_handler(
 
     match state
         .food_log_history_services
-        .latest_slot_before(auth.0.id, meal_slot, before_date, lookback_days)
+        .latest_slots_before(auth.0.id, before_date, lookback_days)
         .await
     {
-        Ok(Some((source_date, logs))) => Json(LatestSlotResponse {
-            source_date,
-            meal_slot: meal_slot.into(),
-            items: logs.iter().map(food_log_to_response).collect(),
+        Ok(slots) => Json(LatestSlotsResponse {
+            slots: slots.iter().map(latest_slot_to_response).collect(),
         })
         .into_response(),
-        Ok(None) => {
-            error_response("not_found", "no recent logs for meal slot".into()).into_response()
-        }
         Err(err) => err.into_response(),
     }
 }
@@ -643,6 +638,14 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
         notes: log.notes.clone(),
         created_at: log.created_at,
         updated_at: log.updated_at,
+    }
+}
+
+fn latest_slot_to_response(slot: &LatestSlotLogs) -> LatestSlotResponse {
+    LatestSlotResponse {
+        source_date: slot.source_date,
+        meal_slot: slot.meal_slot.into(),
+        items: slot.logs.iter().map(food_log_to_response).collect(),
     }
 }
 

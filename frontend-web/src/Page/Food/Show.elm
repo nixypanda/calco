@@ -9,7 +9,6 @@ module Page.Food.Show exposing
     , foodNutrientsForDisplay
     , init
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -71,7 +70,7 @@ type OutMsg
     | RequestInitialData String
     | RequestLocalContext
     | RequestCreateLog CreateLogRequest
-    | Navigate Route
+    | LogCreated FoodLog Route
     | SessionExpired
 
 
@@ -204,10 +203,11 @@ update msg model =
                 Loaded loaded ->
                     if loaded.request == Saving then
                         case result of
-                            Ok _ ->
+                            Ok log ->
                                 ( model
                                 , Cmd.none
-                                , Navigate (FoodSearch loaded.logDate loaded.mealSlot)
+                                , LogCreated log
+                                    (FoodSearch loaded.logDate loaded.mealSlot)
                                 )
 
                             Err error ->
@@ -409,12 +409,6 @@ applyLoadedError message model =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

@@ -462,8 +462,8 @@ onComponentSearchChanged rowId query form =
                 |> Maybe.map .search
                 |> Maybe.withDefault Search.empty
 
-        ( transitionedSearch, _, categoryReq ) =
-            Search.onQueryChanged query priorSearch Nothing
+        ( transitionedSearch, categoryReq ) =
+            Search.onQueryChanged query priorSearch
 
         token : Int
         token =

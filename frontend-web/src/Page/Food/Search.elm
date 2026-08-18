@@ -5,13 +5,14 @@ module Page.Food.Search exposing
     , OutMsg(..)
     , QuickAddButtonState(..)
     , QuickAddState
+    , RecentItemsResult
     , SearchScope(..)
     , contentView
     , init
     , quickAddChipPressable
     , quickAddChipState
+    , retarget
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -124,6 +125,29 @@ init date mealSlot =
     }
 
 
+retarget : Maybe String -> Maybe MealSlot -> Model -> ( Model, Bool )
+retarget date mealSlot model =
+    if model.date == date && model.mealSlot == mealSlot then
+        ( model, False )
+
+    else
+        ( { model
+            | date = date
+            , mealSlot = mealSlot
+            , recentItems =
+                case date |> Maybe.andThen LocalDate.fromString of
+                    Just _ ->
+                        Loading
+
+                    Nothing ->
+                        NotAsked
+            , quickAdd = QuickAddIdle
+            , addedItems = []
+          }
+        , True
+        )
+
+
 
 -- UPDATE
 
@@ -141,8 +165,9 @@ type Msg
     | CompleteFirstSuggestion
     | CompletionClicked Completion
     | DebounceElapsed Int String
+    | CategoryDebounceElapsed Int String
     | SearchCompleted Int (Result Client.ApiError Foods.SearchResponse)
-    | RecentItemsLoaded (Result Client.ApiError Logs.RecentItemsResponse)
+    | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived { date : String, timezone : String }
@@ -150,6 +175,10 @@ type Msg
     | ClearRecentAdded String Int
     | ResultClicked String
     | CreateCustomFoodClicked
+
+
+type alias RecentItemsResult =
+    Result Client.ApiError Logs.RecentItemsResponse
 
 
 type OutMsg
@@ -162,22 +191,29 @@ type OutMsg
     | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | RequestLocalContext
     | RequestCreateLog Logs.CreateLogRequest
+    | LogCreated FoodLog
     | Navigate Route
     | SessionExpired
 
 
-debounceConfig : { delayMs : Int, onFire : Int -> String -> Msg }
+debounceConfig : Search.Debounce Msg
 debounceConfig =
     { delayMs = 300
-    , onFire = DebounceElapsed
+    , onSearchElapsed = DebounceElapsed
+    , onCategoryElapsed = CategoryDebounceElapsed
     }
+
+
+categorySuggestionsLimit : Int
+categorySuggestionsLimit =
+    8
 
 
 applyQueryChange : String -> Model -> ( Model, Cmd Msg, OutMsg )
 applyQueryChange rawQuery model =
     let
-        ( search, debounceCmd, categoryReq ) =
-            Search.onQueryChanged rawQuery model.search (Just debounceConfig)
+        ( search, debounceCmd ) =
+            Search.onQueryChangedDebounced rawQuery model.search debounceConfig
 
         results : Loadable Client.ApiError (List Foods.SearchResult)
         results =
@@ -189,12 +225,7 @@ applyQueryChange rawQuery model =
     in
     ( { model | search = search, results = results }
     , debounceCmd
-    , case categoryReq of
-        Just req ->
-            RequestCategorySuggestions req.token { query = req.query, limit = 8 }
-
-        Nothing ->
-            NoOp
+    , NoOp
     )
 
 
@@ -221,6 +252,11 @@ applyScopeChange scope model =
             nextSearch =
                 { priorSearch
                     | searchToken = priorSearch.searchToken + 1
+
+                    -- Bumping the category token invalidates both a pending
+                    -- suggestion debounce and an already in-flight response, so
+                    -- neither can repopulate the list after the scope changed.
+                    , categoryToken = priorSearch.categoryToken + 1
                     , categorySuggestions = []
                 }
 
@@ -434,6 +470,17 @@ update msg model =
             else
                 ( model, Cmd.none, NoOp )
 
+        CategoryDebounceElapsed token query ->
+            if token == model.search.categoryToken then
+                ( model
+                , Cmd.none
+                , RequestCategorySuggestions token
+                    { query = query, limit = categorySuggestionsLimit }
+                )
+
+            else
+                ( model, Cmd.none, NoOp )
+
         SearchCompleted token result ->
             if token /= model.search.searchToken then
                 ( model, Cmd.none, NoOp )
@@ -450,17 +497,24 @@ update msg model =
                         else
                             ( { model | results = Failure error }, Cmd.none, NoOp )
 
-        RecentItemsLoaded result ->
-            case result of
-                Ok response ->
-                    ( { model | recentItems = Success response.items }, Cmd.none, NoOp )
+        RecentItemsLoaded date mealSlot result ->
+            if model.date /= date || model.mealSlot /= mealSlot then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | recentItems = Failure error }, Cmd.none, SessionExpired )
+            else
+                case result of
+                    Ok response ->
+                        ( { model | recentItems = Success response.items }, Cmd.none, NoOp )
 
-                    else
-                        ( { model | recentItems = Failure error }, Cmd.none, NoOp )
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( { model | recentItems = Failure error }
+                            , Cmd.none
+                            , SessionExpired
+                            )
+
+                        else
+                            ( { model | recentItems = Failure error }, Cmd.none, NoOp )
 
         RecentQuickAddClicked item quantity ->
             if canStartQuickAdd model.quickAdd then
@@ -508,7 +562,7 @@ update msg model =
 
         QuickAddCompleted result ->
             case result of
-                Ok _ ->
+                Ok log ->
                     let
                         key : Maybe String
                         key =
@@ -539,7 +593,7 @@ update msg model =
 
                         Nothing ->
                             Cmd.none
-                    , NoOp
+                    , LogCreated log
                     )
 
                 Err error ->
@@ -723,12 +777,6 @@ clearRecentAddedAfter key token =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

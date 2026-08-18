@@ -125,6 +125,13 @@ tests =
                     |> first
                     |> loadedLogQuantity
                     |> Expect.equal (Just { amount = "3", unit = "g" })
+        , test "update success reports the affected diary date" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.UpdateCompleted (Ok updatedLog))
+                    loadedModel
+                    |> third
+                    |> Expect.equal (FoodLogEntry.LogUpdated updatedLog.logDate)
         , test "update failure preserves current log and form state" <|
             \_ ->
                 let
@@ -159,13 +166,17 @@ tests =
                     |> FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked
                     |> third
                     |> Expect.equal (FoodLogEntry.RequestDeleteLog "log-1")
-        , test "delete success navigates home" <|
+        , test "delete success reports the date and preserves home navigation" <|
             \_ ->
                 FoodLogEntry.update
                     (FoodLogEntry.DeleteCompleted (Ok ()))
                     deletingModel
                     |> third
-                    |> Expect.equal (FoodLogEntry.Navigate (DiaryDay Nothing Nothing))
+                    |> Expect.equal
+                        (FoodLogEntry.LogDeleted
+                            productLog.logDate
+                            (DiaryDay Nothing Nothing)
+                        )
         , test "delete failure keeps modal open and stores error" <|
             \_ ->
                 FoodLogEntry.update

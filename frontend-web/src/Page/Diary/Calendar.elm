@@ -7,7 +7,6 @@ module Page.Diary.Calendar exposing
     , contentViewWithSelection
     , init
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -95,6 +94,8 @@ validMonth period =
 type Msg
     = SummaryLoaded (Result Client.ApiError (List DaySummary))
     | EarlierSummaryLoaded (Result Client.ApiError (List DaySummary))
+    | RefreshDay LocalDate
+    | DaySummaryRefreshed LocalDate (Result Client.ApiError (List DaySummary))
     | LoadEarlierClicked
     | DayClicked String String
 
@@ -103,6 +104,7 @@ type OutMsg
     = NoOp
     | RequestSummary LocalDate LocalDate
     | RequestEarlierSummary LocalDate LocalDate
+    | RequestDaySummary LocalDate
     | Navigate Route
     | SessionExpired
 
@@ -115,6 +117,16 @@ update msg model =
 
         EarlierSummaryLoaded result ->
             applySummaryResult True result model
+
+        RefreshDay date ->
+            if dateIsLoaded date model then
+                ( model, Cmd.none, RequestDaySummary date )
+
+            else
+                ( model, Cmd.none, NoOp )
+
+        DaySummaryRefreshed requestDate result ->
+            applyDaySummaryResult requestDate result model
 
         LoadEarlierClicked ->
             if model.loadingEarlier then
@@ -149,6 +161,70 @@ update msg model =
             , Cmd.none
             , Navigate (DiaryDay (Just date) (Just month))
             )
+
+
+applyDaySummaryResult :
+    LocalDate
+    -> Result Client.ApiError (List DaySummary)
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+applyDaySummaryResult requestDate result model =
+    if not (dateIsLoaded requestDate model) then
+        ( model, Cmd.none, NoOp )
+
+    else
+        case result of
+            Ok summaries ->
+                ( { model
+                    | summaries = replaceDaySummary requestDate summaries model.summaries
+                  }
+                , Cmd.none
+                , NoOp
+                )
+
+            Err error ->
+                if Client.isUnauthorized error then
+                    ( model, Cmd.none, SessionExpired )
+
+                else
+                    ( model, Cmd.none, NoOp )
+
+
+replaceDaySummary : LocalDate -> List DaySummary -> List DaySummary -> List DaySummary
+replaceDaySummary requestDate incoming existing =
+    let
+        dateKey : String
+        dateKey =
+            LocalDate.format requestDate
+    in
+    mergeSummaries
+        (List.filter (\summary -> summary.date /= dateKey) existing)
+        (List.filter (\summary -> summary.date == dateKey) incoming)
+
+
+dateIsLoaded : LocalDate -> Model -> Bool
+dateIsLoaded date model =
+    let
+        dateKey : String
+        dateKey =
+            LocalDate.format date
+
+        earliest : Maybe String
+        earliest =
+            Calendar.monthStart model.oldestMonth |> Maybe.map LocalDate.format
+
+        latest : Maybe String
+        latest =
+            Calendar.monthEnd model.newestMonth
+                |> Maybe.map (LocalDate.clampTo model.today)
+                |> Maybe.map LocalDate.format
+    in
+    case ( earliest, latest ) of
+        ( Just first, Just last ) ->
+            dateKey >= first && dateKey <= last
+
+        _ ->
+            False
 
 
 applySummaryResult :
@@ -217,17 +293,6 @@ requestForMonths oldest newest today =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
-
-
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView =
-    contentViewWithSelection Nothing
 
 
 contentViewWithSelection :

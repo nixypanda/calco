@@ -1,5 +1,6 @@
 use chrono::{Duration, NaiveDate};
 use rust_decimal::Decimal;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -23,6 +24,13 @@ pub struct FoodLogHistoryService {
     food_log_repo: Arc<dyn FoodLogRepository>,
 }
 
+#[derive(Debug, Clone)]
+pub struct LatestSlotLogs {
+    pub meal_slot: MealSlot,
+    pub source_date: NaiveDate,
+    pub logs: Vec<FoodLog>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoodLogDaySummary {
     pub log_date: NaiveDate,
@@ -37,13 +45,12 @@ impl FoodLogHistoryService {
         Self { food_log_repo }
     }
 
-    pub async fn latest_slot_before(
+    pub async fn latest_slots_before(
         &self,
         user_id: Uuid,
-        meal_slot: MealSlot,
         before_date: NaiveDate,
         lookback_days: i64,
-    ) -> Result<Option<(NaiveDate, Vec<FoodLog>)>, NutritionError> {
+    ) -> Result<Vec<LatestSlotLogs>, NutritionError> {
         if !(1..=90).contains(&lookback_days) {
             return Err(NutritionError::Validation(
                 "lookback_days must be between 1 and 90".into(),
@@ -54,24 +61,17 @@ impl FoodLogHistoryService {
             before_date - Duration::days(lookback_days),
             before_date,
         )?;
-        let mut logs = self
+        let logs = self
             .food_log_repo
             .list_by_filter(FoodLogListFilter {
                 user_id,
                 date_range,
-                meal_slot: Some(meal_slot),
+                meal_slot: None,
                 items: Vec::new(),
             })
             .await?;
 
-        let source_date = match logs.iter().map(|log| log.log_date).max() {
-            Some(date) => date,
-            None => return Ok(None),
-        };
-
-        logs.retain(|log| log.log_date == source_date);
-        logs.sort_by_key(|log| std::cmp::Reverse(log.created_at));
-        Ok(Some((source_date, logs)))
+        Ok(latest_slots_from_logs(logs))
     }
 
     pub async fn list_recent_items(
@@ -143,6 +143,46 @@ impl FoodLogHistoryService {
 
         Ok(recent_items_from_logs(logs, to_date))
     }
+}
+
+/// Slots the user never logged inside the window are absent from the result;
+/// callers must not read an empty slot as "logged nothing that day".
+fn latest_slots_from_logs(logs: Vec<FoodLog>) -> Vec<LatestSlotLogs> {
+    let mut by_slot = BTreeMap::<MealSlot, LatestSlotLogs>::new();
+
+    for log in logs {
+        let Some(meal_slot) = log.meal_slot else {
+            continue;
+        };
+
+        match by_slot.get_mut(&meal_slot) {
+            None => {
+                by_slot.insert(
+                    meal_slot,
+                    LatestSlotLogs {
+                        meal_slot,
+                        source_date: log.log_date,
+                        logs: vec![log],
+                    },
+                );
+            }
+            Some(slot) => match log.log_date.cmp(&slot.source_date) {
+                Ordering::Greater => {
+                    slot.source_date = log.log_date;
+                    slot.logs = vec![log];
+                }
+                Ordering::Equal => slot.logs.push(log),
+                Ordering::Less => {}
+            },
+        }
+    }
+
+    for slot in by_slot.values_mut() {
+        slot.logs
+            .sort_by_key(|log| std::cmp::Reverse(log.created_at));
+    }
+
+    by_slot.into_values().collect()
 }
 
 fn summarize_logs_by_date(logs: Vec<FoodLog>) -> Vec<FoodLogDaySummary> {
@@ -310,34 +350,7 @@ mod tests {
     use uuid::Uuid;
 
     #[tokio::test]
-    async fn find_latest_slot_before_skips_empty_days_and_returns_whole_slot() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 150).await;
-        log_test_product(&services, user_id, friday, MealSlot::Lunch, 200).await;
-
-        let latest = history_services
-            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
-            .await
-            .unwrap()
-            .expect("expected latest breakfast slot");
-
-        assert_eq!(latest.0, friday);
-        assert_eq!(latest.1.len(), 2);
-        assert!(
-            latest
-                .1
-                .iter()
-                .all(|log| log.meal_slot == Some(MealSlot::Breakfast))
-        );
-    }
-
-    #[tokio::test]
-    async fn find_latest_slot_before_prefers_most_recent_prior_date() {
+    async fn latest_slots_before_resolves_every_slot_in_one_call() {
         let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
@@ -345,47 +358,92 @@ mod tests {
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
 
         log_test_product(&services, user_id, friday, MealSlot::Breakfast, 100).await;
-        log_test_product(&services, user_id, sunday, MealSlot::Breakfast, 125).await;
-        log_test_product(&services, user_id, monday, MealSlot::Breakfast, 150).await;
+        log_test_product(&services, user_id, friday, MealSlot::Breakfast, 150).await;
+        log_test_product(&services, user_id, friday, MealSlot::Lunch, 200).await;
+        log_test_product(&services, user_id, sunday, MealSlot::Lunch, 250).await;
 
-        let latest = history_services
-            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+        let slots = history_services
+            .latest_slots_before(user_id, monday, 30)
             .await
-            .unwrap()
-            .expect("expected latest breakfast slot");
+            .unwrap();
 
-        assert_eq!(latest.0, sunday);
-        assert_eq!(latest.1.len(), 1);
-        assert_eq!(latest.1[0].quantity_amount, Decimal::new(125, 0));
+        assert_eq!(
+            slots
+                .iter()
+                .map(|slot| (slot.meal_slot, slot.source_date, slot.logs.len()))
+                .collect::<Vec<_>>(),
+            vec![
+                (MealSlot::Breakfast, friday, 2),
+                (MealSlot::Lunch, sunday, 1),
+            ]
+        );
+        assert_eq!(slots[1].logs[0].quantity_amount, Decimal::new(250, 0));
     }
 
     #[tokio::test]
-    async fn find_latest_slot_before_respects_lookback_and_user() {
+    async fn latest_slots_before_ignores_the_before_date_itself() {
         let (services, history_services) = make_services_and_history(Some(sample_product()));
         let user_id = Uuid::new_v4();
-        let other_user_id = Uuid::new_v4();
+        let sunday = NaiveDate::from_ymd_opt(2026, 6, 21).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, user_id, sunday, MealSlot::Breakfast, 125).await;
+        log_test_product(&services, user_id, monday, MealSlot::Breakfast, 150).await;
+
+        let slots = history_services
+            .latest_slots_before(user_id, monday, 30)
+            .await
+            .unwrap();
+
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].source_date, sunday);
+        assert_eq!(slots[0].logs[0].quantity_amount, Decimal::new(125, 0));
+    }
+
+    #[tokio::test]
+    async fn latest_slots_before_omits_slots_outside_the_lookback_window() {
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
+        let user_id = Uuid::new_v4();
         let old_date = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
         let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
         let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
 
         log_test_product(&services, user_id, old_date, MealSlot::Breakfast, 100).await;
-        log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 150).await;
+        log_test_product(&services, user_id, friday, MealSlot::Dinner, 150).await;
 
-        let latest = history_services
-            .latest_slot_before(user_id, MealSlot::Breakfast, monday, 30)
+        let slots = history_services
+            .latest_slots_before(user_id, monday, 7)
             .await
             .unwrap();
 
-        assert!(latest.is_none());
+        assert_eq!(slots.len(), 1);
+        assert_eq!(slots[0].meal_slot, MealSlot::Dinner);
+    }
+
+    #[tokio::test]
+    async fn latest_slots_before_only_sees_the_requested_user() {
+        let (services, history_services) = make_services_and_history(Some(sample_product()));
+        let user_id = Uuid::new_v4();
+        let other_user_id = Uuid::new_v4();
+        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
+        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
+
+        log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 150).await;
+
+        let slots = history_services
+            .latest_slots_before(user_id, monday, 30)
+            .await
+            .unwrap();
+
+        assert!(slots.is_empty());
     }
 
     #[tokio::test]
     async fn history_rejects_invalid_lookback_days() {
         let history_services = empty_history_services();
         let result = history_services
-            .latest_slot_before(
+            .latest_slots_before(
                 Uuid::new_v4(),
-                MealSlot::Breakfast,
                 NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
                 0,
             )
