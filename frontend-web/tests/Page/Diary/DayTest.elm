@@ -41,7 +41,7 @@ tests =
                         |> Expect.equal today
             ]
         , describe "date navigation"
-            [ test "previous day decrements selected date" <|
+            [ test "previous day navigation leaves current state intact" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
@@ -51,10 +51,10 @@ tests =
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
-                            ( "2026-05-29"
+                            ( "2026-05-30"
                             , DiaryDay.Navigate (DiaryDay (Just "2026-05-29") Nothing)
                             )
-            , test "next day increments selected date" <|
+            , test "next day navigation leaves current state intact" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
@@ -62,7 +62,7 @@ tests =
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
-                            ( "2026-05-30"
+                            ( "2026-05-29"
                             , DiaryDay.Navigate (DiaryDay (Just "2026-05-30") Nothing)
                             )
             , test "next day does nothing when selected date is today" <|
@@ -85,18 +85,7 @@ tests =
                             (DiaryDay.Navigate (NutritionDetails (Just "2026-05-29")))
             ]
         , describe "loading"
-            [ test "load started marks diary data as loading" <|
-                \_ ->
-                    DiaryDay.update
-                        DiaryDay.LoadStarted
-                        { emptyModel | diary = DiaryDay.Failed today "old" }
-                        |> first
-                        |> .diary
-                        |> Expect.equal
-                            (DiaryDay.Loading
-                                { date = today, logs = Nothing, goal = Nothing }
-                            )
-            , test "diary stays loading until goals also load" <|
+            [ test "diary stays loading until goals also load" <|
                 \_ ->
                     let
                         ( model, _, outMsg ) =
@@ -222,33 +211,6 @@ tests =
                                 , logs = Just [ lunchLog ]
                                 , goal = Nothing
                                 }
-                            )
-            , test "load started for same loading date is no-op" <|
-                \_ ->
-                    DiaryDay.update DiaryDay.LoadStarted emptyModel
-                        |> third
-                        |> Expect.equal DiaryDay.NoOp
-            , test "load started for changed date resets diary and latest slots" <|
-                \_ ->
-                    DiaryDay.update
-                        DiaryDay.LoadStarted
-                        { emptyModel
-                            | currentDate = yesterday
-                            , diary =
-                                DiaryDay.Loading
-                                    { date = today
-                                    , logs = Nothing
-                                    , goal = Nothing
-                                    }
-                            , copyState = DiaryDay.CopyFailed "old"
-                        }
-                        |> first
-                        |> (\model -> ( model.diary, model.latestSlots, model.copyState ))
-                        |> Expect.equal
-                            ( DiaryDay.Loading
-                                { date = yesterday, logs = Nothing, goal = Nothing }
-                            , DiaryDay.LatestSlotsLoading
-                            , DiaryDay.CopyIdle
                             )
             , test "latest slots success replaces loading state with every source" <|
                 \_ ->
@@ -388,7 +350,7 @@ tests =
                             , latestSlots =
                                 DiaryDay.LatestSlotsLoaded today [ lunchSource ]
                             , copyState = DiaryDay.CopyIdle
-                            , outMsg = DiaryDay.NoOp
+                            , outMsg = DiaryDay.LogsCopied today DiaryDay.DiaryUpdated
                             }
             , test "copy success preserves partial load and does not reload" <|
                 \_ ->
@@ -421,7 +383,7 @@ tests =
                                 , goal = Nothing
                                 }
                             , DiaryDay.CopyIdle
-                            , DiaryDay.NoOp
+                            , DiaryDay.LogsCopied today DiaryDay.DiaryUpdated
                             )
             , test "copy success reloads when existing logs are unknown" <|
                 \_ ->
@@ -449,7 +411,8 @@ tests =
                                     { date = today, logs = Nothing, goal = Nothing }
                             , latestSlots = DiaryDay.LatestSlotsLoading
                             , copyState = DiaryDay.CopyIdle
-                            , outMsg = DiaryDay.RequestDiaryData today
+                            , outMsg =
+                                DiaryDay.LogsCopied today DiaryDay.DiaryNeedsReload
                             }
             , test "copy success with stale date is ignored" <|
                 \_ ->

@@ -15,7 +15,6 @@ module Page.FoodLog.Entry exposing
     , modalView
     , nutrientsForDisplay
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -27,7 +26,7 @@ import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Lib.Date as LocalDate
+import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.DesignTokens as DesignTokens
@@ -132,7 +131,8 @@ type OutMsg
     | RequestMealName String
     | RequestUpdateLog String UpdateLogRequest
     | RequestDeleteLog String
-    | Navigate Route
+    | LogUpdated LocalDate
+    | LogDeleted LocalDate Route
     | SessionExpired
 
 
@@ -187,7 +187,7 @@ update msg model =
         UpdateCompleted result ->
             case result of
                 Ok log ->
-                    ( updateLoadedLog log model, Cmd.none, NoOp )
+                    ( updateLoadedLog log model, Cmd.none, LogUpdated log.logDate )
 
                 Err error ->
                     Client.failure
@@ -256,7 +256,10 @@ update msg model =
                     if loaded.delete == Deleting then
                         case result of
                             Ok _ ->
-                                ( model, Cmd.none, Navigate (DiaryDay Nothing Nothing) )
+                                ( model
+                                , Cmd.none
+                                , LogDeleted loaded.log.logDate (DiaryDay Nothing Nothing)
+                                )
 
                             Err error ->
                                 Client.failure
@@ -583,12 +586,6 @@ modelLogId model =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

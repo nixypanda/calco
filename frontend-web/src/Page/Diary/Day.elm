@@ -1,5 +1,6 @@
 module Page.Diary.Day exposing
-    ( CopyState(..)
+    ( CopyRefresh(..)
+    , CopyState(..)
     , DiaryState(..)
     , LatestSlotSource
     , LatestSlotsState(..)
@@ -13,7 +14,6 @@ module Page.Diary.Day exposing
     , init
     , slotCalories
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -138,8 +138,7 @@ init args =
 
 
 type Msg
-    = LoadStarted
-    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    = LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
     | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
     | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
@@ -158,39 +157,19 @@ type OutMsg
     = NoOp
     | RequestDiaryData LocalDate
     | RequestCopyLatestSlot LocalDate (List CreateLogRequest)
+    | LogsCopied LocalDate CopyRefresh
     | Navigate Route
     | SessionExpired
+
+
+type CopyRefresh
+    = DiaryUpdated
+    | DiaryNeedsReload
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        LoadStarted ->
-            case model.diary of
-                Loading loading ->
-                    if LocalDate.equals loading.date model.currentDate then
-                        ( model, Cmd.none, NoOp )
-
-                    else
-                        ( { model
-                            | diary = loadingState model.currentDate
-                            , latestSlots = LatestSlotsLoading
-                            , copyState = CopyIdle
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
-
-                _ ->
-                    ( { model
-                        | diary = loadingState model.currentDate
-                        , latestSlots = LatestSlotsLoading
-                        , copyState = CopyIdle
-                      }
-                    , Cmd.none
-                    , NoOp
-                    )
-
         LogsLoaded requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
                 ( model, Cmd.none, NoOp )
@@ -283,7 +262,7 @@ update msg model =
                                             model.latestSlots
                                   }
                                 , Cmd.none
-                                , NoOp
+                                , LogsCopied requestDate DiaryUpdated
                                 )
 
                             Nothing ->
@@ -293,7 +272,7 @@ update msg model =
                                     , latestSlots = LatestSlotsLoading
                                   }
                                 , Cmd.none
-                                , RequestDiaryData requestDate
+                                , LogsCopied requestDate DiaryNeedsReload
                                 )
 
                     Err error ->
@@ -314,12 +293,7 @@ update msg model =
                 previous =
                     LocalDate.addDays -1 model.currentDate
             in
-            ( { model
-                | currentDate = previous
-                , diary = loadingState previous
-                , latestSlots = LatestSlotsLoading
-                , copyState = CopyIdle
-              }
+            ( model
             , Cmd.none
             , Navigate
                 (DiaryDay
@@ -331,12 +305,7 @@ update msg model =
         NextDayClicked ->
             case LocalDate.nextOnOrBefore model.today model.currentDate of
                 Just next ->
-                    ( { model
-                        | currentDate = next
-                        , diary = loadingState next
-                        , latestSlots = LatestSlotsLoading
-                        , copyState = CopyIdle
-                      }
+                    ( model
                     , Cmd.none
                     , Navigate
                         (DiaryDay
@@ -585,12 +554,6 @@ slotCalories slot logs =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

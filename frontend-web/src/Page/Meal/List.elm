@@ -6,7 +6,6 @@ module Page.Meal.List exposing
     , init
     , mealSummaryText
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -85,12 +84,6 @@ failure =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

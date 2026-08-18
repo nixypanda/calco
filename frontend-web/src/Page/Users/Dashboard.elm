@@ -5,7 +5,6 @@ module Page.Users.Dashboard exposing
     , contentView
     , init
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -75,12 +74,6 @@ update msg model =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg

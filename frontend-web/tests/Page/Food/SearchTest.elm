@@ -28,6 +28,34 @@ tests =
                     |> first
                     |> (\model -> ( model.search.query, model.results ))
                     |> Expect.equal ( "   ", NotAsked )
+        , test "retarget preserves the query while changing logging context" <|
+            \_ ->
+                FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                    |> (\model ->
+                            { model
+                                | search = Search.withQuery "apple" model.search
+                            }
+                       )
+                    |> FoodSearch.retarget (Just "2026-06-01") (Just Dinner)
+                    |> (\( model, changed ) ->
+                            { query = model.search.query
+                            , date = model.date
+                            , mealSlot = model.mealSlot
+                            , changed = changed
+                            }
+                       )
+                    |> Expect.equal
+                        { query = "apple"
+                        , date = Just "2026-06-01"
+                        , mealSlot = Just Dinner
+                        , changed = True
+                        }
+        , test "retarget is inert when the logging context is unchanged" <|
+            \_ ->
+                FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                    |> FoodSearch.retarget (Just "2026-06-01") (Just Lunch)
+                    |> Tuple.second
+                    |> Expect.equal False
         , test "tab completion expands include category operator" <|
             \_ ->
                 FoodSearch.update
@@ -523,7 +551,11 @@ tests =
         , test "recent items load success stores items" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentItemsLoaded (Ok { items = [ recentProduct ] }))
+                    (FoodSearch.RecentItemsLoaded
+                        Nothing
+                        Nothing
+                        (Ok { items = [ recentProduct ] })
+                    )
                     emptyModel
                     |> first
                     |> .recentItems
@@ -531,7 +563,7 @@ tests =
         , test "recent items failure stores error" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.RecentItemsLoaded (Err Client.NetworkError))
+                    (FoodSearch.RecentItemsLoaded Nothing Nothing (Err Client.NetworkError))
                     emptyModel
                     |> first
                     |> .recentItems
@@ -540,11 +572,28 @@ tests =
             \_ ->
                 FoodSearch.update
                     (FoodSearch.RecentItemsLoaded
+                        Nothing
+                        Nothing
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     emptyModel
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
+        , test "recent items ignore a response for an old logging context" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentItemsLoaded
+                        (Just "2026-05-29")
+                        (Just Lunch)
+                        (Ok { items = [ recentProduct ] })
+                    )
+                    { emptyModel
+                        | date = Just "2026-05-29"
+                        , mealSlot = Just Dinner
+                    }
+                    |> first
+                    |> .recentItems
+                    |> Expect.equal emptyModel.recentItems
         , test "recent product click navigates to food detail with context" <|
             \_ ->
                 FoodSearch.update
@@ -691,6 +740,20 @@ tests =
                     |> (\model -> ( model.addedToken, model.addedItems ))
                     |> Expect.equal
                         ( 1, [ { key = "product:food-1:2 serving", token = 1 } ] )
+        , test "quick add success reports the created log" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+                    emptyModel
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.LocalContextReceived
+                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        )
+                    |> first
+                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> third
+                    |> Expect.equal (FoodSearch.LogCreated productLog)
         , test "quick add success replaces previous added token for same item" <|
             \_ ->
                 FoodSearch.update

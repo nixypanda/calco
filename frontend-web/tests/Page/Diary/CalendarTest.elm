@@ -1,5 +1,6 @@
 module Page.Diary.CalendarTest exposing (tests)
 
+import Data.LogSummary exposing (DaySummary)
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
@@ -68,6 +69,47 @@ tests =
                             (date "2025-08-01")
                             (date "2026-01-31")
                         )
+        , test "refreshing a loaded day requests only that summary" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.RefreshDay (date "2026-07-20"))
+                    (calendarModel [])
+                    |> third
+                    |> Expect.equal
+                        (CalendarPage.RequestDaySummary (date "2026-07-20"))
+        , test "refreshing a day outside the loaded range is ignored" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.RefreshDay (date "2025-12-31"))
+                    (calendarModel [])
+                    |> third
+                    |> Expect.equal CalendarPage.NoOp
+        , test "an empty day refresh removes the stale summary" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.DaySummaryRefreshed
+                        (date "2026-07-20")
+                        (Ok [])
+                    )
+                    (calendarModel
+                        [ { date = "2026-07-20"
+                          , energyKcal = 500
+                          , proteinG = 20
+                          , carbsG = 30
+                          , fatG = 10
+                          }
+                        , { date = "2026-07-21"
+                          , energyKcal = 600
+                          , proteinG = 25
+                          , carbsG = 35
+                          , fatG = 12
+                          }
+                        ]
+                    )
+                    |> first
+                    |> .summaries
+                    |> List.map .date
+                    |> Expect.equal [ "2026-07-21" ]
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842
@@ -75,6 +117,13 @@ tests =
                 )
                     |> Expect.equal ( "842", "1.3k" )
         ]
+
+
+calendarModel : List DaySummary -> CalendarPage.Model
+calendarModel summaries =
+    CalendarPage.init { monthParam = Nothing, today = today }
+        |> Tuple.first
+        |> (\model -> { model | summaries = summaries, status = CalendarPage.Ready })
 
 
 today : LocalDate
@@ -99,4 +148,9 @@ date raw =
 
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
+    value
+
+
+first : ( a, b, c ) -> a
+first ( value, _, _ ) =
     value

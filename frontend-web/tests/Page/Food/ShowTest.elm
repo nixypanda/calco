@@ -229,12 +229,12 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
-        , test "log success returns to contextual search" <|
+        , test "log success reports the created log and contextual search" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
                     |> third
                     |> Expect.equal
-                        (FoodShow.Navigate
+                        (FoodShow.LogCreated log
                             (FoodSearch (Just "2026-05-29") (Just Lunch))
                         )
         , test "log failure keeps form state and stores error" <|

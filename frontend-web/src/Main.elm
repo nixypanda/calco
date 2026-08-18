@@ -98,7 +98,7 @@ init flags url key =
                 , status = Nothing
                 }
       , today = Nothing
-      , page = Page.LoadingPage
+      , page = Page.loading
       , chrome = Chrome.init
       , device =
             Element.classifyDevice

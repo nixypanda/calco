@@ -77,6 +77,18 @@ serialization. Query-param-backed navigation state belongs here.
 `Page.*` modules own page-local TEA, page-local loading/submitting/deleting
 state, and page-specific composition of shared UI and API calls.
 
+Top-level `Page.Model` owns an ordered stack of independently keyed panes.
+Route changes reconcile the desired stack by key: unchanged panes keep their
+local state and issue no initialization request, new identities initialize once,
+and panes absent from the destination are dropped. A pane key includes the
+entity or date context whenever reusing state across those values would be
+incorrect. A small context-selection layer preserves lineage-dependent
+workspaces, such as opening a food from search, because that lineage is not
+encoded in `Data.Route`.
+
+Successful food-log mutations explicitly invalidate matching diary and calendar
+panes. Do not rely on navigation to reinitialize a pane as a refresh mechanism.
+
 `Api.*` modules own request construction, response decoding, and transport
 errors. They do not own business interpretation beyond transport concerns.
 
@@ -174,8 +186,9 @@ subscriptions model =
 
 Rules:
 
-- Each page should expose and own `Model`, `Msg`, `init`, `update`, and
-  `view`.
+- Each page should own `Model`, `Msg`, `init`, `update`, and its view logic.
+  Pane modules expose `contentView` when the top-level workspace owns the page
+  container; standalone-only modules expose `view`.
 - Add `OutMsg` when the page must signal app-level effects such as navigation,
   session expiration, or startup orchestration.
 - Add `subscriptions` only when the page owns actual subscriptions.

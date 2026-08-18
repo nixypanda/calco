@@ -5,13 +5,14 @@ module Page.Food.Search exposing
     , OutMsg(..)
     , QuickAddButtonState(..)
     , QuickAddState
+    , RecentItemsResult
     , SearchScope(..)
     , contentView
     , init
     , quickAddChipPressable
     , quickAddChipState
+    , retarget
     , update
-    , view
     )
 
 import Api.Client as Client
@@ -124,6 +125,29 @@ init date mealSlot =
     }
 
 
+retarget : Maybe String -> Maybe MealSlot -> Model -> ( Model, Bool )
+retarget date mealSlot model =
+    if model.date == date && model.mealSlot == mealSlot then
+        ( model, False )
+
+    else
+        ( { model
+            | date = date
+            , mealSlot = mealSlot
+            , recentItems =
+                case date |> Maybe.andThen LocalDate.fromString of
+                    Just _ ->
+                        Loading
+
+                    Nothing ->
+                        NotAsked
+            , quickAdd = QuickAddIdle
+            , addedItems = []
+          }
+        , True
+        )
+
+
 
 -- UPDATE
 
@@ -143,7 +167,7 @@ type Msg
     | DebounceElapsed Int String
     | CategoryDebounceElapsed Int String
     | SearchCompleted Int (Result Client.ApiError Foods.SearchResponse)
-    | RecentItemsLoaded (Result Client.ApiError Logs.RecentItemsResponse)
+    | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived { date : String, timezone : String }
@@ -151,6 +175,10 @@ type Msg
     | ClearRecentAdded String Int
     | ResultClicked String
     | CreateCustomFoodClicked
+
+
+type alias RecentItemsResult =
+    Result Client.ApiError Logs.RecentItemsResponse
 
 
 type OutMsg
@@ -163,6 +191,7 @@ type OutMsg
     | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
     | RequestLocalContext
     | RequestCreateLog Logs.CreateLogRequest
+    | LogCreated FoodLog
     | Navigate Route
     | SessionExpired
 
@@ -468,17 +497,24 @@ update msg model =
                         else
                             ( { model | results = Failure error }, Cmd.none, NoOp )
 
-        RecentItemsLoaded result ->
-            case result of
-                Ok response ->
-                    ( { model | recentItems = Success response.items }, Cmd.none, NoOp )
+        RecentItemsLoaded date mealSlot result ->
+            if model.date /= date || model.mealSlot /= mealSlot then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( { model | recentItems = Failure error }, Cmd.none, SessionExpired )
+            else
+                case result of
+                    Ok response ->
+                        ( { model | recentItems = Success response.items }, Cmd.none, NoOp )
 
-                    else
-                        ( { model | recentItems = Failure error }, Cmd.none, NoOp )
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( { model | recentItems = Failure error }
+                            , Cmd.none
+                            , SessionExpired
+                            )
+
+                        else
+                            ( { model | recentItems = Failure error }, Cmd.none, NoOp )
 
         RecentQuickAddClicked item quantity ->
             if canStartQuickAdd model.quickAdd then
@@ -526,7 +562,7 @@ update msg model =
 
         QuickAddCompleted result ->
             case result of
-                Ok _ ->
+                Ok log ->
                     let
                         key : Maybe String
                         key =
@@ -557,7 +593,7 @@ update msg model =
 
                         Nothing ->
                             Cmd.none
-                    , NoOp
+                    , LogCreated log
                     )
 
                 Err error ->
@@ -741,12 +777,6 @@ clearRecentAddedAfter key token =
 
 
 -- VIEW
-
-
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
-    Ui.pageContainer device
-        [ contentView { model = model, device = device, theme = theme } ]
 
 
 contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
