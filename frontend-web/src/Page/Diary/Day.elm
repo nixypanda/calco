@@ -11,6 +11,7 @@ module Page.Diary.Day exposing
     , Msg(..)
     , OutMsg(..)
     , contentView
+    , currentLogs
     , init
     , slotCalories
     , update
@@ -131,6 +132,22 @@ init args =
       }
     , RequestDiaryData
     )
+
+
+{-| A pane part-way through a reload still holds the logs it was showing
+before, which is why this is not simply the `Loaded` case.
+-}
+currentLogs : Model -> Maybe (List FoodLog)
+currentLogs model =
+    case model.diary of
+        Loaded loaded ->
+            Just loaded.logs
+
+        Loading loading ->
+            loading.logs
+
+        Failed _ _ ->
+            Nothing
 
 
 

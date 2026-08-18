@@ -80,11 +80,22 @@ state, and page-specific composition of shared UI and API calls.
 
 `Store.elm` owns session-scoped server data and date-keyed diary data. It lives
 at the top level because cached failures use `Api.Client.ApiError`; putting that
-dependency under `Data` would reverse the allowed dependency direction. Page
-orchestration requests only `NotAsked` entries, hydrates new panes from cached
-results, and explicitly invalidates affected entries after mutations. Session
-generation and per-date request identifiers prevent responses from an earlier
-session or superseded request from repopulating the cache.
+dependency under `Data` would reverse the allowed dependency direction. The store
+is opaque: callers name a resource through `Store.Access` and reach it only via
+`request`, `settle`, `cached`, `seed` and `invalidate`, so which field or
+dictionary key backs a resource stays inside the module.
+
+`request` issues at most one in-flight request per resource and hands back an
+opaque `RequestToken`; recording a result requires redeeming that token through
+`settle`, which rejects a response from an earlier session, one whose request a
+mutation has since invalidated, and a duplicate of one already settled. Because
+the only way to write is to redeem, the staleness check cannot be omitted at a
+call site.
+
+`Page` orchestration describes each cached resource once — where it lives, how to
+fetch it, and which panes it feeds — and drives every one of them through the
+same generic ensure/settle/hydrate path. Newly initialized panes are hydrated
+from whatever is already cached; panes the reconcile reused are left alone.
 
 Top-level `Page.Model` owns an ordered stack of independently keyed panes.
 Route changes reconcile the desired stack by key: unchanged panes keep their
