@@ -141,6 +141,7 @@ reconcileTests =
                     |> Expect.equal
                         { panes = [ "kept" ]
                         , effects = []
+                        , initializedKeys = []
                         }
         , test "changed key initializes the desired pane" <|
             \_ ->
@@ -152,6 +153,7 @@ reconcileTests =
                     |> Expect.equal
                         { panes = [ "new pane" ]
                         , effects = [ "initialized new" ]
+                        , initializedKeys = [ "new" ]
                         }
         , test "panes absent from the desired list are dropped" <|
             \_ ->
@@ -175,6 +177,7 @@ reconcileTests =
                     |> Expect.equal
                         { panes = [ "first", "third", "second" ]
                         , effects = [ "initialized third" ]
+                        , initializedKeys = [ "third" ]
                         }
         ]
 

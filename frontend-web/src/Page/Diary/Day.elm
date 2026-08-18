@@ -129,7 +129,7 @@ init args =
       , macroMode = Grams
       , preferences = Nothing
       }
-    , RequestDiaryData currentDate
+    , RequestDiaryData
     )
 
 
@@ -155,7 +155,7 @@ type Msg
 
 type OutMsg
     = NoOp
-    | RequestDiaryData LocalDate
+    | RequestDiaryData
     | RequestCopyLatestSlot LocalDate (List CreateLogRequest)
     | LogsCopied LocalDate CopyRefresh
     | Navigate Route

@@ -50,15 +50,15 @@ type SaveState
 
 type OutMsg
     = NoOp
-    | RequestGoal LocalDate
+    | RequestGoal
     | RequestLocalContext
     | RequestSaveGoal SaveGoalRequest
     | SessionExpired
 
 
 init : LocalDate -> ( Model, OutMsg )
-init today =
-    ( Loading, RequestGoal today )
+init _ =
+    ( Loading, RequestGoal )
 
 
 

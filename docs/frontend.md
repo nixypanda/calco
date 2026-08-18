@@ -39,7 +39,8 @@ The frontend follows a strict ownership model:
 ```text
 Main -> Access / Chrome / Data.Route / Page
 Chrome -> View.Chrome / Data / Ui
-Page -> Data / Api / Ui / View / Lib
+Page -> Store / Data / Api / Ui / View / Lib
+Store -> Api.Client / Data / Lib
 View -> Ui / Data / Lib
 Api -> Api.Client / Data decoders / Lib.Json
 Data -> other Data / Lib
@@ -77,6 +78,14 @@ serialization. Query-param-backed navigation state belongs here.
 `Page.*` modules own page-local TEA, page-local loading/submitting/deleting
 state, and page-specific composition of shared UI and API calls.
 
+`Store.elm` owns session-scoped server data and date-keyed diary data. It lives
+at the top level because cached failures use `Api.Client.ApiError`; putting that
+dependency under `Data` would reverse the allowed dependency direction. Page
+orchestration requests only `NotAsked` entries, hydrates new panes from cached
+results, and explicitly invalidates affected entries after mutations. Session
+generation and per-date request identifiers prevent responses from an earlier
+session or superseded request from repopulating the cache.
+
 Top-level `Page.Model` owns an ordered stack of independently keyed panes.
 Route changes reconcile the desired stack by key: unchanged panes keep their
 local state and issue no initialization request, new identities initialize once,
@@ -87,7 +96,9 @@ workspaces, such as opening a food from search, because that lineage is not
 encoded in `Data.Route`.
 
 Successful food-log mutations explicitly invalidate matching diary and calendar
-panes. Do not rely on navigation to reinitialize a pane as a refresh mechanism.
+panes, plus cached latest-slot suggestions whose lookback window may include the
+changed date. Do not rely on navigation to reinitialize a pane as a refresh
+mechanism.
 
 `Api.*` modules own request construction, response decoding, and transport
 errors. They do not own business interpretation beyond transport concerns.

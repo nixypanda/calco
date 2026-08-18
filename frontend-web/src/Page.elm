@@ -1,10 +1,15 @@
 module Page exposing
-    ( InitContext
+    ( DiaryGoalResult
+    , DiaryLogsResult
+    , InitContext
+    , LatestSlotsResult
     , Model
     , Msg(..)
     , OutMsg(..)
     , Pane(..)
+    , PreferencesResult
     , barcodeScannerEventReceived
+    , clearStore
     , init
     , initPreserving
     , isLoading
@@ -19,6 +24,7 @@ module Page exposing
 
 import Api.Admin
 import Api.Auth
+import Api.Client
 import Api.DiaryPreferences
 import Api.Foods
 import Api.Goals
@@ -26,12 +32,17 @@ import Api.Logs
 import Api.Meals
 import Api.NutritionDetails
 import Data.Auth as Auth
+import Data.DiaryPreferences
+import Data.FoodLog
+import Data.Goals
 import Data.ItemRef as ItemRef
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
+import Dict exposing (Dict)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Loadable exposing (Loadable(..))
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
@@ -54,6 +65,7 @@ import Page.Users.CreateUser as AdminCreateUser
 import Page.Users.Dashboard as AdminDashboard
 import Page.Users.EditUser as AdminEditUser
 import Page.Users.Login as AuthLogin
+import Store exposing (Store)
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
@@ -67,6 +79,7 @@ import Ui.Workspace as Workspace
 type alias Model =
     { panes : List Pane
     , waitingForToday : Bool
+    , store : Store
     }
 
 
@@ -102,6 +115,7 @@ type DesiredPane
 type alias ReconcileResult pane effect =
     { panes : List pane
     , effects : List effect
+    , initializedKeys : List String
     }
 
 
@@ -129,7 +143,15 @@ isLoading model =
 
 loading : Model
 loading =
-    { panes = [], waitingForToday = True }
+    { panes = [], waitingForToday = True, store = Store.empty }
+
+
+clearStore : Model -> Model
+clearStore model =
+    { panes = []
+    , waitingForToday = True
+    , store = Store.reset model.store
+    }
 
 
 paneKeys : Model -> List String
@@ -209,17 +231,25 @@ paneKey pane =
 
 init : InitContext -> ( Model, Cmd Msg, OutMsg )
 init context =
-    initPreserving context { panes = [], waitingForToday = False }
+    initPreserving context
+        { panes = []
+        , waitingForToday = False
+        , store = Store.empty
+        }
 
 
 initPreserving : InitContext -> Model -> ( Model, Cmd Msg, OutMsg )
 initPreserving context current =
     case panesForRoute context current.panes of
         Nothing ->
-            ( { panes = [], waitingForToday = True }, Cmd.none, NoOutMsg )
+            ( { current | panes = [], waitingForToday = True }
+            , Cmd.none
+            , NoOutMsg
+            )
 
         Just desiredPanes ->
             finishReconcile context
+                current.store
                 (reconcile paneKey desiredPaneKey initDesiredPane current.panes desiredPanes)
 
 
@@ -245,14 +275,18 @@ reconcile existingKey desiredKey initialize existing desired =
                     in
                     { panes = pane :: result.panes
                     , effects = effect :: result.effects
+                    , initializedKeys = desiredKey desiredPane :: result.initializedKeys
                     }
 
         reversed : ReconcileResult pane effect
         reversed =
-            List.foldl step { panes = [], effects = [] } desired
+            List.foldl step
+                { panes = [], effects = [], initializedKeys = [] }
+                desired
     in
     { panes = List.reverse reversed.panes
     , effects = List.reverse reversed.effects
+    , initializedKeys = List.reverse reversed.initializedKeys
     }
 
 
@@ -272,20 +306,442 @@ initDesiredPane (DesiredPane _ initialize) =
 
 finishReconcile :
     InitContext
+    -> Store
     -> ReconcileResult Pane ( Cmd Msg, OutMsg )
     -> ( Model, Cmd Msg, OutMsg )
-finishReconcile context result =
+finishReconcile context store result =
     let
-        ( panes, retargetCmd ) =
+        ( retargetedPanes, retargetCmd ) =
             retargetSearchForRoute context.route result.panes
+
+        hydratedPanes : List Pane
+        hydratedPanes =
+            retargetedPanes
+                |> hydrateSharedPanes store result.initializedKeys
+                |> hydrateDatePanes store result.initializedKeys
+
+        ( nextStore, sharedCmd ) =
+            ensureSharedData hydratedPanes store
+
+        ( finalStore, dateCmd ) =
+            ensureDateData hydratedPanes nextStore
     in
-    ( { panes = panes, waitingForToday = False }
+    ( { panes = hydratedPanes, waitingForToday = False, store = finalStore }
     , Cmd.batch
         [ result.effects |> List.map Tuple.first |> Cmd.batch
         , retargetCmd
+        , sharedCmd
+        , dateCmd
         ]
     , result.effects |> List.map Tuple.second |> List.foldl preferOutMsg NoOutMsg
     )
+
+
+hydrateSharedPanes : Store -> List String -> List Pane -> List Pane
+hydrateSharedPanes store initializedKeys panes =
+    List.map
+        (\pane ->
+            if List.member (paneKey pane) initializedKeys then
+                hydrateSharedPane store pane
+
+            else
+                pane
+        )
+        panes
+
+
+hydrateDatePanes : Store -> List String -> List Pane -> List Pane
+hydrateDatePanes store initializedKeys panes =
+    List.map
+        (\pane ->
+            if List.member (paneKey pane) initializedKeys then
+                hydrateDatePane store pane
+
+            else
+                pane
+        )
+        panes
+
+
+hydrateDatePane : Store -> Pane -> Pane
+hydrateDatePane store pane =
+    case pane of
+        DiaryPane key model ->
+            let
+                date : LocalDate
+                date =
+                    model.currentDate
+            in
+            DiaryPane key
+                (model
+                    |> applyDiaryResult (DiaryDay.LogsLoaded date)
+                        (Dict.get (LocalDate.format date) store.diaryLogs)
+                    |> applyDiaryResult (DiaryDay.GoalLoaded date)
+                        (Dict.get (LocalDate.format date) store.diaryGoals)
+                    |> applyDiaryResult (DiaryDay.LatestSlotsReceived date)
+                        (Dict.get (LocalDate.format date) store.latestSlots)
+                )
+
+        GoalsSettingsPane date model ->
+            GoalsSettingsPane date
+                (applyGoalSettingsResult
+                    (Dict.get date store.diaryGoals)
+                    model
+                )
+
+        _ ->
+            pane
+
+
+applyDiaryResult :
+    (Result error value -> DiaryDay.Msg)
+    -> Maybe (Loadable error value)
+    -> DiaryDay.Model
+    -> DiaryDay.Model
+applyDiaryResult toMsg loadable model =
+    loadable
+        |> Maybe.andThen loadableResult
+        |> Maybe.map (\result -> firstOfThree (DiaryDay.update (toMsg result) model))
+        |> Maybe.withDefault model
+
+
+applyGoalSettingsResult :
+    Maybe (Loadable Api.Client.ApiError Data.Goals.GoalSnapshot)
+    -> GoalsSettings.Model
+    -> GoalsSettings.Model
+applyGoalSettingsResult loadable model =
+    loadable
+        |> Maybe.andThen loadableResult
+        |> Maybe.map
+            (\result -> firstOfThree (GoalsSettings.update (GoalsSettings.GoalLoaded result) model))
+        |> Maybe.withDefault model
+
+
+hydrateSharedPane : Store -> Pane -> Pane
+hydrateSharedPane store pane =
+    pane
+        |> hydrateUnits store.units
+        |> hydrateNutrients store.nutrients
+        |> hydratePreferences store.preferences
+
+
+hydrateUnits : Loadable Api.Client.ApiError Api.Foods.UnitListResponse -> Pane -> Pane
+hydrateUnits units pane =
+    case loadableResult units of
+        Just result ->
+            case pane of
+                FoodDetailPane key model ->
+                    FoodDetailPane key
+                        (firstOfThree
+                            (FoodShow.update (FoodShow.UnitsLoaded result) model)
+                        )
+
+                FoodLogDetailPane key model ->
+                    FoodLogDetailPane key
+                        (firstOfThree (FoodLogEntry.update (FoodLogEntry.UnitsLoaded result) model))
+
+                CustomFoodCreatePane model ->
+                    CustomFoodCreatePane
+                        (firstOfThree
+                            (CustomFoodCreate.update (CustomFoodCreate.UnitsLoaded result) model)
+                        )
+
+                CustomFoodEditPane key model ->
+                    CustomFoodEditPane key
+                        (firstOfThree
+                            (CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded result) model)
+                        )
+
+                CustomFoodShowPane key model ->
+                    CustomFoodShowPane key
+                        (firstOfThree
+                            (CustomFoodShow.update (CustomFoodShow.UnitsLoaded result) model)
+                        )
+
+                MealDetailPane key model ->
+                    MealDetailPane key
+                        (firstOfThree (MealShow.update (MealShow.UnitsLoaded result) model))
+
+                _ ->
+                    pane
+
+        Nothing ->
+            pane
+
+
+hydrateNutrients :
+    Loadable Api.Client.ApiError Api.Foods.NutrientListResponse
+    -> Pane
+    -> Pane
+hydrateNutrients nutrients pane =
+    case loadableResult nutrients of
+        Just result ->
+            case pane of
+                CustomFoodCreatePane model ->
+                    CustomFoodCreatePane
+                        (firstOfThree
+                            (CustomFoodCreate.update
+                                (CustomFoodCreate.NutrientsLoaded result)
+                                model
+                            )
+                        )
+
+                CustomFoodEditPane key model ->
+                    CustomFoodEditPane key
+                        (firstOfThree
+                            (CustomFoodEdit.update
+                                (CustomFoodEdit.NutrientsLoaded result)
+                                model
+                            )
+                        )
+
+                _ ->
+                    pane
+
+        Nothing ->
+            pane
+
+
+hydratePreferences :
+    Loadable Api.Client.ApiError Data.DiaryPreferences.DiaryPreferences
+    -> Pane
+    -> Pane
+hydratePreferences preferences pane =
+    case loadableResult preferences of
+        Just result ->
+            case pane of
+                DiaryPane key model ->
+                    DiaryPane key
+                        (firstOfThree
+                            (DiaryDay.update (DiaryDay.PreferencesLoaded result) model)
+                        )
+
+                DiarySettingsPane model ->
+                    DiarySettingsPane
+                        (firstOfThree
+                            (DiarySettings.update
+                                (DiarySettings.PreferencesLoaded result)
+                                model
+                            )
+                        )
+
+                _ ->
+                    pane
+
+        Nothing ->
+            pane
+
+
+loadableResult : Loadable error value -> Maybe (Result error value)
+loadableResult loadable =
+    case loadable of
+        Success value ->
+            Just (Ok value)
+
+        Failure error ->
+            Just (Err error)
+
+        _ ->
+            Nothing
+
+
+ensureSharedData : List Pane -> Store -> ( Store, Cmd Msg )
+ensureSharedData panes store =
+    if List.any isUserPane panes then
+        let
+            generation : Int
+            generation =
+                store.generation
+
+            ( withUnits, unitsCmd ) =
+                case store.units of
+                    NotAsked ->
+                        ( { store | units = Loading }
+                        , Api.Foods.listUnits (SharedUnitsLoaded generation)
+                        )
+
+                    _ ->
+                        ( store, Cmd.none )
+
+            ( withNutrients, nutrientsCmd ) =
+                case withUnits.nutrients of
+                    NotAsked ->
+                        ( { withUnits | nutrients = Loading }
+                        , Api.Foods.listNutrients (SharedNutrientsLoaded generation)
+                        )
+
+                    _ ->
+                        ( withUnits, Cmd.none )
+
+            ( withPreferences, preferencesCmd ) =
+                case withNutrients.preferences of
+                    NotAsked ->
+                        ( { withNutrients | preferences = Loading }
+                        , Api.DiaryPreferences.get
+                            (SharedPreferencesLoaded generation)
+                        )
+
+                    _ ->
+                        ( withNutrients, Cmd.none )
+        in
+        ( withPreferences
+        , Cmd.batch [ unitsCmd, nutrientsCmd, preferencesCmd ]
+        )
+
+    else
+        ( store, Cmd.none )
+
+
+ensureDateData : List Pane -> Store -> ( Store, Cmd Msg )
+ensureDateData panes store =
+    let
+        ensurePane : Pane -> ( Store, List (Cmd Msg) ) -> ( Store, List (Cmd Msg) )
+        ensurePane pane ( currentStore, cmds ) =
+            case pane of
+                DiaryPane _ diary ->
+                    let
+                        ( logsStore, logsCmd ) =
+                            ensureDiaryLogs diary.currentDate currentStore
+
+                        ( goalStore, goalCmd ) =
+                            ensureDiaryGoal diary.currentDate logsStore
+
+                        ( slotsStore, slotsCmd ) =
+                            ensureLatestSlots diary.currentDate goalStore
+                    in
+                    ( slotsStore, slotsCmd :: goalCmd :: logsCmd :: cmds )
+
+                GoalsSettingsPane rawDate _ ->
+                    case LocalDate.fromString rawDate of
+                        Just date ->
+                            let
+                                ( nextStore, cmd ) =
+                                    ensureDiaryGoal date currentStore
+                            in
+                            ( nextStore, cmd :: cmds )
+
+                        Nothing ->
+                            ( currentStore, cmds )
+
+                _ ->
+                    ( currentStore, cmds )
+
+        ( finalStore, reversedCmds ) =
+            List.foldl ensurePane ( store, [] ) panes
+    in
+    ( finalStore, Cmd.batch (List.reverse reversedCmds) )
+
+
+ensureDiaryLogs : LocalDate -> Store -> ( Store, Cmd Msg )
+ensureDiaryLogs date store =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    case Dict.get key store.diaryLogs |> Maybe.withDefault NotAsked of
+        NotAsked ->
+            let
+                requestId : Int
+                requestId =
+                    store.nextRequestId + 1
+            in
+            ( { store
+                | nextRequestId = requestId
+                , diaryLogs = Dict.insert key Loading store.diaryLogs
+                , diaryLogRequestIds = Dict.insert key requestId store.diaryLogRequestIds
+              }
+            , Api.Logs.listLogs date
+                (DiaryLogsStoreLoaded store.generation requestId date)
+            )
+
+        _ ->
+            ( store, Cmd.none )
+
+
+ensureDiaryGoal : LocalDate -> Store -> ( Store, Cmd Msg )
+ensureDiaryGoal date store =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    case Dict.get key store.diaryGoals |> Maybe.withDefault NotAsked of
+        NotAsked ->
+            let
+                requestId : Int
+                requestId =
+                    store.nextRequestId + 1
+            in
+            ( { store
+                | nextRequestId = requestId
+                , diaryGoals = Dict.insert key Loading store.diaryGoals
+                , diaryGoalRequestIds = Dict.insert key requestId store.diaryGoalRequestIds
+              }
+            , Api.Goals.getGoal date
+                (DiaryGoalStoreLoaded store.generation requestId date)
+            )
+
+        _ ->
+            ( store, Cmd.none )
+
+
+ensureLatestSlots : LocalDate -> Store -> ( Store, Cmd Msg )
+ensureLatestSlots date store =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    case Dict.get key store.latestSlots |> Maybe.withDefault NotAsked of
+        NotAsked ->
+            let
+                requestId : Int
+                requestId =
+                    store.nextRequestId + 1
+            in
+            ( { store
+                | nextRequestId = requestId
+                , latestSlots = Dict.insert key Loading store.latestSlots
+                , latestSlotRequestIds = Dict.insert key requestId store.latestSlotRequestIds
+              }
+            , Api.Logs.latestSlots
+                { before = date, lookbackDays = 30 }
+                (LatestSlotsStoreLoaded store.generation requestId date)
+            )
+
+        _ ->
+            ( store, Cmd.none )
+
+
+isUserPane : Pane -> Bool
+isUserPane pane =
+    case pane of
+        LoginPane _ ->
+            False
+
+        SetupPane _ ->
+            False
+
+        AdminPane _ ->
+            False
+
+        AdminCreateUserPane _ ->
+            False
+
+        AdminEditUserPane _ _ ->
+            False
+
+        PlaceholderPane _ ->
+            False
+
+        _ ->
+            True
+
+
+firstOfThree : ( a, b, c ) -> a
+firstOfThree ( value, _, _ ) =
+    value
 
 
 retargetSearchForRoute : Route -> List Pane -> ( List Pane, Cmd Msg )
@@ -782,8 +1238,30 @@ preferOutMsg candidate current =
 -- UPDATE
 
 
+type alias PreferencesResult =
+    Result Api.Client.ApiError Data.DiaryPreferences.DiaryPreferences
+
+
+type alias DiaryLogsResult =
+    Result Api.Client.ApiError (List Data.FoodLog.FoodLog)
+
+
+type alias DiaryGoalResult =
+    Result Api.Client.ApiError Data.Goals.GoalSnapshot
+
+
+type alias LatestSlotsResult =
+    Result Api.Client.ApiError Api.Logs.LatestSlotsResponse
+
+
 type Msg
-    = GotLoginMsg AuthLogin.Msg
+    = SharedUnitsLoaded Int (Result Api.Client.ApiError Api.Foods.UnitListResponse)
+    | SharedNutrientsLoaded Int (Result Api.Client.ApiError Api.Foods.NutrientListResponse)
+    | SharedPreferencesLoaded Int PreferencesResult
+    | DiaryLogsStoreLoaded Int Int LocalDate DiaryLogsResult
+    | DiaryGoalStoreLoaded Int Int LocalDate DiaryGoalResult
+    | LatestSlotsStoreLoaded Int Int LocalDate LatestSlotsResult
+    | GotLoginMsg AuthLogin.Msg
     | GotSetupMsg BootstrapSetup.Msg
     | GotAdminMsg AdminDashboard.Msg
     | GotAdminCreateUserMsg AdminCreateUser.Msg
@@ -808,24 +1286,327 @@ type Msg
 
 update : InitContext -> Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 update context msg model =
-    updateFirst (updatePane model.panes context msg) model.panes
-        |> Maybe.map
-            (\result ->
+    case updateSharedMessage msg model of
+        Just result ->
+            Just result
+
+        Nothing ->
+            updateFirst (updatePane model.panes context msg) model.panes
+                |> Maybe.map
+                    (\result ->
+                        let
+                            paneStore : Store
+                            paneStore =
+                                updateStoreFromPaneMessage msg model.store
+
+                            ( refreshedPanes, nextStore, refreshCmd ) =
+                                applyMutation context result.mutation result.pane paneStore
+                        in
+                        ( { model
+                            | panes = refreshedPanes
+                            , store = nextStore
+                          }
+                        , Cmd.batch [ result.cmd, refreshCmd ]
+                        , result.outMsg
+                        )
+                    )
+
+
+updateSharedMessage : Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
+updateSharedMessage msg model =
+    let
+        finish :
+            Int
+            -> (Loadable Api.Client.ApiError value -> Store -> Store)
+            -> (Loadable Api.Client.ApiError value -> Pane -> Pane)
+            -> Result Api.Client.ApiError value
+            -> Maybe ( Model, Cmd Msg, OutMsg )
+        finish generation applyStore hydrate result =
+            if generation /= model.store.generation then
+                Just ( model, Cmd.none, NoOutMsg )
+
+            else
                 let
-                    ( refreshedPanes, refreshCmd ) =
-                        applyMutation context result.mutation result.pane
+                    store : Store
+                    store =
+                        applyStore (resultToLoadable result) model.store
+
+                    panes : List Pane
+                    panes =
+                        List.map (hydrate (resultToLoadable result)) model.panes
+
+                    outMsg : OutMsg
+                    outMsg =
+                        case result of
+                            Err error ->
+                                if Api.Client.isUnauthorized error then
+                                    SessionExpired
+
+                                else
+                                    NoOutMsg
+
+                            Ok _ ->
+                                NoOutMsg
                 in
-                ( { model | panes = refreshedPanes }
-                , Cmd.batch [ result.cmd, refreshCmd ]
-                , result.outMsg
-                )
+                Just ( { model | panes = panes, store = store }, Cmd.none, outMsg )
+    in
+    case msg of
+        SharedUnitsLoaded generation result ->
+            finish generation
+                (\value store -> { store | units = value })
+                hydrateUnits
+                result
+
+        SharedNutrientsLoaded generation result ->
+            finish generation
+                (\value store -> { store | nutrients = value })
+                hydrateNutrients
+                result
+
+        SharedPreferencesLoaded generation result ->
+            finish generation
+                (\value store -> { store | preferences = value })
+                hydratePreferences
+                result
+
+        DiaryLogsStoreLoaded generation requestId date result ->
+            Just (finishDiaryLogsResponse generation requestId date result model)
+
+        DiaryGoalStoreLoaded generation requestId date result ->
+            Just (finishDiaryGoalResponse generation requestId date result model)
+
+        LatestSlotsStoreLoaded generation requestId date result ->
+            Just (finishLatestSlotsResponse generation requestId date result model)
+
+        _ ->
+            Nothing
+
+
+finishDiaryLogsResponse :
+    Int
+    -> Int
+    -> LocalDate
+    -> Result Api.Client.ApiError (List Data.FoodLog.FoodLog)
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+finishDiaryLogsResponse generation requestId date result model =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    if
+        not
+            (Store.isCurrentRequest generation
+                requestId
+                key
+                model.store
+                model.store.diaryLogRequestIds
             )
+    then
+        ( model, Cmd.none, NoOutMsg )
+
+    else
+        let
+            currentStore : Store
+            currentStore =
+                model.store
+
+            store : Store
+            store =
+                { currentStore
+                    | diaryLogs = Dict.insert key (resultToLoadable result) currentStore.diaryLogs
+                    , diaryLogRequestIds = Dict.remove key currentStore.diaryLogRequestIds
+                }
+        in
+        finishDateResponse result
+            store
+            (updateDiaryPanes date (DiaryDay.LogsLoaded date result) model.panes)
+
+
+finishDiaryGoalResponse :
+    Int
+    -> Int
+    -> LocalDate
+    -> Result Api.Client.ApiError Data.Goals.GoalSnapshot
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+finishDiaryGoalResponse generation requestId date result model =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    if
+        not
+            (Store.isCurrentRequest generation
+                requestId
+                key
+                model.store
+                model.store.diaryGoalRequestIds
+            )
+    then
+        ( model, Cmd.none, NoOutMsg )
+
+    else
+        let
+            currentStore : Store
+            currentStore =
+                model.store
+
+            store : Store
+            store =
+                { currentStore
+                    | diaryGoals = Dict.insert key (resultToLoadable result) currentStore.diaryGoals
+                    , diaryGoalRequestIds = Dict.remove key currentStore.diaryGoalRequestIds
+                }
+
+            panes : List Pane
+            panes =
+                model.panes
+                    |> updateDiaryPanes date (DiaryDay.GoalLoaded date result)
+                    |> updateGoalSettingsPanes key result
+        in
+        finishDateResponse result store panes
+
+
+finishLatestSlotsResponse :
+    Int
+    -> Int
+    -> LocalDate
+    -> Result Api.Client.ApiError Api.Logs.LatestSlotsResponse
+    -> Model
+    -> ( Model, Cmd Msg, OutMsg )
+finishLatestSlotsResponse generation requestId date result model =
+    let
+        key : String
+        key =
+            LocalDate.format date
+    in
+    if
+        not
+            (Store.isCurrentRequest generation
+                requestId
+                key
+                model.store
+                model.store.latestSlotRequestIds
+            )
+    then
+        ( model, Cmd.none, NoOutMsg )
+
+    else
+        let
+            currentStore : Store
+            currentStore =
+                model.store
+
+            store : Store
+            store =
+                { currentStore
+                    | latestSlots =
+                        Dict.insert key
+                            (resultToLoadable result)
+                            currentStore.latestSlots
+                    , latestSlotRequestIds = Dict.remove key currentStore.latestSlotRequestIds
+                }
+        in
+        finishDateResponse result
+            store
+            (updateDiaryPanes date (DiaryDay.LatestSlotsReceived date result) model.panes)
+
+
+finishDateResponse :
+    Result Api.Client.ApiError value
+    -> Store
+    -> List Pane
+    -> ( Model, Cmd Msg, OutMsg )
+finishDateResponse result store panes =
+    ( { panes = panes, waitingForToday = False, store = store }
+    , Cmd.none
+    , case result of
+        Err error ->
+            if Api.Client.isUnauthorized error then
+                SessionExpired
+
+            else
+                NoOutMsg
+
+        Ok _ ->
+            NoOutMsg
+    )
+
+
+updateDiaryPanes : LocalDate -> DiaryDay.Msg -> List Pane -> List Pane
+updateDiaryPanes date msg panes =
+    List.map
+        (\pane ->
+            case pane of
+                DiaryPane key diary ->
+                    if LocalDate.equals diary.currentDate date then
+                        DiaryPane key (firstOfThree (DiaryDay.update msg diary))
+
+                    else
+                        pane
+
+                _ ->
+                    pane
+        )
+        panes
+
+
+updateGoalSettingsPanes :
+    String
+    -> Result Api.Client.ApiError Data.Goals.GoalSnapshot
+    -> List Pane
+    -> List Pane
+updateGoalSettingsPanes date result panes =
+    List.map
+        (\pane ->
+            case pane of
+                GoalsSettingsPane paneDate goals ->
+                    if paneDate == date then
+                        GoalsSettingsPane paneDate
+                            (firstOfThree
+                                (GoalsSettings.update
+                                    (GoalsSettings.GoalLoaded result)
+                                    goals
+                                )
+                            )
+
+                    else
+                        pane
+
+                _ ->
+                    pane
+        )
+        panes
+
+
+resultToLoadable : Result error value -> Loadable error value
+resultToLoadable result =
+    case result of
+        Ok value ->
+            Success value
+
+        Err error ->
+            Failure error
+
+
+updateStoreFromPaneMessage : Msg -> Store -> Store
+updateStoreFromPaneMessage msg store =
+    case msg of
+        GotDiarySettingsMsg (DiarySettings.SaveCompleted (Ok preferences)) ->
+            { store | preferences = Success preferences }
+
+        _ ->
+            store
 
 
 type Mutation
     = NoMutation
     | RefreshDiaryAndCalendar LocalDate
     | RefreshCalendar LocalDate
+    | RefreshGoals
 
 
 type alias PaneUpdate pane =
@@ -919,8 +1700,11 @@ updatePane allPanes context msg pane =
                 mutation : Mutation
                 mutation =
                     case third result of
-                        DiaryDay.LogsCopied date _ ->
+                        DiaryDay.LogsCopied date DiaryDay.DiaryUpdated ->
                             RefreshCalendar date
+
+                        DiaryDay.LogsCopied date DiaryDay.DiaryNeedsReload ->
+                            RefreshDiaryAndCalendar date
 
                         _ ->
                             NoMutation
@@ -944,11 +1728,21 @@ updatePane allPanes context msg pane =
                 (NutritionDetails.update subMsg sub)
 
         ( GotGoalsSettingsMsg subMsg, GoalsSettingsPane date sub ) ->
+            let
+                mutation : Mutation
+                mutation =
+                    case subMsg of
+                        GoalsSettings.SaveCompleted (Ok _) ->
+                            RefreshGoals
+
+                        _ ->
+                            NoMutation
+            in
             stepPane context
                 (GoalsSettingsPane date)
                 GotGoalsSettingsMsg
                 applyGoalsSettingsOutMsg
-                NoMutation
+                mutation
                 (GoalsSettings.update subMsg sub)
 
         ( GotDiarySettingsMsg subMsg, DiarySettingsPane sub ) ->
@@ -1112,34 +1906,116 @@ stepPane context toPane toMsg applyOut mutation ( subModel, subCmd, subOut ) =
         }
 
 
-applyMutation : InitContext -> Mutation -> List Pane -> ( List Pane, Cmd Msg )
-applyMutation context mutation panes =
+applyMutation : InitContext -> Mutation -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
+applyMutation context mutation panes store =
     case mutation of
         NoMutation ->
-            ( panes, Cmd.none )
+            ( panes, store, Cmd.none )
 
         RefreshDiaryAndCalendar date ->
-            refreshPanes context True date panes
+            refreshAfterLogMutation context True date panes store
 
         RefreshCalendar date ->
-            refreshPanes context False date panes
+            refreshAfterLogMutation context False date panes store
+
+        RefreshGoals ->
+            let
+                invalidated : Store
+                invalidated =
+                    { store
+                        | diaryGoals = Dict.empty
+                        , diaryGoalRequestIds = Dict.empty
+                    }
+
+                ( nextStore, cmd ) =
+                    ensureDateData panes invalidated
+            in
+            ( panes, nextStore, cmd )
 
 
-refreshPanes : InitContext -> Bool -> LocalDate -> List Pane -> ( List Pane, Cmd Msg )
-refreshPanes context refreshDiary date panes =
+refreshAfterLogMutation :
+    InitContext
+    -> Bool
+    -> LocalDate
+    -> List Pane
+    -> Store
+    -> ( List Pane, Store, Cmd Msg )
+refreshAfterLogMutation context reloadDiary date panes store =
+    let
+        key : String
+        key =
+            LocalDate.format date
+
+        invalidated : Store
+        invalidated =
+            { store
+                | diaryLogs =
+                    if reloadDiary then
+                        Dict.insert key NotAsked store.diaryLogs
+
+                    else
+                        syncDiaryLogs date panes store.diaryLogs
+                , diaryLogRequestIds = Dict.remove key store.diaryLogRequestIds
+                , latestSlots = Dict.empty
+                , latestSlotRequestIds = Dict.empty
+            }
+
+        ( refreshedPanes, calendarCmd ) =
+            refreshCalendars context date panes
+
+        ( nextStore, dateCmd ) =
+            ensureDateData refreshedPanes invalidated
+    in
+    ( refreshedPanes, nextStore, Cmd.batch [ calendarCmd, dateCmd ] )
+
+
+syncDiaryLogs :
+    LocalDate
+    -> List Pane
+    -> Dict String (Loadable Api.Client.ApiError (List Data.FoodLog.FoodLog))
+    -> Dict String (Loadable Api.Client.ApiError (List Data.FoodLog.FoodLog))
+syncDiaryLogs date panes cached =
+    let
+        logs : Maybe (List Data.FoodLog.FoodLog)
+        logs =
+            panes
+                |> List.filterMap
+                    (\pane ->
+                        case pane of
+                            DiaryPane _ diary ->
+                                if LocalDate.equals diary.currentDate date then
+                                    case diary.diary of
+                                        DiaryDay.Loaded loaded ->
+                                            Just loaded.logs
+
+                                        DiaryDay.Loading loadingState ->
+                                            loadingState.logs
+
+                                        DiaryDay.Failed _ _ ->
+                                            Nothing
+
+                                else
+                                    Nothing
+
+                            _ ->
+                                Nothing
+                    )
+                |> List.head
+    in
+    case logs of
+        Just value ->
+            Dict.insert (LocalDate.format date) (Success value) cached
+
+        Nothing ->
+            Dict.insert (LocalDate.format date) NotAsked cached
+
+
+refreshCalendars : InitContext -> LocalDate -> List Pane -> ( List Pane, Cmd Msg )
+refreshCalendars context date panes =
     let
         refresh : Pane -> ( Pane, Cmd Msg )
         refresh pane =
             case pane of
-                DiaryPane _ diary ->
-                    if refreshDiary && LocalDate.equals diary.currentDate date then
-                        ( pane
-                        , Api.Logs.listLogs date (GotDiaryMsg << DiaryDay.LogsLoaded date)
-                        )
-
-                    else
-                        ( pane, Cmd.none )
-
                 DiaryCalendarPane month calendar ->
                     let
                         ( next, subCmd, subOut ) =
@@ -1228,6 +2104,7 @@ type alias UpdateAllResult =
     , cmds : List (Cmd Msg)
     , outMsg : OutMsg
     , didUpdate : Bool
+    , store : Store
     }
 
 
@@ -1243,13 +2120,17 @@ updateAll pageContext updateOne model =
             case updateOne pane of
                 Just paneResult ->
                     let
-                        ( refreshed, refreshCmd ) =
-                            applyMutation pageContext paneResult.mutation [ paneResult.pane ]
+                        ( refreshed, nextStore, refreshCmd ) =
+                            applyMutation pageContext
+                                paneResult.mutation
+                                [ paneResult.pane ]
+                                result.store
                     in
                     { panes = refreshed ++ result.panes
                     , cmds = Cmd.batch [ paneResult.cmd, refreshCmd ] :: result.cmds
                     , outMsg = preferOutMsg paneResult.outMsg result.outMsg
                     , didUpdate = True
+                    , store = nextStore
                     }
 
                 Nothing ->
@@ -1262,12 +2143,16 @@ updateAll pageContext updateOne model =
                 , cmds = []
                 , outMsg = NoOutMsg
                 , didUpdate = False
+                , store = model.store
                 }
                 model.panes
     in
     if final.didUpdate then
         Just
-            ( { model | panes = List.reverse final.panes }
+            ( { model
+                | panes = List.reverse final.panes
+                , store = final.store
+              }
             , Cmd.batch (List.reverse final.cmds)
             , final.outMsg
             )
@@ -1388,19 +2273,8 @@ applyDiaryOutMsg _ outMsg =
         DiaryDay.NoOp ->
             ( Cmd.none, NoOutMsg )
 
-        DiaryDay.RequestDiaryData date ->
-            ( Cmd.map GotDiaryMsg
-                (Cmd.batch
-                    [ Api.Logs.listLogs date (DiaryDay.LogsLoaded date)
-                    , Api.Goals.getGoal date (DiaryDay.GoalLoaded date)
-                    , Api.DiaryPreferences.get DiaryDay.PreferencesLoaded
-                    , Api.Logs.latestSlots
-                        { before = date, lookbackDays = 30 }
-                        (DiaryDay.LatestSlotsReceived date)
-                    ]
-                )
-            , NoOutMsg
-            )
+        DiaryDay.RequestDiaryData ->
+            ( Cmd.none, NoOutMsg )
 
         DiaryDay.RequestCopyLatestSlot date requests ->
             ( Api.Logs.createLogsBatch
@@ -1409,17 +2283,13 @@ applyDiaryOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        DiaryDay.LogsCopied date refresh ->
+        DiaryDay.LogsCopied _ refresh ->
             case refresh of
                 DiaryDay.DiaryUpdated ->
                     ( Cmd.none, NoOutMsg )
 
                 DiaryDay.DiaryNeedsReload ->
-                    applyDiaryOutMsg
-                        { route = DiaryDay (Just (LocalDate.format date)) Nothing
-                        , today = Just date
-                        }
-                        (DiaryDay.RequestDiaryData date)
+                    ( Cmd.none, NoOutMsg )
 
         DiaryDay.Navigate route ->
             ( Cmd.none, Navigate route )
@@ -1496,10 +2366,7 @@ applyDiarySettingsOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         DiarySettings.RequestPreferences ->
-            ( Api.DiaryPreferences.get
-                (GotDiarySettingsMsg << DiarySettings.PreferencesLoaded)
-            , NoOutMsg
-            )
+            ( Cmd.none, NoOutMsg )
 
         DiarySettings.RequestSave preferences ->
             ( Api.DiaryPreferences.put preferences
@@ -1517,11 +2384,8 @@ applyGoalsSettingsOutMsg _ outMsg =
         GoalsSettings.NoOp ->
             ( Cmd.none, NoOutMsg )
 
-        GoalsSettings.RequestGoal date ->
-            ( Api.Goals.getGoal date
-                (GotGoalsSettingsMsg << GoalsSettings.GoalLoaded)
-            , NoOutMsg
-            )
+        GoalsSettings.RequestGoal ->
+            ( Cmd.none, NoOutMsg )
 
         GoalsSettings.RequestLocalContext ->
             ( Cmd.none, RequestLocalContext )
@@ -1599,11 +2463,9 @@ applyFoodDetailOutMsg context outMsg =
 
         FoodShow.RequestInitialData productId ->
             ( Cmd.batch
-                ([ Api.Foods.getFoodDetail productId
+                (Api.Foods.getFoodDetail productId
                     (GotFoodDetailMsg << FoodShow.FoodLoaded)
-                 , Api.Foods.listUnits (GotFoodDetailMsg << FoodShow.UnitsLoaded)
-                 ]
-                    ++ lastUsedProductDefaultCmd context.route productId
+                    :: lastUsedProductDefaultCmd context.route productId
                 )
             , NoOutMsg
             )
@@ -1630,12 +2492,8 @@ applyFoodLogDetailOutMsg context outMsg =
             ( Cmd.none, NoOutMsg )
 
         FoodLogEntry.RequestInitialData logId ->
-            ( Cmd.batch
-                [ Api.Logs.getLog logId
-                    (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded)
-                , Api.Foods.listUnits
-                    (GotFoodLogDetailMsg << FoodLogEntry.UnitsLoaded)
-                ]
+            ( Api.Logs.getLog logId
+                (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded)
             , NoOutMsg
             )
 
@@ -1693,14 +2551,7 @@ applyCustomFoodCreateOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         CustomFoodCreate.RequestInitialData ->
-            ( Cmd.batch
-                [ Api.Foods.listNutrients
-                    (GotCustomFoodCreateMsg << CustomFoodCreate.NutrientsLoaded)
-                , Api.Foods.listUnits
-                    (GotCustomFoodCreateMsg << CustomFoodCreate.UnitsLoaded)
-                ]
-            , NoOutMsg
-            )
+            ( Cmd.none, NoOutMsg )
 
         CustomFoodCreate.RequestCreateFood request ->
             ( Api.Foods.createCustomFood request
@@ -1759,14 +2610,8 @@ applyCustomFoodEditOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         CustomFoodEdit.RequestInitialData productId ->
-            ( Cmd.batch
-                [ Api.Foods.getFoodDetail productId
-                    (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
-                , Api.Foods.listNutrients
-                    (GotCustomFoodEditMsg << CustomFoodEdit.NutrientsLoaded)
-                , Api.Foods.listUnits
-                    (GotCustomFoodEditMsg << CustomFoodEdit.UnitsLoaded)
-                ]
+            ( Api.Foods.getFoodDetail productId
+                (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
             , NoOutMsg
             )
 
@@ -1819,12 +2664,8 @@ applyCustomFoodShowOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         CustomFoodShow.RequestInitialData productId ->
-            ( Cmd.batch
-                [ Api.Foods.getFoodDetail productId
-                    (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded)
-                , Api.Foods.listUnits
-                    (GotCustomFoodShowMsg << CustomFoodShow.UnitsLoaded)
-                ]
+            ( Api.Foods.getFoodDetail productId
+                (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded)
             , NoOutMsg
             )
 
@@ -1975,7 +2816,6 @@ applyMealDetailOutMsg _ outMsg =
         MealShow.RequestInitialData mealId ->
             ( Cmd.batch
                 [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded)
-                , Api.Foods.listUnits (GotMealDetailMsg << MealShow.UnitsLoaded)
                 , Api.Meals.getMealNutrients
                     { mealId = mealId, amount = "100", unit = defaultCode }
                     (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)

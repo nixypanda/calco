@@ -175,6 +175,7 @@ update msg model =
             ( { model
                 | bootstrap =
                     setSession (Auth.clearSession (currentSession model)) model.bootstrap
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
@@ -254,7 +255,9 @@ applyChromeOutMsg outMsg model =
             )
 
         Chrome.Logout ->
-            ( model, Api.Auth.logout (\_ -> LogoutCompleted) )
+            ( { model | page = Page.clearStore model.page }
+            , Api.Auth.logout (\_ -> LogoutCompleted)
+            )
 
         Chrome.ToggleTheme ->
             let
@@ -393,6 +396,7 @@ applyPageOutMsg outMsg model =
             ( { model
                 | bootstrap =
                     setSession (Auth.clearSession (currentSession model)) model.bootstrap
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AuthLogin)
             )
@@ -412,7 +416,10 @@ applyPageOutMsg outMsg model =
                 nextSession =
                     Auth.applyAuthResult (Ok loginSession) (currentSession model)
             in
-            ( { model | bootstrap = setSession nextSession model.bootstrap }
+            ( { model
+                | bootstrap = setSession nextSession model.bootstrap
+                , page = Page.clearStore model.page
+              }
             , Nav.replaceUrl model.key (Data.Route.routeToPath Root)
             )
 
@@ -428,6 +435,7 @@ applyPageOutMsg outMsg model =
                         { session = nextSession
                         , adminExists = True
                         }
+                , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
             )
