@@ -14,7 +14,10 @@ visible window stays mounted and is hidden with `display: none` — that is what
 keeps its scroll offset alive, while still taking it out of layout, tab order,
 and the accessibility tree. With a single visible pane there is no per-pane
 scroll container to preserve (the document scrolls), so the panes outside the
-window are dropped rather than mounted invisibly.
+window are dropped rather than mounted invisibly. That single pane still gets
+`height fill`, because panes that centre themselves vertically — the login and
+setup forms — have nothing to centre in if this wrapper shrinks to their own
+height.
 
 -}
 view : Device -> List ( String, Element msg ) -> Element msg
@@ -57,6 +60,7 @@ view device panes =
                 Element.Keyed.el
                     [ Element.centerX
                     , Element.width (Element.fill |> Element.maximum 960)
+                    , Element.height Element.fill
                     , Element.padding
                         (if device.class == Element.Phone then
                             DesignTokens.space16
