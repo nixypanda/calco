@@ -12,7 +12,6 @@ module Ui.Typography exposing
     , mutedParagraph
     , pageTitle
     , sectionTitle
-    , sizePageTitle
     , subsectionTitle
     , tableHeader
     , truncatedHeader

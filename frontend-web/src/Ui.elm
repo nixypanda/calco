@@ -57,13 +57,10 @@ module Ui exposing
     , selectDropdown
     , skeletonBar
     , skeletonLoading
-    , statBlock
-    , statBlockGroup
     , statusBadge
     , submittingOrIdle
     , suggestionList
     , toggleSwitch
-    , truncatedText
     )
 
 import Element exposing (Device, Element)
@@ -75,14 +72,12 @@ import Element.Region as Region
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
-import Lib.ListExtra as ListExtra
 import Lib.Number as Number
 import Ui.DesignTokens
     exposing
         ( radiusCard
         , radiusControl
         , radiusHairline
-        , radiusHero
         , radiusPill
         , radiusSmall
         , space12
@@ -102,7 +97,6 @@ import Ui.Typography
         , mutedBody
         , mutedParagraph
         , sectionTitle
-        , sizePageTitle
         , subsectionTitle
         , uiClass
         )
@@ -164,16 +158,6 @@ hoverEffect device attrs =
 
     else
         Element.mouseOver attrs
-
-
-truncatedText : Device -> String -> Element msg
-truncatedText _ string =
-    Element.el
-        [ Element.width Element.fill
-        , Element.clip
-        , uiClass "ui-text-ellipsis"
-        ]
-        (Element.text string)
 
 
 card : Theme -> List (Element msg) -> Element msg
@@ -521,7 +505,6 @@ type SubmitState
 
 type BottomActionTone
     = PrimaryAction
-    | SecondaryAction
     | DangerAction
 
 
@@ -655,9 +638,6 @@ bottomActionButtons device theme buttons =
                 (case config.tone of
                     PrimaryAction ->
                         primaryActionButton device theme config.label config.onPress
-
-                    SecondaryAction ->
-                        fullWidthGhostButton device theme config.label config.onPress
 
                     DangerAction ->
                         fullWidthDangerButton device theme config.label config.onPress
@@ -1655,59 +1635,6 @@ statusBadge theme status =
             else
                 theme.statusRed
         }
-
-
-statBlock :
-    { value : String
-    , unit : String
-    , label : String
-    , color : Element.Color
-    }
-    -> Element msg
-statBlock config =
-    Element.column
-        [ Element.width (Element.fill |> Element.maximum 120)
-        , Element.height (Element.px 100)
-        , Background.color config.color
-        , Border.rounded radiusHero
-        , Element.paddingEach { top = 12, right = 12, bottom = 12, left = 12 }
-        , Element.spacing space2
-        ]
-        [ Element.el
-            [ sizePageTitle
-            , Font.bold
-            , Font.color (Element.rgb255 255 255 255)
-            ]
-            (Element.text config.value)
-        , Element.el
-            [ caption
-            , Font.color (Element.rgb255 255 255 255)
-            ]
-            (Element.text config.unit)
-        , Element.el
-            [ caption
-            , Font.color (Element.rgb255 255 255 255)
-            ]
-            (Element.text config.label)
-        ]
-
-
-statBlockGroup : List (Element msg) -> Element msg
-statBlockGroup blocks =
-    let
-        pairs : List ( Element msg, Element msg )
-        pairs =
-            ListExtra.groupsOf 2 blocks
-
-        row : ( Element msg, Element msg ) -> Element msg
-        row ( a, b ) =
-            Element.row [ Element.spacing space12 ]
-                [ a
-                , b
-                ]
-    in
-    Element.column [ Element.spacing space12 ]
-        (List.map row pairs)
 
 
 linearProgress :

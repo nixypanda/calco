@@ -1,14 +1,9 @@
 module Ui.DesignTokens exposing
-    ( accentPink
-    , accentSoftGreen
-    , accentYellow
-    , radiusCard
+    ( radiusCard
     , radiusControl
     , radiusHairline
-    , radiusHero
     , radiusPill
     , radiusSmall
-    , radiusTight
     , space12
     , space16
     , space2
@@ -17,25 +12,6 @@ module Ui.DesignTokens exposing
     , space4
     , space8
     )
-
-import Element
-
-
-accentPink : Element.Color
-accentPink =
-    Element.rgb255 255 138 170
-
-
-accentYellow : Element.Color
-accentYellow =
-    Element.rgb255 255 210 80
-
-
-accentSoftGreen : Element.Color
-accentSoftGreen =
-    Element.rgb255 200 235 200
-
-
 
 -- Spacing scale
 
@@ -84,11 +60,6 @@ radiusHairline =
     2
 
 
-radiusTight : Int
-radiusTight =
-    4
-
-
 radiusSmall : Int
 radiusSmall =
     8
@@ -102,11 +73,6 @@ radiusControl =
 radiusCard : Int
 radiusCard =
     20
-
-
-radiusHero : Int
-radiusHero =
-    24
 
 
 radiusPill : Int

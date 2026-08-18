@@ -32,13 +32,9 @@ tests =
                     |> first
                     |> errorOf
                     |> Expect.equal (Just "Network error")
-        , test "meal summary includes notes when present" <|
+        , test "meal summary joins calories and component count" <|
             \_ ->
                 MealList.mealSummaryText mealWithNotes
-                    |> Expect.equal "420 kcal ⋅ 0 components"
-        , test "meal summary omits separator when notes are absent" <|
-            \_ ->
-                MealList.mealSummaryText { mealWithNotes | notes = Nothing }
                     |> Expect.equal "420 kcal ⋅ 0 components"
         , test "open meal navigates to meal detail" <|
             \_ ->

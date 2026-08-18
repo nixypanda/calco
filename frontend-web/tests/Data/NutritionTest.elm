@@ -90,7 +90,11 @@ tests =
                     |> Expect.equal Nothing
         , test "dominantMacro returns Nothing for zero macros" <|
             \_ ->
-                Nutrition.dominantMacro []
+                Nutrition.dominantMacro
+                    [ { code = "PROTEIN_G", amount = "0", unit = "g" }
+                    , { code = "CARBS_G", amount = "0", unit = "g" }
+                    , { code = "FAT_G", amount = "0", unit = "g" }
+                    ]
                     |> Expect.equal Nothing
         , test "dominantMacro picks Protein when its calories lead" <|
             \_ ->

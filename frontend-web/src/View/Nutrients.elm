@@ -2,7 +2,6 @@ module View.Nutrients exposing
     ( NutritionInput
     , NutritionState(..)
     , defaultNutritionInput
-    , macroColor
     , macroDot
     , mapNutritionInput
     , nutrientLabel
