@@ -974,7 +974,6 @@ productLog =
     , mealSlot = Just "lunch"
     , item = recentProduct.item
     , quantity = recentProduct.quantity
-    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Nothing
     }

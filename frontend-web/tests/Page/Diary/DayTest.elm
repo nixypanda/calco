@@ -703,7 +703,6 @@ log id mealSlot item nutrients =
     , mealSlot = mealSlot
     , item = item
     , quantity = quantity
-    , nutritionSummary = Nutrition.emptySummary
     , nutrients = nutrients
     , notes = Nothing
     }

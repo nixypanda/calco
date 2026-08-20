@@ -3,7 +3,6 @@ module PageTest exposing (tests)
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
@@ -309,7 +308,6 @@ productLog =
         , brand = Nothing
         }
     , quantity = { amount = "1", unit = "serving" }
-    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Nothing
     }
