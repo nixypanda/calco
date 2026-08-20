@@ -161,7 +161,7 @@ metaText query item =
 
       else
         Nothing
-    , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.energyKcalPer100g
+    , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.nutritionSummary.per100g.energyKcal
     ]
         |> Ui.dotSeparated
 

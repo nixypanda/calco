@@ -251,8 +251,6 @@ result =
     , categories = []
     , servingSizeG = Nothing
     , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
-    , energyKcalPer100g = Nothing
-    , energyKcalPerServing = Nothing
     }
 
 

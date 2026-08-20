@@ -891,10 +891,18 @@ apple =
     , brand = Just "Local"
     , categories = [ "fruit" ]
     , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
-    , energyKcalPer100g = Just "52"
-    , energyKcalPerServing = Nothing
+    , nutritionSummary = { per100g = applePer100g, perServing = Nothing }
     }
+
+
+applePer100g : Nutrition.NutritionSummary
+applePer100g =
+    let
+        empty : Nutrition.NutritionSummary
+        empty =
+            Nutrition.emptySummary
+    in
+    { empty | energyKcal = Just "52" }
 
 
 appleDetail : ProductDetail
@@ -974,7 +982,6 @@ productLog =
     , mealSlot = Just "lunch"
     , item = recentProduct.item
     , quantity = recentProduct.quantity
-    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Nothing
     }

@@ -390,7 +390,6 @@ productLog =
         , brand = Just "Local"
         }
     , quantity = { amount = "2", unit = "serving" }
-    , nutritionSummary = Nutrition.emptySummary
     , nutrients = []
     , notes = Just "Good"
     }

@@ -49,6 +49,17 @@ async fn seed_meal(router: &axum::Router, user: &str, product_id: &str) -> Strin
     created["id"].as_str().unwrap().to_string()
 }
 
+fn nutrient_amount<'a>(nutrients: &'a Value, code: &str) -> &'a str {
+    nutrients
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["code"] == code)
+        .unwrap_or_else(|| panic!("{code} snapshot missing"))["amount"]
+        .as_str()
+        .unwrap()
+}
+
 #[sqlx::test]
 async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     let router = app(pool).await;
@@ -83,10 +94,10 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
     assert_eq!(created["log_date"], "2026-06-01");
     assert_eq!(created["meal_slot"], "breakfast");
     assert_eq!(created["device_timezone"], "Asia/Kolkata");
-    assert_eq!(created["nutrition_summary"]["energy_kcal"], "78");
-    assert_eq!(created["nutrition_summary"]["carbs_g"], "21");
-    assert_eq!(created["nutrition_summary"]["protein_g"], "1.50");
-    assert_eq!(created["nutrition_summary"]["fat_g"], "0");
+    assert_eq!(nutrient_amount(&created["nutrients"], "ENERGY_KCAL"), "78");
+    assert_eq!(nutrient_amount(&created["nutrients"], "CARBS_G"), "21");
+    assert_eq!(nutrient_amount(&created["nutrients"], "PROTEIN_G"), "1.50");
+    assert_eq!(nutrient_amount(&created["nutrients"], "FAT_G"), "0");
 
     // Nutrient snapshot should include kcal scaled to 150g
     let created_nutrients = created["nutrients"].as_array().unwrap();

@@ -160,11 +160,11 @@ macros =
     ]
 
 
-servings : List Nutrition.Serving
+servings : List { label : String, quantity : String, unit : String, grams : String }
 servings =
     [ { label = "Piece", quantity = "1", unit = "piece", grams = "50" } ]
 
 
-per100g : List Nutrition.Per100gNutrient
+per100g : List { code : String, amountPer100g : String, unit : String }
 per100g =
     [ { code = "ENERGY_KCAL", amountPer100g = "120", unit = "kcal" } ]
