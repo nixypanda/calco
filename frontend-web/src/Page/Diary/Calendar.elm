@@ -262,7 +262,7 @@ requestForMonths oldest newest today =
 
 
 contentViewWithSelection :
-    Maybe String
+    Maybe LocalDate
     -> { model : Model, device : Device, theme : Theme }
     -> Element Msg
 contentViewWithSelection selectedDate { model, theme } =
@@ -285,7 +285,7 @@ contentViewWithSelection selectedDate { model, theme } =
         )
 
 
-monthsView : Theme -> Model -> Maybe String -> Bool -> List (Element Msg)
+monthsView : Theme -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
 monthsView theme model selectedDate loadingEarlier =
     monthRange model.newestMonth model.oldestMonth
         |> List.map (monthView theme model selectedDate)
@@ -301,7 +301,7 @@ monthRange newest oldest =
         newest :: monthRange (Calendar.shiftMonth -1 newest) oldest
 
 
-monthView : Theme -> Model -> Maybe String -> String -> Element Msg
+monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
 monthView theme model selectedDate month =
     Ui.card theme
         [ Typography.sectionTitle theme (Calendar.monthLabel month)
@@ -318,7 +318,7 @@ monthView theme model selectedDate month =
 dayView :
     Theme
     -> Model
-    -> Maybe String
+    -> Maybe LocalDate
     -> String
     -> Int
     -> List (Element.Attribute Msg)
@@ -356,7 +356,7 @@ dayView theme model selectedDate month day attributes =
         Input.button
             (Border.rounded DesignTokens.radiusSmall
                 :: Background.color
-                    (if selectedDate == Just date then
+                    (if selectedDate == maybeDate then
                         theme.brandBlueSoft
 
                      else
@@ -367,7 +367,7 @@ dayView theme model selectedDate month day attributes =
                 :: Element.htmlAttribute
                     (Attr.attribute
                         "aria-pressed"
-                        (if selectedDate == Just date then
+                        (if selectedDate == maybeDate then
                             "true"
 
                          else

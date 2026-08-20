@@ -2683,14 +2683,14 @@ view props =
             (List.map (paneView props (selectedDiaryDate props.model.panes)) props.model.panes)
 
 
-selectedDiaryDate : List Pane -> Maybe String
+selectedDiaryDate : List Pane -> Maybe LocalDate
 selectedDiaryDate panes =
     panes
         |> List.filterMap
             (\pane ->
                 case pane of
                     DiaryPane paneId _ ->
-                        Just (LocalDate.format paneId.date)
+                        Just paneId.date
 
                     _ ->
                         Nothing
@@ -2700,7 +2700,7 @@ selectedDiaryDate panes =
 
 paneView :
     { model : Model, device : Device, theme : Theme }
-    -> Maybe String
+    -> Maybe LocalDate
     -> Pane
     -> ( String, Element Msg )
 paneView props selectedDate pane =
