@@ -226,8 +226,6 @@ searchResponseJson =
                 }
             , "per_serving": null
             }
-         , "energy_kcal_per_100g": "52"
-         , "energy_kcal_per_serving": null
          }]
     }
     """

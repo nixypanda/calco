@@ -563,8 +563,6 @@ searchResult =
         { per100g = Nutrition.emptySummary
         , perServing = Nothing
         }
-    , energyKcalPer100g = Nothing
-    , energyKcalPerServing = Nothing
     }
 
 
@@ -587,6 +585,4 @@ searchResultForId productId =
         { per100g = Nutrition.emptySummary
         , perServing = Nothing
         }
-    , energyKcalPer100g = Nothing
-    , energyKcalPerServing = Nothing
     }

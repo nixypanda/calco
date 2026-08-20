@@ -194,8 +194,6 @@ type alias SearchResult =
     , categories : List String
     , servingSizeG : Maybe String
     , nutritionSummary : ProductNutritionSummary
-    , energyKcalPer100g : Maybe String
-    , energyKcalPerServing : Maybe String
     }
 
 
@@ -469,8 +467,6 @@ searchResultDecoder =
         (Decode.field "categories" (Decode.list Decode.string))
         (Decode.field "serving_size_g" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "nutrition_summary" productNutritionSummaryDecoder)
-        |> Json.andMap (Decode.field "energy_kcal_per_100g" (Decode.nullable Decode.string))
-        |> Json.andMap (Decode.field "energy_kcal_per_serving" (Decode.nullable Decode.string))
 
 
 categorySuggestionDecoder : Decoder CategorySuggestion
