@@ -409,29 +409,24 @@ hydrateDated : Store -> Pane -> Pane
 hydrateDated store pane =
     case pane of
         DiaryPane paneId diary ->
-            let
-                dateKey : String
-                dateKey =
-                    LocalDate.format paneId.date
-            in
             DiaryPane paneId
                 (diary
                     |> applyCached DiaryDay.update
                         (DiaryDay.LogsLoaded paneId.date)
-                        (Store.cached (Store.diaryLogsAt dateKey) store)
+                        (Store.cached (Store.diaryLogsAt paneId.date) store)
                     |> applyCached DiaryDay.update
                         (DiaryDay.GoalLoaded paneId.date)
-                        (Store.cached (Store.diaryGoalAt dateKey) store)
+                        (Store.cached (Store.diaryGoalAt paneId.date) store)
                     |> applyCached DiaryDay.update
                         (DiaryDay.LatestSlotsReceived paneId.date)
-                        (Store.cached (Store.latestSlotsAt dateKey) store)
+                        (Store.cached (Store.latestSlotsAt paneId.date) store)
                 )
 
         GoalsSettingsPane date goals ->
             GoalsSettingsPane date
                 (applyCached GoalsSettings.update
                     GoalsSettings.GoalLoaded
-                    (Store.cached (Store.diaryGoalAt (LocalDate.format date)) store)
+                    (Store.cached (Store.diaryGoalAt date) store)
                     goals
                 )
 
@@ -545,7 +540,7 @@ type alias SharedResource a =
 can be open on the same date at once.
 -}
 type alias DateResource a =
-    { access : String -> Store.Access a
+    { access : LocalDate -> Store.Access a
     , fetch : LocalDate -> Store.RequestToken -> Cmd Msg
     , apply : LocalDate -> Result Api.Client.ApiError a -> List Pane -> List Pane
     }
@@ -679,7 +674,7 @@ ensureDateData panes store =
 
 ensureDate : DateResource a -> LocalDate -> Store -> ( Store, Cmd Msg )
 ensureDate resource date store =
-    case Store.request (resource.access (LocalDate.format date)) store of
+    case Store.request (resource.access date) store of
         Just ( nextStore, token ) ->
             ( nextStore, resource.fetch date token )
 
@@ -1378,7 +1373,7 @@ settleDate :
     -> Model
     -> ( Model, Cmd Msg, OutMsg )
 settleDate resource token date result model =
-    case Store.settle (resource.access (LocalDate.format date)) token result model.store of
+    case Store.settle (resource.access date) token result model.store of
         Nothing ->
             ( model, Cmd.none, NoOutMsg )
 
@@ -1798,7 +1793,7 @@ refreshAfterLogMutation context reloadDiary date panes store =
     let
         logs : Store.Access (List Data.FoodLog.FoodLog)
         logs =
-            Store.diaryLogsAt (LocalDate.format date)
+            Store.diaryLogsAt date
 
         invalidated : Store
         invalidated =
