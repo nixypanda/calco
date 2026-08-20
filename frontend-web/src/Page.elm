@@ -41,6 +41,7 @@ import Data.FoodLog
 import Data.Goals
 import Data.ItemRef as ItemRef
 import Data.LocalContext exposing (LocalContext)
+import Data.LogSummary as LogSummary
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
@@ -574,7 +575,16 @@ diaryLogsResource : DateResource (List Data.FoodLog.FoodLog)
 diaryLogsResource =
     { access = Store.diaryLogsAt
     , fetch = \date token -> Api.Logs.listLogs date (DiaryLogsStoreLoaded token date)
-    , apply = \date result -> updateDiaryPanes date (DiaryDay.LogsLoaded date result)
+    , apply =
+        \date result ->
+            updateDiaryPanes date (DiaryDay.LogsLoaded date result)
+                >> (case result of
+                        Ok logs ->
+                            applyDayTotals date logs
+
+                        Err _ ->
+                            identity
+                   )
     }
 
 
@@ -1307,7 +1317,7 @@ update context msg model =
                     (\result ->
                         let
                             ( refreshedPanes, nextStore, refreshCmd ) =
-                                applyMutation context result.mutation result.pane model.store
+                                applyMutation result.mutation result.pane model.store
                         in
                         ( { model
                             | panes = refreshedPanes
@@ -1755,17 +1765,17 @@ stepPane context toPane toMsg applyOut mutation ( subModel, subCmd, subOut ) =
         }
 
 
-applyMutation : InitContext -> Mutation -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
-applyMutation context mutation panes store =
+applyMutation : Mutation -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
+applyMutation mutation panes store =
     case mutation of
         NoMutation ->
             ( panes, store, Cmd.none )
 
         RefreshDiaryAndCalendar date ->
-            refreshAfterLogMutation context True date panes store
+            refreshAfterLogMutation True date panes store
 
         RefreshCalendar date ->
-            refreshAfterLogMutation context False date panes store
+            refreshAfterLogMutation False date panes store
 
         PreferencesSaved preferences ->
             ( panes, Store.seed Store.preferences preferences store, Cmd.none )
@@ -1783,54 +1793,49 @@ window reaches back `latestSlotsLookbackDays`, so the changed date may be the
 source of any date's suggestions.
 -}
 refreshAfterLogMutation :
-    InitContext
-    -> Bool
+    Bool
     -> LocalDate
     -> List Pane
     -> Store
     -> ( List Pane, Store, Cmd Msg )
-refreshAfterLogMutation context reloadDiary date panes store =
+refreshAfterLogMutation reloadDiary date panes store =
     let
-        logs : Store.Access (List Data.FoodLog.FoodLog)
-        logs =
+        access : Store.Access (List Data.FoodLog.FoodLog)
+        access =
             Store.diaryLogsAt date
+
+        appliedLogs : Maybe (List Data.FoodLog.FoodLog)
+        appliedLogs =
+            if reloadDiary then
+                Nothing
+
+            else
+                diaryPaneLogs date panes
 
         invalidated : Store
         invalidated =
             Store.clearLatestSlots
-                (if reloadDiary then
-                    Store.invalidate logs store
+                (case appliedLogs of
+                    Just logs ->
+                        Store.seed access logs store
 
-                 else
-                    seedLogsFromDiary logs date panes store
+                    Nothing ->
+                        Store.invalidate access store
                 )
 
-        ( refreshedPanes, calendarCmd ) =
-            refreshCalendars context date panes
+        refreshedPanes : List Pane
+        refreshedPanes =
+            case appliedLogs of
+                Just logs ->
+                    applyDayTotals date logs panes
+
+                Nothing ->
+                    panes
 
         ( nextStore, dateCmd ) =
             ensureDateData refreshedPanes invalidated
     in
-    ( refreshedPanes, nextStore, Cmd.batch [ calendarCmd, dateCmd ] )
-
-
-{-| The diary pane applied this mutation to its own logs already, so what it
-holds is the post-mutation truth and caching it costs nothing where a refetch
-would cost a request.
--}
-seedLogsFromDiary :
-    Store.Access (List Data.FoodLog.FoodLog)
-    -> LocalDate
-    -> List Pane
-    -> Store
-    -> Store
-seedLogsFromDiary access date panes store =
-    case diaryPaneLogs date panes of
-        Just logs ->
-            Store.seed access logs store
-
-        Nothing ->
-            Store.invalidate access store
+    ( refreshedPanes, nextStore, dateCmd )
 
 
 diaryPaneLogs : LocalDate -> List Pane -> Maybe (List Data.FoodLog.FoodLog)
@@ -1852,32 +1857,23 @@ diaryPaneLogs date panes =
         |> List.head
 
 
-refreshCalendars : InitContext -> LocalDate -> List Pane -> ( List Pane, Cmd Msg )
-refreshCalendars context date panes =
+applyDayTotals : LocalDate -> List Data.FoodLog.FoodLog -> List Pane -> List Pane
+applyDayTotals date logs panes =
     let
-        refresh : Pane -> ( Pane, Cmd Msg )
-        refresh pane =
+        msg : DiaryCalendar.Msg
+        msg =
+            DiaryCalendar.DayTotalsKnown date (LogSummary.fromLogs date logs)
+    in
+    List.map
+        (\pane ->
             case pane of
                 DiaryCalendarPane month calendar ->
-                    let
-                        ( next, subCmd, subOut ) =
-                            DiaryCalendar.update (DiaryCalendar.RefreshDay date) calendar
-
-                        ( outCmd, _ ) =
-                            applyDiaryCalendarOutMsg context subOut
-                    in
-                    ( DiaryCalendarPane month next
-                    , Cmd.batch [ Cmd.map GotDiaryCalendarMsg subCmd, outCmd ]
-                    )
+                    DiaryCalendarPane month (modelOnly (DiaryCalendar.update msg calendar))
 
                 _ ->
-                    ( pane, Cmd.none )
-
-        results : List ( Pane, Cmd Msg )
-        results =
-            List.map refresh panes
-    in
-    ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
+                    pane
+        )
+        panes
 
 
 third : ( a, b, c ) -> c
@@ -1892,7 +1888,6 @@ localContextReceived :
     -> Maybe ( Model, Cmd Msg, OutMsg )
 localContextReceived pageContext context model =
     updateAll
-        pageContext
         (\pane ->
             case pane of
                 FoodDetailPane _ _ ->
@@ -1926,7 +1921,6 @@ barcodeScannerEventReceived :
     -> Maybe ( Model, Cmd Msg, OutMsg )
 barcodeScannerEventReceived pageContext event model =
     updateAll
-        pageContext
         (\pane ->
             case pane of
                 FoodSearchPane _ ->
@@ -1951,11 +1945,10 @@ type alias UpdateAllResult =
 
 
 updateAll :
-    InitContext
-    -> (Pane -> Maybe (PaneUpdate Pane))
+    (Pane -> Maybe (PaneUpdate Pane))
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
-updateAll pageContext updateOne model =
+updateAll updateOne model =
     let
         step : Pane -> UpdateAllResult -> UpdateAllResult
         step pane result =
@@ -1963,8 +1956,7 @@ updateAll pageContext updateOne model =
                 Just paneResult ->
                     let
                         ( refreshed, nextStore, refreshCmd ) =
-                            applyMutation pageContext
-                                paneResult.mutation
+                            applyMutation paneResult.mutation
                                 [ paneResult.pane ]
                                 result.store
                     in
@@ -2164,13 +2156,6 @@ applyDiaryCalendarOutMsg _ outMsg =
                 , toDate = toDate
                 }
                 (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded)
-            , NoOutMsg
-            )
-
-        DiaryCalendar.RequestDaySummary date ->
-            ( Api.Logs.summary
-                { fromDate = date, toDate = date }
-                (GotDiaryCalendarMsg << DiaryCalendar.DaySummaryRefreshed date)
             , NoOutMsg
             )
 

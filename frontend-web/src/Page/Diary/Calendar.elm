@@ -94,8 +94,7 @@ validMonth period =
 type Msg
     = SummaryLoaded (Result Client.ApiError (List DaySummary))
     | EarlierSummaryLoaded (Result Client.ApiError (List DaySummary))
-    | RefreshDay LocalDate
-    | DaySummaryRefreshed LocalDate (Result Client.ApiError (List DaySummary))
+    | DayTotalsKnown LocalDate (Maybe DaySummary)
     | LoadEarlierClicked
     | DayClicked String String
 
@@ -104,7 +103,6 @@ type OutMsg
     = NoOp
     | RequestSummary LocalDate LocalDate
     | RequestEarlierSummary LocalDate LocalDate
-    | RequestDaySummary LocalDate
     | Navigate Route
     | SessionExpired
 
@@ -118,15 +116,15 @@ update msg model =
         EarlierSummaryLoaded result ->
             applySummaryResult True result model
 
-        RefreshDay date ->
+        DayTotalsKnown date summary ->
             if dateIsLoaded date model then
-                ( model, Cmd.none, RequestDaySummary date )
+                ( { model | summaries = replaceDay date summary model.summaries }
+                , Cmd.none
+                , NoOp
+                )
 
             else
                 ( model, Cmd.none, NoOp )
-
-        DaySummaryRefreshed requestDate result ->
-            applyDaySummaryResult requestDate result model
 
         LoadEarlierClicked ->
             if model.loadingEarlier then
@@ -163,38 +161,11 @@ update msg model =
             )
 
 
-applyDaySummaryResult :
-    LocalDate
-    -> Result Client.ApiError (List DaySummary)
-    -> Model
-    -> ( Model, Cmd Msg, OutMsg )
-applyDaySummaryResult requestDate result model =
-    if not (dateIsLoaded requestDate model) then
-        ( model, Cmd.none, NoOp )
-
-    else
-        case result of
-            Ok summaries ->
-                ( { model
-                    | summaries = replaceDaySummary requestDate summaries model.summaries
-                  }
-                , Cmd.none
-                , NoOp
-                )
-
-            Err error ->
-                if Client.isUnauthorized error then
-                    ( model, Cmd.none, SessionExpired )
-
-                else
-                    ( model, Cmd.none, NoOp )
-
-
-replaceDaySummary : LocalDate -> List DaySummary -> List DaySummary -> List DaySummary
-replaceDaySummary requestDate incoming existing =
+replaceDay : LocalDate -> Maybe DaySummary -> List DaySummary -> List DaySummary
+replaceDay date summary existing =
     mergeSummaries
-        (List.filter (\summary -> not (LocalDate.equals summary.date requestDate)) existing)
-        (List.filter (\summary -> LocalDate.equals summary.date requestDate) incoming)
+        (List.filter (\other -> not (LocalDate.equals other.date date)) existing)
+        (summary |> Maybe.map List.singleton |> Maybe.withDefault [])
 
 
 dateIsLoaded : LocalDate -> Model -> Bool

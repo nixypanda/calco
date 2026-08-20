@@ -1,8 +1,10 @@
 module Data.LogSummary exposing
     ( DaySummary
+    , fromLogs
     , listDecoder
     )
 
+import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Json.Decode as Decode exposing (Decoder)
 import Lib.Date as LocalDate exposing (LocalDate)
 
@@ -14,6 +16,21 @@ type alias DaySummary =
     , carbsG : Float
     , fatG : Float
     }
+
+
+fromLogs : LocalDate -> List { log | nutrients : List NutrientAmount } -> Maybe DaySummary
+fromLogs date logs =
+    if List.isEmpty logs then
+        Nothing
+
+    else
+        Just
+            { date = date
+            , energyKcal = Nutrition.sumNutrient "ENERGY_KCAL" logs
+            , proteinG = Nutrition.sumNutrient "PROTEIN_G" logs
+            , carbsG = Nutrition.sumNutrient "CARBS_G" logs
+            , fatG = Nutrition.sumNutrient "FAT_G" logs
+            }
 
 
 decoder : Decoder DaySummary

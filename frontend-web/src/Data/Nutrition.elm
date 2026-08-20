@@ -20,6 +20,7 @@ module Data.Nutrition exposing
     , scaledSnapshotForQuantity
     , servingCaloriesText
     , servingGrams
+    , sumNutrient
     , summaryDecoder
     , summaryToNutrients
     , summaryValue
