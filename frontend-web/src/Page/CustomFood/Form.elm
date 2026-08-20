@@ -34,6 +34,7 @@ import Dict exposing (Dict)
 import Element exposing (Device, Element)
 import Lib.ListExtra as ListExtra
 import Lib.Text as Text
+import Lib.Ticket as Ticket exposing (Ticket)
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
@@ -99,7 +100,7 @@ type alias CategoryInput =
     { selected : List String
     , query : String
     , suggestions : List CategorySuggestion
-    , token : Int
+    , token : Ticket
     }
 
 
@@ -127,7 +128,7 @@ type ValidationError
 
 type OutMsg
     = NoOutMsg
-    | RequestCategorySuggestions Int CategorySuggestionRequest
+    | RequestCategorySuggestions Ticket CategorySuggestionRequest
 
 
 emptyForm : FormModel
@@ -151,7 +152,7 @@ emptyCategoryInput =
     { selected = []
     , query = ""
     , suggestions = []
-    , token = 0
+    , token = Ticket.initial
     }
 
 
@@ -184,7 +185,7 @@ type Msg
     | AddCategory String
     | RemoveCategory String
     | AcceptCategorySuggestion String
-    | CategorySuggestionsLoaded Int (Result Client.ApiError (List CategorySuggestion))
+    | CategorySuggestionsLoaded Ticket (Result Client.ApiError (List CategorySuggestion))
     | NutrientCodeChanged Int String
     | ToggleNutrientCodeDropdown Int
     | NutrientAmountChanged Int String
@@ -439,7 +440,7 @@ update msg formIn =
                 next =
                     { categoryInput
                         | query = value
-                        , token = categoryInput.token + 1
+                        , token = Ticket.next categoryInput.token
                     }
 
                 trimmed : String

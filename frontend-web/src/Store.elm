@@ -26,6 +26,7 @@ import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.FoodLog exposing (FoodLog)
 import Data.Goals exposing (GoalSnapshot)
 import Dict exposing (Dict)
+import Lib.Date as LocalDate exposing (LocalDate)
 
 
 {-| Opaque so that every write either redeems the token of the request that
@@ -110,19 +111,25 @@ reset (Store fields) =
 -- RESOURCES
 
 
-diaryLogsAt : String -> Access (List FoodLog)
-diaryLogsAt key =
-    dictAccess key .diaryLogs (\entries fields -> { fields | diaryLogs = entries })
+diaryLogsAt : LocalDate -> Access (List FoodLog)
+diaryLogsAt date =
+    dictAccess (LocalDate.format date)
+        .diaryLogs
+        (\entries fields -> { fields | diaryLogs = entries })
 
 
-diaryGoalAt : String -> Access GoalSnapshot
-diaryGoalAt key =
-    dictAccess key .diaryGoals (\entries fields -> { fields | diaryGoals = entries })
+diaryGoalAt : LocalDate -> Access GoalSnapshot
+diaryGoalAt date =
+    dictAccess (LocalDate.format date)
+        .diaryGoals
+        (\entries fields -> { fields | diaryGoals = entries })
 
 
-latestSlotsAt : String -> Access LatestSlotsResponse
-latestSlotsAt key =
-    dictAccess key .latestSlots (\entries fields -> { fields | latestSlots = entries })
+latestSlotsAt : LocalDate -> Access LatestSlotsResponse
+latestSlotsAt date =
+    dictAccess (LocalDate.format date)
+        .latestSlots
+        (\entries fields -> { fields | latestSlots = entries })
 
 
 preferences : Access DiaryPreferences

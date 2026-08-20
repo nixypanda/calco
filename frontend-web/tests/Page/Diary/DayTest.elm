@@ -18,27 +18,11 @@ tests : Test
 tests =
     describe "Page.Diary.Day"
         [ describe "initialization"
-            [ test "valid date query param becomes current date" <|
+            [ test "the pane's date is the date it shows" <|
                 \_ ->
-                    initModel (Just "2026-05-30")
+                    initModel yesterday
                         |> .currentDate
-                        |> LocalDate.format
-                        |> Expect.equal "2026-05-30"
-            , test "invalid date query param falls back to today" <|
-                \_ ->
-                    initModel (Just "not-a-date")
-                        |> .currentDate
-                        |> Expect.equal today
-            , test "missing date query param falls back to today" <|
-                \_ ->
-                    initModel Nothing
-                        |> .currentDate
-                        |> Expect.equal today
-            , test "future date query param is clamped to today" <|
-                \_ ->
-                    initModel (Just "2026-05-31")
-                        |> .currentDate
-                        |> Expect.equal today
+                        |> Expect.equal yesterday
             ]
         , describe "date navigation"
             [ test "previous day navigation leaves current state intact" <|
@@ -47,7 +31,7 @@ tests =
                         ( model, _, outMsg ) =
                             DiaryDay.update
                                 DiaryDay.PreviousDayClicked
-                                (initModel (Just "2026-05-30"))
+                                (initModel today)
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
@@ -58,7 +42,7 @@ tests =
                 \_ ->
                     let
                         ( model, _, outMsg ) =
-                            DiaryDay.update DiaryDay.NextDayClicked (initModel (Just "2026-05-29"))
+                            DiaryDay.update DiaryDay.NextDayClicked (initModel yesterday)
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
@@ -70,16 +54,25 @@ tests =
                     let
                         model : DiaryDay.Model
                         model =
-                            initModel Nothing
+                            initModel today
 
                         ( next, _, outMsg ) =
                             DiaryDay.update DiaryDay.NextDayClicked model
                     in
                     ( next.currentDate, outMsg )
                         |> Expect.equal ( model.currentDate, DiaryDay.NoOp )
+            , test "a day that rolls over stops being the last navigable one" <|
+                \_ ->
+                    initModel today
+                        |> DiaryDay.update (DiaryDay.TodayChanged tomorrow)
+                        |> first
+                        |> DiaryDay.update DiaryDay.NextDayClicked
+                        |> third
+                        |> Expect.equal
+                            (DiaryDay.Navigate (DiaryDay (Just "2026-05-31") Nothing))
             , test "details action carries the selected date" <|
                 \_ ->
-                    DiaryDay.update DiaryDay.DetailsClicked (initModel (Just "2026-05-29"))
+                    DiaryDay.update DiaryDay.DetailsClicked (initModel yesterday)
                         |> third
                         |> Expect.equal
                             (DiaryDay.Navigate (NutritionDetails (Just "2026-05-29")))
@@ -530,10 +523,10 @@ tests =
         ]
 
 
-initModel : Maybe String -> DiaryDay.Model
-initModel dateParam =
+initModel : LocalDate -> DiaryDay.Model
+initModel currentDate =
     DiaryDay.init
-        { dateParam = dateParam
+        { date = currentDate
         , calendarMonth = Nothing
         , today = today
         }
@@ -596,6 +589,11 @@ yesterday =
     date "2026-05-29"
 
 
+tomorrow : LocalDate
+tomorrow =
+    date "2026-05-31"
+
+
 date : String -> LocalDate
 date raw =
     case LocalDate.fromString raw of
@@ -620,7 +618,7 @@ productRef =
 lunchLog : FoodLog
 lunchLog =
     log "log-1"
-        (Just "lunch")
+        (Just Lunch)
         productRef
         [ nutrient "ENERGY_KCAL" "247.5" "kcal"
         , nutrient "PROTEIN_G" "46.5" "g"
@@ -631,7 +629,7 @@ lunchLog =
 
 secondLunchLog : FoodLog
 secondLunchLog =
-    log "log-2" (Just "lunch") productRef [ nutrient "ENERGY_KCAL" "100" "kcal" ]
+    log "log-2" (Just Lunch) productRef [ nutrient "ENERGY_KCAL" "100" "kcal" ]
 
 
 yesterdayLunchLog : FoodLog
@@ -641,12 +639,12 @@ yesterdayLunchLog =
 
 breakfastLog : FoodLog
 breakfastLog =
-    log "log-3" (Just "breakfast") productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
+    log "log-3" (Just Breakfast) productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
 
 
 dinnerLog : FoodLog
 dinnerLog =
-    log "log-4" (Just "dinner") productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
+    log "log-4" (Just Dinner) productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
 
 
 dinnerSlotResponse : Api.Logs.LatestSlotResponse
@@ -695,7 +693,7 @@ summary =
     ]
 
 
-log : String -> Maybe String -> LogItem -> List NutrientAmount -> FoodLog
+log : String -> Maybe MealSlot -> LogItem -> List NutrientAmount -> FoodLog
 log id mealSlot item nutrients =
     { id = id
     , logDate = date "2026-05-30"

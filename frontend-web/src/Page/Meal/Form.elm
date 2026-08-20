@@ -29,13 +29,14 @@ import Api.Meals
         ( CreateMealComponentRequest
         , CreateMealRequest
         )
-import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition exposing (defaultCode)
 import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
+import Lib.Ticket as Ticket exposing (Ticket)
+import Set exposing (Set)
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
@@ -55,7 +56,6 @@ type alias RowId =
 type alias ComponentRow =
     { rowId : RowId
     , productId : String
-    , productName : String
     , quantity : String
     , unit : String
     , search : QueryState
@@ -69,9 +69,9 @@ type alias CategorySuggestionResult =
 
 type alias ProductAndCategoryRequests =
     { rowId : RowId
-    , searchToken : Int
+    , searchToken : Ticket
     , searchRequest : Foods.SearchRequest
-    , categoryToken : Int
+    , categoryToken : Ticket
     , categoryRequest : Foods.CategorySuggestionRequest
     }
 
@@ -82,9 +82,9 @@ type alias FormFields =
     , totalQuantity : String
     , totalUnit : String
     , components : List ComponentRow
-    , productNames : ItemNameLookup.Names
+    , namedProductIds : Set String
     , nextRowId : RowId
-    , nextSearchToken : Int
+    , nextSearchToken : Ticket
     , submit : SubmitState
     }
 
@@ -122,8 +122,8 @@ type ValidationError
 
 type FormFieldOutMsg
     = RequestProductName String
-    | RequestProductSearch RowId Int Foods.SearchRequest
-    | RequestCategorySuggestions RowId Int Foods.CategorySuggestionRequest
+    | RequestProductSearch RowId Ticket Foods.SearchRequest
+    | RequestCategorySuggestions RowId Ticket Foods.CategorySuggestionRequest
     | RequestProductAndCats ProductAndCategoryRequests
     | FormSessionExpired
 
@@ -135,9 +135,9 @@ emptyFormFields =
     , totalQuantity = ""
     , totalUnit = defaultCode
     , components = [ emptyComponentRow 1 ]
-    , productNames = ItemNameLookup.empty
+    , namedProductIds = Set.empty
     , nextRowId = 2
-    , nextSearchToken = 1
+    , nextSearchToken = Ticket.next Ticket.initial
     , submit = Idle
     }
 
@@ -146,7 +146,6 @@ emptyComponentRow : RowId -> ComponentRow
 emptyComponentRow rowId =
     { rowId = rowId
     , productId = ""
-    , productName = ""
     , quantity = "100"
     , unit = defaultCode
     , search = Search.empty
@@ -164,8 +163,8 @@ type FormFieldMsg
     | TotalQuantityChanged String
     | TotalUnitChanged String
     | ComponentSearchChanged RowId String
-    | ComponentSearchCompleted RowId Int (Result Client.ApiError SearchResponse)
-    | ComponentCategoriesCompleted RowId Int CategorySuggestionResult
+    | ComponentSearchCompleted RowId Ticket (Result Client.ApiError SearchResponse)
+    | ComponentCategoriesCompleted RowId Ticket CategorySuggestionResult
     | CompleteFirstComponentSuggestion RowId
     | ComponentCompletionClicked RowId Completion
     | SelectProduct RowId SearchResult
@@ -205,24 +204,16 @@ updateFormField msg form =
                         Err _ ->
                             "Unknown food"
 
-                nextNames : ItemNameLookup.Names
-                nextNames =
-                    ItemNameLookup.insertProduct productId name form.productNames
-
-                nextForm : FormFields
-                nextForm =
-                    { form
-                        | components =
-                            List.map (mergeProductName productId name) form.components
-                        , productNames = nextNames
-                    }
+                named : Set String
+                named =
+                    Set.insert productId form.namedProductIds
             in
-            ( nextForm
+            ( { form
+                | components = List.map (applyProductName productId name) form.components
+                , namedProductIds = named
+              }
             , Cmd.none
-            , requestNextMissingProductName
-                (Just productId)
-                form.components
-                nextNames
+            , requestNextMissingProductName form.components named
             )
 
         ComponentSearchChanged rowId query ->
@@ -465,13 +456,13 @@ onComponentSearchChanged rowId query form =
         ( transitionedSearch, categoryReq ) =
             Search.onQueryChanged query priorSearch
 
-        token : Int
+        token : Ticket
         token =
             form.nextSearchToken
 
-        categoryToken : Int
+        categoryToken : Ticket
         categoryToken =
-            token + 1
+            Ticket.next token
 
         nextSearch : QueryState
         nextSearch =
@@ -494,7 +485,7 @@ onComponentSearchChanged rowId query form =
     in
     case ( searchRequest, categoryReq ) of
         ( Just productRequest, Just cat ) ->
-            ( { nextForm | nextSearchToken = token + 2 }
+            ( { nextForm | nextSearchToken = Ticket.next categoryToken }
                 |> updateComponent rowId SetSearchLoading
             , Cmd.none
             , Just
@@ -509,14 +500,14 @@ onComponentSearchChanged rowId query form =
             )
 
         ( Just productRequest, Nothing ) ->
-            ( { nextForm | nextSearchToken = token + 1 }
+            ( { nextForm | nextSearchToken = categoryToken }
                 |> updateComponent rowId SetSearchLoading
             , Cmd.none
             , Just (RequestProductSearch rowId token productRequest)
             )
 
         ( Nothing, Just cat ) ->
-            ( { nextForm | nextSearchToken = token + 2 }
+            ( { nextForm | nextSearchToken = Ticket.next categoryToken }
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Just
@@ -554,28 +545,20 @@ completeComponentSuggestion rowId form =
             ( form, Cmd.none, Nothing )
 
 
-requestNextMissingProductName :
-    Maybe String
-    -> List ComponentRow
-    -> ItemNameLookup.Names
-    -> Maybe FormFieldOutMsg
-requestNextMissingProductName completedProductId rows productNames =
+requestNextMissingProductName : List ComponentRow -> Set String -> Maybe FormFieldOutMsg
+requestNextMissingProductName rows namedProductIds =
     rows
         |> List.map .productId
         |> List.filter (String.trim >> String.isEmpty >> not)
-        |> (\ids ->
-                ItemNameLookup.nextMissingProductId
-                    completedProductId
-                    ids
-                    productNames
-           )
+        |> List.filter (\id -> not (Set.member id namedProductIds))
+        |> List.head
         |> Maybe.map RequestProductName
 
 
-mergeProductName : String -> String -> ComponentRow -> ComponentRow
-mergeProductName productId name row =
+applyProductName : String -> String -> ComponentRow -> ComponentRow
+applyProductName productId name row =
     if row.productId == productId then
-        { row | productName = name, search = Search.withQuery name row.search }
+        { row | search = Search.withQuery name row.search }
 
     else
         row
@@ -591,7 +574,7 @@ type ComponentPatch
     | SetQuantity String
     | SetUnit String
     | SetSearch QueryState
-    | SetSearchResults Int (List SearchResult)
+    | SetSearchResults Ticket (List SearchResult)
     | SetSearchLoading
     | SetSearchFailed
 
@@ -606,13 +589,7 @@ patchRow rowId patch row =
             SetProduct id name ->
                 { row
                     | productId = id
-                    , productName = name
-                    , search =
-                        { query = name
-                        , searchToken = 0
-                        , categoryToken = 0
-                        , categorySuggestions = []
-                        }
+                    , search = Search.withQuery name Search.empty
                     , searchResults = NotAsked
                 }
 

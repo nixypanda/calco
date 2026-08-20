@@ -2,8 +2,10 @@ module StoreTest exposing (tests)
 
 import Data.FoodLog exposing (FoodLog)
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Store exposing (Store)
 import Test exposing (Test, describe, test)
+import Time
 
 
 tests : Test
@@ -155,9 +157,19 @@ sessionsWithRepeatedRequestId =
 
 logsForDay : Store.Access (List FoodLog)
 logsForDay =
-    Store.diaryLogsAt "2026-08-18"
+    Store.diaryLogsAt (date "2026-08-18")
 
 
-otherDay : String
+otherDay : LocalDate
 otherDay =
-    "2026-08-17"
+    date "2026-08-17"
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            LocalDate.fromPosix Time.utc (Time.millisToPosix 0)

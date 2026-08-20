@@ -8,6 +8,7 @@ import Data.Route exposing (Route(..))
 import Data.Search as Search
 import Expect
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Meal.Create as MealCreate
 import Page.Meal.Form as Common
 import Test exposing (Test, describe, test)
@@ -81,13 +82,13 @@ tests =
                 in
                 MealCreate.update
                     (MealCreate.FormMsg
-                        (Common.ComponentSearchCompleted 1 1 (Ok { items = [ result ] }))
+                        (Common.ComponentSearchCompleted 1 (ticket 1) (Ok { items = [ result ] }))
                     )
                     { emptyFormFields
                         | components =
                             [ { row
                                 | search =
-                                    Search.withSearchToken 2 row.search
+                                    Search.withSearchToken (ticket 2) row.search
                               }
                             ]
                     }
@@ -105,13 +106,13 @@ tests =
                 in
                 MealCreate.update
                     (MealCreate.FormMsg
-                        (Common.ComponentSearchCompleted 1 2 (Ok { items = [ result ] }))
+                        (Common.ComponentSearchCompleted 1 (ticket 2) (Ok { items = [ result ] }))
                     )
                     { emptyFormFields
                         | components =
                             [ { row
                                 | search =
-                                    Search.withSearchToken 2 row.search
+                                    Search.withSearchToken (ticket 2) row.search
                               }
                             ]
                     }
@@ -150,10 +151,10 @@ tests =
                         (MealCreate.FormOutMsg
                             (Common.RequestProductAndCats
                                 { rowId = 1
-                                , searchToken = 1
+                                , searchToken = ticket 1
                                 , searchRequest =
                                     { query = "category:foo", scope = SearchAll }
-                                , categoryToken = 2
+                                , categoryToken = ticket 2
                                 , categoryRequest = { query = "foo", limit = 8 }
                                 }
                             )
@@ -163,7 +164,7 @@ tests =
                 MealCreate.update
                     (MealCreate.FormMsg
                         (Common.ComponentCategoriesCompleted 1
-                            2
+                            (ticket 2)
                             (Ok
                                 { items =
                                     [ { value = "food and beverages", count = 4 } ]
@@ -173,7 +174,7 @@ tests =
                     )
                     (modelWithRow
                         { emptyRow
-                            | search = Search.withCategoryToken 2 emptyRow.search
+                            | search = Search.withCategoryToken (ticket 2) emptyRow.search
                         }
                     )
                     |> first
@@ -191,8 +192,8 @@ tests =
                         { emptyRow
                             | search =
                                 { query = "category:foo"
-                                , searchToken = 0
-                                , categoryToken = 0
+                                , searchToken = ticket 0
+                                , categoryToken = ticket 0
                                 , categorySuggestions =
                                     [ { value = "food and beverages", count = 4 } ]
                                 }
@@ -309,3 +310,8 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

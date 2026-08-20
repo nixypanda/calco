@@ -5,6 +5,7 @@ import Api.Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitI
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
@@ -105,7 +106,7 @@ tests =
                     loadedModel
                     |> third
                     |> Expect.equal
-                        (CustomFoodEdit.RequestCategorySuggestions 1
+                        (CustomFoodEdit.RequestCategorySuggestions (ticket 1)
                             { query = "dai", limit = 8 }
                         )
         , test "category suggestions update loaded form" <|
@@ -120,7 +121,7 @@ tests =
                 in
                 CustomFoodEdit.update
                     (CustomFoodEdit.CategorySuggestionsLoaded
-                        1
+                        (ticket 1)
                         (Ok { items = [ { value = "dairy", count = 3 } ] })
                     )
                     queried
@@ -245,7 +246,7 @@ validLoadedModel =
                 { selected = [ "dairy" ]
                 , query = ""
                 , suggestions = []
-                , token = 0
+                , token = ticket 0
                 }
             , nutrients = [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
             , servings = [ { label = "cube", quantity = "2", unit = "piece", grams = "50" } ]
@@ -334,3 +335,8 @@ nutrientItems =
       , category = "macros"
       }
     ]
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

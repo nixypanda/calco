@@ -4,6 +4,7 @@ import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
 import Data.Nutrition as Nutrition
 import Expect
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
 
@@ -89,7 +90,7 @@ tests =
                             { selected = [ "snack", "fruit" ]
                             , query = ""
                             , suggestions = []
-                            , token = 0
+                            , token = ticket 0
                             }
                     }
                     |> Result.map .categories
@@ -111,7 +112,7 @@ tests =
                             { selected = [ "dairy" ]
                             , query = ""
                             , suggestions = []
-                            , token = 0
+                            , token = ticket 0
                             }
                         , nutrients =
                             [ { code = "PROTEIN_G"
@@ -331,7 +332,7 @@ tests =
                                 { selected = []
                                 , query = "Dairy"
                                 , suggestions = [ { value = "dairy", count = 3 } ]
-                                , token = 0
+                                , token = ticket 0
                                 }
                         }
                 in
@@ -350,7 +351,7 @@ tests =
                                 { selected = [ "dairy", "snack" ]
                                 , query = ""
                                 , suggestions = []
-                                , token = 0
+                                , token = ticket 0
                                 }
                         }
                 in
@@ -369,7 +370,7 @@ tests =
                                 { selected = []
                                 , query = "dai"
                                 , suggestions = [ { value = "dairy", count = 3 } ]
-                                , token = 1
+                                , token = ticket 1
                                 }
                         }
                 in
@@ -388,13 +389,13 @@ tests =
                                 { selected = []
                                 , query = "dai"
                                 , suggestions = []
-                                , token = 1
+                                , token = ticket 1
                                 }
                         }
                 in
                 Form.update
                     (Form.CategorySuggestionsLoaded
-                        1
+                        (ticket 1)
                         (Ok [ { value = "dairy", count = 3 } ])
                     )
                     base
@@ -412,13 +413,13 @@ tests =
                                 { selected = []
                                 , query = "dai"
                                 , suggestions = [ { value = "old", count = 1 } ]
-                                , token = 2
+                                , token = ticket 2
                                 }
                         }
                 in
                 Form.update
                     (Form.CategorySuggestionsLoaded
-                        1
+                        (ticket 1)
                         (Ok [ { value = "dairy", count = 3 } ])
                     )
                     base
@@ -436,13 +437,13 @@ tests =
                                 { selected = []
                                 , query = "dai"
                                 , suggestions = [ { value = "old", count = 1 } ]
-                                , token = 1
+                                , token = ticket 1
                                 }
                         }
                 in
                 Form.update
                     (Form.CategorySuggestionsLoaded
-                        1
+                        (ticket 1)
                         (Err Client.NetworkError)
                     )
                     base
@@ -560,3 +561,8 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

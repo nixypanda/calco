@@ -3,7 +3,6 @@ module Data.MealSlot exposing
     , all
     , fromString
     , label
-    , matches
     , toString
     )
 
@@ -14,7 +13,6 @@ type MealSlot
     | Dinner
     | Snack
     | LateNightSnack
-    | Other
 
 
 all : List MealSlot
@@ -40,9 +38,6 @@ fromString raw =
         "late_night_snack" ->
             Just LateNightSnack
 
-        "other" ->
-            Just Other
-
         _ ->
             Nothing
 
@@ -65,9 +60,6 @@ toString slot =
         LateNightSnack ->
             "late_night_snack"
 
-        Other ->
-            "other"
-
 
 label : MealSlot -> String
 label slot =
@@ -86,19 +78,3 @@ label slot =
 
         LateNightSnack ->
             "Late-night Snack"
-
-        Other ->
-            "Other"
-
-
-matches : MealSlot -> Maybe String -> Bool
-matches slot maybeRaw =
-    case slot of
-        Other ->
-            maybeRaw
-                |> Maybe.andThen fromString
-                |> Maybe.map (\parsed -> parsed == Other)
-                |> Maybe.withDefault True
-
-        _ ->
-            maybeRaw == Just (toString slot)

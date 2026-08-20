@@ -107,24 +107,16 @@ type alias LatestSlotSource =
 
 
 init :
-    { dateParam : Maybe String
+    { date : LocalDate
     , calendarMonth : Maybe String
     , today : LocalDate
     }
     -> ( Model, OutMsg )
 init args =
-    let
-        currentDate : LocalDate
-        currentDate =
-            args.dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault args.today
-                |> LocalDate.clampTo args.today
-    in
-    ( { currentDate = currentDate
+    ( { currentDate = args.date
       , today = args.today
       , calendarMonth = args.calendarMonth
-      , diary = loadingState currentDate
+      , diary = loadingState args.date
       , latestSlots = LatestSlotsLoading
       , copyState = CopyIdle
       , macroMode = Grams
@@ -168,6 +160,7 @@ type Msg
     | AddFoodClicked MealSlot
     | LogClicked String
     | MealsClicked
+    | TodayChanged LocalDate
 
 
 type OutMsg
@@ -362,6 +355,9 @@ update msg model =
 
         MealsClicked ->
             ( model, Cmd.none, Navigate MealList )
+
+        TodayChanged today ->
+            ( { model | today = today }, Cmd.none, NoOp )
 
 
 failure : LocalDate -> Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -564,7 +560,7 @@ toggleMacroMode mode =
 slotCalories : MealSlot -> List FoodLog -> Float
 slotCalories slot logs =
     logs
-        |> FoodLog.logsForSlot slot
+        |> FoodLog.logsForSlot (Just slot)
         |> List.map (.nutrients >> Nutrition.caloriesFrom)
         |> List.sum
 
@@ -1124,7 +1120,7 @@ copyErrorView theme copyState =
 
 
 type alias SlotSection =
-    { slot : MealSlot
+    { slot : Maybe MealSlot
     , logs : List FoodLog
     }
 
@@ -1132,35 +1128,33 @@ type alias SlotSection =
 logGroupsView : Theme -> Device -> Model -> List FoodLog -> Element Msg
 logGroupsView theme device model logs =
     let
-        section : MealSlot -> SlotSection
+        section : Maybe MealSlot -> SlotSection
         section slot =
             { slot = slot, logs = FoodLog.logsForSlot slot logs }
 
-        otherSection : SlotSection
-        otherSection =
-            section Other
+        unslotted : SlotSection
+        unslotted =
+            section Nothing
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        (List.map section MealSlot.all
+        ((MealSlot.all
+            |> List.map (Just >> section)
             |> List.filter (shouldShowSection model.preferences)
-            |> List.map (slotView theme device model)
-            |> (\sections ->
-                    sections
-                        ++ [ if List.isEmpty otherSection.logs then
-                                Element.none
+         )
+            ++ (if List.isEmpty unslotted.logs then
+                    []
 
-                             else
-                                slotView theme device model otherSection
-                           ]
+                else
+                    [ unslotted ]
                )
+            |> List.map (slotView theme device model)
         )
 
 
 shouldShowSection : Maybe DiaryPreferences -> SlotSection -> Bool
 shouldShowSection maybePreferences section =
     not (List.isEmpty section.logs)
-        || (maybePreferences
-                |> Maybe.map (DiaryPreferences.isEnabled section.slot)
+        || (Maybe.map2 DiaryPreferences.isEnabled section.slot maybePreferences
                 |> Maybe.withDefault False
            )
 
@@ -1171,32 +1165,33 @@ slotView theme device model section =
         totals : MacroTotals
         totals =
             Nutrition.macroTotals section.logs
+
+        body : List (Element Msg)
+        body =
+            case section.slot of
+                Just slot ->
+                    (if List.isEmpty section.logs then
+                        [ emptySlotView theme device model slot ]
+
+                     else
+                        List.map (logRow theme) section.logs
+                    )
+                        ++ [ Ui.hairline theme
+                           , Ui.fullWidthGhostButton
+                                device
+                                theme
+                                "+ Add Food"
+                                (AddFoodClicked slot)
+                           ]
+
+                Nothing ->
+                    List.map (logRow theme) section.logs
     in
     mealSlotCard theme
         device
         section.slot
         (mealSlotHeader theme model.macroMode section totals)
-        (Ui.hairline theme
-            :: (if List.isEmpty section.logs then
-                    [ emptySlotView theme device model section.slot ]
-
-                else
-                    List.map (logRow theme) section.logs
-               )
-            ++ (case section.slot of
-                    Other ->
-                        []
-
-                    _ ->
-                        [ Ui.hairline theme
-                        , Ui.fullWidthGhostButton
-                            device
-                            theme
-                            "+ Add Food"
-                            (AddFoodClicked section.slot)
-                        ]
-               )
-        )
+        (Ui.hairline theme :: body)
 
 
 emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
@@ -1296,7 +1291,7 @@ mealSlotHeader theme macroMode section totals =
         , Element.spacing DesignTokens.space12
         ]
         [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-            [ Typography.sectionTitle theme (MealSlot.label section.slot)
+            [ Typography.sectionTitle theme (sectionTitle section.slot)
             , Input.button []
                 { onPress = Just MacroModeToggled
                 , label = Typography.mutedCaption theme (macroSummary macroMode totals)
@@ -1305,6 +1300,16 @@ mealSlotHeader theme macroMode section totals =
         , Typography.mutedCaption theme
             (String.fromInt (round sectionKcal) ++ " kcal")
         ]
+
+
+sectionTitle : Maybe MealSlot -> String
+sectionTitle maybeSlot =
+    case maybeSlot of
+        Just slot ->
+            MealSlot.label slot
+
+        Nothing ->
+            "Other"
 
 
 mealSlotHeaderHeight : Int
@@ -1342,13 +1347,19 @@ mealSlotFade theme =
         Element.none
 
 
-mealSlotCard : Theme -> Device -> MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
-mealSlotCard theme device slot header bodyChildren =
-    case slot of
-        Other ->
+mealSlotCard :
+    Theme
+    -> Device
+    -> Maybe MealSlot
+    -> Element Msg
+    -> List (Element Msg)
+    -> Element Msg
+mealSlotCard theme device maybeSlot header bodyChildren =
+    case maybeSlot of
+        Nothing ->
             Ui.card theme (header :: bodyChildren)
 
-        _ ->
+        Just slot ->
             Ui.heroCard theme
                 { header = header
                 , body = bodyChildren
@@ -1378,51 +1389,48 @@ mealSlotHorizontalPadding device =
 
 mealSlotBackground : MealSlot -> List (Element.Attribute msg)
 mealSlotBackground slot =
-    case mealSlotImage slot of
-        Just image ->
-            [ Element.htmlAttribute
-                (Html.Attributes.style
-                    "background-image"
-                    ("url(\"" ++ image.url ++ "\")")
-                )
-            , Element.htmlAttribute
-                (Html.Attributes.style
-                    "background-size"
-                    "max(100%, 1120px) auto"
-                )
-            , Element.htmlAttribute
-                (Html.Attributes.style
-                    "background-position"
-                    (image.focusX ++ " top")
-                )
-            , Element.htmlAttribute
-                (Html.Attributes.style "background-repeat" "no-repeat")
-            ]
+    let
+        image : { url : String, focusX : String }
+        image =
+            mealSlotImage slot
+    in
+    [ Element.htmlAttribute
+        (Html.Attributes.style
+            "background-image"
+            ("url(\"" ++ image.url ++ "\")")
+        )
+    , Element.htmlAttribute
+        (Html.Attributes.style
+            "background-size"
+            "max(100%, 1120px) auto"
+        )
+    , Element.htmlAttribute
+        (Html.Attributes.style
+            "background-position"
+            (image.focusX ++ " top")
+        )
+    , Element.htmlAttribute
+        (Html.Attributes.style "background-repeat" "no-repeat")
+    ]
 
-        Nothing ->
-            []
 
-
-mealSlotImage : MealSlot -> Maybe { url : String, focusX : String }
+mealSlotImage : MealSlot -> { url : String, focusX : String }
 mealSlotImage slot =
     case slot of
         Breakfast ->
-            Just { url = "/assets/breakfast.png", focusX = "13%" }
+            { url = "/assets/breakfast.png", focusX = "13%" }
 
         Lunch ->
-            Just { url = "/assets/lunch.png", focusX = "50%" }
+            { url = "/assets/lunch.png", focusX = "50%" }
 
         Dinner ->
-            Just { url = "/assets/dinner.png", focusX = "47%" }
+            { url = "/assets/dinner.png", focusX = "47%" }
 
         Snack ->
-            Just { url = "/assets/snacks.png", focusX = "82%" }
+            { url = "/assets/snacks.png", focusX = "82%" }
 
         LateNightSnack ->
-            Just { url = "/assets/late-night-snack.png", focusX = "73%" }
-
-        Other ->
-            Nothing
+            { url = "/assets/late-night-snack.png", focusX = "73%" }
 
 
 macroSummary : MacroMode -> MacroTotals -> String

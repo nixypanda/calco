@@ -43,13 +43,20 @@ tests =
                     |> MealSlot.toString
                     |> MealSlot.fromString
                     |> Expect.equal (Just slot)
-        , test "other matches missing or unknown backend slots" <|
+        , test "every slot formats to a value the backend accepts" <|
             \_ ->
-                [ MealSlot.matches Other Nothing
-                , MealSlot.matches Other (Just "late")
-                , MealSlot.matches Other (Just "lunch")
-                ]
-                    |> Expect.equal [ True, True, False ]
+                List.map MealSlot.toString MealSlot.all
+                    |> Expect.equal
+                        [ "breakfast"
+                        , "lunch"
+                        , "dinner"
+                        , "snack"
+                        , "late_night_snack"
+                        ]
+        , test "rejects the unslotted bucket's label as a slot" <|
+            \_ ->
+                MealSlot.fromString "other"
+                    |> Expect.equal Nothing
         ]
 
 
@@ -61,5 +68,4 @@ mealSlotFuzzer =
         , Fuzz.constant Dinner
         , Fuzz.constant Snack
         , Fuzz.constant LateNightSnack
-        , Fuzz.constant Other
         ]

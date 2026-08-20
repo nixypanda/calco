@@ -1,6 +1,7 @@
 module Page exposing
     ( DiaryGoalResult
     , DiaryLogsResult
+    , DiaryPaneId
     , InitContext
     , LatestSlotsResult
     , Model
@@ -34,10 +35,13 @@ import Api.Logs
 import Api.Meals
 import Api.NutritionDetails
 import Data.Auth as Auth
+import Data.BarcodeScan exposing (ScannerEvent)
 import Data.DiaryPreferences
 import Data.FoodLog
 import Data.Goals
 import Data.ItemRef as ItemRef
+import Data.LocalContext exposing (LocalContext)
+import Data.LogSummary as LogSummary
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
@@ -90,10 +94,10 @@ type Pane
     | AdminPane AdminDashboard.Model
     | AdminCreateUserPane AdminCreateUser.Model
     | AdminEditUserPane String AdminEditUser.Model
-    | DiaryPane String DiaryDay.Model
+    | DiaryPane DiaryPaneId DiaryDay.Model
     | DiaryCalendarPane String DiaryCalendar.Model
-    | NutritionDetailsPane String NutritionDetails.Model
-    | GoalsSettingsPane String GoalsSettings.Model
+    | NutritionDetailsPane LocalDate NutritionDetails.Model
+    | GoalsSettingsPane LocalDate GoalsSettings.Model
     | DiarySettingsPane DiarySettings.Model
     | FoodSearchPane FoodSearch.Model
     | FoodDetailPane String FoodShow.Model
@@ -107,6 +111,12 @@ type Pane
     | MealEditPane String MealEdit.Model
     | MealDetailPane String MealShow.Model
     | PlaceholderPane String
+
+
+type alias DiaryPaneId =
+    { date : LocalDate
+    , calendarMonth : Maybe String
+    }
 
 
 type DesiredPane
@@ -178,17 +188,17 @@ paneKey pane =
         AdminEditUserPane userId _ ->
             "admin-edit-user:" ++ userId
 
-        DiaryPane key _ ->
-            key
+        DiaryPane paneId _ ->
+            diaryPaneKey paneId
 
         DiaryCalendarPane month _ ->
             "calendar:" ++ month
 
         NutritionDetailsPane date _ ->
-            "nutrition-details:" ++ date
+            nutritionDetailsPaneKey date
 
         GoalsSettingsPane date _ ->
-            "goals-settings:" ++ date
+            goalsSettingsPaneKey date
 
         DiarySettingsPane _ ->
             "diary-settings"
@@ -228,6 +238,24 @@ paneKey pane =
 
         PlaceholderPane message ->
             "placeholder:" ++ message
+
+
+diaryPaneKey : DiaryPaneId -> String
+diaryPaneKey paneId =
+    "diary:"
+        ++ LocalDate.format paneId.date
+        ++ ":"
+        ++ Maybe.withDefault "none" paneId.calendarMonth
+
+
+nutritionDetailsPaneKey : LocalDate -> String
+nutritionDetailsPaneKey date =
+    "nutrition-details:" ++ LocalDate.format date
+
+
+goalsSettingsPaneKey : LocalDate -> String
+goalsSettingsPaneKey date =
+    "goals-settings:" ++ LocalDate.format date
 
 
 init : InitContext -> ( Model, Cmd Msg, OutMsg )
@@ -381,34 +409,25 @@ hydrateWith hydrate cached pane =
 hydrateDated : Store -> Pane -> Pane
 hydrateDated store pane =
     case pane of
-        DiaryPane key diary ->
-            let
-                date : LocalDate
-                date =
-                    diary.currentDate
-
-                dateKey : String
-                dateKey =
-                    LocalDate.format date
-            in
-            DiaryPane key
+        DiaryPane paneId diary ->
+            DiaryPane paneId
                 (diary
                     |> applyCached DiaryDay.update
-                        (DiaryDay.LogsLoaded date)
-                        (Store.cached (Store.diaryLogsAt dateKey) store)
+                        (DiaryDay.LogsLoaded paneId.date)
+                        (Store.cached (Store.diaryLogsAt paneId.date) store)
                     |> applyCached DiaryDay.update
-                        (DiaryDay.GoalLoaded date)
-                        (Store.cached (Store.diaryGoalAt dateKey) store)
+                        (DiaryDay.GoalLoaded paneId.date)
+                        (Store.cached (Store.diaryGoalAt paneId.date) store)
                     |> applyCached DiaryDay.update
-                        (DiaryDay.LatestSlotsReceived date)
-                        (Store.cached (Store.latestSlotsAt dateKey) store)
+                        (DiaryDay.LatestSlotsReceived paneId.date)
+                        (Store.cached (Store.latestSlotsAt paneId.date) store)
                 )
 
-        GoalsSettingsPane dateKey goals ->
-            GoalsSettingsPane dateKey
+        GoalsSettingsPane date goals ->
+            GoalsSettingsPane date
                 (applyCached GoalsSettings.update
                     GoalsSettings.GoalLoaded
-                    (Store.cached (Store.diaryGoalAt dateKey) store)
+                    (Store.cached (Store.diaryGoalAt date) store)
                     goals
                 )
 
@@ -495,8 +514,8 @@ hydrateNutrients result pane =
 hydratePreferences : PreferencesResult -> Pane -> Pane
 hydratePreferences result pane =
     case pane of
-        DiaryPane key model ->
-            DiaryPane key
+        DiaryPane paneId model ->
+            DiaryPane paneId
                 (modelOnly (DiaryDay.update (DiaryDay.PreferencesLoaded result) model))
 
         DiarySettingsPane model ->
@@ -522,7 +541,7 @@ type alias SharedResource a =
 can be open on the same date at once.
 -}
 type alias DateResource a =
-    { access : String -> Store.Access a
+    { access : LocalDate -> Store.Access a
     , fetch : LocalDate -> Store.RequestToken -> Cmd Msg
     , apply : LocalDate -> Result Api.Client.ApiError a -> List Pane -> List Pane
     }
@@ -556,7 +575,16 @@ diaryLogsResource : DateResource (List Data.FoodLog.FoodLog)
 diaryLogsResource =
     { access = Store.diaryLogsAt
     , fetch = \date token -> Api.Logs.listLogs date (DiaryLogsStoreLoaded token date)
-    , apply = \date result -> updateDiaryPanes date (DiaryDay.LogsLoaded date result)
+    , apply =
+        \date result ->
+            updateDiaryPanes date (DiaryDay.LogsLoaded date result)
+                >> (case result of
+                        Ok logs ->
+                            applyDayTotals date logs
+
+                        Err _ ->
+                            identity
+                   )
     }
 
 
@@ -567,7 +595,7 @@ diaryGoalResource =
     , apply =
         \date result ->
             updateDiaryPanes date (DiaryDay.GoalLoaded date result)
-                >> updateGoalSettingsPanes (LocalDate.format date) result
+                >> updateGoalSettingsPanes date result
     }
 
 
@@ -625,30 +653,25 @@ ensureDateData panes store =
         ensurePane : Pane -> ( Store, List (Cmd Msg) ) -> ( Store, List (Cmd Msg) )
         ensurePane pane ( currentStore, cmds ) =
             case pane of
-                DiaryPane _ diary ->
+                DiaryPane paneId _ ->
                     let
                         ( logsStore, logsCmd ) =
-                            ensureDate diaryLogsResource diary.currentDate currentStore
+                            ensureDate diaryLogsResource paneId.date currentStore
 
                         ( goalStore, goalCmd ) =
-                            ensureDate diaryGoalResource diary.currentDate logsStore
+                            ensureDate diaryGoalResource paneId.date logsStore
 
                         ( slotsStore, slotsCmd ) =
-                            ensureDate latestSlotsResource diary.currentDate goalStore
+                            ensureDate latestSlotsResource paneId.date goalStore
                     in
                     ( slotsStore, slotsCmd :: goalCmd :: logsCmd :: cmds )
 
-                GoalsSettingsPane rawDate _ ->
-                    case LocalDate.fromString rawDate of
-                        Just date ->
-                            let
-                                ( nextStore, cmd ) =
-                                    ensureDate diaryGoalResource date currentStore
-                            in
-                            ( nextStore, cmd :: cmds )
-
-                        Nothing ->
-                            ( currentStore, cmds )
+                GoalsSettingsPane date _ ->
+                    let
+                        ( nextStore, cmd ) =
+                            ensureDate diaryGoalResource date currentStore
+                    in
+                    ( nextStore, cmd :: cmds )
 
                 _ ->
                     ( currentStore, cmds )
@@ -661,7 +684,7 @@ ensureDateData panes store =
 
 ensureDate : DateResource a -> LocalDate -> Store -> ( Store, Cmd Msg )
 ensureDate resource date store =
-    case Store.request (resource.access (LocalDate.format date)) store of
+    case Store.request (resource.access date) store of
         Just ( nextStore, token ) ->
             ( nextStore, resource.fetch date token )
 
@@ -921,28 +944,31 @@ adminEditDesired context userId =
 diaryDesired : InitContext -> LocalDate -> Maybe String -> Maybe String -> DesiredPane
 diaryDesired context today dateParam calendarMonth =
     let
-        date : LocalDate
-        date =
-            dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault today
-                |> LocalDate.clampTo today
-
-        key : String
-        key =
-            "diary:" ++ LocalDate.format date ++ ":" ++ Maybe.withDefault "none" calendarMonth
+        paneId : DiaryPaneId
+        paneId =
+            { date = dateFromParam today dateParam
+            , calendarMonth = calendarMonth
+            }
     in
     fromInit context
-        key
-        (DiaryPane key)
+        (diaryPaneKey paneId)
+        (DiaryPane paneId)
         applyDiaryOutMsg
         (\_ ->
             DiaryDay.init
-                { dateParam = dateParam
+                { date = paneId.date
                 , calendarMonth = calendarMonth
                 , today = today
                 }
         )
+
+
+dateFromParam : LocalDate -> Maybe String -> LocalDate
+dateFromParam today dateParam =
+    dateParam
+        |> Maybe.andThen LocalDate.fromString
+        |> Maybe.withDefault today
+        |> LocalDate.clampTo today
 
 
 calendarDesired : InitContext -> LocalDate -> Maybe String -> DesiredPane
@@ -964,34 +990,22 @@ nutritionDesired context today dateParam =
     let
         date : LocalDate
         date =
-            dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault today
-                |> LocalDate.clampTo today
-
-        key : String
-        key =
-            LocalDate.format date
+            dateFromParam today dateParam
     in
     fromInit context
-        ("nutrition-details:" ++ key)
-        (NutritionDetailsPane key)
+        (nutritionDetailsPaneKey date)
+        (NutritionDetailsPane date)
         applyNutritionDetailsOutMsg
-        (\_ -> NutritionDetails.init { dateParam = dateParam, today = today })
+        (\_ -> NutritionDetails.init { date = date, today = today })
 
 
 goalsDesired : InitContext -> LocalDate -> DesiredPane
 goalsDesired context today =
-    let
-        key : String
-        key =
-            LocalDate.format today
-    in
     fromInit context
-        ("goals-settings:" ++ key)
-        (GoalsSettingsPane key)
+        (goalsSettingsPaneKey today)
+        (GoalsSettingsPane today)
         applyGoalsSettingsOutMsg
-        (\_ -> GoalsSettings.init today)
+        (\_ -> GoalsSettings.init)
 
 
 diarySettingsDesired : InitContext -> DesiredPane
@@ -1303,7 +1317,7 @@ update context msg model =
                     (\result ->
                         let
                             ( refreshedPanes, nextStore, refreshCmd ) =
-                                applyMutation context result.mutation result.pane model.store
+                                applyMutation result.mutation result.pane model.store
                         in
                         ( { model
                             | panes = refreshedPanes
@@ -1369,7 +1383,7 @@ settleDate :
     -> Model
     -> ( Model, Cmd Msg, OutMsg )
 settleDate resource token date result model =
-    case Store.settle (resource.access (LocalDate.format date)) token result model.store of
+    case Store.settle (resource.access date) token result model.store of
         Nothing ->
             ( model, Cmd.none, NoOutMsg )
 
@@ -1402,9 +1416,9 @@ updateDiaryPanes date msg panes =
     List.map
         (\pane ->
             case pane of
-                DiaryPane key diary ->
-                    if LocalDate.equals diary.currentDate date then
-                        DiaryPane key (modelOnly (DiaryDay.update msg diary))
+                DiaryPane paneId diary ->
+                    if LocalDate.equals paneId.date date then
+                        DiaryPane paneId (modelOnly (DiaryDay.update msg diary))
 
                     else
                         pane
@@ -1415,13 +1429,13 @@ updateDiaryPanes date msg panes =
         panes
 
 
-updateGoalSettingsPanes : String -> DiaryGoalResult -> List Pane -> List Pane
+updateGoalSettingsPanes : LocalDate -> DiaryGoalResult -> List Pane -> List Pane
 updateGoalSettingsPanes date result panes =
     List.map
         (\pane ->
             case pane of
                 GoalsSettingsPane paneDate goals ->
-                    if paneDate == date then
+                    if LocalDate.equals paneDate date then
                         GoalsSettingsPane paneDate
                             (modelOnly
                                 (GoalsSettings.update (GoalsSettings.GoalLoaded result) goals)
@@ -1526,7 +1540,7 @@ updatePane allPanes context msg pane =
                 NoMutation
                 (AdminEditUser.update subMsg sub)
 
-        ( GotDiaryMsg subMsg, DiaryPane key sub ) ->
+        ( GotDiaryMsg subMsg, DiaryPane paneId sub ) ->
             let
                 result : ( DiaryDay.Model, Cmd DiaryDay.Msg, DiaryDay.OutMsg )
                 result =
@@ -1544,7 +1558,7 @@ updatePane allPanes context msg pane =
                         _ ->
                             NoMutation
             in
-            stepPane context (DiaryPane key) GotDiaryMsg applyDiaryOutMsg mutation result
+            stepPane context (DiaryPane paneId) GotDiaryMsg applyDiaryOutMsg mutation result
 
         ( GotDiaryCalendarMsg subMsg, DiaryCalendarPane month sub ) ->
             stepPane context
@@ -1751,17 +1765,17 @@ stepPane context toPane toMsg applyOut mutation ( subModel, subCmd, subOut ) =
         }
 
 
-applyMutation : InitContext -> Mutation -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
-applyMutation context mutation panes store =
+applyMutation : Mutation -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
+applyMutation mutation panes store =
     case mutation of
         NoMutation ->
             ( panes, store, Cmd.none )
 
         RefreshDiaryAndCalendar date ->
-            refreshAfterLogMutation context True date panes store
+            refreshAfterLogMutation True date panes store
 
         RefreshCalendar date ->
-            refreshAfterLogMutation context False date panes store
+            refreshAfterLogMutation False date panes store
 
         PreferencesSaved preferences ->
             ( panes, Store.seed Store.preferences preferences store, Cmd.none )
@@ -1779,54 +1793,49 @@ window reaches back `latestSlotsLookbackDays`, so the changed date may be the
 source of any date's suggestions.
 -}
 refreshAfterLogMutation :
-    InitContext
-    -> Bool
+    Bool
     -> LocalDate
     -> List Pane
     -> Store
     -> ( List Pane, Store, Cmd Msg )
-refreshAfterLogMutation context reloadDiary date panes store =
+refreshAfterLogMutation reloadDiary date panes store =
     let
-        logs : Store.Access (List Data.FoodLog.FoodLog)
-        logs =
-            Store.diaryLogsAt (LocalDate.format date)
+        access : Store.Access (List Data.FoodLog.FoodLog)
+        access =
+            Store.diaryLogsAt date
+
+        appliedLogs : Maybe (List Data.FoodLog.FoodLog)
+        appliedLogs =
+            if reloadDiary then
+                Nothing
+
+            else
+                diaryPaneLogs date panes
 
         invalidated : Store
         invalidated =
             Store.clearLatestSlots
-                (if reloadDiary then
-                    Store.invalidate logs store
+                (case appliedLogs of
+                    Just logs ->
+                        Store.seed access logs store
 
-                 else
-                    seedLogsFromDiary logs date panes store
+                    Nothing ->
+                        Store.invalidate access store
                 )
 
-        ( refreshedPanes, calendarCmd ) =
-            refreshCalendars context date panes
+        refreshedPanes : List Pane
+        refreshedPanes =
+            case appliedLogs of
+                Just logs ->
+                    applyDayTotals date logs panes
+
+                Nothing ->
+                    panes
 
         ( nextStore, dateCmd ) =
             ensureDateData refreshedPanes invalidated
     in
-    ( refreshedPanes, nextStore, Cmd.batch [ calendarCmd, dateCmd ] )
-
-
-{-| The diary pane applied this mutation to its own logs already, so what it
-holds is the post-mutation truth and caching it costs nothing where a refetch
-would cost a request.
--}
-seedLogsFromDiary :
-    Store.Access (List Data.FoodLog.FoodLog)
-    -> LocalDate
-    -> List Pane
-    -> Store
-    -> Store
-seedLogsFromDiary access date panes store =
-    case diaryPaneLogs date panes of
-        Just logs ->
-            Store.seed access logs store
-
-        Nothing ->
-            Store.invalidate access store
+    ( refreshedPanes, nextStore, dateCmd )
 
 
 diaryPaneLogs : LocalDate -> List Pane -> Maybe (List Data.FoodLog.FoodLog)
@@ -1835,8 +1844,8 @@ diaryPaneLogs date panes =
         |> List.filterMap
             (\pane ->
                 case pane of
-                    DiaryPane _ diary ->
-                        if LocalDate.equals diary.currentDate date then
+                    DiaryPane paneId diary ->
+                        if LocalDate.equals paneId.date date then
                             DiaryDay.currentLogs diary
 
                         else
@@ -1848,32 +1857,23 @@ diaryPaneLogs date panes =
         |> List.head
 
 
-refreshCalendars : InitContext -> LocalDate -> List Pane -> ( List Pane, Cmd Msg )
-refreshCalendars context date panes =
+applyDayTotals : LocalDate -> List Data.FoodLog.FoodLog -> List Pane -> List Pane
+applyDayTotals date logs panes =
     let
-        refresh : Pane -> ( Pane, Cmd Msg )
-        refresh pane =
+        msg : DiaryCalendar.Msg
+        msg =
+            DiaryCalendar.DayTotalsKnown date (LogSummary.fromLogs date logs)
+    in
+    List.map
+        (\pane ->
             case pane of
                 DiaryCalendarPane month calendar ->
-                    let
-                        ( next, subCmd, subOut ) =
-                            DiaryCalendar.update (DiaryCalendar.RefreshDay date) calendar
-
-                        ( outCmd, _ ) =
-                            applyDiaryCalendarOutMsg context subOut
-                    in
-                    ( DiaryCalendarPane month next
-                    , Cmd.batch [ Cmd.map GotDiaryCalendarMsg subCmd, outCmd ]
-                    )
+                    DiaryCalendarPane month (modelOnly (DiaryCalendar.update msg calendar))
 
                 _ ->
-                    ( pane, Cmd.none )
-
-        results : List ( Pane, Cmd Msg )
-        results =
-            List.map refresh panes
-    in
-    ( List.map Tuple.first results, results |> List.map Tuple.second |> Cmd.batch )
+                    pane
+        )
+        panes
 
 
 third : ( a, b, c ) -> c
@@ -1883,12 +1883,11 @@ third ( _, _, value ) =
 
 localContextReceived :
     InitContext
-    -> { date : String, timezone : String }
+    -> LocalContext
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
 localContextReceived pageContext context model =
     updateAll
-        pageContext
         (\pane ->
             case pane of
                 FoodDetailPane _ _ ->
@@ -1909,20 +1908,56 @@ localContextReceived pageContext context model =
                         (GotGoalsSettingsMsg (GoalsSettings.LocalContextReceived context))
                         pane
 
+                DiaryPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotDiaryMsg << DiaryDay.TodayChanged)
+
+                DiaryCalendarPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotDiaryCalendarMsg << DiaryCalendar.TodayChanged)
+
+                NutritionDetailsPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotNutritionDetailsMsg << NutritionDetails.TodayChanged)
+
                 _ ->
                     Nothing
         )
         model
 
 
+{-| The browser is the only thing that knows the day has rolled over under a tab
+left open overnight, so the panes that clamp navigation against "today" take it
+from the same context the save paths already ask for.
+-}
+todayChangedIn :
+    InitContext
+    -> Model
+    -> LocalContext
+    -> Pane
+    -> (LocalDate -> Msg)
+    -> Maybe (PaneUpdate Pane)
+todayChangedIn pageContext model context pane toMsg =
+    LocalDate.fromString context.date
+        |> Maybe.andThen (\today -> updatePane model.panes pageContext (toMsg today) pane)
+
+
 barcodeScannerEventReceived :
     InitContext
-    -> { event : String, barcode : Maybe String, message : Maybe String }
+    -> ScannerEvent
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
 barcodeScannerEventReceived pageContext event model =
     updateAll
-        pageContext
         (\pane ->
             case pane of
                 FoodSearchPane _ ->
@@ -1947,11 +1982,10 @@ type alias UpdateAllResult =
 
 
 updateAll :
-    InitContext
-    -> (Pane -> Maybe (PaneUpdate Pane))
+    (Pane -> Maybe (PaneUpdate Pane))
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
-updateAll pageContext updateOne model =
+updateAll updateOne model =
     let
         step : Pane -> UpdateAllResult -> UpdateAllResult
         step pane result =
@@ -1959,8 +1993,7 @@ updateAll pageContext updateOne model =
                 Just paneResult ->
                     let
                         ( refreshed, nextStore, refreshCmd ) =
-                            applyMutation pageContext
-                                paneResult.mutation
+                            applyMutation paneResult.mutation
                                 [ paneResult.pane ]
                                 result.store
                     in
@@ -2163,13 +2196,6 @@ applyDiaryCalendarOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        DiaryCalendar.RequestDaySummary date ->
-            ( Api.Logs.summary
-                { fromDate = date, toDate = date }
-                (GotDiaryCalendarMsg << DiaryCalendar.DaySummaryRefreshed date)
-            , NoOutMsg
-            )
-
         DiaryCalendar.Navigate route ->
             ( Cmd.none, Navigate route )
 
@@ -2338,12 +2364,6 @@ applyFoodLogDetailOutMsg context outMsg =
         FoodLogEntry.RequestProductDetail productId ->
             ( Api.Foods.getFoodDetail productId
                 (GotFoodLogDetailMsg << FoodLogEntry.ProductDetailLoaded)
-            , NoOutMsg
-            )
-
-        FoodLogEntry.RequestMealName mealId ->
-            ( Api.Meals.getMealName mealId
-                (GotFoodLogDetailMsg << FoodLogEntry.MealNameLoaded)
             , NoOutMsg
             )
 
@@ -2700,14 +2720,14 @@ view props =
             (List.map (paneView props (selectedDiaryDate props.model.panes)) props.model.panes)
 
 
-selectedDiaryDate : List Pane -> Maybe String
+selectedDiaryDate : List Pane -> Maybe LocalDate
 selectedDiaryDate panes =
     panes
         |> List.filterMap
             (\pane ->
                 case pane of
-                    DiaryPane _ diary ->
-                        Just (LocalDate.format diary.currentDate)
+                    DiaryPane paneId _ ->
+                        Just paneId.date
 
                     _ ->
                         Nothing
@@ -2717,7 +2737,7 @@ selectedDiaryDate panes =
 
 paneView :
     { model : Model, device : Device, theme : Theme }
-    -> Maybe String
+    -> Maybe LocalDate
     -> Pane
     -> ( String, Element Msg )
 paneView props selectedDate pane =

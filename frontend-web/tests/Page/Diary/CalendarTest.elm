@@ -53,63 +53,72 @@ tests =
                         )
         , test "load earlier requests the preceding six-month block" <|
             \_ ->
-                let
-                    model : CalendarPage.Model
-                    model =
-                        CalendarPage.init
-                            { monthParam = Nothing
-                            , today = today
-                            }
-                            |> Tuple.first
-                in
-                CalendarPage.update CalendarPage.LoadEarlierClicked model
+                CalendarPage.update CalendarPage.LoadEarlierClicked (calendarModel [])
                     |> third
                     |> Expect.equal
                         (CalendarPage.RequestEarlierSummary
                             (date "2025-08-01")
                             (date "2026-01-31")
                         )
-        , test "refreshing a loaded day requests only that summary" <|
+        , test "load earlier is ignored while a load is already in flight" <|
             \_ ->
-                CalendarPage.update
-                    (CalendarPage.RefreshDay (date "2026-07-20"))
-                    (calendarModel [])
-                    |> third
-                    |> Expect.equal
-                        (CalendarPage.RequestDaySummary (date "2026-07-20"))
-        , test "refreshing a day outside the loaded range is ignored" <|
-            \_ ->
-                CalendarPage.update
-                    (CalendarPage.RefreshDay (date "2025-12-31"))
-                    (calendarModel [])
+                CalendarPage.update CalendarPage.LoadEarlierClicked
+                    (calendarModel [] |> withStatus CalendarPage.LoadingEarlier)
                     |> third
                     |> Expect.equal CalendarPage.NoOp
-        , test "an empty day refresh removes the stale summary" <|
+        , test "known totals replace that day's summary" <|
             \_ ->
                 CalendarPage.update
-                    (CalendarPage.DaySummaryRefreshed
-                        (date "2026-07-20")
-                        (Ok [])
+                    (CalendarPage.DayTotalsKnown (date "2026-07-20")
+                        (Just (summaryOn "2026-07-20" 750))
                     )
+                    (calendarModel [ summaryOn "2026-07-20" 500 ])
+                    |> first
+                    |> .summaries
+                    |> List.map .energyKcal
+                    |> Expect.equal [ 750 ]
+        , test "a day with nothing left logged loses its summary" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.DayTotalsKnown (date "2026-07-20") Nothing)
                     (calendarModel
-                        [ { date = "2026-07-20"
-                          , energyKcal = 500
-                          , proteinG = 20
-                          , carbsG = 30
-                          , fatG = 10
-                          }
-                        , { date = "2026-07-21"
-                          , energyKcal = 600
-                          , proteinG = 25
-                          , carbsG = 35
-                          , fatG = 12
-                          }
+                        [ summaryOn "2026-07-20" 500
+                        , summaryOn "2026-07-21" 600
                         ]
                     )
                     |> first
                     |> .summaries
                     |> List.map .date
-                    |> Expect.equal [ "2026-07-21" ]
+                    |> Expect.equal [ date "2026-07-21" ]
+        , test "totals for a day outside the loaded range are ignored" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.DayTotalsKnown (date "2025-12-31")
+                        (Just (summaryOn "2025-12-31" 500))
+                    )
+                    (calendarModel [])
+                    |> first
+                    |> .summaries
+                    |> Expect.equal []
+        , test "a day the calendar treated as future accepts totals once it rolls over" <|
+            \_ ->
+                let
+                    totals : CalendarPage.Msg
+                    totals =
+                        CalendarPage.DayTotalsKnown (date "2026-07-30")
+                            (Just (summaryOn "2026-07-30" 500))
+
+                    summariesAfter : CalendarPage.Model -> List DaySummary
+                    summariesAfter =
+                        CalendarPage.update totals >> first >> .summaries
+                in
+                ( summariesAfter (calendarModel [])
+                , calendarModel []
+                    |> CalendarPage.update (CalendarPage.TodayChanged (date "2026-07-30"))
+                    |> first
+                    |> summariesAfter
+                )
+                    |> Expect.equal ( [], [ summaryOn "2026-07-30" 500 ] )
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842
@@ -117,6 +126,21 @@ tests =
                 )
                     |> Expect.equal ( "842", "1.3k" )
         ]
+
+
+summaryOn : String -> Float -> DaySummary
+summaryOn raw energyKcal =
+    { date = date raw
+    , energyKcal = energyKcal
+    , proteinG = 20
+    , carbsG = 30
+    , fatG = 10
+    }
+
+
+withStatus : CalendarPage.Status -> CalendarPage.Model -> CalendarPage.Model
+withStatus status model =
+    { model | status = status }
 
 
 calendarModel : List DaySummary -> CalendarPage.Model

@@ -1,8 +1,10 @@
 module Data.Goals exposing
     ( GoalSnapshot
     , GoalSource(..)
+    , GoalStatus
     , GoalTargets
     , decoder
+    , statusOf
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -30,11 +32,24 @@ type alias GoalSnapshot =
     }
 
 
+type alias GoalStatus =
+    { source : GoalSource
+    , effectiveFrom : Maybe LocalDate
+    }
+
+
+statusOf : GoalSnapshot -> GoalStatus
+statusOf snapshot =
+    { source = snapshot.source
+    , effectiveFrom = snapshot.effectiveFrom
+    }
+
+
 decoder : Decoder GoalSnapshot
 decoder =
     Decode.map4 GoalSnapshot
-        (Decode.field "requested_date" dateDecoder)
-        (Decode.field "effective_from" (Decode.nullable dateDecoder))
+        (Decode.field "requested_date" LocalDate.decoder)
+        (Decode.field "effective_from" (Decode.nullable LocalDate.decoder))
         (Decode.field "source" sourceDecoder)
         targetsDecoder
 
@@ -62,20 +77,6 @@ sourceDecoder =
 
                     _ ->
                         Decode.fail ("Invalid goal source: " ++ value)
-            )
-
-
-dateDecoder : Decoder LocalDate
-dateDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                case LocalDate.fromString raw of
-                    Just date ->
-                        Decode.succeed date
-
-                    Nothing ->
-                        Decode.fail ("Invalid local date: " ++ raw)
             )
 
 

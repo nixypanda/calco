@@ -4,13 +4,11 @@ module Api.Meals exposing
     , Meal
     , MealComponent
     , MealListResponse
-    , MealName
     , MealNutrientsQuery
     , MealNutritionResponse
     , createMeal
     , deleteMeal
     , getMeal
-    , getMealName
     , getMealNutrients
     , listMeals
     , updateMeal
@@ -23,12 +21,6 @@ import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Lib.Json as Json
 import Url.Builder as Builder
-
-
-type alias MealName =
-    { id : String
-    , name : String
-    }
 
 
 type alias Meal =
@@ -76,14 +68,6 @@ type alias MealNutritionResponse =
     , nutritionSummary : NutritionSummary
     , nutrients : List NutrientAmount
     }
-
-
-getMealName : String -> (Result Client.ApiError MealName -> msg) -> Cmd msg
-getMealName id toMsg =
-    Client.get
-        (Builder.absolute [ "api", "meals", id ] [])
-        decoder
-        toMsg
 
 
 listMeals : (Result Client.ApiError MealListResponse -> msg) -> Cmd msg
@@ -166,13 +150,6 @@ componentRequestEncoder component =
         [ ( "item", ItemRef.encoder component.item )
         , ( "quantity", Nutrition.quantityEncoder component.quantity )
         ]
-
-
-decoder : Decoder MealName
-decoder =
-    Decode.map2 MealName
-        (Decode.field "id" Decode.string)
-        (Decode.field "name" Decode.string)
 
 
 mealListDecoder : Decoder MealListResponse

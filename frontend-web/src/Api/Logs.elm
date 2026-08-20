@@ -298,7 +298,7 @@ latestSlotsResponseDecoder =
 latestSlotResponseDecoder : Decode.Decoder LatestSlotResponse
 latestSlotResponseDecoder =
     Decode.map3 LatestSlotResponse
-        (Decode.field "source_date" dateFieldDecoder)
+        (Decode.field "source_date" LocalDate.decoder)
         (Decode.field "meal_slot" Decode.string)
         (Decode.field "items" (Decode.list FoodLog.decoder))
 
@@ -319,7 +319,7 @@ recentItemDecoder : Decode.Decoder RecentItem
 recentItemDecoder =
     Decode.map6 RecentItem
         (Decode.field "item" FoodLog.logItemDecoder)
-        (Decode.field "last_used_date" dateFieldDecoder)
+        (Decode.field "last_used_date" LocalDate.decoder)
         (Decode.field "meal_slot" (Decode.nullable Decode.string))
         (Decode.field "quantity" Nutrition.quantityDecoder)
         (Decode.field "nutrition_summary" Nutrition.summaryDecoder)
@@ -341,17 +341,3 @@ maybeMealSlotQuery maybeSlot =
 
         Nothing ->
             []
-
-
-dateFieldDecoder : Decode.Decoder LocalDate
-dateFieldDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                case LocalDate.fromString raw of
-                    Just date ->
-                        Decode.succeed date
-
-                    Nothing ->
-                        Decode.fail ("Invalid local date: " ++ raw)
-            )

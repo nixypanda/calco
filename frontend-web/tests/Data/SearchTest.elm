@@ -2,6 +2,7 @@ module Data.SearchTest exposing (tests)
 
 import Data.Search as Search
 import Expect
+import Lib.Ticket as Ticket exposing (Ticket)
 import Test exposing (Test, describe, test)
 
 
@@ -62,8 +63,8 @@ tests =
                 Search.empty
                     |> Expect.equal
                         { query = ""
-                        , searchToken = 0
-                        , categoryToken = 0
+                        , searchToken = ticket 0
+                        , categoryToken = ticket 0
                         , categorySuggestions = []
                         }
         , test "onQueryChanged trims and bumps tokens for non-empty queries" <|
@@ -79,8 +80,8 @@ tests =
                 }
                     |> Expect.equal
                         { query = "apple"
-                        , searchToken = 1
-                        , categoryToken = 1
+                        , searchToken = ticket 1
+                        , categoryToken = ticket 1
                         , categoryReq = Nothing
                         }
         , test "onQueryChanged clears category suggestions when not a category value" <|
@@ -89,8 +90,8 @@ tests =
                     ( next, _ ) =
                         Search.onQueryChanged "apple"
                             { query = ""
-                            , searchToken = 0
-                            , categoryToken = 0
+                            , searchToken = ticket 0
+                            , categoryToken = ticket 0
                             , categorySuggestions = [ { value = "fruit", count = 2 } ]
                             }
                 in
@@ -102,8 +103,8 @@ tests =
                     ( next, _ ) =
                         Search.onQueryChanged "category:foo"
                             { query = ""
-                            , searchToken = 0
-                            , categoryToken = 0
+                            , searchToken = ticket 0
+                            , categoryToken = ticket 0
                             , categorySuggestions = [ { value = "fruit", count = 2 } ]
                             }
                 in
@@ -116,7 +117,7 @@ tests =
                         Search.onQueryChanged "category:foo" Search.empty
                 in
                 categoryReq
-                    |> Expect.equal (Just { token = 1, query = "foo" })
+                    |> Expect.equal (Just { token = ticket 1, query = "foo" })
         , test "onQueryChangedDebounced produces a cmd for non-empty queries" <|
             \_ ->
                 let
@@ -162,31 +163,31 @@ tests =
                 in
                 ( settled.categoryToken
                 , settled
-                    |> Search.setCategorySuggestions 3
+                    |> Search.setCategorySuggestions (ticket 3)
                         [ { value = "chocolate", count = 9 } ]
-                    |> Search.setCategorySuggestions 1
+                    |> Search.setCategorySuggestions (ticket 1)
                         [ { value = "stale", count = 1 } ]
                     |> .categorySuggestions
                 )
-                    |> Expect.equal ( 3, [ { value = "chocolate", count = 9 } ] )
+                    |> Expect.equal ( ticket 3, [ { value = "chocolate", count = 9 } ] )
         , test "setCategorySuggestions drops stale responses" <|
             \_ ->
-                Search.setCategorySuggestions 1
+                Search.setCategorySuggestions (ticket 1)
                     [ { value = "fruit", count = 2 } ]
                     { query = ""
-                    , searchToken = 0
-                    , categoryToken = 2
+                    , searchToken = ticket 0
+                    , categoryToken = ticket 2
                     , categorySuggestions = []
                     }
                     |> .categorySuggestions
                     |> Expect.equal []
         , test "setCategorySuggestions applies matching responses" <|
             \_ ->
-                Search.setCategorySuggestions 2
+                Search.setCategorySuggestions (ticket 2)
                     [ { value = "fruit", count = 2 } ]
                     { query = ""
-                    , searchToken = 0
-                    , categoryToken = 2
+                    , searchToken = ticket 0
+                    , categoryToken = ticket 2
                     , categorySuggestions = []
                     }
                     |> .categorySuggestions
@@ -195,14 +196,19 @@ tests =
             \_ ->
                 Search.withQuery "apple"
                     { query = ""
-                    , searchToken = 4
-                    , categoryToken = 5
+                    , searchToken = ticket 4
+                    , categoryToken = ticket 5
                     , categorySuggestions = [ { value = "fruit", count = 1 } ]
                     }
                     |> Expect.equal
                         { query = "apple"
-                        , searchToken = 4
-                        , categoryToken = 5
+                        , searchToken = ticket 4
+                        , categoryToken = ticket 5
                         , categorySuggestions = [ { value = "fruit", count = 1 } ]
                         }
         ]
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

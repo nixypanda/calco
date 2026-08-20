@@ -128,7 +128,7 @@ mealSlotFuzzer =
         , Fuzz.constant Lunch
         , Fuzz.constant Dinner
         , Fuzz.constant Snack
-        , Fuzz.constant Other
+        , Fuzz.constant LateNightSnack
         ]
 
 

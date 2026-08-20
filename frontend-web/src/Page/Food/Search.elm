@@ -18,8 +18,10 @@ module Page.Food.Search exposing
 import Api.Client as Client
 import Api.Foods as Foods
 import Api.Logs as Logs
+import Data.BarcodeScan exposing (ScannerEvent)
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
+import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -35,6 +37,7 @@ import Html.Events
 import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
 import Ui
@@ -56,14 +59,14 @@ type alias Model =
     , results : Loadable Client.ApiError (List Foods.SearchResult)
     , barcodeQuery : String
     , barcodeLookup : Loadable Client.ApiError Foods.ProductDetail
-    , barcodeToken : Int
+    , barcodeToken : Ticket
     , barcodeScanner : BarcodeScannerState
     , recentItems : Loadable Client.ApiError (List Logs.RecentItem)
     , date : Maybe String
     , mealSlot : Maybe MealSlot
     , quickAdd : QuickAddState
-    , addedItems : List { key : String, token : Int }
-    , addedToken : Int
+    , addedItems : List { key : String, token : Ticket }
+    , addedToken : Ticket
     }
 
 
@@ -108,7 +111,7 @@ init date mealSlot =
     , results = NotAsked
     , barcodeQuery = ""
     , barcodeLookup = NotAsked
-    , barcodeToken = 0
+    , barcodeToken = Ticket.initial
     , barcodeScanner = ScannerIdle
     , recentItems =
         case date |> Maybe.andThen LocalDate.fromString of
@@ -121,7 +124,7 @@ init date mealSlot =
     , mealSlot = mealSlot
     , quickAdd = QuickAddIdle
     , addedItems = []
-    , addedToken = 0
+    , addedToken = Ticket.initial
     }
 
 
@@ -159,20 +162,20 @@ type Msg
     | BarcodeSubmitted
     | BarcodeScanClicked
     | BarcodeScanCancelClicked
-    | BarcodeScannerEventReceived { event : String, barcode : Maybe String, message : Maybe String }
-    | BarcodeLookupCompleted Int (Result Client.ApiError Foods.ProductDetail)
-    | CategorySuggestionsCompleted Int (Result Client.ApiError Foods.CategorySuggestionResponse)
+    | BarcodeScannerEventReceived ScannerEvent
+    | BarcodeLookupCompleted Ticket (Result Client.ApiError Foods.ProductDetail)
+    | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
-    | DebounceElapsed Int String
-    | CategoryDebounceElapsed Int String
-    | SearchCompleted Int (Result Client.ApiError Foods.SearchResponse)
+    | DebounceElapsed Ticket String
+    | CategoryDebounceElapsed Ticket String
+    | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
     | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
-    | LocalContextReceived { date : String, timezone : String }
+    | LocalContextReceived LocalContext
     | QuickAddCompleted (Result Client.ApiError FoodLog)
-    | ClearRecentAdded String Int
+    | ClearRecentAdded String Ticket
     | ResultClicked String
     | CreateCustomFoodClicked
 
@@ -183,12 +186,12 @@ type alias RecentItemsResult =
 
 type OutMsg
     = NoOp
-    | RequestSearch Int Foods.SearchRequest
-    | RequestBarcodeScanStopAndSearch Int Foods.SearchRequest
-    | RequestBarcodeLookup Int String
+    | RequestSearch Ticket Foods.SearchRequest
+    | RequestBarcodeScanStopAndSearch Ticket Foods.SearchRequest
+    | RequestBarcodeLookup Ticket String
     | RequestBarcodeScanStart
     | RequestBarcodeScanStop
-    | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
+    | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
     | RequestLocalContext
     | RequestCreateLog Logs.CreateLogRequest
     | LogCreated FoodLog
@@ -251,12 +254,12 @@ applyScopeChange scope model =
             nextSearch : QueryState
             nextSearch =
                 { priorSearch
-                    | searchToken = priorSearch.searchToken + 1
+                    | searchToken = Ticket.next priorSearch.searchToken
 
                     -- Bumping the category token invalidates both a pending
                     -- suggestion debounce and an already in-flight response, so
                     -- neither can repopulate the list after the scope changed.
-                    , categoryToken = priorSearch.categoryToken + 1
+                    , categoryToken = Ticket.next priorSearch.categoryToken
                     , categorySuggestions = []
                 }
 
@@ -272,7 +275,7 @@ applyScopeChange scope model =
                         else
                             NotAsked
                     , barcodeLookup = NotAsked
-                    , barcodeToken = model.barcodeToken + 1
+                    , barcodeToken = Ticket.next model.barcodeToken
                     , barcodeScanner =
                         if leavingBarcode then
                             ScannerIdle
@@ -307,9 +310,9 @@ applyBarcodeSubmit model =
         barcode =
             String.trim model.barcodeQuery
 
-        nextToken : Int
+        nextToken : Ticket
         nextToken =
-            model.barcodeToken + 1
+            Ticket.next model.barcodeToken
     in
     if String.isEmpty barcode then
         ( { model | barcodeLookup = NotAsked, barcodeToken = nextToken }
@@ -569,9 +572,9 @@ update msg model =
                             quickAddTarget model.quickAdd
                                 |> Maybe.map quickAddTargetKey
 
-                        nextToken : Int
+                        nextToken : Ticket
                         nextToken =
-                            model.addedToken + 1
+                            Ticket.next model.addedToken
                     in
                     ( { model
                         | quickAdd = QuickAddIdle
@@ -680,7 +683,7 @@ applyBarcodeScannerEvent event model =
 
 
 quickAddRequest :
-    { date : String, timezone : String }
+    LocalContext
     -> Model
     -> QuickAddTarget
     -> Maybe Logs.CreateLogRequest
@@ -769,7 +772,7 @@ canStartQuickAdd quickAdd =
             True
 
 
-clearRecentAddedAfter : String -> Int -> Cmd Msg
+clearRecentAddedAfter : String -> Ticket -> Cmd Msg
 clearRecentAddedAfter key token =
     Process.sleep 500
         |> Task.perform (\_ -> ClearRecentAdded key token)

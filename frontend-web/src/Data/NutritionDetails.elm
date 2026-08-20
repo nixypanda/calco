@@ -81,7 +81,7 @@ type NutrientStatus
 decoder : Decoder NutritionDetails
 decoder =
     Decode.map4 NutritionDetails
-        (Decode.field "date" dateDecoder)
+        (Decode.field "date" LocalDate.decoder)
         (Decode.field "reference" referenceDecoder)
         (Decode.field "logged_items" Decode.int)
         (Decode.field "nutrients" (Decode.list nutrientDecoder))
@@ -111,20 +111,6 @@ nutrientDecoder =
         |> Json.andMap (Decode.field "items_with_data" Decode.int)
         |> Json.andMap (Decode.field "coverage" coverageDecoder)
         |> Json.andMap (Decode.field "status" statusDecoder)
-
-
-dateDecoder : Decoder LocalDate
-dateDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                case LocalDate.fromString raw of
-                    Just date ->
-                        Decode.succeed date
-
-                    Nothing ->
-                        Decode.fail ("Invalid local date: " ++ raw)
-            )
 
 
 decimalDecoder : Decoder Float

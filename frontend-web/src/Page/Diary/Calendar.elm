@@ -37,6 +37,7 @@ import Ui.Typography as Typography
 type Status
     = Loading
     | Ready
+    | LoadingEarlier
     | Failed String
 
 
@@ -46,7 +47,6 @@ type alias Model =
     , oldestMonth : String
     , summaries : List DaySummary
     , status : Status
-    , loadingEarlier : Bool
     }
 
 
@@ -75,7 +75,6 @@ init args =
             , oldestMonth = oldestMonth
             , summaries = []
             , status = Loading
-            , loadingEarlier = False
             }
     in
     ( model, requestForMonths oldestMonth newestMonth args.today )
@@ -94,17 +93,16 @@ validMonth period =
 type Msg
     = SummaryLoaded (Result Client.ApiError (List DaySummary))
     | EarlierSummaryLoaded (Result Client.ApiError (List DaySummary))
-    | RefreshDay LocalDate
-    | DaySummaryRefreshed LocalDate (Result Client.ApiError (List DaySummary))
+    | DayTotalsKnown LocalDate (Maybe DaySummary)
     | LoadEarlierClicked
     | DayClicked String String
+    | TodayChanged LocalDate
 
 
 type OutMsg
     = NoOp
     | RequestSummary LocalDate LocalDate
     | RequestEarlierSummary LocalDate LocalDate
-    | RequestDaySummary LocalDate
     | Navigate Route
     | SessionExpired
 
@@ -118,43 +116,23 @@ update msg model =
         EarlierSummaryLoaded result ->
             applySummaryResult True result model
 
-        RefreshDay date ->
+        DayTotalsKnown date summary ->
             if dateIsLoaded date model then
-                ( model, Cmd.none, RequestDaySummary date )
+                ( { model | summaries = replaceDay date summary model.summaries }
+                , Cmd.none
+                , NoOp
+                )
 
             else
                 ( model, Cmd.none, NoOp )
-
-        DaySummaryRefreshed requestDate result ->
-            applyDaySummaryResult requestDate result model
 
         LoadEarlierClicked ->
-            if model.loadingEarlier then
-                ( model, Cmd.none, NoOp )
+            case model.status of
+                Ready ->
+                    loadEarlier model
 
-            else
-                let
-                    nextOldest : String
-                    nextOldest =
-                        Calendar.shiftMonth -6 model.oldestMonth
-
-                    previousDay : Maybe LocalDate
-                    previousDay =
-                        Calendar.monthStart model.oldestMonth
-                            |> Maybe.map (LocalDate.addDays -1)
-                in
-                case ( Calendar.monthStart nextOldest, previousDay ) of
-                    ( Just fromDate, Just toDate ) ->
-                        ( { model
-                            | oldestMonth = nextOldest
-                            , loadingEarlier = True
-                          }
-                        , Cmd.none
-                        , RequestEarlierSummary fromDate toDate
-                        )
-
-                    _ ->
-                        ( model, Cmd.none, NoOp )
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         DayClicked month date ->
             ( model
@@ -162,44 +140,15 @@ update msg model =
             , Navigate (DiaryDay (Just date) (Just month))
             )
 
-
-applyDaySummaryResult :
-    LocalDate
-    -> Result Client.ApiError (List DaySummary)
-    -> Model
-    -> ( Model, Cmd Msg, OutMsg )
-applyDaySummaryResult requestDate result model =
-    if not (dateIsLoaded requestDate model) then
-        ( model, Cmd.none, NoOp )
-
-    else
-        case result of
-            Ok summaries ->
-                ( { model
-                    | summaries = replaceDaySummary requestDate summaries model.summaries
-                  }
-                , Cmd.none
-                , NoOp
-                )
-
-            Err error ->
-                if Client.isUnauthorized error then
-                    ( model, Cmd.none, SessionExpired )
-
-                else
-                    ( model, Cmd.none, NoOp )
+        TodayChanged today ->
+            ( { model | today = today }, Cmd.none, NoOp )
 
 
-replaceDaySummary : LocalDate -> List DaySummary -> List DaySummary -> List DaySummary
-replaceDaySummary requestDate incoming existing =
-    let
-        dateKey : String
-        dateKey =
-            LocalDate.format requestDate
-    in
+replaceDay : LocalDate -> Maybe DaySummary -> List DaySummary -> List DaySummary
+replaceDay date summary existing =
     mergeSummaries
-        (List.filter (\summary -> summary.date /= dateKey) existing)
-        (List.filter (\summary -> summary.date == dateKey) incoming)
+        (List.filter (\other -> not (LocalDate.equals other.date date)) existing)
+        (summary |> Maybe.map List.singleton |> Maybe.withDefault [])
 
 
 dateIsLoaded : LocalDate -> Model -> Bool
@@ -227,6 +176,29 @@ dateIsLoaded date model =
             False
 
 
+loadEarlier : Model -> ( Model, Cmd Msg, OutMsg )
+loadEarlier model =
+    let
+        nextOldest : String
+        nextOldest =
+            Calendar.shiftMonth -6 model.oldestMonth
+
+        previousDay : Maybe LocalDate
+        previousDay =
+            Calendar.monthStart model.oldestMonth
+                |> Maybe.map (LocalDate.addDays -1)
+    in
+    case ( Calendar.monthStart nextOldest, previousDay ) of
+        ( Just fromDate, Just toDate ) ->
+            ( { model | oldestMonth = nextOldest, status = LoadingEarlier }
+            , Cmd.none
+            , RequestEarlierSummary fromDate toDate
+            )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
 applySummaryResult :
     Bool
     -> Result Client.ApiError (List DaySummary)
@@ -238,7 +210,6 @@ applySummaryResult earlier result model =
             ( { model
                 | summaries = mergeSummaries model.summaries summaries
                 , status = Ready
-                , loadingEarlier = False
               }
             , Cmd.none
             , NoOp
@@ -262,7 +233,6 @@ applySummaryResult earlier result model =
 
                         else
                             Failed (Client.displayError error)
-                    , loadingEarlier = False
                   }
                 , Cmd.none
                 , NoOp
@@ -274,11 +244,11 @@ mergeSummaries existing incoming =
     List.foldl
         (\summary merged ->
             summary
-                :: List.filter (.date >> (/=) summary.date) merged
+                :: List.filter (\other -> not (LocalDate.equals other.date summary.date)) merged
         )
         existing
         incoming
-        |> List.sortBy .date
+        |> List.sortBy (.date >> LocalDate.format)
 
 
 requestForMonths : String -> String -> LocalDate -> OutMsg
@@ -296,7 +266,7 @@ requestForMonths oldest newest today =
 
 
 contentViewWithSelection :
-    Maybe String
+    Maybe LocalDate
     -> { model : Model, device : Device, theme : Theme }
     -> Element Msg
 contentViewWithSelection selectedDate { model, theme } =
@@ -312,13 +282,18 @@ contentViewWithSelection selectedDate { model, theme } =
                 [ Ui.errorBanner theme message ]
 
             Ready ->
-                monthRange model.newestMonth model.oldestMonth
-                    |> List.map (monthView theme model selectedDate)
-                    |> (\months ->
-                            months
-                                ++ [ loadEarlierButton theme model.loadingEarlier ]
-                       )
+                monthsView theme model selectedDate False
+
+            LoadingEarlier ->
+                monthsView theme model selectedDate True
         )
+
+
+monthsView : Theme -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
+monthsView theme model selectedDate loadingEarlier =
+    monthRange model.newestMonth model.oldestMonth
+        |> List.map (monthView theme model selectedDate)
+        |> (\months -> months ++ [ loadEarlierButton theme loadingEarlier ])
 
 
 monthRange : String -> String -> List String
@@ -330,7 +305,7 @@ monthRange newest oldest =
         newest :: monthRange (Calendar.shiftMonth -1 newest) oldest
 
 
-monthView : Theme -> Model -> Maybe String -> String -> Element Msg
+monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
 monthView theme model selectedDate month =
     Ui.card theme
         [ Typography.sectionTitle theme (Calendar.monthLabel month)
@@ -347,7 +322,7 @@ monthView theme model selectedDate month =
 dayView :
     Theme
     -> Model
-    -> Maybe String
+    -> Maybe LocalDate
     -> String
     -> Int
     -> List (Element.Attribute Msg)
@@ -370,7 +345,7 @@ dayView theme model selectedDate month day attributes =
 
         maybeSummary : Maybe DaySummary
         maybeSummary =
-            summaryFor date model.summaries
+            maybeDate |> Maybe.andThen (\value -> summaryFor value model.summaries)
 
         label : Element Msg
         label =
@@ -385,7 +360,7 @@ dayView theme model selectedDate month day attributes =
         Input.button
             (Border.rounded DesignTokens.radiusSmall
                 :: Background.color
-                    (if selectedDate == Just date then
+                    (if selectedDate == maybeDate then
                         theme.brandBlueSoft
 
                      else
@@ -396,7 +371,7 @@ dayView theme model selectedDate month day attributes =
                 :: Element.htmlAttribute
                     (Attr.attribute
                         "aria-pressed"
-                        (if selectedDate == Just date then
+                        (if selectedDate == maybeDate then
                             "true"
 
                          else
@@ -504,9 +479,9 @@ macroSegments theme summary =
     ]
 
 
-summaryFor : String -> List DaySummary -> Maybe DaySummary
+summaryFor : LocalDate -> List DaySummary -> Maybe DaySummary
 summaryFor date summaries =
-    List.filter (.date >> (==) date) summaries
+    List.filter (\summary -> LocalDate.equals summary.date date) summaries
         |> List.head
 
 

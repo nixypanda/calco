@@ -102,7 +102,7 @@ initLogFormFromLog : FoodLog -> Model
 initLogFormFromLog log =
     { amount = log.quantity.amount
     , unit = log.quantity.unit
-    , mealSlot = Maybe.andThen MealSlot.fromString log.mealSlot
+    , mealSlot = log.mealSlot
     , notes = log.notes |> Maybe.withDefault ""
     , openDropdown = NoDropdownOpen
     , submitState = SubmitIdle

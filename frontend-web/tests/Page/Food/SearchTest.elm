@@ -12,6 +12,7 @@ import Data.Search as Search
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Food.Search as FoodSearch
 import Test exposing (Test, describe, test)
 import Time
@@ -101,10 +102,10 @@ tests =
             \_ ->
                 FoodSearch.update (FoodSearch.QueryChanged "category:foo") emptyModel
                     |> first
-                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed (ticket 1) "foo")
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestCategorySuggestions 1
+                        (FoodSearch.RequestCategorySuggestions (ticket 1)
                             { query = "foo", limit = 8 }
                         )
         , test "a burst of keystrokes only requests suggestions for the settled query" <|
@@ -120,17 +121,17 @@ tests =
                             emptyModel
                             [ "category:c", "category:ch", "category:cho" ]
                 in
-                ( FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "c") typed
+                ( FoodSearch.update (FoodSearch.CategoryDebounceElapsed (ticket 1) "c") typed
                     |> third
-                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 2 "ch") typed
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed (ticket 2) "ch") typed
                     |> third
-                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed 3 "cho") typed
+                , FoodSearch.update (FoodSearch.CategoryDebounceElapsed (ticket 3) "cho") typed
                     |> third
                 )
                     |> Expect.equal
                         ( FoodSearch.NoOp
                         , FoodSearch.NoOp
-                        , FoodSearch.RequestCategorySuggestions 3
+                        , FoodSearch.RequestCategorySuggestions (ticket 3)
                             { query = "cho", limit = 8 }
                         )
         , test "scope change cancels a pending category debounce" <|
@@ -139,7 +140,7 @@ tests =
                     |> first
                     |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
                     |> first
-                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed 1 "foo")
+                    |> FoodSearch.update (FoodSearch.CategoryDebounceElapsed (ticket 1) "foo")
                     |> third
                     |> Expect.equal FoodSearch.NoOp
         , test "scope change drops an in-flight category response" <|
@@ -149,7 +150,7 @@ tests =
                     |> FoodSearch.update (FoodSearch.ScopeSelected FoodSearch.Custom)
                     |> first
                     |> FoodSearch.update
-                        (FoodSearch.CategorySuggestionsCompleted 1
+                        (FoodSearch.CategorySuggestionsCompleted (ticket 1)
                             (Ok { items = [ { value = "food", count = 4 } ] })
                         )
                     |> first
@@ -164,7 +165,7 @@ tests =
         , test "matching category suggestions are stored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.CategorySuggestionsCompleted 1
+                    (FoodSearch.CategorySuggestionsCompleted (ticket 1)
                         (Ok
                             { items =
                                 [ { value = "food and beverages", count = 4 } ]
@@ -173,7 +174,7 @@ tests =
                     )
                     { emptyModel
                         | search =
-                            Search.withCategoryToken 1
+                            Search.withCategoryToken (ticket 1)
                                 emptyModel.search
                     }
                     |> first
@@ -183,11 +184,11 @@ tests =
         , test "stale category suggestions are ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.CategorySuggestionsCompleted 1
+                    (FoodSearch.CategorySuggestionsCompleted (ticket 1)
                         (Ok { items = [ { value = "food", count = 4 } ] })
                     )
                     { emptyModel
-                        | search = Search.withCategoryToken 2 emptyModel.search
+                        | search = Search.withCategoryToken (ticket 2) emptyModel.search
                     }
                     |> first
                     |> .search
@@ -196,12 +197,12 @@ tests =
         , test "category suggestion failure clears suggestions" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.CategorySuggestionsCompleted 1 (Err Client.NetworkError))
+                    (FoodSearch.CategorySuggestionsCompleted (ticket 1) (Err Client.NetworkError))
                     { emptyModel
                         | search =
                             { query = ""
-                            , searchToken = 0
-                            , categoryToken = 1
+                            , searchToken = ticket 0
+                            , categoryToken = ticket 1
                             , categorySuggestions = [ { value = "old", count = 1 } ]
                             }
                     }
@@ -212,11 +213,11 @@ tests =
         , test "category suggestion unauthorized expires session" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.CategorySuggestionsCompleted 1
+                    (FoodSearch.CategorySuggestionsCompleted (ticket 1)
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     { emptyModel
-                        | search = Search.withCategoryToken 1 emptyModel.search
+                        | search = Search.withCategoryToken (ticket 1) emptyModel.search
                     }
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
@@ -227,8 +228,8 @@ tests =
                     { emptyModel
                         | search =
                             { query = "category:foo"
-                            , searchToken = 0
-                            , categoryToken = 0
+                            , searchToken = ticket 0
+                            , categoryToken = ticket 0
                             , categorySuggestions = [ { value = "food and beverages", count = 4 } ]
                             }
                     }
@@ -273,16 +274,16 @@ tests =
         , test "debounce for current token requests search" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.DebounceElapsed 2 "apple")
+                    (FoodSearch.DebounceElapsed (ticket 2) "apple")
                     { emptyModel
                         | scope = FoodSearch.All
                         , search =
-                            Search.withSearchToken 2
+                            Search.withSearchToken (ticket 2)
                                 emptyModel.search
                     }
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestSearch 2
+                        (FoodSearch.RequestSearch (ticket 2)
                             { query = "apple", scope = Foods.SearchAll }
                         )
         , test "history scope change immediately searches existing query" <|
@@ -295,20 +296,20 @@ tests =
                     }
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestSearch 1
+                        (FoodSearch.RequestSearch (ticket 1)
                             { query = "apple", scope = Foods.SearchHistory }
                         )
         , test "custom scope debounce uses custom scope" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.DebounceElapsed 2 "apple")
+                    (FoodSearch.DebounceElapsed (ticket 2) "apple")
                     { emptyModel
                         | scope = FoodSearch.Custom
-                        , search = Search.withSearchToken 2 emptyModel.search
+                        , search = Search.withSearchToken (ticket 2) emptyModel.search
                     }
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestSearch 2
+                        (FoodSearch.RequestSearch (ticket 2)
                             { query = "apple", scope = Foods.SearchCustom }
                         )
         , test "barcode input change does not request lookup" <|
@@ -327,7 +328,7 @@ tests =
                         , barcodeQuery = " 12345 "
                     }
                     |> third
-                    |> Expect.equal (FoodSearch.RequestBarcodeLookup 1 "12345")
+                    |> Expect.equal (FoodSearch.RequestBarcodeLookup (ticket 1) "12345")
         , test "barcode scan click requests scanner start" <|
             \_ ->
                 FoodSearch.update
@@ -409,7 +410,7 @@ tests =
                         { barcodeQuery = "12345"
                         , scanner = FoodSearch.ScannerIdle
                         , lookup = Loading
-                        , outMsg = FoodSearch.RequestBarcodeLookup 1 "12345"
+                        , outMsg = FoodSearch.RequestBarcodeLookup (ticket 1) "12345"
                         }
         , test "switching away from barcode scope requests scanner stop" <|
             \_ ->
@@ -437,10 +438,10 @@ tests =
         , test "barcode lookup success navigates to food detail with context" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted 1 (Ok appleDetail))
+                    (FoodSearch.BarcodeLookupCompleted (ticket 1) (Ok appleDetail))
                     { emptyModel
                         | scope = FoodSearch.Barcode
-                        , barcodeToken = 1
+                        , barcodeToken = ticket 1
                         , date = Just "2026-05-29"
                         , mealSlot = Just Lunch
                     }
@@ -452,49 +453,49 @@ tests =
         , test "barcode lookup failure keeps error on page" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted 1 (Err Client.NetworkError))
+                    (FoodSearch.BarcodeLookupCompleted (ticket 1) (Err Client.NetworkError))
                     { emptyModel
                         | scope = FoodSearch.Barcode
-                        , barcodeToken = 1
+                        , barcodeToken = ticket 1
                     }
                     |> (\( updated, _, outMsg ) -> ( updated.barcodeLookup, outMsg ))
                     |> Expect.equal ( Failure Client.NetworkError, FoodSearch.NoOp )
         , test "barcode lookup unauthorized expires session" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted 1
+                    (FoodSearch.BarcodeLookupCompleted (ticket 1)
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     { emptyModel
                         | scope = FoodSearch.Barcode
-                        , barcodeToken = 1
+                        , barcodeToken = ticket 1
                     }
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
         , test "stale barcode lookup is ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted 1 (Ok appleDetail))
+                    (FoodSearch.BarcodeLookupCompleted (ticket 1) (Ok appleDetail))
                     { emptyModel
                         | scope = FoodSearch.Barcode
-                        , barcodeToken = 2
+                        , barcodeToken = ticket 2
                     }
                     |> third
                     |> Expect.equal FoodSearch.NoOp
         , test "debounce for stale token is ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.DebounceElapsed 1 "apple")
-                    { emptyModel | search = Search.withSearchToken 2 emptyModel.search }
+                    (FoodSearch.DebounceElapsed (ticket 1) "apple")
+                    { emptyModel | search = Search.withSearchToken (ticket 2) emptyModel.search }
                     |> third
                     |> Expect.equal FoodSearch.NoOp
         , test "matching search result stores items and clears loading" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.SearchCompleted 2 (Ok { items = [ apple ] }))
+                    (FoodSearch.SearchCompleted (ticket 2) (Ok { items = [ apple ] }))
                     { emptyModel
                         | search =
-                            Search.withSearchToken 2
+                            Search.withSearchToken (ticket 2)
                                 emptyModel.search
                         , results = Loading
                     }
@@ -504,10 +505,10 @@ tests =
         , test "stale search result is ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.SearchCompleted 1 (Ok { items = [ apple ] }))
+                    (FoodSearch.SearchCompleted (ticket 1) (Ok { items = [ apple ] }))
                     { emptyModel
                         | search =
-                            Search.withSearchToken 2
+                            Search.withSearchToken (ticket 2)
                                 emptyModel.search
                         , results = Loading
                     }
@@ -517,10 +518,10 @@ tests =
         , test "search failure stores error and clears results" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.SearchCompleted 2 (Err Client.NetworkError))
+                    (FoodSearch.SearchCompleted (ticket 2) (Err Client.NetworkError))
                     { loadedModel
                         | search =
-                            Search.withSearchToken 2
+                            Search.withSearchToken (ticket 2)
                                 loadedModel.search
                         , results = Loading
                     }
@@ -530,10 +531,10 @@ tests =
         , test "search failure from stale token is ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.SearchCompleted 1 (Err Client.NetworkError))
+                    (FoodSearch.SearchCompleted (ticket 1) (Err Client.NetworkError))
                     { loadedModel
                         | search =
-                            Search.withSearchToken 2
+                            Search.withSearchToken (ticket 2)
                                 loadedModel.search
                     }
                     |> first
@@ -542,10 +543,10 @@ tests =
         , test "search unauthorized expires session" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.SearchCompleted 2
+                    (FoodSearch.SearchCompleted (ticket 2)
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
-                    { emptyModel | search = Search.withSearchToken 2 emptyModel.search }
+                    { emptyModel | search = Search.withSearchToken (ticket 2) emptyModel.search }
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
         , test "recent items load success stores items" <|
@@ -739,7 +740,7 @@ tests =
                     |> first
                     |> (\model -> ( model.addedToken, model.addedItems ))
                     |> Expect.equal
-                        ( 1, [ { key = "product:food-1:2 serving", token = 1 } ] )
+                        ( ticket 1, [ { key = "product:food-1:2 serving", token = ticket 1 } ] )
         , test "quick add success reports the created log" <|
             \_ ->
                 FoodSearch.update
@@ -759,8 +760,8 @@ tests =
                 FoodSearch.update
                     (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
                     { emptyModel
-                        | addedToken = 1
-                        , addedItems = [ { key = "product:food-1:2 serving", token = 1 } ]
+                        | addedToken = ticket 1
+                        , addedItems = [ { key = "product:food-1:2 serving", token = ticket 1 } ]
                     }
                     |> first
                     |> FoodSearch.update
@@ -771,7 +772,7 @@ tests =
                     |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
                     |> first
                     |> .addedItems
-                    |> Expect.equal [ { key = "product:food-1:2 serving", token = 2 } ]
+                    |> Expect.equal [ { key = "product:food-1:2 serving", token = ticket 2 } ]
         , test "quick add success with no pending item does not mark added" <|
             \_ ->
                 FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog)) emptyModel
@@ -848,9 +849,9 @@ tests =
         , test "clear recent added removes matching added item" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" 1)
+                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" (ticket 1))
                     { emptyModel
-                        | addedItems = [ { key = "product:food-1:2 serving", token = 1 } ]
+                        | addedItems = [ { key = "product:food-1:2 serving", token = ticket 1 } ]
                     }
                     |> first
                     |> .addedItems
@@ -858,13 +859,13 @@ tests =
         , test "clear recent added ignores stale token" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" 1)
+                    (FoodSearch.ClearRecentAdded "product:food-1:2 serving" (ticket 1))
                     { emptyModel
-                        | addedItems = [ { key = "product:food-1:2 serving", token = 2 } ]
+                        | addedItems = [ { key = "product:food-1:2 serving", token = ticket 2 } ]
                     }
                     |> first
                     |> .addedItems
-                    |> Expect.equal [ { key = "product:food-1:2 serving", token = 2 } ]
+                    |> Expect.equal [ { key = "product:food-1:2 serving", token = ticket 2 } ]
         ]
 
 
@@ -877,7 +878,7 @@ loadedModel : FoodSearch.Model
 loadedModel =
     { emptyModel
         | results = Success [ apple ]
-        , search = Search.withSearchToken 1 emptyModel.search
+        , search = Search.withSearchToken (ticket 1) emptyModel.search
     }
 
 
@@ -979,7 +980,7 @@ productLog =
     { id = "log-1"
     , logDate = date "2026-06-01"
     , deviceTimezone = Just "Asia/Kolkata"
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , item = recentProduct.item
     , quantity = recentProduct.quantity
     , nutrients = []
@@ -1010,3 +1011,8 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

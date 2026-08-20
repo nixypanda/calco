@@ -18,6 +18,7 @@ module Data.Search exposing
     )
 
 import Lib.Text as Text
+import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
 
@@ -34,15 +35,15 @@ type alias CategorySuggestion =
 
 
 type alias CategoryRequest =
-    { token : Int
+    { token : Ticket
     , query : String
     }
 
 
 type alias QueryState =
     { query : String
-    , searchToken : Int
-    , categoryToken : Int
+    , searchToken : Ticket
+    , categoryToken : Ticket
     , categorySuggestions : List CategorySuggestion
     }
 
@@ -50,16 +51,16 @@ type alias QueryState =
 empty : QueryState
 empty =
     { query = ""
-    , searchToken = 0
-    , categoryToken = 0
+    , searchToken = Ticket.initial
+    , categoryToken = Ticket.initial
     , categorySuggestions = []
     }
 
 
 type alias Debounce msg =
     { delayMs : Int
-    , onSearchElapsed : Int -> String -> msg
-    , onCategoryElapsed : Int -> String -> msg
+    , onSearchElapsed : Ticket -> String -> msg
+    , onCategoryElapsed : Ticket -> String -> msg
     }
 
 
@@ -70,13 +71,13 @@ onQueryChanged rawQuery state =
         isEmpty =
             String.isEmpty (String.trim rawQuery)
 
-        nextSearchToken : Int
+        nextSearchToken : Ticket
         nextSearchToken =
-            state.searchToken + 1
+            Ticket.next state.searchToken
 
-        nextCategoryToken : Int
+        nextCategoryToken : Ticket
         nextCategoryToken =
-            state.categoryToken + 1
+            Ticket.next state.categoryToken
 
         categoryReq : Maybe CategoryRequest
         categoryReq =
@@ -153,13 +154,13 @@ onQueryChangedDebounced rawQuery state config =
     )
 
 
-debounceAfter : Int -> Int -> String -> (Int -> String -> msg) -> Cmd msg
+debounceAfter : Int -> Ticket -> String -> (Ticket -> String -> msg) -> Cmd msg
 debounceAfter delayMs token query onFire =
     Process.sleep (toFloat delayMs)
         |> Task.perform (\_ -> onFire token query)
 
 
-setCategorySuggestions : Int -> List CategorySuggestion -> QueryState -> QueryState
+setCategorySuggestions : Ticket -> List CategorySuggestion -> QueryState -> QueryState
 setCategorySuggestions token suggestions state =
     if state.categoryToken == token then
         { state | categorySuggestions = suggestions }
@@ -173,12 +174,12 @@ withQuery query state =
     { state | query = query }
 
 
-withSearchToken : Int -> QueryState -> QueryState
+withSearchToken : Ticket -> QueryState -> QueryState
 withSearchToken token state =
     { state | searchToken = token }
 
 
-withCategoryToken : Int -> QueryState -> QueryState
+withCategoryToken : Ticket -> QueryState -> QueryState
 withCategoryToken token state =
     { state | categoryToken = token }
 

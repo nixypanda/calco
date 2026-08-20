@@ -44,13 +44,13 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodLogEntry.RequestProductDetail "food-1")
-        , test "meal log requests meal name" <|
+        , test "meal log requests nothing further" <|
             \_ ->
                 FoodLogEntry.update
                     (FoodLogEntry.LogLoaded (Ok mealLog))
                     emptyModel
                     |> third
-                    |> Expect.equal (FoodLogEntry.RequestMealName "meal-1")
+                    |> Expect.equal FoodLogEntry.NoOp
         , test "product detail success stores product and item name" <|
             \_ ->
                 FoodLogEntry.update
@@ -95,16 +95,14 @@ tests =
                           , unit = "kcal"
                           }
                         ]
-        , test "meal name success stores item name" <|
+        , test "meal title comes from the log itself" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.MealNameLoaded
-                        (Ok { id = "meal-1", name = "Lunch bowl" })
-                    )
-                    mealLoadedModel
+                    (FoodLogEntry.LogLoaded (Ok mealLog))
+                    awaitingLogModel
                     |> first
                     |> loadedItemTitle
-                    |> Expect.equal "Lunch bowl"
+                    |> Expect.equal "Lunch meal"
         , test "submit emits update payload" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.SubmitClicked loadedModel
@@ -359,16 +357,12 @@ deleteFailedModel =
         }
 
 
-mealLoadedModel : FoodLogEntry.Model
-mealLoadedModel =
-    FoodLogEntry.Loaded
+awaitingLogModel : FoodLogEntry.Model
+awaitingLogModel =
+    FoodLogEntry.Loading
         { logId = "log-1"
-        , log = mealLog
-        , item = FoodLogEntry.MealItem (FoodLogEntry.DetailLoading mealLog.item)
-        , units = [ gram ]
-        , form = FoodLogForm.initLogFormFromLog mealLog
-        , request = FoodLogEntry.Idle
-        , delete = DeleteIdle
+        , log = Nothing
+        , units = Just [ gram ]
         }
 
 
@@ -382,7 +376,7 @@ productLog =
     { id = "log-1"
     , logDate = sampleDate
     , deviceTimezone = Just "Asia/Kolkata"
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , item =
         { itemType = ItemRef.Product
         , id = "food-1"
@@ -542,14 +536,8 @@ loadedItemTitle model =
     case model of
         FoodLogEntry.Loaded loaded ->
             case loaded.item of
-                FoodLogEntry.MealItem (FoodLogEntry.DetailLoaded meal) ->
+                FoodLogEntry.MealItem meal ->
                     meal.name
-
-                FoodLogEntry.MealItem (FoodLogEntry.DetailLoading _) ->
-                    "Loading meal..."
-
-                FoodLogEntry.MealItem (FoodLogEntry.DetailUnavailable item) ->
-                    item.name
 
                 _ ->
                     "Loading..."

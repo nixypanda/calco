@@ -1,8 +1,10 @@
 module Page.Goals.Settings exposing
-    ( LoadedModel
+    ( Form
+    , FormState(..)
     , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , ReadyModel
     , SaveState(..)
     , init
     , update
@@ -11,9 +13,10 @@ module Page.Goals.Settings exposing
 
 import Api.Client as Client
 import Api.Goals exposing (SaveGoalRequest)
-import Data.Goals exposing (GoalSnapshot, GoalSource(..), GoalTargets)
+import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, GoalTargets)
+import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
-import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Date as LocalDate
 import Ui
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -25,25 +28,35 @@ import Ui.Typography as Typography
 
 type Model
     = Loading
-    | Ready LoadedModel
+    | Ready ReadyModel
     | Failed String
 
 
-type alias LoadedModel =
-    { today : LocalDate
-    , snapshot : GoalSnapshot
-    , calorieTarget : String
-    , proteinTargetG : String
-    , carbsTargetG : String
-    , fatTargetG : String
-    , saveState : SaveState
+type alias ReadyModel =
+    { status : GoalStatus
+    , form : Form
+    , formState : FormState
+    , save : SaveState
     }
 
 
+type alias Form =
+    { calorieTarget : String
+    , proteinTargetG : String
+    , carbsTargetG : String
+    , fatTargetG : String
+    }
+
+
+type FormState
+    = Pristine
+    | Edited
+
+
 type SaveState
-    = Editing
+    = Idle
     | ValidationFailed String
-    | WaitingForLocalContext
+    | AwaitingLocalContext GoalTargets
     | Saving
     | SaveFailed String
 
@@ -56,8 +69,8 @@ type OutMsg
     | SessionExpired
 
 
-init : LocalDate -> ( Model, OutMsg )
-init _ =
+init : ( Model, OutMsg )
+init =
     ( Loading, RequestGoal )
 
 
@@ -72,71 +85,72 @@ type Msg
     | CarbsTargetChanged String
     | FatTargetChanged String
     | SaveClicked
-    | LocalContextReceived { date : String, timezone : String }
+    | LocalContextReceived LocalContext
     | SaveCompleted (Result Client.ApiError GoalSnapshot)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        GoalLoaded result ->
-            case result of
-                Ok snapshot ->
-                    ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
+        GoalLoaded (Ok snapshot) ->
+            case model of
+                Ready ready ->
+                    ( Ready (refreshedWith snapshot ready), Cmd.none, NoOp )
 
-                Err error ->
-                    case model of
-                        Loading ->
-                            Client.failure
-                                { noOp = NoOp
-                                , sessionExpired = SessionExpired
-                                , applyError = \message _ -> Failed message
-                                }
-                                error
-                                model
+                _ ->
+                    ( Ready (readyModelFor snapshot), Cmd.none, NoOp )
 
-                        Ready loaded ->
-                            Client.failure
-                                { noOp = NoOp
-                                , sessionExpired = SessionExpired
-                                , applyError =
-                                    \message _ ->
-                                        Ready { loaded | saveState = SaveFailed message }
-                                }
-                                error
-                                model
+        GoalLoaded (Err error) ->
+            case model of
+                Ready _ ->
+                    Client.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \_ unchanged -> unchanged
+                        }
+                        error
+                        model
 
-                        Failed _ ->
-                            ( model, Cmd.none, NoOp )
+                Failed _ ->
+                    ( model, Cmd.none, NoOp )
+
+                Loading ->
+                    Client.failure
+                        { noOp = NoOp
+                        , sessionExpired = SessionExpired
+                        , applyError = \message _ -> Failed message
+                        }
+                        error
+                        model
 
         CalorieTargetChanged value ->
-            updateField (\loaded -> { loaded | calorieTarget = value }) model
+            updateForm (\form -> { form | calorieTarget = value }) model
 
         ProteinTargetChanged value ->
-            updateField (\loaded -> { loaded | proteinTargetG = value }) model
+            updateForm (\form -> { form | proteinTargetG = value }) model
 
         CarbsTargetChanged value ->
-            updateField (\loaded -> { loaded | carbsTargetG = value }) model
+            updateForm (\form -> { form | carbsTargetG = value }) model
 
         FatTargetChanged value ->
-            updateField (\loaded -> { loaded | fatTargetG = value }) model
+            updateForm (\form -> { form | fatTargetG = value }) model
 
         SaveClicked ->
             case model of
-                Ready loaded ->
-                    case validate loaded of
-                        Ok _ ->
+                Ready ready ->
+                    case validate ready.form of
+                        Ok targets ->
                             ( Ready
-                                { loaded
-                                    | saveState = WaitingForLocalContext
+                                { ready
+                                    | save = AwaitingLocalContext targets
+                                    , formState = Pristine
                                 }
                             , Cmd.none
                             , RequestLocalContext
                             )
 
                         Err message ->
-                            ( Ready
-                                { loaded | saveState = ValidationFailed message }
+                            ( Ready { ready | save = ValidationFailed message }
                             , Cmd.none
                             , NoOp
                             )
@@ -146,28 +160,17 @@ update msg model =
 
         LocalContextReceived context ->
             case model of
-                Ready loaded ->
-                    case loaded.saveState of
-                        WaitingForLocalContext ->
-                            case validate loaded of
-                                Ok targets ->
-                                    ( Ready { loaded | saveState = Saving }
-                                    , Cmd.none
-                                    , RequestSaveGoal
-                                        { localDate = context.date
-                                        , deviceTimezone = context.timezone
-                                        , targets = targets
-                                        }
-                                    )
-
-                                Err message ->
-                                    ( Ready
-                                        { loaded
-                                            | saveState = ValidationFailed message
-                                        }
-                                    , Cmd.none
-                                    , NoOp
-                                    )
+                Ready ready ->
+                    case ready.save of
+                        AwaitingLocalContext targets ->
+                            ( Ready { ready | save = Saving }
+                            , Cmd.none
+                            , RequestSaveGoal
+                                { localDate = context.date
+                                , deviceTimezone = context.timezone
+                                , targets = targets
+                                }
+                            )
 
                         _ ->
                             ( model, Cmd.none, NoOp )
@@ -177,26 +180,24 @@ update msg model =
 
         SaveCompleted result ->
             case model of
-                Ready loaded ->
-                    case loaded.saveState of
-                        Saving ->
-                            case result of
-                                Ok snapshot ->
-                                    ( Ready (loadedModelFor snapshot), Cmd.none, NoOp )
+                Ready ready ->
+                    case ( ready.save, result ) of
+                        ( Saving, Ok snapshot ) ->
+                            ( Ready (refreshedWith snapshot { ready | save = Idle })
+                            , Cmd.none
+                            , NoOp
+                            )
 
-                                Err error ->
-                                    Client.failure
-                                        { noOp = NoOp
-                                        , sessionExpired = SessionExpired
-                                        , applyError =
-                                            \message _ ->
-                                                Ready
-                                                    { loaded
-                                                        | saveState = SaveFailed message
-                                                    }
-                                        }
-                                        error
-                                        model
+                        ( Saving, Err error ) ->
+                            Client.failure
+                                { noOp = NoOp
+                                , sessionExpired = SessionExpired
+                                , applyError =
+                                    \message _ ->
+                                        Ready { ready | save = SaveFailed message }
+                                }
+                                error
+                                model
 
                         _ ->
                             ( model, Cmd.none, NoOp )
@@ -205,16 +206,16 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-updateField : (LoadedModel -> LoadedModel) -> Model -> ( Model, Cmd Msg, OutMsg )
-updateField transform model =
+updateForm : (Form -> Form) -> Model -> ( Model, Cmd Msg, OutMsg )
+updateForm transform model =
     case model of
-        Ready loaded ->
+        Ready ready ->
             ( Ready
-                (transform
-                    { loaded
-                        | saveState = Editing
-                    }
-                )
+                { ready
+                    | form = transform ready.form
+                    , formState = Edited
+                    , save = editingSave ready.save
+                }
             , Cmd.none
             , NoOp
             )
@@ -223,16 +224,42 @@ updateField transform model =
             ( model, Cmd.none, NoOp )
 
 
-validate : LoadedModel -> Result String GoalTargets
-validate loaded =
+refreshedWith : GoalSnapshot -> ReadyModel -> ReadyModel
+refreshedWith snapshot ready =
+    case ready.formState of
+        Pristine ->
+            { ready
+                | status = Goals.statusOf snapshot
+                , form = formFor snapshot.targets
+            }
+
+        Edited ->
+            { ready | status = Goals.statusOf snapshot }
+
+
+editingSave : SaveState -> SaveState
+editingSave save =
+    case save of
+        ValidationFailed _ ->
+            Idle
+
+        SaveFailed _ ->
+            Idle
+
+        _ ->
+            save
+
+
+validate : Form -> Result String GoalTargets
+validate form =
     let
         maybeTargets : Maybe GoalTargets
         maybeTargets =
             Maybe.map4 GoalTargets
-                (String.toFloat loaded.calorieTarget)
-                (String.toFloat loaded.proteinTargetG)
-                (String.toFloat loaded.carbsTargetG)
-                (String.toFloat loaded.fatTargetG)
+                (String.toFloat form.calorieTarget)
+                (String.toFloat form.proteinTargetG)
+                (String.toFloat form.carbsTargetG)
+                (String.toFloat form.fatTargetG)
     in
     case maybeTargets of
         Just targets ->
@@ -268,15 +295,21 @@ validate loaded =
             Err "Enter valid numbers for all goal fields."
 
 
-loadedModelFor : GoalSnapshot -> LoadedModel
-loadedModelFor snapshot =
-    { today = snapshot.requestedDate
-    , snapshot = snapshot
-    , calorieTarget = String.fromFloat snapshot.targets.calorieTarget
-    , proteinTargetG = String.fromFloat snapshot.targets.proteinTargetG
-    , carbsTargetG = String.fromFloat snapshot.targets.carbsTargetG
-    , fatTargetG = String.fromFloat snapshot.targets.fatTargetG
-    , saveState = Editing
+readyModelFor : GoalSnapshot -> ReadyModel
+readyModelFor snapshot =
+    { status = Goals.statusOf snapshot
+    , form = formFor snapshot.targets
+    , formState = Pristine
+    , save = Idle
+    }
+
+
+formFor : GoalTargets -> Form
+formFor targets =
+    { calorieTarget = String.fromFloat targets.calorieTarget
+    , proteinTargetG = String.fromFloat targets.proteinTargetG
+    , carbsTargetG = String.fromFloat targets.carbsTargetG
+    , fatTargetG = String.fromFloat targets.fatTargetG
     }
 
 
@@ -294,36 +327,36 @@ view { model, device, theme } =
             Failed message ->
                 [ Ui.errorBanner theme message ]
 
-            Ready loaded ->
-                [ Ui.maybeErrorBanner theme (requestError loaded.saveState)
+            Ready ready ->
+                [ Ui.maybeErrorBanner theme (requestError ready.save)
                 , Ui.card theme
                     [ Typography.sectionTitle theme "Daily Targets"
-                    , Typography.mutedParagraph theme (statusMessage loaded.snapshot)
+                    , Typography.mutedParagraph theme (statusMessage ready.status)
                     , Ui.decimalInput theme
                         { label = "Calories"
-                        , value = loaded.calorieTarget
+                        , value = ready.form.calorieTarget
                         , onChange = CalorieTargetChanged
                         }
                     , Ui.decimalInput theme
                         { label = "Protein (g)"
-                        , value = loaded.proteinTargetG
+                        , value = ready.form.proteinTargetG
                         , onChange = ProteinTargetChanged
                         }
                     , Ui.decimalInput theme
                         { label = "Carbs (g)"
-                        , value = loaded.carbsTargetG
+                        , value = ready.form.carbsTargetG
                         , onChange = CarbsTargetChanged
                         }
                     , Ui.decimalInput theme
                         { label = "Fat (g)"
-                        , value = loaded.fatTargetG
+                        , value = ready.form.fatTargetG
                         , onChange = FatTargetChanged
                         }
-                    , Ui.maybeErrorBanner theme (formError loaded.saveState)
+                    , Ui.maybeErrorBanner theme (formError ready.save)
                     ]
                 , Ui.primarySubmitButton device
                     theme
-                    { state = Ui.submittingOrIdle (loaded.saveState == Saving)
+                    { state = Ui.submittingOrIdle (isSaving ready.save)
                     , idleLabel = "Save Goals"
                     , submittingLabel = "Saving..."
                     , onPress = SaveClicked
@@ -332,9 +365,9 @@ view { model, device, theme } =
         )
 
 
-statusMessage : GoalSnapshot -> String
-statusMessage snapshot =
-    case ( snapshot.source, snapshot.effectiveFrom ) of
+statusMessage : GoalStatus -> String
+statusMessage status =
+    case ( status.source, status.effectiveFrom ) of
         ( Default, Nothing ) ->
             "Using backend defaults for this date."
 
@@ -348,9 +381,22 @@ statusMessage snapshot =
             "Using backend defaults after " ++ LocalDate.display effectiveFrom ++ "."
 
 
+isSaving : SaveState -> Bool
+isSaving save =
+    case save of
+        AwaitingLocalContext _ ->
+            True
+
+        Saving ->
+            True
+
+        _ ->
+            False
+
+
 formError : SaveState -> Maybe String
-formError saveState =
-    case saveState of
+formError save =
+    case save of
         ValidationFailed message ->
             Just message
 
@@ -359,8 +405,8 @@ formError saveState =
 
 
 requestError : SaveState -> Maybe String
-requestError saveState =
-    case saveState of
+requestError save =
+    case save of
         SaveFailed message ->
             Just message
 

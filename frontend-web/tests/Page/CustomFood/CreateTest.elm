@@ -4,6 +4,7 @@ import Api.Client as Client
 import Api.Foods exposing (CategorySuggestion, CreateFoodRequest, NutrientItem, UnitItem)
 import Data.Route exposing (Route(..))
 import Expect
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
@@ -62,7 +63,7 @@ tests =
                     initialModel
                     |> third
                     |> Expect.equal
-                        (CustomFoodCreate.RequestCategorySuggestions 1
+                        (CustomFoodCreate.RequestCategorySuggestions (ticket 1)
                             { query = "dai", limit = 8 }
                         )
         , test "category suggestions update matching form token" <|
@@ -77,7 +78,7 @@ tests =
                 in
                 CustomFoodCreate.update
                     (CustomFoodCreate.CategorySuggestionsLoaded
-                        1
+                        (ticket 1)
                         (Ok { items = [ dairySuggestion ] })
                     )
                     queried
@@ -98,7 +99,7 @@ tests =
                 in
                 CustomFoodCreate.update
                     (CustomFoodCreate.CategorySuggestionsLoaded
-                        0
+                        (ticket 0)
                         (Ok { items = [ dairySuggestion ] })
                     )
                     queried
@@ -166,7 +167,7 @@ validModel =
                     { selected = [ "dairy" ]
                     , query = ""
                     , suggestions = []
-                    , token = 0
+                    , token = ticket 0
                     }
                 , nutrients =
                     [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
@@ -212,3 +213,8 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

@@ -3,6 +3,7 @@ module Lib.Date exposing
     , addDays
     , clampTo
     , compare
+    , decoder
     , display
     , equals
     , format
@@ -13,6 +14,7 @@ module Lib.Date exposing
     )
 
 import Char
+import Json.Decode as Decode exposing (Decoder)
 import Time
 
 
@@ -37,6 +39,20 @@ fromString raw =
 
         _ ->
             Nothing
+
+
+decoder : Decoder LocalDate
+decoder =
+    Decode.string
+        |> Decode.andThen
+            (\raw ->
+                case fromString raw of
+                    Just date ->
+                        Decode.succeed date
+
+                    Nothing ->
+                        Decode.fail ("Invalid local date: " ++ raw)
+            )
 
 
 fromParts : Int -> Int -> Int -> Maybe LocalDate
