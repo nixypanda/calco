@@ -98,7 +98,6 @@ pub struct LogResponse {
     pub device_timezone: Option<String>,
     pub item: ItemDto,
     pub quantity: QuantityDto,
-    pub nutrition_summary: NutrientSummaryDto,
     pub nutrients: Vec<NutrientSnapshotDto>,
     pub notes: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -628,7 +627,6 @@ fn food_log_to_response(log: &FoodLog) -> LogResponse {
         device_timezone: log.device_timezone.clone(),
         item: item_to_dto(&log.item),
         quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
-        nutrition_summary: food_log_nutrition_summary(log),
         nutrients: log
             .nutrient_snapshots
             .iter()
@@ -673,14 +671,6 @@ fn quantity_usage_to_dto(usage: &QuantityUsage) -> QuantityUsageDto {
         quantity: quantity_to_dto(usage.amount, usage.unit.0.clone()),
         log_count: usage.log_count,
     }
-}
-
-fn food_log_nutrition_summary(log: &FoodLog) -> NutrientSummaryDto {
-    nutrient_summary_from_entries(
-        log.nutrient_snapshots
-            .iter()
-            .map(|snapshot| (snapshot.nutrient_code.0.clone(), snapshot.amount)),
-    )
 }
 
 fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {
