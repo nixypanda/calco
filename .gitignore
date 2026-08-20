@@ -29,6 +29,8 @@ data/
 data-fixed*/
 !frontend-web/src/Data/
 !frontend-web/src/Data/*.elm
+!frontend-web/tests/Data/
+!frontend-web/tests/Data/*.elm
 
 # Python cache
 __pycache__/

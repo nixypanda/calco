@@ -77,3 +77,11 @@ Build and run:
 nix develop -c just frontend-web-build
 nix develop -c just frontend-web-dev
 ```
+
+## Gotchas
+
+- **New files under `src/Data/` or `tests/Data/` need a `.gitignore` negation.**
+  The root `.gitignore` ignores `data/` for the import pipeline, and macOS
+  matches that case-insensitively, so `Data/` is caught too. `git status` stays
+  silent and the file never lands in a commit — three test files sat untracked
+  this way. Run `git status` after adding one.
