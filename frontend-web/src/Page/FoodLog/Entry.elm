@@ -4,7 +4,6 @@ module Page.FoodLog.Entry exposing
     , LoadedItem(..)
     , LoadedModel
     , LoadingModel
-    , MealState
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -20,7 +19,6 @@ module Page.FoodLog.Entry exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
-import Api.Meals exposing (MealName)
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition as Nutrition
@@ -67,7 +65,7 @@ type alias LoadedModel =
 
 type LoadedItem
     = ProductItem ProductState
-    | MealItem MealState
+    | MealItem Data.FoodLog.LogItem
 
 
 type ItemDetail a
@@ -78,10 +76,6 @@ type ItemDetail a
 
 type alias ProductState =
     ItemDetail ProductDetail
-
-
-type alias MealState =
-    ItemDetail MealName
 
 
 type RequestState
@@ -114,7 +108,6 @@ type Msg
     = LogLoaded (Result Client.ApiError FoodLog)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | ProductDetailLoaded (Result Client.ApiError ProductDetail)
-    | MealNameLoaded (Result Client.ApiError MealName)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
     | UpdateCompleted (Result Client.ApiError FoodLog)
@@ -128,7 +121,6 @@ type OutMsg
     = NoOp
     | RequestInitialData String
     | RequestProductDetail String
-    | RequestMealName String
     | RequestUpdateLog String UpdateLogRequest
     | RequestDeleteLog String
     | LogUpdated LocalDate
@@ -157,9 +149,6 @@ update msg model =
 
         ProductDetailLoaded result ->
             ( updateLoadedItem (applyProductDetail result) model, Cmd.none, NoOp )
-
-        MealNameLoaded result ->
-            ( updateLoadedItem (applyMealName result) model, Cmd.none, NoOp )
 
         FormMsg subMsg ->
             case model of
@@ -413,7 +402,7 @@ initialLoadedItem log =
             ProductItem (DetailLoading log.item)
 
         Meal ->
-            MealItem (DetailLoading log.item)
+            MealItem log.item
 
 
 updateLoadedItem : (LoadedItem -> LoadedItem) -> Model -> Model
@@ -448,25 +437,6 @@ applyProductDetail result item =
             item
 
 
-applyMealName : Result Client.ApiError MealName -> LoadedItem -> LoadedItem
-applyMealName result item =
-    case item of
-        MealItem mealState ->
-            case result of
-                Ok meal ->
-                    if mealStateId mealState == meal.id then
-                        MealItem (DetailLoaded meal)
-
-                    else
-                        item
-
-                Err _ ->
-                    MealItem (DetailUnavailable (mealStateItem mealState))
-
-        _ ->
-            item
-
-
 productStateId : ProductState -> String
 productStateId state =
     (productStateItem state).id
@@ -483,28 +453,6 @@ productStateItem state =
             , id = food.id
             , name = food.name
             , brand = food.brand
-            }
-
-        DetailUnavailable item ->
-            item
-
-
-mealStateId : MealState -> String
-mealStateId state =
-    (mealStateItem state).id
-
-
-mealStateItem : MealState -> Data.FoodLog.LogItem
-mealStateItem state =
-    case state of
-        DetailLoading item ->
-            item
-
-        DetailLoaded meal ->
-            { itemType = Meal
-            , id = meal.id
-            , name = meal.name
-            , brand = Nothing
             }
 
         DetailUnavailable item ->
@@ -557,8 +505,10 @@ itemResolutionOutMsg log =
         Product ->
             RequestProductDetail log.item.id
 
+        -- Products need servings, nutrients and allowed units the log lacks. A
+        -- meal log already carries everything its view renders.
         Meal ->
-            RequestMealName log.item.id
+            NoOp
 
 
 loadFailure : Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -757,16 +707,8 @@ itemTitle theme item =
                 DetailUnavailable fallback ->
                     Element.text fallback.name
 
-        MealItem mealState ->
-            case mealState of
-                DetailLoading _ ->
-                    Ui.skeletonBar theme
-
-                DetailLoaded meal ->
-                    Typography.truncatedHeader theme meal.name
-
-                DetailUnavailable fallback ->
-                    Element.text fallback.name
+        MealItem meal ->
+            Typography.truncatedHeader theme meal.name
 
 
 metaSubtitle : Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle

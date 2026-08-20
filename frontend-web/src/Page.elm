@@ -2341,12 +2341,6 @@ applyFoodLogDetailOutMsg context outMsg =
             , NoOutMsg
             )
 
-        FoodLogEntry.RequestMealName mealId ->
-            ( Api.Meals.getMealName mealId
-                (GotFoodLogDetailMsg << FoodLogEntry.MealNameLoaded)
-            , NoOutMsg
-            )
-
         FoodLogEntry.RequestUpdateLog logId request ->
             ( Api.Logs.updateLog logId
                 request
