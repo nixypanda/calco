@@ -53,22 +53,19 @@ tests =
                         )
         , test "load earlier requests the preceding six-month block" <|
             \_ ->
-                let
-                    model : CalendarPage.Model
-                    model =
-                        CalendarPage.init
-                            { monthParam = Nothing
-                            , today = today
-                            }
-                            |> Tuple.first
-                in
-                CalendarPage.update CalendarPage.LoadEarlierClicked model
+                CalendarPage.update CalendarPage.LoadEarlierClicked (calendarModel [])
                     |> third
                     |> Expect.equal
                         (CalendarPage.RequestEarlierSummary
                             (date "2025-08-01")
                             (date "2026-01-31")
                         )
+        , test "load earlier is ignored while a load is already in flight" <|
+            \_ ->
+                CalendarPage.update CalendarPage.LoadEarlierClicked
+                    (calendarModel [] |> withStatus CalendarPage.LoadingEarlier)
+                    |> third
+                    |> Expect.equal CalendarPage.NoOp
         , test "known totals replace that day's summary" <|
             \_ ->
                 CalendarPage.update
@@ -120,6 +117,11 @@ summaryOn raw energyKcal =
     , carbsG = 30
     , fatG = 10
     }
+
+
+withStatus : CalendarPage.Status -> CalendarPage.Model -> CalendarPage.Model
+withStatus status model =
+    { model | status = status }
 
 
 calendarModel : List DaySummary -> CalendarPage.Model

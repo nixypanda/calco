@@ -37,6 +37,7 @@ import Ui.Typography as Typography
 type Status
     = Loading
     | Ready
+    | LoadingEarlier
     | Failed String
 
 
@@ -46,7 +47,6 @@ type alias Model =
     , oldestMonth : String
     , summaries : List DaySummary
     , status : Status
-    , loadingEarlier : Bool
     }
 
 
@@ -75,7 +75,6 @@ init args =
             , oldestMonth = oldestMonth
             , summaries = []
             , status = Loading
-            , loadingEarlier = False
             }
     in
     ( model, requestForMonths oldestMonth newestMonth args.today )
@@ -127,32 +126,12 @@ update msg model =
                 ( model, Cmd.none, NoOp )
 
         LoadEarlierClicked ->
-            if model.loadingEarlier then
-                ( model, Cmd.none, NoOp )
+            case model.status of
+                Ready ->
+                    loadEarlier model
 
-            else
-                let
-                    nextOldest : String
-                    nextOldest =
-                        Calendar.shiftMonth -6 model.oldestMonth
-
-                    previousDay : Maybe LocalDate
-                    previousDay =
-                        Calendar.monthStart model.oldestMonth
-                            |> Maybe.map (LocalDate.addDays -1)
-                in
-                case ( Calendar.monthStart nextOldest, previousDay ) of
-                    ( Just fromDate, Just toDate ) ->
-                        ( { model
-                            | oldestMonth = nextOldest
-                            , loadingEarlier = True
-                          }
-                        , Cmd.none
-                        , RequestEarlierSummary fromDate toDate
-                        )
-
-                    _ ->
-                        ( model, Cmd.none, NoOp )
+                _ ->
+                    ( model, Cmd.none, NoOp )
 
         DayClicked month date ->
             ( model
@@ -193,6 +172,29 @@ dateIsLoaded date model =
             False
 
 
+loadEarlier : Model -> ( Model, Cmd Msg, OutMsg )
+loadEarlier model =
+    let
+        nextOldest : String
+        nextOldest =
+            Calendar.shiftMonth -6 model.oldestMonth
+
+        previousDay : Maybe LocalDate
+        previousDay =
+            Calendar.monthStart model.oldestMonth
+                |> Maybe.map (LocalDate.addDays -1)
+    in
+    case ( Calendar.monthStart nextOldest, previousDay ) of
+        ( Just fromDate, Just toDate ) ->
+            ( { model | oldestMonth = nextOldest, status = LoadingEarlier }
+            , Cmd.none
+            , RequestEarlierSummary fromDate toDate
+            )
+
+        _ ->
+            ( model, Cmd.none, NoOp )
+
+
 applySummaryResult :
     Bool
     -> Result Client.ApiError (List DaySummary)
@@ -204,7 +206,6 @@ applySummaryResult earlier result model =
             ( { model
                 | summaries = mergeSummaries model.summaries summaries
                 , status = Ready
-                , loadingEarlier = False
               }
             , Cmd.none
             , NoOp
@@ -228,7 +229,6 @@ applySummaryResult earlier result model =
 
                         else
                             Failed (Client.displayError error)
-                    , loadingEarlier = False
                   }
                 , Cmd.none
                 , NoOp
@@ -278,13 +278,18 @@ contentViewWithSelection selectedDate { model, theme } =
                 [ Ui.errorBanner theme message ]
 
             Ready ->
-                monthRange model.newestMonth model.oldestMonth
-                    |> List.map (monthView theme model selectedDate)
-                    |> (\months ->
-                            months
-                                ++ [ loadEarlierButton theme model.loadingEarlier ]
-                       )
+                monthsView theme model selectedDate False
+
+            LoadingEarlier ->
+                monthsView theme model selectedDate True
         )
+
+
+monthsView : Theme -> Model -> Maybe String -> Bool -> List (Element Msg)
+monthsView theme model selectedDate loadingEarlier =
+    monthRange model.newestMonth model.oldestMonth
+        |> List.map (monthView theme model selectedDate)
+        |> (\months -> months ++ [ loadEarlierButton theme loadingEarlier ])
 
 
 monthRange : String -> String -> List String
