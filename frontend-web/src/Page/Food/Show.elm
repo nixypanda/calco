@@ -15,6 +15,7 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, RecentItemsResponse)
 import Data.FoodLog exposing (FoodLog)
+import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -98,7 +99,7 @@ type Msg
     | LastUsedLoaded (Result Client.ApiError RecentItemsResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
-    | LocalContextReceived { date : String, timezone : String }
+    | LocalContextReceived LocalContext
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
@@ -229,7 +230,7 @@ update msg model =
 
 
 createLogFromLocalContext :
-    { date : String, timezone : String }
+    LocalContext
     -> LoadedModel
     -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =

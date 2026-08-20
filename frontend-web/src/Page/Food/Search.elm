@@ -18,8 +18,10 @@ module Page.Food.Search exposing
 import Api.Client as Client
 import Api.Foods as Foods
 import Api.Logs as Logs
+import Data.BarcodeScan exposing (ScannerEvent)
 import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
+import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -159,7 +161,7 @@ type Msg
     | BarcodeSubmitted
     | BarcodeScanClicked
     | BarcodeScanCancelClicked
-    | BarcodeScannerEventReceived { event : String, barcode : Maybe String, message : Maybe String }
+    | BarcodeScannerEventReceived ScannerEvent
     | BarcodeLookupCompleted Int (Result Client.ApiError Foods.ProductDetail)
     | CategorySuggestionsCompleted Int (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
@@ -170,7 +172,7 @@ type Msg
     | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
-    | LocalContextReceived { date : String, timezone : String }
+    | LocalContextReceived LocalContext
     | QuickAddCompleted (Result Client.ApiError FoodLog)
     | ClearRecentAdded String Int
     | ResultClicked String
@@ -680,7 +682,7 @@ applyBarcodeScannerEvent event model =
 
 
 quickAddRequest :
-    { date : String, timezone : String }
+    LocalContext
     -> Model
     -> QuickAddTarget
     -> Maybe Logs.CreateLogRequest

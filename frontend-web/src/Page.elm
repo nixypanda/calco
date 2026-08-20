@@ -34,10 +34,12 @@ import Api.Logs
 import Api.Meals
 import Api.NutritionDetails
 import Data.Auth as Auth
+import Data.BarcodeScan exposing (ScannerEvent)
 import Data.DiaryPreferences
 import Data.FoodLog
 import Data.Goals
 import Data.ItemRef as ItemRef
+import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
@@ -1883,7 +1885,7 @@ third ( _, _, value ) =
 
 localContextReceived :
     InitContext
-    -> { date : String, timezone : String }
+    -> LocalContext
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
 localContextReceived pageContext context model =
@@ -1917,7 +1919,7 @@ localContextReceived pageContext context model =
 
 barcodeScannerEventReceived :
     InitContext
-    -> { event : String, barcode : Maybe String, message : Maybe String }
+    -> ScannerEvent
     -> Model
     -> Maybe ( Model, Cmd Msg, OutMsg )
 barcodeScannerEventReceived pageContext event model =

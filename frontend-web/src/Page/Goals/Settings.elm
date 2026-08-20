@@ -12,6 +12,7 @@ module Page.Goals.Settings exposing
 import Api.Client as Client
 import Api.Goals exposing (SaveGoalRequest)
 import Data.Goals exposing (GoalSnapshot, GoalSource(..), GoalTargets)
+import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Ui
@@ -72,7 +73,7 @@ type Msg
     | CarbsTargetChanged String
     | FatTargetChanged String
     | SaveClicked
-    | LocalContextReceived { date : String, timezone : String }
+    | LocalContextReceived LocalContext
     | SaveCompleted (Result Client.ApiError GoalSnapshot)
 
 

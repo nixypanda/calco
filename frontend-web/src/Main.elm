@@ -17,6 +17,8 @@ import Browser.Events
 import Browser.Navigation as Nav
 import Chrome
 import Data.Auth as Auth exposing (Session)
+import Data.BarcodeScan exposing (ScannerEvent)
+import Data.LocalContext exposing (LocalContext)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Html
@@ -53,13 +55,6 @@ type alias Model =
     , device : Element.Device
     , theme : Theme
     , version : Version.Model
-    }
-
-
-type alias BarcodeScannerEvent =
-    { event : String
-    , barcode : Maybe String
-    , message : Maybe String
     }
 
 
@@ -131,8 +126,8 @@ type Msg
     | LogoutCompleted
     | WindowResized Int Int
     | GotPageMsg Page.Msg
-    | GotLocalContext { date : String, timezone : String }
-    | GotBarcodeScannerEvent BarcodeScannerEvent
+    | GotLocalContext LocalContext
+    | GotBarcodeScannerEvent ScannerEvent
     | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
 
@@ -607,7 +602,7 @@ subscriptions _ =
 port requestLocalContext : () -> Cmd msg
 
 
-port localContextReceived : ({ date : String, timezone : String } -> msg) -> Sub msg
+port localContextReceived : (LocalContext -> msg) -> Sub msg
 
 
 port requestBarcodeScanStart : () -> Cmd msg
@@ -616,7 +611,7 @@ port requestBarcodeScanStart : () -> Cmd msg
 port requestBarcodeScanStop : () -> Cmd msg
 
 
-port barcodeScannerEvent : (BarcodeScannerEvent -> msg) -> Sub msg
+port barcodeScannerEvent : (ScannerEvent -> msg) -> Sub msg
 
 
 port persistThemeMode : String -> Cmd msg
