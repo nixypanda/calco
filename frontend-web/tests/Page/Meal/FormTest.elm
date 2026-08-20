@@ -27,7 +27,7 @@ tests : Test
 tests =
     describe "Page.Meal.Form"
         [ describe "ProductNameLoaded"
-            [ test "Ok stores product name and merges into matching rows" <|
+            [ test "Ok shows the product name in matching rows" <|
                 \_ ->
                     let
                         formWithProduct : FormFields
@@ -41,7 +41,7 @@ tests =
                     in
                     form.components
                         |> List.head
-                        |> Maybe.map .productName
+                        |> Maybe.map (.search >> .query)
                         |> Expect.equal (Just "Milk")
             , test "Err falls back to Unknown food" <|
                 \_ ->
@@ -57,7 +57,7 @@ tests =
                     in
                     form.components
                         |> List.head
-                        |> Maybe.map .productName
+                        |> Maybe.map (.search >> .query)
                         |> Expect.equal (Just "Unknown food")
             , test "Ok with no other missing products returns no outmsg" <|
                 \_ ->

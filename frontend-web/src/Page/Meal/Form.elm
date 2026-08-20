@@ -29,13 +29,13 @@ import Api.Meals
         ( CreateMealComponentRequest
         , CreateMealRequest
         )
-import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition exposing (defaultCode)
 import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
+import Set exposing (Set)
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
@@ -55,7 +55,6 @@ type alias RowId =
 type alias ComponentRow =
     { rowId : RowId
     , productId : String
-    , productName : String
     , quantity : String
     , unit : String
     , search : QueryState
@@ -82,7 +81,7 @@ type alias FormFields =
     , totalQuantity : String
     , totalUnit : String
     , components : List ComponentRow
-    , productNames : ItemNameLookup.Names
+    , namedProductIds : Set String
     , nextRowId : RowId
     , nextSearchToken : Int
     , submit : SubmitState
@@ -135,7 +134,7 @@ emptyFormFields =
     , totalQuantity = ""
     , totalUnit = defaultCode
     , components = [ emptyComponentRow 1 ]
-    , productNames = ItemNameLookup.empty
+    , namedProductIds = Set.empty
     , nextRowId = 2
     , nextSearchToken = 1
     , submit = Idle
@@ -146,7 +145,6 @@ emptyComponentRow : RowId -> ComponentRow
 emptyComponentRow rowId =
     { rowId = rowId
     , productId = ""
-    , productName = ""
     , quantity = "100"
     , unit = defaultCode
     , search = Search.empty
@@ -205,24 +203,16 @@ updateFormField msg form =
                         Err _ ->
                             "Unknown food"
 
-                nextNames : ItemNameLookup.Names
-                nextNames =
-                    ItemNameLookup.insertProduct productId name form.productNames
-
-                nextForm : FormFields
-                nextForm =
-                    { form
-                        | components =
-                            List.map (mergeProductName productId name) form.components
-                        , productNames = nextNames
-                    }
+                named : Set String
+                named =
+                    Set.insert productId form.namedProductIds
             in
-            ( nextForm
+            ( { form
+                | components = List.map (applyProductName productId name) form.components
+                , namedProductIds = named
+              }
             , Cmd.none
-            , requestNextMissingProductName
-                (Just productId)
-                form.components
-                nextNames
+            , requestNextMissingProductName form.components named
             )
 
         ComponentSearchChanged rowId query ->
@@ -554,28 +544,20 @@ completeComponentSuggestion rowId form =
             ( form, Cmd.none, Nothing )
 
 
-requestNextMissingProductName :
-    Maybe String
-    -> List ComponentRow
-    -> ItemNameLookup.Names
-    -> Maybe FormFieldOutMsg
-requestNextMissingProductName completedProductId rows productNames =
+requestNextMissingProductName : List ComponentRow -> Set String -> Maybe FormFieldOutMsg
+requestNextMissingProductName rows namedProductIds =
     rows
         |> List.map .productId
         |> List.filter (String.trim >> String.isEmpty >> not)
-        |> (\ids ->
-                ItemNameLookup.nextMissingProductId
-                    completedProductId
-                    ids
-                    productNames
-           )
+        |> List.filter (\id -> not (Set.member id namedProductIds))
+        |> List.head
         |> Maybe.map RequestProductName
 
 
-mergeProductName : String -> String -> ComponentRow -> ComponentRow
-mergeProductName productId name row =
+applyProductName : String -> String -> ComponentRow -> ComponentRow
+applyProductName productId name row =
     if row.productId == productId then
-        { row | productName = name, search = Search.withQuery name row.search }
+        { row | search = Search.withQuery name row.search }
 
     else
         row
@@ -606,13 +588,7 @@ patchRow rowId patch row =
             SetProduct id name ->
                 { row
                     | productId = id
-                    , productName = name
-                    , search =
-                        { query = name
-                        , searchToken = 0
-                        , categoryToken = 0
-                        , categorySuggestions = []
-                        }
+                    , search = Search.withQuery name Search.empty
                     , searchResults = NotAsked
                 }
 

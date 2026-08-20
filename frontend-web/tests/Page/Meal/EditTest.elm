@@ -2,7 +2,6 @@ module Page.Meal.EditTest exposing (tests)
 
 import Api.Client as Client
 import Api.Meals exposing (Meal, MealNutritionResponse)
-import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
@@ -36,6 +35,14 @@ tests =
                     |> componentsOf
                     |> List.map (\row -> ( row.productId, row.quantity, row.unit ))
                     |> Expect.equal [ ( "food-1", "2", "serving" ) ]
+        , test "meal load requests the name of its first product component" <|
+            \_ ->
+                MealEdit.update
+                    (MealEdit.MealLoaded (Ok meal))
+                    (Tuple.first (MealEdit.init "meal-1"))
+                    |> third
+                    |> Expect.equal
+                        (MealEdit.FormOutMsg (Common.RequestProductName "food-1"))
         , test "meal load failure transitions to edit load failed" <|
             \_ ->
                 MealEdit.update
@@ -164,7 +171,6 @@ loadedWithForm fields =
         { mealId = "meal-1"
         , meal = meal
         , fields = fields
-        , productNames = ItemNameLookup.empty
         , nutrition = NutritionLoading View.Nutrients.defaultNutritionInput
         }
 

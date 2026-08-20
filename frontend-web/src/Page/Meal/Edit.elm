@@ -11,12 +11,12 @@ module Page.Meal.Edit exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
-import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
+import Set
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
@@ -42,7 +42,6 @@ type alias LoadedModel =
     { mealId : String
     , meal : Meal
     , fields : Common.FormFields
-    , productNames : ItemNameLookup.Names
     , nutrition : NutritionState
     }
 
@@ -117,7 +116,7 @@ update msg model =
                     in
                     ( Editing loaded
                     , Cmd.none
-                    , requestProductNames (uniqueProductIds meal)
+                    , requestFirstProductName meal
                     )
 
                 Err error ->
@@ -284,7 +283,6 @@ loadedFromMeal meal loading =
     { mealId = loading.mealId
     , meal = meal
     , fields = editFormFromMeal meal
-    , productNames = ItemNameLookup.empty
     , nutrition = loading.nutrition
     }
 
@@ -294,7 +292,6 @@ loadedFromMealFresh meal =
     { mealId = meal.id
     , meal = meal
     , fields = editFormFromMeal meal
-    , productNames = ItemNameLookup.empty
     , nutrition = NutritionLoading defaultNutritionInput
     }
 
@@ -333,15 +330,15 @@ editFormFromMeal meal =
 
         else
             rows
-    , productNames = ItemNameLookup.empty
+    , namedProductIds = Set.empty
     , nextRowId = List.length rows + 1
     , nextSearchToken = 1
     , submit = Common.Idle
     }
 
 
-uniqueProductIds : Meal -> List String
-uniqueProductIds meal =
+requestFirstProductName : Meal -> OutMsg
+requestFirstProductName meal =
     meal.components
         |> List.filterMap
             (\component ->
@@ -353,12 +350,7 @@ uniqueProductIds meal =
                         Nothing
             )
         |> List.filter (String.trim >> String.isEmpty >> not)
-        |> ItemNameLookup.uniqueProductIds
-
-
-requestProductNames : List String -> OutMsg
-requestProductNames ids =
-    ItemNameLookup.nextMissingProductId Nothing ids ItemNameLookup.empty
+        |> List.head
         |> Maybe.map (FormOutMsg << Common.RequestProductName)
         |> Maybe.withDefault NoOp
 
