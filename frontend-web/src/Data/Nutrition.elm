@@ -3,9 +3,7 @@ module Data.Nutrition exposing
     , MacroTotals
     , NutrientAmount
     , NutritionSummary
-    , Per100gNutrient
     , Quantity
-    , Serving
     , caloriesFrom
     , decoder
     , defaultCode
@@ -70,21 +68,6 @@ summaryToNutrients summary =
     , { code = "CARBS_G", amount = Maybe.withDefault "0" summary.carbsG, unit = "g" }
     , { code = "FAT_G", amount = Maybe.withDefault "0" summary.fatG, unit = "g" }
     ]
-
-
-type alias Per100gNutrient =
-    { code : String
-    , amountPer100g : String
-    , unit : String
-    }
-
-
-type alias Serving =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
-    }
 
 
 type alias MacroTotals =
