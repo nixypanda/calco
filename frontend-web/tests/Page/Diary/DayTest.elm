@@ -18,27 +18,11 @@ tests : Test
 tests =
     describe "Page.Diary.Day"
         [ describe "initialization"
-            [ test "valid date query param becomes current date" <|
+            [ test "the pane's date is the date it shows" <|
                 \_ ->
-                    initModel (Just "2026-05-30")
+                    initModel yesterday
                         |> .currentDate
-                        |> LocalDate.format
-                        |> Expect.equal "2026-05-30"
-            , test "invalid date query param falls back to today" <|
-                \_ ->
-                    initModel (Just "not-a-date")
-                        |> .currentDate
-                        |> Expect.equal today
-            , test "missing date query param falls back to today" <|
-                \_ ->
-                    initModel Nothing
-                        |> .currentDate
-                        |> Expect.equal today
-            , test "future date query param is clamped to today" <|
-                \_ ->
-                    initModel (Just "2026-05-31")
-                        |> .currentDate
-                        |> Expect.equal today
+                        |> Expect.equal yesterday
             ]
         , describe "date navigation"
             [ test "previous day navigation leaves current state intact" <|
@@ -47,7 +31,7 @@ tests =
                         ( model, _, outMsg ) =
                             DiaryDay.update
                                 DiaryDay.PreviousDayClicked
-                                (initModel (Just "2026-05-30"))
+                                (initModel today)
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
@@ -58,7 +42,7 @@ tests =
                 \_ ->
                     let
                         ( model, _, outMsg ) =
-                            DiaryDay.update DiaryDay.NextDayClicked (initModel (Just "2026-05-29"))
+                            DiaryDay.update DiaryDay.NextDayClicked (initModel yesterday)
                     in
                     ( LocalDate.format model.currentDate, outMsg )
                         |> Expect.equal
@@ -70,7 +54,7 @@ tests =
                     let
                         model : DiaryDay.Model
                         model =
-                            initModel Nothing
+                            initModel today
 
                         ( next, _, outMsg ) =
                             DiaryDay.update DiaryDay.NextDayClicked model
@@ -79,7 +63,7 @@ tests =
                         |> Expect.equal ( model.currentDate, DiaryDay.NoOp )
             , test "details action carries the selected date" <|
                 \_ ->
-                    DiaryDay.update DiaryDay.DetailsClicked (initModel (Just "2026-05-29"))
+                    DiaryDay.update DiaryDay.DetailsClicked (initModel yesterday)
                         |> third
                         |> Expect.equal
                             (DiaryDay.Navigate (NutritionDetails (Just "2026-05-29")))
@@ -530,10 +514,10 @@ tests =
         ]
 
 
-initModel : Maybe String -> DiaryDay.Model
-initModel dateParam =
+initModel : LocalDate -> DiaryDay.Model
+initModel currentDate =
     DiaryDay.init
-        { dateParam = dateParam
+        { date = currentDate
         , calendarMonth = Nothing
         , today = today
         }

@@ -42,20 +42,11 @@ type OutMsg
     | SessionExpired
 
 
-init : { dateParam : Maybe String, today : LocalDate } -> ( Model, OutMsg )
+init : { date : LocalDate, today : LocalDate } -> ( Model, OutMsg )
 init args =
-    let
-        context : DateContext
-        context =
-            { currentDate =
-                args.dateParam
-                    |> Maybe.andThen LocalDate.fromString
-                    |> Maybe.withDefault args.today
-                    |> LocalDate.clampTo args.today
-            , today = args.today
-            }
-    in
-    ( Loading context, RequestNutritionDetails context.currentDate )
+    ( Loading { currentDate = args.date, today = args.today }
+    , RequestNutritionDetails args.date
+    )
 
 
 type Msg

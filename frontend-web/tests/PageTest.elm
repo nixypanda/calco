@@ -29,6 +29,21 @@ workspaceTests =
                 expectPaneKeys
                     (DiaryDay (Just date) (Just month))
                     [ "calendar:" ++ month, diaryKey date (Just month) ]
+        , test "an unparseable diary date falls back to today" <|
+            \_ ->
+                expectPaneKeys
+                    (DiaryDay (Just "not-a-date") Nothing)
+                    [ diaryKey (LocalDate.format today) Nothing ]
+        , test "a missing diary date falls back to today" <|
+            \_ ->
+                expectPaneKeys
+                    (DiaryDay Nothing Nothing)
+                    [ diaryKey (LocalDate.format today) Nothing ]
+        , test "a future diary date is clamped to today" <|
+            \_ ->
+                expectPaneKeys
+                    (DiaryDay (Just "2027-01-01") Nothing)
+                    [ diaryKey (LocalDate.format today) Nothing ]
         , test "dated search opens diary and search panes" <|
             \_ ->
                 expectPaneKeys

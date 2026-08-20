@@ -1,6 +1,7 @@
 module Page exposing
     ( DiaryGoalResult
     , DiaryLogsResult
+    , DiaryPaneId
     , InitContext
     , LatestSlotsResult
     , Model
@@ -92,10 +93,10 @@ type Pane
     | AdminPane AdminDashboard.Model
     | AdminCreateUserPane AdminCreateUser.Model
     | AdminEditUserPane String AdminEditUser.Model
-    | DiaryPane String DiaryDay.Model
+    | DiaryPane DiaryPaneId DiaryDay.Model
     | DiaryCalendarPane String DiaryCalendar.Model
-    | NutritionDetailsPane String NutritionDetails.Model
-    | GoalsSettingsPane String GoalsSettings.Model
+    | NutritionDetailsPane LocalDate NutritionDetails.Model
+    | GoalsSettingsPane LocalDate GoalsSettings.Model
     | DiarySettingsPane DiarySettings.Model
     | FoodSearchPane FoodSearch.Model
     | FoodDetailPane String FoodShow.Model
@@ -109,6 +110,12 @@ type Pane
     | MealEditPane String MealEdit.Model
     | MealDetailPane String MealShow.Model
     | PlaceholderPane String
+
+
+type alias DiaryPaneId =
+    { date : LocalDate
+    , calendarMonth : Maybe String
+    }
 
 
 type DesiredPane
@@ -180,17 +187,17 @@ paneKey pane =
         AdminEditUserPane userId _ ->
             "admin-edit-user:" ++ userId
 
-        DiaryPane key _ ->
-            key
+        DiaryPane paneId _ ->
+            diaryPaneKey paneId
 
         DiaryCalendarPane month _ ->
             "calendar:" ++ month
 
         NutritionDetailsPane date _ ->
-            "nutrition-details:" ++ date
+            nutritionDetailsPaneKey date
 
         GoalsSettingsPane date _ ->
-            "goals-settings:" ++ date
+            goalsSettingsPaneKey date
 
         DiarySettingsPane _ ->
             "diary-settings"
@@ -230,6 +237,24 @@ paneKey pane =
 
         PlaceholderPane message ->
             "placeholder:" ++ message
+
+
+diaryPaneKey : DiaryPaneId -> String
+diaryPaneKey paneId =
+    "diary:"
+        ++ LocalDate.format paneId.date
+        ++ ":"
+        ++ Maybe.withDefault "none" paneId.calendarMonth
+
+
+nutritionDetailsPaneKey : LocalDate -> String
+nutritionDetailsPaneKey date =
+    "nutrition-details:" ++ LocalDate.format date
+
+
+goalsSettingsPaneKey : LocalDate -> String
+goalsSettingsPaneKey date =
+    "goals-settings:" ++ LocalDate.format date
 
 
 init : InitContext -> ( Model, Cmd Msg, OutMsg )
@@ -383,34 +408,30 @@ hydrateWith hydrate cached pane =
 hydrateDated : Store -> Pane -> Pane
 hydrateDated store pane =
     case pane of
-        DiaryPane key diary ->
+        DiaryPane paneId diary ->
             let
-                date : LocalDate
-                date =
-                    diary.currentDate
-
                 dateKey : String
                 dateKey =
-                    LocalDate.format date
+                    LocalDate.format paneId.date
             in
-            DiaryPane key
+            DiaryPane paneId
                 (diary
                     |> applyCached DiaryDay.update
-                        (DiaryDay.LogsLoaded date)
+                        (DiaryDay.LogsLoaded paneId.date)
                         (Store.cached (Store.diaryLogsAt dateKey) store)
                     |> applyCached DiaryDay.update
-                        (DiaryDay.GoalLoaded date)
+                        (DiaryDay.GoalLoaded paneId.date)
                         (Store.cached (Store.diaryGoalAt dateKey) store)
                     |> applyCached DiaryDay.update
-                        (DiaryDay.LatestSlotsReceived date)
+                        (DiaryDay.LatestSlotsReceived paneId.date)
                         (Store.cached (Store.latestSlotsAt dateKey) store)
                 )
 
-        GoalsSettingsPane dateKey goals ->
-            GoalsSettingsPane dateKey
+        GoalsSettingsPane date goals ->
+            GoalsSettingsPane date
                 (applyCached GoalsSettings.update
                     GoalsSettings.GoalLoaded
-                    (Store.cached (Store.diaryGoalAt dateKey) store)
+                    (Store.cached (Store.diaryGoalAt (LocalDate.format date)) store)
                     goals
                 )
 
@@ -497,8 +518,8 @@ hydrateNutrients result pane =
 hydratePreferences : PreferencesResult -> Pane -> Pane
 hydratePreferences result pane =
     case pane of
-        DiaryPane key model ->
-            DiaryPane key
+        DiaryPane paneId model ->
+            DiaryPane paneId
                 (modelOnly (DiaryDay.update (DiaryDay.PreferencesLoaded result) model))
 
         DiarySettingsPane model ->
@@ -569,7 +590,7 @@ diaryGoalResource =
     , apply =
         \date result ->
             updateDiaryPanes date (DiaryDay.GoalLoaded date result)
-                >> updateGoalSettingsPanes (LocalDate.format date) result
+                >> updateGoalSettingsPanes date result
     }
 
 
@@ -627,30 +648,25 @@ ensureDateData panes store =
         ensurePane : Pane -> ( Store, List (Cmd Msg) ) -> ( Store, List (Cmd Msg) )
         ensurePane pane ( currentStore, cmds ) =
             case pane of
-                DiaryPane _ diary ->
+                DiaryPane paneId _ ->
                     let
                         ( logsStore, logsCmd ) =
-                            ensureDate diaryLogsResource diary.currentDate currentStore
+                            ensureDate diaryLogsResource paneId.date currentStore
 
                         ( goalStore, goalCmd ) =
-                            ensureDate diaryGoalResource diary.currentDate logsStore
+                            ensureDate diaryGoalResource paneId.date logsStore
 
                         ( slotsStore, slotsCmd ) =
-                            ensureDate latestSlotsResource diary.currentDate goalStore
+                            ensureDate latestSlotsResource paneId.date goalStore
                     in
                     ( slotsStore, slotsCmd :: goalCmd :: logsCmd :: cmds )
 
-                GoalsSettingsPane rawDate _ ->
-                    case LocalDate.fromString rawDate of
-                        Just date ->
-                            let
-                                ( nextStore, cmd ) =
-                                    ensureDate diaryGoalResource date currentStore
-                            in
-                            ( nextStore, cmd :: cmds )
-
-                        Nothing ->
-                            ( currentStore, cmds )
+                GoalsSettingsPane date _ ->
+                    let
+                        ( nextStore, cmd ) =
+                            ensureDate diaryGoalResource date currentStore
+                    in
+                    ( nextStore, cmd :: cmds )
 
                 _ ->
                     ( currentStore, cmds )
@@ -923,28 +939,31 @@ adminEditDesired context userId =
 diaryDesired : InitContext -> LocalDate -> Maybe String -> Maybe String -> DesiredPane
 diaryDesired context today dateParam calendarMonth =
     let
-        date : LocalDate
-        date =
-            dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault today
-                |> LocalDate.clampTo today
-
-        key : String
-        key =
-            "diary:" ++ LocalDate.format date ++ ":" ++ Maybe.withDefault "none" calendarMonth
+        paneId : DiaryPaneId
+        paneId =
+            { date = dateFromParam today dateParam
+            , calendarMonth = calendarMonth
+            }
     in
     fromInit context
-        key
-        (DiaryPane key)
+        (diaryPaneKey paneId)
+        (DiaryPane paneId)
         applyDiaryOutMsg
         (\_ ->
             DiaryDay.init
-                { dateParam = dateParam
+                { date = paneId.date
                 , calendarMonth = calendarMonth
                 , today = today
                 }
         )
+
+
+dateFromParam : LocalDate -> Maybe String -> LocalDate
+dateFromParam today dateParam =
+    dateParam
+        |> Maybe.andThen LocalDate.fromString
+        |> Maybe.withDefault today
+        |> LocalDate.clampTo today
 
 
 calendarDesired : InitContext -> LocalDate -> Maybe String -> DesiredPane
@@ -966,32 +985,20 @@ nutritionDesired context today dateParam =
     let
         date : LocalDate
         date =
-            dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault today
-                |> LocalDate.clampTo today
-
-        key : String
-        key =
-            LocalDate.format date
+            dateFromParam today dateParam
     in
     fromInit context
-        ("nutrition-details:" ++ key)
-        (NutritionDetailsPane key)
+        (nutritionDetailsPaneKey date)
+        (NutritionDetailsPane date)
         applyNutritionDetailsOutMsg
-        (\_ -> NutritionDetails.init { dateParam = dateParam, today = today })
+        (\_ -> NutritionDetails.init { date = date, today = today })
 
 
 goalsDesired : InitContext -> LocalDate -> DesiredPane
 goalsDesired context today =
-    let
-        key : String
-        key =
-            LocalDate.format today
-    in
     fromInit context
-        ("goals-settings:" ++ key)
-        (GoalsSettingsPane key)
+        (goalsSettingsPaneKey today)
+        (GoalsSettingsPane today)
         applyGoalsSettingsOutMsg
         (\_ -> GoalsSettings.init)
 
@@ -1404,9 +1411,9 @@ updateDiaryPanes date msg panes =
     List.map
         (\pane ->
             case pane of
-                DiaryPane key diary ->
-                    if LocalDate.equals diary.currentDate date then
-                        DiaryPane key (modelOnly (DiaryDay.update msg diary))
+                DiaryPane paneId diary ->
+                    if LocalDate.equals paneId.date date then
+                        DiaryPane paneId (modelOnly (DiaryDay.update msg diary))
 
                     else
                         pane
@@ -1417,13 +1424,13 @@ updateDiaryPanes date msg panes =
         panes
 
 
-updateGoalSettingsPanes : String -> DiaryGoalResult -> List Pane -> List Pane
+updateGoalSettingsPanes : LocalDate -> DiaryGoalResult -> List Pane -> List Pane
 updateGoalSettingsPanes date result panes =
     List.map
         (\pane ->
             case pane of
                 GoalsSettingsPane paneDate goals ->
-                    if paneDate == date then
+                    if LocalDate.equals paneDate date then
                         GoalsSettingsPane paneDate
                             (modelOnly
                                 (GoalsSettings.update (GoalsSettings.GoalLoaded result) goals)
@@ -1528,7 +1535,7 @@ updatePane allPanes context msg pane =
                 NoMutation
                 (AdminEditUser.update subMsg sub)
 
-        ( GotDiaryMsg subMsg, DiaryPane key sub ) ->
+        ( GotDiaryMsg subMsg, DiaryPane paneId sub ) ->
             let
                 result : ( DiaryDay.Model, Cmd DiaryDay.Msg, DiaryDay.OutMsg )
                 result =
@@ -1546,7 +1553,7 @@ updatePane allPanes context msg pane =
                         _ ->
                             NoMutation
             in
-            stepPane context (DiaryPane key) GotDiaryMsg applyDiaryOutMsg mutation result
+            stepPane context (DiaryPane paneId) GotDiaryMsg applyDiaryOutMsg mutation result
 
         ( GotDiaryCalendarMsg subMsg, DiaryCalendarPane month sub ) ->
             stepPane context
@@ -1837,8 +1844,8 @@ diaryPaneLogs date panes =
         |> List.filterMap
             (\pane ->
                 case pane of
-                    DiaryPane _ diary ->
-                        if LocalDate.equals diary.currentDate date then
+                    DiaryPane paneId diary ->
+                        if LocalDate.equals paneId.date date then
                             DiaryDay.currentLogs diary
 
                         else
@@ -2702,8 +2709,8 @@ selectedDiaryDate panes =
         |> List.filterMap
             (\pane ->
                 case pane of
-                    DiaryPane _ diary ->
-                        Just (LocalDate.format diary.currentDate)
+                    DiaryPane paneId _ ->
+                        Just (LocalDate.format paneId.date)
 
                     _ ->
                         Nothing

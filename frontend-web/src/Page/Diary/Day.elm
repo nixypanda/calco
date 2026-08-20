@@ -107,24 +107,16 @@ type alias LatestSlotSource =
 
 
 init :
-    { dateParam : Maybe String
+    { date : LocalDate
     , calendarMonth : Maybe String
     , today : LocalDate
     }
     -> ( Model, OutMsg )
 init args =
-    let
-        currentDate : LocalDate
-        currentDate =
-            args.dateParam
-                |> Maybe.andThen LocalDate.fromString
-                |> Maybe.withDefault args.today
-                |> LocalDate.clampTo args.today
-    in
-    ( { currentDate = currentDate
+    ( { currentDate = args.date
       , today = args.today
       , calendarMonth = args.calendarMonth
-      , diary = loadingState currentDate
+      , diary = loadingState args.date
       , latestSlots = LatestSlotsLoading
       , copyState = CopyIdle
       , macroMode = Grams
