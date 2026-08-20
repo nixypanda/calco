@@ -35,6 +35,7 @@ import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
+import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
 import Ui
 import Ui.DesignTokens as DesignTokens
@@ -68,9 +69,9 @@ type alias CategorySuggestionResult =
 
 type alias ProductAndCategoryRequests =
     { rowId : RowId
-    , searchToken : Int
+    , searchToken : Ticket
     , searchRequest : Foods.SearchRequest
-    , categoryToken : Int
+    , categoryToken : Ticket
     , categoryRequest : Foods.CategorySuggestionRequest
     }
 
@@ -83,7 +84,7 @@ type alias FormFields =
     , components : List ComponentRow
     , namedProductIds : Set String
     , nextRowId : RowId
-    , nextSearchToken : Int
+    , nextSearchToken : Ticket
     , submit : SubmitState
     }
 
@@ -121,8 +122,8 @@ type ValidationError
 
 type FormFieldOutMsg
     = RequestProductName String
-    | RequestProductSearch RowId Int Foods.SearchRequest
-    | RequestCategorySuggestions RowId Int Foods.CategorySuggestionRequest
+    | RequestProductSearch RowId Ticket Foods.SearchRequest
+    | RequestCategorySuggestions RowId Ticket Foods.CategorySuggestionRequest
     | RequestProductAndCats ProductAndCategoryRequests
     | FormSessionExpired
 
@@ -136,7 +137,7 @@ emptyFormFields =
     , components = [ emptyComponentRow 1 ]
     , namedProductIds = Set.empty
     , nextRowId = 2
-    , nextSearchToken = 1
+    , nextSearchToken = Ticket.next Ticket.initial
     , submit = Idle
     }
 
@@ -162,8 +163,8 @@ type FormFieldMsg
     | TotalQuantityChanged String
     | TotalUnitChanged String
     | ComponentSearchChanged RowId String
-    | ComponentSearchCompleted RowId Int (Result Client.ApiError SearchResponse)
-    | ComponentCategoriesCompleted RowId Int CategorySuggestionResult
+    | ComponentSearchCompleted RowId Ticket (Result Client.ApiError SearchResponse)
+    | ComponentCategoriesCompleted RowId Ticket CategorySuggestionResult
     | CompleteFirstComponentSuggestion RowId
     | ComponentCompletionClicked RowId Completion
     | SelectProduct RowId SearchResult
@@ -455,13 +456,13 @@ onComponentSearchChanged rowId query form =
         ( transitionedSearch, categoryReq ) =
             Search.onQueryChanged query priorSearch
 
-        token : Int
+        token : Ticket
         token =
             form.nextSearchToken
 
-        categoryToken : Int
+        categoryToken : Ticket
         categoryToken =
-            token + 1
+            Ticket.next token
 
         nextSearch : QueryState
         nextSearch =
@@ -484,7 +485,7 @@ onComponentSearchChanged rowId query form =
     in
     case ( searchRequest, categoryReq ) of
         ( Just productRequest, Just cat ) ->
-            ( { nextForm | nextSearchToken = token + 2 }
+            ( { nextForm | nextSearchToken = Ticket.next categoryToken }
                 |> updateComponent rowId SetSearchLoading
             , Cmd.none
             , Just
@@ -499,14 +500,14 @@ onComponentSearchChanged rowId query form =
             )
 
         ( Just productRequest, Nothing ) ->
-            ( { nextForm | nextSearchToken = token + 1 }
+            ( { nextForm | nextSearchToken = categoryToken }
                 |> updateComponent rowId SetSearchLoading
             , Cmd.none
             , Just (RequestProductSearch rowId token productRequest)
             )
 
         ( Nothing, Just cat ) ->
-            ( { nextForm | nextSearchToken = token + 2 }
+            ( { nextForm | nextSearchToken = Ticket.next categoryToken }
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Just
@@ -573,7 +574,7 @@ type ComponentPatch
     | SetQuantity String
     | SetUnit String
     | SetSearch QueryState
-    | SetSearchResults Int (List SearchResult)
+    | SetSearchResults Ticket (List SearchResult)
     | SetSearchLoading
     | SetSearchFailed
 

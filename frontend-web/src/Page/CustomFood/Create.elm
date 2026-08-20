@@ -11,6 +11,7 @@ import Api.Foods as Foods
         )
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import Lib.Ticket exposing (Ticket)
 import Page.CustomFood.Form as Form
 import Ui
 import Ui.Theme exposing (Theme)
@@ -43,7 +44,7 @@ type Msg
     = NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
-    | CategorySuggestionsLoaded Int (Result Client.ApiError CategorySuggestionResponse)
+    | CategorySuggestionsLoaded Ticket (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
 
@@ -52,7 +53,7 @@ type OutMsg
     = NoOp
     | RequestInitialData
     | RequestCreateFood CreateFoodRequest
-    | RequestCategorySuggestions Int Foods.CategorySuggestionRequest
+    | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
     | Navigate Route
     | SessionExpired
 

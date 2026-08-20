@@ -13,6 +13,7 @@ import Data.Nutrition as Nutrition
 import Data.Search as Search
 import Expect
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Meal.Form as Form
     exposing
         ( FormFieldMsg(..)
@@ -143,11 +144,11 @@ tests =
                         formAfterSearch : FormFields
                         formAfterSearch =
                             emptyForm
-                                |> updateComponentSearchToken 1 5
+                                |> updateComponentSearchToken 1 (ticket 5)
 
                         ( form, _, _ ) =
                             Form.updateFormField
-                                (ComponentSearchCompleted 1 5 (Ok searchResponse))
+                                (ComponentSearchCompleted 1 (ticket 5) (Ok searchResponse))
                                 formAfterSearch
                     in
                     form.components
@@ -160,11 +161,11 @@ tests =
                         formAfterSearch : FormFields
                         formAfterSearch =
                             emptyForm
-                                |> updateComponentSearchToken 1 3
+                                |> updateComponentSearchToken 1 (ticket 3)
 
                         ( form, _, _ ) =
                             Form.updateFormField
-                                (ComponentSearchCompleted 1 5 (Ok searchResponse))
+                                (ComponentSearchCompleted 1 (ticket 5) (Ok searchResponse))
                                 formAfterSearch
                     in
                     form.components
@@ -176,7 +177,7 @@ tests =
                     let
                         ( form, _, _ ) =
                             Form.updateFormField
-                                (ComponentSearchCompleted 1 1 (Err Client.NetworkError))
+                                (ComponentSearchCompleted 1 (ticket 1) (Err Client.NetworkError))
                                 emptyForm
                     in
                     form.components
@@ -188,7 +189,10 @@ tests =
                     let
                         ( _, _, outMsg ) =
                             Form.updateFormField
-                                (ComponentSearchCompleted 1 1 (Err (Client.BadStatus 401 "" "")))
+                                (ComponentSearchCompleted 1
+                                    (ticket 1)
+                                    (Err (Client.BadStatus 401 "" ""))
+                                )
                                 emptyForm
                     in
                     outMsg
@@ -201,12 +205,12 @@ tests =
                         formWithToken : FormFields
                         formWithToken =
                             emptyForm
-                                |> updateComponentCategoryToken 1 3
+                                |> updateComponentCategoryToken 1 (ticket 3)
 
                         ( form, _, _ ) =
                             Form.updateFormField
                                 (ComponentCategoriesCompleted 1
-                                    3
+                                    (ticket 3)
                                     (Ok { items = [ { value = "dairy", count = 5 } ] })
                                 )
                                 formWithToken
@@ -221,12 +225,12 @@ tests =
                         formWithToken : FormFields
                         formWithToken =
                             emptyForm
-                                |> updateComponentCategoryToken 1 1
+                                |> updateComponentCategoryToken 1 (ticket 1)
 
                         ( form, _, _ ) =
                             Form.updateFormField
                                 (ComponentCategoriesCompleted 1
-                                    3
+                                    (ticket 3)
                                     (Ok { items = [ { value = "dairy", count = 5 } ] })
                                 )
                                 formWithToken
@@ -241,12 +245,12 @@ tests =
                         formWithSuggestions : FormFields
                         formWithSuggestions =
                             emptyForm
-                                |> updateComponentCategoryToken 1 1
+                                |> updateComponentCategoryToken 1 (ticket 1)
 
                         ( form, _, _ ) =
                             Form.updateFormField
                                 (ComponentCategoriesCompleted 1
-                                    1
+                                    (ticket 1)
                                     (Err Client.NetworkError)
                                 )
                                 formWithSuggestions
@@ -261,7 +265,7 @@ tests =
                         ( _, _, outMsg ) =
                             Form.updateFormField
                                 (ComponentCategoriesCompleted 1
-                                    1
+                                    (ticket 1)
                                     (Err (Client.BadStatus 401 "" ""))
                                 )
                                 emptyForm
@@ -277,8 +281,8 @@ tests =
                         base =
                             emptyForm
                                 |> updateComponentQuery 1 "category:da"
-                                |> updateComponentSearchToken 1 0
-                                |> updateComponentCategoryToken 1 0
+                                |> updateComponentSearchToken 1 (ticket 0)
+                                |> updateComponentCategoryToken 1 (ticket 0)
                                 |> updateComponentCategorySuggestions 1
                                     [ { value = "dairy", count = 5 } ]
 
@@ -308,8 +312,8 @@ tests =
                         base : FormFields
                         base =
                             emptyForm
-                                |> updateComponentSearchToken 1 0
-                                |> updateComponentCategoryToken 1 0
+                                |> updateComponentSearchToken 1 (ticket 0)
+                                |> updateComponentCategoryToken 1 (ticket 0)
 
                         completion : Search.Completion
                         completion =
@@ -461,14 +465,14 @@ updateSearchOnRow :
     Form.RowId
     ->
         ({ query : String
-         , searchToken : Int
-         , categoryToken : Int
+         , searchToken : Ticket
+         , categoryToken : Ticket
          , categorySuggestions : List Search.CategorySuggestion
          }
          ->
             { query : String
-            , searchToken : Int
-            , categoryToken : Int
+            , searchToken : Ticket
+            , categoryToken : Ticket
             , categorySuggestions : List Search.CategorySuggestion
             }
         )
@@ -489,14 +493,14 @@ updateSearchOnRow rowId fn form =
     }
 
 
-updateComponentSearchToken : Form.RowId -> Int -> FormFields -> FormFields
+updateComponentSearchToken : Form.RowId -> Ticket -> FormFields -> FormFields
 updateComponentSearchToken rowId token form =
     updateSearchOnRow rowId
         (\s -> { s | searchToken = token })
         form
 
 
-updateComponentCategoryToken : Form.RowId -> Int -> FormFields -> FormFields
+updateComponentCategoryToken : Form.RowId -> Ticket -> FormFields -> FormFields
 updateComponentCategoryToken rowId token form =
     updateSearchOnRow rowId
         (\s -> { s | categoryToken = token })
@@ -586,3 +590,8 @@ searchResultForId productId =
         , perServing = Nothing
         }
     }
+
+
+ticket : Int -> Ticket
+ticket count =
+    List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)

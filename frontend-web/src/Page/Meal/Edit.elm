@@ -16,7 +16,6 @@ import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Page.Meal.Form as Common
-import Set
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
@@ -299,6 +298,10 @@ loadedFromMealFresh meal =
 editFormFromMeal : Meal -> Common.FormFields
 editFormFromMeal meal =
     let
+        empty : Common.FormFields
+        empty =
+            Common.emptyFormFields
+
         rows : List Common.ComponentRow
         rows =
             List.indexedMap
@@ -316,24 +319,22 @@ editFormFromMeal meal =
                 )
                 meal.components
     in
-    { name = meal.name
-    , notes = Maybe.withDefault "" meal.notes
-    , totalQuantity =
-        Maybe.map .amount meal.totalQuantity
-            |> Maybe.withDefault ""
-    , totalUnit =
-        Maybe.map .unit meal.totalQuantity
-            |> Maybe.withDefault defaultCode
-    , components =
-        if List.isEmpty rows then
-            [ Common.emptyComponentRow 1 ]
+    { empty
+        | name = meal.name
+        , notes = Maybe.withDefault "" meal.notes
+        , totalQuantity =
+            Maybe.map .amount meal.totalQuantity
+                |> Maybe.withDefault ""
+        , totalUnit =
+            Maybe.map .unit meal.totalQuantity
+                |> Maybe.withDefault defaultCode
+        , components =
+            if List.isEmpty rows then
+                empty.components
 
-        else
-            rows
-    , namedProductIds = Set.empty
-    , nextRowId = List.length rows + 1
-    , nextSearchToken = 1
-    , submit = Common.Idle
+            else
+                rows
+        , nextRowId = List.length rows + 1
     }
 
 
