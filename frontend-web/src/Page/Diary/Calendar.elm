@@ -192,14 +192,9 @@ applyDaySummaryResult requestDate result model =
 
 replaceDaySummary : LocalDate -> List DaySummary -> List DaySummary -> List DaySummary
 replaceDaySummary requestDate incoming existing =
-    let
-        dateKey : String
-        dateKey =
-            LocalDate.format requestDate
-    in
     mergeSummaries
-        (List.filter (\summary -> summary.date /= dateKey) existing)
-        (List.filter (\summary -> summary.date == dateKey) incoming)
+        (List.filter (\summary -> not (LocalDate.equals summary.date requestDate)) existing)
+        (List.filter (\summary -> LocalDate.equals summary.date requestDate) incoming)
 
 
 dateIsLoaded : LocalDate -> Model -> Bool
@@ -274,11 +269,11 @@ mergeSummaries existing incoming =
     List.foldl
         (\summary merged ->
             summary
-                :: List.filter (.date >> (/=) summary.date) merged
+                :: List.filter (\other -> not (LocalDate.equals other.date summary.date)) merged
         )
         existing
         incoming
-        |> List.sortBy .date
+        |> List.sortBy (.date >> LocalDate.format)
 
 
 requestForMonths : String -> String -> LocalDate -> OutMsg
@@ -370,7 +365,7 @@ dayView theme model selectedDate month day attributes =
 
         maybeSummary : Maybe DaySummary
         maybeSummary =
-            summaryFor date model.summaries
+            maybeDate |> Maybe.andThen (\value -> summaryFor value model.summaries)
 
         label : Element Msg
         label =
@@ -504,9 +499,9 @@ macroSegments theme summary =
     ]
 
 
-summaryFor : String -> List DaySummary -> Maybe DaySummary
+summaryFor : LocalDate -> List DaySummary -> Maybe DaySummary
 summaryFor date summaries =
-    List.filter (.date >> (==) date) summaries
+    List.filter (\summary -> LocalDate.equals summary.date date) summaries
         |> List.head
 
 

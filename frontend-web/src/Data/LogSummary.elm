@@ -4,10 +4,11 @@ module Data.LogSummary exposing
     )
 
 import Json.Decode as Decode exposing (Decoder)
+import Lib.Date as LocalDate exposing (LocalDate)
 
 
 type alias DaySummary =
-    { date : String
+    { date : LocalDate
     , energyKcal : Float
     , proteinG : Float
     , carbsG : Float
@@ -18,7 +19,7 @@ type alias DaySummary =
 decoder : Decoder DaySummary
 decoder =
     Decode.map5 DaySummary
-        (Decode.field "date" Decode.string)
+        (Decode.field "date" LocalDate.decoder)
         (Decode.field "energy_kcal" decimalDecoder)
         (Decode.field "protein_g" decimalDecoder)
         (Decode.field "carbs_g" decimalDecoder)

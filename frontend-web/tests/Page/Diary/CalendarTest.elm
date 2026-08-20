@@ -92,13 +92,13 @@ tests =
                         (Ok [])
                     )
                     (calendarModel
-                        [ { date = "2026-07-20"
+                        [ { date = date "2026-07-20"
                           , energyKcal = 500
                           , proteinG = 20
                           , carbsG = 30
                           , fatG = 10
                           }
-                        , { date = "2026-07-21"
+                        , { date = date "2026-07-21"
                           , energyKcal = 600
                           , proteinG = 25
                           , carbsG = 35
@@ -109,7 +109,7 @@ tests =
                     |> first
                     |> .summaries
                     |> List.map .date
-                    |> Expect.equal [ "2026-07-21" ]
+                    |> Expect.equal [ date "2026-07-21" ]
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842
