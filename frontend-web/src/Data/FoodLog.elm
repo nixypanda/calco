@@ -40,7 +40,7 @@ decoder : Decoder FoodLog
 decoder =
     Decode.map7 FoodLog
         (Decode.field "id" Decode.string)
-        (Decode.field "log_date" dateFieldDecoder)
+        (Decode.field "log_date" LocalDate.decoder)
         (Decode.field "device_timezone" (Decode.nullable Decode.string))
         (Decode.field "meal_slot" mealSlotFieldDecoder)
         (Decode.field "item" logItemDecoder)
@@ -53,20 +53,6 @@ mealSlotFieldDecoder : Decoder (Maybe MealSlot)
 mealSlotFieldDecoder =
     Decode.nullable Decode.string
         |> Decode.map (Maybe.andThen MealSlot.fromString)
-
-
-dateFieldDecoder : Decoder LocalDate
-dateFieldDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                case LocalDate.fromString raw of
-                    Just date ->
-                        Decode.succeed date
-
-                    Nothing ->
-                        Decode.fail ("Invalid local date: " ++ raw)
-            )
 
 
 logItemDecoder : Decoder LogItem
