@@ -620,7 +620,7 @@ productRef =
 lunchLog : FoodLog
 lunchLog =
     log "log-1"
-        (Just "lunch")
+        (Just Lunch)
         productRef
         [ nutrient "ENERGY_KCAL" "247.5" "kcal"
         , nutrient "PROTEIN_G" "46.5" "g"
@@ -631,7 +631,7 @@ lunchLog =
 
 secondLunchLog : FoodLog
 secondLunchLog =
-    log "log-2" (Just "lunch") productRef [ nutrient "ENERGY_KCAL" "100" "kcal" ]
+    log "log-2" (Just Lunch) productRef [ nutrient "ENERGY_KCAL" "100" "kcal" ]
 
 
 yesterdayLunchLog : FoodLog
@@ -641,12 +641,12 @@ yesterdayLunchLog =
 
 breakfastLog : FoodLog
 breakfastLog =
-    log "log-3" (Just "breakfast") productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
+    log "log-3" (Just Breakfast) productRef [ nutrient "ENERGY_KCAL" "10" "kcal" ]
 
 
 dinnerLog : FoodLog
 dinnerLog =
-    log "log-4" (Just "dinner") productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
+    log "log-4" (Just Dinner) productRef [ nutrient "ENERGY_KCAL" "300" "kcal" ]
 
 
 dinnerSlotResponse : Api.Logs.LatestSlotResponse
@@ -695,7 +695,7 @@ summary =
     ]
 
 
-log : String -> Maybe String -> LogItem -> List NutrientAmount -> FoodLog
+log : String -> Maybe MealSlot -> LogItem -> List NutrientAmount -> FoodLog
 log id mealSlot item nutrients =
     { id = id
     , logDate = date "2026-05-30"

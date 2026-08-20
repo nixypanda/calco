@@ -291,7 +291,7 @@ log =
     { id = "log-1"
     , logDate = sampleDate
     , deviceTimezone = deviceTimezone
-    , mealSlot = Just "lunch"
+    , mealSlot = Just Lunch
     , item = { itemType = ItemRef.Product, id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
