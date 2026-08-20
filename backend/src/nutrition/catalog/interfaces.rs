@@ -109,8 +109,6 @@ pub struct ProductSearchItemDto {
     pub categories: Vec<String>,
     pub serving_size_g: Option<Decimal>,
     pub nutrition_summary: ProductNutritionSummaryDto,
-    pub energy_kcal_per_100g: Option<Decimal>,
-    pub energy_kcal_per_serving: Option<Decimal>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -513,9 +511,6 @@ async fn custom_foods_to_list_response(
 }
 
 fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
-    let energy_kcal_per_100g = product_energy_kcal_per_100g(&product);
-    let energy_kcal_per_serving =
-        energy_kcal_per_serving(energy_kcal_per_100g, product.serving_size_g);
     let nutrition_summary = product_nutrition_summary(&product);
 
     ProductSearchItemDto {
@@ -528,8 +523,6 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
         categories: product.categories.into_iter().map(|c| c.0).collect(),
         serving_size_g: product.serving_size_g,
         nutrition_summary,
-        energy_kcal_per_100g,
-        energy_kcal_per_serving,
         created_at: product.created_at,
         updated_at: product.updated_at,
     }
@@ -554,24 +547,6 @@ fn product_nutrition_summary(product: &Product) -> ProductNutritionSummaryDto {
     ProductNutritionSummaryDto {
         per_100g,
         per_serving,
-    }
-}
-
-fn product_energy_kcal_per_100g(product: &Product) -> Option<Decimal> {
-    product
-        .nutrients
-        .iter()
-        .find(|n| n.nutrient_code.0 == "ENERGY_KCAL")
-        .map(|n| n.amount_per_100g.value())
-}
-
-fn energy_kcal_per_serving(
-    energy_kcal_per_100g: Option<Decimal>,
-    serving_size_g: Option<Decimal>,
-) -> Option<Decimal> {
-    match (energy_kcal_per_100g, serving_size_g) {
-        (Some(kcal), Some(serving_size_g)) => Some(kcal * serving_size_g / Decimal::new(100, 0)),
-        _ => None,
     }
 }
 
