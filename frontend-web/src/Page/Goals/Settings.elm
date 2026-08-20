@@ -1,5 +1,6 @@
 module Page.Goals.Settings exposing
     ( Form
+    , FormState(..)
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -34,6 +35,7 @@ type Model
 type alias ReadyModel =
     { status : GoalStatus
     , form : Form
+    , formState : FormState
     , save : SaveState
     }
 
@@ -46,9 +48,13 @@ type alias Form =
     }
 
 
-type SaveState
+type FormState
     = Pristine
-    | Editing
+    | Edited
+
+
+type SaveState
+    = Idle
     | ValidationFailed String
     | AwaitingLocalContext GoalTargets
     | Saving
@@ -134,7 +140,11 @@ update msg model =
                 Ready ready ->
                     case validate ready.form of
                         Ok targets ->
-                            ( Ready { ready | save = AwaitingLocalContext targets }
+                            ( Ready
+                                { ready
+                                    | save = AwaitingLocalContext targets
+                                    , formState = Pristine
+                                }
                             , Cmd.none
                             , RequestLocalContext
                             )
@@ -173,7 +183,10 @@ update msg model =
                 Ready ready ->
                     case ( ready.save, result ) of
                         ( Saving, Ok snapshot ) ->
-                            ( Ready (readyModelFor snapshot), Cmd.none, NoOp )
+                            ( Ready (refreshedWith snapshot { ready | save = Idle })
+                            , Cmd.none
+                            , NoOp
+                            )
 
                         ( Saving, Err error ) ->
                             Client.failure
@@ -197,7 +210,12 @@ updateForm : (Form -> Form) -> Model -> ( Model, Cmd Msg, OutMsg )
 updateForm transform model =
     case model of
         Ready ready ->
-            ( Ready { ready | form = transform ready.form, save = Editing }
+            ( Ready
+                { ready
+                    | form = transform ready.form
+                    , formState = Edited
+                    , save = editingSave ready.save
+                }
             , Cmd.none
             , NoOp
             )
@@ -208,12 +226,28 @@ updateForm transform model =
 
 refreshedWith : GoalSnapshot -> ReadyModel -> ReadyModel
 refreshedWith snapshot ready =
-    case ready.save of
+    case ready.formState of
         Pristine ->
-            readyModelFor snapshot
+            { ready
+                | status = Goals.statusOf snapshot
+                , form = formFor snapshot.targets
+            }
+
+        Edited ->
+            { ready | status = Goals.statusOf snapshot }
+
+
+editingSave : SaveState -> SaveState
+editingSave save =
+    case save of
+        ValidationFailed _ ->
+            Idle
+
+        SaveFailed _ ->
+            Idle
 
         _ ->
-            { ready | status = Goals.statusOf snapshot }
+            save
 
 
 validate : Form -> Result String GoalTargets
@@ -265,7 +299,8 @@ readyModelFor : GoalSnapshot -> ReadyModel
 readyModelFor snapshot =
     { status = Goals.statusOf snapshot
     , form = formFor snapshot.targets
-    , save = Pristine
+    , formState = Pristine
+    , save = Idle
     }
 
 
@@ -321,7 +356,7 @@ view { model, device, theme } =
                     ]
                 , Ui.primarySubmitButton device
                     theme
-                    { state = Ui.submittingOrIdle (ready.save == Saving)
+                    { state = Ui.submittingOrIdle (isSaving ready.save)
                     , idleLabel = "Save Goals"
                     , submittingLabel = "Saving..."
                     , onPress = SaveClicked
@@ -344,6 +379,19 @@ statusMessage status =
 
         ( Default, Just effectiveFrom ) ->
             "Using backend defaults after " ++ LocalDate.display effectiveFrom ++ "."
+
+
+isSaving : SaveState -> Bool
+isSaving save =
+    case save of
+        AwaitingLocalContext _ ->
+            True
+
+        Saving ->
+            True
+
+        _ ->
+            False
 
 
 formError : SaveState -> Maybe String

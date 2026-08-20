@@ -30,7 +30,7 @@ tests =
                     (GoalsSettings.GoalLoaded (Ok savedSnapshot))
                     GoalsSettings.Loading
                     |> first
-                    |> saveState
+                    |> formState
                     |> Expect.equal (Just GoalsSettings.Pristine)
         , test "a refresh replaces a pristine form" <|
             \_ ->
@@ -165,14 +165,44 @@ tests =
                     |> first
                     |> fields
                     |> Expect.equal (Just [ "2100", "150", "240", "60" ])
-        , test "save success returns the form to pristine" <|
+        , test "save success leaves nothing in flight" <|
             \_ ->
                 GoalsSettings.update
                     (GoalsSettings.SaveCompleted (Ok updatedSnapshot))
                     savingModel
                     |> first
                     |> saveState
-                    |> Expect.equal (Just GoalsSettings.Pristine)
+                    |> Expect.equal (Just GoalsSettings.Idle)
+        , test "typing during a save does not cancel the save" <|
+            \_ ->
+                GoalsSettings.update
+                    (GoalsSettings.CalorieTargetChanged "2300")
+                    savingModel
+                    |> first
+                    |> saveState
+                    |> Expect.equal (Just GoalsSettings.Saving)
+        , test "a save completing under the user's typing keeps their text" <|
+            \_ ->
+                let
+                    typedWhileSaving : GoalsSettings.Model
+                    typedWhileSaving =
+                        GoalsSettings.Ready
+                            { pristineModel
+                                | save = GoalsSettings.Saving
+                                , formState = GoalsSettings.Edited
+                                , form =
+                                    { savedForm | calorieTarget = "2300" }
+                            }
+                in
+                GoalsSettings.update
+                    (GoalsSettings.SaveCompleted (Ok defaultSnapshot))
+                    typedWhileSaving
+                    |> first
+                    |> (\model -> ( fields model, status model ))
+                    |> Expect.equal
+                        ( Just [ "2300", "160", "255", "70" ]
+                        , Just { source = Default, effectiveFrom = Nothing }
+                        )
         , test "save failure stores request error" <|
             \_ ->
                 GoalsSettings.update
@@ -203,15 +233,15 @@ tests =
                     failedModel
                     |> first
                     |> saveState
-                    |> Expect.equal (Just GoalsSettings.Editing)
+                    |> Expect.equal (Just GoalsSettings.Idle)
         , test "editing a pristine form takes it out of pristine" <|
             \_ ->
                 GoalsSettings.update
                     (GoalsSettings.CalorieTargetChanged "2300")
                     (GoalsSettings.Ready pristineModel)
                     |> first
-                    |> saveState
-                    |> Expect.equal (Just GoalsSettings.Editing)
+                    |> formState
+                    |> Expect.equal (Just GoalsSettings.Edited)
         , test "goal load error on loading moves to failed" <|
             \_ ->
                 GoalsSettings.update
@@ -287,13 +317,14 @@ pristineModel : GoalsSettings.ReadyModel
 pristineModel =
     { status = { source = Saved, effectiveFrom = Just today }
     , form = savedForm
-    , save = GoalsSettings.Pristine
+    , formState = GoalsSettings.Pristine
+    , save = GoalsSettings.Idle
     }
 
 
 editingModel : GoalsSettings.ReadyModel
 editingModel =
-    { pristineModel | save = GoalsSettings.Editing }
+    { pristineModel | formState = GoalsSettings.Edited }
 
 
 readyWith : (GoalsSettings.Form -> GoalsSettings.Form) -> GoalsSettings.Model
@@ -309,7 +340,7 @@ waitingModel =
 
 savingModel : GoalsSettings.Model
 savingModel =
-    GoalsSettings.Ready { editingModel | save = GoalsSettings.Saving }
+    GoalsSettings.Ready { pristineModel | save = GoalsSettings.Saving }
 
 
 savedTargets : GoalTargets
@@ -393,6 +424,16 @@ status model =
     case model of
         GoalsSettings.Ready ready ->
             Just ready.status
+
+        _ ->
+            Nothing
+
+
+formState : GoalsSettings.Model -> Maybe GoalsSettings.FormState
+formState model =
+    case model of
+        GoalsSettings.Ready ready ->
+            Just ready.formState
 
         _ ->
             Nothing
