@@ -993,7 +993,7 @@ goalsDesired context today =
         ("goals-settings:" ++ key)
         (GoalsSettingsPane key)
         applyGoalsSettingsOutMsg
-        (\_ -> GoalsSettings.init today)
+        (\_ -> GoalsSettings.init)
 
 
 diarySettingsDesired : InitContext -> DesiredPane

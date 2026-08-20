@@ -1,8 +1,10 @@
 module Data.Goals exposing
     ( GoalSnapshot
     , GoalSource(..)
+    , GoalStatus
     , GoalTargets
     , decoder
+    , statusOf
     )
 
 import Json.Decode as Decode exposing (Decoder)
@@ -27,6 +29,19 @@ type alias GoalSnapshot =
     , effectiveFrom : Maybe LocalDate
     , source : GoalSource
     , targets : GoalTargets
+    }
+
+
+type alias GoalStatus =
+    { source : GoalSource
+    , effectiveFrom : Maybe LocalDate
+    }
+
+
+statusOf : GoalSnapshot -> GoalStatus
+statusOf snapshot =
+    { source = snapshot.source
+    , effectiveFrom = snapshot.effectiveFrom
     }
 
 
