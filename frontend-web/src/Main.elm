@@ -24,8 +24,6 @@ import Element exposing (Element)
 import Html
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
-import Task
-import Time
 import Ui
 import Ui.Css as Css
 import Ui.Theme as Theme exposing (Theme)
@@ -106,8 +104,6 @@ init flags url key =
     , Cmd.batch
         [ Api.Auth.session GotSession
         , Api.Auth.bootstrapStatus GotBootstrapStatus
-        , Task.perform GotLocalDate
-            (Task.map2 LocalDate.fromPosix Time.here Time.now)
         , Cmd.map GotVersionMsg versionCmd
         ]
     )
@@ -122,7 +118,6 @@ type Msg
     | UrlChanged Url
     | GotSession (Result Client.ApiError Auth.LoginSession)
     | GotBootstrapStatus (Result Client.ApiError Auth.BootstrapStatus)
-    | GotLocalDate LocalDate
     | LogoutCompleted
     | WindowResized Int Int
     | GotPageMsg Page.Msg
@@ -163,9 +158,6 @@ update msg model =
                 (\progress -> { progress | status = Just result })
                 model
 
-        GotLocalDate today ->
-            changeRouteTo model.route { model | today = Just today }
-
         LogoutCompleted ->
             ( { model
                 | bootstrap =
@@ -200,7 +192,16 @@ update msg model =
                     )
 
         GotLocalContext context ->
-            stepPageUpdate (Page.localContextReceived (pageContext model) context model.page) model
+            let
+                ( dated, dateCmd ) =
+                    adoptToday context model
+
+                ( final, contextCmd ) =
+                    stepPageUpdate
+                        (Page.localContextReceived (pageContext dated) context dated.page)
+                        dated
+            in
+            ( final, Cmd.batch [ dateCmd, contextCmd ] )
 
         GotBarcodeScannerEvent event ->
             stepPageUpdate
@@ -371,6 +372,27 @@ stepPageResult ( page, pageCmd, outMsg ) model =
             applyPageOutMsg outMsg { model | page = page }
     in
     ( finalModel, Cmd.batch [ Cmd.map GotPageMsg pageCmd, outCmd ] )
+
+
+{-| Reconciling the route is what turns a rolled-over day into the right set of
+panes: a diary route with no date param keys off `today`, so it becomes a new
+pane for the new day, while an explicitly dated route keeps the one it has.
+-}
+adoptToday : LocalContext -> Model -> ( Model, Cmd Msg )
+adoptToday context model =
+    case ( LocalDate.fromString context.date, model.today ) of
+        ( Just today, Just current ) ->
+            if LocalDate.equals today current then
+                ( model, Cmd.none )
+
+            else
+                changeRouteTo model.route { model | today = Just today }
+
+        ( Just today, Nothing ) ->
+            changeRouteTo model.route { model | today = Just today }
+
+        ( Nothing, _ ) ->
+            ( model, Cmd.none )
 
 
 pageContext : Model -> Page.InitContext

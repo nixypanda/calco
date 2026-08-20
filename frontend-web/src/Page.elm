@@ -1908,10 +1908,47 @@ localContextReceived pageContext context model =
                         (GotGoalsSettingsMsg (GoalsSettings.LocalContextReceived context))
                         pane
 
+                DiaryPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotDiaryMsg << DiaryDay.TodayChanged)
+
+                DiaryCalendarPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotDiaryCalendarMsg << DiaryCalendar.TodayChanged)
+
+                NutritionDetailsPane _ _ ->
+                    todayChangedIn pageContext
+                        model
+                        context
+                        pane
+                        (GotNutritionDetailsMsg << NutritionDetails.TodayChanged)
+
                 _ ->
                     Nothing
         )
         model
+
+
+{-| The browser is the only thing that knows the day has rolled over under a tab
+left open overnight, so the panes that clamp navigation against "today" take it
+from the same context the save paths already ask for.
+-}
+todayChangedIn :
+    InitContext
+    -> Model
+    -> LocalContext
+    -> Pane
+    -> (LocalDate -> Msg)
+    -> Maybe (PaneUpdate Pane)
+todayChangedIn pageContext model context pane toMsg =
+    LocalDate.fromString context.date
+        |> Maybe.andThen (\today -> updatePane model.panes pageContext (toMsg today) pane)
 
 
 barcodeScannerEventReceived :

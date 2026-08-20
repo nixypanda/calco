@@ -61,6 +61,15 @@ tests =
                     in
                     ( next.currentDate, outMsg )
                         |> Expect.equal ( model.currentDate, DiaryDay.NoOp )
+            , test "a day that rolls over stops being the last navigable one" <|
+                \_ ->
+                    initModel today
+                        |> DiaryDay.update (DiaryDay.TodayChanged tomorrow)
+                        |> first
+                        |> DiaryDay.update DiaryDay.NextDayClicked
+                        |> third
+                        |> Expect.equal
+                            (DiaryDay.Navigate (DiaryDay (Just "2026-05-31") Nothing))
             , test "details action carries the selected date" <|
                 \_ ->
                     DiaryDay.update DiaryDay.DetailsClicked (initModel yesterday)
@@ -578,6 +587,11 @@ today =
 yesterday : LocalDate
 yesterday =
     date "2026-05-29"
+
+
+tomorrow : LocalDate
+tomorrow =
+    date "2026-05-31"
 
 
 date : String -> LocalDate

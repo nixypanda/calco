@@ -96,6 +96,7 @@ type Msg
     | DayTotalsKnown LocalDate (Maybe DaySummary)
     | LoadEarlierClicked
     | DayClicked String String
+    | TodayChanged LocalDate
 
 
 type OutMsg
@@ -138,6 +139,9 @@ update msg model =
             , Cmd.none
             , Navigate (DiaryDay (Just date) (Just month))
             )
+
+        TodayChanged today ->
+            ( { model | today = today }, Cmd.none, NoOp )
 
 
 replaceDay : LocalDate -> Maybe DaySummary -> List DaySummary -> List DaySummary

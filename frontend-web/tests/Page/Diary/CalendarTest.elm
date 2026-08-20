@@ -100,6 +100,25 @@ tests =
                     |> first
                     |> .summaries
                     |> Expect.equal []
+        , test "a day the calendar treated as future accepts totals once it rolls over" <|
+            \_ ->
+                let
+                    totals : CalendarPage.Msg
+                    totals =
+                        CalendarPage.DayTotalsKnown (date "2026-07-30")
+                            (Just (summaryOn "2026-07-30" 500))
+
+                    summariesAfter : CalendarPage.Model -> List DaySummary
+                    summariesAfter =
+                        CalendarPage.update totals >> first >> .summaries
+                in
+                ( summariesAfter (calendarModel [])
+                , calendarModel []
+                    |> CalendarPage.update (CalendarPage.TodayChanged (date "2026-07-30"))
+                    |> first
+                    |> summariesAfter
+                )
+                    |> Expect.equal ( [], [ summaryOn "2026-07-30" 500 ] )
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842

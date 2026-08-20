@@ -7,6 +7,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
+import Page.Diary.Day as DiaryDayPage
 import Page.Food.Search as FoodSearchPage
 import Test exposing (Test, describe, test)
 import Time
@@ -264,6 +265,57 @@ routeFlowTests =
                     |> Maybe.map Page.paneKeys
                     |> Expect.equal
                         (Just [ diaryKey date Nothing, "food-search" ])
+        , test "an undated diary route follows the day over, a dated one stays put" <|
+            \_ ->
+                let
+                    tomorrow : Maybe LocalDate
+                    tomorrow =
+                        LocalDate.fromString "2026-07-30"
+
+                    afterRollover : Route -> List String
+                    afterRollover route =
+                        Page.init { route = route, today = Just today }
+                            |> first
+                            |> Page.initPreserving { route = route, today = tomorrow }
+                            |> first
+                            |> Page.paneKeys
+                in
+                ( afterRollover (DiaryDay Nothing Nothing)
+                , afterRollover (DiaryDay (Just date) Nothing)
+                )
+                    |> Expect.equal
+                        ( [ diaryKey "2026-07-30" Nothing ]
+                        , [ diaryKey date Nothing ]
+                        )
+        , test "a rolled-over day reaches the diary pane already open on it" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = DiaryDay Nothing Nothing, today = Just today }
+
+                    mounted : Page.Model
+                    mounted =
+                        Page.init context |> first
+
+                    nextDay : Page.Model -> Maybe Page.OutMsg
+                    nextDay model =
+                        Page.update context
+                            (Page.GotDiaryMsg DiaryDayPage.NextDayClicked)
+                            model
+                            |> Maybe.map third
+                in
+                ( nextDay mounted
+                , mounted
+                    |> Page.localContextReceived context
+                        { date = "2026-07-30", timezone = "Asia/Kolkata" }
+                    |> Maybe.map first
+                    |> Maybe.andThen nextDay
+                )
+                    |> Expect.equal
+                        ( Just Page.NoOutMsg
+                        , Just (Page.Navigate (DiaryDay (Just "2026-07-30") Nothing))
+                        )
         ]
 
 
@@ -350,4 +402,9 @@ today =
 
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
+    value
+
+
+third : ( a, b, c ) -> c
+third ( _, _, value ) =
     value

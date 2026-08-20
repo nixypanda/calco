@@ -160,6 +160,7 @@ type Msg
     | AddFoodClicked MealSlot
     | LogClicked String
     | MealsClicked
+    | TodayChanged LocalDate
 
 
 type OutMsg
@@ -354,6 +355,9 @@ update msg model =
 
         MealsClicked ->
             ( model, Cmd.none, Navigate MealList )
+
+        TodayChanged today ->
+            ( { model | today = today }, Cmd.none, NoOp )
 
 
 failure : LocalDate -> Client.ApiError -> Model -> ( Model, Cmd Msg, OutMsg )

@@ -53,6 +53,7 @@ type Msg
     = NutritionDetailsLoaded LocalDate (Result Client.ApiError NutritionDetails)
     | PreviousDayClicked
     | NextDayClicked
+    | TodayChanged LocalDate
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -86,6 +87,27 @@ update msg model =
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
+
+        TodayChanged changed ->
+            ( withToday changed model, Cmd.none, NoOp )
+
+
+withToday : LocalDate -> Model -> Model
+withToday changed model =
+    let
+        context : DateContext
+        context =
+            { currentDate = currentDate model, today = changed }
+    in
+    case model of
+        Loading _ ->
+            Loading context
+
+        Loaded _ report ->
+            Loaded context report
+
+        Failed _ message ->
+            Failed context message
 
 
 navigateTo : LocalDate -> Model -> ( Model, Cmd Msg, OutMsg )
