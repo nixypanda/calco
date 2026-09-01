@@ -21,30 +21,42 @@ reclassifyDeviceTests =
     describe "Main.reclassifyDevice"
         [ test "ignores a resize that keeps the same classification" <|
             \_ ->
-                Main.reclassifyDevice 1300
+                Main.reclassifyDevice 1500
                     800
-                    (Element.classifyDevice { width = 1250, height = 800 })
+                    (Main.classifyDevice 1450 800)
                     |> Expect.equal Nothing
         , test "ignores a resize back to the exact same size" <|
             \_ ->
                 Main.reclassifyDevice 420
                     900
-                    (Element.classifyDevice { width = 420, height = 900 })
+                    (Main.classifyDevice 420 900)
                     |> Expect.equal Nothing
         , test "reports a resize that crosses into another device class" <|
             \_ ->
-                Main.reclassifyDevice 1300
+                Main.reclassifyDevice 1500
                     800
-                    (Element.classifyDevice { width = 420, height = 900 })
+                    (Main.classifyDevice 420 900)
                     |> Expect.equal
-                        (Just (Element.classifyDevice { width = 1300, height = 800 }))
+                        (Just (Main.classifyDevice 1500 800))
         , test "reports a resize that only flips orientation" <|
             \_ ->
                 Main.reclassifyDevice 550
                     400
-                    (Element.classifyDevice { width = 500, height = 900 })
+                    (Main.classifyDevice 500 900)
                     |> Expect.equal
-                        (Just (Element.classifyDevice { width = 550, height = 400 }))
+                        (Just (Main.classifyDevice 550 400))
+        , test "does not change class when only height crosses an elm-ui breakpoint" <|
+            \_ ->
+                Main.reclassifyDevice 1000
+                    700
+                    (Main.classifyDevice 1000 500)
+                    |> Expect.equal Nothing
+        , test "uses the safe workspace width as the desktop breakpoint" <|
+            \_ ->
+                ( Main.classifyDevice 1439 900 |> .class
+                , Main.classifyDevice 1440 900 |> .class
+                )
+                    |> Expect.equal ( Element.Tablet, Element.Desktop )
         ]
 
 

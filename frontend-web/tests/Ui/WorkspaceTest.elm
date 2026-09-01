@@ -83,13 +83,13 @@ visibilityTests =
                         , ( "search", False )
                         , ( "food-detail", True )
                         ]
-        , test "tablet shows the last two panes" <|
+        , test "tablet shows only the last pane" <|
             \_ ->
                 Workspace.paneVisibility (device Tablet)
                     [ "diary", "search", "food-detail" ]
                     |> Expect.equal
                         [ ( "diary", False )
-                        , ( "search", True )
+                        , ( "search", False )
                         , ( "food-detail", True )
                         ]
         , test "desktop shows the last two panes" <|

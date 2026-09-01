@@ -4,6 +4,7 @@ port module Main exposing
     , Model
     , Msg
     , PageModel
+    , classifyDevice
     , main
     , normalizeChromeNavigation
     , reclassifyDevice
@@ -94,10 +95,7 @@ init flags url key =
       , page = Page.loading
       , chrome = Chrome.init
       , device =
-            Element.classifyDevice
-                { width = flags.windowWidth
-                , height = flags.windowHeight
-                }
+            classifyDevice flags.windowWidth flags.windowHeight
       , theme = Theme.forMode (Theme.modeFromString flags.themeMode)
       , version = versionModel
       }
@@ -224,13 +222,40 @@ reclassifyDevice width height current =
     let
         next : Element.Device
         next =
-            Element.classifyDevice { width = width, height = height }
+            classifyDevice width height
     in
     if next == current then
         Nothing
 
     else
         Just next
+
+
+{-| Classify from width so changing viewport height cannot unexpectedly enable
+the two-pane workspace. The desktop threshold leaves enough horizontal room
+for two useful panes after workspace padding and spacing are applied.
+-}
+classifyDevice : Int -> Int -> Element.Device
+classifyDevice width height =
+    { class =
+        if width < 600 then
+            Element.Phone
+
+        else if width < 1440 then
+            Element.Tablet
+
+        else if width <= 1920 then
+            Element.Desktop
+
+        else
+            Element.BigDesktop
+    , orientation =
+        if width < height then
+            Element.Portrait
+
+        else
+            Element.Landscape
+    }
 
 
 stepChromeUpdate : ( Chrome.Model, Chrome.OutMsg ) -> Model -> ( Model, Cmd Msg )

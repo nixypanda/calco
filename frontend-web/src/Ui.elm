@@ -114,6 +114,7 @@ cardShadow _ =
 type PageHeaderSubtitle
     = SubtitleText String
     | SubtitleMeta { items : List String, separator : String }
+    | SubtitleMetaLines { lines : List (List String), separator : String }
 
 
 layout : Theme -> Element msg -> Element msg
@@ -318,6 +319,27 @@ pageHeaderSubtitle theme subtitle =
                 ]
                 (separatedInline meta)
 
+        SubtitleMetaLines meta ->
+            Element.column
+                [ Element.width Element.fill
+                , Element.spacing space2
+                , minWidthZero
+                ]
+                (List.map
+                    (\items ->
+                        Element.paragraph
+                            [ Font.color theme.textMuted
+                            , body
+                            , Element.width Element.fill
+                            , minWidthZero
+                            ]
+                            (separatedInline
+                                { items = items, separator = meta.separator }
+                            )
+                    )
+                    meta.lines
+                )
+
 
 separatedInline : { items : List String, separator : String } -> List (Element msg)
 separatedInline meta =
@@ -483,14 +505,14 @@ maybeErrorBanner theme maybeError =
 
 errorBanner : Theme -> String -> Element msg
 errorBanner theme message =
-    Element.el
+    Element.paragraph
         [ Background.color theme.dangerBg
         , Font.color theme.dangerFg
         , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill
         ]
-        (Element.text message)
+        [ Element.text message ]
 
 
 

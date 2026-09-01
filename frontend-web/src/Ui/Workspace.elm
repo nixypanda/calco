@@ -119,7 +119,7 @@ paneLimit device =
             1
 
         Element.Tablet ->
-            2
+            1
 
         Element.Desktop ->
             2
