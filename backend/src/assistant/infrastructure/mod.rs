@@ -1,5 +1,7 @@
-//! Infrastructure adapters are introduced in later slices.
+//! Infrastructure adapters for the food-assistance context.
 //!
-//! In particular, this module will own the OpenAI-compatible protocol and the
-//! nutrition vocabulary anti-corruption adapter. No provider or nutrition
-//! repository dependency is introduced by the foundation slice.
+//! Provider protocol adapters arrive in later slices. The nutrition adapter
+//! deliberately consumes only catalog application reads and translates their
+//! values into assistant-owned vocabulary terms.
+
+pub mod nutrition_catalog;

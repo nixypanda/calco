@@ -178,6 +178,17 @@ impl CatalogService {
         self.unit_repo.list_all().await
     }
 
+    /// Returns the catalog policy codes a custom food must contain.
+    ///
+    /// This is reference data for application consumers. Catalog domain
+    /// validation remains the authority that enforces the requirement.
+    pub fn required_custom_food_nutrient_codes(&self) -> Vec<String> {
+        REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect()
+    }
+
     pub async fn allowed_units(
         &self,
         product: &Product,
