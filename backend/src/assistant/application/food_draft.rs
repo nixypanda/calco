@@ -1,10 +1,12 @@
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::time::Instant;
 
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::assistant::domain::{
     AssistantError, Conversation, DraftNutrient, DraftServing, DraftStatus, FoodDraft,
@@ -78,6 +80,9 @@ impl FoodPhotoMimeType {
 /// The user-supplied data for a single custom-food drafting request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
+    /// Used only by admission control and content-free operational telemetry.
+    /// It is never sent to the model provider.
+    pub user_id: Uuid,
     pub conversation: Conversation,
     pub photos: Vec<SanitizedFoodPhoto>,
 }
@@ -151,6 +156,70 @@ pub trait FoodDraftPort: Send + Sync {
     async fn draft(&self, request: FoodDraftRequest) -> Result<FoodDraftTurn, AssistantError>;
 }
 
+/// The only durable-observability seam for a food-draft operation. It has no
+/// text, photo bytes, prompt, provider URL, model name, or raw response field.
+pub trait FoodDraftTelemetryPort: Send + Sync {
+    fn record(&self, event: FoodDraftTelemetryEvent);
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodDraftTelemetryOutcome {
+    DraftReady,
+    NeedsClarification,
+    Disabled,
+    ValidationFailed,
+    ModelUnavailable,
+    RateLimited,
+    Busy,
+    InvalidModelResponse,
+    InternalFailure,
+}
+
+impl FoodDraftTelemetryOutcome {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::DraftReady => "draft_ready",
+            Self::NeedsClarification => "needs_clarification",
+            Self::Disabled => "disabled",
+            Self::ValidationFailed => "validation_failed",
+            Self::ModelUnavailable => "model_unavailable",
+            Self::RateLimited => "rate_limited",
+            Self::Busy => "busy",
+            Self::InvalidModelResponse => "invalid_model_response",
+            Self::InternalFailure => "internal_failure",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FoodDraftTelemetryEvent {
+    pub user_id: Uuid,
+    pub image_count: usize,
+    pub latency_ms: u128,
+    pub outcome: FoodDraftTelemetryOutcome,
+    pub input_tokens: Option<u64>,
+    pub output_tokens: Option<u64>,
+}
+
+/// Emits structured events suitable for normal deployment logs. The fields
+/// intentionally remain model-independent and content-free.
+pub struct TracingFoodDraftTelemetry;
+
+impl FoodDraftTelemetryPort for TracingFoodDraftTelemetry {
+    fn record(&self, event: FoodDraftTelemetryEvent) {
+        tracing::info!(
+            operation = "food_assistant_draft",
+            user_id = %event.user_id,
+            latency_ms = event.latency_ms,
+            outcome = event.outcome.as_str(),
+            image_count = event.image_count,
+            input_tokens = ?event.input_tokens,
+            output_tokens = ?event.output_tokens,
+            "food-assistant operation completed"
+        );
+    }
+}
+
 /// Validates an untrusted model turn and returns a transient form draft.
 ///
 /// This type intentionally owns only a generation port and a vocabulary-read
@@ -159,6 +228,7 @@ pub trait FoodDraftPort: Send + Sync {
 pub struct FoodDraftService {
     model: Arc<dyn FoodDraftModelPort>,
     vocabulary: Arc<dyn FoodVocabularyPort>,
+    telemetry: Arc<dyn FoodDraftTelemetryPort>,
 }
 
 impl FoodDraftService {
@@ -166,29 +236,92 @@ impl FoodDraftService {
         model: Arc<dyn FoodDraftModelPort>,
         vocabulary: Arc<dyn FoodVocabularyPort>,
     ) -> Self {
-        Self { model, vocabulary }
+        Self::with_telemetry(model, vocabulary, Arc::new(TracingFoodDraftTelemetry))
+    }
+
+    pub fn with_telemetry(
+        model: Arc<dyn FoodDraftModelPort>,
+        vocabulary: Arc<dyn FoodVocabularyPort>,
+        telemetry: Arc<dyn FoodDraftTelemetryPort>,
+    ) -> Self {
+        Self {
+            model,
+            vocabulary,
+            telemetry,
+        }
     }
 }
 
 #[async_trait]
 impl FoodDraftPort for FoodDraftService {
     async fn draft(&self, request: FoodDraftRequest) -> Result<FoodDraftTurn, AssistantError> {
-        let vocabulary = self.vocabulary.supported_vocabulary().await?;
-        validate_vocabulary(&vocabulary)?;
+        let started = Instant::now();
+        let user_id = request.user_id;
+        let image_count = request.photos.len();
+        let result: Result<
+            (FoodDraftTurn, Option<ModelUsage>),
+            (AssistantError, Option<ModelUsage>),
+        > = async {
+            let vocabulary = self
+                .vocabulary
+                .supported_vocabulary()
+                .await
+                .map_err(|error| (error, None))?;
+            validate_vocabulary(&vocabulary).map_err(|error| (error, None))?;
 
-        // This is deliberately the sole model call. Invalid structured content
-        // is rejected locally rather than retried as another paid request.
-        let response = self
-            .model
-            .generate(ModelDraftRequest {
-                conversation: request.conversation,
-                photos: request.photos,
-                system_prompt: build_system_prompt(&vocabulary),
-                response_schema: food_draft_response_schema(),
-            })
-            .await?;
+            // This is deliberately the sole model call. Invalid structured content
+            // is rejected locally rather than retried as another paid request.
+            let response = self
+                .model
+                .generate(ModelDraftRequest {
+                    conversation: request.conversation,
+                    photos: request.photos,
+                    system_prompt: build_system_prompt(&vocabulary),
+                    response_schema: food_draft_response_schema(),
+                })
+                .await
+                .map_err(|error| (error, None))?;
+            let usage = response.usage;
+            let turn = decode_and_validate(&response.content, &vocabulary)
+                .map_err(|error| (error, usage))?;
+            Ok((turn, usage))
+        }
+        .await;
 
-        decode_and_validate(&response.content, &vocabulary)
+        let (outcome, usage) = match &result {
+            Ok((turn, usage)) => (
+                match turn.status {
+                    DraftStatus::DraftReady => FoodDraftTelemetryOutcome::DraftReady,
+                    DraftStatus::NeedsClarification => {
+                        FoodDraftTelemetryOutcome::NeedsClarification
+                    }
+                },
+                *usage,
+            ),
+            Err((error, usage)) => (telemetry_outcome_for_error(error), *usage),
+        };
+        self.telemetry.record(FoodDraftTelemetryEvent {
+            user_id,
+            image_count,
+            latency_ms: started.elapsed().as_millis(),
+            outcome,
+            input_tokens: usage.and_then(|usage| usage.input_tokens),
+            output_tokens: usage.and_then(|usage| usage.output_tokens),
+        });
+
+        result.map(|(turn, _)| turn).map_err(|(error, _)| error)
+    }
+}
+
+fn telemetry_outcome_for_error(error: &AssistantError) -> FoodDraftTelemetryOutcome {
+    match error {
+        AssistantError::Disabled => FoodDraftTelemetryOutcome::Disabled,
+        AssistantError::Validation(_) => FoodDraftTelemetryOutcome::ValidationFailed,
+        AssistantError::ModelUnavailable => FoodDraftTelemetryOutcome::ModelUnavailable,
+        AssistantError::RateLimited => FoodDraftTelemetryOutcome::RateLimited,
+        AssistantError::Busy => FoodDraftTelemetryOutcome::Busy,
+        AssistantError::InvalidModelResponse => FoodDraftTelemetryOutcome::InvalidModelResponse,
+        AssistantError::Internal => FoodDraftTelemetryOutcome::InternalFailure,
     }
 }
 
@@ -521,6 +654,7 @@ mod tests {
 
     struct RecordingModel {
         content: String,
+        usage: Option<ModelUsage>,
         requests: Mutex<Vec<ModelDraftRequest>>,
     }
 
@@ -533,8 +667,22 @@ mod tests {
             self.requests.lock().await.push(request);
             Ok(ModelDraftResponse {
                 content: self.content.clone(),
-                usage: None,
+                usage: self.usage,
             })
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingTelemetry {
+        events: std::sync::Mutex<Vec<FoodDraftTelemetryEvent>>,
+    }
+
+    impl FoodDraftTelemetryPort for RecordingTelemetry {
+        fn record(&self, event: FoodDraftTelemetryEvent) {
+            self.events
+                .lock()
+                .expect("recording telemetry mutex poisoned")
+                .push(event);
         }
     }
 
@@ -576,6 +724,7 @@ mod tests {
 
     fn request() -> FoodDraftRequest {
         FoodDraftRequest {
+            user_id: Uuid::new_v4(),
             conversation: Conversation::new(vec![
                 ConversationTurn::new(ConversationRole::User, "A bowl of dal rice").unwrap(),
             ])
@@ -607,6 +756,7 @@ mod tests {
     async fn service(content: String) -> (FoodDraftService, Arc<RecordingModel>) {
         let model = Arc::new(RecordingModel {
             content,
+            usage: None,
             requests: Mutex::new(Vec::new()),
         });
         (
@@ -635,6 +785,75 @@ mod tests {
                 .contains("SODIUM_MG | Sodium | mg")
         );
         assert!(requests[0].response_schema.contains("additionalProperties"));
+    }
+
+    #[tokio::test]
+    async fn emits_content_free_operational_telemetry_with_provider_usage() {
+        let user_id = Uuid::new_v4();
+        let model = Arc::new(RecordingModel {
+            content: ready_json(),
+            usage: Some(ModelUsage {
+                input_tokens: Some(123),
+                output_tokens: Some(45),
+            }),
+            requests: Mutex::new(Vec::new()),
+        });
+        let telemetry = Arc::new(RecordingTelemetry::default());
+        let service =
+            FoodDraftService::with_telemetry(model, Arc::new(StaticVocabulary), telemetry.clone());
+
+        let mut draft_request = request();
+        draft_request.user_id = user_id;
+        service.draft(draft_request).await.unwrap();
+
+        let events = telemetry.events.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].user_id, user_id);
+        assert_eq!(events[0].image_count, 0);
+        assert_eq!(events[0].outcome, FoodDraftTelemetryOutcome::DraftReady);
+        assert_eq!(events[0].input_tokens, Some(123));
+        assert_eq!(events[0].output_tokens, Some(45));
+    }
+
+    #[tokio::test]
+    async fn preserves_provider_usage_in_telemetry_when_response_is_invalid() {
+        let model = Arc::new(RecordingModel {
+            content: "not JSON".into(),
+            usage: Some(ModelUsage {
+                input_tokens: Some(123),
+                output_tokens: Some(45),
+            }),
+            requests: Mutex::new(Vec::new()),
+        });
+        let telemetry = Arc::new(RecordingTelemetry::default());
+        let service =
+            FoodDraftService::with_telemetry(model, Arc::new(StaticVocabulary), telemetry.clone());
+
+        assert!(matches!(
+            service.draft(request()).await,
+            Err(AssistantError::InvalidModelResponse)
+        ));
+
+        let events = telemetry.events.lock().unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].outcome,
+            FoodDraftTelemetryOutcome::InvalidModelResponse
+        );
+        assert_eq!(events[0].input_tokens, Some(123));
+        assert_eq!(events[0].output_tokens, Some(45));
+    }
+
+    #[test]
+    fn admission_failures_have_distinct_telemetry_outcomes() {
+        assert_eq!(
+            telemetry_outcome_for_error(&AssistantError::RateLimited),
+            FoodDraftTelemetryOutcome::RateLimited
+        );
+        assert_eq!(
+            telemetry_outcome_for_error(&AssistantError::Busy),
+            FoodDraftTelemetryOutcome::Busy
+        );
     }
 
     #[tokio::test]

@@ -398,6 +398,12 @@ enabledView theme device formHasManualInput chat =
             ]
         , Typography.mutedParagraph theme
             "Describe a food or dish. Estimates must be reviewed before you create it."
+        , Typography.mutedParagraph theme
+            (String.concat
+                [ "Your description, replies, and photos are sent with this assistant request. "
+                , "CalCo does not save them."
+                ]
+            )
         ]
             ++ (if chat.expanded then
                     expandedContent theme device formHasManualInput chat
@@ -537,8 +543,8 @@ photoPicker theme device chat =
             (Typography.mutedParagraph
                 theme
                 (String.concat
-                    [ "Optional photos can improve an estimate. Photos are sent only with this "
-                    , "assistant request and are not saved."
+                    [ "Optional photos can improve an estimate. They are sent with the "
+                    , "assistant request and are not saved by CalCo."
                     ]
                 )
                 :: photoChooseButton theme device chat

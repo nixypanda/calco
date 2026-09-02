@@ -19,6 +19,10 @@ pub enum AssistantError {
     Validation(String),
     #[error("assistant model is unavailable")]
     ModelUnavailable,
+    #[error("food-assistant request rate is limited")]
+    RateLimited,
+    #[error("food assistant is busy")]
+    Busy,
     #[error("assistant model returned an invalid response")]
     InvalidModelResponse,
     #[error("assistant operation failed")]

@@ -5,7 +5,7 @@ use axum::extract::FromRef;
 
 use crate::AppState;
 use crate::assistant::application::{
-    FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort,
+    FoodDraftOperations, FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort,
 };
 use crate::assistant::domain::{AssistantError, FoodDraftTurn};
 use crate::assistant::infrastructure::{
@@ -47,6 +47,7 @@ impl AssistantStatus {
 pub struct AssistantModule {
     pub food_drafts: Arc<dyn FoodDraftPort>,
     pub images: Arc<dyn FoodImageSanitizerPort>,
+    pub operations: Arc<FoodDraftOperations>,
     pub status: AssistantStatus,
 }
 
@@ -61,6 +62,7 @@ impl AssistantModule {
         Self {
             food_drafts: Arc::new(DisabledFoodDraftPort),
             images: Arc::new(DisabledFoodImageSanitizer),
+            operations: Arc::new(FoodDraftOperations::new()),
             status: AssistantStatus::disabled(),
         }
     }
@@ -84,6 +86,7 @@ impl AssistantModule {
         Ok(Self {
             food_drafts,
             images: Arc::new(SafeFoodImageSanitizer),
+            operations: Arc::new(FoodDraftOperations::new()),
             status: AssistantStatus {
                 enabled: true,
                 supports_images: settings.supports_images,
@@ -96,6 +99,7 @@ impl AssistantModule {
         Self {
             food_drafts,
             images: Arc::new(DisabledFoodImageSanitizer),
+            operations: Arc::new(FoodDraftOperations::new()),
             status: AssistantStatus::enabled(),
         }
     }
@@ -105,6 +109,7 @@ impl AssistantModule {
         Self {
             food_drafts,
             images: Arc::new(SafeFoodImageSanitizer),
+            operations: Arc::new(FoodDraftOperations::new()),
             status: AssistantStatus {
                 enabled: true,
                 supports_images: true,
@@ -158,6 +163,7 @@ mod tests {
     async fn disabled_module_advertises_no_capabilities_and_rejects_drafts() {
         let module = AssistantModule::disabled();
         let request = FoodDraftRequest {
+            user_id: uuid::Uuid::new_v4(),
             conversation: Conversation::new(vec![
                 ConversationTurn::new(ConversationRole::User, "dal rice").unwrap(),
             ])

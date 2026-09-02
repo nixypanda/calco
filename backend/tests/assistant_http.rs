@@ -8,8 +8,8 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort, FoodPhotoMimeType,
-    SanitizedFoodPhoto,
+    FoodDraftOperations, FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort,
+    FoodPhotoMimeType, SanitizedFoodPhoto,
 };
 use calco_backend::assistant::domain::{
     AssistantError, DraftNutrient, DraftStatus, FoodDraft, FoodDraftTurn,
@@ -177,6 +177,7 @@ async fn app_with_image_components(
     state.assistant = AssistantModule {
         food_drafts: port,
         images,
+        operations: Arc::new(FoodDraftOperations::new()),
         status: AssistantStatus {
             enabled: true,
             supports_images: true,
@@ -327,6 +328,33 @@ async fn assistant_http_is_authenticated_text_only_and_never_creates_products(po
         assert_eq!(status, expected_status, "body: {body:?}");
         assert_error(&body, expected_code);
     }
+}
+
+#[sqlx::test]
+async fn assistant_http_limits_each_user_and_returns_a_retry_hint(pool: PgPool) {
+    let scripted_port: Arc<dyn FoodDraftPort> = Arc::new(ScriptedFoodDraftPort::new(
+        std::iter::repeat_with(|| Ok(ready_turn())).take(5),
+    ));
+    let router = app_with_port(pool, scripted_port).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+
+    for _ in 0..5 {
+        let (status, _, body) = send(
+            &router,
+            multipart_request(Some(&user), &[("conversation", conversation())]),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "body: {body:?}");
+    }
+
+    let (status, headers, body) = send(
+        &router,
+        multipart_request(Some(&user), &[("conversation", conversation())]),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "body: {body:?}");
+    assert_error(&body, "rate_limited");
+    assert_eq!(headers.get(header::RETRY_AFTER).unwrap(), "60");
 }
 
 #[sqlx::test]

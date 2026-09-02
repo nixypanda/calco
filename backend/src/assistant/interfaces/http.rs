@@ -8,7 +8,7 @@
 use axum::{
     Router,
     extract::{DefaultBodyLimit, Multipart, State, multipart::MultipartRejection},
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Json, Response},
     routing::{get, post},
 };
@@ -114,12 +114,16 @@ async fn status_handler(
 }
 
 async fn draft_handler(
-    _user: AuthUser,
+    user: AuthUser,
     State(assistant): State<AssistantModule>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<FoodDraftTurnResponse>, AssistantHttpError> {
     let multipart = multipart.map_err(|_| AssistantHttpError::invalid_multipart())?;
-    let request = parse_draft_request(multipart, &assistant).await?;
+    let request = parse_draft_request(multipart, &assistant, user.0.id).await?;
+    let _permit = assistant
+        .operations
+        .acquire(request.user_id, request.photos.len())
+        .map_err(AssistantHttpError::from)?;
     let turn = assistant
         .food_drafts
         .draft(request)
@@ -139,6 +143,7 @@ fn status_to_response(status: AssistantStatus) -> AssistantStatusResponse {
 async fn parse_draft_request(
     mut multipart: Multipart,
     assistant: &AssistantModule,
+    user_id: uuid::Uuid,
 ) -> Result<FoodDraftRequest, AssistantHttpError> {
     let mut fields = 0_usize;
     let mut conversation = None;
@@ -233,6 +238,7 @@ async fn parse_draft_request(
         .map_err(AssistantHttpError::from)?;
 
     Ok(FoodDraftRequest {
+        user_id,
         conversation: Conversation::new(turns).map_err(AssistantHttpError::from)?,
         photos,
     })
@@ -325,6 +331,7 @@ struct AssistantHttpError {
     status: StatusCode,
     code: &'static str,
     message: String,
+    retry_after_seconds: Option<u64>,
 }
 
 impl AssistantHttpError {
@@ -333,6 +340,7 @@ impl AssistantHttpError {
             status: StatusCode::BAD_REQUEST,
             code: "validation",
             message: message.into(),
+            retry_after_seconds: None,
         }
     }
 
@@ -345,6 +353,7 @@ impl AssistantHttpError {
             status: StatusCode::PAYLOAD_TOO_LARGE,
             code: "payload_too_large",
             message: "food-draft request is too large".into(),
+            retry_after_seconds: None,
         }
     }
 
@@ -364,17 +373,32 @@ impl From<AssistantError> for AssistantHttpError {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 code: "assistant_disabled",
                 message: "food assistant is disabled".into(),
+                retry_after_seconds: None,
             },
             AssistantError::Validation(message) => Self::validation(message),
             AssistantError::ModelUnavailable => Self {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 code: "model_unavailable",
                 message: "food assistant is temporarily unavailable; retry later".into(),
+                retry_after_seconds: Some(1),
+            },
+            AssistantError::RateLimited => Self {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                code: "rate_limited",
+                message: "too many food-assistant requests; retry later".into(),
+                retry_after_seconds: Some(60),
+            },
+            AssistantError::Busy => Self {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: "assistant_busy",
+                message: "food assistant is busy; retry shortly".into(),
+                retry_after_seconds: Some(1),
             },
             AssistantError::InvalidModelResponse => Self {
                 status: StatusCode::BAD_GATEWAY,
                 code: "invalid_model_response",
                 message: "food assistant returned an invalid response".into(),
+                retry_after_seconds: None,
             },
             AssistantError::Internal => {
                 tracing::error!("food-assistant request failed");
@@ -382,6 +406,7 @@ impl From<AssistantError> for AssistantHttpError {
                     status: StatusCode::INTERNAL_SERVER_ERROR,
                     code: "internal",
                     message: "internal server error".into(),
+                    retry_after_seconds: None,
                 }
             }
         }
@@ -390,7 +415,7 @@ impl From<AssistantError> for AssistantHttpError {
 
 impl IntoResponse for AssistantHttpError {
     fn into_response(self) -> Response {
-        (
+        let mut response = (
             self.status,
             Json(ErrorResponse {
                 error: ErrorBody {
@@ -399,7 +424,15 @@ impl IntoResponse for AssistantHttpError {
                 },
             }),
         )
-            .into_response()
+            .into_response();
+        if let Some(retry_after_seconds) = self.retry_after_seconds {
+            response.headers_mut().insert(
+                header::RETRY_AFTER,
+                HeaderValue::from_str(&retry_after_seconds.to_string())
+                    .expect("retry-after seconds are a valid header value"),
+            );
+        }
+        response
     }
 }
 
@@ -416,6 +449,17 @@ mod tests {
             error.message,
             "food assistant is temporarily unavailable; retry later"
         );
+    }
+
+    #[test]
+    fn retryable_admission_errors_have_safe_statuses_and_retry_hints() {
+        let rate_limited = AssistantHttpError::from(AssistantError::RateLimited).into_response();
+        assert_eq!(rate_limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(rate_limited.headers()[header::RETRY_AFTER], "60");
+
+        let busy = AssistantHttpError::from(AssistantError::Busy).into_response();
+        assert_eq!(busy.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(busy.headers()[header::RETRY_AFTER], "1");
     }
 
     #[test]
