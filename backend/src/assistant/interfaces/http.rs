@@ -16,7 +16,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::assistant::application::FoodDraftRequest;
+use crate::assistant::application::{FoodDraftRequest, FoodImageLimits};
 use crate::assistant::domain::{
     AssistantError, Conversation, ConversationRole, ConversationTurn, DraftStatus, FoodDraft,
     FoodDraftTurn,
@@ -25,12 +25,11 @@ use crate::assistant::module::{AssistantModule, AssistantStatus};
 use crate::auth::interfaces::http::AuthUser;
 use crate::nutrition::interfaces::{ErrorBody, ErrorResponse};
 
-/// Text-only requests can carry the largest valid Unicode conversation plus a
-/// small JSON envelope, while remaining far below the framework default needed
-/// for the later photo pipeline.
-const MAX_MULTIPART_BODY_BYTES: usize = 384 * 1024;
+/// The aggregate body leaves room for a bounded conversation and multipart
+/// envelope in addition to the bounded raw image total.
+const MAX_MULTIPART_BODY_BYTES: usize = 13 * 1024 * 1024;
 const MAX_CONVERSATION_FIELD_BYTES: usize = 320 * 1024;
-const MAX_MULTIPART_FIELDS: usize = 1;
+const MAX_MULTIPART_FIELDS: usize = 5;
 
 pub fn assistant_routes(state: AppState) -> Router {
     Router::new()
@@ -120,7 +119,7 @@ async fn draft_handler(
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Result<Json<FoodDraftTurnResponse>, AssistantHttpError> {
     let multipart = multipart.map_err(|_| AssistantHttpError::invalid_multipart())?;
-    let request = parse_draft_request(multipart).await?;
+    let request = parse_draft_request(multipart, &assistant).await?;
     let turn = assistant
         .food_drafts
         .draft(request)
@@ -139,9 +138,14 @@ fn status_to_response(status: AssistantStatus) -> AssistantStatusResponse {
 
 async fn parse_draft_request(
     mut multipart: Multipart,
+    assistant: &AssistantModule,
 ) -> Result<FoodDraftRequest, AssistantHttpError> {
     let mut fields = 0_usize;
     let mut conversation = None;
+    let mut photos = Vec::new();
+    let mut raw_photo_bytes = 0_usize;
+    let mut sanitized_photo_bytes = 0_usize;
+    let photo_limits = assistant.images.limits();
 
     while let Some(mut field) = multipart
         .next_field()
@@ -151,7 +155,7 @@ async fn parse_draft_request(
         fields += 1;
         if fields > MAX_MULTIPART_FIELDS {
             return Err(AssistantHttpError::validation(
-                "only the conversation field is accepted",
+                "exactly one conversation and up to four photo fields are allowed",
             ));
         }
 
@@ -160,10 +164,45 @@ async fn parse_draft_request(
             Some("conversation") if field.file_name().is_none() && conversation.is_none() => {
                 conversation = Some(read_conversation_field(&mut field).await?);
             }
-            Some("photos") => {
+            Some("conversation") => {
                 return Err(AssistantHttpError::validation(
-                    "photos are not supported by the text-only assistant yet",
+                    "conversation must appear exactly once and cannot be a file",
                 ));
+            }
+            Some("photos") => {
+                if !assistant.status.supports_images {
+                    return Err(AssistantHttpError::validation(
+                        "photos are unavailable for this food assistant",
+                    ));
+                }
+                if field.file_name().is_none() {
+                    return Err(AssistantHttpError::validation("each photo must be a file"));
+                }
+                if photos.len() == photo_limits.max_images {
+                    return Err(AssistantHttpError::validation(
+                        "at most four photos are allowed",
+                    ));
+                }
+                let declared_mime_type = field
+                    .content_type()
+                    .map(ToString::to_string)
+                    .ok_or_else(|| AssistantHttpError::validation("photo MIME type is required"))?;
+                let bytes =
+                    read_photo_field(&mut field, &mut raw_photo_bytes, photo_limits).await?;
+                let photo = assistant
+                    .images
+                    .sanitize(&declared_mime_type, bytes)
+                    .await
+                    .map_err(AssistantHttpError::from)?;
+                if photo.bytes.len()
+                    > photo_limits
+                        .max_total_bytes
+                        .saturating_sub(sanitized_photo_bytes)
+                {
+                    return Err(AssistantHttpError::payload_too_large());
+                }
+                sanitized_photo_bytes += photo.bytes.len();
+                photos.push(photo);
             }
             _ => {
                 return Err(AssistantHttpError::validation(
@@ -195,6 +234,7 @@ async fn parse_draft_request(
 
     Ok(FoodDraftRequest {
         conversation: Conversation::new(turns).map_err(AssistantHttpError::from)?,
+        photos,
     })
 }
 
@@ -211,6 +251,31 @@ async fn read_conversation_field(
             return Err(AssistantHttpError::payload_too_large());
         }
         bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+async fn read_photo_field(
+    field: &mut axum::extract::multipart::Field<'_>,
+    raw_photo_bytes: &mut usize,
+    limits: FoodImageLimits,
+) -> Result<Vec<u8>, AssistantHttpError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(AssistantHttpError::from_multipart)?
+    {
+        if chunk.len() > limits.max_bytes_per_image.saturating_sub(bytes.len())
+            || chunk.len() > limits.max_total_bytes.saturating_sub(*raw_photo_bytes)
+        {
+            return Err(AssistantHttpError::payload_too_large());
+        }
+        bytes.extend_from_slice(&chunk);
+        *raw_photo_bytes += chunk.len();
+    }
+    if bytes.is_empty() {
+        return Err(AssistantHttpError::validation("photo cannot be empty"));
     }
     Ok(bytes)
 }

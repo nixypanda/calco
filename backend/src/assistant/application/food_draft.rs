@@ -29,12 +29,57 @@ const MAX_SERVING_GRAMS: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
 const MAX_SERVING_QUANTITY: Decimal = Decimal::from_parts(10_000, 0, 0, false, 0);
 const CALORIE_CONSISTENCY_WARNING: &str = "Energy differs substantially from the 4/4/9 estimate based on protein, carbohydrates, and fat; review the nutrition values.";
 
-/// The user-supplied data for a single text-only custom-food drafting request.
-/// Photo input will be added as a distinct transport-safe value in a later
-/// slice, rather than making the model port depend on HTTP multipart types.
+/// A decoded and re-encoded photo suitable for an AI provider. This is an
+/// assistant-owned value: HTTP upload details and provider wire DTOs never
+/// cross this boundary.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SanitizedFoodPhoto {
+    pub mime_type: FoodPhotoMimeType,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FoodImageLimits {
+    pub max_images: usize,
+    pub max_bytes_per_image: usize,
+    pub max_total_bytes: usize,
+}
+
+/// The application seam for normalizing an untrusted image upload. It carries
+/// plain bytes and provider-neutral output, never multipart or provider DTOs.
+#[async_trait]
+pub trait FoodImageSanitizerPort: Send + Sync {
+    fn limits(&self) -> FoodImageLimits;
+
+    async fn sanitize(
+        &self,
+        declared_mime_type: &str,
+        bytes: Vec<u8>,
+    ) -> Result<SanitizedFoodPhoto, AssistantError>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodPhotoMimeType {
+    Jpeg,
+    Png,
+    Webp,
+}
+
+impl FoodPhotoMimeType {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Jpeg => "image/jpeg",
+            Self::Png => "image/png",
+            Self::Webp => "image/webp",
+        }
+    }
+}
+
+/// The user-supplied data for a single custom-food drafting request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
     pub conversation: Conversation,
+    pub photos: Vec<SanitizedFoodPhoto>,
 }
 
 /// The provider-neutral request sent by the application service to a model.
@@ -42,6 +87,7 @@ pub struct FoodDraftRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelDraftRequest {
     pub conversation: Conversation,
+    pub photos: Vec<SanitizedFoodPhoto>,
     pub system_prompt: String,
     pub response_schema: String,
 }
@@ -136,6 +182,7 @@ impl FoodDraftPort for FoodDraftService {
             .model
             .generate(ModelDraftRequest {
                 conversation: request.conversation,
+                photos: request.photos,
                 system_prompt: build_system_prompt(&vocabulary),
                 response_schema: food_draft_response_schema(),
             })
@@ -533,6 +580,7 @@ mod tests {
                 ConversationTurn::new(ConversationRole::User, "A bowl of dal rice").unwrap(),
             ])
             .unwrap(),
+            photos: vec![],
         }
     }
 

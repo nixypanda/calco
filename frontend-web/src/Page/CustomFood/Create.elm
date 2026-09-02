@@ -12,6 +12,7 @@ import Api.Foods as Foods
 import Data.FoodAssistant
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Page.CustomFood.Assistant as Assistant
 import Page.CustomFood.Form as Form
@@ -64,7 +65,7 @@ type OutMsg
     | RequestCreateFood CreateFoodRequest
     | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
     | RequestAssistantStatus
-    | RequestFoodDraft Data.FoodAssistant.Conversation
+    | RequestFoodDraft Data.FoodAssistant.Conversation (List File)
     | Navigate Route
     | SessionExpired
 
@@ -213,8 +214,8 @@ applyAssistantOutMsg assistantOut model command =
         Assistant.RequestStatus ->
             ( model, command, RequestAssistantStatus )
 
-        Assistant.RequestDraft conversation ->
-            ( model, command, RequestFoodDraft conversation )
+        Assistant.RequestDraft conversation photos ->
+            ( model, command, RequestFoodDraft conversation photos )
 
         Assistant.ApplyDraft draft ->
             ( { model | form = Form.applyAiDraft draft model.form }, command, NoOp )

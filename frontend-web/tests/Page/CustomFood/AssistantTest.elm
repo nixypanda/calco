@@ -32,6 +32,10 @@ tests =
                             , draft = Nothing
                             , warnings = []
                             , awaitingReplacementConfirmation = False
+                            , supportsImages = False
+                            , photos = []
+                            , photoUrls = []
+                            , photoError = Nothing
                             }
                         )
         , test "sending adds one user turn and requests multipart conversation" <|
@@ -44,6 +48,7 @@ tests =
                     |> Expect.equal
                         (Assistant.RequestDraft
                             expectedConversation
+                            []
                         )
         , test "a retryable failure keeps the transcript and retry requests it again" <|
             \_ ->
@@ -64,6 +69,7 @@ tests =
                     |> Expect.equal
                         (Assistant.RequestDraft
                             expectedConversation
+                            []
                         )
         , test "manual values require confirmation before a draft can apply" <|
             \_ ->
@@ -98,6 +104,74 @@ tests =
                         )
                     |> third
                     |> Expect.equal Assistant.SessionExpired
+        , test "photo metadata accepts supported images at or below 5 MiB" <|
+            \_ ->
+                Assistant.validatePhotoMetadata []
+                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 1 }
+                    , { mimeType = "image/webp", size = 3 }
+                    ]
+                    |> Expect.equal (Ok ())
+        , test "photo metadata rejects unsupported MIME types before upload" <|
+            \_ ->
+                Assistant.validatePhotoMetadata [] [ { mimeType = "image/gif", size = 1 } ]
+                    |> Expect.equal (Err "Photos must be JPEG, PNG, or WebP.")
+        , test "photo metadata rejects files above 5 MiB before upload" <|
+            \_ ->
+                Assistant.validatePhotoMetadata []
+                    [ { mimeType = "image/png", size = 5 * 1024 * 1024 + 1 } ]
+                    |> Expect.equal (Err "Each photo must be 5 MiB or smaller.")
+        , test "photo metadata accepts exactly 12 MiB across existing and selected photos" <|
+            \_ ->
+                Assistant.validatePhotoMetadata
+                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    ]
+                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 } ]
+                    |> Expect.equal (Ok ())
+        , test "photo metadata rejects more than 12 MiB across existing and selected photos" <|
+            \_ ->
+                Assistant.validatePhotoMetadata
+                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    ]
+                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 + 1 } ]
+                    |> Expect.equal (Err "Photos together must be 12 MiB or smaller.")
+        , test "a ready draft clears stale photo preview state" <|
+            \_ ->
+                let
+                    chat : Assistant.ChatModel
+                    chat =
+                        { expanded = False
+                        , transcript = []
+                        , description = ""
+                        , request = Assistant.Sending
+                        , draft = Nothing
+                        , warnings = []
+                        , awaitingReplacementConfirmation = False
+                        , supportsImages = True
+                        , photos = []
+                        , photoUrls = [ Just "blob:stale-preview" ]
+                        , photoError = Just "A stale photo error"
+                        }
+                in
+                Assistant.update (Assistant.DraftCompleted (Ok draftTurn)) (Assistant.Enabled chat)
+                    |> first
+                    |> Expect.equal
+                        (Assistant.Enabled
+                            { chat
+                                | request = Assistant.Ready
+                                , draft = Just draft
+                                , warnings = [ "Nutrition is estimated." ]
+                                , transcript =
+                                    [ { role = FoodAssistant.Assistant
+                                      , text = "Here is an estimate."
+                                      }
+                                    ]
+                                , photoUrls = []
+                                , photoError = Nothing
+                            }
+                        )
         ]
 
 

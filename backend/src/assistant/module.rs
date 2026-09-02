@@ -4,10 +4,12 @@ use async_trait::async_trait;
 use axum::extract::FromRef;
 
 use crate::AppState;
-use crate::assistant::application::{FoodDraftPort, FoodDraftRequest};
+use crate::assistant::application::{
+    FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort,
+};
 use crate::assistant::domain::{AssistantError, FoodDraftTurn};
 use crate::assistant::infrastructure::{
-    NutritionCatalogVocabularyAdapter, OpenAiCompatibleFoodDraftModel,
+    NutritionCatalogVocabularyAdapter, OpenAiCompatibleFoodDraftModel, SafeFoodImageSanitizer,
 };
 use crate::config::AiRuntimeSettings;
 use crate::nutrition::catalog::application::CatalogService;
@@ -44,6 +46,7 @@ impl AssistantStatus {
 #[derive(Clone)]
 pub struct AssistantModule {
     pub food_drafts: Arc<dyn FoodDraftPort>,
+    pub images: Arc<dyn FoodImageSanitizerPort>,
     pub status: AssistantStatus,
 }
 
@@ -57,18 +60,13 @@ impl AssistantModule {
     pub fn disabled() -> Self {
         Self {
             food_drafts: Arc::new(DisabledFoodDraftPort),
+            images: Arc::new(DisabledFoodImageSanitizer),
             status: AssistantStatus::disabled(),
         }
     }
 
-    /// Constructs the text-only assistant module from validated deployment
-    /// settings and the catalog application seam.
-    ///
-    /// `AiRuntimeSettings::Enabled::supports_images` describes the selected
-    /// deployment, but this API deliberately reports `false` until slice 9
-    /// supplies image parsing and sanitization. Advertising the configured
-    /// capability sooner would invite clients to send photos this module cannot
-    /// safely process.
+    /// Constructs the assistant module from validated deployment settings and
+    /// the catalog application seam.
     pub fn build(
         settings: &AiRuntimeSettings,
         catalog: Arc<CatalogService>,
@@ -83,21 +81,60 @@ impl AssistantModule {
             model, vocabulary,
         ));
 
-        Ok(Self::enabled_with_port(food_drafts))
+        Ok(Self {
+            food_drafts,
+            images: Arc::new(SafeFoodImageSanitizer),
+            status: AssistantStatus {
+                enabled: true,
+                supports_images: settings.supports_images,
+            },
+        })
     }
 
-    /// Test and alternate-composition seam for a complete application port.
-    /// It remains text-only by construction; image support cannot be enabled
-    /// through this constructor before the transport pipeline exists.
+    /// Test and alternate-composition seam for a text-only application port.
     pub fn enabled_with_port(food_drafts: Arc<dyn FoodDraftPort>) -> Self {
         Self {
             food_drafts,
+            images: Arc::new(DisabledFoodImageSanitizer),
             status: AssistantStatus::enabled(),
+        }
+    }
+
+    /// Test composition seam for the complete photo pipeline.
+    pub fn enabled_with_images(food_drafts: Arc<dyn FoodDraftPort>) -> Self {
+        Self {
+            food_drafts,
+            images: Arc::new(SafeFoodImageSanitizer),
+            status: AssistantStatus {
+                enabled: true,
+                supports_images: true,
+            },
         }
     }
 }
 
 struct DisabledFoodDraftPort;
+
+struct DisabledFoodImageSanitizer;
+
+#[async_trait]
+impl FoodImageSanitizerPort for DisabledFoodImageSanitizer {
+    fn limits(&self) -> FoodImageLimits {
+        FoodImageLimits {
+            max_images: 0,
+            max_bytes_per_image: 0,
+            max_total_bytes: 0,
+        }
+    }
+
+    async fn sanitize(
+        &self,
+        _declared_mime_type: &str,
+        _bytes: Vec<u8>,
+    ) -> Result<crate::assistant::application::SanitizedFoodPhoto, AssistantError> {
+        Err(AssistantError::Disabled)
+    }
+}
 
 #[async_trait]
 impl FoodDraftPort for DisabledFoodDraftPort {
@@ -125,6 +162,7 @@ mod tests {
                 ConversationTurn::new(ConversationRole::User, "dal rice").unwrap(),
             ])
             .unwrap(),
+            photos: vec![],
         };
 
         assert!(!module.status.enabled);

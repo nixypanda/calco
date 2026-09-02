@@ -3,8 +3,9 @@ mod prompt;
 mod schema;
 
 pub use food_draft::{
-    FoodDraftModelPort, FoodDraftPort, FoodDraftRequest, FoodDraftService, FoodVocabulary,
-    FoodVocabularyPort, ModelDraftRequest, ModelDraftResponse, ModelUsage, SupportedNutrient,
+    FoodDraftModelPort, FoodDraftPort, FoodDraftRequest, FoodDraftService, FoodImageLimits,
+    FoodImageSanitizerPort, FoodPhotoMimeType, FoodVocabulary, FoodVocabularyPort,
+    ModelDraftRequest, ModelDraftResponse, ModelUsage, SanitizedFoodPhoto, SupportedNutrient,
     SupportedUnit,
 };
 pub use prompt::build_system_prompt;

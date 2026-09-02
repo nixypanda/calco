@@ -2440,8 +2440,9 @@ applyCustomFoodCreateOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        CustomFoodCreate.RequestFoodDraft conversation ->
+        CustomFoodCreate.RequestFoodDraft conversation photos ->
             ( Api.FoodAssistant.requestDraft conversation
+                photos
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
                     << CustomFoodAssistant.DraftCompleted

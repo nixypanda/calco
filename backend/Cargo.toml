@@ -28,6 +28,7 @@ toml_edit = "0.25"
 url = "2"
 zeroize = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

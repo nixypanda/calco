@@ -7,11 +7,14 @@ use async_trait::async_trait;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
-use calco_backend::assistant::application::{FoodDraftPort, FoodDraftRequest};
+use calco_backend::assistant::application::{
+    FoodDraftPort, FoodDraftRequest, FoodImageLimits, FoodImageSanitizerPort, FoodPhotoMimeType,
+    SanitizedFoodPhoto,
+};
 use calco_backend::assistant::domain::{
     AssistantError, DraftNutrient, DraftStatus, FoodDraft, FoodDraftTurn,
 };
-use calco_backend::assistant::module::AssistantModule;
+use calco_backend::assistant::module::{AssistantModule, AssistantStatus};
 use calco_backend::config::{AiAuthenticationSettings, AiEnabledSettings, AiRuntimeSettings};
 use calco_backend::{build_app_state, build_router_with_state};
 use common::*;
@@ -21,25 +24,69 @@ use sqlx::PgPool;
 
 struct ScriptedFoodDraftPort {
     responses: Mutex<VecDeque<Result<FoodDraftTurn, AssistantError>>>,
+    photo_counts: Mutex<Vec<usize>>,
 }
 
 impl ScriptedFoodDraftPort {
     fn new(responses: impl IntoIterator<Item = Result<FoodDraftTurn, AssistantError>>) -> Self {
         Self {
             responses: Mutex::new(responses.into_iter().collect()),
+            photo_counts: Mutex::new(vec![]),
         }
     }
 }
 
 #[async_trait]
 impl FoodDraftPort for ScriptedFoodDraftPort {
-    async fn draft(&self, _request: FoodDraftRequest) -> Result<FoodDraftTurn, AssistantError> {
+    async fn draft(&self, request: FoodDraftRequest) -> Result<FoodDraftTurn, AssistantError> {
+        self.photo_counts
+            .lock()
+            .expect("scripted-port mutex poisoned")
+            .push(request.photos.len());
         self.responses
             .lock()
             .expect("scripted-port mutex poisoned")
             .pop_front()
             .expect("unexpected food-draft request")
     }
+}
+
+fn multipart_photo_request(cookie: &str, photo: &[u8]) -> Request<Body> {
+    multipart_photos_request(cookie, &[("image/png", photo)])
+}
+
+fn multipart_photos_request(cookie: &str, photos: &[(&str, &[u8])]) -> Request<Body> {
+    const BOUNDARY: &str = "calco-assistant-photo-boundary";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"conversation\"\r\n\r\n{}\r\n",
+            conversation()
+        )
+        .as_bytes(),
+    );
+    for (index, (mime_type, photo)) in photos.iter().enumerate() {
+        body.extend_from_slice(
+            format!(
+                "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"photos\"; filename=\"food-{index}\"\r\nContent-Type: {mime_type}\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(photo);
+        body.extend_from_slice(b"\r\n");
+    }
+    body.extend_from_slice(format!("--{BOUNDARY}--\r\n").as_bytes());
+
+    Request::builder()
+        .method(Method::POST)
+        .uri("/api/ai/custom-food/draft")
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={BOUNDARY}"),
+        )
+        .header(header::COOKIE, cookie)
+        .body(Body::from(body))
+        .expect("build multipart photo request")
 }
 
 fn multipart_request(cookie: Option<&str>, fields: &[(&str, String)]) -> Request<Body> {
@@ -107,6 +154,58 @@ async fn app_with_port(pool: PgPool, port: Arc<dyn FoodDraftPort>) -> Router {
         .expect("build test app state");
     state.assistant = AssistantModule::enabled_with_port(port);
     build_router_with_state(state, &config.environment)
+}
+
+async fn app_with_image_port(pool: PgPool, port: Arc<dyn FoodDraftPort>) -> Router {
+    let config = test_config();
+    let mut state = build_app_state(pool, config.clone())
+        .await
+        .expect("build test app state");
+    state.assistant = AssistantModule::enabled_with_images(port);
+    build_router_with_state(state, &config.environment)
+}
+
+async fn app_with_image_components(
+    pool: PgPool,
+    port: Arc<dyn FoodDraftPort>,
+    images: Arc<dyn FoodImageSanitizerPort>,
+) -> Router {
+    let config = test_config();
+    let mut state = build_app_state(pool, config.clone())
+        .await
+        .expect("build test app state");
+    state.assistant = AssistantModule {
+        food_drafts: port,
+        images,
+        status: AssistantStatus {
+            enabled: true,
+            supports_images: true,
+        },
+    };
+    build_router_with_state(state, &config.environment)
+}
+
+struct TestImageSanitizer {
+    limits: FoodImageLimits,
+    sanitized_size: usize,
+}
+
+#[async_trait]
+impl FoodImageSanitizerPort for TestImageSanitizer {
+    fn limits(&self) -> FoodImageLimits {
+        self.limits
+    }
+
+    async fn sanitize(
+        &self,
+        _declared_mime_type: &str,
+        _bytes: Vec<u8>,
+    ) -> Result<SanitizedFoodPhoto, AssistantError> {
+        Ok(SanitizedFoodPhoto {
+            mime_type: FoodPhotoMimeType::Png,
+            bytes: vec![0; self.sanitized_size],
+        })
+    }
 }
 
 fn assert_error(body: &[u8], code: &str) {
@@ -231,7 +330,7 @@ async fn assistant_http_is_authenticated_text_only_and_never_creates_products(po
 }
 
 #[sqlx::test]
-async fn configured_image_capability_is_not_advertised_before_slice_nine(pool: PgPool) {
+async fn configured_image_capability_is_advertised_when_the_complete_pipeline_exists(pool: PgPool) {
     let mut config = test_config();
     config.ai = AiRuntimeSettings::Enabled(AiEnabledSettings {
         endpoint: "http://127.0.0.1:9/v1/chat/completions".parse().unwrap(),
@@ -242,5 +341,102 @@ async fn configured_image_capability_is_not_advertised_before_slice_nine(pool: P
 
     let state = build_app_state(pool, config).await.unwrap();
     assert!(state.assistant.status.enabled);
-    assert!(!state.assistant.status.supports_images);
+    assert!(state.assistant.status.supports_images);
+}
+
+#[sqlx::test]
+async fn assistant_http_sanitizes_a_valid_photo_before_calling_the_port(pool: PgPool) {
+    let port = Arc::new(ScriptedFoodDraftPort::new([Ok(ready_turn())]));
+    let router = app_with_image_port(pool, port.clone()).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    // A valid 1x1 PNG. Its transport bytes are intentionally not retained by
+    // the test port; only the count crossing the application boundary is kept.
+    let png = [
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 248, 207, 192, 240, 31,
+        0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    let (status, _, body) = send(&router, multipart_photo_request(&user, &png)).await;
+    assert_eq!(status, StatusCode::OK, "body: {body:?}");
+    assert_eq!(*port.photo_counts.lock().unwrap(), vec![1]);
+}
+
+#[sqlx::test]
+async fn enabled_image_transport_rejects_invalid_uploads_without_calling_the_port(pool: PgPool) {
+    let port = Arc::new(ScriptedFoodDraftPort::new([]));
+    let router = app_with_image_port(pool, port.clone()).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let png = [
+        137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 6,
+        0, 0, 0, 31, 21, 196, 137, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 248, 207, 192, 240, 31,
+        0, 5, 0, 1, 255, 137, 153, 61, 29, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ];
+    let too_large_photo = vec![0; 5 * 1024 * 1024 + 1];
+    let aggregate_overflow = vec![0; 4 * 1024 * 1024 + 1];
+
+    for request in [
+        multipart_photos_request(&user, &[("image/jpeg", &png)]),
+        multipart_photos_request(&user, &[("image/gif", &png)]),
+        multipart_photos_request(
+            &user,
+            &[
+                ("image/png", &png),
+                ("image/png", &png),
+                ("image/png", &png),
+                ("image/png", &png),
+                ("image/png", &png),
+            ],
+        ),
+        multipart_photos_request(&user, &[("image/png", &too_large_photo)]),
+        multipart_photos_request(
+            &user,
+            &[
+                ("image/png", &aggregate_overflow),
+                ("image/png", &aggregate_overflow),
+                ("image/png", &aggregate_overflow),
+            ],
+        ),
+    ] {
+        let (status, _, body) = send(&router, request).await;
+        assert!(
+            status == StatusCode::BAD_REQUEST || status == StatusCode::PAYLOAD_TOO_LARGE,
+            "status: {status}, body: {body:?}"
+        );
+        assert_error(
+            &body,
+            if status == StatusCode::BAD_REQUEST {
+                "validation"
+            } else {
+                "payload_too_large"
+            },
+        );
+    }
+
+    assert!(port.photo_counts.lock().unwrap().is_empty());
+}
+
+#[sqlx::test]
+async fn enabled_image_transport_enforces_total_sanitized_bytes_before_calling_the_port(
+    pool: PgPool,
+) {
+    let port = Arc::new(ScriptedFoodDraftPort::new([]));
+    let sanitizer = Arc::new(TestImageSanitizer {
+        limits: FoodImageLimits {
+            max_images: 4,
+            max_bytes_per_image: 100,
+            max_total_bytes: 10,
+        },
+        sanitized_size: 6,
+    });
+    let router = app_with_image_components(pool, port.clone(), sanitizer).await;
+    let (_admin, user) = bootstrap_and_user(&router).await;
+    let (status, _, body) = send(
+        &router,
+        multipart_photos_request(&user, &[("image/png", b"a"), ("image/png", b"b")]),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "body: {body:?}");
+    assert_error(&body, "payload_too_large");
+    assert!(port.photo_counts.lock().unwrap().is_empty());
 }

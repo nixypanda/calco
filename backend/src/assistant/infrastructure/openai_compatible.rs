@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use base64::Engine;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -302,7 +303,26 @@ struct RequestBody {
 #[derive(Serialize)]
 struct ChatMessage {
     role: &'static str,
-    content: String,
+    content: ChatContent,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ChatContent {
+    Text(String),
+    Parts(Vec<ChatContentPart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ChatContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Serialize)]
+struct ImageUrl {
+    url: String,
 }
 
 impl RequestBody {
@@ -321,18 +341,57 @@ impl RequestBody {
             ),
         };
 
+        let latest_user_turn = request
+            .conversation
+            .turns
+            .iter()
+            .rposition(|turn| turn.role == ConversationRole::User);
+        if !request.photos.is_empty() && latest_user_turn.is_none() {
+            return Err(GenerationFailure::InvalidResponse);
+        }
+
         let mut messages = Vec::with_capacity(request.conversation.turns.len() + 1);
         messages.push(ChatMessage {
             role: "system",
-            content: system_prompt,
+            content: ChatContent::Text(system_prompt),
         });
-        messages.extend(request.conversation.turns.iter().map(|turn| ChatMessage {
-            role: match turn.role {
-                ConversationRole::User => "user",
-                ConversationRole::Assistant => "assistant",
-            },
-            content: turn.text.clone(),
-        }));
+        messages.extend(
+            request
+                .conversation
+                .turns
+                .iter()
+                .enumerate()
+                .map(|(index, turn)| {
+                    let content = if Some(index) == latest_user_turn && !request.photos.is_empty() {
+                        let mut parts = Vec::with_capacity(request.photos.len() + 1);
+                        parts.push(ChatContentPart::Text {
+                            text: turn.text.clone(),
+                        });
+                        parts.extend(request.photos.iter().map(|photo| {
+                            ChatContentPart::ImageUrl {
+                                image_url: ImageUrl {
+                                    url: format!(
+                                        "data:{};base64,{}",
+                                        photo.mime_type.as_str(),
+                                        base64::engine::general_purpose::STANDARD
+                                            .encode(&photo.bytes)
+                                    ),
+                                },
+                            }
+                        }));
+                        ChatContent::Parts(parts)
+                    } else {
+                        ChatContent::Text(turn.text.clone())
+                    };
+                    ChatMessage {
+                        role: match turn.role {
+                            ConversationRole::User => "user",
+                            ConversationRole::Assistant => "assistant",
+                        },
+                        content,
+                    }
+                }),
+        );
         let response_format = match mode {
             ResponseMode::JsonSchema => Some(json!({
                 "type": "json_schema",
@@ -427,10 +486,12 @@ mod tests {
     use axum::routing::post;
     use axum::{Json, Router};
     use futures_util::stream;
-    use serde_json::Value;
+    use serde_json::{Value, json};
     use tokio::sync::Mutex;
 
-    use crate::assistant::application::{FoodDraftModelPort, ModelDraftRequest};
+    use crate::assistant::application::{
+        FoodDraftModelPort, FoodPhotoMimeType, ModelDraftRequest, SanitizedFoodPhoto,
+    };
     use crate::assistant::domain::{Conversation, ConversationRole, ConversationTurn};
     use crate::config::{AiAuthenticationSettings, AiEnabledSettings};
 
@@ -543,6 +604,7 @@ mod tests {
                 ConversationTurn::new(ConversationRole::Assistant, "which lentil?").unwrap(),
             ])
             .unwrap(),
+            photos: vec![],
             system_prompt: "SYSTEM PRIVATE INSTRUCTION".into(),
             response_schema: r#"{"type":"object","additionalProperties":false}"#.into(),
         }
@@ -581,6 +643,40 @@ mod tests {
         assert_eq!(body["response_format"]["type"], "json_schema");
         assert!(headers.get("authorization").is_none());
         assert_eq!(requests[0].2, "/configured/path?provider=value");
+    }
+
+    #[tokio::test]
+    async fn encodes_each_sanitized_photo_as_an_openai_image_url_content_part() {
+        let server = mock_server(vec![(AxumStatusCode::OK, successful_response())]).await;
+        let model = OpenAiCompatibleFoodDraftModel::new(&settings(
+            server.endpoint.clone(),
+            AiAuthenticationSettings::None,
+        ))
+        .unwrap();
+        let mut multimodal = request();
+        multimodal.photos = vec![
+            SanitizedFoodPhoto {
+                mime_type: FoodPhotoMimeType::Jpeg,
+                bytes: vec![1, 2, 3],
+            },
+            SanitizedFoodPhoto {
+                mime_type: FoodPhotoMimeType::Webp,
+                bytes: vec![4, 5],
+            },
+        ];
+
+        model.generate(multimodal).await.unwrap();
+
+        let requests = server.state.requests.lock().await;
+        let parts = requests[0].0["messages"][1]["content"].as_array().unwrap();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(
+            parts[0],
+            json!({ "type": "text", "text": "two cups of dal" })
+        );
+        assert_eq!(parts[1]["image_url"]["url"], "data:image/jpeg;base64,AQID");
+        assert_eq!(parts[2]["image_url"]["url"], "data:image/webp;base64,BAU=");
+        assert_eq!(requests[0].0["messages"][2]["content"], "which lentil?");
     }
 
     #[tokio::test]
