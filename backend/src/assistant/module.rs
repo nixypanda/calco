@@ -1,9 +1,16 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use axum::extract::FromRef;
 
+use crate::AppState;
 use crate::assistant::application::{FoodDraftPort, FoodDraftRequest};
 use crate::assistant::domain::{AssistantError, FoodDraftTurn};
+use crate::assistant::infrastructure::{
+    NutritionCatalogVocabularyAdapter, OpenAiCompatibleFoodDraftModel,
+};
+use crate::config::AiRuntimeSettings;
+use crate::nutrition::catalog::application::CatalogService;
 
 /// Capability data intended for a future status endpoint. It contains no
 /// endpoint, model, authentication mode, or credential material.
@@ -21,10 +28,10 @@ impl AssistantStatus {
         }
     }
 
-    pub const fn enabled(supports_images: bool) -> Self {
+    pub const fn enabled() -> Self {
         Self {
             enabled: true,
-            supports_images,
+            supports_images: false,
         }
     }
 }
@@ -40,6 +47,12 @@ pub struct AssistantModule {
     pub status: AssistantStatus,
 }
 
+impl FromRef<AppState> for AssistantModule {
+    fn from_ref(app: &AppState) -> Self {
+        app.assistant.clone()
+    }
+}
+
 impl AssistantModule {
     pub fn disabled() -> Self {
         Self {
@@ -48,13 +61,38 @@ impl AssistantModule {
         }
     }
 
-    /// Constructs an enabled module only after composition has supplied a
-    /// complete application service. The foundation intentionally does not
-    /// construct provider adapters or read runtime configuration.
-    pub fn enabled(food_drafts: Arc<dyn FoodDraftPort>, supports_images: bool) -> Self {
+    /// Constructs the text-only assistant module from validated deployment
+    /// settings and the catalog application seam.
+    ///
+    /// `AiRuntimeSettings::Enabled::supports_images` describes the selected
+    /// deployment, but this API deliberately reports `false` until slice 9
+    /// supplies image parsing and sanitization. Advertising the configured
+    /// capability sooner would invite clients to send photos this module cannot
+    /// safely process.
+    pub fn build(
+        settings: &AiRuntimeSettings,
+        catalog: Arc<CatalogService>,
+    ) -> Result<Self, AssistantError> {
+        let Some(settings) = settings.as_enabled() else {
+            return Ok(Self::disabled());
+        };
+
+        let model = Arc::new(OpenAiCompatibleFoodDraftModel::new(settings)?);
+        let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(catalog));
+        let food_drafts = Arc::new(crate::assistant::application::FoodDraftService::new(
+            model, vocabulary,
+        ));
+
+        Ok(Self::enabled_with_port(food_drafts))
+    }
+
+    /// Test and alternate-composition seam for a complete application port.
+    /// It remains text-only by construction; image support cannot be enabled
+    /// through this constructor before the transport pipeline exists.
+    pub fn enabled_with_port(food_drafts: Arc<dyn FoodDraftPort>) -> Self {
         Self {
             food_drafts,
-            status: AssistantStatus::enabled(supports_images),
+            status: AssistantStatus::enabled(),
         }
     }
 }
@@ -70,9 +108,11 @@ impl FoodDraftPort for DisabledFoodDraftPort {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::assistant::application::FoodDraftRequest;
     use crate::assistant::domain::{
-        AssistantError, Conversation, ConversationRole, ConversationTurn,
+        AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraftTurn,
     };
 
     use super::AssistantModule;
@@ -93,5 +133,25 @@ mod tests {
             module.food_drafts.draft(request).await,
             Err(AssistantError::Disabled)
         ));
+    }
+
+    #[test]
+    fn enabled_module_remains_text_only_until_image_transport_exists() {
+        struct UnusedPort;
+
+        #[async_trait::async_trait]
+        impl crate::assistant::application::FoodDraftPort for UnusedPort {
+            async fn draft(
+                &self,
+                _request: FoodDraftRequest,
+            ) -> Result<FoodDraftTurn, AssistantError> {
+                unreachable!("status does not call the food-draft port")
+            }
+        }
+
+        let module = AssistantModule::enabled_with_port(Arc::new(UnusedPort));
+
+        assert!(module.status.enabled);
+        assert!(!module.status.supports_images);
     }
 }

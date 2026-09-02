@@ -6,3 +6,6 @@
 
 pub mod nutrition_catalog;
 pub mod openai_compatible;
+
+pub use nutrition_catalog::NutritionCatalogVocabularyAdapter;
+pub use openai_compatible::OpenAiCompatibleFoodDraftModel;
