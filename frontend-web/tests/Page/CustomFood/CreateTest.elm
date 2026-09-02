@@ -2,9 +2,11 @@ module Page.CustomFood.CreateTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (CategorySuggestion, CreateFoodRequest, NutrientItem, UnitItem)
+import Data.FoodAssistant as FoodAssistant exposing (DraftStatus(..))
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
+import Page.CustomFood.Assistant as Assistant
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
@@ -143,6 +145,19 @@ tests =
                     validModel
                     |> third
                     |> Expect.equal CustomFoodCreate.SessionExpired
+        , test "assistant responses do not mutate the form before explicit apply" <|
+            \_ ->
+                let
+                    withAssistant : CustomFoodCreate.Model
+                    withAssistant =
+                        { validModel | assistant = enabledAssistant }
+                in
+                CustomFoodCreate.update
+                    (CustomFoodCreate.AssistantMsg (Assistant.DraftCompleted (Ok draftTurn)))
+                    withAssistant
+                    |> first
+                    |> .form
+                    |> Expect.equal validModel.form
         ]
 
 
@@ -203,6 +218,33 @@ gram =
 nutrientItems : List NutrientItem
 nutrientItems =
     [ { code = "PROTEIN_G", name = "Protein", unit = "g", category = "macros" } ]
+
+
+enabledAssistant : Assistant.Model
+enabledAssistant =
+    Assistant.update
+        (Assistant.StatusLoaded (Ok { enabled = True, supportsImages = False }))
+        (Tuple.first Assistant.init)
+        |> first
+
+
+draftTurn : FoodAssistant.FoodDraftTurn
+draftTurn =
+    { assistantMessage = "Here is an estimate."
+    , status = DraftReady
+    , draft =
+        Just
+            { name = "Chicken biryani"
+            , brand = Nothing
+            , categories = [ "rice dishes" ]
+            , servingSizeG = Just 350
+            , defaultQuantity = Just 1
+            , defaultUnit = Just "serving"
+            , nutrients = [ { code = "ENERGY_KCAL", amountPer100g = 172 } ]
+            , servings = [ { label = "1 bowl", quantity = 1, unit = "serving", grams = 350 } ]
+            }
+    , warnings = [ "Estimated nutrition." ]
+    }
 
 
 first : ( a, b, c ) -> a

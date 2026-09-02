@@ -7,6 +7,7 @@ module Api.Client exposing
     , isUnauthorized
     , post
     , postEmpty
+    , postMultipart
     , postNoBody
     , put
     )
@@ -32,6 +33,16 @@ get path decoder toMsg =
 post : String -> Encode.Value -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
 post path body decoder toMsg =
     request "POST" path (Http.jsonBody body) decoder toMsg
+
+
+postMultipart :
+    String
+    -> List Http.Part
+    -> Decoder value
+    -> (Result ApiError value -> msg)
+    -> Cmd msg
+postMultipart path parts decoder toMsg =
+    request "POST" path (Http.multipartBody parts) decoder toMsg
 
 
 postEmpty : String -> Encode.Value -> (Result ApiError () -> msg) -> Cmd msg

@@ -2,6 +2,7 @@ module Page.CustomFood.FormTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
+import Data.FoodAssistant as FoodAssistant
 import Data.Nutrition as Nutrition
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -492,6 +493,50 @@ tests =
                 , Form.addCategoryTag "SNACK" [ "snack" ]
                 ]
                     |> Expect.equal [ [ "snack" ], [ "snack" ] ]
+        , test "applying an AI draft replaces every supported form field" <|
+            \_ ->
+                Form.applyAiDraft draft (Form.withNutrientCatalog nutrientItems Form.emptyForm)
+                    |> (\next ->
+                            { name = next.name
+                            , brand = next.brand
+                            , categories = next.categoryInput.selected
+                            , servingSizeG = next.servingSizeG
+                            , defaultQuantity = next.defaultQuantity
+                            , defaultUnit = next.defaultUnit
+                            , nutrients = next.nutrients
+                            , servings = next.servings
+                            }
+                       )
+                    |> Expect.equal
+                        { name = "Chicken biryani"
+                        , brand = "Kitchen"
+                        , categories = [ "rice dishes", "chicken" ]
+                        , servingSizeG = "350"
+                        , defaultQuantity = "1"
+                        , defaultUnit = "serving"
+                        , nutrients =
+                            [ { code = "ENERGY_KCAL", amountPer100g = "172", unit = "kcal" }
+                            , { code = "PROTEIN_G", amountPer100g = "8.4", unit = "g" }
+                            ]
+                        , servings =
+                            [ { label = "1 bowl"
+                              , quantity = "1"
+                              , unit = "serving"
+                              , grams = "350"
+                              }
+                            ]
+                        }
+        , test "manual input detection ignores empty form defaults" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+                in
+                ( Form.hasManualInput base
+                , Form.hasManualInput { base | name = "Paneer" }
+                )
+                    |> Expect.equal ( False, True )
         ]
 
 
@@ -540,6 +585,22 @@ nutrientItems =
       , category = "macros"
       }
     ]
+
+
+draft : FoodAssistant.FoodDraft
+draft =
+    { name = "Chicken biryani"
+    , brand = Just "Kitchen"
+    , categories = [ "Rice Dishes", "Chicken" ]
+    , servingSizeG = Just 350
+    , defaultQuantity = Just 1
+    , defaultUnit = Just "serving"
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amountPer100g = 172 }
+        , { code = "PROTEIN_G", amountPer100g = 8.4 }
+        ]
+    , servings = [ { label = "1 bowl", quantity = 1, unit = "serving", grams = 350 } ]
+    }
 
 
 emptyForm : Form.FormModel

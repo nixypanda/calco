@@ -9,9 +9,11 @@ import Api.Foods as Foods
         , NutrientItem
         , UnitItem
         )
+import Data.FoodAssistant
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
+import Page.CustomFood.Assistant as Assistant
 import Page.CustomFood.Form as Form
 import Ui
 import Ui.Theme exposing (Theme)
@@ -23,6 +25,7 @@ import Ui.Theme exposing (Theme)
 
 type alias Model =
     { form : Form.FormModel
+    , assistant : Assistant.Model
     , nutrients : List NutrientItem
     , units : List UnitItem
     , error : Maybe String
@@ -31,7 +34,12 @@ type alias Model =
 
 init : ( Model, OutMsg )
 init =
-    ( { form = Form.emptyForm, nutrients = [], units = [], error = Nothing }
+    ( { form = Form.emptyForm
+      , assistant = Tuple.first Assistant.init
+      , nutrients = []
+      , units = []
+      , error = Nothing
+      }
     , RequestInitialData
     )
 
@@ -44,6 +52,7 @@ type Msg
     = NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
+    | AssistantMsg Assistant.Msg
     | CategorySuggestionsLoaded Ticket (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
@@ -54,6 +63,8 @@ type OutMsg
     | RequestInitialData
     | RequestCreateFood CreateFoodRequest
     | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
+    | RequestAssistantStatus
+    | RequestFoodDraft Data.FoodAssistant.Conversation
     | Navigate Route
     | SessionExpired
 
@@ -98,6 +109,15 @@ update msg model =
                 Form.RequestCategorySuggestions token request ->
                     RequestCategorySuggestions token request
             )
+
+        AssistantMsg subMsg ->
+            let
+                ( nextAssistant, subCmd, assistantOut ) =
+                    Assistant.update subMsg model.assistant
+            in
+            applyAssistantOutMsg assistantOut
+                { model | assistant = nextAssistant }
+                (Cmd.map AssistantMsg subCmd)
 
         CategorySuggestionsLoaded token result ->
             let
@@ -184,6 +204,25 @@ failure =
         }
 
 
+applyAssistantOutMsg : Assistant.OutMsg -> Model -> Cmd Msg -> ( Model, Cmd Msg, OutMsg )
+applyAssistantOutMsg assistantOut model command =
+    case assistantOut of
+        Assistant.NoOutMsg ->
+            ( model, command, NoOp )
+
+        Assistant.RequestStatus ->
+            ( model, command, RequestAssistantStatus )
+
+        Assistant.RequestDraft conversation ->
+            ( model, command, RequestFoodDraft conversation )
+
+        Assistant.ApplyDraft draft ->
+            ( { model | form = Form.applyAiDraft draft model.form }, command, NoOp )
+
+        Assistant.SessionExpired ->
+            ( model, command, SessionExpired )
+
+
 
 -- VIEW
 
@@ -192,6 +231,8 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme model.error
+        , Element.map AssistantMsg
+            (Assistant.view theme device (Form.hasManualInput model.form) model.assistant)
         , Element.map FormMsg (Form.view theme device model.nutrients model.units model.form)
         , Ui.primarySubmitButton device
             theme
