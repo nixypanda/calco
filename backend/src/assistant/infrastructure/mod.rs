@@ -5,3 +5,4 @@
 //! values into assistant-owned vocabulary terms.
 
 pub mod nutrition_catalog;
+pub mod openai_compatible;
