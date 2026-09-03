@@ -109,9 +109,8 @@ bodyView : Theme -> Device -> Model -> Element Msg
 bodyView theme device model =
     case model of
         Loaded foods ->
-            Ui.listCard theme
-                { rows = List.map (foodRow theme device) foods
-                , footer =
+            Ui.section theme
+                { header =
                     Just
                         (Ui.fullWidthGhostButton
                             device
@@ -119,6 +118,14 @@ bodyView theme device model =
                             "+ Create Food"
                             CreateCustomFoodClicked
                         )
+                , body =
+                    if List.isEmpty foods then
+                        [ Typography.mutedBodyParagraph theme "No items yet." ]
+
+                    else
+                        List.intersperse (Ui.hairline theme)
+                            (List.map (foodRow theme device) foods)
+                , footer = Nothing
                 }
 
         LoadFailed _ ->

@@ -601,11 +601,11 @@ loadedView theme device model =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ itemHeader theme model
+        [ itemHeader theme device model
         , Element.map FormMsg
             (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
         , detailActionsView theme device model
-        , View.Nutrients.nutritionCard theme nutrients
+        , View.Nutrients.responsiveNutritionCard device theme nutrients
         ]
 
 
@@ -665,8 +665,8 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Theme -> LoadedModel -> Element Msg
-itemHeader theme model =
+itemHeader : Theme -> Device -> LoadedModel -> Element Msg
+itemHeader theme device model =
     let
         maybeFood : Maybe ProductDetail
         maybeFood =
@@ -676,7 +676,7 @@ itemHeader theme model =
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme model.item
-            , subtitle = Just (metaSubtitle maybeFood model.log)
+            , subtitle = Just (metaSubtitle device maybeFood model.log)
             , actions = []
             }
         , case maybeFood of
@@ -711,19 +711,35 @@ itemTitle theme item =
             Typography.truncatedHeader theme meal.name
 
 
-metaSubtitle : Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
-metaSubtitle maybeFood log =
+metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
+metaSubtitle device maybeFood log =
     case maybeFood of
         Just food ->
-            Ui.SubtitleMeta
-                { items =
+            let
+                productMeta : List String
+                productMeta =
                     [ food.brand
                     , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-                    , Just ("Logged " ++ LocalDate.display log.logDate)
                     ]
                         |> List.filterMap identity
-                , separator = " ⋅ "
-                }
+
+                loggedMeta : String
+                loggedMeta =
+                    "Logged " ++ LocalDate.display log.logDate
+            in
+            if Ui.isSmall device then
+                Ui.SubtitleMetaLines
+                    { lines =
+                        [ productMeta, [ loggedMeta ] ]
+                            |> List.filter (not << List.isEmpty)
+                    , separator = " ⋅ "
+                    }
+
+            else
+                Ui.SubtitleMeta
+                    { items = productMeta ++ [ loggedMeta ]
+                    , separator = " ⋅ "
+                    }
 
         Nothing ->
             Ui.SubtitleText ("Logged " ++ LocalDate.display log.logDate)

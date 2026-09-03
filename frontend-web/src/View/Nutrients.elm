@@ -8,6 +8,7 @@ module View.Nutrients exposing
     , nutritionCard
     , nutritionInput
     , preview
+    , responsiveNutritionCard
     )
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
@@ -304,6 +305,20 @@ mapNutritionInput transform state =
 
 macroBreakdownView : Theme -> List NutrientAmount -> Element msg
 macroBreakdownView theme nutrients =
+    macroBreakdownViewWithLegend (macroLegend theme) theme nutrients
+
+
+responsiveMacroBreakdownView : Element.Device -> Theme -> List NutrientAmount -> Element msg
+responsiveMacroBreakdownView device theme nutrients =
+    macroBreakdownViewWithLegend (responsiveMacroLegend device theme) theme nutrients
+
+
+macroBreakdownViewWithLegend :
+    (MacroPortions -> Element msg)
+    -> Theme
+    -> List NutrientAmount
+    -> Element msg
+macroBreakdownViewWithLegend legend theme nutrients =
     let
         portions : MacroPortions
         portions =
@@ -311,7 +326,7 @@ macroBreakdownView theme nutrients =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ macroBarRow theme 24 portions
-        , macroLegend theme portions
+        , legend portions
         ]
 
 
@@ -384,24 +399,41 @@ barSegment color pct =
 
 macroLegend : Theme -> MacroPortions -> Element msg
 macroLegend theme portions =
-    Element.row
-        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Element.row [ Element.spacing DesignTokens.space4 ]
-            [ legendDot theme.proteinAccent
-            , Element.el [ Typography.body ]
-                (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
-            ]
-        , Element.row [ Element.spacing DesignTokens.space4 ]
-            [ legendDot theme.carbsAccent
-            , Element.el [ Typography.body ]
-                (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
-            ]
-        , Element.row [ Element.spacing DesignTokens.space4 ]
-            [ legendDot theme.fatAccent
-            , Element.el [ Typography.body ]
-                (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
-            ]
+    macroLegendItems theme portions
+        |> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+
+
+responsiveMacroLegend : Element.Device -> Theme -> MacroPortions -> Element msg
+responsiveMacroLegend device theme portions =
+    if Ui.isSmall device then
+        macroLegendItems theme portions
+            |> Element.column
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                ]
+
+    else
+        macroLegend theme portions
+
+
+macroLegendItems : Theme -> MacroPortions -> List (Element msg)
+macroLegendItems theme portions =
+    [ Element.row [ Element.spacing DesignTokens.space4 ]
+        [ legendDot theme.proteinAccent
+        , Element.el [ Typography.body ]
+            (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
         ]
+    , Element.row [ Element.spacing DesignTokens.space4 ]
+        [ legendDot theme.carbsAccent
+        , Element.el [ Typography.body ]
+            (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
+        ]
+    , Element.row [ Element.spacing DesignTokens.space4 ]
+        [ legendDot theme.fatAccent
+        , Element.el [ Typography.body ]
+            (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
+        ]
+    ]
 
 
 legendDot : Element.Color -> Element msg
@@ -490,6 +522,19 @@ nutritionCard theme nutrients =
         { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
             [ macroBreakdownView theme nutrients
+            , Ui.hairline theme
+            , nutrientsTableInner theme nutrients
+            ]
+        , footer = Nothing
+        }
+
+
+responsiveNutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
+responsiveNutritionCard device theme nutrients =
+    Ui.section theme
+        { header = Just (Typography.subsectionTitle theme "Nutrition")
+        , body =
+            [ responsiveMacroBreakdownView device theme nutrients
             , Ui.hairline theme
             , nutrientsTableInner theme nutrients
             ]
