@@ -11,7 +11,6 @@ use crate::auth::domain::{
 use crate::auth::infrastructure::postgres::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
 };
-use crate::config::AppConfig;
 
 #[derive(Clone)]
 pub struct AuthModule {
@@ -22,19 +21,13 @@ pub struct AuthModule {
 }
 
 impl AuthModule {
-    pub fn build(pool: &PgPool, config: &AppConfig) -> Self {
+    pub fn build(pool: &PgPool, cookie_config: SessionCookieConfig) -> Self {
         let identity_repo =
             Arc::new(PostgresIdentityRepository::new(pool.clone())) as Arc<dyn IdentityRepository>;
         let session_repo =
             Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
         let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
             as Arc<dyn UserProfileRepository>;
-
-        let cookie_config = SessionCookieConfig {
-            cookie_name: config.session_cookie_name.clone(),
-            cookie_secure: config.session_cookie_secure,
-            ttl_seconds: config.session_ttl_seconds,
-        };
 
         let bootstrap = AuthBootstrapService::new(
             identity_repo.clone(),

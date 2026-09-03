@@ -24,6 +24,7 @@ base64 = "0.22"
 sha2 = "0.10"
 hex = "0.4"
 dotenvy = "0.15"
+toml_edit = "0.25"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
