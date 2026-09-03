@@ -128,8 +128,8 @@ foodDraftDecoder =
             (Decode.field "name" Decode.string)
             (Decode.field "brand" (Decode.nullable Decode.string))
             (Decode.field "categories" (Decode.list Decode.string))
-            (Decode.field "serving_size_g" (Decode.nullable Decode.float))
-            (Decode.field "default_quantity" (Decode.nullable Decode.float))
+            (Decode.field "serving_size_g" (Decode.nullable decimalDecoder))
+            (Decode.field "default_quantity" (Decode.nullable decimalDecoder))
             (Decode.field "default_unit" (Decode.nullable Decode.string))
             (Decode.field "nutrients" (Decode.list draftNutrientDecoder))
             (Decode.field "servings" (Decode.list draftServingDecoder))
@@ -140,7 +140,7 @@ draftNutrientDecoder =
     strictObject [ "code", "amount_per_100g" ] <|
         Decode.map2 DraftNutrient
             (Decode.field "code" Decode.string)
-            (Decode.field "amount_per_100g" Decode.float)
+            (Decode.field "amount_per_100g" decimalDecoder)
 
 
 draftServingDecoder : Decoder DraftServing
@@ -148,9 +148,26 @@ draftServingDecoder =
     strictObject [ "label", "quantity", "unit", "grams" ] <|
         Decode.map4 DraftServing
             (Decode.field "label" Decode.string)
-            (Decode.field "quantity" Decode.float)
+            (Decode.field "quantity" decimalDecoder)
             (Decode.field "unit" Decode.string)
-            (Decode.field "grams" Decode.float)
+            (Decode.field "grams" decimalDecoder)
+
+
+decimalDecoder : Decoder Float
+decimalDecoder =
+    Decode.oneOf
+        [ Decode.float
+        , Decode.string
+            |> Decode.andThen
+                (\raw ->
+                    case String.toFloat raw of
+                        Just value ->
+                            Decode.succeed value
+
+                        Nothing ->
+                            Decode.fail ("Invalid decimal string: " ++ raw)
+                )
+        ]
 
 
 draftStatusDecoder : Decoder DraftStatus

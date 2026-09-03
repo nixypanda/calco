@@ -22,6 +22,34 @@ tests =
                         )
                     |> Expect.equal
                         (Ok ( "Estimated from your description.", Just "Chicken biryani", Just 4 ))
+        , test "decodes backend decimal strings throughout a draft" <|
+            \_ ->
+                Decode.decodeString FoodAssistant.foodDraftTurnDecoder stringDecimalDraftJson
+                    |> Result.map
+                        (\turn ->
+                            turn.draft
+                                |> Maybe.map
+                                    (\draft ->
+                                        ( ( draft.servingSizeG, draft.defaultQuantity )
+                                        , List.map .amountPer100g draft.nutrients
+                                        , draft.servings
+                                            |> List.head
+                                            |> Maybe.map
+                                                (\serving ->
+                                                    ( serving.quantity, serving.grams )
+                                                )
+                                        )
+                                    )
+                        )
+                    |> Expect.equal
+                        (Ok
+                            (Just
+                                ( ( Just 350, Just 1 )
+                                , [ 172, 8.4, 22.1, 5.7 ]
+                                , Just ( 1, 350 )
+                                )
+                            )
+                        )
         , test "rejects extra draft fields" <|
             \_ ->
                 Decode.decodeString FoodAssistant.foodDraftTurnDecoder
@@ -54,5 +82,21 @@ completeDraftJson =
         , "{\"code\":\"FAT_G\",\"amount_per_100g\":5.7}],"
         , "\"servings\":[{\"label\":\"1 bowl\",\"quantity\":1,\"unit\":\"serving\","
         , "\"grams\":350}]},"
+        , "\"warnings\":[\"Estimated nutrition.\"]}"
+        ]
+
+
+stringDecimalDraftJson : String
+stringDecimalDraftJson =
+    String.concat
+        [ "{\"assistant_message\":\"Estimated from your description.\",\"status\":\"draft_ready\","
+        , "\"draft\":{\"name\":\"Chicken biryani\",\"brand\":null,\"categories\":[\"rice dishes\"],"
+        , "\"serving_size_g\":\"350\",\"default_quantity\":\"1\",\"default_unit\":\"serving\","
+        , "\"nutrients\":[{\"code\":\"ENERGY_KCAL\",\"amount_per_100g\":\"172\"},"
+        , "{\"code\":\"PROTEIN_G\",\"amount_per_100g\":\"8.4\"},"
+        , "{\"code\":\"CARBS_G\",\"amount_per_100g\":\"22.1\"},"
+        , "{\"code\":\"FAT_G\",\"amount_per_100g\":\"5.7\"}],"
+        , "\"servings\":[{\"label\":\"1 bowl\",\"quantity\":\"1\",\"unit\":\"serving\","
+        , "\"grams\":\"350\"}]},"
         , "\"warnings\":[\"Estimated nutrition.\"]}"
         ]
