@@ -8,6 +8,24 @@
 
 let
   cfg = config.services.calco;
+  tomlFormat = pkgs.formats.toml { };
+  generatedConfig = tomlFormat.generate "calco-config.toml" {
+    ai = {
+      enabled = cfg.ai.enable;
+      endpoint = cfg.ai.endpoint;
+      model = cfg.ai.model;
+      supports_images = cfg.ai.supportsImages;
+      authentication = {
+        kind = cfg.ai.authentication.kind;
+      }
+      // lib.optionalAttrs (cfg.ai.authentication.headerName != null) {
+        header_name = cfg.ai.authentication.headerName;
+      }
+      // lib.optionalAttrs (cfg.ai.authentication.apiKeyFile != null) {
+        api_key_file = cfg.ai.authentication.apiKeyFile;
+      };
+    };
+  };
   inherit (lib)
     mkEnableOption
     mkOption
@@ -66,6 +84,58 @@ in
         Frontend static-asset package. Consumers point their reverse proxy
         (caddy/nginx/...) at `''${cfg.frontendPackage}/share/calco/web`.
       '';
+    };
+
+    ai = {
+      enable = mkEnableOption "CalCo AI food assistant";
+
+      endpoint = mkOption {
+        type = types.str;
+        default = "";
+        example = "http://127.0.0.1:11434/v1/chat/completions";
+        description = "Complete OpenAI-compatible Chat Completions endpoint URL.";
+      };
+
+      model = mkOption {
+        type = types.str;
+        default = "";
+        example = "gemma3:12b";
+        description = "Provider model identifier.";
+      };
+
+      supportsImages = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Whether the configured model accepts image input.";
+      };
+
+      authentication = {
+        kind = mkOption {
+          type = types.enum [
+            "none"
+            "bearer"
+            "header"
+          ];
+          default = "none";
+          description = "Authentication method used by the AI provider.";
+        };
+
+        headerName = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = "HTTP header name used when authentication.kind is header.";
+        };
+
+        apiKeyFile = mkOption {
+          type = types.nullOr types.str;
+          default = null;
+          description = ''
+            Runtime path to the AI provider API-key file. This is a string,
+            rather than a Nix path, so a secret is never copied into the Nix
+            store.
+          '';
+        };
+      };
     };
   };
 
@@ -132,8 +202,14 @@ in
         APP_HOST = "127.0.0.1";
         APP_PORT = toString cfg.port;
         DATABASE_URL = "postgres://${cfg.databaseUser}@localhost/${cfg.databaseName}?host=/run/postgresql";
+        CALCO_CONFIG_FILE = generatedConfig;
         RUST_LOG = "info";
       };
+
+      restartTriggers = [
+        cfg.backendPackage
+        generatedConfig
+      ];
 
       serviceConfig = {
         User = cfg.databaseUser;

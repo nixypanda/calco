@@ -10,7 +10,9 @@ mod file;
 use std::path::PathBuf;
 
 pub use environment::{EnvironmentConfig, SessionEnvironmentConfig};
-pub use file::FileConfig;
+pub use file::{
+    AiAuthenticationSettings, AiEnabledSettings, AiModel, AiRuntimeSettings, FileConfig,
+};
 
 /// All startup settings required by application composition.
 #[derive(Clone)]
@@ -66,7 +68,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::{AppConfig, ConfigError, EnvironmentConfig, FileConfig};
+    use super::{AiAuthenticationSettings, AppConfig, ConfigError, EnvironmentConfig, FileConfig};
 
     static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -159,14 +161,139 @@ mod tests {
     fn unknown_fields_fail_typed_deserialization() {
         for contents in [
             "unexpected = true\n",
-            "[ai]\nenabled = false\n",
-            "[nested.section]\nvalue = 1\n",
+            "[ai]\nenabled = false\nunexpected = true\n",
+            "[ai.authentication]\nkind = \"none\"\n",
         ] {
             let config = TempFile::new(contents);
 
             assert_eq!(
                 super::file::load_config_file(Some(config.path())),
                 Err(ConfigError::InvalidToml)
+            );
+        }
+    }
+
+    #[test]
+    fn absent_ai_section_and_explicitly_disabled_ai_are_runtime_disabled() {
+        for contents in [
+            "# AI configuration is optional\n",
+            "[ai]\nenabled = false\n",
+            "[ai]\nenabled = false\nendpoint = \"\"\nmodel = \"\"\n[ai.authentication]\nkind = \"none\"\n",
+        ] {
+            let config = TempFile::new(contents);
+
+            assert_eq!(
+                super::file::load_config_file(Some(config.path())),
+                Ok(FileConfig::default())
+            );
+        }
+    }
+
+    #[test]
+    fn enabled_ai_deserializes_to_complete_runtime_settings() {
+        let config = TempFile::new(
+            "[ai]\nenabled = true\nendpoint = \"https://provider.example/v1/chat/completions\"\nmodel = \"  vision-model  \"\nsupports_images = true\n[ai.authentication]\nkind = \"header\"\nheader_name = \"api-key\"\napi_key_file = \"/run/secrets/provider-key\"\n",
+        );
+
+        let loaded = super::file::load_config_file(Some(config.path())).unwrap();
+        let settings = loaded.ai.as_enabled().expect("enabled AI settings");
+
+        assert_eq!(
+            settings.endpoint.as_str(),
+            "https://provider.example/v1/chat/completions"
+        );
+        assert_eq!(settings.model.as_str(), "vision-model");
+        assert!(settings.supports_images);
+        assert_eq!(
+            settings.authentication,
+            AiAuthenticationSettings::Header {
+                header_name: "api-key".parse().unwrap(),
+                api_key_file: PathBuf::from("/run/secrets/provider-key"),
+            }
+        );
+    }
+
+    #[test]
+    fn tracked_assistant_configs_load_without_reading_their_key_files() {
+        let config_directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("../assistant-config");
+        let expected = [
+            (
+                "groq.toml",
+                "https://api.groq.com/openai/v1/chat/completions",
+                "qwen/qwen3.6-27b",
+                "assistant-config/groq-api-key",
+            ),
+            (
+                "openrouter.toml",
+                "https://openrouter.ai/api/v1/chat/completions",
+                "openrouter/free",
+                "assistant-config/openrouter-api-key",
+            ),
+        ];
+
+        for (file_name, endpoint, model, api_key_file) in expected {
+            let loaded = super::file::load_config_file(Some(&config_directory.join(file_name)))
+                .expect("tracked config loads without a credential file");
+            let settings = loaded.ai.as_enabled().expect("AI is enabled");
+
+            assert_eq!(settings.endpoint.as_str(), endpoint);
+            assert_eq!(settings.model.as_str(), model);
+            assert!(settings.supports_images);
+            assert_eq!(
+                settings.authentication,
+                AiAuthenticationSettings::Bearer {
+                    api_key_file: PathBuf::from(api_key_file),
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn malformed_unknown_wrong_type_and_incomplete_ai_config_are_invalid_toml() {
+        let invalid_configs = [
+            "[ai\nenabled = true\n",
+            "[ai]\nenabled = true\nunknown = true\n",
+            "[ai]\nenabled = \"true\"\n",
+            "[ai]\nenabled = true\nendpoint = 42\nmodel = \"model\"\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = 42\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\nsupports_images = \"yes\"\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"none\"\nunexpected = true\n",
+            "[ai]\nenabled = true\nmodel = \"model\"\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n",
+            "[ai]\nenabled = true\nendpoint = \"ftp://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"none\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"   \"\n[ai.authentication]\nkind = \"none\"\n",
+        ];
+
+        for contents in invalid_configs {
+            let config = TempFile::new(contents);
+            assert_eq!(
+                super::file::load_config_file(Some(config.path())),
+                Err(ConfigError::InvalidToml),
+                "{contents}"
+            );
+        }
+    }
+
+    #[test]
+    fn authentication_shapes_are_refined_during_deserialization() {
+        let invalid_configs = [
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"other\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"none\"\napi_key_file = \"/run/key\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"bearer\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"bearer\"\napi_key_file = \"\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"bearer\"\napi_key_file = \"/run/key\"\nheader_name = \"api-key\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"header\"\napi_key_file = \"/run/key\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"header\"\nheader_name = \"not a header\"\napi_key_file = \"/run/key\"\n",
+            "[ai]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[ai.authentication]\nkind = \"header\"\nheader_name = \"api-key\"\napi_key_file = \"\"\n",
+        ];
+
+        for contents in invalid_configs {
+            let config = TempFile::new(contents);
+            assert_eq!(
+                super::file::load_config_file(Some(config.path())),
+                Err(ConfigError::InvalidToml),
+                "{contents}"
             );
         }
     }

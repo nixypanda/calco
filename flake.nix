@@ -50,6 +50,12 @@
 
           packages.default = self.packages.${system}.backend;
 
+          checks = pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            calco-nixos-module-evaluation = import ./nix/module-test.nix {
+              inherit self nixpkgs pkgs;
+            };
+          };
+
           devShells.default = pkgs.mkShell {
             buildInputs = with pkgs; [
               # Backend

@@ -6,6 +6,9 @@
 .env.local
 .env.*.local
 
+# Local AI provider credentials (the matching TOML metadata is tracked).
+assistant-config/*-api-key
+
 # OS
 .DS_Store
 Thumbs.db
