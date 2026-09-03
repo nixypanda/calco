@@ -6,7 +6,7 @@ use axum::http::HeaderValue;
 use super::ConfigError;
 
 /// Typed environment-owned server, database, session, and CORS settings.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct EnvironmentConfig {
     pub database_url: String,
     pub bind_addr: SocketAddr,

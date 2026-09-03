@@ -10,22 +10,31 @@ mod file;
 use std::path::PathBuf;
 
 pub use environment::{EnvironmentConfig, SessionEnvironmentConfig};
+pub use file::FileConfig;
 
 /// All startup settings required by application composition.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppConfig {
     pub environment: EnvironmentConfig,
+    pub file: FileConfig,
 }
 
 impl AppConfig {
-    /// Loads typed process settings and validates the optional TOML file named
-    /// by `CALCO_CONFIG_FILE`.
+    /// Loads typed process settings and the optional TOML file named by
+    /// `CALCO_CONFIG_FILE`.
     pub fn from_env() -> Result<Self, ConfigError> {
-        let environment = EnvironmentConfig::from_env()?;
         let config_file = std::env::var_os("CALCO_CONFIG_FILE").map(PathBuf::from);
-        file::validate_config_file(config_file.as_deref())?;
+        Self::from_sources(|name| std::env::var(name).ok(), config_file.as_deref())
+    }
 
-        Ok(Self { environment })
+    fn from_sources(
+        environment_lookup: impl Fn(&str) -> Option<String>,
+        config_file: Option<&std::path::Path>,
+    ) -> Result<Self, ConfigError> {
+        let environment = EnvironmentConfig::from_lookup(environment_lookup)?;
+        let file = file::load_config_file(config_file)?;
+
+        Ok(Self { environment, file })
     }
 }
 
@@ -49,8 +58,6 @@ pub enum ConfigError {
     ConfigFileUnreadable,
     #[error("CALCO_CONFIG_FILE contains invalid TOML")]
     InvalidToml,
-    #[error("invalid configuration for {field}")]
-    InvalidField { field: &'static str },
 }
 
 #[cfg(test)]
@@ -59,7 +66,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use super::{ConfigError, EnvironmentConfig};
+    use super::{AppConfig, ConfigError, EnvironmentConfig, FileConfig};
 
     static TEMP_FILE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -86,8 +93,26 @@ mod tests {
     }
 
     #[test]
-    fn absent_config_path_is_valid() {
-        assert_eq!(super::file::validate_config_file(None), Ok(()));
+    fn app_config_retains_typed_file_config() {
+        let config_file = TempFile::new("");
+        let config = AppConfig::from_sources(
+            |name| match name {
+                "DATABASE_URL" => Some("postgres://calco:calco/calco".into()),
+                _ => None,
+            },
+            Some(config_file.path()),
+        )
+        .unwrap();
+
+        assert_eq!(config.file, FileConfig::default());
+    }
+
+    #[test]
+    fn absent_config_path_loads_default_typed_config() {
+        assert_eq!(
+            super::file::load_config_file(None),
+            Ok(FileConfig::default())
+        );
     }
 
     #[test]
@@ -96,12 +121,12 @@ mod tests {
         let comments = TempFile::new("# Feature configuration is optional.\n");
 
         assert_eq!(
-            super::file::validate_config_file(Some(empty.path())),
-            Ok(())
+            super::file::load_config_file(Some(empty.path())),
+            Ok(FileConfig::default())
         );
         assert_eq!(
-            super::file::validate_config_file(Some(comments.path())),
-            Ok(())
+            super::file::load_config_file(Some(comments.path())),
+            Ok(FileConfig::default())
         );
     }
 
@@ -112,7 +137,9 @@ mod tests {
             std::process::id()
         ));
 
-        let error = super::file::validate_config_file(Some(&missing_path)).unwrap_err();
+        let error = super::file::load_config_file(Some(&missing_path))
+            .err()
+            .unwrap();
 
         assert_eq!(error, ConfigError::ConfigFileUnreadable);
         assert!(!format!("{error:?} {error}").contains("contains-no-secret"));
@@ -123,13 +150,13 @@ mod tests {
         let config = TempFile::new("[feature\nenabled = true\n");
 
         assert_eq!(
-            super::file::validate_config_file(Some(config.path())),
+            super::file::load_config_file(Some(config.path())),
             Err(ConfigError::InvalidToml)
         );
     }
 
     #[test]
-    fn top_level_fields_are_reserved_until_their_feature_is_introduced() {
+    fn unknown_fields_fail_typed_deserialization() {
         for contents in [
             "unexpected = true\n",
             "[ai]\nenabled = false\n",
@@ -138,10 +165,8 @@ mod tests {
             let config = TempFile::new(contents);
 
             assert_eq!(
-                super::file::validate_config_file(Some(config.path())),
-                Err(ConfigError::InvalidField {
-                    field: "CALCO_CONFIG_FILE"
-                })
+                super::file::load_config_file(Some(config.path())),
+                Err(ConfigError::InvalidToml)
             );
         }
     }
@@ -198,7 +223,7 @@ mod tests {
         let valid_database = || Some("postgres://calco:calco@localhost/calco".to_owned());
 
         assert_eq!(
-            EnvironmentConfig::from_lookup(|_| None).unwrap_err(),
+            EnvironmentConfig::from_lookup(|_| None).err().unwrap(),
             ConfigError::DatabaseUrlMissing
         );
         assert_eq!(
@@ -207,7 +232,8 @@ mod tests {
                 "APP_HOST" => Some("not-an-ip".into()),
                 _ => None,
             })
-            .unwrap_err(),
+            .err()
+            .unwrap(),
             ConfigError::InvalidAppHost
         );
         assert_eq!(
@@ -216,7 +242,8 @@ mod tests {
                 "APP_PORT" => Some("not-a-port".into()),
                 _ => None,
             })
-            .unwrap_err(),
+            .err()
+            .unwrap(),
             ConfigError::InvalidAppPort
         );
         for value in ["TRUE", "1", "yes"] {
@@ -226,7 +253,8 @@ mod tests {
                     "SESSION_COOKIE_SECURE" => Some(value.into()),
                     _ => None,
                 })
-                .unwrap_err(),
+                .err()
+                .unwrap(),
                 ConfigError::InvalidSessionCookieSecure
             );
         }
@@ -237,7 +265,8 @@ mod tests {
                     "SESSION_TTL_SECONDS" => Some(value.into()),
                     _ => None,
                 })
-                .unwrap_err(),
+                .err()
+                .unwrap(),
                 ConfigError::InvalidSessionTtl
             );
         }
@@ -247,7 +276,8 @@ mod tests {
                 "CORS_ALLOWED_ORIGINS" => Some("https://valid.example,invalid\nvalue".into()),
                 _ => None,
             })
-            .unwrap_err(),
+            .err()
+            .unwrap(),
             ConfigError::InvalidCorsAllowedOrigins
         );
     }

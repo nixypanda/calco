@@ -6,7 +6,7 @@ use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, Method, Request, StatusCode, header};
 use calco_backend::build_router;
-use calco_backend::config::{AppConfig, EnvironmentConfig, SessionEnvironmentConfig};
+use calco_backend::config::{AppConfig, EnvironmentConfig, FileConfig, SessionEnvironmentConfig};
 use http_body_util::BodyExt;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -28,6 +28,7 @@ pub fn test_config() -> AppConfig {
             },
             cors_allowed_origins: Vec::new(),
         },
+        file: FileConfig::default(),
     }
 }
 

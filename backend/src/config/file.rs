@@ -1,24 +1,23 @@
 use std::path::Path;
 
-use toml_edit::DocumentMut;
+use serde::Deserialize;
 
 use super::ConfigError;
 
-pub(super) fn validate_config_file(path: Option<&Path>) -> Result<(), ConfigError> {
+/// Typed settings loaded from `CALCO_CONFIG_FILE`.
+///
+/// This is intentionally empty until file-owned application features are
+/// introduced. Rejecting unknown fields prevents a misspelled or premature
+/// setting from being silently ignored.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct FileConfig {}
+
+pub(super) fn load_config_file(path: Option<&Path>) -> Result<FileConfig, ConfigError> {
     let Some(path) = path else {
-        return Ok(());
+        return Ok(FileConfig::default());
     };
 
     let raw = std::fs::read_to_string(path).map_err(|_| ConfigError::ConfigFileUnreadable)?;
-    let document = raw
-        .parse::<DocumentMut>()
-        .map_err(|_| ConfigError::InvalidToml)?;
-
-    if !document.as_table().is_empty() {
-        return Err(ConfigError::InvalidField {
-            field: "CALCO_CONFIG_FILE",
-        });
-    }
-
-    Ok(())
+    toml_edit::de::from_str(&raw).map_err(|_| ConfigError::InvalidToml)
 }
