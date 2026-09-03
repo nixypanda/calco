@@ -8,9 +8,10 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::auth::domain::SessionCookieConfig;
 use crate::auth::interfaces::http::auth_routes;
 use crate::auth::module::AuthModule;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, EnvironmentConfig};
 use crate::import::interfaces::http::import_routes;
 use crate::import::module::ImportModule;
 use crate::nutrition::catalog::interfaces::catalog_routes;
@@ -29,19 +30,24 @@ pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// decoupled from the others while sharing a single router state.
 #[derive(Clone)]
 pub struct AppState {
-    pub config: AppConfig,
     pub auth: AuthModule,
     pub nutrition: NutritionModule,
     pub import: ImportModule,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
-    let auth = AuthModule::build(&pool, &config);
+    let auth = AuthModule::build(
+        &pool,
+        SessionCookieConfig {
+            cookie_name: config.environment.session.cookie_name.clone(),
+            cookie_secure: config.environment.session.cookie_secure,
+            ttl_seconds: config.environment.session.ttl_seconds,
+        },
+    );
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(&pool);
 
     Ok(AppState {
-        config,
         auth,
         nutrition,
         import,
@@ -49,7 +55,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
 }
 
 pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, BoxError> {
-    let cors = build_cors_layer(&config);
+    let cors = build_cors_layer(&config.environment);
     let auth_state = build_app_state(pool, config).await?;
 
     let api = Router::new()
@@ -67,7 +73,7 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
     Ok(Router::new().nest("/api", api).layer(cors))
 }
 
-fn build_cors_layer(config: &AppConfig) -> CorsLayer {
+fn build_cors_layer(config: &EnvironmentConfig) -> CorsLayer {
     let methods = [
         Method::GET,
         Method::POST,
@@ -84,14 +90,7 @@ fn build_cors_layer(config: &AppConfig) -> CorsLayer {
             .allow_headers(headers);
     }
 
-    let origins: Vec<HeaderValue> = config
-        .cors_allowed_origins
-        .iter()
-        .map(|o| {
-            HeaderValue::from_str(o)
-                .unwrap_or_else(|_| panic!("invalid CORS_ALLOWED_ORIGINS entry: {o}"))
-        })
-        .collect();
+    let origins: Vec<HeaderValue> = config.cors_allowed_origins.clone();
 
     CorsLayer::new()
         .allow_origin(AllowOrigin::list(origins))
