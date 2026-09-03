@@ -4,7 +4,7 @@
 # See https://github.com/casey/just
 
 default_database_url := "postgres://calco:calco@localhost:5432/calco"
-default_calco_config_file := justfile_directory() + "/calco-config.toml"
+default_calco_config_file := justfile_directory() + "/assistant-config/openrouter.toml"
 
 # ──────────────────────────────────────────────
 # Database

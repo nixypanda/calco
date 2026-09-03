@@ -7,8 +7,8 @@
 .env.*.local
 
 # Local deployment configuration
-calco-config.toml
-calco-openrouter-api-key
+assistant-config/*.toml
+assistant-config/*-api-key
 
 # OS
 .DS_Store
