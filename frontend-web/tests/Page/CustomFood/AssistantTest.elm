@@ -95,6 +95,40 @@ tests =
                 )
                     |> Expect.equal
                         ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
+        , test "draft preview exposes every field before application" <|
+            \_ ->
+                Assistant.draftPreviewData
+                    { draft
+                        | brand = Just "Restaurant"
+                        , categories = [ "chicken", "rice", "main dish" ]
+                        , nutrients =
+                            [ { code = "ENERGY_KCAL", amountPer100g = 220 }
+                            , { code = "FAT_G", amountPer100g = 15 }
+                            , { code = "SODIUM_MG", amountPer100g = 500 }
+                            ]
+                        , servings =
+                            [ { label = "One Bowl"
+                              , quantity = 1
+                              , unit = "serving"
+                              , grams = 350
+                              }
+                            ]
+                    }
+                    |> Expect.equal
+                        { details =
+                            [ ( "Name", "Chicken biryani" )
+                            , ( "Brand", "Restaurant" )
+                            , ( "Categories", "chicken, rice, main dish" )
+                            , ( "Serving size", "350 g" )
+                            , ( "Default quantity", "1 serving" )
+                            ]
+                        , nutrients =
+                            [ ( "Energy", "220 kcal" )
+                            , ( "Fat", "15 g" )
+                            , ( "Sodium", "500 mg" )
+                            ]
+                        , servings = [ ( "One Bowl", "1 serving = 350 g" ) ]
+                        }
         , test "unauthorized draft failure expires the session" <|
             \_ ->
                 enabled

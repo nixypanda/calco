@@ -1,10 +1,12 @@
 module Page.CustomFood.Assistant exposing
     ( ChatModel
+    , DraftPreviewData
     , Model(..)
     , Msg(..)
     , OutMsg(..)
     , PhotoMetadata
     , RequestState(..)
+    , draftPreviewData
     , init
     , update
     , validatePhotoMetadata
@@ -28,11 +30,13 @@ import Element.Font as Font
 import Element.Input as Input
 import File exposing (File)
 import File.Select
+import Lib.Number as Number
 import Task
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
+import View.Nutrients as Nutrients
 
 
 type Model
@@ -60,6 +64,13 @@ type alias ChatModel =
 type alias PhotoMetadata =
     { mimeType : String
     , size : Int
+    }
+
+
+type alias DraftPreviewData =
+    { details : List ( String, String )
+    , nutrients : List ( String, String )
+    , servings : List ( String, String )
     }
 
 
@@ -416,6 +427,7 @@ enabledView theme device formHasManualInput chat =
 expandedContent : Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
 expandedContent theme device formHasManualInput chat =
     [ transcriptView theme chat.transcript
+    , draftPreviewView theme chat.draft
     , warningView theme chat.warnings
     , requestErrorView theme chat.request
     , descriptionInput theme chat
@@ -423,6 +435,138 @@ expandedContent theme device formHasManualInput chat =
     , sendButton theme device chat.request
     ]
         ++ draftActionView theme device formHasManualInput chat
+
+
+draftPreviewView : Theme -> Maybe FoodDraft -> Element Msg
+draftPreviewView theme maybeDraft =
+    case maybeDraft of
+        Nothing ->
+            Element.none
+
+        Just draft ->
+            let
+                preview : DraftPreviewData
+                preview =
+                    draftPreviewData draft
+            in
+            Element.column
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space12
+                , Element.padding DesignTokens.space12
+                , Border.width 1
+                , Border.color theme.divider
+                , Border.rounded DesignTokens.radiusControl
+                , Background.color theme.inputFill
+                ]
+                [ Typography.subsectionTitle theme "Draft preview"
+                , previewRows theme preview.details
+                , previewSection theme "Nutrition per 100 g" preview.nutrients
+                , previewSection theme "Servings" preview.servings
+                ]
+
+
+previewSection : Theme -> String -> List ( String, String ) -> Element Msg
+previewSection theme title rows =
+    Element.column
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ Element.el [ Font.bold ] (Element.text title)
+        , if List.isEmpty rows then
+            Typography.mutedParagraph theme "None suggested."
+
+          else
+            previewRows theme rows
+        ]
+
+
+previewRows : Theme -> List ( String, String ) -> Element Msg
+previewRows theme rows =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        (List.map (previewRow theme) rows)
+
+
+previewRow : Theme -> ( String, String ) -> Element Msg
+previewRow theme ( label, value ) =
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Element.el [ Font.color theme.textMuted ] (Element.text label)
+        , Element.paragraph [ Element.width Element.fill, Font.alignRight ]
+            [ Element.text value ]
+        ]
+
+
+draftPreviewData : FoodDraft -> DraftPreviewData
+draftPreviewData draft =
+    { details =
+        [ ( "Name", draft.name )
+        , ( "Brand", Maybe.withDefault "Not specified" draft.brand )
+        , ( "Categories", defaultText "None suggested" (String.join ", " draft.categories) )
+        , ( "Serving size"
+          , draft.servingSizeG
+                |> Maybe.map (\grams -> formatDecimal grams ++ " g")
+                |> Maybe.withDefault "Not specified"
+          )
+        , ( "Default quantity"
+          , case ( draft.defaultQuantity, draft.defaultUnit ) of
+                ( Just quantity, Just unit ) ->
+                    formatDecimal quantity ++ " " ++ unit
+
+                _ ->
+                    "Not specified"
+          )
+        ]
+    , nutrients =
+        List.map
+            (\nutrient ->
+                ( Nutrients.nutrientLabel nutrient.code
+                , formatDecimal nutrient.amountPer100g ++ " " ++ nutrientUnit nutrient.code
+                )
+            )
+            draft.nutrients
+    , servings =
+        List.map
+            (\serving ->
+                ( serving.label
+                , formatDecimal serving.quantity
+                    ++ " "
+                    ++ serving.unit
+                    ++ " = "
+                    ++ formatDecimal serving.grams
+                    ++ " g"
+                )
+            )
+            draft.servings
+    }
+
+
+formatDecimal : Float -> String
+formatDecimal =
+    Number.toFixedTrimmed 3
+
+
+nutrientUnit : String -> String
+nutrientUnit code =
+    if String.endsWith "_KCAL" code then
+        "kcal"
+
+    else if String.endsWith "_MG" code then
+        "mg"
+
+    else if String.endsWith "_UG" code then
+        "µg"
+
+    else if String.endsWith "_G" code then
+        "g"
+
+    else
+        ""
+
+
+defaultText : String -> String -> String
+defaultText fallback value =
+    if String.isEmpty value then
+        fallback
+
+    else
+        value
 
 
 transcriptView : Theme -> List ConversationTurn -> Element Msg
