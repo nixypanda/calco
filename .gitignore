@@ -8,6 +8,7 @@
 
 # Local deployment configuration
 calco-config.toml
+calco-openrouter-api-key
 
 # OS
 .DS_Store
