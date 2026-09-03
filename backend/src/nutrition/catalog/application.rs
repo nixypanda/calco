@@ -178,6 +178,24 @@ impl CatalogService {
         self.unit_repo.list_all().await
     }
 
+    pub fn required_custom_food_nutrient_codes(&self) -> Vec<String> {
+        REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES
+            .iter()
+            .map(|code| (*code).to_owned())
+            .collect()
+    }
+
+    /// Unit codes accepted by the catalog for a custom food's default quantity.
+    ///
+    /// Keep callers on the same mass-only policy used by `Product::new_custom`
+    /// instead of reconstructing that policy from unit metadata.
+    pub fn custom_food_default_unit_codes(&self) -> Vec<String> {
+        self.unit_converter
+            .mass_unit_codes()
+            .map(str::to_owned)
+            .collect()
+    }
+
     pub async fn allowed_units(
         &self,
         product: &Product,

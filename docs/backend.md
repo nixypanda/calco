@@ -378,6 +378,33 @@ GET  /imports/{id}
 GET  /imports/{id}/errors
 ```
 
+### Assistant
+
+Authenticated user routes:
+
+```text
+GET  /api/ai/food-assistant/status
+POST /api/ai/custom-food/draft
+```
+
+`GET /api/ai/food-assistant/status` returns whether text drafting is enabled and always
+reports `supports_images: false` for this API version.
+
+`POST /api/ai/custom-food/draft` accepts `multipart/form-data` with exactly one
+non-file `conversation` field. Its JSON value is `{ "turns": [...] }`, with a
+non-empty array of at most 20 `{ role, text }` turns. Roles are `user` or
+`assistant`, and each trimmed text value is limited to 4,000 characters. The
+body is limited to 96 KiB. Unknown fields, duplicate conversation fields, and
+the reserved `photos` field are rejected. The response is either
+`needs_clarification` with an assistant message or `draft_ready` with a complete
+reviewable custom-food draft and warnings.
+
+The route does not create or update catalog data. Clients explicitly submit an
+accepted draft through `POST /api/foods/custom`. Photo inputs are not accepted in
+this text-only slice. Per-user throttling and the global in-flight limit return
+`429` with `Retry-After`; disabled AI returns `503`, and provider failures are
+mapped to opaque `502` responses.
+
 ## Database
 
 Migrations live in:
