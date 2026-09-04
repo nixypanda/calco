@@ -48,6 +48,7 @@ type alias ChatModel =
     , draft : Maybe FoodDraft
     , warnings : List String
     , awaitingOverwriteConfirmation : Bool
+    , awaitingNewSessionConfirmation : Bool
     }
 
 
@@ -74,6 +75,8 @@ type Msg
     | DraftCompleted (Result Client.ApiError FoodDraftTurn)
     | RetryClicked
     | NewSessionClicked
+    | ConfirmNewSessionClicked
+    | CancelNewSessionClicked
     | ApplyDraftClicked Bool
     | ConfirmOverwriteClicked
     | CancelOverwriteClicked
@@ -101,6 +104,7 @@ emptyChat =
     , draft = Nothing
     , warnings = []
     , awaitingOverwriteConfirmation = False
+    , awaitingNewSessionConfirmation = False
     }
 
 
@@ -158,7 +162,19 @@ update msg model =
             updateChat retryDraft model
 
         NewSessionClicked ->
-            updateChat newSession model
+            updateChat requestNewSession model
+
+        ConfirmNewSessionClicked ->
+            updateChat confirmNewSession model
+
+        CancelNewSessionClicked ->
+            updateChat
+                (\chat ->
+                    ( { chat | awaitingNewSessionConfirmation = False }
+                    , NoOutMsg
+                    )
+                )
+                model
 
         ApplyDraftClicked formHasManualInput ->
             updateChat (requestApply formHasManualInput) model
@@ -221,6 +237,7 @@ sendTranscript transcript chat =
                 , draft = Nothing
                 , warnings = []
                 , awaitingOverwriteConfirmation = False
+                , awaitingNewSessionConfirmation = False
               }
             , RequestDraft boundedConversation
             )
@@ -266,15 +283,43 @@ retryDraft : ChatModel -> ( ChatModel, OutMsg )
 retryDraft chat =
     case ( chat.request, FoodAssistant.conversation chat.transcript ) of
         ( RequestFailed _, Ok boundedConversation ) ->
-            ( { chat | request = Sending }, RequestDraft boundedConversation )
+            ( { chat
+                | request = Sending
+                , awaitingNewSessionConfirmation = False
+              }
+            , RequestDraft boundedConversation
+            )
 
         _ ->
             ( chat, NoOutMsg )
 
 
+requestNewSession : ChatModel -> ( ChatModel, OutMsg )
+requestNewSession chat =
+    if chat.request == Sending || not (hasSession chat) then
+        ( chat, NoOutMsg )
+
+    else
+        ( { chat | awaitingNewSessionConfirmation = True }, NoOutMsg )
+
+
 newSession : ChatModel -> ( ChatModel, OutMsg )
 newSession chat =
     ( { emptyChat | expanded = chat.expanded }, NoOutMsg )
+
+
+confirmNewSession : ChatModel -> ( ChatModel, OutMsg )
+confirmNewSession chat =
+    if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
+        newSession chat
+
+    else
+        ( chat, NoOutMsg )
+
+
+hasSession : ChatModel -> Bool
+hasSession chat =
+    not (List.isEmpty chat.transcript) || chat.draft /= Nothing
 
 
 requestApply : Bool -> ChatModel -> ( ChatModel, OutMsg )
@@ -372,16 +417,21 @@ enabledView theme device formHasManualInput chat =
         [ Element.row [ Element.width Element.fill ]
             [ Typography.subsectionTitle theme "Create with AI"
             , Element.el [ Element.alignRight ]
-                (Ui.fullWidthGhostButton
-                    device
-                    theme
-                    (if chat.expanded then
-                        "Hide"
+                (if chat.expanded then
+                    Ui.compactDangerOutlineButton
+                        device
+                        theme
+                        Ui.CompactContent
+                        "Hide assistant"
+                        ToggleExpanded
 
-                     else
-                        "Start"
-                    )
-                    ToggleExpanded
+                 else
+                    Ui.compactBrandOutlineButton
+                        device
+                        theme
+                        Ui.CompactContent
+                        "Show assistant"
+                        ToggleExpanded
                 )
             ]
         , Typography.mutedParagraph theme
@@ -403,27 +453,80 @@ enabledView theme device formHasManualInput chat =
 
 expandedContent : Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
 expandedContent theme device formHasManualInput chat =
-    [ transcriptView theme chat.transcript
-    , draftPreviewView theme chat.draft
+    [ conversationView theme device chat
+    , draftPreviewView theme device formHasManualInput chat
     , warningView theme chat.warnings
     , requestErrorView theme device chat.request
     , descriptionInput theme chat
     , sendButton theme device chat.request
-    , Ui.fullWidthGhostButton device theme "New session" NewSessionClicked
     ]
-        ++ draftActionView theme device formHasManualInput chat
 
 
-transcriptView : Theme -> List ConversationTurn -> Element Msg
-transcriptView theme transcript =
-    if List.isEmpty transcript then
+conversationView : Theme -> Device -> ChatModel -> Element Msg
+conversationView theme device chat =
+    if not (hasSession chat) then
         Typography.mutedParagraph theme
             "Start with the food, portion, ingredients, and known nutrition."
 
     else
         Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            (List.map (turnView theme) transcript)
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            ([ Element.row [ Element.width Element.fill ]
+                [ Element.el [ Font.bold ] (Element.text "Conversation")
+                , if chat.request == Sending then
+                    Element.none
+
+                  else
+                    Element.el [ Element.alignRight ]
+                        (Ui.compactPrimaryButton
+                            device
+                            theme
+                            Ui.CompactContent
+                            "New session"
+                            NewSessionClicked
+                        )
+                ]
+             , Element.column
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                ]
+                (List.map (turnView theme) chat.transcript)
+             ]
+                ++ (if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
+                        [ newSessionConfirmation theme device ]
+
+                    else
+                        []
+                   )
+            )
+
+
+newSessionConfirmation : Theme -> Device -> Element Msg
+newSessionConfirmation theme device =
+    confirmationSurface theme
+        [ Element.paragraph [ Element.width Element.fill ]
+            [ Element.text
+                (String.concat
+                    [ "Start a new session? The current conversation and draft "
+                    , "will be discarded. Your food form will not be changed."
+                    ]
+                )
+            ]
+        , compactActionRow device
+            [ Ui.compactGhostButton
+                device
+                theme
+                Ui.CompactResponsive
+                "Cancel"
+                CancelNewSessionClicked
+            , Ui.compactDangerOutlineButton
+                device
+                theme
+                Ui.CompactResponsive
+                "Start new session"
+                ConfirmNewSessionClicked
+            ]
+        ]
 
 
 turnView : Theme -> ConversationTurn -> Element Msg
@@ -473,7 +576,7 @@ descriptionInput theme chat =
 
 sendButton : Theme -> Device -> RequestState -> Element Msg
 sendButton theme device request =
-    Ui.secondarySubmitButton device
+    Ui.primarySubmitButton device
         theme
         { state =
             if request == Sending then
@@ -481,8 +584,8 @@ sendButton theme device request =
 
             else
                 Ui.Idle
-        , idleLabel = "Send to assistant"
-        , submittingLabel = "Getting estimate..."
+        , idleLabel = "Send"
+        , submittingLabel = "Generating draft…"
         , onPress = SendClicked
         }
 
@@ -530,9 +633,9 @@ warningView theme warnings =
             )
 
 
-draftPreviewView : Theme -> Maybe FoodDraft -> Element Msg
-draftPreviewView theme maybeDraft =
-    case maybeDraft of
+draftPreviewView : Theme -> Device -> Bool -> ChatModel -> Element Msg
+draftPreviewView theme device formHasManualInput chat =
+    case chat.draft of
         Nothing ->
             Element.none
 
@@ -554,6 +657,7 @@ draftPreviewView theme maybeDraft =
                 , previewRows theme preview.details
                 , previewSection theme "Nutrition per 100 g" preview.nutrients
                 , previewSection theme "Servings" preview.servings
+                , draftActionView theme device formHasManualInput chat
                 ]
 
 
@@ -656,41 +760,71 @@ defaultText fallback value =
         value
 
 
-draftActionView : Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
+draftActionView : Theme -> Device -> Bool -> ChatModel -> Element Msg
 draftActionView theme device formHasManualInput chat =
     case chat.draft of
         Nothing ->
-            []
+            Element.none
 
         Just _ ->
             if chat.awaitingOverwriteConfirmation then
-                [ Ui.errorBanner theme
-                    "Applying this draft will replace the values already in the form."
-                , Ui.secondarySubmitButton device
-                    theme
-                    { state = Ui.Idle
-                    , idleLabel = "Replace form values"
-                    , submittingLabel = "Replacing..."
-                    , onPress = ConfirmOverwriteClicked
-                    }
-                , Ui.fullWidthGhostButton
-                    device
-                    theme
-                    "Cancel"
-                    CancelOverwriteClicked
-                ]
+                confirmationSurface theme
+                    [ Element.paragraph [ Element.width Element.fill ]
+                        [ Element.text
+                            "Applying this draft will replace the values already in the form."
+                        ]
+                    , compactActionRow device
+                        [ Ui.compactGhostButton
+                            device
+                            theme
+                            Ui.CompactResponsive
+                            "Cancel"
+                            CancelOverwriteClicked
+                        , Ui.compactDangerButton
+                            device
+                            theme
+                            Ui.CompactResponsive
+                            "Replace form values"
+                            ConfirmOverwriteClicked
+                        ]
+                    ]
 
             else
-                [ Ui.secondarySubmitButton device
+                Ui.primarySubmitButton
+                    device
                     theme
                     { state = Ui.Idle
-                    , idleLabel =
-                        if formHasManualInput then
-                            "Apply draft to form..."
-
-                        else
-                            "Apply draft to form"
-                    , submittingLabel = "Applying..."
+                    , idleLabel = "Apply to form"
+                    , submittingLabel = "Applying…"
                     , onPress = ApplyDraftClicked formHasManualInput
                     }
-                ]
+
+
+confirmationSurface : Theme -> List (Element msg) -> Element msg
+confirmationSurface theme children =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space12
+        , Element.padding DesignTokens.space12
+        , Background.color theme.dangerBg
+        , Font.color theme.dangerFg
+        , Border.rounded DesignTokens.radiusControl
+        ]
+        children
+
+
+compactActionRow : Device -> List (Element msg) -> Element msg
+compactActionRow device actions =
+    if Ui.isSmall device then
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+            actions
+
+    else
+        Element.row
+            [ Element.alignRight
+            , Element.spacing DesignTokens.space8
+            ]
+            actions

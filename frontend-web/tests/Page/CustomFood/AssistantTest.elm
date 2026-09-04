@@ -138,30 +138,42 @@ tests =
                         , nutrients = [ ( "Energy", "120.5 kcal" ) ]
                         , servings = [ ( "one bowl", "1 bowl = 300 g" ) ]
                         }
-        , test "new session clears transient assistant state" <|
+        , test "new session asks before clearing transient assistant state" <|
             \_ ->
-                sent
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update (Assistant.DescriptionChanged "another answer")
-                    |> first
-                    |> Assistant.update (Assistant.ApplyDraftClicked True)
-                    |> first
-                    |> Assistant.update Assistant.NewSessionClicked
+                let
+                    existing : Assistant.Model
+                    existing =
+                        sent
+                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                            |> first
+                            |> Assistant.update (Assistant.DescriptionChanged "another answer")
+                            |> first
+                            |> Assistant.update Assistant.ToggleExpanded
+                            |> first
+
+                    awaiting : Assistant.Model
+                    awaiting =
+                        existing
+                            |> Assistant.update Assistant.NewSessionClicked
+                            |> first
+                in
+                ( awaiting |> chatState |> Maybe.map .awaitingNewSessionConfirmation
+                , awaiting
+                    |> Assistant.update Assistant.CancelNewSessionClicked
                     |> first
                     |> chatState
+                    |> Maybe.map .transcript
+                , awaiting
+                    |> Assistant.update Assistant.ConfirmNewSessionClicked
+                    |> first
+                    |> chatState
+                )
                     |> Expect.equal
-                        (Just
-                            { expanded = False
-                            , transcript = []
-                            , description = ""
-                            , request = Assistant.Ready
-                            , draft = Nothing
-                            , warnings = []
-                            , awaitingOverwriteConfirmation = False
-                            }
+                        ( Just True
+                        , existing |> chatState |> Maybe.map .transcript
+                        , Just emptyExpandedChat
                         )
-        , test "new session recovers after reaching the 20-turn cap" <|
+        , test "confirmed new session recovers after reaching the 20-turn cap" <|
             \_ ->
                 fullChat
                     |> Assistant.update (Assistant.DescriptionChanged "one more")
@@ -170,18 +182,128 @@ tests =
                     |> first
                     |> Assistant.update Assistant.NewSessionClicked
                     |> first
+                    |> Assistant.update Assistant.ConfirmNewSessionClicked
+                    |> first
                     |> requestState
                     |> Expect.equal (Just Assistant.Ready)
-        , test "expanded assistant renders a new session action" <|
+        , test "new session cannot reset an in-flight request" <|
             \_ ->
-                expanded
+                sent
+                    |> Assistant.update Assistant.NewSessionClicked
+                    |> first
+                    |> chatState
+                    |> Maybe.map
+                        (\chat ->
+                            ( chat.request
+                            , chat.transcript
+                            , chat.awaitingNewSessionConfirmation
+                            )
+                        )
+                    |> Expect.equal
+                        (sent
+                            |> chatState
+                            |> Maybe.map
+                                (\chat ->
+                                    ( chat.request
+                                    , chat.transcript
+                                    , False
+                                    )
+                                )
+                        )
+        , test "show and hide preserve the assistant session" <|
+            \_ ->
+                let
+                    completed : Assistant.Model
+                    completed =
+                        sent
+                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                            |> first
+                in
+                completed
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> chatState
+                    |> Maybe.map (\chat -> ( chat.transcript, chat.draft ))
+                    |> Expect.equal
+                        (completed
+                            |> chatState
+                            |> Maybe.map (\chat -> ( chat.transcript, chat.draft ))
+                        )
+        , test "assistant actions use their scoped labels" <|
+            \_ ->
+                sent
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
                     |> Assistant.view
                         Theme.light
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
                     |> Query.fromHtml
-                    |> Query.has [ Selector.text "New session" ]
+                    |> Query.has
+                        [ Selector.text "Hide assistant"
+                        , Selector.text "New session"
+                        , Selector.text "Send"
+                        , Selector.text "Apply to form"
+                        ]
+        , test "new session confirmation explains its scope" <|
+            \_ ->
+                sent
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.update Assistant.NewSessionClicked
+                    |> first
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text
+                            (String.concat
+                                [ "Start a new session? The current conversation and draft "
+                                , "will be discarded. Your food form will not be changed."
+                                ]
+                            )
+                        , Selector.text "Cancel"
+                        , Selector.text "Start new session"
+                        ]
+        , test "overwrite confirmation uses explicit draft actions" <|
+            \_ ->
+                sent
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.update (Assistant.ApplyDraftClicked True)
+                    |> first
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        True
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Cancel"
+                        , Selector.text "Replace form values"
+                        ]
+        , test "collapsed assistant is a show action, not a session reset" <|
+            \_ ->
+                enabled
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Show assistant" ]
         ]
 
 
@@ -202,11 +324,17 @@ sent =
         |> first
 
 
-expanded : Assistant.Model
-expanded =
-    enabled
-        |> Assistant.update Assistant.ToggleExpanded
-        |> first
+emptyExpandedChat : Assistant.ChatModel
+emptyExpandedChat =
+    { expanded = True
+    , transcript = []
+    , description = ""
+    , request = Assistant.Ready
+    , draft = Nothing
+    , warnings = []
+    , awaitingOverwriteConfirmation = False
+    , awaitingNewSessionConfirmation = False
+    }
 
 
 fullChat : Assistant.Model
