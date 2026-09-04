@@ -105,7 +105,7 @@ draftTurnForStatus status =
         "needs_clarification" ->
             Decode.map3
                 (\message draft warnings -> ( message, draft, warnings ))
-                (Decode.field "assistant_message" nonEmptyStringDecoder)
+                (Decode.field "assistant_message" Decode.string)
                 (Decode.field "draft" (Decode.nullable foodDraftDecoder))
                 (Decode.field "warnings" (Decode.list Decode.string))
                 |> Decode.andThen
@@ -126,7 +126,7 @@ draftTurnForStatus status =
                         , warnings = warnings
                         }
                 )
-                (Decode.field "assistant_message" nonEmptyStringDecoder)
+                (Decode.field "assistant_message" Decode.string)
                 (Decode.field "draft" foodDraftDecoder)
                 (Decode.field "warnings" (Decode.list Decode.string))
 
@@ -147,111 +147,33 @@ foodDraftDecoder =
         , "servings"
         ]
     <|
-        (Decode.map8 FoodDraft
-            (Decode.field "name" nonEmptyStringDecoder)
-            (Decode.field "brand" (Decode.nullable nonEmptyStringDecoder))
-            (Decode.field "categories" (Decode.list nonEmptyStringDecoder))
-            (Decode.field "serving_size_g" (Decode.nullable positiveDecimalDecoder))
-            (Decode.field "default_quantity" (Decode.nullable positiveDecimalDecoder))
-            (Decode.field "default_unit" (Decode.nullable nonEmptyStringDecoder))
+        Decode.map8 FoodDraft
+            (Decode.field "name" Decode.string)
+            (Decode.field "brand" (Decode.nullable Decode.string))
+            (Decode.field "categories" (Decode.list Decode.string))
+            (Decode.field "serving_size_g" (Decode.nullable Decode.string))
+            (Decode.field "default_quantity" (Decode.nullable Decode.string))
+            (Decode.field "default_unit" (Decode.nullable Decode.string))
             (Decode.field "nutrients" (Decode.list draftNutrientDecoder))
             (Decode.field "servings" (Decode.list draftServingDecoder))
-            |> Decode.andThen
-                (\draft ->
-                    if
-                        Maybe.map (always ()) draft.defaultQuantity
-                            == Maybe.map (always ()) draft.defaultUnit
-                    then
-                        Decode.succeed draft
-
-                    else
-                        Decode.fail "Default quantity and unit must be supplied together"
-                )
-        )
 
 
 draftNutrientDecoder : Decoder DraftNutrient
 draftNutrientDecoder =
     strictObject [ "code", "amount_per_100g" ] <|
         Decode.map2 DraftNutrient
-            (Decode.field "code" nonEmptyStringDecoder)
-            (Decode.field "amount_per_100g" nonNegativeDecimalDecoder)
+            (Decode.field "code" Decode.string)
+            (Decode.field "amount_per_100g" Decode.string)
 
 
 draftServingDecoder : Decoder DraftServing
 draftServingDecoder =
     strictObject [ "label", "quantity", "unit", "grams" ] <|
         Decode.map4 DraftServing
-            (Decode.field "label" nonEmptyStringDecoder)
-            (Decode.field "quantity" positiveDecimalDecoder)
-            (Decode.field "unit" nonEmptyStringDecoder)
-            (Decode.field "grams" positiveDecimalDecoder)
-
-
-positiveDecimalDecoder : Decoder String
-positiveDecimalDecoder =
-    decimalDecoder
-        |> Decode.andThen
-            (\value ->
-                if Maybe.withDefault 0 (String.toFloat value) > 0 then
-                    Decode.succeed value
-
-                else
-                    Decode.fail "Expected a positive decimal"
-            )
-
-
-nonNegativeDecimalDecoder : Decoder String
-nonNegativeDecimalDecoder =
-    decimalDecoder
-        |> Decode.andThen
-            (\value ->
-                if Maybe.withDefault -1 (String.toFloat value) >= 0 then
-                    Decode.succeed value
-
-                else
-                    Decode.fail "Expected a non-negative decimal"
-            )
-
-
-decimalDecoder : Decoder String
-decimalDecoder =
-    Decode.oneOf
-        [ Decode.string
-        , Decode.float |> Decode.map String.fromFloat
-        ]
-        |> Decode.andThen
-            (\raw ->
-                let
-                    value : String
-                    value =
-                        String.trim raw
-                in
-                case String.toFloat value of
-                    Just _ ->
-                        Decode.succeed value
-
-                    Nothing ->
-                        Decode.fail "Invalid decimal"
-            )
-
-
-nonEmptyStringDecoder : Decoder String
-nonEmptyStringDecoder =
-    Decode.string
-        |> Decode.andThen
-            (\raw ->
-                let
-                    value : String
-                    value =
-                        String.trim raw
-                in
-                if String.isEmpty value then
-                    Decode.fail "Expected non-empty text"
-
-                else
-                    Decode.succeed value
-            )
+            (Decode.field "label" Decode.string)
+            (Decode.field "quantity" Decode.string)
+            (Decode.field "unit" Decode.string)
+            (Decode.field "grams" Decode.string)
 
 
 strictObject : List String -> Decoder a -> Decoder a

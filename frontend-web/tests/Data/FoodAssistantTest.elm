@@ -45,6 +45,34 @@ tests =
                     )
                     |> Result.mapError (always ())
                     |> Expect.equal (Err ())
+        , test "trusts backend-owned draft semantics but requires decimal strings" <|
+            \_ ->
+                Decode.decodeString FoodAssistant.foodDraftTurnDecoder
+                    (String.replace
+                        "\"serving_size_g\":\"350.50\""
+                        "\"serving_size_g\":\"not revalidated here\""
+                        readyJson
+                    )
+                    |> Result.map
+                        (\turn ->
+                            case turn of
+                                DraftReady result ->
+                                    result.draft.servingSizeG
+
+                                NeedsClarification _ ->
+                                    Nothing
+                        )
+                    |> Expect.equal (Ok (Just "not revalidated here"))
+        , test "rejects numeric decimals because the backend contract uses strings" <|
+            \_ ->
+                Decode.decodeString FoodAssistant.foodDraftTurnDecoder
+                    (String.replace
+                        "\"serving_size_g\":\"350.50\""
+                        "\"serving_size_g\":350.50"
+                        readyJson
+                    )
+                    |> Result.mapError (always ())
+                    |> Expect.equal (Err ())
         , test "rejects image capability in the text-only status" <|
             \_ ->
                 Decode.decodeString FoodAssistant.assistantStatusDecoder

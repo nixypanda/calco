@@ -3,11 +3,19 @@
 use std::sync::Mutex;
 use std::time::Duration;
 
+use async_openai::Client as OpenAiClient;
+use async_openai::config::Config;
+use async_openai::error::OpenAIError;
+use async_openai::types::chat::{
+    ChatCompletionRequestAssistantMessage, ChatCompletionRequestSystemMessage,
+    ChatCompletionRequestUserMessage, CreateChatCompletionRequest, CreateChatCompletionResponse,
+    ResponseFormat, ResponseFormatJsonSchema,
+};
 use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
-use reqwest::{Client, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use secrecy::SecretString;
+use serde::Serialize;
+use serde_json::Value;
 use zeroize::Zeroizing;
 
 use crate::assistant::application::{
@@ -18,15 +26,15 @@ use crate::config::{AiAuthenticationSettings, AiEnabledSettings};
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const MAX_PROVIDER_RESPONSE_BYTES: usize = 1024 * 1024;
 const JSON_ONLY_INSTRUCTION: &str =
     "Return only one JSON object that conforms exactly to the supplied JSON Schema.";
+const GROQ_HOST: &str = "api.groq.com";
+const MAX_OUTPUT_TOKENS: u32 = 16_384;
 
 pub struct OpenAiCompatibleFoodDraftModel {
-    client: Client,
-    endpoint: reqwest::Url,
+    client: OpenAiClient<ProviderConfig>,
     model: String,
-    authentication: ProviderAuthentication,
+    groq_compatibility: bool,
     response_mode: Mutex<ResponseMode>,
 }
 
@@ -36,30 +44,40 @@ impl std::fmt::Debug for OpenAiCompatibleFoodDraftModel {
             .debug_struct("OpenAiCompatibleFoodDraftModel")
             .field("endpoint", &"[REDACTED]")
             .field("model", &"[REDACTED]")
-            .field("authentication", &self.authentication)
+            .field("authentication", &"[REDACTED]")
             .finish_non_exhaustive()
     }
 }
 
+/// The SDK config deliberately owns the exact configured Chat Completions URL.
+/// Its `url` implementation ignores the SDK's default path so endpoints with a
+/// custom path or query string remain unchanged.
 #[derive(Clone)]
-enum ProviderAuthentication {
-    None,
-    Header {
-        name: reqwest::header::HeaderName,
-        value: HeaderValue,
-    },
+struct ProviderConfig {
+    endpoint: String,
+    headers: HeaderMap,
+    unused_api_key: SecretString,
 }
 
-impl std::fmt::Debug for ProviderAuthentication {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => formatter.write_str("ProviderAuthentication::None"),
-            Self::Header { name, .. } => formatter
-                .debug_struct("ProviderAuthentication::Header")
-                .field("name", name)
-                .field("value", &"[REDACTED]")
-                .finish(),
-        }
+impl Config for ProviderConfig {
+    fn headers(&self) -> HeaderMap {
+        self.headers.clone()
+    }
+
+    fn url(&self, _path: &str) -> String {
+        self.endpoint.clone()
+    }
+
+    fn query(&self) -> Vec<(&str, &str)> {
+        Vec::new()
+    }
+
+    fn api_base(&self) -> &str {
+        &self.endpoint
+    }
+
+    fn api_key(&self) -> &SecretString {
+        &self.unused_api_key
     }
 }
 
@@ -83,116 +101,47 @@ impl OpenAiCompatibleFoodDraftModel {
         connect_timeout: Duration,
         request_timeout: Duration,
     ) -> Result<Self, AssistantError> {
-        let authentication = ProviderAuthentication::from_settings(&settings.authentication)?;
-        let client = Client::builder()
+        let headers = authentication_headers(&settings.authentication)?;
+        let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(connect_timeout)
             .timeout(request_timeout)
             .build()
             .map_err(|_| AssistantError::Internal)?;
+        let config = ProviderConfig {
+            endpoint: settings.endpoint.as_str().to_owned(),
+            headers,
+            unused_api_key: SecretString::from(String::new()),
+        };
         Ok(Self {
-            client,
-            endpoint: settings.endpoint.clone(),
+            client: OpenAiClient::build(http_client, config),
             model: settings.model.as_str().to_owned(),
-            authentication,
+            groq_compatibility: settings.endpoint.host_str() == Some(GROQ_HOST),
             response_mode: Mutex::new(ResponseMode::JsonSchema),
         })
     }
-
-    async fn generate_in_mode(
-        &self,
-        request: &ModelDraftRequest,
-        mode: ResponseMode,
-    ) -> Result<ModelDraftResponse, GenerationFailure> {
-        let body = RequestBody::from_request(&self.model, request, mode)?;
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json"),
-        );
-        self.authentication.apply(&mut headers);
-        let response = self
-            .client
-            .post(self.endpoint.clone())
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|_| GenerationFailure::Unavailable)?;
-        let status = response.status();
-        let bytes = match read_bounded_body(response).await {
-            Ok(bytes) => bytes,
-            Err(BodyReadFailure::TooLarge) if status.is_success() => {
-                return Err(GenerationFailure::InvalidResponse);
-            }
-            Err(BodyReadFailure::TooLarge | BodyReadFailure::Read) => {
-                return Err(GenerationFailure::Unavailable);
-            }
-        };
-        if !status.is_success() {
-            return if explicitly_rejects_response_format(status, &bytes) {
-                Err(GenerationFailure::UnsupportedResponseFormat)
-            } else {
-                Err(GenerationFailure::Unavailable)
-            };
-        }
-        parse_response(&bytes).map_err(|_| GenerationFailure::InvalidResponse)
-    }
-
-    fn response_mode(&self) -> Result<ResponseMode, AssistantError> {
-        self.response_mode
-            .lock()
-            .map(|value| *value)
-            .map_err(|_| AssistantError::Internal)
-    }
-
-    fn advance_mode(&self, rejected: ResponseMode) -> Result<Option<ResponseMode>, AssistantError> {
-        let mut current = self
-            .response_mode
-            .lock()
-            .map_err(|_| AssistantError::Internal)?;
-        if *current != rejected {
-            return Ok(Some(*current));
-        }
-        *current = match rejected {
-            ResponseMode::JsonSchema => ResponseMode::JsonObject,
-            ResponseMode::JsonObject => ResponseMode::PromptConstrained,
-            ResponseMode::PromptConstrained => return Ok(None),
-        };
-        Ok(Some(*current))
-    }
 }
 
-impl ProviderAuthentication {
-    fn from_settings(settings: &AiAuthenticationSettings) -> Result<Self, AssistantError> {
-        match settings {
-            AiAuthenticationSettings::None => Ok(Self::None),
-            AiAuthenticationSettings::Bearer { api_key_file } => {
-                let key = read_secret_once(api_key_file)?;
-                let wire = Zeroizing::new(format!("Bearer {}", key.as_str()));
-                Ok(Self::Header {
-                    name: AUTHORIZATION,
-                    value: sensitive_header(&wire)?,
-                })
-            }
-            AiAuthenticationSettings::Header {
-                header_name,
-                api_key_file,
-            } => {
-                let key = read_secret_once(api_key_file)?;
-                Ok(Self::Header {
-                    name: header_name.clone(),
-                    value: sensitive_header(&key)?,
-                })
-            }
+fn authentication_headers(
+    settings: &AiAuthenticationSettings,
+) -> Result<HeaderMap, AssistantError> {
+    let mut headers = HeaderMap::new();
+    match settings {
+        AiAuthenticationSettings::None => {}
+        AiAuthenticationSettings::Bearer { api_key_file } => {
+            let key = read_secret_once(api_key_file)?;
+            let wire = Zeroizing::new(format!("Bearer {}", key.as_str()));
+            headers.insert(AUTHORIZATION, sensitive_header(&wire)?);
+        }
+        AiAuthenticationSettings::Header {
+            header_name,
+            api_key_file,
+        } => {
+            let key = read_secret_once(api_key_file)?;
+            headers.insert(header_name, sensitive_header(&key)?);
         }
     }
-
-    fn apply(&self, headers: &mut HeaderMap) {
-        if let Self::Header { name, value } = self {
-            headers.insert(name, value.clone());
-        }
-    }
+    Ok(headers)
 }
 
 fn read_secret_once(path: &std::path::Path) -> Result<Zeroizing<String>, AssistantError> {
@@ -216,166 +165,164 @@ impl FoodDraftModelPort for OpenAiCompatibleFoodDraftModel {
         &self,
         request: ModelDraftRequest,
     ) -> Result<ModelDraftResponse, AssistantError> {
-        let mut mode = self.response_mode()?;
+        let mut mode = *self
+            .response_mode
+            .lock()
+            .map_err(|_| AssistantError::Internal)?;
         loop {
-            match self.generate_in_mode(&request, mode).await {
-                Ok(response) => return Ok(response),
-                Err(GenerationFailure::UnsupportedResponseFormat) => {
-                    mode = self
-                        .advance_mode(mode)?
-                        .ok_or(AssistantError::ModelUnavailable)?;
+            let mut sdk_request = build_request(&self.model, &request, mode)
+                .map_err(|_| AssistantError::InvalidModelResponse)?;
+            if !self.groq_compatibility {
+                sdk_request.max_completion_tokens = Some(MAX_OUTPUT_TOKENS);
+            }
+            // async-openai buffers the provider response internally, so the
+            // former byte cap cannot be retained. The request timeout and
+            // output-token bound still constrain every completion.
+            let response = if self.groq_compatibility {
+                // BYOT is limited to Groq's two request extensions.
+                self.client
+                    .chat()
+                    .create_byot::<_, CreateChatCompletionResponse>(&GroqRequest {
+                        request: &sdk_request,
+                        reasoning_format: "hidden",
+                        max_tokens: MAX_OUTPUT_TOKENS,
+                    })
+                    .await
+            } else {
+                self.client.chat().create(sdk_request).await
+            };
+            match response {
+                Ok(response) => {
+                    return parse_response(&response).map_err(|_| {
+                        tracing::error!(response = ?response, mode = ?mode, "provider response was invalid");
+                        AssistantError::InvalidModelResponse
+                    });
                 }
-                Err(GenerationFailure::Unavailable) => {
-                    return Err(AssistantError::ModelUnavailable);
+                Err(error) if rejects_response_format(&error) => {
+                    let next = match mode {
+                        ResponseMode::JsonSchema => ResponseMode::JsonObject,
+                        ResponseMode::JsonObject => ResponseMode::PromptConstrained,
+                        ResponseMode::PromptConstrained => {
+                            return Err(AssistantError::ModelUnavailable);
+                        }
+                    };
+                    let mut cached = self
+                        .response_mode
+                        .lock()
+                        .map_err(|_| AssistantError::Internal)?;
+                    if *cached == mode {
+                        *cached = next;
+                    }
+                    mode = *cached;
                 }
-                Err(GenerationFailure::InvalidResponse) => {
+                Err(OpenAIError::JSONDeserialize(error, body)) => {
+                    tracing::error!(error = %error, body = %body, mode = ?mode, "provider response could not be parsed");
                     return Err(AssistantError::InvalidModelResponse);
+                }
+                Err(error) => {
+                    tracing::error!(error = %error, mode = ?mode, "provider request failed");
+                    return Err(AssistantError::ModelUnavailable);
                 }
             }
         }
     }
 }
 
-#[derive(Debug)]
-enum GenerationFailure {
-    UnsupportedResponseFormat,
-    Unavailable,
-    InvalidResponse,
-}
-
-#[derive(Debug)]
-enum BodyReadFailure {
-    TooLarge,
-    Read,
-}
-
-async fn read_bounded_body(mut response: reqwest::Response) -> Result<Vec<u8>, BodyReadFailure> {
-    if response
-        .content_length()
-        .is_some_and(|value| value > MAX_PROVIDER_RESPONSE_BYTES as u64)
-    {
-        return Err(BodyReadFailure::TooLarge);
-    }
-    let mut body = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| BodyReadFailure::Read)? {
-        if chunk.len() > MAX_PROVIDER_RESPONSE_BYTES.saturating_sub(body.len()) {
-            return Err(BodyReadFailure::TooLarge);
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
-}
-
 #[derive(Serialize)]
-struct RequestBody {
-    model: String,
-    messages: Vec<ChatMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    response_format: Option<Value>,
+struct GroqRequest<'a> {
+    #[serde(flatten)]
+    request: &'a CreateChatCompletionRequest,
+    reasoning_format: &'static str,
+    max_tokens: u32,
 }
 
-#[derive(Serialize)]
-struct ChatMessage {
-    role: &'static str,
-    content: String,
-}
-
-impl RequestBody {
-    fn from_request(
-        model: &str,
-        request: &ModelDraftRequest,
-        mode: ResponseMode,
-    ) -> Result<Self, GenerationFailure> {
-        let schema: Value = serde_json::from_str(&request.response_schema)
-            .map_err(|_| GenerationFailure::InvalidResponse)?;
-        let system_prompt = match mode {
-            ResponseMode::JsonSchema => request.system_prompt.clone(),
-            ResponseMode::JsonObject | ResponseMode::PromptConstrained => format!(
-                "{}\n{}\nRequired JSON Schema:\n{}",
-                request.system_prompt, JSON_ONLY_INSTRUCTION, request.response_schema
-            ),
-        };
-        let mut messages = vec![ChatMessage {
-            role: "system",
-            content: system_prompt,
-        }];
-        messages.extend(request.conversation.turns().iter().map(|turn| ChatMessage {
-            role: match turn.role() {
-                ConversationRole::User => "user",
-                ConversationRole::Assistant => "assistant",
+fn build_request(
+    model: &str,
+    request: &ModelDraftRequest,
+    mode: ResponseMode,
+) -> Result<CreateChatCompletionRequest, ()> {
+    let schema: Value = serde_json::from_str(&request.response_schema).map_err(|_| ())?;
+    let system_prompt = match mode {
+        ResponseMode::JsonSchema => request.system_prompt.clone(),
+        ResponseMode::JsonObject | ResponseMode::PromptConstrained => format!(
+            "{}\n{}\nRequired JSON Schema:\n{}",
+            request.system_prompt, JSON_ONLY_INSTRUCTION, request.response_schema
+        ),
+    };
+    let mut messages = vec![ChatCompletionRequestSystemMessage::from(system_prompt).into()];
+    messages.extend(
+        request
+            .conversation
+            .turns()
+            .iter()
+            .map(|turn| match turn.role() {
+                ConversationRole::User => {
+                    ChatCompletionRequestUserMessage::from(turn.text()).into()
+                }
+                ConversationRole::Assistant => {
+                    ChatCompletionRequestAssistantMessage::from(turn.text()).into()
+                }
+            }),
+    );
+    let response_format = match mode {
+        ResponseMode::JsonSchema => Some(ResponseFormat::JsonSchema {
+            json_schema: ResponseFormatJsonSchema {
+                description: None,
+                name: "food_draft_response".to_owned(),
+                schema,
+                strict: Some(true),
             },
-            content: turn.text().to_owned(),
-        }));
-        let response_format = match mode {
-            ResponseMode::JsonSchema => Some(
-                json!({"type":"json_schema","json_schema":{"name":"food_draft_response","strict":true,"schema":schema}}),
-            ),
-            ResponseMode::JsonObject => Some(json!({"type":"json_object"})),
-            ResponseMode::PromptConstrained => None,
-        };
-        Ok(Self {
-            model: model.to_owned(),
-            messages,
-            response_format,
-        })
-    }
+        }),
+        ResponseMode::JsonObject => Some(ResponseFormat::JsonObject),
+        ResponseMode::PromptConstrained => None,
+    };
+    Ok(CreateChatCompletionRequest {
+        model: model.to_owned(),
+        messages,
+        response_format,
+        ..Default::default()
+    })
 }
 
-#[derive(Deserialize)]
-struct ProviderResponse {
-    choices: Vec<ProviderChoice>,
-    #[serde(default)]
-    usage: Option<ProviderUsage>,
-}
-#[derive(Deserialize)]
-struct ProviderChoice {
-    message: ProviderMessage,
-}
-#[derive(Deserialize)]
-struct ProviderMessage {
-    content: Option<Value>,
-    #[serde(default)]
-    refusal: Option<Value>,
-}
-#[derive(Deserialize)]
-struct ProviderUsage {
-    #[serde(default)]
-    prompt_tokens: Option<u64>,
-    #[serde(default)]
-    completion_tokens: Option<u64>,
-}
-
-fn parse_response(bytes: &[u8]) -> Result<ModelDraftResponse, ()> {
-    let response: ProviderResponse = serde_json::from_slice(bytes).map_err(|_| ())?;
-    let message = response.choices.into_iter().next().ok_or(())?.message;
+fn parse_response(response: &CreateChatCompletionResponse) -> Result<ModelDraftResponse, ()> {
+    let message = &response.choices.first().ok_or(())?.message;
     if message.refusal.is_some() {
         return Err(());
     }
-    let content = match message.content.ok_or(())? {
-        Value::String(value) if !value.is_empty() => value,
-        _ => return Err(()),
-    };
+    let content = message
+        .content
+        .as_ref()
+        .filter(|value| !value.is_empty())
+        .ok_or(())?
+        .clone();
     Ok(ModelDraftResponse {
         content,
-        usage: response.usage.map(|value| ModelUsage {
-            input_tokens: value.prompt_tokens,
-            output_tokens: value.completion_tokens,
+        usage: response.usage.as_ref().map(|value| ModelUsage {
+            input_tokens: Some(u64::from(value.prompt_tokens)),
+            output_tokens: Some(u64::from(value.completion_tokens)),
         }),
     })
 }
 
-fn explicitly_rejects_response_format(status: StatusCode, body: &[u8]) -> bool {
-    if status != StatusCode::BAD_REQUEST && status != StatusCode::UNPROCESSABLE_ENTITY {
-        return false;
-    }
-    let Ok(text) = std::str::from_utf8(body) else {
+fn rejects_response_format(error: &OpenAIError) -> bool {
+    let OpenAIError::ApiError(response) = error else {
         return false;
     };
-    let text = text.to_ascii_lowercase();
-    text.contains("response_format")
+    explicitly_rejects_response_format(response.status_code, &response.api_error.to_string())
+}
+
+fn explicitly_rejects_response_format(status: reqwest::StatusCode, body: &str) -> bool {
+    if status != reqwest::StatusCode::BAD_REQUEST
+        && status != reqwest::StatusCode::UNPROCESSABLE_ENTITY
+    {
+        return false;
+    }
+    let text = body.to_ascii_lowercase();
+    (text.contains("response_format")
         && ["unsupported", "not supported", "unknown", "not available"]
             .iter()
-            .any(|term| text.contains(term))
+            .any(|term| text.contains(term)))
+        || text.contains("json_validate_failed")
 }
 
 #[cfg(test)]
@@ -387,12 +334,11 @@ mod tests {
     use axum::http::{HeaderMap as AxumHeaderMap, StatusCode as AxumStatusCode};
     use axum::routing::post;
     use axum::{Json, Router};
-    use serde_json::Value;
+    use serde_json::{Value, json};
     use tokio::sync::Mutex as AsyncMutex;
 
     use super::*;
     use crate::assistant::domain::{Conversation, ConversationRole, ConversationTurn};
-    use crate::config::{AiAuthenticationSettings, AiEnabledSettings};
 
     #[derive(Clone)]
     struct MockState {
@@ -405,6 +351,7 @@ mod tests {
         state: MockState,
         task: tokio::task::JoinHandle<()>,
     }
+
     impl Drop for MockServer {
         fn drop(&mut self) {
             self.task.abort();
@@ -447,7 +394,22 @@ mod tests {
     }
 
     fn success() -> String {
-        r#"{"choices":[{"message":{"content":"{\"assistant_message\":\"How much?\",\"status\":\"needs_clarification\",\"draft\":null,\"warnings\":[]}"}}],"usage":{"prompt_tokens":7,"completion_tokens":3}}"#.into()
+        json!({
+            "id": "test-completion",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "{\"assistant_message\":\"How much?\",\"status\":\"needs_clarification\",\"draft\":null,\"warnings\":[]}"
+                },
+                "finish_reason": "stop"
+            }],
+            "created": 1,
+            "model": "test-model",
+            "object": "chat.completion",
+            "usage": {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}
+        })
+        .to_string()
     }
 
     fn settings(endpoint: url::Url, authentication: AiAuthenticationSettings) -> AiEnabledSettings {
@@ -480,7 +442,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sends_text_messages_and_bearer_auth_to_configured_path() {
+    async fn sends_sdk_messages_and_bearer_auth_to_exact_configured_url() {
         let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
         let path = temp_key("secret-for-test\n");
         let model = OpenAiCompatibleFoodDraftModel::new(&settings(
@@ -491,17 +453,22 @@ mod tests {
         ))
         .unwrap();
         std::fs::remove_file(path).unwrap();
+
         let response = model.generate(request()).await.unwrap();
+
         assert_eq!(response.usage.unwrap().input_tokens, Some(7));
         let requests = server.state.requests.lock().await;
         assert_eq!(requests[0].0["messages"][1]["content"], "dal");
         assert_eq!(requests[0].0["response_format"]["type"], "json_schema");
         assert_eq!(requests[0].1["authorization"], "Bearer secret-for-test");
         assert_eq!(requests[0].2, "/chat?x=1");
+        assert!(requests[0].0.get("reasoning_format").is_none());
+        assert!(requests[0].0.get("max_tokens").is_none());
+        assert_eq!(requests[0].0["max_completion_tokens"], MAX_OUTPUT_TOKENS);
     }
 
     #[tokio::test]
-    async fn sends_custom_authentication_header() {
+    async fn sends_custom_authentication_header_without_authorization() {
         let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
         let path = temp_key("custom-secret\n");
         let model = OpenAiCompatibleFoodDraftModel::new(&settings(
@@ -522,6 +489,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn no_authentication_sends_no_authorization_header() {
+        let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
+        let model = OpenAiCompatibleFoodDraftModel::new(&settings(
+            server.endpoint.clone(),
+            AiAuthenticationSettings::None,
+        ))
+        .unwrap();
+
+        model.generate(request()).await.unwrap();
+
+        let requests = server.state.requests.lock().await;
+        assert!(requests[0].1.get("authorization").is_none());
+    }
+
+    #[tokio::test]
     async fn falls_back_and_caches_supported_response_mode() {
         let unsupported = r#"{"error":{"message":"response_format is unsupported"}}"#.into();
         let server = server(vec![
@@ -535,12 +517,34 @@ mod tests {
             AiAuthenticationSettings::None,
         ))
         .unwrap();
+
         model.generate(request()).await.unwrap();
         model.generate(request()).await.unwrap();
+
         let requests = server.state.requests.lock().await;
         assert_eq!(requests[0].0["response_format"]["type"], "json_schema");
         assert_eq!(requests[1].0["response_format"]["type"], "json_object");
         assert_eq!(requests[2].0["response_format"]["type"], "json_object");
+    }
+
+    #[tokio::test]
+    async fn groq_validation_error_falls_back_to_json_object() {
+        let unsupported = r#"{"error":{"message":"json_validate_failed"}}"#.into();
+        let server = server(vec![
+            (AxumStatusCode::BAD_REQUEST, unsupported, Duration::ZERO),
+            (AxumStatusCode::OK, success(), Duration::ZERO),
+        ])
+        .await;
+        let model = OpenAiCompatibleFoodDraftModel::new(&settings(
+            server.endpoint.clone(),
+            AiAuthenticationSettings::None,
+        ))
+        .unwrap();
+
+        model.generate(request()).await.unwrap();
+
+        let requests = server.state.requests.lock().await;
+        assert_eq!(requests[1].0["response_format"]["type"], "json_object");
     }
 
     #[tokio::test]
@@ -578,7 +582,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn timeout_and_oversized_content_are_safely_mapped() {
+    async fn timeout_is_safely_mapped() {
         let delayed = server(vec![(
             AxumStatusCode::OK,
             success(),
@@ -591,26 +595,138 @@ mod tests {
             Duration::from_millis(10),
         )
         .unwrap();
+
         assert!(matches!(
             model.generate(request()).await,
             Err(AssistantError::ModelUnavailable)
         ));
+    }
 
-        let large = server(vec![(
-            AxumStatusCode::OK,
-            "x".repeat(MAX_PROVIDER_RESPONSE_BYTES + 1),
-            Duration::ZERO,
-        )])
+    #[test]
+    fn groq_byot_adds_only_the_provider_extensions() {
+        let request = build_request("test-model", &request(), ResponseMode::JsonSchema).unwrap();
+        let body = serde_json::to_value(GroqRequest {
+            request: &request,
+            reasoning_format: "hidden",
+            max_tokens: MAX_OUTPUT_TOKENS,
+        })
+        .unwrap();
+
+        assert_eq!(body["reasoning_format"], "hidden");
+        assert_eq!(body["max_tokens"], MAX_OUTPUT_TOKENS);
+        assert!(body.get("max_completion_tokens").is_none());
+        assert_eq!(body["response_format"]["type"], "json_schema");
+    }
+
+    #[test]
+    fn typed_response_rejects_no_choices_refusal_and_empty_content() {
+        let no_choices = typed_response(json!([]), None);
+        assert!(parse_response(&no_choices).is_err());
+
+        let refusal = typed_response(
+            json!([{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": null,
+                    "refusal": "I cannot answer"
+                },
+                "finish_reason": "stop"
+            }]),
+            None,
+        );
+        assert!(parse_response(&refusal).is_err());
+
+        let empty_content = typed_response(
+            json!([{
+                "index": 0,
+                "message": {"role": "assistant", "content": ""},
+                "finish_reason": "stop"
+            }]),
+            None,
+        );
+        assert!(parse_response(&empty_content).is_err());
+    }
+
+    #[tokio::test]
+    async fn invalid_typed_responses_are_mapped_to_invalid_model_response() {
+        let server = server(vec![
+            (
+                AxumStatusCode::OK,
+                serde_json::to_string(&typed_response(json!([]), None)).unwrap(),
+                Duration::ZERO,
+            ),
+            (
+                AxumStatusCode::OK,
+                serde_json::to_string(&typed_response(
+                    json!([{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": null, "refusal": "No"},
+                        "finish_reason": "stop"
+                    }]),
+                    None,
+                ))
+                .unwrap(),
+                Duration::ZERO,
+            ),
+            (
+                AxumStatusCode::OK,
+                serde_json::to_string(&typed_response(
+                    json!([{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "stop"
+                    }]),
+                    None,
+                ))
+                .unwrap(),
+                Duration::ZERO,
+            ),
+        ])
         .await;
         let model = OpenAiCompatibleFoodDraftModel::new(&settings(
-            large.endpoint.clone(),
+            server.endpoint.clone(),
             AiAuthenticationSettings::None,
         ))
         .unwrap();
-        assert!(matches!(
-            model.generate(request()).await,
-            Err(AssistantError::InvalidModelResponse)
-        ));
+
+        for _ in 0..3 {
+            assert!(matches!(
+                model.generate(request()).await,
+                Err(AssistantError::InvalidModelResponse)
+            ));
+        }
+    }
+
+    #[test]
+    fn typed_response_accepts_missing_usage() {
+        let response = typed_response(
+            json!([{
+                "index": 0,
+                "message": {"role": "assistant", "content": "{}"},
+                "finish_reason": "stop"
+            }]),
+            None,
+        );
+
+        let parsed = parse_response(&response).unwrap();
+
+        assert_eq!(parsed.content, "{}");
+        assert_eq!(parsed.usage, None);
+    }
+
+    fn typed_response(choices: Value, usage: Option<Value>) -> CreateChatCompletionResponse {
+        let mut wire = json!({
+            "id": "test-completion",
+            "choices": choices,
+            "created": 1,
+            "model": "test-model",
+            "object": "chat.completion"
+        });
+        if let Some(usage) = usage {
+            wire["usage"] = usage;
+        }
+        serde_json::from_value(wire).unwrap()
     }
 
     #[test]

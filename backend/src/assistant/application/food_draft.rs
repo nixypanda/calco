@@ -25,11 +25,6 @@ const MAX_NUTRIENT_OTHER: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0)
 const MAX_SERVING_VALUE: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct FoodDraftRequest {
-    pub conversation: Conversation,
-}
-
-#[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftResult {
     pub turn: FoodDraftTurn,
     pub usage: Option<ModelUsage>,
@@ -91,7 +86,7 @@ pub trait FoodVocabularyPort: Send + Sync {
 
 #[async_trait]
 pub trait FoodDraftPort: Send + Sync {
-    async fn draft(&self, request: FoodDraftRequest) -> Result<FoodDraftResult, AssistantError>;
+    async fn draft(&self, conversation: Conversation) -> Result<FoodDraftResult, AssistantError>;
 }
 
 pub struct FoodDraftService {
@@ -110,12 +105,12 @@ impl FoodDraftService {
 
 #[async_trait]
 impl FoodDraftPort for FoodDraftService {
-    async fn draft(&self, request: FoodDraftRequest) -> Result<FoodDraftResult, AssistantError> {
+    async fn draft(&self, conversation: Conversation) -> Result<FoodDraftResult, AssistantError> {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
         let response = self
             .model
             .generate(ModelDraftRequest {
-                conversation: request.conversation,
+                conversation,
                 system_prompt: build_system_prompt(&vocabulary),
                 response_schema: food_draft_response_schema(&vocabulary),
             })
@@ -176,8 +171,14 @@ fn parse_model_turn(
     content: &str,
     vocabulary: &FoodVocabulary,
 ) -> Result<FoodDraftTurn, AssistantError> {
-    let wire: WireTurn =
-        serde_json::from_str(content).map_err(|_| AssistantError::InvalidModelResponse)?;
+    let wire: WireTurn = serde_json::from_str(content).map_err(|e| {
+        tracing::error!(
+            content = %content,
+            error = %e,
+            "failed to parse model response"
+        );
+        AssistantError::InvalidModelResponse
+    })?;
     match wire.status {
         WireStatus::NeedsClarification if wire.draft.is_none() && wire.warnings.is_empty() => {
             FoodDraftTurn::clarification(wire.assistant_message)

@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftModelPort, FoodDraftPort, FoodDraftRequest, FoodDraftResult, FoodDraftService,
-    ModelDraftRequest, ModelDraftResponse, ModelUsage,
+    FoodDraftModelPort, FoodDraftPort, FoodDraftResult, FoodDraftService, ModelDraftRequest,
+    ModelDraftResponse, ModelUsage,
 };
-use calco_backend::assistant::domain::{AssistantError, FoodDraftTurn};
+use calco_backend::assistant::domain::{AssistantError, Conversation, FoodDraftTurn};
 use calco_backend::assistant::infrastructure::NutritionCatalogVocabularyAdapter;
 use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
@@ -38,7 +38,7 @@ impl FoodDraftModelPort for FakeModel {
 
 #[async_trait]
 impl FoodDraftPort for FakeDraftService {
-    async fn draft(&self, _request: FoodDraftRequest) -> Result<FoodDraftResult, AssistantError> {
+    async fn draft(&self, _conversation: Conversation) -> Result<FoodDraftResult, AssistantError> {
         self.result.clone()
     }
 }

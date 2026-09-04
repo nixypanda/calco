@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use rust_decimal::Decimal;
+use serde::Serialize;
 
 pub const MAX_CONVERSATION_TURNS: usize = 20;
 pub const MAX_CONVERSATION_MESSAGE_CHARS: usize = 4_000;
@@ -104,7 +105,7 @@ impl FoodDraftTurn {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct FoodDraft {
     pub name: String,
     pub brand: Option<String>,
@@ -164,7 +165,7 @@ impl FoodDraft {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct DraftNutrient {
     pub code: String,
     pub amount_per_100g: Decimal,
@@ -183,7 +184,7 @@ impl DraftNutrient {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct DraftServing {
     pub label: String,
     pub quantity: Decimal,

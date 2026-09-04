@@ -3,6 +3,9 @@
 # Usage: nix develop -c just <command>
 # See https://github.com/casey/just
 
+default_database_url := "postgres://calco:calco@localhost:5432/calco"
+default_calco_config_file := justfile_directory() + "/assistant-config/groq.toml"
+
 # ──────────────────────────────────────────────
 # Database
 # ──────────────────────────────────────────────
@@ -38,7 +41,9 @@ db-shell:
 
 # Run backend in dev mode (auto-reload)
 backend-dev:
-    cargo run --manifest-path backend/Cargo.toml
+    DATABASE_URL="${DATABASE_URL:-{{ default_database_url }}}" \
+        CALCO_CONFIG_FILE="${CALCO_CONFIG_FILE:-{{ default_calco_config_file }}}" \
+        cargo run --manifest-path backend/Cargo.toml
 
 # Build backend
 backend-build:
@@ -58,7 +63,7 @@ backend-coverage:
 
 # Run backend migrations
 backend-migrate:
-    cd backend && DATABASE_URL="${DATABASE_URL:-postgres://calco:calco@localhost:5432/calco}" sqlx migrate run --ignore-missing
+    cd backend && DATABASE_URL="${DATABASE_URL:-{{ default_database_url }}}" sqlx migrate run --ignore-missing
 
 # ──────────────────────────────────────────────
 # Frontend (Web)
@@ -107,7 +112,9 @@ frontend-web-coverage:
 # Start both backend and frontend in dev mode (requires db up)
 dev: db-wait
     @echo "Starting backend and frontend..."
-    (cd backend && cargo run) &
+    (DATABASE_URL="${DATABASE_URL:-{{ default_database_url }}}" \
+        CALCO_CONFIG_FILE="${CALCO_CONFIG_FILE:-{{ default_calco_config_file }}}" \
+        cargo run --manifest-path backend/Cargo.toml) &
     (cd frontend-web && npm run dev) &
     wait
 

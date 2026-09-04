@@ -8,11 +8,10 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::assistant::application::{FoodDraftRequest, ModelUsage};
+use crate::assistant::application::ModelUsage;
 use crate::assistant::domain::{
     AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraft, FoodDraftTurn,
 };
@@ -61,7 +60,7 @@ enum ConversationRoleRequest {
 struct AssistantDraftResponse {
     assistant_message: String,
     status: DraftStatusResponse,
-    draft: Option<FoodDraftDto>,
+    draft: Option<FoodDraft>,
     warnings: Vec<String>,
 }
 
@@ -70,32 +69,6 @@ struct AssistantDraftResponse {
 enum DraftStatusResponse {
     NeedsClarification,
     DraftReady,
-}
-
-#[derive(Serialize)]
-struct FoodDraftDto {
-    name: String,
-    brand: Option<String>,
-    categories: Vec<String>,
-    serving_size_g: Option<Decimal>,
-    default_quantity: Option<Decimal>,
-    default_unit: Option<String>,
-    nutrients: Vec<DraftNutrientDto>,
-    servings: Vec<DraftServingDto>,
-}
-
-#[derive(Serialize)]
-struct DraftNutrientDto {
-    code: String,
-    amount_per_100g: Decimal,
-}
-
-#[derive(Serialize)]
-struct DraftServingDto {
-    label: String,
-    quantity: Decimal,
-    unit: String,
-    grams: Decimal,
 }
 
 #[derive(Serialize)]
@@ -185,7 +158,7 @@ async fn draft(
         Err(error) => return error,
     };
 
-    match service.draft(FoodDraftRequest { conversation }).await {
+    match service.draft(conversation).await {
         Ok(result) => DraftHttpResult {
             response: Json(turn_to_response(result.turn)).into_response(),
             outcome: "success",
@@ -340,38 +313,9 @@ fn turn_to_response(turn: FoodDraftTurn) -> AssistantDraftResponse {
         } => AssistantDraftResponse {
             assistant_message,
             status: DraftStatusResponse::DraftReady,
-            draft: Some(food_draft_to_dto(draft)),
+            draft: Some(draft),
             warnings,
         },
-    }
-}
-
-fn food_draft_to_dto(draft: FoodDraft) -> FoodDraftDto {
-    FoodDraftDto {
-        name: draft.name,
-        brand: draft.brand,
-        categories: draft.categories,
-        serving_size_g: draft.serving_size_g,
-        default_quantity: draft.default_quantity,
-        default_unit: draft.default_unit,
-        nutrients: draft
-            .nutrients
-            .into_iter()
-            .map(|value| DraftNutrientDto {
-                code: value.code,
-                amount_per_100g: value.amount_per_100g,
-            })
-            .collect(),
-        servings: draft
-            .servings
-            .into_iter()
-            .map(|value| DraftServingDto {
-                label: value.label,
-                quantity: value.quantity,
-                unit: value.unit,
-                grams: value.grams,
-            })
-            .collect(),
     }
 }
 
@@ -391,6 +335,66 @@ mod tests {
                 "assistant_message": "How many grams?",
                 "status": "needs_clarification",
                 "draft": null,
+                "warnings": []
+            })
+        );
+    }
+
+    #[test]
+    fn response_contract_serializes_the_validated_draft_directly() {
+        let draft = FoodDraft::new(
+            "Dal".into(),
+            None,
+            vec!["lentils".into()],
+            Some(rust_decimal::Decimal::new(35_050, 2)),
+            Some(rust_decimal::Decimal::ONE),
+            Some("bowl".into()),
+            vec![
+                crate::assistant::domain::DraftNutrient::new(
+                    "ENERGY_KCAL".into(),
+                    rust_decimal::Decimal::new(172_125, 3),
+                )
+                .unwrap(),
+            ],
+            vec![
+                crate::assistant::domain::DraftServing::new(
+                    "one bowl".into(),
+                    rust_decimal::Decimal::ONE,
+                    "bowl".into(),
+                    rust_decimal::Decimal::new(35_050, 2),
+                )
+                .unwrap(),
+            ],
+        )
+        .unwrap();
+        let value = serde_json::to_value(turn_to_response(
+            FoodDraftTurn::ready("Review this estimate.", draft, vec![]).unwrap(),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "assistant_message": "Review this estimate.",
+                "status": "draft_ready",
+                "draft": {
+                    "name": "Dal",
+                    "brand": null,
+                    "categories": ["lentils"],
+                    "serving_size_g": "350.50",
+                    "default_quantity": "1",
+                    "default_unit": "bowl",
+                    "nutrients": [{
+                        "code": "ENERGY_KCAL",
+                        "amount_per_100g": "172.125"
+                    }],
+                    "servings": [{
+                        "label": "one bowl",
+                        "quantity": "1",
+                        "unit": "bowl",
+                        "grams": "350.50"
+                    }]
+                },
                 "warnings": []
             })
         );
