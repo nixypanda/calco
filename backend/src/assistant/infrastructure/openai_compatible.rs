@@ -8,13 +8,13 @@ use async_openai::config::Config;
 use async_openai::error::OpenAIError;
 use async_openai::types::chat::{
     ChatCompletionRequestAssistantMessage, ChatCompletionRequestSystemMessage,
-    ChatCompletionRequestUserMessage, CreateChatCompletionRequest, CreateChatCompletionResponse,
-    ResponseFormat, ResponseFormatJsonSchema,
+    ChatCompletionRequestUserMessage, CreateChatCompletionRequest, ResponseFormat,
+    ResponseFormatJsonSchema,
 };
 use async_trait::async_trait;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::SecretString;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -182,14 +182,17 @@ impl FoodDraftModelPort for OpenAiCompatibleFoodDraftModel {
                 // BYOT is limited to Groq's two request extensions.
                 self.client
                     .chat()
-                    .create_byot::<_, CreateChatCompletionResponse>(&GroqRequest {
+                    .create_byot::<_, ProviderResponse>(&GroqRequest {
                         request: &sdk_request,
                         reasoning_format: "hidden",
                         max_tokens: MAX_OUTPUT_TOKENS,
                     })
                     .await
             } else {
-                self.client.chat().create(sdk_request).await
+                self.client
+                    .chat()
+                    .create_byot::<_, ProviderResponse>(&sdk_request)
+                    .await
             };
             match response {
                 Ok(response) => {
@@ -234,6 +237,34 @@ struct GroqRequest<'a> {
     request: &'a CreateChatCompletionRequest,
     reasoning_format: &'static str,
     max_tokens: u32,
+}
+
+/// Minimal, deliberately tolerant view of an OpenAI-compatible response.
+///
+/// Providers add fields and enum variants to the protocol (for example,
+/// Groq's `service_tier = "on_demand"`). Deserializing only the fields CalCo
+/// consumes keeps those extensions from breaking otherwise valid responses.
+#[derive(Debug, Deserialize, Serialize)]
+struct ProviderResponse {
+    choices: Vec<ProviderChoice>,
+    usage: Option<ProviderUsage>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ProviderChoice {
+    message: ProviderMessage,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ProviderMessage {
+    content: Option<String>,
+    refusal: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ProviderUsage {
+    prompt_tokens: u64,
+    completion_tokens: u64,
 }
 
 fn build_request(
@@ -284,7 +315,7 @@ fn build_request(
     })
 }
 
-fn parse_response(response: &CreateChatCompletionResponse) -> Result<ModelDraftResponse, ()> {
+fn parse_response(response: &ProviderResponse) -> Result<ModelDraftResponse, ()> {
     let message = &response.choices.first().ok_or(())?.message;
     if message.refusal.is_some() {
         return Err(());
@@ -298,8 +329,8 @@ fn parse_response(response: &CreateChatCompletionResponse) -> Result<ModelDraftR
     Ok(ModelDraftResponse {
         content,
         usage: response.usage.as_ref().map(|value| ModelUsage {
-            input_tokens: Some(u64::from(value.prompt_tokens)),
-            output_tokens: Some(u64::from(value.completion_tokens)),
+            input_tokens: Some(value.prompt_tokens),
+            output_tokens: Some(value.completion_tokens),
         }),
     })
 }
@@ -715,7 +746,52 @@ mod tests {
         assert_eq!(parsed.usage, None);
     }
 
-    fn typed_response(choices: Value, usage: Option<Value>) -> CreateChatCompletionResponse {
+    #[test]
+    fn accepts_groq_on_demand_response_and_ignores_provider_extensions() {
+        let response: ProviderResponse = serde_json::from_value(json!({
+            "id": "chatcmpl-groq-test",
+            "object": "chat.completion",
+            "created": 1,
+            "model": "qwen/qwen3.6-27b",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "{\"status\":\"draft_ready\"}"
+                },
+                "logprobs": null,
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "queue_time": 0.04,
+                "prompt_tokens": 1114,
+                "prompt_time": 0.09,
+                "completion_tokens": 3672,
+                "completion_time": 7.22,
+                "total_tokens": 4786,
+                "total_time": 7.31,
+                "completion_tokens_details": {"reasoning_tokens": 3053}
+            },
+            "usage_breakdown": null,
+            "system_fingerprint": "fp_test",
+            "x_groq": {"id": "req_test", "seed": 42},
+            "service_tier": "on_demand"
+        }))
+        .unwrap();
+
+        let parsed = parse_response(&response).unwrap();
+
+        assert_eq!(parsed.content, "{\"status\":\"draft_ready\"}");
+        assert_eq!(
+            parsed.usage,
+            Some(ModelUsage {
+                input_tokens: Some(1114),
+                output_tokens: Some(3672),
+            })
+        );
+    }
+
+    fn typed_response(choices: Value, usage: Option<Value>) -> ProviderResponse {
         let mut wire = json!({
             "id": "test-completion",
             "choices": choices,
