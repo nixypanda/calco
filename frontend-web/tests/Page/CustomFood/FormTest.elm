@@ -2,6 +2,7 @@ module Page.CustomFood.FormTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
+import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition as Nutrition
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -492,7 +493,75 @@ tests =
                 , Form.addCategoryTag "SNACK" [ "snack" ]
                 ]
                     |> Expect.equal [ [ "snack" ], [ "snack" ] ]
+        , test "AI draft maps every value without changing decimal text" <|
+            \_ ->
+                Form.emptyForm
+                    |> Form.withNutrientCatalog nutrientItems
+                    |> Form.applyAiDraft assistantDraft
+                    |> (\form ->
+                            { name = form.name
+                            , brand = form.brand
+                            , categories = form.categoryInput.selected
+                            , servingSizeG = form.servingSizeG
+                            , defaultQuantity = form.defaultQuantity
+                            , defaultUnit = form.defaultUnit
+                            , nutrients = form.nutrients
+                            , servings = form.servings
+                            }
+                       )
+                    |> Expect.equal
+                        { name = "Dal"
+                        , brand = "Kitchen"
+                        , categories = [ "lentils", "dinner" ]
+                        , servingSizeG = "300.50"
+                        , defaultQuantity = "1"
+                        , defaultUnit = "bowl"
+                        , nutrients =
+                            [ { code = "ENERGY_KCAL"
+                              , amountPer100g = "120.125000"
+                              , unit = "kcal"
+                              }
+                            ]
+                        , servings =
+                            [ { label = "one bowl"
+                              , quantity = "1"
+                              , unit = "bowl"
+                              , grams = "300.50"
+                              }
+                            ]
+                        }
+        , test "manual input detection ignores the blank starter row" <|
+            \_ ->
+                let
+                    empty : Form.FormModel
+                    empty =
+                        Form.emptyForm
+                in
+                ( Form.hasManualInput empty
+                , Form.hasManualInput { empty | name = "Dal" }
+                )
+                    |> Expect.equal ( False, True )
         ]
+
+
+assistantDraft : FoodDraft
+assistantDraft =
+    { name = "Dal"
+    , brand = Just "Kitchen"
+    , categories = [ "Lentils", "DINNER" ]
+    , servingSizeG = Just "300.50"
+    , defaultQuantity = Just "1"
+    , defaultUnit = Just "bowl"
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amountPer100g = "120.125000" } ]
+    , servings =
+        [ { label = "one bowl"
+          , quantity = "1"
+          , unit = "bowl"
+          , grams = "300.50"
+          }
+        ]
+    }
 
 
 product : ProductDetail

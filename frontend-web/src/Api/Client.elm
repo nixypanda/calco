@@ -7,10 +7,12 @@ module Api.Client exposing
     , isUnauthorized
     , post
     , postEmpty
+    , postMultipart
     , postNoBody
     , put
     )
 
+import Dict
 import Http
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
@@ -21,6 +23,7 @@ type ApiError
     | Timeout
     | NetworkError
     | BadStatus Int String String
+    | RateLimited (Maybe Int)
     | BadBody String
 
 
@@ -32,6 +35,16 @@ get path decoder toMsg =
 post : String -> Encode.Value -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
 post path body decoder toMsg =
     request "POST" path (Http.jsonBody body) decoder toMsg
+
+
+postMultipart :
+    String
+    -> List Http.Part
+    -> Decoder value
+    -> (Result ApiError value -> msg)
+    -> Cmd msg
+postMultipart path parts decoder toMsg =
+    request "POST" path (Http.multipartBody parts) decoder toMsg
 
 
 postEmpty : String -> Encode.Value -> (Result ApiError () -> msg) -> Cmd msg
@@ -88,7 +101,17 @@ expectJson decoder toMsg =
                     Err NetworkError
 
                 Http.BadStatus_ metadata body ->
-                    Err (decodeBackendError metadata.statusCode body)
+                    if metadata.statusCode == 429 then
+                        Err
+                            (RateLimited
+                                (metadata.headers
+                                    |> Dict.get "retry-after"
+                                    |> Maybe.andThen String.toInt
+                                )
+                            )
+
+                    else
+                        Err (decodeBackendError metadata.statusCode body)
 
                 Http.GoodStatus_ _ body ->
                     if String.isEmpty body then
@@ -147,6 +170,14 @@ displayError error =
 
             else
                 code ++ ": " ++ message
+
+        RateLimited maybeSeconds ->
+            case maybeSeconds of
+                Just seconds ->
+                    "Too many requests. Try again in " ++ String.fromInt seconds ++ " seconds."
+
+                Nothing ->
+                    "Too many requests. Please wait before trying again."
 
         BadBody message ->
             "Unexpected response: " ++ message

@@ -587,10 +587,11 @@ impl ProductServing {
     }
 }
 
-const REQUIRED_NUTRIENT_CODES: &[&str] = &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
+pub const REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES: &[&str] =
+    &["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"];
 
 fn validate_required_nutrients(nutrients: &[ProductNutrient]) -> Result<(), NutritionError> {
-    let missing: Vec<&str> = REQUIRED_NUTRIENT_CODES
+    let missing: Vec<&str> = REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES
         .iter()
         .copied()
         .filter(|code| !nutrients.iter().any(|n| n.nutrient_code.0 == *code))

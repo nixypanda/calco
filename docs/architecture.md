@@ -56,12 +56,17 @@ that coupling.
 
 ## Bounded Contexts
 
-Three bounded contexts: `auth`, `nutrition`, and `import`. Each lives under its own top-level module (`backend/src/{auth,nutrition,import}/`). `auth` and `import` nest the four layers (`domain`, `application`, `infrastructure`, `interfaces`) directly. `nutrition` is organized feature-first (see below): one folder per sub-context, each nesting the four layers inside.
+Four bounded contexts: `auth`, `nutrition`, `import`, and `assistant`. Each
+lives under its own top-level backend module. `auth`, `import`, and `assistant`
+nest the four layers (`domain`, `application`, `infrastructure`, `interfaces`)
+directly. `nutrition` is organized feature-first (see below): one folder per
+sub-context, each nesting the four layers inside.
 
 Dependency direction between contexts:
 
 ```text
 import -> nutrition -> auth
+assistant -> nutrition (read-only catalog vocabulary)
 ```
 
 `auth` depends on nothing. `nutrition` depends on `auth` only at the interface edge (its HTTP handlers use the `AuthUser` extractor), never in domain or application. `import` depends on `nutrition` only through the catalog domain (`catalog::Category`). Contexts integrate at the seams, not through shared domain logic — this is the invariant that keeps the top level clean.
@@ -151,6 +156,22 @@ Imports are an anti-corruption/staging layer around external food datasets.
 
 `ImportJob` owns staged products, nutrients, servings, and row-level errors. Staged rows become catalog data only when an import is committed. Imports translate at the seam (their own `ImportError`, their own DTOs) and are intentionally operated from CLI scripts in `tools/importers/data-sources`, not from browser UI.
 
+### Assistant
+
+The assistant is a text-only, review-before-write custom-food drafting context.
+It receives a bounded conversation, supplies the model with a bounded read-only
+nutrition vocabulary, and returns either one clarification question or a
+complete food draft. It never persists catalog data; the user must review and
+submit a draft through the existing custom-food API.
+
+Provider credentials are loaded once at startup only when AI is enabled.
+Requests are authenticated, size-bounded, rate-limited per user, and protected
+by a process-wide concurrency limit. Telemetry contains only user ID, latency,
+outcome, and provider token counts when present. Prompt and response content,
+provider configuration, credentials, and credential paths are excluded.
+
+Photo and image inputs are outside this boundary for this change.
+
 ## Transaction And Consistency Decisions
 
 - Product create/update replaces nutrients and servings atomically.
@@ -179,5 +200,7 @@ Major route groups:
 - `/diary-preferences`
 - `/meals`
 - `/imports`
+- `/api/ai/food-assistant/status`
+- `/api/ai/custom-food/draft`
 
 See [backend.md](backend.md) for route details.

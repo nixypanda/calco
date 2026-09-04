@@ -1,5 +1,6 @@
 module Ui exposing
     ( BottomActionTone(..)
+    , CompactButtonWidth(..)
     , InputConfig
     , PageHeaderSubtitle(..)
     , SubmitButtonConfig
@@ -14,6 +15,11 @@ module Ui exposing
     , chipBackground
     , chips
     , coloredPill
+    , compactBrandOutlineButton
+    , compactDangerButton
+    , compactDangerOutlineButton
+    , compactGhostButton
+    , compactPrimaryButton
     , completionDropdown
     , completionRow
     , dangerIconButton
@@ -530,6 +536,11 @@ type BottomActionTone
     | DangerAction
 
 
+type CompactButtonWidth
+    = CompactContent
+    | CompactResponsive
+
+
 submittingOrIdle : Bool -> SubmitState
 submittingOrIdle isSubmitting =
     if isSubmitting then
@@ -645,6 +656,122 @@ secondarySubmitButton device theme config =
                 Nothing
         , label = Element.text label
         }
+
+
+compactGhostButton :
+    Device
+    -> Theme
+    -> CompactButtonWidth
+    -> String
+    -> msg
+    -> Element msg
+compactGhostButton device theme width label msg =
+    Input.button
+        [ compactButtonWidth device width
+        , Element.height (Element.px 44)
+        , Element.paddingXY space12 space8
+        , Border.rounded radiusPill
+        , Font.color theme.textMuted
+        , Font.medium
+        , Font.size 14
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , hoverEffect device
+            [ Background.color theme.brandBlueSoft
+            , Font.color theme.brandBlue
+            ]
+        ]
+        { onPress = Just msg, label = Element.text label }
+
+
+compactPrimaryButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
+compactPrimaryButton device theme width label msg =
+    Input.button
+        [ Background.color theme.brandBlue
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded radiusPill
+        , compactButtonWidth device width
+        , Element.height (Element.px 48)
+        , Element.paddingXY space16 space8
+        , Font.medium
+        , Font.size 14
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , hoverEffect device [ Background.color theme.brandBluePressed ]
+        ]
+        { onPress = Just msg, label = Element.text label }
+
+
+compactBrandOutlineButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
+compactBrandOutlineButton device theme width label msg =
+    Input.button
+        [ Background.color theme.cardBg
+        , Font.color theme.brandBlue
+        , Border.width 1
+        , Border.color theme.brandBlue
+        , Border.rounded radiusPill
+        , compactButtonWidth device width
+        , Element.height (Element.px 44)
+        , Element.paddingXY space12 space8
+        , Font.medium
+        , Font.size 14
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , hoverEffect device [ Background.color theme.brandBlueSoft ]
+        ]
+        { onPress = Just msg, label = Element.text label }
+
+
+compactDangerButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
+compactDangerButton device theme width label msg =
+    Input.button
+        [ Background.color theme.dangerSolid
+        , Font.color (Element.rgb255 255 255 255)
+        , Border.rounded radiusPill
+        , compactButtonWidth device width
+        , Element.height (Element.px 48)
+        , Element.paddingXY space16 space8
+        , Font.medium
+        , Font.size 14
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , hoverEffect device [ Background.color theme.dangerFg ]
+        ]
+        { onPress = Just msg, label = Element.text label }
+
+
+compactDangerOutlineButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
+compactDangerOutlineButton device theme width label msg =
+    Input.button
+        [ Background.color theme.cardBg
+        , Font.color theme.dangerFg
+        , Border.width 1
+        , Border.color theme.dangerFg
+        , Border.rounded radiusPill
+        , compactButtonWidth device width
+        , Element.height (Element.px 44)
+        , Element.paddingXY space12 space8
+        , Font.medium
+        , Font.size 14
+        , Font.center
+        , uiClass "ui-motion ui-pressable"
+        , hoverEffect device [ Background.color theme.dangerBg ]
+        ]
+        { onPress = Just msg, label = Element.text label }
+
+
+compactButtonWidth : Device -> CompactButtonWidth -> Element.Attribute msg
+compactButtonWidth device width =
+    case width of
+        CompactContent ->
+            Element.width Element.shrink
+
+        CompactResponsive ->
+            if isSmall device then
+                Element.width Element.fill
+
+            else
+                Element.width Element.shrink
 
 
 bottomActionButtons :

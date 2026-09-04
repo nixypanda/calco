@@ -1,3 +1,4 @@
+pub mod assistant;
 pub mod auth;
 pub mod config;
 pub mod import;
@@ -8,6 +9,8 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
+use crate::assistant::interfaces::assistant_routes;
+use crate::assistant::module::AssistantModule;
 use crate::auth::domain::SessionCookieConfig;
 use crate::auth::interfaces::http::auth_routes;
 use crate::auth::module::AuthModule;
@@ -33,6 +36,7 @@ pub struct AppState {
     pub auth: AuthModule,
     pub nutrition: NutritionModule,
     pub import: ImportModule,
+    pub assistant: AssistantModule,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
@@ -46,11 +50,13 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     );
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(&pool);
+    let assistant = AssistantModule::build(&config.file.ai, &nutrition.catalog)?;
 
     Ok(AppState {
         auth,
         nutrition,
         import,
+        assistant,
     })
 }
 
@@ -58,6 +64,13 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
     let cors = build_cors_layer(&config.environment);
     let auth_state = build_app_state(pool, config).await?;
 
+    Ok(build_router_from_state(auth_state).layer(cors))
+}
+
+/// Builds the HTTP surface from an already-composed state. This keeps provider
+/// substitution available to black-box tests without changing production
+/// composition.
+pub fn build_router_from_state(auth_state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .route("/version", get(version))
@@ -68,9 +81,10 @@ pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, Box
         .merge(nutrition_details_routes(auth_state.clone()))
         .merge(meal_routes(auth_state.clone()))
         .merge(goal_target_routes(auth_state.clone()))
-        .merge(import_routes(auth_state));
+        .merge(import_routes(auth_state.clone()))
+        .merge(assistant_routes(auth_state));
 
-    Ok(Router::new().nest("/api", api).layer(cors))
+    Router::new().nest("/api", api)
 }
 
 fn build_cors_layer(config: &EnvironmentConfig) -> CorsLayer {

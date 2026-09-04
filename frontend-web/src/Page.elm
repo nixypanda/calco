@@ -29,6 +29,7 @@ import Api.Admin
 import Api.Auth
 import Api.Client
 import Api.DiaryPreferences
+import Api.FoodAssistant
 import Api.Foods
 import Api.Goals
 import Api.Logs
@@ -47,6 +48,7 @@ import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
+import Page.CustomFood.Assistant as CustomFoodAssistant
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
@@ -2409,7 +2411,13 @@ applyCustomFoodCreateOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         CustomFoodCreate.RequestInitialData ->
-            ( Cmd.none, NoOutMsg )
+            ( Api.FoodAssistant.getStatus
+                (GotCustomFoodCreateMsg
+                    << CustomFoodCreate.AssistantMsg
+                    << CustomFoodAssistant.StatusLoaded
+                )
+            , NoOutMsg
+            )
 
         CustomFoodCreate.RequestCreateFood request ->
             ( Api.Foods.createCustomFood request
@@ -2420,6 +2428,24 @@ applyCustomFoodCreateOutMsg _ outMsg =
         CustomFoodCreate.RequestCategorySuggestions token request ->
             ( Api.Foods.listCategorySuggestions request
                 (GotCustomFoodCreateMsg << CustomFoodCreate.CategorySuggestionsLoaded token)
+            , NoOutMsg
+            )
+
+        CustomFoodCreate.RequestAssistantStatus ->
+            ( Api.FoodAssistant.getStatus
+                (GotCustomFoodCreateMsg
+                    << CustomFoodCreate.AssistantMsg
+                    << CustomFoodAssistant.StatusLoaded
+                )
+            , NoOutMsg
+            )
+
+        CustomFoodCreate.RequestFoodDraft conversation ->
+            ( Api.FoodAssistant.requestDraft conversation
+                (GotCustomFoodCreateMsg
+                    << CustomFoodCreate.AssistantMsg
+                    << CustomFoodAssistant.DraftCompleted
+                )
             , NoOutMsg
             )
 

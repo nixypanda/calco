@@ -9,8 +9,10 @@ module Page.CustomFood.Form exposing
     , SubmitState(..)
     , ValidationError(..)
     , addCategoryTag
+    , applyAiDraft
     , emptyForm
     , fromProductDetail
+    , hasManualInput
     , isSubmitting
     , toCreateFoodRequest
     , unitGhostText
@@ -29,6 +31,7 @@ import Api.Foods
         , ProductDetail
         , UnitItem
         )
+import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition exposing (defaultCode)
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
@@ -167,6 +170,84 @@ emptyNutrientRow =
 emptyServingRow : ServingRow
 emptyServingRow =
     { label = "", quantity = "", unit = defaultCode, grams = "" }
+
+
+applyAiDraft : FoodDraft -> FormModel -> FormModel
+applyAiDraft draft form =
+    let
+        categoryInput : CategoryInput
+        categoryInput =
+            form.categoryInput
+    in
+    { form
+        | name = draft.name
+        , brand = Maybe.withDefault "" draft.brand
+        , categoryInput =
+            { categoryInput
+                | selected = List.map String.toLower draft.categories
+                , query = ""
+                , suggestions = []
+            }
+        , servingSizeG = Maybe.withDefault "" draft.servingSizeG
+        , defaultQuantity = Maybe.withDefault "" draft.defaultQuantity
+        , defaultUnit = Maybe.withDefault "" draft.defaultUnit
+        , nutrients =
+            List.map
+                (\nutrient ->
+                    { code = nutrient.code
+                    , amountPer100g = nutrient.amountPer100g
+                    , unit =
+                        Dict.get nutrient.code form.nutrientCatalog
+                            |> Maybe.withDefault ""
+                    }
+                )
+                draft.nutrients
+        , servings =
+            List.map
+                (\serving ->
+                    { label = serving.label
+                    , quantity = serving.quantity
+                    , unit = serving.unit
+                    , grams = serving.grams
+                    }
+                )
+                draft.servings
+        , submit = Idle
+        , openDropdown = NoneOpen
+    }
+
+
+hasManualInput : FormModel -> Bool
+hasManualInput form =
+    List.any (not << String.isEmpty << String.trim)
+        [ form.name
+        , form.brand
+        , form.categoryInput.query
+        , form.servingSizeG
+        , form.defaultQuantity
+        ]
+        || not (List.isEmpty form.categoryInput.selected)
+        || (form.defaultUnit
+                /= defaultCode
+                && not (String.isEmpty (String.trim form.defaultUnit))
+           )
+        || List.any
+            (\row ->
+                not (String.isEmpty (String.trim row.code))
+                    || not (String.isEmpty (String.trim row.amountPer100g))
+            )
+            form.nutrients
+        || List.any
+            (\row ->
+                not (String.isEmpty (String.trim row.label))
+                    || not (String.isEmpty (String.trim row.quantity))
+                    || not (String.isEmpty (String.trim row.grams))
+                    || (row.unit
+                            /= defaultCode
+                            && not (String.isEmpty (String.trim row.unit))
+                       )
+            )
+            form.servings
 
 
 
