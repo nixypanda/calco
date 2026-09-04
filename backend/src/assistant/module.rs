@@ -7,12 +7,13 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::assistant::application::{FoodDraftPort, FoodDraftService};
+use crate::assistant::application::FoodDraftService;
 use crate::assistant::domain::AssistantError;
-use crate::assistant::infrastructure::{
-    NutritionCatalogVocabularyAdapter, OpenAiCompatibleFoodDraftModel,
+use crate::assistant::infrastructure::{FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter};
+use crate::assistant::llm::{
+    Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
 };
-use crate::config::AiRuntimeSettings;
+use crate::config::{AiAuthenticationSettings, AiRuntimeSettings};
 use crate::nutrition::module::CatalogModule;
 
 const REQUESTS_PER_WINDOW: usize = 10;
@@ -22,7 +23,7 @@ const MAX_TRACKED_USERS: usize = 1_024;
 
 #[derive(Clone)]
 pub struct AssistantModule {
-    service: Option<Arc<dyn FoodDraftPort>>,
+    service: Option<Arc<FoodDraftService>>,
     limits: Arc<AssistantLimits>,
 }
 
@@ -49,11 +50,32 @@ impl AssistantModule {
         let service = match settings {
             AiRuntimeSettings::Disabled => None,
             AiRuntimeSettings::Enabled(settings) => {
-                let model = Arc::new(OpenAiCompatibleFoodDraftModel::new(settings)?);
+                let authentication = match &settings.authentication {
+                    AiAuthenticationSettings::None => Authentication::None,
+                    AiAuthenticationSettings::Bearer { api_key_file } => {
+                        Authentication::BearerFile(api_key_file.clone())
+                    }
+                    AiAuthenticationSettings::Header {
+                        header_name,
+                        api_key_file,
+                    } => Authentication::HeaderFile {
+                        name: header_name.clone(),
+                        path: api_key_file.clone(),
+                    },
+                };
+                let chat = Arc::new(
+                    OpenAiCompatibleClient::new(OpenAiCompatibleConfig {
+                        endpoint: settings.endpoint.clone(),
+                        model: settings.model.as_str().to_owned(),
+                        authentication,
+                    })
+                    .map_err(map_chat_startup_error)?,
+                );
+                let model = Arc::new(FoodDraftModelAdapter::new(chat));
                 let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
                     catalog.services.clone(),
                 ));
-                Some(Arc::new(FoodDraftService::new(model, vocabulary)) as Arc<dyn FoodDraftPort>)
+                Some(Arc::new(FoodDraftService::new(model, vocabulary)))
             }
         };
         Ok(Self::new(
@@ -66,7 +88,7 @@ impl AssistantModule {
     }
 
     /// Dependency-injection seam for tests and alternate text-draft providers.
-    pub fn from_service(service: Arc<dyn FoodDraftPort>) -> Self {
+    pub fn from_service(service: Arc<FoodDraftService>) -> Self {
         Self::new(
             Some(service),
             REQUESTS_PER_WINDOW,
@@ -87,7 +109,7 @@ impl AssistantModule {
     }
 
     fn new(
-        service: Option<Arc<dyn FoodDraftPort>>,
+        service: Option<Arc<FoodDraftService>>,
         requests_per_window: usize,
         window: Duration,
         max_in_flight: usize,
@@ -109,7 +131,7 @@ impl AssistantModule {
         self.service.is_some()
     }
 
-    pub(crate) fn service(&self) -> Option<Arc<dyn FoodDraftPort>> {
+    pub(crate) fn service(&self) -> Option<Arc<FoodDraftService>> {
         self.service.clone()
     }
 
@@ -153,6 +175,10 @@ impl AssistantModule {
         user_requests.push_back(now);
         Ok(permit)
     }
+}
+
+fn map_chat_startup_error(_error: ChatError) -> AssistantError {
+    AssistantError::Internal
 }
 
 impl FromRef<AppState> for AssistantModule {

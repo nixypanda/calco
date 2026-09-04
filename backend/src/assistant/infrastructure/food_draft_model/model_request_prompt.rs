@@ -1,4 +1,4 @@
-use super::FoodVocabulary;
+use crate::assistant::application::FoodVocabulary;
 
 pub(super) fn build_system_prompt(vocabulary: &FoodVocabulary) -> String {
     let nutrients = vocabulary

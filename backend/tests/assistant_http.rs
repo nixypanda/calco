@@ -1,15 +1,17 @@
 mod common;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftModelPort, FoodDraftPort, FoodDraftResult, FoodDraftService, ModelDraftRequest,
-    ModelDraftResponse, ModelUsage,
+    FoodDraftModel, FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort,
+    ModelUsage,
 };
-use calco_backend::assistant::domain::{AssistantError, Conversation, FoodDraftTurn};
+use calco_backend::assistant::domain::{
+    AssistantError, Conversation, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
+};
 use calco_backend::assistant::infrastructure::NutritionCatalogVocabularyAdapter;
 use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
@@ -17,34 +19,42 @@ use common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
-#[derive(Clone)]
-struct FakeDraftService {
+struct FakeModel {
     result: Result<FoodDraftResult, AssistantError>,
+    observed_vocabulary: Option<Arc<Mutex<Option<FoodVocabulary>>>>,
 }
 
-struct FakeModel {
-    response: ModelDraftResponse,
-}
+struct FakeVocabulary;
 
 #[async_trait]
-impl FoodDraftModelPort for FakeModel {
+impl FoodDraftModel for FakeModel {
     async fn generate(
         &self,
-        _request: ModelDraftRequest,
-    ) -> Result<ModelDraftResponse, AssistantError> {
-        Ok(self.response.clone())
-    }
-}
-
-#[async_trait]
-impl FoodDraftPort for FakeDraftService {
-    async fn draft(&self, _conversation: Conversation) -> Result<FoodDraftResult, AssistantError> {
+        _conversation: &Conversation,
+        vocabulary: &FoodVocabulary,
+    ) -> Result<FoodDraftResult, AssistantError> {
+        if let Some(observed) = &self.observed_vocabulary {
+            *observed.lock().unwrap() = Some(vocabulary.clone());
+        }
         self.result.clone()
     }
 }
 
+#[async_trait]
+impl FoodVocabularyPort for FakeVocabulary {
+    async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError> {
+        Ok(FoodVocabulary::default())
+    }
+}
+
 fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
-    AssistantModule::from_service(Arc::new(FakeDraftService { result }))
+    AssistantModule::from_service(Arc::new(FoodDraftService::new(
+        Arc::new(FakeModel {
+            result,
+            observed_vocabulary: None,
+        }),
+        Arc::new(FakeVocabulary),
+    )))
 }
 
 async fn app_with_assistant(pool: PgPool, assistant: AssistantModule) -> axum::Router {
@@ -53,20 +63,22 @@ async fn app_with_assistant(pool: PgPool, assistant: AssistantModule) -> axum::R
     build_router_from_state(state)
 }
 
-async fn app_with_model_response(pool: PgPool, content: &str) -> axum::Router {
+async fn app_with_model_result_and_real_vocabulary(
+    pool: PgPool,
+    result: FoodDraftResult,
+) -> (axum::Router, Arc<Mutex<Option<FoodVocabulary>>>) {
     let mut state = build_app_state(pool, test_config()).await.unwrap();
+    let observed_vocabulary = Arc::new(Mutex::new(None));
     let model = Arc::new(FakeModel {
-        response: ModelDraftResponse {
-            content: content.to_owned(),
-            usage: None,
-        },
+        result: Ok(result),
+        observed_vocabulary: Some(observed_vocabulary.clone()),
     });
     let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
         state.nutrition.catalog.services.clone(),
     ));
     state.assistant =
         AssistantModule::from_service(Arc::new(FoodDraftService::new(model, vocabulary)));
-    build_router_from_state(state)
+    (build_router_from_state(state), observed_vocabulary)
 }
 
 fn conversation() -> Value {
@@ -229,28 +241,47 @@ async fn multipart_limits_and_text_only_boundary_are_enforced(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn model_draft_uses_real_catalog_vocabulary_and_is_submittable(pool: PgPool) {
-    let response = r#"{
-        "assistant_message":"Review this estimate.",
-        "status":"draft_ready",
-        "draft":{
-            "name":"Dal",
-            "brand":null,
-            "categories":["lentils"],
-            "serving_size_g":240,
-            "default_quantity":1,
-            "default_unit":"g",
-            "nutrients":[
-                {"code":"ENERGY_KCAL","amount_per_100g":120},
-                {"code":"PROTEIN_G","amount_per_100g":7},
-                {"code":"CARBS_G","amount_per_100g":20},
-                {"code":"FAT_G","amount_per_100g":2}
-            ],
-            "servings":[{"label":"one cup","quantity":1,"unit":"cup","grams":240}]
+async fn real_catalog_vocabulary_reaches_model_and_trusted_draft_is_submittable(pool: PgPool) {
+    let nutrient = |code: &str, amount: i64| {
+        DraftNutrient::new(code.into(), rust_decimal::Decimal::new(amount, 0)).unwrap()
+    };
+    let draft = FoodDraft::new(
+        "Dal".into(),
+        None,
+        vec!["lentils".into()],
+        Some(rust_decimal::Decimal::new(240, 0)),
+        Some(rust_decimal::Decimal::ONE),
+        Some("g".into()),
+        vec![
+            nutrient("ENERGY_KCAL", 120),
+            nutrient("PROTEIN_G", 7),
+            nutrient("CARBS_G", 20),
+            nutrient("FAT_G", 2),
+        ],
+        vec![
+            DraftServing::new(
+                "one cup".into(),
+                rust_decimal::Decimal::ONE,
+                "cup".into(),
+                rust_decimal::Decimal::new(240, 0),
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    let (router, observed_vocabulary) = app_with_model_result_and_real_vocabulary(
+        pool,
+        FoodDraftResult {
+            turn: FoodDraftTurn::ready(
+                "Review this estimate.",
+                draft,
+                vec!["Estimated values".into()],
+            )
+            .unwrap(),
+            usage: None,
         },
-        "warnings":["Estimated values"]
-    }"#;
-    let router = app_with_model_response(pool, response).await;
+    )
+    .await;
     let (_, user) = bootstrap_and_user(&router).await;
 
     let (status, _, bytes) = send(&router, draft_request(Some(&user))).await;
@@ -259,6 +290,34 @@ async fn model_draft_uses_real_catalog_vocabulary_and_is_submittable(pool: PgPoo
     assert_eq!(assistant_response["status"], "draft_ready");
     assert_eq!(assistant_response["draft"]["default_unit"], "g");
     assert_eq!(assistant_response["draft"]["servings"][0]["unit"], "cup");
+
+    let vocabulary = observed_vocabulary.lock().unwrap().take().unwrap();
+    assert!(
+        vocabulary
+            .nutrients
+            .iter()
+            .any(|value| value.code == "ENERGY_KCAL")
+    );
+    assert!(
+        vocabulary
+            .default_units
+            .iter()
+            .any(|value| value.code == "g")
+    );
+    assert!(
+        vocabulary
+            .serving_units
+            .iter()
+            .any(|value| value.code == "cup")
+    );
+    for required in ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"] {
+        assert!(
+            vocabulary
+                .required_nutrient_codes
+                .iter()
+                .any(|code| code == required)
+        );
+    }
 
     let created: Value = post_json(
         &router,

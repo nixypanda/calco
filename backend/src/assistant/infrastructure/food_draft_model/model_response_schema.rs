@@ -1,8 +1,8 @@
-use serde_json::json;
+use serde_json::{Value, json};
 
-use super::FoodVocabulary;
+use crate::assistant::application::FoodVocabulary;
 
-pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> String {
+pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
     let default_units = vocabulary
         .default_units
         .iter()
@@ -58,7 +58,6 @@ pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> String 
             "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 500 } }
         }
     })
-    .to_string()
 }
 
 #[cfg(test)]
@@ -91,8 +90,7 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_fields_at_each_object_level() {
-        let value: serde_json::Value =
-            serde_json::from_str(&food_draft_response_schema(&vocabulary())).unwrap();
+        let value = food_draft_response_schema(&vocabulary());
         assert_eq!(value["additionalProperties"], false);
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["additionalProperties"],
@@ -104,12 +102,12 @@ mod tests {
         );
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["properties"]["default_unit"]["enum"],
-            serde_json::json!(["g", null])
+            json!(["g", null])
         );
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["properties"]["servings"]["items"]["properties"]
                 ["unit"]["enum"],
-            serde_json::json!(["g", "cup"])
+            json!(["g", "cup"])
         );
     }
 }

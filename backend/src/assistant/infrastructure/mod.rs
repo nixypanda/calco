@@ -1,5 +1,5 @@
+mod food_draft_model;
 mod nutrition_catalog;
-mod openai_compatible;
 
+pub use food_draft_model::FoodDraftModelAdapter;
 pub use nutrition_catalog::NutritionCatalogVocabularyAdapter;
-pub use openai_compatible::OpenAiCompatibleFoodDraftModel;
