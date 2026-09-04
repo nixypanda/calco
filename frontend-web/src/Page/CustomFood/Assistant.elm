@@ -4,10 +4,14 @@ module Page.CustomFood.Assistant exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
+    , PhotoMetadata
     , RequestState(..)
     , draftPreviewData
     , init
+    , previewUrls
+    , removeAt
     , update
+    , validatePhotoMetadata
     , view
     )
 
@@ -26,6 +30,13 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import File exposing (File)
+import File.Select
+import Html
+import Html.Attributes as HtmlAttributes
+import Html.Events as HtmlEvents
+import Json.Decode as Decode
+import Task
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
@@ -49,6 +60,16 @@ type alias ChatModel =
     , warnings : List String
     , awaitingOverwriteConfirmation : Bool
     , awaitingNewSessionConfirmation : Bool
+    , supportsImages : Bool
+    , photos : List File
+    , photoUrls : List (Maybe String)
+    , photoError : Maybe String
+    }
+
+
+type alias PhotoMetadata =
+    { mimeType : String
+    , size : Int
     }
 
 
@@ -71,6 +92,11 @@ type Msg
     | RetryStatusClicked
     | ToggleExpanded
     | DescriptionChanged String
+    | TakePhotoSelected File
+    | ChoosePhotos
+    | PhotosSelected File (List File)
+    | PhotoPreviewLoaded Int String
+    | RemovePhoto Int
     | SendClicked
     | DraftCompleted (Result Client.ApiError FoodDraftTurn)
     | RetryClicked
@@ -85,7 +111,8 @@ type Msg
 type OutMsg
     = NoOutMsg
     | RequestStatus
-    | RequestDraft Conversation
+    | RequestDraft Conversation (List File)
+    | RevokePhotoPreviewUrls (List String)
     | ApplyDraft FoodDraft
     | SessionExpired
 
@@ -93,6 +120,16 @@ type OutMsg
 init : ( Model, OutMsg )
 init =
     ( LoadingStatus, RequestStatus )
+
+
+previewUrls : Model -> List String
+previewUrls model =
+    case model of
+        Enabled chat ->
+            List.filterMap identity chat.photoUrls
+
+        _ ->
+            []
 
 
 emptyChat : ChatModel
@@ -105,6 +142,10 @@ emptyChat =
     , warnings = []
     , awaitingOverwriteConfirmation = False
     , awaitingNewSessionConfirmation = False
+    , supportsImages = False
+    , photos = []
+    , photoUrls = []
+    , photoError = Nothing
     }
 
 
@@ -115,7 +156,10 @@ update msg model =
             case result of
                 Ok status ->
                     if status.enabled then
-                        ( Enabled emptyChat, Cmd.none, NoOutMsg )
+                        ( Enabled { emptyChat | supportsImages = status.supportsImages }
+                        , Cmd.none
+                        , NoOutMsg
+                        )
 
                     else
                         ( Disabled, Cmd.none, NoOutMsg )
@@ -139,6 +183,52 @@ update msg model =
         DescriptionChanged description ->
             updateChat
                 (\chat -> ( { chat | description = description }, NoOutMsg ))
+                model
+
+        TakePhotoSelected photo ->
+            addSelectedPhotos [ photo ] model
+
+        ChoosePhotos ->
+            case model of
+                Enabled chat ->
+                    if canAddPhotos chat then
+                        ( model
+                        , File.Select.files [ "image/*" ] PhotosSelected
+                        , NoOutMsg
+                        )
+
+                    else
+                        ( model, Cmd.none, NoOutMsg )
+
+                _ ->
+                    ( model, Cmd.none, NoOutMsg )
+
+        PhotosSelected first rest ->
+            addSelectedPhotos (first :: rest) model
+
+        PhotoPreviewLoaded index url ->
+            updateChat
+                (\chat ->
+                    ( { chat | photoUrls = setAt index (Just url) chat.photoUrls }
+                    , NoOutMsg
+                    )
+                )
+                model
+
+        RemovePhoto index ->
+            updateChat
+                (\chat ->
+                    ( { chat
+                        | photos = removeAt index chat.photos
+                        , photoUrls = removeAt index chat.photoUrls
+                        , photoError = Nothing
+                      }
+                    , valueAt index chat.photoUrls
+                        |> Maybe.andThen identity
+                        |> Maybe.map (List.singleton >> RevokePhotoPreviewUrls)
+                        |> Maybe.withDefault NoOutMsg
+                    )
+                )
                 model
 
         SendClicked ->
@@ -239,7 +329,7 @@ sendTranscript transcript chat =
                 , awaitingOverwriteConfirmation = False
                 , awaitingNewSessionConfirmation = False
               }
-            , RequestDraft boundedConversation
+            , RequestDraft boundedConversation chat.photos
             )
 
 
@@ -274,8 +364,11 @@ completeDraft turn chat =
                 , draft = Just readyDraft.draft
                 , warnings = readyDraft.warnings
                 , awaitingOverwriteConfirmation = False
+                , photos = []
+                , photoUrls = []
+                , photoError = Nothing
               }
-            , NoOutMsg
+            , revokePreviewUrls chat
             )
 
 
@@ -287,7 +380,7 @@ retryDraft chat =
                 | request = Sending
                 , awaitingNewSessionConfirmation = False
               }
-            , RequestDraft boundedConversation
+            , RequestDraft boundedConversation chat.photos
             )
 
         _ ->
@@ -305,7 +398,12 @@ requestNewSession chat =
 
 newSession : ChatModel -> ( ChatModel, OutMsg )
 newSession chat =
-    ( { emptyChat | expanded = chat.expanded }, NoOutMsg )
+    ( { emptyChat
+        | expanded = chat.expanded
+        , supportsImages = chat.supportsImages
+      }
+    , revokePreviewUrls chat
+    )
 
 
 confirmNewSession : ChatModel -> ( ChatModel, OutMsg )
@@ -319,7 +417,10 @@ confirmNewSession chat =
 
 hasSession : ChatModel -> Bool
 hasSession chat =
-    not (List.isEmpty chat.transcript) || chat.draft /= Nothing
+    not (List.isEmpty chat.transcript)
+        || chat.draft
+        /= Nothing
+        || not (List.isEmpty chat.photos)
 
 
 requestApply : Bool -> ChatModel -> ( ChatModel, OutMsg )
@@ -379,6 +480,154 @@ draftErrorMessage error =
 
         _ ->
             "The assistant could not create a draft. Please retry."
+
+
+addSelectedPhotos : List File -> Model -> ( Model, Cmd Msg, OutMsg )
+addSelectedPhotos files model =
+    case model of
+        Enabled chat ->
+            if not (canAddPhotos chat) then
+                ( model, Cmd.none, NoOutMsg )
+
+            else
+                case
+                    validatePhotoMetadata
+                        (List.map photoMetadata chat.photos)
+                        (List.map photoMetadata files)
+                of
+                    Err message ->
+                        ( Enabled { chat | photoError = Just message }
+                        , Cmd.none
+                        , NoOutMsg
+                        )
+
+                    Ok () ->
+                        let
+                            firstIndex : Int
+                            firstIndex =
+                                List.length chat.photos
+
+                            previewCommands : List (Cmd Msg)
+                            previewCommands =
+                                files
+                                    |> List.indexedMap
+                                        (\index photo ->
+                                            File.toUrl photo
+                                                |> Task.perform
+                                                    (PhotoPreviewLoaded (firstIndex + index))
+                                        )
+                        in
+                        ( Enabled
+                            { chat
+                                | photos = chat.photos ++ files
+                                , photoUrls =
+                                    chat.photoUrls
+                                        ++ List.repeat (List.length files) Nothing
+                                , photoError = Nothing
+                            }
+                        , Cmd.batch previewCommands
+                        , NoOutMsg
+                        )
+
+        _ ->
+            ( model, Cmd.none, NoOutMsg )
+
+
+canAddPhotos : ChatModel -> Bool
+canAddPhotos chat =
+    chat.supportsImages
+        && chat.request
+        /= Sending
+        && List.length chat.photos
+        < maxPhotoCount
+
+
+photoMetadata : File -> PhotoMetadata
+photoMetadata photo =
+    { mimeType = File.mime photo
+    , size = File.size photo
+    }
+
+
+validatePhotoMetadata : List PhotoMetadata -> List PhotoMetadata -> Result String ()
+validatePhotoMetadata existingPhotos selectedPhotos =
+    let
+        photos : List PhotoMetadata
+        photos =
+            existingPhotos ++ selectedPhotos
+    in
+    if List.length photos > maxPhotoCount then
+        Err "Only four photos can be attached."
+
+    else if List.any (not << supportedPhotoMime << .mimeType) photos then
+        Err "Photos must be JPEG, PNG, or WebP."
+
+    else if List.any (\photo -> photo.size > maxPhotoBytes) photos then
+        Err "Each photo must be 5 MiB or smaller."
+
+    else if List.sum (List.map .size photos) > maxTotalPhotoBytes then
+        Err "Photos together must be 12 MiB or smaller."
+
+    else
+        Ok ()
+
+
+supportedPhotoMime : String -> Bool
+supportedPhotoMime mimeType =
+    List.member mimeType [ "image/jpeg", "image/png", "image/webp" ]
+
+
+maxPhotoCount : Int
+maxPhotoCount =
+    4
+
+
+maxPhotoBytes : Int
+maxPhotoBytes =
+    5 * 1024 * 1024
+
+
+maxTotalPhotoBytes : Int
+maxTotalPhotoBytes =
+    12 * 1024 * 1024
+
+
+revokePreviewUrls : ChatModel -> OutMsg
+revokePreviewUrls chat =
+    case List.filterMap identity chat.photoUrls of
+        [] ->
+            NoOutMsg
+
+        urls ->
+            RevokePhotoPreviewUrls urls
+
+
+removeAt : Int -> List a -> List a
+removeAt index values =
+    values
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( current, _ ) -> current /= index)
+        |> List.map Tuple.second
+
+
+setAt : Int -> a -> List a -> List a
+setAt index value values =
+    values
+        |> List.indexedMap
+            (\current original ->
+                if current == index then
+                    value
+
+                else
+                    original
+            )
+
+
+valueAt : Int -> List a -> Maybe a
+valueAt index values =
+    values
+        |> List.drop index
+        |> List.head
 
 
 view : Theme -> Device -> Bool -> Model -> Element Msg
@@ -458,6 +707,7 @@ expandedContent theme device formHasManualInput chat =
     , warningView theme chat.warnings
     , requestErrorView theme device chat.request
     , descriptionInput theme chat
+    , photoPicker theme device chat
     , sendButton theme device chat.request
     ]
 
@@ -572,6 +822,178 @@ descriptionInput theme chat =
         , label = Input.labelAbove [] (Ui.fieldLabel theme "Food description or answer")
         , spellcheck = True
         }
+
+
+photoPicker : Theme -> Device -> ChatModel -> Element Msg
+photoPicker theme device chat =
+    if not chat.supportsImages then
+        Element.none
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+            ([ Element.el [ Font.bold ] (Element.text "Photos (optional)")
+             , Typography.mutedParagraph theme
+                (String.concat
+                    [ "Photos are used only for the current assistant request and "
+                    , "are not persisted by CalCo."
+                    ]
+                )
+             , photoActionView theme device chat
+             ]
+                ++ photoErrorView theme chat.photoError
+                ++ List.indexedMap
+                    (\index photo ->
+                        photoPreview
+                            theme
+                            device
+                            index
+                            photo
+                            (valueAt index chat.photoUrls
+                                |> Maybe.andThen identity
+                            )
+                    )
+                    chat.photos
+            )
+
+
+photoActionView : Theme -> Device -> ChatModel -> Element Msg
+photoActionView theme device chat =
+    if List.length chat.photos >= maxPhotoCount then
+        Typography.mutedParagraph theme "Four photos attached (maximum)."
+
+    else
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+            [ cameraInput chat
+            , choosePhotosButton theme device chat
+            , Typography.mutedParagraph theme
+                (String.concat
+                    [ "Camera capture usually requires HTTPS or localhost. "
+                    , "If camera access is denied or unavailable, choose photos instead. "
+                    , "Your browser may show a chooser even when camera capture is requested."
+                    ]
+                )
+            ]
+
+
+choosePhotosButton : Theme -> Device -> ChatModel -> Element Msg
+choosePhotosButton theme device chat =
+    let
+        label : String
+        label =
+            if List.isEmpty chat.photos then
+                "Choose photos"
+
+            else
+                "Choose more photos"
+    in
+    if chat.request == Sending then
+        Input.button
+            [ Element.width Element.fill
+            , Element.padding DesignTokens.space12
+            , Border.width 1
+            , Border.color theme.divider
+            , Border.rounded DesignTokens.radiusControl
+            , Background.color theme.inputFill
+            , Font.color theme.textMuted
+            ]
+            { onPress = Nothing
+            , label = Element.el [ Element.centerX ] (Element.text label)
+            }
+
+    else
+        Ui.fullWidthGhostButton device theme label ChoosePhotos
+
+
+cameraInput : ChatModel -> Element Msg
+cameraInput chat =
+    Element.html <|
+        Html.label
+            [ HtmlAttributes.classList
+                [ ( "photo-capture-label", True )
+                , ( "photo-capture-label--disabled", not (canAddPhotos chat) )
+                ]
+            ]
+            [ Html.span [] [ Html.text "Take photo" ]
+            , Html.input
+                [ HtmlAttributes.type_ "file"
+                , HtmlAttributes.accept "image/*"
+                , HtmlAttributes.attribute "capture" "environment"
+                , HtmlAttributes.attribute "aria-label" "Take a food photo"
+                , HtmlAttributes.disabled (not (canAddPhotos chat))
+                , HtmlEvents.on "change" cameraFileDecoder
+                , HtmlAttributes.value ""
+                ]
+                []
+            ]
+
+
+cameraFileDecoder : Decode.Decoder Msg
+cameraFileDecoder =
+    Decode.at [ "target", "files", "0" ] File.decoder
+        |> Decode.map TakePhotoSelected
+
+
+photoErrorView : Theme -> Maybe String -> List (Element Msg)
+photoErrorView theme maybeError =
+    case maybeError of
+        Just message ->
+            [ Ui.errorBanner theme message ]
+
+        Nothing ->
+            []
+
+
+photoPreview : Theme -> Device -> Int -> File -> Maybe String -> Element Msg
+photoPreview theme device index photo maybeUrl =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space8
+        ]
+        [ case maybeUrl of
+            Just url ->
+                Element.image
+                    [ Element.width (Element.px 72)
+                    , Element.height (Element.px 72)
+                    , Border.rounded DesignTokens.radiusControl
+                    ]
+                    { src = url, description = File.name photo }
+
+            Nothing ->
+                Element.el
+                    [ Element.width (Element.px 72)
+                    , Element.height (Element.px 72)
+                    ]
+                    (Element.text "Loading preview…")
+        , Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space4
+            ]
+            [ Element.paragraph [ Element.width Element.fill ]
+                [ Element.text (File.name photo) ]
+            , Typography.mutedParagraph theme (formatPhotoSize (File.size photo))
+            , Ui.compactDangerOutlineButton
+                device
+                theme
+                Ui.CompactContent
+                "Remove photo"
+                (RemovePhoto index)
+            ]
+        ]
+
+
+formatPhotoSize : Int -> String
+formatPhotoSize bytes =
+    if bytes >= 1024 * 1024 then
+        String.fromFloat (toFloat bytes / toFloat (1024 * 1024)) ++ " MiB"
+
+    else
+        String.fromInt ((bytes + 1023) // 1024) ++ " KiB"
 
 
 sendButton : Theme -> Device -> RequestState -> Element Msg

@@ -20,6 +20,7 @@ module Page exposing
     , localContextReceived
     , modalView
     , paneKeys
+    , photoPreviewUrls
     , reconcile
     , update
     , view
@@ -145,6 +146,7 @@ type OutMsg
     | RequestLocalContext
     | RequestBarcodeScanStart
     | RequestBarcodeScanStop
+    | RevokePhotoPreviewUrls (List String)
     | LoginSucceeded Auth.LoginSession
     | SetupSucceeded Auth.LoginSession
 
@@ -170,6 +172,20 @@ clearStore model =
 paneKeys : Model -> List String
 paneKeys model =
     List.map paneKey model.panes
+
+
+photoPreviewUrls : Model -> List String
+photoPreviewUrls model =
+    model.panes
+        |> List.concatMap
+            (\pane ->
+                case pane of
+                    CustomFoodCreatePane createModel ->
+                        CustomFoodCreate.photoPreviewUrls createModel
+
+                    _ ->
+                        []
+            )
 
 
 paneKey : Pane -> String
@@ -2440,14 +2456,18 @@ applyCustomFoodCreateOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        CustomFoodCreate.RequestFoodDraft conversation ->
+        CustomFoodCreate.RequestFoodDraft conversation photos ->
             ( Api.FoodAssistant.requestDraft conversation
+                photos
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
                     << CustomFoodAssistant.DraftCompleted
                 )
             , NoOutMsg
             )
+
+        CustomFoodCreate.RevokePhotoPreviewUrls urls ->
+            ( Cmd.none, RevokePhotoPreviewUrls urls )
 
         CustomFoodCreate.Navigate route ->
             ( Cmd.none, Navigate route )

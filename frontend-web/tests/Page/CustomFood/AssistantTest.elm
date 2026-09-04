@@ -4,6 +4,7 @@ import Api.Client as Client
 import Data.FoodAssistant as FoodAssistant exposing (ConversationTurn, FoodDraftTurn(..))
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
+import Html.Attributes as HtmlAttributes
 import Json.Encode as Encode
 import Page.CustomFood.Assistant as Assistant
 import Test exposing (Test, describe, test)
@@ -18,7 +19,9 @@ tests =
         [ test "disabled status exposes no chat state" <|
             \_ ->
                 Assistant.update
-                    (Assistant.StatusLoaded (Ok { enabled = False }))
+                    (Assistant.StatusLoaded
+                        (Ok { enabled = False, supportsImages = False })
+                    )
                     (Tuple.first Assistant.init)
                     |> first
                     |> Expect.equal Assistant.Disabled
@@ -304,15 +307,184 @@ tests =
                     |> Element.layout []
                     |> Query.fromHtml
                     |> Query.has [ Selector.text "Show assistant" ]
+        , test "text-only assistants hide all photo controls" <|
+            \_ ->
+                enabled
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.hasNot
+                        [ Selector.text "Take photo"
+                        , Selector.text "Choose photos"
+                        ]
+        , test "image assistants expose a rear-camera input and file chooser" <|
+            \_ ->
+                imageEnabled
+                    |> Assistant.update Assistant.ToggleExpanded
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Take photo"
+                        , Selector.text "Choose photos"
+                        , Selector.attribute (HtmlAttributes.type_ "file")
+                        , Selector.attribute (HtmlAttributes.accept "image/*")
+                        , Selector.attribute
+                            (HtmlAttributes.attribute "capture" "environment")
+                        ]
+        , test "photo metadata accepts supported files at the limits" <|
+            \_ ->
+                Assistant.validatePhotoMetadata
+                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    ]
+                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 }
+                    , { mimeType = "image/jpeg", size = 0 }
+                    ]
+                    |> Expect.equal (Ok ())
+        , test "photo metadata rejects unsupported formats and oversized files" <|
+            \_ ->
+                ( Assistant.validatePhotoMetadata []
+                    [ { mimeType = "image/gif", size = 1 } ]
+                , Assistant.validatePhotoMetadata []
+                    [ { mimeType = "image/png", size = 5 * 1024 * 1024 + 1 } ]
+                )
+                    |> Expect.equal
+                        ( Err "Photos must be JPEG, PNG, or WebP."
+                        , Err "Each photo must be 5 MiB or smaller."
+                        )
+        , test "photo metadata enforces four-photo and combined-size limits" <|
+            \_ ->
+                ( Assistant.validatePhotoMetadata
+                    (List.repeat 4 { mimeType = "image/jpeg", size = 1 })
+                    [ { mimeType = "image/png", size = 1 } ]
+                , Assistant.validatePhotoMetadata
+                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    ]
+                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 + 1 } ]
+                )
+                    |> Expect.equal
+                        ( Err "Only four photos can be attached."
+                        , Err "Photos together must be 12 MiB or smaller."
+                        )
+        , test "removing a photo keeps file and preview positions aligned" <|
+            \_ ->
+                ( Assistant.removeAt 1 [ "first", "second", "third" ]
+                , Assistant.removeAt 1 [ "url-1", "url-2", "url-3" ]
+                )
+                    |> Expect.equal
+                        ( [ "first", "third" ], [ "url-1", "url-3" ] )
+        , test "clarification and failure retain photo previews for resend" <|
+            \_ ->
+                let
+                    selected : Assistant.Model
+                    selected =
+                        withPreviewUrl "blob:food-photo" sent
+
+                    clarified : Assistant.Model
+                    clarified =
+                        selected
+                            |> Assistant.update
+                                (Assistant.DraftCompleted
+                                    (Ok
+                                        (NeedsClarification
+                                            { assistantMessage = "How much?" }
+                                        )
+                                    )
+                                )
+                            |> first
+
+                    failed : Assistant.Model
+                    failed =
+                        selected
+                            |> Assistant.update
+                                (Assistant.DraftCompleted (Err Client.NetworkError))
+                            |> first
+                in
+                ( Assistant.previewUrls clarified, Assistant.previewUrls failed )
+                    |> Expect.equal
+                        ( [ "blob:food-photo" ], [ "blob:food-photo" ] )
+        , test "ready draft and confirmed new session clear and revoke previews" <|
+            \_ ->
+                let
+                    selected : Assistant.Model
+                    selected =
+                        withPreviewUrl "blob:food-photo" sent
+
+                    readyResult : ( Assistant.Model, Cmd Assistant.Msg, Assistant.OutMsg )
+                    readyResult =
+                        Assistant.update (Assistant.DraftCompleted (Ok readyTurn)) selected
+
+                    sessionResult : ( Assistant.Model, Cmd Assistant.Msg, Assistant.OutMsg )
+                    sessionResult =
+                        selected
+                            |> Assistant.update
+                                (Assistant.DraftCompleted
+                                    (Ok
+                                        (NeedsClarification
+                                            { assistantMessage = "How much?" }
+                                        )
+                                    )
+                                )
+                            |> first
+                            |> Assistant.update Assistant.NewSessionClicked
+                            |> first
+                            |> Assistant.update Assistant.ConfirmNewSessionClicked
+                in
+                { readyUrls = readyResult |> first |> Assistant.previewUrls
+                , readyOut = readyResult |> third
+                , sessionUrls = sessionResult |> first |> Assistant.previewUrls
+                , sessionOut = sessionResult |> third
+                }
+                    |> Expect.equal
+                        { readyUrls = []
+                        , readyOut =
+                            Assistant.RevokePhotoPreviewUrls [ "blob:food-photo" ]
+                        , sessionUrls = []
+                        , sessionOut =
+                            Assistant.RevokePhotoPreviewUrls [ "blob:food-photo" ]
+                        }
         ]
 
 
 enabled : Assistant.Model
 enabled =
     Assistant.update
-        (Assistant.StatusLoaded (Ok { enabled = True }))
+        (Assistant.StatusLoaded
+            (Ok { enabled = True, supportsImages = False })
+        )
         (Tuple.first Assistant.init)
         |> first
+
+
+imageEnabled : Assistant.Model
+imageEnabled =
+    Assistant.update
+        (Assistant.StatusLoaded
+            (Ok { enabled = True, supportsImages = True })
+        )
+        (Tuple.first Assistant.init)
+        |> first
+
+
+withPreviewUrl : String -> Assistant.Model -> Assistant.Model
+withPreviewUrl url model =
+    case model of
+        Assistant.Enabled chat ->
+            Assistant.Enabled { chat | photoUrls = [ Just url ] }
+
+        other ->
+            other
 
 
 sent : Assistant.Model
@@ -334,6 +506,10 @@ emptyExpandedChat =
     , warnings = []
     , awaitingOverwriteConfirmation = False
     , awaitingNewSessionConfirmation = False
+    , supportsImages = False
+    , photos = []
+    , photoUrls = []
+    , photoError = Nothing
     }
 
 
@@ -384,7 +560,7 @@ readyTurn =
 requestJson : Assistant.OutMsg -> Maybe String
 requestJson outMsg =
     case outMsg of
-        Assistant.RequestDraft conversation ->
+        Assistant.RequestDraft conversation _ ->
             Just (Encode.encode 0 (FoodAssistant.conversationEncoder conversation))
 
         _ ->

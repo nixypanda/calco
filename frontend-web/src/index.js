@@ -54,6 +54,10 @@ app.ports.reloadPage.subscribe(() => {
     location.reload();
 });
 
+app.ports.revokePhotoPreviewUrls.subscribe((urls) => {
+    urls.forEach((url) => URL.revokeObjectURL(url));
+});
+
 // Barcode scanner port wiring.
 const barcodeScanner = createBarcodeScanner({
     videoElementId: "calco-barcode-scanner-video",
@@ -70,6 +74,9 @@ app.ports.requestBarcodeScanStop.subscribe(() => {
 
 window.addEventListener("pagehide", () => {
     barcodeScanner.stop();
+    document.querySelectorAll('img[src^="blob:"]').forEach((image) => {
+        URL.revokeObjectURL(image.src);
+    });
 });
 
 document.addEventListener("visibilitychange", () => {
