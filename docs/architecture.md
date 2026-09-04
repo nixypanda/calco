@@ -172,6 +172,23 @@ provider configuration, credentials, and credential paths are excluded.
 
 Photo and image inputs are outside this boundary for this change.
 
+Planned work expands this boundary while preserving review-before-write. The
+food assistant will accept images, including a nutrition-table photo used to
+prepare a custom-food draft. The user must review and explicitly submit that
+draft before any catalog write occurs. The planned missing-barcode flow is:
+
+```text
+Local barcode lookup
+  -> match: open the catalog food
+  -> miss: query Open Food Facts
+       -> match: pull the product data into CalCo and continue
+       -> miss: photograph nutrition table -> review draft -> create custom food
+```
+
+The create-custom-food UI is also planned to omit its separate portion section;
+the initial draft and creation flow will use per-100 g nutrition values. This
+does not remove serving definitions from the catalog or logging domain.
+
 ## Transaction And Consistency Decisions
 
 - Product create/update replaces nutrients and servings atomically.

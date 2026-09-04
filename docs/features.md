@@ -115,6 +115,25 @@ product goal is a simple food tracker, not an analytics or trend platform.
 - [ ] As a user, I want to change my own password so that I do not need an admin
       reset for routine password changes.
 
+### Food Capture And Assistant Todo
+
+- [ ] Add image support to the food assistant so that users can provide food or
+      nutrition-label photos as context when drafting a custom food. Image input
+      must remain review-before-write and must not create catalog data by itself.
+- [ ] Remove the portion section from the create-custom-food flow. Custom foods
+      should initially be created from their per-100 g nutrition data without
+      requiring the user to define an additional portion; serving support for
+      catalog foods and food logging remains unchanged.
+- [ ] When a barcode is not present in the local catalog, look it up in Open Food
+      Facts (OFF). If OFF has a match, pull its product and nutrition data into
+      CalCo and let the user continue with that food instead of entering it
+      manually.
+- [ ] When a barcode is absent from both the local catalog and OFF, let the user
+      photograph the product's nutrition table. Use the image to prepare a
+      custom-food draft, require the user to review and correct the extracted
+      values, and create the food in the database only after explicit
+      confirmation.
+
 ## Quality Of Life Backlog
 
 These are workflow-speed improvements rather than new core nutrition
@@ -166,7 +185,8 @@ capabilities. They are grouped by theme so they can be ranked later.
 - [x] As a user, I want the app to take me directly into create or import flows
       when a barcode is not found so that missing packaged foods are quick to
       add. A failed lookup offers a direct action to the custom-food creation
-      form.
+      form. Live OFF lookup and nutrition-table photo drafting are still planned
+      in **Food Capture And Assistant Todo**.
 
 ### Editing And Diary Cleanup
 
