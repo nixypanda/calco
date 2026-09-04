@@ -1,4 +1,4 @@
-//! Authenticated multipart transport for transient, text-only food drafts.
+//! Authenticated multipart transport for transient food drafts.
 
 use std::time::Instant;
 
@@ -11,16 +11,16 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::assistant::application::ModelUsage;
+use crate::assistant::application::{FoodDraftRequest, FoodImageLimits, ModelUsage};
 use crate::assistant::domain::{
     AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraft, FoodDraftTurn,
 };
 use crate::assistant::module::{AdmissionError, AssistantModule};
 use crate::auth::interfaces::http::AuthUser;
 
-const MAX_REQUEST_BYTES: usize = 96 * 1024;
+const MAX_REQUEST_BYTES: usize = 13 * 1024 * 1024;
 const MAX_CONVERSATION_FIELD_BYTES: usize = 92 * 1024;
-const MAX_MULTIPART_FIELDS: usize = 1;
+const MAX_MULTIPART_FIELDS: usize = 5;
 
 pub fn assistant_routes(state: AppState) -> Router {
     Router::new()
@@ -88,7 +88,7 @@ async fn status_handler(
 ) -> Json<AssistantStatusResponse> {
     Json(AssistantStatusResponse {
         enabled: module.is_enabled(),
-        supports_images: false,
+        supports_images: module.supports_images(),
     })
 }
 
@@ -153,12 +153,12 @@ async fn draft(
             );
         }
     };
-    let conversation = match parse_multipart(multipart).await {
+    let request = match parse_multipart(multipart, &module).await {
         Ok(value) => value,
         Err(error) => return error,
     };
 
-    match service.draft(conversation).await {
+    match service.draft(request).await {
         Ok(result) => DraftHttpResult {
             response: Json(turn_to_response(result.turn)).into_response(),
             outcome: "success",
@@ -168,9 +168,17 @@ async fn draft(
     }
 }
 
-async fn parse_multipart(mut multipart: Multipart) -> Result<Conversation, DraftHttpResult> {
+async fn parse_multipart(
+    mut multipart: Multipart,
+    module: &AssistantModule,
+) -> Result<FoodDraftRequest, DraftHttpResult> {
     let mut fields = 0;
     let mut conversation = None;
+    let mut photos = Vec::new();
+    let mut raw_photo_bytes = 0;
+    let mut sanitized_photo_bytes = 0;
+    let image_sanitizer = module.image_sanitizer();
+    let image_limits = image_sanitizer.as_ref().map(|sanitizer| sanitizer.limits());
 
     loop {
         let field = match multipart.next_field().await {
@@ -189,8 +197,29 @@ async fn parse_multipart(mut multipart: Multipart) -> Result<Conversation, Draft
             Some("conversation") if field.file_name().is_none() && conversation.is_none() => {
                 conversation = Some(read_conversation(field).await?);
             }
-            // Reserved for the additive photo PR, but explicitly rejected now.
-            Some("photos") => return Err(invalid_request()),
+            Some("photos") => {
+                let (Some(sanitizer), Some(limits)) = (&image_sanitizer, image_limits) else {
+                    return Err(invalid_request());
+                };
+                if field.file_name().is_none() || photos.len() >= limits.max_images {
+                    return Err(invalid_request());
+                }
+                let mime_type = field
+                    .content_type()
+                    .map(str::to_owned)
+                    .ok_or_else(invalid_request)?;
+                let bytes = read_photo(field, &mut raw_photo_bytes, limits).await?;
+                let photo = sanitizer
+                    .sanitize(&mime_type, bytes)
+                    .await
+                    .map_err(assistant_failure)?;
+                if photo.bytes.len() > limits.max_total_bytes.saturating_sub(sanitized_photo_bytes)
+                {
+                    return Err(payload_too_large());
+                }
+                sanitized_photo_bytes += photo.bytes.len();
+                photos.push(photo);
+            }
             _ => return Err(invalid_request()),
         }
     }
@@ -210,7 +239,10 @@ async fn parse_multipart(mut multipart: Multipart) -> Result<Conversation, Draft
         })
         .collect::<Result<Vec<_>, _>>()
         .map_err(assistant_failure)?;
-    Conversation::new(turns).map_err(assistant_failure)
+    Ok(FoodDraftRequest {
+        conversation: Conversation::new(turns).map_err(assistant_failure)?,
+        photos,
+    })
 }
 
 async fn read_conversation(mut field: Field<'_>) -> Result<Vec<u8>, DraftHttpResult> {
@@ -228,6 +260,35 @@ async fn read_conversation(mut field: Field<'_>) -> Result<Vec<u8>, DraftHttpRes
             return Err(payload_too_large());
         }
         bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+async fn read_photo(
+    mut field: Field<'_>,
+    raw_total: &mut usize,
+    limits: FoodImageLimits,
+) -> Result<Vec<u8>, DraftHttpResult> {
+    let mut bytes = Vec::new();
+    loop {
+        let chunk = match field.chunk().await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(error) if error.status() == StatusCode::PAYLOAD_TOO_LARGE => {
+                return Err(payload_too_large());
+            }
+            Err(_) => return Err(invalid_request()),
+        };
+        if chunk.len() > limits.max_bytes_per_image.saturating_sub(bytes.len())
+            || chunk.len() > limits.max_total_bytes.saturating_sub(*raw_total)
+        {
+            return Err(payload_too_large());
+        }
+        *raw_total += chunk.len();
+        bytes.extend_from_slice(&chunk);
+    }
+    if bytes.is_empty() {
+        return Err(invalid_request());
     }
     Ok(bytes)
 }
@@ -409,15 +470,15 @@ mod tests {
     }
 
     #[test]
-    fn status_never_advertises_image_support() {
+    fn status_serializes_image_support() {
         let value = serde_json::to_value(AssistantStatusResponse {
             enabled: true,
-            supports_images: false,
+            supports_images: true,
         })
         .unwrap();
         assert_eq!(
             value,
-            serde_json::json!({"enabled": true, "supports_images": false})
+            serde_json::json!({"enabled": true, "supports_images": true})
         );
     }
 }

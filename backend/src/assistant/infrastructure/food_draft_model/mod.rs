@@ -6,11 +6,13 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::assistant::application::{FoodDraftModel, FoodDraftResult, FoodVocabulary, ModelUsage};
-use crate::assistant::domain::{AssistantError, Conversation, ConversationRole};
+use crate::assistant::application::{
+    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodVocabulary, ModelUsage,
+};
+use crate::assistant::domain::{AssistantError, ConversationRole};
 use crate::assistant::llm::{
-    ChatClient, ChatError, ChatMessage, ChatRequest, ChatResponse, ChatRole, ResponseFormat,
-    TokenUsage,
+    ChatClient, ChatError, ChatImage, ChatMessage, ChatRequest, ChatResponse, ChatRole,
+    ResponseFormat, TokenUsage,
 };
 
 use model_request_prompt::build_system_prompt;
@@ -33,20 +35,36 @@ impl FoodDraftModelAdapter {
 impl FoodDraftModel for FoodDraftModelAdapter {
     async fn generate(
         &self,
-        conversation: &Conversation,
+        request: &FoodDraftRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError> {
         let mut messages = vec![ChatMessage {
             role: ChatRole::System,
             content: build_system_prompt(vocabulary),
+            images: vec![],
         }];
-        messages.extend(conversation.turns().iter().map(|turn| ChatMessage {
+        messages.extend(request.conversation.turns().iter().map(|turn| ChatMessage {
             role: match turn.role() {
                 ConversationRole::User => ChatRole::User,
                 ConversationRole::Assistant => ChatRole::Assistant,
             },
             content: turn.text().to_owned(),
+            images: vec![],
         }));
+        if !request.photos.is_empty() {
+            let latest_user = messages
+                .iter_mut()
+                .rfind(|message| message.role == ChatRole::User)
+                .ok_or(AssistantError::InvalidInput)?;
+            latest_user.images = request
+                .photos
+                .iter()
+                .map(|photo| ChatImage {
+                    mime_type: photo.mime_type.as_str(),
+                    bytes: photo.bytes.clone(),
+                })
+                .collect();
+        }
         let response: ChatResponse = self
             .chat
             .complete(ChatRequest {
@@ -86,8 +104,9 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::assistant::application::{FoodPhotoMimeType, SanitizedFoodPhoto};
     use crate::assistant::application::{SupportedNutrient, SupportedUnit};
-    use crate::assistant::domain::{ConversationTurn, FoodDraftTurn};
+    use crate::assistant::domain::{Conversation, ConversationTurn, FoodDraftTurn};
 
     struct FakeChat {
         request: Mutex<Option<ChatRequest>>,
@@ -132,7 +151,16 @@ mod tests {
             required_nutrient_codes: vec!["ENERGY_KCAL".into()],
         };
 
-        let result = model.generate(&conversation, &vocabulary).await.unwrap();
+        let result = model
+            .generate(
+                &FoodDraftRequest {
+                    conversation,
+                    photos: vec![],
+                },
+                &vocabulary,
+            )
+            .await
+            .unwrap();
 
         assert!(matches!(
             result.turn,
@@ -146,5 +174,39 @@ mod tests {
             schema["properties"]["draft"]["oneOf"][1]["properties"]["default_unit"]["enum"],
             serde_json::json!(["g", null])
         );
+    }
+
+    #[tokio::test]
+    async fn attaches_photos_only_to_the_latest_user_message() {
+        let chat = Arc::new(FakeChat {
+            request: Mutex::new(None),
+        });
+        let model = FoodDraftModelAdapter::new(chat.clone());
+        let conversation = Conversation::new(vec![
+            ConversationTurn::new(ConversationRole::User, "first description").unwrap(),
+            ConversationTurn::new(ConversationRole::Assistant, "clarifying question").unwrap(),
+            ConversationTurn::new(ConversationRole::User, "this is the pictured plate").unwrap(),
+        ])
+        .unwrap();
+
+        model
+            .generate(
+                &FoodDraftRequest {
+                    conversation,
+                    photos: vec![SanitizedFoodPhoto {
+                        mime_type: FoodPhotoMimeType::Jpeg,
+                        bytes: vec![1, 2, 3],
+                    }],
+                },
+                &FoodVocabulary::default(),
+            )
+            .await
+            .unwrap();
+
+        let request = chat.request.lock().unwrap().take().unwrap();
+        assert!(request.messages[1].images.is_empty());
+        assert!(request.messages[2].images.is_empty());
+        assert_eq!(request.messages[3].images[0].mime_type, "image/jpeg");
+        assert_eq!(request.messages[3].images[0].bytes, vec![1, 2, 3]);
     }
 }

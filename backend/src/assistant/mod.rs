@@ -1,4 +1,4 @@
-//! Text-only custom-food drafting bounded context.
+//! Custom-food drafting bounded context with optional image input.
 
 pub mod application;
 pub mod domain;
