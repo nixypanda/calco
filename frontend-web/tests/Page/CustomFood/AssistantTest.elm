@@ -98,6 +98,27 @@ tests =
                                 "The assistant is busy. Try again in 12 seconds."
                             )
                         )
+        , test "backend validation messages explain what must be corrected" <|
+            \_ ->
+                sent
+                    |> Assistant.update
+                        (Assistant.DraftCompleted
+                            (Err
+                                (Client.BadStatus
+                                    400
+                                    "photo_dimensions_too_large"
+                                    "A photo has too many pixels."
+                                )
+                            )
+                        )
+                    |> first
+                    |> requestState
+                    |> Expect.equal
+                        (Just
+                            (Assistant.RequestFailed
+                                "A photo has too many pixels."
+                            )
+                        )
         , test "ready result is previewed before any apply output" <|
             \_ ->
                 enabled

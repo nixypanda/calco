@@ -6,9 +6,8 @@ use async_trait::async_trait;
 use image::{ImageFormat, ImageReader, load_from_memory_with_format};
 
 use crate::assistant::application::{
-    FoodImageLimits, FoodImageSanitizer, FoodPhotoMimeType, SanitizedFoodPhoto,
+    FoodImageError, FoodImageLimits, FoodImageSanitizer, FoodPhotoMimeType, SanitizedFoodPhoto,
 };
-use crate::assistant::domain::AssistantError;
 
 pub const MAX_FOOD_PHOTOS: usize = 4;
 pub const MAX_FOOD_PHOTO_BYTES: usize = 5 * 1024 * 1024;
@@ -32,35 +31,38 @@ impl FoodImageSanitizer for SafeFoodImageSanitizer {
         &self,
         declared_mime_type: &str,
         bytes: Vec<u8>,
-    ) -> Result<SanitizedFoodPhoto, AssistantError> {
+    ) -> Result<SanitizedFoodPhoto, FoodImageError> {
         let declared_mime_type = declared_mime_type.to_owned();
         tokio::task::spawn_blocking(move || sanitize_food_photo(&declared_mime_type, bytes))
             .await
-            .map_err(|_| AssistantError::Internal)?
+            .map_err(|_| FoodImageError::Internal)?
     }
 }
 
 pub fn sanitize_food_photo(
     declared_mime_type: &str,
     bytes: Vec<u8>,
-) -> Result<SanitizedFoodPhoto, AssistantError> {
-    if bytes.is_empty() || bytes.len() > MAX_FOOD_PHOTO_BYTES {
-        return Err(AssistantError::InvalidInput);
+) -> Result<SanitizedFoodPhoto, FoodImageError> {
+    if bytes.is_empty() {
+        return Err(FoodImageError::Empty);
+    }
+    if bytes.len() > MAX_FOOD_PHOTO_BYTES {
+        return Err(FoodImageError::EncodedTooLarge);
     }
 
     let mime_type = parse_mime_type(declared_mime_type)?;
-    let detected = detect_format(&bytes).ok_or(AssistantError::InvalidInput)?;
+    let detected = detect_format(&bytes).ok_or(FoodImageError::InvalidData)?;
     if detected != mime_type {
-        return Err(AssistantError::InvalidInput);
+        return Err(FoodImageError::TypeMismatch);
     }
 
     let (width, height) = ImageReader::with_format(Cursor::new(&bytes), image_format(mime_type))
         .into_dimensions()
-        .map_err(|_| AssistantError::InvalidInput)?;
+        .map_err(|_| FoodImageError::InvalidData)?;
     validate_dimensions(width, height)?;
 
     let decoded = load_from_memory_with_format(&bytes, image_format(mime_type))
-        .map_err(|_| AssistantError::InvalidInput)?;
+        .map_err(|_| FoodImageError::InvalidData)?;
     validate_dimensions(decoded.width(), decoded.height())?;
     let normalized = if decoded.width() > MAX_FOOD_PHOTO_DIMENSION
         || decoded.height() > MAX_FOOD_PHOTO_DIMENSION
@@ -72,20 +74,20 @@ pub fn sanitize_food_photo(
     let mut output = Cursor::new(Vec::new());
     normalized
         .write_to(&mut output, image_format(mime_type))
-        .map_err(|_| AssistantError::InvalidInput)?;
+        .map_err(|_| FoodImageError::InvalidData)?;
     let bytes = output.into_inner();
     if bytes.is_empty() || bytes.len() > MAX_FOOD_PHOTO_BYTES {
-        return Err(AssistantError::InvalidInput);
+        return Err(FoodImageError::EncodedTooLarge);
     }
     Ok(SanitizedFoodPhoto { mime_type, bytes })
 }
 
-fn parse_mime_type(value: &str) -> Result<FoodPhotoMimeType, AssistantError> {
+fn parse_mime_type(value: &str) -> Result<FoodPhotoMimeType, FoodImageError> {
     match value {
         "image/jpeg" => Ok(FoodPhotoMimeType::Jpeg),
         "image/png" => Ok(FoodPhotoMimeType::Png),
         "image/webp" => Ok(FoodPhotoMimeType::Webp),
-        _ => Err(AssistantError::InvalidInput),
+        _ => Err(FoodImageError::UnsupportedType),
     }
 }
 
@@ -109,12 +111,12 @@ fn image_format(value: FoodPhotoMimeType) -> ImageFormat {
     }
 }
 
-fn validate_dimensions(width: u32, height: u32) -> Result<(), AssistantError> {
+fn validate_dimensions(width: u32, height: u32) -> Result<(), FoodImageError> {
     let pixels = u64::from(width)
         .checked_mul(u64::from(height))
-        .ok_or(AssistantError::InvalidInput)?;
+        .ok_or(FoodImageError::DimensionsTooLarge)?;
     if width == 0 || height == 0 || pixels > MAX_FOOD_PHOTO_PIXELS {
-        return Err(AssistantError::InvalidInput);
+        return Err(FoodImageError::DimensionsTooLarge);
     }
     Ok(())
 }
@@ -143,9 +145,18 @@ mod tests {
                 .mime_type,
             FoodPhotoMimeType::Png
         );
-        assert!(sanitize_food_photo("image/jpeg", png.clone()).is_err());
-        assert!(sanitize_food_photo("image/gif", png).is_err());
-        assert!(sanitize_food_photo("image/png", b"not an image".to_vec()).is_err());
+        assert_eq!(
+            sanitize_food_photo("image/jpeg", png.clone()),
+            Err(FoodImageError::TypeMismatch)
+        );
+        assert_eq!(
+            sanitize_food_photo("image/gif", png),
+            Err(FoodImageError::UnsupportedType)
+        );
+        assert_eq!(
+            sanitize_food_photo("image/png", b"not an image".to_vec()),
+            Err(FoodImageError::InvalidData)
+        );
     }
 
     #[test]
@@ -176,6 +187,9 @@ mod tests {
     #[test]
     fn rejects_pixel_bombs_before_decode() {
         let png = image_bytes(ImageFormat::Png, 4_000, 4_000);
-        assert!(sanitize_food_photo("image/png", png).is_err());
+        assert_eq!(
+            sanitize_food_photo("image/png", png),
+            Err(FoodImageError::DimensionsTooLarge)
+        );
     }
 }

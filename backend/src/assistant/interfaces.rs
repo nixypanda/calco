@@ -11,9 +11,12 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
-use crate::assistant::application::{FoodDraftRequest, FoodImageLimits, ModelUsage};
+use crate::assistant::application::{
+    FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
+};
 use crate::assistant::domain::{
     AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraft, FoodDraftTurn,
+    MAX_CONVERSATION_MESSAGE_CHARS, MAX_CONVERSATION_TURNS,
 };
 use crate::assistant::module::{AdmissionError, AssistantModule};
 use crate::auth::interfaces::http::AuthUser;
@@ -99,14 +102,24 @@ async fn draft_handler(
 ) -> Response {
     let started = Instant::now();
     let result = draft(module, user.id, multipart).await;
-    tracing::info!(
-        user_id = %user.id,
-        latency_ms = started.elapsed().as_millis() as u64,
-        outcome = result.outcome,
-        input_tokens = result.usage.and_then(|value| value.input_tokens),
-        output_tokens = result.usage.and_then(|value| value.output_tokens),
-        "assistant draft request completed"
-    );
+    if let Some(reason) = result.rejection_reason {
+        tracing::warn!(
+            user_id = %user.id,
+            latency_ms = started.elapsed().as_millis() as u64,
+            outcome = result.outcome,
+            reason,
+            "assistant draft request rejected"
+        );
+    } else {
+        tracing::info!(
+            user_id = %user.id,
+            latency_ms = started.elapsed().as_millis() as u64,
+            outcome = result.outcome,
+            input_tokens = result.usage.and_then(|value| value.input_tokens),
+            output_tokens = result.usage.and_then(|value| value.output_tokens),
+            "assistant draft request completed"
+        );
+    }
     result.response
 }
 
@@ -114,6 +127,7 @@ struct DraftHttpResult {
     response: Response,
     outcome: &'static str,
     usage: Option<ModelUsage>,
+    rejection_reason: Option<&'static str>,
 }
 
 async fn draft(
@@ -146,10 +160,11 @@ async fn draft(
             return payload_too_large();
         }
         Err(_) => {
-            return failure(
+            return rejected(
                 StatusCode::BAD_REQUEST,
-                "invalid_request",
+                "invalid_multipart",
                 "request must use multipart/form-data",
+                "multipart/form-data extractor rejected request",
             );
         }
     };
@@ -163,6 +178,7 @@ async fn draft(
             response: Json(turn_to_response(result.turn)).into_response(),
             outcome: "success",
             usage: result.usage,
+            rejection_reason: None,
         },
         Err(error) => assistant_failure(error),
     }
@@ -187,11 +203,24 @@ async fn parse_multipart(
             Err(error) if error.status() == StatusCode::PAYLOAD_TOO_LARGE => {
                 return Err(payload_too_large());
             }
-            Err(_) => return Err(invalid_request()),
+            Err(_) => return Err(invalid_multipart("could not read multipart field")),
         };
         fields += 1;
         if fields > MAX_MULTIPART_FIELDS {
-            return Err(invalid_request());
+            if field.name() == Some("photos") {
+                return Err(rejected(
+                    StatusCode::BAD_REQUEST,
+                    "too_many_photos",
+                    "only four photos can be attached",
+                    "photo count exceeded limit",
+                ));
+            }
+            return Err(rejected(
+                StatusCode::BAD_REQUEST,
+                "too_many_fields",
+                "request contains too many multipart fields",
+                "multipart field count exceeded limit",
+            ));
         }
         match field.name() {
             Some("conversation") if field.file_name().is_none() && conversation.is_none() => {
@@ -199,34 +228,125 @@ async fn parse_multipart(
             }
             Some("photos") => {
                 let (Some(sanitizer), Some(limits)) = (&image_sanitizer, image_limits) else {
-                    return Err(invalid_request());
+                    return Err(rejected(
+                        StatusCode::BAD_REQUEST,
+                        "photos_not_supported",
+                        "this assistant does not support photos",
+                        "photo supplied to text-only assistant",
+                    ));
                 };
-                if field.file_name().is_none() || photos.len() >= limits.max_images {
-                    return Err(invalid_request());
+                if field.file_name().is_none() {
+                    return Err(rejected(
+                        StatusCode::BAD_REQUEST,
+                        "photo_file_required",
+                        "each photo must be uploaded as a file",
+                        "photo part has no filename",
+                    ));
                 }
-                let mime_type = field
-                    .content_type()
-                    .map(str::to_owned)
-                    .ok_or_else(invalid_request)?;
+                if photos.len() >= limits.max_images {
+                    return Err(rejected(
+                        StatusCode::BAD_REQUEST,
+                        "too_many_photos",
+                        "only four photos can be attached",
+                        "photo count exceeded limit",
+                    ));
+                }
+                let mime_type = field.content_type().map(str::to_owned).ok_or_else(|| {
+                    rejected(
+                        StatusCode::BAD_REQUEST,
+                        "photo_type_required",
+                        "each photo must include a file type",
+                        "photo content type is missing",
+                    )
+                })?;
                 let bytes = read_photo(field, &mut raw_photo_bytes, limits).await?;
                 let photo = sanitizer
                     .sanitize(&mime_type, bytes)
                     .await
-                    .map_err(assistant_failure)?;
+                    .map_err(image_failure)?;
                 if photo.bytes.len() > limits.max_total_bytes.saturating_sub(sanitized_photo_bytes)
                 {
-                    return Err(payload_too_large());
+                    return Err(rejected(
+                        StatusCode::PAYLOAD_TOO_LARGE,
+                        "photos_too_large",
+                        "photos together are too large after processing",
+                        "sanitized photo total exceeded byte limit",
+                    ));
                 }
                 sanitized_photo_bytes += photo.bytes.len();
                 photos.push(photo);
             }
-            _ => return Err(invalid_request()),
+            Some("conversation") => {
+                return Err(rejected(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_conversation_field",
+                    "the conversation must be supplied once as a text field",
+                    "conversation field is duplicated or has a filename",
+                ));
+            }
+            _ => {
+                return Err(rejected(
+                    StatusCode::BAD_REQUEST,
+                    "unexpected_field",
+                    "request contains an unexpected field",
+                    "unexpected multipart field",
+                ));
+            }
         }
     }
 
-    let bytes = conversation.ok_or_else(invalid_request)?;
-    let wire: ConversationRequest =
-        serde_json::from_slice(&bytes).map_err(|_| invalid_request())?;
+    let bytes = conversation.ok_or_else(|| {
+        rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_required",
+            "a conversation is required",
+            "conversation multipart field is missing",
+        )
+    })?;
+    let wire: ConversationRequest = serde_json::from_slice(&bytes).map_err(|_| {
+        rejected(
+            StatusCode::BAD_REQUEST,
+            "invalid_conversation",
+            "conversation data is malformed",
+            "conversation JSON did not match the request schema",
+        )
+    })?;
+    if wire.turns.is_empty() {
+        return Err(rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_empty",
+            "a conversation must contain a message",
+            "conversation contains no turns",
+        ));
+    }
+    if wire.turns.len() > MAX_CONVERSATION_TURNS {
+        return Err(rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_too_long",
+            "the conversation is full; start a new assistant session",
+            "conversation turn count exceeded limit",
+        ));
+    }
+    if wire.turns.iter().any(|turn| turn.text.trim().is_empty()) {
+        return Err(rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_empty",
+            "conversation messages cannot be empty",
+            "conversation contains an empty message",
+        ));
+    }
+    if wire
+        .turns
+        .iter()
+        .any(|turn| turn.text.chars().count() > MAX_CONVERSATION_MESSAGE_CHARS)
+    {
+        return Err(rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_too_long",
+            "conversation messages must be 4,000 characters or fewer",
+            "conversation message exceeded character limit",
+        ));
+    }
     let turns = wire
         .turns
         .into_iter()
@@ -254,10 +374,15 @@ async fn read_conversation(mut field: Field<'_>) -> Result<Vec<u8>, DraftHttpRes
             Err(error) if error.status() == StatusCode::PAYLOAD_TOO_LARGE => {
                 return Err(payload_too_large());
             }
-            Err(_) => return Err(invalid_request()),
+            Err(_) => return Err(invalid_multipart("could not read conversation field")),
         };
         if chunk.len() > MAX_CONVERSATION_FIELD_BYTES.saturating_sub(bytes.len()) {
-            return Err(payload_too_large());
+            return Err(rejected(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "conversation_too_large",
+                "conversation data is too large",
+                "conversation field exceeded byte limit",
+            ));
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -277,18 +402,28 @@ async fn read_photo(
             Err(error) if error.status() == StatusCode::PAYLOAD_TOO_LARGE => {
                 return Err(payload_too_large());
             }
-            Err(_) => return Err(invalid_request()),
+            Err(_) => return Err(invalid_multipart("could not read photo field")),
         };
         if chunk.len() > limits.max_bytes_per_image.saturating_sub(bytes.len())
             || chunk.len() > limits.max_total_bytes.saturating_sub(*raw_total)
         {
-            return Err(payload_too_large());
+            return Err(rejected(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "photo_too_large",
+                "a photo or the combined photos are too large",
+                "raw photo byte limit exceeded",
+            ));
         }
         *raw_total += chunk.len();
         bytes.extend_from_slice(&chunk);
     }
     if bytes.is_empty() {
-        return Err(invalid_request());
+        return Err(rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_empty",
+            "photos cannot be empty",
+            "photo field is empty",
+        ));
     }
     Ok(bytes)
 }
@@ -300,7 +435,12 @@ fn assistant_failure(error: AssistantError) -> DraftHttpResult {
             "assistant_disabled",
             "assistant is unavailable",
         ),
-        AssistantError::InvalidInput => invalid_request(),
+        AssistantError::InvalidInput => rejected(
+            StatusCode::BAD_REQUEST,
+            "invalid_conversation",
+            "conversation data is invalid",
+            "assistant input validation failed",
+        ),
         AssistantError::ModelUnavailable => failure(
             StatusCode::BAD_GATEWAY,
             "provider_unavailable",
@@ -319,19 +459,67 @@ fn assistant_failure(error: AssistantError) -> DraftHttpResult {
     }
 }
 
-fn invalid_request() -> DraftHttpResult {
-    failure(
+fn image_failure(error: FoodImageError) -> DraftHttpResult {
+    match error {
+        FoodImageError::Empty => rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_empty",
+            "photos cannot be empty",
+            "image sanitizer received an empty photo",
+        ),
+        FoodImageError::UnsupportedType => rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_unsupported_type",
+            "photos must be JPEG, PNG, or WebP",
+            "photo declared an unsupported content type",
+        ),
+        FoodImageError::TypeMismatch => rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_type_mismatch",
+            "a photo's contents do not match its file type",
+            "detected photo format did not match declared content type",
+        ),
+        FoodImageError::InvalidData => rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_invalid",
+            "a photo could not be read; choose a valid JPEG, PNG, or WebP image",
+            "photo could not be decoded or normalized",
+        ),
+        FoodImageError::DimensionsTooLarge => rejected(
+            StatusCode::BAD_REQUEST,
+            "photo_dimensions_too_large",
+            "a photo has too many pixels; resize it below 12 megapixels and retry",
+            "photo dimensions exceeded pixel limit",
+        ),
+        FoodImageError::EncodedTooLarge => rejected(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "photo_too_large",
+            "a photo is too large after processing",
+            "processed photo exceeded byte limit",
+        ),
+        FoodImageError::Internal => failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "assistant_error",
+            "assistant request failed",
+        ),
+    }
+}
+
+fn invalid_multipart(reason: &'static str) -> DraftHttpResult {
+    rejected(
         StatusCode::BAD_REQUEST,
-        "invalid_request",
-        "invalid request",
+        "invalid_multipart",
+        "request upload could not be read",
+        reason,
     )
 }
 
 fn payload_too_large() -> DraftHttpResult {
-    failure(
+    rejected(
         StatusCode::PAYLOAD_TOO_LARGE,
         "payload_too_large",
         "request is too large",
+        "request exceeded the HTTP body limit",
     )
 }
 
@@ -346,6 +534,15 @@ fn throttled(code: &'static str, message: &'static str, retry_after: u64) -> Dra
 }
 
 fn failure(status: StatusCode, code: &'static str, message: &'static str) -> DraftHttpResult {
+    rejected(status, code, message, message)
+}
+
+fn rejected(
+    status: StatusCode,
+    code: &'static str,
+    message: &'static str,
+    reason: &'static str,
+) -> DraftHttpResult {
     DraftHttpResult {
         response: (
             status,
@@ -356,6 +553,7 @@ fn failure(status: StatusCode, code: &'static str, message: &'static str) -> Dra
             .into_response(),
         outcome: code,
         usage: None,
+        rejection_reason: Some(reason),
     }
 }
 

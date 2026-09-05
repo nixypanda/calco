@@ -478,6 +478,9 @@ draftErrorMessage error =
         Client.BadStatus 401 _ _ ->
             "Your session has expired."
 
+        Client.BadStatus _ _ message ->
+            message
+
         _ ->
             "The assistant could not create a draft. Please retry."
 

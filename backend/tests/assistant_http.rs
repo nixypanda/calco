@@ -208,7 +208,7 @@ async fn disabled_malformed_and_provider_failures_are_safe(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
         parse_json::<Value>(&bytes)["error"]["code"],
-        "invalid_request"
+        "invalid_conversation"
     );
 
     let request = draft_request(Some(&user));
@@ -242,25 +242,28 @@ async fn multipart_limits_and_text_only_boundary_are_enforced(pool: PgPool) {
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(
         parse_json::<Value>(&bytes)["error"]["code"],
-        "payload_too_large"
+        "conversation_too_large"
     );
 
     let valid = serde_json::to_vec(&conversation()).unwrap();
-    for fields in [
-        vec![(
-            "photos",
-            Some(("food.jpg", "image/jpeg")),
-            b"photo".as_slice(),
-        )],
-        vec![("unknown", None, valid.as_slice())],
+    for (fields, expected_code) in [
+        (
+            vec![(
+                "photos",
+                Some(("food.jpg", "image/jpeg")),
+                b"photo".as_slice(),
+            )],
+            "photos_not_supported",
+        ),
+        (
+            vec![("unknown", None, valid.as_slice())],
+            "unexpected_field",
+        ),
     ] {
         let request = multipart_request("/api/ai/custom-food/draft", Some(&user), &fields);
         let (status, _, bytes) = send(&router, request).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(
-            parse_json::<Value>(&bytes)["error"]["code"],
-            "invalid_request"
-        );
+        assert_eq!(parse_json::<Value>(&bytes)["error"]["code"], expected_code);
     }
 }
 
@@ -341,6 +344,12 @@ async fn image_transport_rejects_invalid_and_excess_photos(pool: PgPool) {
     let (_, user) = bootstrap_and_user(&router).await;
     let conversation = serde_json::to_vec(&conversation()).unwrap();
     let fake_png = b"not a png".as_slice();
+    let image = image::ImageBuffer::from_pixel(2, 3, image::Rgba([20, 30, 40, 255]));
+    let mut valid_png = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut valid_png, image::ImageFormat::Png)
+        .unwrap();
+    let valid_png = valid_png.into_inner();
 
     let invalid = multipart_request(
         "/api/ai/custom-food/draft",
@@ -350,10 +359,20 @@ async fn image_transport_rejects_invalid_and_excess_photos(pool: PgPool) {
             ("photos", Some(("food.png", "image/png")), fake_png),
         ],
     );
-    let (status, _, _) = send(&router, invalid).await;
+    let (status, _, bytes) = send(&router, invalid).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response: Value = parse_json(&bytes);
+    assert_eq!(response["error"]["code"], "photo_invalid");
+    assert_eq!(
+        response["error"]["message"],
+        "a photo could not be read; choose a valid JPEG, PNG, or WebP image"
+    );
 
-    let photo = ("photos", Some(("food.jpg", "image/jpeg")), fake_png);
+    let photo = (
+        "photos",
+        Some(("food.png", "image/png")),
+        valid_png.as_slice(),
+    );
     let too_many = multipart_request(
         "/api/ai/custom-food/draft",
         Some(&user),
@@ -366,8 +385,12 @@ async fn image_transport_rejects_invalid_and_excess_photos(pool: PgPool) {
             photo,
         ],
     );
-    let (status, _, _) = send(&router, too_many).await;
+    let (status, _, bytes) = send(&router, too_many).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        parse_json::<Value>(&bytes)["error"]["code"],
+        "too_many_photos"
+    );
 }
 
 #[sqlx::test]

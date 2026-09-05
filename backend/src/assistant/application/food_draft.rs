@@ -40,6 +40,17 @@ pub struct FoodImageLimits {
     pub max_total_bytes: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodImageError {
+    Empty,
+    UnsupportedType,
+    TypeMismatch,
+    InvalidData,
+    DimensionsTooLarge,
+    EncodedTooLarge,
+    Internal,
+}
+
 #[async_trait]
 pub trait FoodImageSanitizer: Send + Sync {
     fn limits(&self) -> FoodImageLimits;
@@ -48,7 +59,7 @@ pub trait FoodImageSanitizer: Send + Sync {
         &self,
         declared_mime_type: &str,
         bytes: Vec<u8>,
-    ) -> Result<SanitizedFoodPhoto, AssistantError>;
+    ) -> Result<SanitizedFoodPhoto, FoodImageError>;
 }
 
 #[derive(Clone, PartialEq, Eq)]
