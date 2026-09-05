@@ -1334,19 +1334,24 @@ type Msg
 
 update : InitContext -> Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 update context msg model =
-    case updateSharedMessage msg model of
+    let
+        activeModel : Model
+        activeModel =
+            promoteContextualDiary msg model
+    in
+    case updateSharedMessage msg activeModel of
         Just result ->
             Just result
 
         Nothing ->
-            updateFirst (updatePane model.panes context msg) model.panes
+            updateFirst (updatePane activeModel.panes context msg) activeModel.panes
                 |> Maybe.map
                     (\result ->
                         let
                             ( refreshedPanes, nextStore, refreshCmd ) =
-                                applyMutation result.mutation result.pane model.store
+                                applyMutation result.mutation result.pane activeModel.store
                         in
-                        ( { model
+                        ( { activeModel
                             | panes = refreshedPanes
                             , store = nextStore
                           }
@@ -1354,6 +1359,52 @@ update context msg model =
                         , result.outMsg
                         )
                     )
+
+
+promoteContextualDiary : Msg -> Model -> Model
+promoteContextualDiary msg model =
+    case ( isDiaryOperation msg, model.panes ) of
+        ( True, (DiaryCalendarPane _ _) :: (DiaryPane paneId diary) :: _ ) ->
+            { model
+                | panes =
+                    [ DiaryPane
+                        { paneId | calendarMonth = Nothing }
+                        (DiaryDay.asMain diary)
+                    ]
+            }
+
+        _ ->
+            model
+
+
+isDiaryOperation : Msg -> Bool
+isDiaryOperation msg =
+    case msg of
+        GotDiaryMsg subMsg ->
+            case subMsg of
+                DiaryDay.LogsLoaded _ _ ->
+                    False
+
+                DiaryDay.GoalLoaded _ _ ->
+                    False
+
+                DiaryDay.PreferencesLoaded _ ->
+                    False
+
+                DiaryDay.LatestSlotsReceived _ _ ->
+                    False
+
+                DiaryDay.CopyLatestCompleted _ _ ->
+                    False
+
+                DiaryDay.TodayChanged _ ->
+                    False
+
+                _ ->
+                    True
+
+        _ ->
+            False
 
 
 updateSharedMessage : Msg -> Model -> Maybe ( Model, Cmd Msg, OutMsg )

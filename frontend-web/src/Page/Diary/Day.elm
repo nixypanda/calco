@@ -10,6 +10,7 @@ module Page.Diary.Day exposing
     , Model
     , Msg(..)
     , OutMsg(..)
+    , asMain
     , contentView
     , currentLogs
     , init
@@ -81,6 +82,11 @@ type alias Model =
     , macroMode : MacroMode
     , preferences : Maybe DiaryPreferences
     }
+
+
+asMain : Model -> Model
+asMain model =
+    { model | calendarMonth = Nothing }
 
 
 {-| Only the loaded state carries a date: suggestions must not be rendered

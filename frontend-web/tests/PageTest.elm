@@ -321,6 +321,46 @@ routeFlowTests =
                         [ "calendar:" ++ month
                         , "food-detail:food-1:" ++ date ++ ":lunch"
                         ]
+        , test "using a contextual diary promotes it to the main pane" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = DiaryDay (Just date) (Just month)
+                        , today = Just today
+                        }
+                in
+                Page.init context
+                    |> first
+                    |> Page.update context
+                        (Page.GotDiaryMsg DiaryDayPage.MacroModeToggled)
+                    |> Maybe.map first
+                    |> Maybe.map Page.paneKeys
+                    |> Expect.equal (Just [ diaryKey date Nothing ])
+        , test "promoted diary navigation drops its calendar lineage" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = DiaryDay (Just date) (Just month)
+                        , today = Just today
+                        }
+                in
+                Page.init context
+                    |> first
+                    |> Page.update context
+                        (Page.GotDiaryMsg DiaryDayPage.PreviousDayClicked)
+                    |> Maybe.map
+                        (\( model, _, outMsg ) ->
+                            ( Page.paneKeys model, outMsg )
+                        )
+                    |> Expect.equal
+                        (Just
+                            ( [ diaryKey date Nothing ]
+                            , Page.Navigate
+                                (DiaryDay (Just previousDate) Nothing)
+                            )
+                        )
         , test "moving to another day changes the diary key" <|
             \_ ->
                 Page.init
