@@ -1417,7 +1417,10 @@ selectDropdown device theme config =
 
         optionsElement : Element msg
         optionsElement =
-            Element.el [ Element.moveDown 4 ]
+            Element.el
+                [ Element.moveDown 4
+                , Element.htmlAttribute (Html.Attributes.style "z-index" "20")
+                ]
                 (optionList theme
                     { maxHeight = Nothing
                     , rows = List.map renderOption config.options
