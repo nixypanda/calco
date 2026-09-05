@@ -387,23 +387,27 @@ GET  /api/ai/food-assistant/status
 POST /api/ai/custom-food/draft
 ```
 
-`GET /api/ai/food-assistant/status` returns whether text drafting is enabled and always
-reports `supports_images: false` for this API version.
+`GET /api/ai/food-assistant/status` returns whether drafting is enabled and
+reports `supports_images` from the configured provider capability.
 
 `POST /api/ai/custom-food/draft` accepts `multipart/form-data` with exactly one
-non-file `conversation` field. Its JSON value is `{ "turns": [...] }`, with a
-non-empty array of at most 20 `{ role, text }` turns. Roles are `user` or
-`assistant`, and each trimmed text value is limited to 4,000 characters. The
-body is limited to 96 KiB. Unknown fields, duplicate conversation fields, and
-the reserved `photos` field are rejected. The response is either
+non-file `conversation` field and, when `supports_images` is true, up to four
+`photos` file fields. Its JSON value is `{ "turns": [...] }`, with a non-empty
+array of at most 20 `{ role, text }` turns. Roles are `user` or `assistant`, and
+each trimmed text value is limited to 4,000 characters. Photos may be JPEG, PNG,
+or WebP; each is limited to 5 MiB, their combined raw and normalized size to
+12 MiB, and decoded input to 12 megapixels. Accepted photos are downscaled to a
+maximum 2,048-pixel edge, re-encoded to remove metadata, and attached to the
+latest user turn. The aggregate multipart body is limited to 13 MiB. Unknown
+or duplicate conversation fields and photos for a text-only provider are
+rejected. The response is either
 `needs_clarification` with an assistant message or `draft_ready` with a complete
 reviewable custom-food draft and warnings.
 
 The route does not create or update catalog data. Clients explicitly submit an
-accepted draft through `POST /api/foods/custom`. Photo inputs are not accepted in
-this text-only slice. Per-user throttling and the global in-flight limit return
-`429` with `Retry-After`; disabled AI returns `503`, and provider failures are
-mapped to opaque `502` responses.
+accepted draft through `POST /api/foods/custom`. Per-user throttling and the
+global in-flight limit return `429` with `Retry-After`; disabled AI returns
+`503`, and provider failures are mapped to opaque `502` responses.
 
 ## Database
 

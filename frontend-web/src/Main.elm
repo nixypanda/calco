@@ -277,7 +277,10 @@ applyChromeOutMsg outMsg model =
 
         Chrome.Logout ->
             ( { model | page = Page.clearStore model.page }
-            , Api.Auth.logout (\_ -> LogoutCompleted)
+            , Cmd.batch
+                [ Api.Auth.logout (\_ -> LogoutCompleted)
+                , revokePhotoPreviewUrls (Page.photoPreviewUrls model.page)
+                ]
             )
 
         Chrome.ToggleTheme ->
@@ -395,8 +398,24 @@ stepPageResult ( page, pageCmd, outMsg ) model =
     let
         ( finalModel, outCmd ) =
             applyPageOutMsg outMsg { model | page = page }
+
+        removedPhotoUrls : List String
+        removedPhotoUrls =
+            Page.photoPreviewUrls model.page
+                |> List.filter
+                    (not
+                        << (\url ->
+                                List.member url (Page.photoPreviewUrls finalModel.page)
+                           )
+                    )
     in
-    ( finalModel, Cmd.batch [ Cmd.map GotPageMsg pageCmd, outCmd ] )
+    ( finalModel
+    , Cmd.batch
+        [ Cmd.map GotPageMsg pageCmd
+        , outCmd
+        , revokePhotoPreviewUrls removedPhotoUrls
+        ]
+    )
 
 
 {-| Reconciling the route is what turns a rolled-over day into the right set of
@@ -451,6 +470,9 @@ applyPageOutMsg outMsg model =
 
         Page.RequestBarcodeScanStop ->
             ( model, requestBarcodeScanStop () )
+
+        Page.RevokePhotoPreviewUrls urls ->
+            ( model, revokePhotoPreviewUrls urls )
 
         Page.LoginSucceeded loginSession ->
             let
@@ -659,6 +681,9 @@ port requestBarcodeScanStop : () -> Cmd msg
 
 
 port barcodeScannerEvent : (ScannerEvent -> msg) -> Sub msg
+
+
+port revokePhotoPreviewUrls : List String -> Cmd msg
 
 
 port persistThemeMode : String -> Cmd msg

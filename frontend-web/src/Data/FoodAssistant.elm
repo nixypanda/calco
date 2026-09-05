@@ -23,7 +23,9 @@ import Json.Encode as Encode
 
 
 type alias AssistantStatus =
-    { enabled : Bool }
+    { enabled : Bool
+    , supportsImages : Bool
+    }
 
 
 type ConversationRole
@@ -77,18 +79,9 @@ type alias DraftServing =
 assistantStatusDecoder : Decoder AssistantStatus
 assistantStatusDecoder =
     strictObject [ "enabled", "supports_images" ] <|
-        (Decode.map2 Tuple.pair
+        Decode.map2 AssistantStatus
             (Decode.field "enabled" Decode.bool)
             (Decode.field "supports_images" Decode.bool)
-            |> Decode.andThen
-                (\( enabled, supportsImages ) ->
-                    if supportsImages then
-                        Decode.fail "Image support is outside the text assistant contract"
-
-                    else
-                        Decode.succeed { enabled = enabled }
-                )
-        )
 
 
 foodDraftTurnDecoder : Decoder FoodDraftTurn

@@ -73,12 +73,11 @@ tests =
                     )
                     |> Result.mapError (always ())
                     |> Expect.equal (Err ())
-        , test "rejects image capability in the text-only status" <|
+        , test "decodes and preserves image capability" <|
             \_ ->
                 Decode.decodeString FoodAssistant.assistantStatusDecoder
                     "{\"enabled\":true,\"supports_images\":true}"
-                    |> Result.mapError (always ())
-                    |> Expect.equal (Err ())
+                    |> Expect.equal (Ok { enabled = True, supportsImages = True })
         , test "conversation is encoded with only bounded turns" <|
             \_ ->
                 FoodAssistant.userTurn "  one bowl of dal  "

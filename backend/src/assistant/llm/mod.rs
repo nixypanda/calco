@@ -3,6 +3,6 @@
 mod openai_compatible;
 
 pub(crate) use openai_compatible::{
-    Authentication, ChatClient, ChatError, ChatMessage, ChatRequest, ChatResponse, ChatRole,
-    OpenAiCompatibleClient, OpenAiCompatibleConfig, ResponseFormat, TokenUsage,
+    Authentication, ChatClient, ChatError, ChatImage, ChatMessage, ChatRequest, ChatResponse,
+    ChatRole, OpenAiCompatibleClient, OpenAiCompatibleConfig, ResponseFormat, TokenUsage,
 };

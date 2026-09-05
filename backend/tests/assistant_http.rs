@@ -1,18 +1,21 @@
 mod common;
 
+use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftModel, FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort,
-    ModelUsage,
+    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodDraftService, FoodVocabulary,
+    FoodVocabularyPort, ModelUsage,
 };
 use calco_backend::assistant::domain::{
-    AssistantError, Conversation, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
+    AssistantError, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
 };
-use calco_backend::assistant::infrastructure::NutritionCatalogVocabularyAdapter;
+use calco_backend::assistant::infrastructure::{
+    NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
+};
 use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
 use common::*;
@@ -30,7 +33,7 @@ struct FakeVocabulary;
 impl FoodDraftModel for FakeModel {
     async fn generate(
         &self,
-        _conversation: &Conversation,
+        _request: &FoodDraftRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError> {
         if let Some(observed) = &self.observed_vocabulary {
@@ -38,6 +41,19 @@ impl FoodDraftModel for FakeModel {
         }
         self.result.clone()
     }
+}
+
+fn fake_assistant_with_images(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
+    AssistantModule::from_service_with_images(
+        Arc::new(FoodDraftService::new(
+            Arc::new(FakeModel {
+                result,
+                observed_vocabulary: None,
+            }),
+            Arc::new(FakeVocabulary),
+        )),
+        Arc::new(SafeFoodImageSanitizer::new()),
+    )
 }
 
 #[async_trait]
@@ -88,18 +104,22 @@ fn conversation() -> Value {
 fn multipart_request(
     uri: &str,
     cookie: Option<&str>,
-    fields: &[(&str, Option<&str>, &[u8])],
+    fields: &[(&str, Option<(&str, &str)>, &[u8])],
 ) -> Request<Body> {
     let boundary = "calco-assistant-test-boundary";
     let mut body = Vec::new();
-    for (name, filename, value) in fields {
+    for (name, file, value) in fields {
         body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
-        let filename = filename
-            .map(|value| format!("; filename=\"{value}\""))
+        let filename = file
+            .map(|(filename, _)| format!("; filename=\"{filename}\""))
             .unwrap_or_default();
         body.extend_from_slice(
-            format!("Content-Disposition: form-data; name=\"{name}\"{filename}\r\n\r\n").as_bytes(),
+            format!("Content-Disposition: form-data; name=\"{name}\"{filename}\r\n").as_bytes(),
         );
+        if let Some((_, mime_type)) = file {
+            body.extend_from_slice(format!("Content-Type: {mime_type}\r\n").as_bytes());
+        }
+        body.extend_from_slice(b"\r\n");
         body.extend_from_slice(value);
         body.extend_from_slice(b"\r\n");
     }
@@ -188,7 +208,7 @@ async fn disabled_malformed_and_provider_failures_are_safe(pool: PgPool) {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(
         parse_json::<Value>(&bytes)["error"]["code"],
-        "invalid_request"
+        "invalid_conversation"
     );
 
     let request = draft_request(Some(&user));
@@ -222,22 +242,155 @@ async fn multipart_limits_and_text_only_boundary_are_enforced(pool: PgPool) {
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
     assert_eq!(
         parse_json::<Value>(&bytes)["error"]["code"],
-        "payload_too_large"
+        "conversation_too_large"
     );
 
     let valid = serde_json::to_vec(&conversation()).unwrap();
-    for fields in [
-        vec![("photos", Some("food.jpg"), b"photo".as_slice())],
-        vec![("unknown", None, valid.as_slice())],
+    for (fields, expected_code) in [
+        (
+            vec![(
+                "photos",
+                Some(("food.jpg", "image/jpeg")),
+                b"photo".as_slice(),
+            )],
+            "photos_not_supported",
+        ),
+        (
+            vec![("unknown", None, valid.as_slice())],
+            "unexpected_field",
+        ),
     ] {
         let request = multipart_request("/api/ai/custom-food/draft", Some(&user), &fields);
         let (status, _, bytes) = send(&router, request).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(
-            parse_json::<Value>(&bytes)["error"]["code"],
-            "invalid_request"
-        );
+        assert_eq!(parse_json::<Value>(&bytes)["error"]["code"], expected_code);
     }
+}
+
+#[sqlx::test]
+async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
+    struct ImageObservingModel(Arc<Mutex<Vec<(usize, &'static str)>>>);
+
+    #[async_trait]
+    impl FoodDraftModel for ImageObservingModel {
+        async fn generate(
+            &self,
+            request: &FoodDraftRequest,
+            _vocabulary: &FoodVocabulary,
+        ) -> Result<FoodDraftResult, AssistantError> {
+            *self.0.lock().unwrap() = request
+                .photos
+                .iter()
+                .map(|photo| (photo.bytes.len(), photo.mime_type.as_str()))
+                .collect();
+            Ok(FoodDraftResult {
+                turn: FoodDraftTurn::clarification("How large was the serving?").unwrap(),
+                usage: None,
+            })
+        }
+    }
+
+    let observed = Arc::new(Mutex::new(vec![]));
+    let service = Arc::new(FoodDraftService::new(
+        Arc::new(ImageObservingModel(observed.clone())),
+        Arc::new(FakeVocabulary),
+    ));
+    let router = app_with_assistant(
+        pool,
+        AssistantModule::from_service_with_images(service, Arc::new(SafeFoodImageSanitizer::new())),
+    )
+    .await;
+    let (_, user) = bootstrap_and_user(&router).await;
+    let status: Value = get_json(&router, "/api/ai/food-assistant/status", &user).await;
+    assert_eq!(status, json!({"enabled": true, "supports_images": true}));
+    let conversation = serde_json::to_vec(&conversation()).unwrap();
+    let image = image::ImageBuffer::from_pixel(2, 3, image::Rgba([20, 30, 40, 255]));
+    let mut png = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+    let png = png.into_inner();
+    let request = multipart_request(
+        "/api/ai/custom-food/draft",
+        Some(&user),
+        &[
+            ("conversation", None, &conversation),
+            ("photos", Some(("food.png", "image/png")), &png),
+        ],
+    );
+    let (status, _, bytes) = send(&router, request).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "body: {}",
+        String::from_utf8_lossy(&bytes)
+    );
+    let observed = observed.lock().unwrap();
+    assert_eq!(observed.len(), 1);
+    assert_eq!(observed[0].1, "image/png");
+    assert!(observed[0].0 > 0);
+}
+
+#[sqlx::test]
+async fn image_transport_rejects_invalid_and_excess_photos(pool: PgPool) {
+    let router = app_with_assistant(
+        pool,
+        fake_assistant_with_images(Ok(FoodDraftResult {
+            turn: FoodDraftTurn::clarification("How much?").unwrap(),
+            usage: None,
+        })),
+    )
+    .await;
+    let (_, user) = bootstrap_and_user(&router).await;
+    let conversation = serde_json::to_vec(&conversation()).unwrap();
+    let fake_png = b"not a png".as_slice();
+    let image = image::ImageBuffer::from_pixel(2, 3, image::Rgba([20, 30, 40, 255]));
+    let mut valid_png = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image)
+        .write_to(&mut valid_png, image::ImageFormat::Png)
+        .unwrap();
+    let valid_png = valid_png.into_inner();
+
+    let invalid = multipart_request(
+        "/api/ai/custom-food/draft",
+        Some(&user),
+        &[
+            ("conversation", None, &conversation),
+            ("photos", Some(("food.png", "image/png")), fake_png),
+        ],
+    );
+    let (status, _, bytes) = send(&router, invalid).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response: Value = parse_json(&bytes);
+    assert_eq!(response["error"]["code"], "photo_invalid");
+    assert_eq!(
+        response["error"]["message"],
+        "a photo could not be read; choose a valid JPEG, PNG, or WebP image"
+    );
+
+    let photo = (
+        "photos",
+        Some(("food.png", "image/png")),
+        valid_png.as_slice(),
+    );
+    let too_many = multipart_request(
+        "/api/ai/custom-food/draft",
+        Some(&user),
+        &[
+            ("conversation", None, &conversation),
+            photo,
+            photo,
+            photo,
+            photo,
+            photo,
+        ],
+    );
+    let (status, _, bytes) = send(&router, too_many).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        parse_json::<Value>(&bytes)["error"]["code"],
+        "too_many_photos"
+    );
 }
 
 #[sqlx::test]

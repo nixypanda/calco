@@ -7,9 +7,11 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::assistant::application::FoodDraftService;
+use crate::assistant::application::{FoodDraftService, FoodImageSanitizer};
 use crate::assistant::domain::AssistantError;
-use crate::assistant::infrastructure::{FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter};
+use crate::assistant::infrastructure::{
+    FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
+};
 use crate::assistant::llm::{
     Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
 };
@@ -24,6 +26,7 @@ const MAX_TRACKED_USERS: usize = 1_024;
 #[derive(Clone)]
 pub struct AssistantModule {
     service: Option<Arc<FoodDraftService>>,
+    images: Option<Arc<dyn FoodImageSanitizer>>,
     limits: Arc<AssistantLimits>,
 }
 
@@ -47,8 +50,8 @@ impl AssistantModule {
         settings: &AiRuntimeSettings,
         catalog: &CatalogModule,
     ) -> Result<Self, AssistantError> {
-        let service = match settings {
-            AiRuntimeSettings::Disabled => None,
+        let (service, images) = match settings {
+            AiRuntimeSettings::Disabled => (None, None),
             AiRuntimeSettings::Enabled(settings) => {
                 let authentication = match &settings.authentication {
                     AiAuthenticationSettings::None => Authentication::None,
@@ -75,11 +78,18 @@ impl AssistantModule {
                 let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
                     catalog.services.clone(),
                 ));
-                Some(Arc::new(FoodDraftService::new(model, vocabulary)))
+                let images = settings.supports_images.then(|| {
+                    Arc::new(SafeFoodImageSanitizer::new()) as Arc<dyn FoodImageSanitizer>
+                });
+                (
+                    Some(Arc::new(FoodDraftService::new(model, vocabulary))),
+                    images,
+                )
             }
         };
         Ok(Self::new(
             service,
+            images,
             REQUESTS_PER_WINDOW,
             RATE_WINDOW,
             MAX_IN_FLIGHT,
@@ -91,6 +101,21 @@ impl AssistantModule {
     pub fn from_service(service: Arc<FoodDraftService>) -> Self {
         Self::new(
             Some(service),
+            None,
+            REQUESTS_PER_WINDOW,
+            RATE_WINDOW,
+            MAX_IN_FLIGHT,
+            MAX_TRACKED_USERS,
+        )
+    }
+
+    pub fn from_service_with_images(
+        service: Arc<FoodDraftService>,
+        images: Arc<dyn FoodImageSanitizer>,
+    ) -> Self {
+        Self::new(
+            Some(service),
+            Some(images),
             REQUESTS_PER_WINDOW,
             RATE_WINDOW,
             MAX_IN_FLIGHT,
@@ -101,6 +126,7 @@ impl AssistantModule {
     pub fn disabled() -> Self {
         Self::new(
             None,
+            None,
             REQUESTS_PER_WINDOW,
             RATE_WINDOW,
             MAX_IN_FLIGHT,
@@ -110,6 +136,7 @@ impl AssistantModule {
 
     fn new(
         service: Option<Arc<FoodDraftService>>,
+        images: Option<Arc<dyn FoodImageSanitizer>>,
         requests_per_window: usize,
         window: Duration,
         max_in_flight: usize,
@@ -117,6 +144,7 @@ impl AssistantModule {
     ) -> Self {
         Self {
             service,
+            images,
             limits: Arc::new(AssistantLimits {
                 requests_per_window,
                 window,
@@ -129,6 +157,14 @@ impl AssistantModule {
 
     pub fn is_enabled(&self) -> bool {
         self.service.is_some()
+    }
+
+    pub fn supports_images(&self) -> bool {
+        self.is_enabled() && self.images.is_some()
+    }
+
+    pub(crate) fn image_sanitizer(&self) -> Option<Arc<dyn FoodImageSanitizer>> {
+        self.images.clone()
     }
 
     pub(crate) fn service(&self) -> Option<Arc<FoodDraftService>> {
@@ -193,7 +229,7 @@ mod tests {
 
     #[test]
     fn rate_limit_is_per_user_and_concurrency_is_global() {
-        let module = AssistantModule::new(None, 1, Duration::from_secs(60), 1, 10);
+        let module = AssistantModule::new(None, None, 1, Duration::from_secs(60), 1, 10);
         let first_user = Uuid::new_v4();
         let second_user = Uuid::new_v4();
         let permit = module.admit(first_user).unwrap();
@@ -211,7 +247,7 @@ mod tests {
 
     #[test]
     fn expired_user_entries_are_pruned() {
-        let module = AssistantModule::new(None, 1, Duration::ZERO, 1, 10);
+        let module = AssistantModule::new(None, None, 1, Duration::ZERO, 1, 10);
         for _ in 0..100 {
             drop(module.admit(Uuid::new_v4()).unwrap());
         }
@@ -220,7 +256,7 @@ mod tests {
 
     #[test]
     fn tracked_users_are_capped_without_consuming_existing_user_permits() {
-        let module = AssistantModule::new(None, 2, Duration::from_secs(60), 3, 2);
+        let module = AssistantModule::new(None, None, 2, Duration::from_secs(60), 3, 2);
         let first = Uuid::new_v4();
         let second = Uuid::new_v4();
         let rejected = Uuid::new_v4();
@@ -237,7 +273,7 @@ mod tests {
 
     #[test]
     fn expired_bucket_is_evicted_before_capacity_is_checked() {
-        let module = AssistantModule::new(None, 1, Duration::ZERO, 1, 1);
+        let module = AssistantModule::new(None, None, 1, Duration::ZERO, 1, 1);
         drop(module.admit(Uuid::new_v4()).unwrap());
         assert!(module.admit(Uuid::new_v4()).is_ok());
         assert_eq!(module.limits.requests.lock().unwrap().len(), 1);

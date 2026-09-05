@@ -1,10 +1,11 @@
-//! Provider-tolerant, text-only OpenAI-compatible Chat Completions client.
+//! Provider-tolerant OpenAI-compatible Chat Completions client.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use base64::Engine;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, StatusCode, Url};
 use serde::{Deserialize, Serialize};
@@ -42,6 +43,13 @@ pub(crate) enum ChatRole {
 pub(crate) struct ChatMessage {
     pub role: ChatRole,
     pub content: String,
+    pub images: Vec<ChatImage>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ChatImage {
+    pub mime_type: &'static str,
+    pub bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -376,7 +384,26 @@ struct RequestBody {
 #[derive(Serialize)]
 struct RequestMessage {
     role: &'static str,
-    content: String,
+    content: RequestContent,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum RequestContent {
+    Text(String),
+    Parts(Vec<RequestContentPart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum RequestContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
+#[derive(Serialize)]
+struct ImageUrl {
+    url: String,
 }
 
 impl RequestBody {
@@ -387,27 +414,48 @@ impl RequestBody {
         include_generic_token_limit: bool,
     ) -> Result<Self, CompletionFailure> {
         let ResponseFormat::JsonSchema { name, schema } = &request.response_format;
-        let mut messages = request
-            .messages
-            .iter()
-            .map(|message| RequestMessage {
-                role: match message.role {
-                    ChatRole::System => "system",
-                    ChatRole::User => "user",
-                    ChatRole::Assistant => "assistant",
-                },
-                content: message.content.clone(),
-            })
-            .collect::<Vec<_>>();
+        let mut messages =
+            request
+                .messages
+                .iter()
+                .map(|message| RequestMessage {
+                    role: match message.role {
+                        ChatRole::System => "system",
+                        ChatRole::User => "user",
+                        ChatRole::Assistant => "assistant",
+                    },
+                    content: if message.images.is_empty() {
+                        RequestContent::Text(message.content.clone())
+                    } else {
+                        let mut parts = vec![RequestContentPart::Text {
+                            text: message.content.clone(),
+                        }];
+                        parts.extend(message.images.iter().map(|image| {
+                            RequestContentPart::ImageUrl {
+                                image_url: ImageUrl {
+                                    url: format!(
+                                        "data:{};base64,{}",
+                                        image.mime_type,
+                                        base64::engine::general_purpose::STANDARD
+                                            .encode(&image.bytes)
+                                    ),
+                                },
+                            }
+                        }));
+                        RequestContent::Parts(parts)
+                    },
+                })
+                .collect::<Vec<_>>();
         if mode != ResponseMode::JsonSchema {
             let system = messages
                 .iter_mut()
                 .find(|message| message.role == "system")
                 .ok_or(CompletionFailure::InvalidResponse)?;
-            system.content = format!(
-                "{}\n{}\nRequired JSON Schema:\n{}",
-                system.content, JSON_ONLY_INSTRUCTION, schema
-            );
+            let RequestContent::Text(content) = &mut system.content else {
+                return Err(CompletionFailure::InvalidResponse);
+            };
+            *content =
+                format!("{content}\n{JSON_ONLY_INSTRUCTION}\nRequired JSON Schema:\n{schema}");
         }
         let response_format = match mode {
             ResponseMode::JsonSchema => Some(json!({
@@ -540,10 +588,12 @@ mod tests {
                 ChatMessage {
                     role: ChatRole::System,
                     content: "PRIVATE PROMPT".into(),
+                    images: vec![],
                 },
                 ChatMessage {
                     role: ChatRole::User,
                     content: "dal".into(),
+                    images: vec![],
                 },
             ],
             response_format: ResponseFormat::JsonSchema {
@@ -803,6 +853,28 @@ mod tests {
         assert_eq!(body["reasoning_format"], "hidden");
         assert_eq!(body["max_tokens"], 16_384);
         assert!(body.get("max_completion_tokens").is_none());
+    }
+
+    #[test]
+    fn image_messages_use_openai_data_url_parts() {
+        let mut request = request();
+        request.messages[1].images.push(ChatImage {
+            mime_type: "image/jpeg",
+            bytes: vec![1, 2, 3],
+        });
+
+        let body =
+            RequestBody::from_request("test", &request, ResponseMode::JsonSchema, true).unwrap();
+        let body = serde_json::to_value(body).unwrap();
+
+        assert_eq!(body["messages"][1]["content"][0]["type"], "text");
+        assert_eq!(body["messages"][1]["content"][0]["text"], "dal");
+        assert_eq!(body["messages"][1]["content"][1]["type"], "image_url");
+        assert_eq!(
+            body["messages"][1]["content"][1]["image_url"]["url"],
+            "data:image/jpeg;base64,AQID"
+        );
+        assert!(body["messages"][0]["content"].is_string());
     }
 
     #[test]

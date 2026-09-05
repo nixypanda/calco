@@ -104,6 +104,46 @@ body {
 
 /* HTML widgets
    These support Element.html-based controls whose static structure is better expressed in CSS. */
+.photo-capture-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--ui-divider);
+  border-radius: 8px;
+  color: var(--ui-text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.photo-capture-label input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.photo-capture-label:focus-within {
+  outline: 2px solid var(--ui-focus-ring, currentColor);
+  outline-offset: 2px;
+}
+
+.photo-capture-label--disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.photo-capture-label--disabled input {
+  cursor: not-allowed;
+}
+
 .ui-chip-group {
   /* Chips render through Element.html, so CSS is the cleanest home for their box model. */
   display: flex;

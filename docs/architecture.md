@@ -158,11 +158,12 @@ Imports are an anti-corruption/staging layer around external food datasets.
 
 ### Assistant
 
-The assistant is a text-only, review-before-write custom-food drafting context.
-It receives a bounded conversation, supplies the model with a bounded read-only
-nutrition vocabulary, and returns either one clarification question or a
-complete food draft. It never persists catalog data; the user must review and
-submit a draft through the existing custom-food API.
+The assistant is a review-before-write custom-food drafting context. It receives
+a bounded conversation and optional sanitized food photos, supplies the model
+with a bounded read-only nutrition vocabulary, and returns either one
+clarification question or a complete food draft. It never persists catalog
+data; the user must review and submit a draft through the existing custom-food
+API.
 
 Provider credentials are loaded once at startup only when AI is enabled.
 Requests are authenticated, size-bounded, rate-limited per user, and protected
@@ -170,12 +171,11 @@ by a process-wide concurrency limit. Telemetry contains only user ID, latency,
 outcome, and provider token counts when present. Prompt and response content,
 provider configuration, credentials, and credential paths are excluded.
 
-Photo and image inputs are outside this boundary for this change.
-
-Planned work expands this boundary while preserving review-before-write. The
-food assistant will accept images, including a nutrition-table photo used to
-prepare a custom-food draft. The user must review and explicitly submit that
-draft before any catalog write occurs. The planned missing-barcode flow is:
+Image-capable providers accept bounded JPEG, PNG, and WebP multipart uploads.
+The backend validates file signatures and decoded dimensions, strips metadata
+by re-encoding, and sends images only with the latest user turn. The user must
+still review and explicitly submit the resulting draft before any catalog write
+occurs. The planned missing-barcode flow is:
 
 ```text
 Local barcode lookup
