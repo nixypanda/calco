@@ -32,7 +32,6 @@ import Api.Foods
         , UnitItem
         )
 import Data.FoodAssistant exposing (FoodDraft)
-import Data.Nutrition exposing (defaultCode)
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
 import Lib.ListExtra as ListExtra
@@ -169,7 +168,12 @@ emptyNutrientRow =
 
 emptyServingRow : ServingRow
 emptyServingRow =
-    { label = "", quantity = "", unit = defaultCode, grams = "" }
+    { label = "", quantity = "", unit = "", grams = "" }
+
+
+noDefaultOption : String
+noDefaultOption =
+    "__no_default__"
 
 
 applyAiDraft : FoodDraft -> FormModel -> FormModel
@@ -225,10 +229,7 @@ hasManualInput form =
         , form.defaultQuantity
         ]
         || not (List.isEmpty form.categoryInput.selected)
-        || (form.defaultUnit
-                /= defaultCode
-                && not (String.isEmpty (String.trim form.defaultUnit))
-           )
+        || not (String.isEmpty (String.trim form.defaultUnit))
         || List.any
             (\row ->
                 not (String.isEmpty (String.trim row.code))
@@ -240,10 +241,7 @@ hasManualInput form =
                 not (String.isEmpty (String.trim row.label))
                     || not (String.isEmpty (String.trim row.quantity))
                     || not (String.isEmpty (String.trim row.grams))
-                    || (row.unit
-                            /= defaultCode
-                            && not (String.isEmpty (String.trim row.unit))
-                       )
+                    || not (String.isEmpty (String.trim row.unit))
             )
             form.servings
 
@@ -446,6 +444,7 @@ hasServingInput : ServingRow -> Bool
 hasServingInput row =
     not (String.isEmpty (String.trim row.label))
         && not (String.isEmpty (String.trim row.quantity))
+        && not (String.isEmpty (String.trim row.unit))
         && not (String.isEmpty (String.trim row.grams))
 
 
@@ -557,12 +556,20 @@ update msg formIn =
 
         DefaultUnitChanged value ->
             let
-                quantity : String
-                quantity =
-                    if value == "" then
+                selectedUnit : String
+                selectedUnit =
+                    if value == noDefaultOption then
                         ""
 
-                    else if value == "g" then
+                    else
+                        value
+
+                quantity : String
+                quantity =
+                    if selectedUnit == "" then
+                        ""
+
+                    else if selectedUnit == "g" then
                         if form.defaultUnit == "g" && not (String.isEmpty form.defaultQuantity) then
                             form.defaultQuantity
 
@@ -571,13 +578,13 @@ update msg formIn =
 
                     else
                         form.servings
-                            |> List.filter (\serving -> serving.unit == value)
+                            |> List.filter (\serving -> serving.unit == selectedUnit)
                             |> List.head
                             |> Maybe.map .quantity
                             |> Maybe.withDefault ""
             in
             ( { form
-                | defaultUnit = value
+                | defaultUnit = selectedUnit
                 , defaultQuantity = quantity
                 , openDropdown = NoneOpen
               }
@@ -939,7 +946,7 @@ defaultPortionCard theme device form =
             theme
             { label = "Default Unit"
             , selected = form.defaultUnit
-            , options = View.QuantityInput.unitOptions form.defaultUnit (defaultPortionUnits form)
+            , options = defaultPortionOptions form
             , onChange = DefaultUnitChanged
             , isOpen = form.openDropdown == DefaultUnitOpen
             , onToggle = ToggleDefaultUnitDropdown
@@ -974,16 +981,15 @@ defaultPortionCard theme device form =
         ]
 
 
-defaultPortionUnits : FormModel -> List UnitItem
-defaultPortionUnits form =
-    { code = "", name = "No default", kind = "" }
-        :: { code = "g", name = "Grams", kind = "mass" }
+defaultPortionOptions : FormModel -> List ( String, String )
+defaultPortionOptions form =
+    ( noDefaultOption, "No default" )
+        :: ( "g", "Grams" )
         :: List.map
             (\serving ->
-                { code = serving.unit
-                , name = serving.label
-                , kind = "serving"
-                }
+                ( serving.unit
+                , serving.label ++ " (" ++ serving.quantity ++ " " ++ serving.unit ++ ")"
+                )
             )
             (List.filter hasServingInput form.servings)
 

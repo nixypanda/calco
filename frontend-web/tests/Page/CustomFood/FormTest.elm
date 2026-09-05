@@ -474,6 +474,13 @@ tests =
                           , grams = "50"
                           }
                         ]
+        , test "new serving rows do not preselect grams" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> .servings
+                    |> List.map .unit
+                    |> Expect.equal [ "" ]
         , test "remove serving row removes the selected row" <|
             \_ ->
                 Form.emptyForm
@@ -497,6 +504,13 @@ tests =
                     |> updateForm (Form.ServingQuantityChanged 0 "1.5")
                     |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
                     |> Expect.equal ( "1.5", "cup" )
+        , test "no default option clears the selected default without staying selected" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm (Form.DefaultUnitChanged "g")
+                    |> updateForm (Form.DefaultUnitChanged "__no_default__")
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "", "" )
         , test "removing the selected serving clears the default portion" <|
             \_ ->
                 Form.emptyForm
