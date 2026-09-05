@@ -7,7 +7,6 @@ async fn seed_product(router: &axum::Router, user: &str, name: &str, kcal: i64) 
     let payload = json!({
         "name": name,
         "categories": ["test"],
-        "serving_size_g": 100,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [

@@ -605,7 +605,6 @@ mod tests {
             "Dal".into(),
             None,
             vec!["lentils".into()],
-            Some(rust_decimal::Decimal::new(35_050, 2)),
             Some(rust_decimal::Decimal::ONE),
             Some("bowl".into()),
             vec![
@@ -640,7 +639,6 @@ mod tests {
                     "name": "Dal",
                     "brand": null,
                     "categories": ["lentils"],
-                    "serving_size_g": "350.50",
                     "default_quantity": "1",
                     "default_unit": "bowl",
                     "nutrients": [{

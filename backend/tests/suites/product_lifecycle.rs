@@ -16,7 +16,6 @@ async fn create_custom_product(
         "name": name,
         "brand": brand,
         "categories": categories,
-        "serving_size_g": 100,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -94,7 +93,6 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "name": "Test Granola",
         "brand": "BrandCo",
         "categories": ["breakfast", "cereals"],
-        "serving_size_g": 50,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -122,16 +120,11 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     assert_eq!(detail["name"], "Test Granola");
     assert_eq!(detail["brand"], "BrandCo");
     assert_eq!(detail["visibility"], "global");
-    assert_eq!(detail["serving_size_g"], "50");
     assert_eq!(
         detail["nutrition_summary"]["per_100g"]["energy_kcal"],
         "450"
     );
     assert_eq!(detail["nutrition_summary"]["per_100g"]["protein_g"], "9");
-    assert_amount(
-        &detail["nutrition_summary"]["per_serving"]["energy_kcal"],
-        225.0,
-    );
     let nutrient_codes: Vec<&str> = detail["nutrients"]
         .as_array()
         .unwrap()
@@ -147,7 +140,6 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         "name": "Test Granola (Honey)",
         "brand": "BrandCo",
         "categories": ["breakfast"],
-        "serving_size_g": 55,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -171,7 +163,6 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
 
     let after_update: Value = get_json(&router, &format!("/api/foods/{id}"), &user).await;
     assert_eq!(after_update["name"], "Test Granola (Honey)");
-    assert_eq!(after_update["serving_size_g"], "55");
     assert_eq!(after_update["nutrients"].as_array().unwrap().len(), 4);
 
     // ── Search ──────────────────────────────────────────────────────────
@@ -209,14 +200,9 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     assert_eq!(listed["brand"], "BrandCo");
     assert_eq!(listed["visibility"], "global");
     assert_eq!(listed["source"], "USER");
-    assert_eq!(listed["serving_size_g"], "55");
     assert_eq!(
         listed["nutrition_summary"]["per_100g"]["energy_kcal"],
         "460"
-    );
-    assert_amount(
-        &listed["nutrition_summary"]["per_serving"]["energy_kcal"],
-        253.0,
     );
     let listed_nutrients = listed["nutrients"].as_array().expect("nutrients");
     assert_eq!(listed_nutrients.len(), 4);
@@ -363,14 +349,6 @@ async fn barcode_lookup_returns_shared_custom_foods(pool: PgPool) {
     let other_lookup: Value =
         get_json(&router, "/api/foods/barcode/private-barcode-123", &other).await;
     assert_eq!(other_lookup["id"], product_id);
-}
-
-fn assert_amount(value: &Value, expected: f64) {
-    let actual: f64 = value.as_str().unwrap().parse().unwrap();
-    assert!(
-        (actual - expected).abs() < 0.001,
-        "expected {expected}, got {actual}"
-    );
 }
 
 #[sqlx::test]

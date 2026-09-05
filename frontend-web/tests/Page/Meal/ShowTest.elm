@@ -404,8 +404,7 @@ product =
     , categories = []
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
-    , servingSizeG = Nothing
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]

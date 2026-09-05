@@ -241,7 +241,6 @@ def _stage_import_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, An
                 "name": description,
                 "brand": record.get("brand"),
                 "categories": record.get("categories") or [],
-                "serving_size_g": record.get("serving_size_g"),
             }
         )
 
@@ -280,7 +279,6 @@ def _custom_payload(record: dict[str, Any]) -> dict[str, Any]:
             "name",
             "brand",
             "categories",
-            "serving_size_g",
             "default_quantity",
             "default_unit",
             "nutrients",

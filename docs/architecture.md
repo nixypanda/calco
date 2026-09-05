@@ -185,9 +185,9 @@ Local barcode lookup
        -> miss: photograph nutrition table -> review draft -> create custom food
 ```
 
-The create-custom-food UI is also planned to omit its separate portion section;
-the initial draft and creation flow will use per-100 g nutrition values. This
-does not remove serving definitions from the catalog or logging domain.
+Custom foods store nutrition per 100 g and may define ordered, food-specific
+serving conversions. An optional default portion is only a logging-form prefill:
+it is either a gram quantity or an exact configured serving.
 
 ## Transaction And Consistency Decisions
 

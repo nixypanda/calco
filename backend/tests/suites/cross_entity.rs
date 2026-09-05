@@ -15,7 +15,6 @@ async fn product_to_meal_to_log(pool: PgPool) {
     let product_payload = json!({
         "name": "Bread",
         "categories": ["bakery"],
-        "serving_size_g": 30,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -142,7 +141,6 @@ async fn shared_content_keeps_creator_writes_and_food_logs_private(pool: PgPool)
     let product_payload = json!({
         "name": "Shared Bread",
         "categories": ["shared"],
-        "serving_size_g": 30,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [

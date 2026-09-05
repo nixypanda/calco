@@ -443,7 +443,6 @@ mod tests {
             categories: vec![],
             default_quantity: None,
             default_unit: None,
-            serving_size_g: None,
             nutrients: vec![ProductNutrient {
                 nutrient_code: NutrientCode("ENERGY_KCAL".to_string()),
                 amount_per_100g: AmountPer100g::new(Decimal::new(250, 0)).unwrap(),

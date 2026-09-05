@@ -33,7 +33,6 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
                 "name": "Imported Yogurt",
                 "brand": "ImportCo",
                 "categories": ["dairy"],
-                "serving_size_g": 150
             },
             {
                 "row_number": 2,
@@ -43,7 +42,6 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
                 "name": "Imported Bar",
                 "brand": "ImportCo",
                 "categories": ["snacks"],
-                "serving_size_g": 40
             }
         ]
     });

@@ -107,7 +107,6 @@ tests =
                     { base
                         | name = "  Paneer  "
                         , brand = " "
-                        , servingSizeG = ""
                         , defaultQuantity = ""
                         , categoryInput =
                             { selected = [ "dairy" ]
@@ -143,7 +142,6 @@ tests =
                             { name = request.name
                             , brand = request.brand
                             , categories = request.categories
-                            , servingSizeG = request.servingSizeG
                             , defaultQuantity = request.defaultQuantity
                             , nutrients = request.nutrients
                             , servings = request.servings
@@ -154,7 +152,6 @@ tests =
                             { name = "Paneer"
                             , brand = Nothing
                             , categories = [ "dairy" ]
-                            , servingSizeG = Nothing
                             , defaultQuantity = Nothing
                             , nutrients =
                                 [ { code = "PROTEIN_G", amountPer100g = 18 } ]
@@ -487,6 +484,45 @@ tests =
                     |> .servings
                     |> List.map .label
                     |> Expect.equal [ "second" ]
+        , test "selecting a serving sets and synchronizes the default portion" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> updateForm (Form.ServingLabelChanged 0 "one cup")
+                    |> updateForm (Form.ServingQuantityChanged 0 "1")
+                    |> updateForm (Form.ServingUnitChanged 0 "cup")
+                    |> updateForm (Form.ServingGramsChanged 0 "240")
+                    |> updateForm (Form.DefaultUnitChanged "cup")
+                    |> updateForm (Form.DefaultQuantityChanged "2")
+                    |> updateForm (Form.ServingQuantityChanged 0 "1.5")
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "1.5", "cup" )
+        , test "removing the selected serving clears the default portion" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> updateForm (Form.ServingQuantityChanged 0 "1")
+                    |> updateForm (Form.ServingUnitChanged 0 "cup")
+                    |> updateForm (Form.DefaultUnitChanged "cup")
+                    |> updateForm (Form.RemoveServingRow 0)
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "", "" )
+        , test "duplicate serving units are rejected" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+                in
+                Form.toCreateFoodRequest
+                    { base
+                        | name = "Soup"
+                        , servings =
+                            [ { label = "small cup", quantity = "1", unit = "cup", grams = "180" }
+                            , { label = "large cup", quantity = "2", unit = "cup", grams = "360" }
+                            ]
+                    }
+                    |> Expect.equal (Err (Form.DuplicateServingUnit "cup"))
         , test "category tag ignores blanks and duplicates" <|
             \_ ->
                 [ Form.addCategoryTag " " [ "snack" ]
@@ -502,7 +538,6 @@ tests =
                             { name = form.name
                             , brand = form.brand
                             , categories = form.categoryInput.selected
-                            , servingSizeG = form.servingSizeG
                             , defaultQuantity = form.defaultQuantity
                             , defaultUnit = form.defaultUnit
                             , nutrients = form.nutrients
@@ -513,7 +548,6 @@ tests =
                         { name = "Dal"
                         , brand = "Kitchen"
                         , categories = [ "lentils", "dinner" ]
-                        , servingSizeG = "300.50"
                         , defaultQuantity = "1"
                         , defaultUnit = "bowl"
                         , nutrients =
@@ -549,7 +583,6 @@ assistantDraft =
     { name = "Dal"
     , brand = Just "Kitchen"
     , categories = [ "Lentils", "DINNER" ]
-    , servingSizeG = Just "300.50"
     , defaultQuantity = Just "1"
     , defaultUnit = Just "bowl"
     , nutrients =
@@ -576,8 +609,7 @@ product =
     , categories = [ "dairy" ]
     , defaultQuantity = Just "1"
     , defaultUnit = Just "cup"
-    , servingSizeG = Just "245"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients =
         [ { code = "PROTEIN_G"
           , amountPer100g = "3.5"

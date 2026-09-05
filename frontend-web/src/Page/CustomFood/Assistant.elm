@@ -1144,10 +1144,6 @@ draftPreviewData draft =
         [ ( "Name", draft.name )
         , ( "Brand", Maybe.withDefault "Not specified" draft.brand )
         , ( "Categories", defaultText "None suggested" (String.join ", " draft.categories) )
-        , ( "Serving size"
-          , Maybe.map (\value -> value ++ " g") draft.servingSizeG
-                |> Maybe.withDefault "Not specified"
-          )
         , ( "Default quantity"
           , case ( draft.defaultQuantity, draft.defaultUnit ) of
                 ( Just quantity, Just unit ) ->

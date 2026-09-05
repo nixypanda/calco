@@ -211,7 +211,6 @@ def _build_record(row: dict[str, str], input_path: str | Path) -> dict[str, obje
         "name": description,
         "brand": MFP_BRAND,
         "categories": MFP_CATEGORIES,
-        "serving_size_g": _json_number(serving_grams),
         "default_quantity": 1,
         "default_unit": _default_unit(row),
         "nutrients": nutrients,

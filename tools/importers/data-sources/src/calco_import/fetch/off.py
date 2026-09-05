@@ -130,7 +130,6 @@ def _build_off_food_row(
         "name": row[indices.product].strip() or None,
         "brand": row[indices.brands].strip() or None,
         "categories": categories_from_csv(row[indices.categories]),
-        "serving_size_g": None,
     }
 
 

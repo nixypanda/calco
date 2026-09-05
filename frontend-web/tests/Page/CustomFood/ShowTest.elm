@@ -204,8 +204,7 @@ food =
     , categories = [ "fruit" ]
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
-    , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = []

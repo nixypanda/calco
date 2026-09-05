@@ -24,12 +24,24 @@ tests =
                 FoodLogForm.initLogFormFromFood Nothing { food | defaultUnit = Just "serving" }
                     |> .unit
                     |> Expect.equal "serving"
-        , test "missing defaults initialize 1 g" <|
+        , test "missing defaults initialize 100 g" <|
             \_ ->
                 FoodLogForm.initLogFormFromFood Nothing
                     { food | defaultQuantity = Nothing, defaultUnit = Nothing }
                     |> (\current -> ( current.amount, current.unit ))
-                    |> Expect.equal ( "1", "g" )
+                    |> Expect.equal ( "100", "g" )
+        , test "missing defaults use the first configured serving" <|
+            \_ ->
+                FoodLogForm.initLogFormFromFood Nothing
+                    { food
+                        | defaultQuantity = Nothing
+                        , defaultUnit = Nothing
+                        , servings =
+                            [ { label = "one cup", quantity = "1", unit = "cup", grams = "240" }
+                            ]
+                    }
+                    |> (\current -> ( current.amount, current.unit ))
+                    |> Expect.equal ( "1", "cup" )
         , test "meal dropdown toggle opens only meal dropdown" <|
             \_ ->
                 FoodLogForm.update FoodLogForm.ToggleMealSlotDropdown form
@@ -278,8 +290,7 @@ food =
     , categories = []
     , defaultQuantity = Just "1"
     , defaultUnit = Just "g"
-    , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = []

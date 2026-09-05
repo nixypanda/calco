@@ -54,6 +54,7 @@ module Ui exposing
     , pageHeader
     , passwordInput
     , primarySubmitButton
+    , readOnlyDecimalInput
     , removableChip
     , scrimOverlay
     , searchInput
@@ -957,6 +958,13 @@ decimalInput theme config =
     textInput theme
         [ inputMode "decimal" ]
         { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
+
+
+readOnlyDecimalInput : Theme -> InputConfig msg -> Element msg
+readOnlyDecimalInput theme config =
+    textInput theme
+        [ Html.Attributes.readonly True |> Element.htmlAttribute ]
+        config
 
 
 {-| Digits-only keypad for fields such as a barcode: no decimal separator. Passed

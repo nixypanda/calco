@@ -215,7 +215,6 @@ searchResponseJson =
          , "name": "Apple"
          , "brand": null
          , "categories": ["fruit"]
-         , "serving_size_g": "100"
          , "nutrition_summary":
             { "per_100g":
                 { "energy_kcal": "52"
@@ -224,7 +223,6 @@ searchResponseJson =
                 , "fat_g": null
                 , "fiber_g": null
                 }
-            , "per_serving": null
             }
          }]
     }
@@ -253,7 +251,6 @@ productDetailJson =
     , "categories": ["fruit"]
     , "default_quantity": "1"
     , "default_unit": "g"
-    , "serving_size_g": "100"
     , "nutrition_summary":
         { "per_100g":
             { "energy_kcal": "52"
@@ -262,7 +259,6 @@ productDetailJson =
             , "fat_g": null
             , "fiber_g": null
             }
-        , "per_serving": null
         }
     , "nutrients":
         [{ "code": "ENERGY_KCAL"

@@ -48,12 +48,7 @@ impl FoodVocabularyPort for NutritionCatalogVocabularyAdapter {
                 kind,
             })
             .collect();
-        let default_codes = self.catalog.custom_food_default_unit_codes();
-        let default_units = serving_units
-            .iter()
-            .filter(|unit| default_codes.contains(&unit.code))
-            .cloned()
-            .collect();
+        let default_units = serving_units.clone();
         Ok(FoodVocabulary {
             nutrients,
             default_units,

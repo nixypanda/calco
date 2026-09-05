@@ -127,7 +127,6 @@ class GenerateFoodsToCreateTests(unittest.TestCase):
         assert result["created"] == 1
         assert result["raw_basic"] == 1
         assert records[0]["name"] == "Whey"
-        assert records[0]["serving_size_g"] == BREADED_SERVING_G
         assert records[0]["default_unit"] == "serving"
         assert records[0]["nutrients"] == [
             {
@@ -314,7 +313,6 @@ class GenerateFoodsToCreateTests(unittest.TestCase):
         )
         records = self._read_jsonl()
 
-        assert records[0]["serving_size_g"] == ML_BASIS_GRAMS
         assert records[0]["default_unit"] == "ml"
         assert records[0]["servings"] == [
             {"label": "100 ml", "quantity": 100, "unit": "ml", "grams": 100}

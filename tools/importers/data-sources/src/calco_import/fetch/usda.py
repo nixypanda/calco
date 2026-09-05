@@ -51,13 +51,6 @@ def _build_food_row(food: dict) -> dict | None:
         category = food.get("foodCategoryId", "")
 
     brand = food.get("brandName") or food.get("brandOwner") or None
-    serving_size = food.get("servingSize")
-    if serving_size is not None:
-        try:
-            serving_size = float(serving_size)
-        except (ValueError, TypeError):
-            serving_size = None
-
     return {
         "type": "food",
         "source": "USDA",
@@ -65,7 +58,6 @@ def _build_food_row(food: dict) -> dict | None:
         "name": description,
         "brand": brand,
         "categories": [str(category).strip().lower()] if category else [],
-        "serving_size_g": serving_size,
     }
 
 

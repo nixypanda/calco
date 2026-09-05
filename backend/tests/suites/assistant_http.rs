@@ -400,7 +400,6 @@ async fn real_catalog_vocabulary_reaches_model_and_trusted_draft_is_submittable(
         "Dal".into(),
         None,
         vec!["lentils".into()],
-        Some(rust_decimal::Decimal::new(240, 0)),
         Some(rust_decimal::Decimal::ONE),
         Some("g".into()),
         vec![

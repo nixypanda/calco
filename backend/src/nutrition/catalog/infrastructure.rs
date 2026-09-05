@@ -53,7 +53,7 @@ impl PostgresProductRepository {
 
     async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductServingRow>(
-            "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY created_at",
+            "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY position",
         )
         .bind(product_id)
         .fetch_all(&self.pool)
@@ -117,7 +117,7 @@ impl PostgresProductRepository {
             SELECT product_id, label, quantity, unit, grams
             FROM product_servings
             WHERE product_id = ANY($1)
-            ORDER BY product_id, created_at
+            ORDER BY product_id, position
             "#,
         )
         .bind(product_ids)
@@ -164,7 +164,7 @@ impl ProductRepository for PostgresProductRepository {
                 sqlx::query_as::<_, ProductRow>(
                     r#"
                     SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit, serving_size_g,
+                           categories, default_quantity, default_unit,
                            created_at, updated_at
                     FROM products
                     WHERE deleted_at IS NULL
@@ -204,7 +204,7 @@ impl ProductRepository for PostgresProductRepository {
                 sqlx::query_as::<_, ProductRow>(
                     r#"
                     SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                           categories, default_quantity, default_unit, serving_size_g,
+                           categories, default_quantity, default_unit,
                            created_at, updated_at
                     FROM products
                     WHERE deleted_at IS NULL
@@ -255,7 +255,7 @@ impl ProductRepository for PostgresProductRepository {
                     )
                     SELECT p.id, p.source, p.source_id, p.user_id, p.visibility, p.barcode,
                            p.name, p.brand, p.categories, p.default_quantity, p.default_unit,
-                           p.serving_size_g, p.created_at, p.updated_at
+                           p.created_at, p.updated_at
                     FROM products p
                     JOIN latest_logs l ON l.product_id = p.id
                     WHERE p.deleted_at IS NULL
@@ -393,7 +393,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g,
+                   categories, default_quantity, default_unit,
                    created_at, updated_at
             FROM products WHERE id = $1 AND deleted_at IS NULL
             "#,
@@ -433,7 +433,7 @@ impl ProductRepository for PostgresProductRepository {
         let row = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g,
+                   categories, default_quantity, default_unit,
                    created_at, updated_at
             FROM products
             WHERE barcode = $1
@@ -458,7 +458,7 @@ impl ProductRepository for PostgresProductRepository {
         let rows = sqlx::query_as::<_, ProductRow>(
             r#"
             SELECT id, source, source_id, user_id, visibility, barcode, name, brand,
-                   categories, default_quantity, default_unit, serving_size_g,
+                   categories, default_quantity, default_unit,
                    created_at, updated_at
             FROM products
             WHERE source = 'USER'
@@ -492,8 +492,8 @@ impl ProductRepository for PostgresProductRepository {
         sqlx::query(
             r#"
             INSERT INTO products (id, source, source_id, user_id, visibility, barcode, name,
-                                  brand, categories, default_quantity, default_unit, serving_size_g)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                                  brand, categories, default_quantity, default_unit)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             "#,
         )
         .bind(product.id.0)
@@ -513,7 +513,6 @@ impl ProductRepository for PostgresProductRepository {
         )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
-        .bind(product.serving_size_g)
         .execute(&mut *tx)
         .await?;
 
@@ -530,7 +529,7 @@ impl ProductRepository for PostgresProductRepository {
         sqlx::query(
             r#"
             UPDATE products SET name=$2, brand=$3, categories=$4, default_quantity=$5,
-                                default_unit=$6, serving_size_g=$7, updated_at=now()
+                                default_unit=$6, updated_at=now()
             WHERE id=$1
             "#,
         )
@@ -546,7 +545,6 @@ impl ProductRepository for PostgresProductRepository {
         )
         .bind(product.default_quantity)
         .bind(product.default_unit.as_ref().map(|u| &u.0))
-        .bind(product.serving_size_g)
         .execute(&mut *tx)
         .await?;
 
@@ -591,7 +589,6 @@ struct ProductRow {
     categories: Vec<String>,
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
-    serving_size_g: Option<Decimal>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -671,7 +668,6 @@ fn product_row_to_product(
         categories: row.categories.into_iter().map(Category).collect(),
         default_quantity: row.default_quantity,
         default_unit: row.default_unit.map(UnitCode),
-        serving_size_g: row.serving_size_g,
         nutrients,
         servings,
         created_at: row.created_at,
@@ -853,13 +849,14 @@ async fn insert_product_servings(
     let quantities: Vec<Decimal> = servings.iter().map(|s| s.quantity).collect();
     let units: Vec<String> = servings.iter().map(|s| s.unit.0.clone()).collect();
     let grams: Vec<Decimal> = servings.iter().map(|s| s.grams).collect();
+    let positions: Vec<i32> = (0..servings.len() as i32).collect();
 
     sqlx::query(
         r#"
-        INSERT INTO product_servings (product_id, label, quantity, unit, grams)
-        SELECT $1, v.label, v.quantity, v.unit, v.grams
-        FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::numeric[])
-            AS v(label, quantity, unit, grams)
+        INSERT INTO product_servings (product_id, label, quantity, unit, grams, position)
+        SELECT $1, v.label, v.quantity, v.unit, v.grams, v.position
+        FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::numeric[], $6::integer[])
+            AS v(label, quantity, unit, grams, position)
         "#,
     )
     .bind(product_id)
@@ -867,6 +864,7 @@ async fn insert_product_servings(
     .bind(&quantities)
     .bind(&units)
     .bind(&grams)
+    .bind(&positions)
     .execute(&mut **tx)
     .await?;
     Ok(())

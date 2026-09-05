@@ -76,7 +76,6 @@ tests =
                                 , fatG = Nothing
                                 , fiberG = Nothing
                                 }
-                            , perServing = Nothing
                             }
                     }
                     |> Expect.equal "Local ⋅ 120 kcal per 100 g"
@@ -128,8 +127,7 @@ food =
     , categories = []
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
-    , servingSizeG = Nothing
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = []

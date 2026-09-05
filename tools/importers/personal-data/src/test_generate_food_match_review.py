@@ -107,14 +107,12 @@ def _candidate(
     protein: str,
     carbs: str,
     fat: str,
-    serving_size_g: str | None = None,
     servings: list[ProductServing] | None = None,
 ) -> ProductCandidate:
     return ProductCandidate(
         id=product_id,
         name=name,
         brand=None,
-        serving_size_g=Decimal(serving_size_g) if serving_size_g else None,
         nutrients_per_100g={
             "ENERGY_KCAL": Decimal(energy),
             "PROTEIN_G": Decimal(protein),

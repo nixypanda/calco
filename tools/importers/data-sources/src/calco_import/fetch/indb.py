@@ -26,7 +26,6 @@ def _build_indb_food_row(source_id: str, name: str) -> dict:
         "name": name,
         "brand": None,
         "categories": [],
-        "serving_size_g": None,
     }
 
 

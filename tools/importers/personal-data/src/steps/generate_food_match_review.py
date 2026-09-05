@@ -109,7 +109,6 @@ class ProductCandidate:
     id: str
     name: str
     brand: str | None
-    serving_size_g: Decimal | None
     nutrients_per_100g: dict[str, Decimal]
     servings: list[ProductServing]
 
@@ -162,7 +161,6 @@ class PsqlCatalogRepository(CatalogRepository):
             p.id::text AS id,
             p.name,
             p.brand,
-            p.serving_size_g::text AS serving_size_g,
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
@@ -233,7 +231,6 @@ class PsqlCatalogRepository(CatalogRepository):
                 p.id,
                 p.name,
                 p.brand,
-                p.serving_size_g,
                 GREATEST(
                     similarity(lower(p.name), lower(:'normalized_query')),
                     similarity(lower(COALESCE(p.brand, '')), lower(:'query'))
@@ -263,7 +260,6 @@ class PsqlCatalogRepository(CatalogRepository):
             c.id::text AS id,
             c.name,
             c.brand,
-            c.serving_size_g::text AS serving_size_g,
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
@@ -346,7 +342,6 @@ def _parse_psql_candidates(output: str) -> list[ProductCandidate]:
                 id=row["id"],
                 name=row["name"],
                 brand=row.get("brand") or None,
-                serving_size_g=_to_decimal(row.get("serving_size_g")),
                 nutrients_per_100g=nutrients,
                 servings=servings,
             )
@@ -535,12 +530,6 @@ def _candidate_serving_basis(
     for serving in candidate.servings:
         if serving.grams > 0 and _serving_grams_matches(target_grams, serving.grams):
             return f"candidate serving '{serving.label}' {serving.grams}g"
-    if (
-        candidate.serving_size_g
-        and candidate.serving_size_g > 0
-        and _serving_grams_matches(target_grams, candidate.serving_size_g)
-    ):
-        return f"candidate serving_size_g {candidate.serving_size_g}g"
     return "candidate serving grams differ"
 
 

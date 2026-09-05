@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::import::domain::*;
-use crate::nutrition::catalog::domain::{AmountPer100g, ServingSizeG, Source};
+use crate::nutrition::catalog::domain::{AmountPer100g, Source};
 
 fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
     Source::from_str(&food.source)?;
@@ -12,7 +12,6 @@ fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
     if food.name.is_empty() {
         return Err("name is required".into());
     }
-    ServingSizeG::new(food.serving_size_g).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -372,7 +371,6 @@ mod tests {
                         name: "Test Product".into(),
                         brand: Some("Test Brand".into()),
                         categories: vec!["snacks".into()],
-                        serving_size_g: Some(rust_decimal::Decimal::new(100, 0)),
                         raw_payload: None,
                         row_number: Some(1),
                     },
@@ -383,7 +381,6 @@ mod tests {
                         name: "Another Product".into(),
                         brand: None,
                         categories: vec![],
-                        serving_size_g: None,
                         raw_payload: None,
                         row_number: Some(2),
                     },
@@ -411,7 +408,6 @@ mod tests {
                     name: String::new(),
                     brand: None,
                     categories: vec![],
-                    serving_size_g: None,
                     raw_payload: None,
                     row_number: Some(1),
                 }],
@@ -492,7 +488,6 @@ mod tests {
                     name: "Rice".into(),
                     brand: None,
                     categories: vec!["cereals".into()],
-                    serving_size_g: None,
                     raw_payload: None,
                     row_number: Some(1),
                 }],
@@ -528,7 +523,6 @@ mod tests {
                     name: "Hot tea (Garam Chai)".into(),
                     brand: None,
                     categories: vec![],
-                    serving_size_g: None,
                     raw_payload: None,
                     row_number: Some(1),
                 }],
@@ -575,7 +569,6 @@ mod tests {
                     name: "Product".into(),
                     brand: None,
                     categories: vec![],
-                    serving_size_g: None,
                     raw_payload: None,
                     row_number: None,
                 }],
@@ -610,7 +603,6 @@ mod tests {
                     name: "Test".into(),
                     brand: None,
                     categories: vec![],
-                    serving_size_g: None,
                     raw_payload: None,
                     row_number: Some(1),
                 }],

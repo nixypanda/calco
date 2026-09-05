@@ -187,9 +187,8 @@ validRequest =
     { name = "Paneer"
     , brand = Just "Local"
     , categories = [ "dairy" ]
-    , servingSizeG = Nothing
     , defaultQuantity = Nothing
-    , defaultUnit = Just "g"
+    , defaultUnit = Nothing
     , nutrients = [ { code = "PROTEIN_G", amountPer100g = 18 } ]
     , servings = [ { label = "cube", quantity = 2, unit = "piece", grams = 50 } ]
     }

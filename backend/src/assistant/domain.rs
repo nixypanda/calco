@@ -110,7 +110,6 @@ pub struct FoodDraft {
     pub name: String,
     pub brand: Option<String>,
     pub categories: Vec<String>,
-    pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub nutrients: Vec<DraftNutrient>,
@@ -123,7 +122,6 @@ impl FoodDraft {
         name: String,
         brand: Option<String>,
         categories: Vec<String>,
-        serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
         nutrients: Vec<DraftNutrient>,
@@ -132,9 +130,16 @@ impl FoodDraft {
         let name = bounded_text(name, MAX_DRAFT_NAME_CHARS)?;
         let brand = optional_bounded_text(brand, MAX_DRAFT_NAME_CHARS)?;
         let default_unit = optional_bounded_text(default_unit, MAX_DRAFT_UNIT_CHARS)?;
-        if serving_size_g.is_some_and(|value| value <= Decimal::ZERO)
-            || default_quantity.is_some_and(|value| value <= Decimal::ZERO)
+        if default_quantity.is_some_and(|value| value <= Decimal::ZERO)
             || default_quantity.is_some() != default_unit.is_some()
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
+        if let (Some(quantity), Some(unit)) = (default_quantity, default_unit.as_deref())
+            && unit != "g"
+            && !servings
+                .iter()
+                .any(|serving| serving.unit == unit && serving.quantity == quantity)
         {
             return Err(AssistantError::InvalidModelResponse);
         }
@@ -156,7 +161,6 @@ impl FoodDraft {
             name,
             brand,
             categories: normalized_categories,
-            serving_size_g,
             default_quantity,
             default_unit,
             nutrients,

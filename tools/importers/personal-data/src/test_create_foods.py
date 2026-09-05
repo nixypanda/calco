@@ -18,7 +18,6 @@ def _record(**overrides: object) -> dict[str, object]:
         "name": "Whey",
         "brand": "MyFitnessPal",
         "categories": ["mfp-import"],
-        "serving_size_g": 30,
         "default_quantity": 1,
         "default_unit": "serving",
         "nutrients": [

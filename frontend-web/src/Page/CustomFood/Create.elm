@@ -220,6 +220,12 @@ validationMessage err =
         Form.InvalidServingGrams value ->
             "Serving grams must be a positive number (got: " ++ value ++ ")"
 
+        Form.DuplicateServingUnit unit ->
+            "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"
+
+        Form.InvalidDefaultPortion ->
+            "Default portion must be grams or match a configured serving"
+
 
 withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel
 withSubmit state form =

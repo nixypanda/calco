@@ -57,11 +57,11 @@ impl ImportRepository for PostgresImportRepository {
 
         for food in foods {
             sqlx::query(
-                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, categories, serving_size_g, raw_payload, row_number)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                r#"INSERT INTO staging_products (import_id, source, source_id, barcode, name, brand, categories, raw_payload, row_number)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                    ON CONFLICT (import_id, source, source_id) DO UPDATE SET
                        barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
-                       categories = EXCLUDED.categories, serving_size_g = EXCLUDED.serving_size_g,
+                       categories = EXCLUDED.categories,
                        raw_payload = EXCLUDED.raw_payload, row_number = EXCLUDED.row_number"#,
             )
             .bind(import_id.0)
@@ -71,7 +71,6 @@ impl ImportRepository for PostgresImportRepository {
             .bind(&food.name)
             .bind(&food.brand)
             .bind(&food.categories)
-            .bind(food.serving_size_g)
             .bind(&food.raw_payload)
             .bind(food.row_number)
             .execute(&mut *tx)
@@ -204,13 +203,13 @@ impl ImportRepository for PostgresImportRepository {
         // freshly inserted rows), so a brand-new import no longer counts rows as both.
         let (created, updated): (i64, i64) = sqlx::query_as(
             r#"WITH upserted AS (
-                   INSERT INTO products (id, source, source_id, barcode, name, brand, categories, serving_size_g, visibility, created_at, updated_at)
-                   SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.categories, sp.serving_size_g, 'global', NOW(), NOW()
+                   INSERT INTO products (id, source, source_id, barcode, name, brand, categories, visibility, created_at, updated_at)
+                   SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.categories, 'global', NOW(), NOW()
                    FROM staging_products sp
                    WHERE sp.import_id = $1
                    ON CONFLICT (source, source_id) DO UPDATE SET
                        barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
-                       categories = EXCLUDED.categories, serving_size_g = EXCLUDED.serving_size_g, updated_at = NOW()
+                       categories = EXCLUDED.categories, updated_at = NOW()
                    RETURNING (xmax = 0) AS inserted
                )
                SELECT
@@ -266,12 +265,27 @@ impl ImportRepository for PostgresImportRepository {
         .await?;
 
         let servings_count: (i64,) = sqlx::query_as(
-            r#"WITH inserted AS (
-                   INSERT INTO product_servings (id, product_id, label, quantity, unit, grams, created_at)
-                   SELECT gen_random_uuid(), p.id, ss.label, ss.quantity, ss.unit, ss.grams, NOW()
+            r#"WITH unique_servings AS (
+                   SELECT p.id AS product_id, ss.label, ss.quantity, ss.unit, ss.grams,
+                          ss.row_number,
+                          row_number() OVER (
+                              PARTITION BY p.id, ss.unit
+                              ORDER BY ss.row_number, ss.label
+                          ) AS unit_rank
                    FROM staging_product_servings ss
                    JOIN products p ON p.source = ss.source AND p.source_id = ss.source_id
                    WHERE ss.import_id = $1
+               ), positioned AS (
+                   SELECT product_id, label, quantity, unit, grams,
+                          (row_number() OVER (
+                              PARTITION BY product_id ORDER BY row_number, label, unit
+                          ) - 1)::integer AS position
+                   FROM unique_servings
+                   WHERE unit_rank = 1
+               ), inserted AS (
+                   INSERT INTO product_servings (id, product_id, label, quantity, unit, grams, position, created_at)
+                   SELECT gen_random_uuid(), product_id, label, quantity, unit, grams, position, NOW()
+                   FROM positioned
                    RETURNING 1 AS flag
                )
                SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,

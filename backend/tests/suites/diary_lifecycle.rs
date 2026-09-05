@@ -8,7 +8,6 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
         "name": "Diary Test Apple",
         "brand": "Orchard Lab",
         "categories": ["fruit"],
-        "serving_size_g": 100,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -119,7 +118,6 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
         "name": "Renamed Apple",
         "brand": "New Brand",
         "categories": ["fruit"],
-        "serving_size_g": 100,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [

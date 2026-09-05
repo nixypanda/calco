@@ -54,7 +54,6 @@ Food row:
   "name": "Rice, white, raw",
   "brand": null,
   "categories": ["grain"],
-  "serving_size_g": 100,
   "row_number": 1
 }
 ```

@@ -102,7 +102,6 @@ struct ImportFoodRowDto {
     brand: Option<String>,
     #[serde(default)]
     categories: Vec<String>,
-    serving_size_g: Option<Decimal>,
 }
 
 #[derive(Serialize)]
@@ -325,7 +324,6 @@ fn import_food_row_dto_to_product(row: ImportFoodRowDto) -> StagedImportProduct 
             .into_iter()
             .map(|c| c.0)
             .collect(),
-        serving_size_g: row.serving_size_g,
         raw_payload: None,
         row_number: row.row_number,
     }
