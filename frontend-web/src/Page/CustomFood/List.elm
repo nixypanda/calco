@@ -48,7 +48,8 @@ init =
 type Msg
     = FoodsLoaded (Result Client.ApiError Foods.CustomFoodListResponse)
     | OpenFoodClicked String
-    | CreateCustomFoodClicked
+    | CreateWithAiClicked
+    | CreateManuallyClicked
     | BackClicked
 
 
@@ -66,7 +67,10 @@ update msg model =
         OpenFoodClicked id ->
             ( model, Cmd.none, Navigate (CustomFoodShow id) )
 
-        CreateCustomFoodClicked ->
+        CreateWithAiClicked ->
+            ( model, Cmd.none, Navigate CustomFoodCreateWithAi )
+
+        CreateManuallyClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )
 
         BackClicked ->
@@ -112,12 +116,7 @@ bodyView theme device model =
             Ui.section theme
                 { header =
                     Just
-                        (Ui.fullWidthGhostButton
-                            device
-                            theme
-                            "+ Create Food"
-                            CreateCustomFoodClicked
-                        )
+                        (createActions device theme)
                 , body =
                     if List.isEmpty foods then
                         [ Typography.mutedBodyParagraph theme "No items yet." ]
@@ -133,6 +132,33 @@ bodyView theme device model =
 
         Loading ->
             Ui.skeletonLoading theme
+
+
+createActions : Device -> Theme -> Element Msg
+createActions device theme =
+    Element.row
+        [ Element.width Element.fill
+        , Element.spacing 12
+        ]
+        [ Element.el [ Element.width Element.fill ]
+            (Ui.primarySubmitButton device
+                theme
+                { state = Ui.Idle
+                , idleLabel = "Create with AI"
+                , submittingLabel = "Create with AI"
+                , onPress = CreateWithAiClicked
+                }
+            )
+        , Element.el [ Element.width Element.fill ]
+            (Ui.secondarySubmitButton device
+                theme
+                { state = Ui.Idle
+                , idleLabel = "Enter manually"
+                , submittingLabel = "Enter manually"
+                , onPress = CreateManuallyClicked
+                }
+            )
+        ]
 
 
 foodRow : Theme -> Device -> ProductDetail -> Element Msg

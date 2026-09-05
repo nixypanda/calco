@@ -132,6 +132,75 @@ tests =
                        )
                     |> Expect.equal
                         ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
+        , test "ready draft hides the conversation behind ask for changes" <|
+            \_ ->
+                enabled
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Draft preview"
+                        , Selector.text "New session"
+                        , Selector.text "Apply to form"
+                        , Selector.text "Ask for changes"
+                        ]
+        , test "ready draft does not render conversation controls" <|
+            \_ ->
+                enabled
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.hasNot
+                        [ Selector.text "Conversation"
+                        , Selector.text "Food description or answer"
+                        , Selector.text "Send"
+                        ]
+        , test "ask for changes reveals the conversation and follow-up input" <|
+            \_ ->
+                enabled
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.update Assistant.AskForChangesClicked
+                    |> first
+                    |> Assistant.view
+                        Theme.light
+                        { class = Phone, orientation = Portrait }
+                        False
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Conversation"
+                        , Selector.text "What should change?"
+                        , Selector.text "Cancel changes"
+                        , Selector.text "New session"
+                        , Selector.text "Send"
+                        ]
+        , test "a revised draft hides the conversation again" <|
+            \_ ->
+                enabled
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> Assistant.update Assistant.AskForChangesClicked
+                    |> first
+                    |> Assistant.update (Assistant.DescriptionChanged "Use 250 g")
+                    |> first
+                    |> Assistant.update Assistant.SendClicked
+                    |> first
+                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                    |> first
+                    |> chatState
+                    |> Maybe.map .askingForChanges
+                    |> Expect.equal (Just False)
         , test "manual form requires confirmation and cancel does not apply" <|
             \_ ->
                 let
@@ -171,8 +240,6 @@ tests =
                             |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                             |> first
                             |> Assistant.update (Assistant.DescriptionChanged "another answer")
-                            |> first
-                            |> Assistant.update Assistant.ToggleExpanded
                             |> first
 
                     awaiting : Assistant.Model
@@ -234,33 +301,10 @@ tests =
                                     )
                                 )
                         )
-        , test "show and hide preserve the assistant session" <|
-            \_ ->
-                let
-                    completed : Assistant.Model
-                    completed =
-                        sent
-                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                            |> first
-                in
-                completed
-                    |> Assistant.update Assistant.ToggleExpanded
-                    |> first
-                    |> Assistant.update Assistant.ToggleExpanded
-                    |> first
-                    |> chatState
-                    |> Maybe.map (\chat -> ( chat.transcript, chat.draft ))
-                    |> Expect.equal
-                        (completed
-                            |> chatState
-                            |> Maybe.map (\chat -> ( chat.transcript, chat.draft ))
-                        )
         , test "assistant actions use their scoped labels" <|
             \_ ->
                 sent
                     |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update Assistant.ToggleExpanded
                     |> first
                     |> Assistant.view
                         Theme.light
@@ -269,10 +313,9 @@ tests =
                     |> Element.layout []
                     |> Query.fromHtml
                     |> Query.has
-                        [ Selector.text "Hide assistant"
-                        , Selector.text "New session"
-                        , Selector.text "Send"
+                        [ Selector.text "New session"
                         , Selector.text "Apply to form"
+                        , Selector.text "Ask for changes"
                         ]
         , test "new session confirmation explains its scope" <|
             \_ ->
@@ -280,8 +323,6 @@ tests =
                     |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                     |> first
                     |> Assistant.update Assistant.NewSessionClicked
-                    |> first
-                    |> Assistant.update Assistant.ToggleExpanded
                     |> first
                     |> Assistant.view
                         Theme.light
@@ -306,8 +347,6 @@ tests =
                     |> first
                     |> Assistant.update (Assistant.ApplyDraftClicked True)
                     |> first
-                    |> Assistant.update Assistant.ToggleExpanded
-                    |> first
                     |> Assistant.view
                         Theme.light
                         { class = Phone, orientation = Portrait }
@@ -318,7 +357,7 @@ tests =
                         [ Selector.text "Cancel"
                         , Selector.text "Replace form values"
                         ]
-        , test "collapsed assistant is a show action, not a session reset" <|
+        , test "focused assistant exposes its input without a reveal action" <|
             \_ ->
                 enabled
                     |> Assistant.view
@@ -327,12 +366,13 @@ tests =
                         False
                     |> Element.layout []
                     |> Query.fromHtml
-                    |> Query.has [ Selector.text "Show assistant" ]
+                    |> Query.has
+                        [ Selector.text "Food description or answer"
+                        , Selector.text "Send"
+                        ]
         , test "text-only assistants hide all photo controls" <|
             \_ ->
                 enabled
-                    |> Assistant.update Assistant.ToggleExpanded
-                    |> first
                     |> Assistant.view
                         Theme.light
                         { class = Phone, orientation = Portrait }
@@ -346,8 +386,6 @@ tests =
         , test "image assistants expose a rear-camera input and file chooser" <|
             \_ ->
                 imageEnabled
-                    |> Assistant.update Assistant.ToggleExpanded
-                    |> first
                     |> Assistant.view
                         Theme.light
                         { class = Phone, orientation = Portrait }
@@ -519,12 +557,12 @@ sent =
 
 emptyExpandedChat : Assistant.ChatModel
 emptyExpandedChat =
-    { expanded = True
-    , transcript = []
+    { transcript = []
     , description = ""
     , request = Assistant.Ready
     , draft = Nothing
     , warnings = []
+    , askingForChanges = False
     , awaitingOverwriteConfirmation = False
     , awaitingNewSessionConfirmation = False
     , supportsImages = False

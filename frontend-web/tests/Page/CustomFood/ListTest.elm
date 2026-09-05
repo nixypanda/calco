@@ -40,13 +40,20 @@ tests =
                     (Tuple.first CustomFoodList.init)
                     |> third
                     |> Expect.equal (CustomFoodList.Navigate (CustomFoodShow "food-1"))
-        , test "create food navigates to custom food create" <|
+        , test "manual create navigates to the manual form" <|
             \_ ->
                 CustomFoodList.update
-                    CustomFoodList.CreateCustomFoodClicked
+                    CustomFoodList.CreateManuallyClicked
                     (Tuple.first CustomFoodList.init)
                     |> third
                     |> Expect.equal (CustomFoodList.Navigate CustomFoodCreate)
+        , test "AI create navigates to the focused assistant" <|
+            \_ ->
+                CustomFoodList.update
+                    CustomFoodList.CreateWithAiClicked
+                    (Tuple.first CustomFoodList.init)
+                    |> third
+                    |> Expect.equal (CustomFoodList.Navigate CustomFoodCreateWithAi)
         , test "back navigates to diary" <|
             \_ ->
                 CustomFoodList.update CustomFoodList.BackClicked (Tuple.first CustomFoodList.init)

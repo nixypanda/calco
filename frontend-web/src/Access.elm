@@ -105,6 +105,9 @@ resolveKnownSession session adminExists route =
             CustomFoodCreate ->
                 Render route
 
+            CustomFoodCreateWithAi ->
+                Render route
+
             CustomFoodEdit _ ->
                 Render route
 

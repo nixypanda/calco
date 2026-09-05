@@ -888,7 +888,15 @@ panesForRoute context existing =
             Just (logWorkspaceDesired context logId dateParam calendarMonth)
 
         CustomFoodCreate ->
-            Just (customFoodCreateDesired context existing)
+            Just (customFoodCreateDesired context existing CustomFoodCreate.init)
+
+        CustomFoodCreateWithAi ->
+            Just
+                (customFoodCreateDesired
+                    context
+                    existing
+                    CustomFoodCreate.initWithAssistant
+                )
 
         CustomFoodEdit productId ->
             Just [ customFoodListDesired context, customFoodEditDesired context productId ]
@@ -1140,16 +1148,20 @@ foodLogDetailDesired context logId =
         (\_ -> FoodLogEntry.init logId)
 
 
-customFoodCreateDesired : InitContext -> List Pane -> List DesiredPane
-customFoodCreateDesired context existing =
+customFoodCreateDesired :
+    InitContext
+    -> List Pane
+    -> ( CustomFoodCreate.Model, CustomFoodCreate.OutMsg )
+    -> List DesiredPane
+customFoodCreateDesired context existing createInit =
     if List.any isFoodSearchPane existing then
         existing
             |> List.filter (\pane -> isDiaryPane pane || isFoodSearchPane pane)
             |> List.map preservePane
-            |> (\prefix -> prefix ++ [ customFoodCreatePaneDesired context ])
+            |> (\prefix -> prefix ++ [ customFoodCreatePaneDesired context createInit ])
 
     else
-        [ customFoodListDesired context, customFoodCreatePaneDesired context ]
+        [ customFoodListDesired context, customFoodCreatePaneDesired context createInit ]
 
 
 preservePane : Pane -> DesiredPane
@@ -1166,13 +1178,16 @@ customFoodListDesired context =
         (\_ -> CustomFoodList.init)
 
 
-customFoodCreatePaneDesired : InitContext -> DesiredPane
-customFoodCreatePaneDesired context =
+customFoodCreatePaneDesired :
+    InitContext
+    -> ( CustomFoodCreate.Model, CustomFoodCreate.OutMsg )
+    -> DesiredPane
+customFoodCreatePaneDesired context createInit =
     fromInit context
         "custom-food-create"
         CustomFoodCreatePane
         applyCustomFoodCreateOutMsg
-        (\_ -> CustomFoodCreate.init)
+        (\_ -> createInit)
 
 
 customFoodEditDesired : InitContext -> String -> DesiredPane

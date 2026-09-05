@@ -132,6 +132,22 @@ workspaceTests =
                         , "food-search"
                         , "custom-food-create"
                         ]
+        , test "AI creation uses the same contextual create workspace" <|
+            \_ ->
+                Page.init
+                    { route = FoodSearch (Just date) (Just Lunch)
+                    , today = Just today
+                    }
+                    |> first
+                    |> Page.initPreserving
+                        { route = CustomFoodCreateWithAi, today = Just today }
+                    |> first
+                    |> Page.paneKeys
+                    |> Expect.equal
+                        [ diaryKey date Nothing
+                        , "food-search"
+                        , "custom-food-create"
+                        ]
         , test "calendar-aware log opens all three contextual panes" <|
             \_ ->
                 expectPaneKeys

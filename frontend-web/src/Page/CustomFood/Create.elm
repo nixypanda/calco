@@ -3,6 +3,7 @@ module Page.CustomFood.Create exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , initWithAssistant
     , photoPreviewUrls
     , update
     , view
@@ -35,6 +36,7 @@ import Ui.Theme exposing (Theme)
 type alias Model =
     { form : Form.FormModel
     , assistant : Assistant.Model
+    , assistantOnly : Bool
     , nutrients : List NutrientItem
     , units : List UnitItem
     , error : Maybe String
@@ -45,6 +47,20 @@ init : ( Model, OutMsg )
 init =
     ( { form = Form.emptyForm
       , assistant = Tuple.first Assistant.init
+      , assistantOnly = False
+      , nutrients = []
+      , units = []
+      , error = Nothing
+      }
+    , NoOp
+    )
+
+
+initWithAssistant : ( Model, OutMsg )
+initWithAssistant =
+    ( { form = Form.emptyForm
+      , assistant = Tuple.first Assistant.init
+      , assistantOnly = True
       , nutrients = []
       , units = []
       , error = Nothing
@@ -239,7 +255,10 @@ applyAssistantOutMsg assistantOut model command =
             ( model, command, RevokePhotoPreviewUrls urls )
 
         Assistant.ApplyDraft draft ->
-            ( { model | form = Form.applyAiDraft draft model.form }
+            ( { model
+                | form = Form.applyAiDraft draft model.form
+                , assistantOnly = False
+              }
             , command
             , NoOp
             )
@@ -254,21 +273,24 @@ applyAssistantOutMsg assistantOut model command =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ Ui.maybeErrorBanner theme model.error
-        , Element.map AssistantMsg
-            (Assistant.view
-                theme
-                device
-                (Form.hasManualInput model.form)
-                model.assistant
-            )
-        , Element.map FormMsg (Form.view theme device model.nutrients model.units model.form)
-        , Ui.primarySubmitButton device
-            theme
-            { state = Ui.submittingOrIdle (Form.isSubmitting model.form.submit)
-            , idleLabel = "Create Food"
-            , submittingLabel = "Creating..."
-            , onPress = SubmitClicked
-            }
-        ]
+    let
+        content : List (Element Msg)
+        content =
+            if model.assistantOnly then
+                [ Element.map AssistantMsg
+                    (Assistant.view theme device False model.assistant)
+                ]
+
+            else
+                [ Element.map FormMsg
+                    (Form.view theme device model.nutrients model.units model.form)
+                , Ui.primarySubmitButton device
+                    theme
+                    { state = Ui.submittingOrIdle (Form.isSubmitting model.form.submit)
+                    , idleLabel = "Create Food"
+                    , submittingLabel = "Creating..."
+                    , onPress = SubmitClicked
+                    }
+                ]
+    in
+    Ui.pageContainer device (Ui.maybeErrorBanner theme model.error :: content)

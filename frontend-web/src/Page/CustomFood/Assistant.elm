@@ -52,12 +52,12 @@ type Model
 
 
 type alias ChatModel =
-    { expanded : Bool
-    , transcript : List ConversationTurn
+    { transcript : List ConversationTurn
     , description : String
     , request : RequestState
     , draft : Maybe FoodDraft
     , warnings : List String
+    , askingForChanges : Bool
     , awaitingOverwriteConfirmation : Bool
     , awaitingNewSessionConfirmation : Bool
     , supportsImages : Bool
@@ -90,7 +90,6 @@ type RequestState
 type Msg
     = StatusLoaded (Result Client.ApiError AssistantStatus)
     | RetryStatusClicked
-    | ToggleExpanded
     | DescriptionChanged String
     | TakePhotoSelected File
     | ChoosePhotos
@@ -103,6 +102,8 @@ type Msg
     | NewSessionClicked
     | ConfirmNewSessionClicked
     | CancelNewSessionClicked
+    | AskForChangesClicked
+    | CancelChangesClicked
     | ApplyDraftClicked Bool
     | ConfirmOverwriteClicked
     | CancelOverwriteClicked
@@ -134,12 +135,12 @@ previewUrls model =
 
 emptyChat : ChatModel
 emptyChat =
-    { expanded = False
-    , transcript = []
+    { transcript = []
     , description = ""
     , request = Ready
     , draft = Nothing
     , warnings = []
+    , askingForChanges = False
     , awaitingOverwriteConfirmation = False
     , awaitingNewSessionConfirmation = False
     , supportsImages = False
@@ -172,13 +173,6 @@ update msg model =
 
         RetryStatusClicked ->
             ( LoadingStatus, Cmd.none, RequestStatus )
-
-        ToggleExpanded ->
-            updateChat
-                (\chat ->
-                    ( { chat | expanded = not chat.expanded }, NoOutMsg )
-                )
-                model
 
         DescriptionChanged description ->
             updateChat
@@ -264,6 +258,14 @@ update msg model =
                     , NoOutMsg
                     )
                 )
+                model
+
+        AskForChangesClicked ->
+            updateChat askForChanges model
+
+        CancelChangesClicked ->
+            updateChat
+                (\chat -> ( { chat | askingForChanges = False }, NoOutMsg ))
                 model
 
         ApplyDraftClicked formHasManualInput ->
@@ -363,6 +365,7 @@ completeDraft turn chat =
                 , request = Ready
                 , draft = Just readyDraft.draft
                 , warnings = readyDraft.warnings
+                , askingForChanges = False
                 , awaitingOverwriteConfirmation = False
                 , photos = []
                 , photoUrls = []
@@ -399,8 +402,7 @@ requestNewSession chat =
 newSession : ChatModel -> ( ChatModel, OutMsg )
 newSession chat =
     ( { emptyChat
-        | expanded = chat.expanded
-        , supportsImages = chat.supportsImages
+        | supportsImages = chat.supportsImages
       }
     , revokePreviewUrls chat
     )
@@ -413,6 +415,16 @@ confirmNewSession chat =
 
     else
         ( chat, NoOutMsg )
+
+
+askForChanges : ChatModel -> ( ChatModel, OutMsg )
+askForChanges chat =
+    case chat.draft of
+        Just _ ->
+            ( { chat | askingForChanges = True }, NoOutMsg )
+
+        Nothing ->
+            ( chat, NoOutMsg )
 
 
 hasSession : ChatModel -> Bool
@@ -665,61 +677,47 @@ view theme device formHasManualInput model =
 
 enabledView : Theme -> Device -> Bool -> ChatModel -> Element Msg
 enabledView theme device formHasManualInput chat =
-    Ui.card theme <|
-        [ Element.row [ Element.width Element.fill ]
-            [ Typography.subsectionTitle theme "Create with AI"
-            , Element.el [ Element.alignRight ]
-                (if chat.expanded then
-                    Ui.compactDangerOutlineButton
-                        device
-                        theme
-                        Ui.CompactContent
-                        "Hide assistant"
-                        ToggleExpanded
-
-                 else
-                    Ui.compactBrandOutlineButton
-                        device
-                        theme
-                        Ui.CompactContent
-                        "Show assistant"
-                        ToggleExpanded
-                )
-            ]
-        , Typography.mutedParagraph theme
-            "Describe a food or dish. Review every estimate before creating it."
-        , Typography.mutedParagraph theme
-            (String.concat
-                [ "Your descriptions and replies go to the configured AI provider. "
-                , "CalCo does not store them."
-                ]
-            )
-        ]
-            ++ (if chat.expanded then
-                    expandedContent theme device formHasManualInput chat
-
-                else
-                    []
-               )
+    Ui.card theme (expandedContent theme device formHasManualInput chat)
 
 
 expandedContent : Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
 expandedContent theme device formHasManualInput chat =
-    [ conversationView theme device chat
-    , draftPreviewView theme device formHasManualInput chat
-    , warningView theme chat.warnings
-    , requestErrorView theme device chat.request
-    , descriptionInput theme chat
-    , photoPicker theme device chat
-    , sendButton theme device chat.request
-    ]
+    case chat.draft of
+        Just _ ->
+            [ draftPreviewView theme device formHasManualInput chat
+            , warningView theme chat.warnings
+            , requestErrorView theme device chat.request
+            , if chat.awaitingNewSessionConfirmation then
+                newSessionConfirmation theme device
+
+              else
+                Element.none
+            ]
+                ++ (if chat.askingForChanges then
+                        [ conversationView theme device chat
+                        , descriptionInput theme chat
+                        , photoPicker theme device chat
+                        , sendButton theme device chat.request
+                        ]
+
+                    else
+                        []
+                   )
+
+        Nothing ->
+            [ conversationView theme device chat
+            , warningView theme chat.warnings
+            , requestErrorView theme device chat.request
+            , descriptionInput theme chat
+            , photoPicker theme device chat
+            , sendButton theme device chat.request
+            ]
 
 
 conversationView : Theme -> Device -> ChatModel -> Element Msg
 conversationView theme device chat =
     if not (hasSession chat) then
-        Typography.mutedParagraph theme
-            "Start with the food, portion, ingredients, and known nutrition."
+        Element.none
 
     else
         Element.column
@@ -745,7 +743,13 @@ conversationView theme device chat =
                 ]
                 (List.map (turnView theme) chat.transcript)
              ]
-                ++ (if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
+                ++ (if
+                        chat.awaitingNewSessionConfirmation
+                            && chat.request
+                            /= Sending
+                            && chat.draft
+                            == Nothing
+                    then
                         [ newSessionConfirmation theme device ]
 
                     else
@@ -820,9 +824,25 @@ descriptionInput theme chat =
         , placeholder =
             Just
                 (Input.placeholder []
-                    (Element.text "For example: one bowl of dal, about 300 g")
+                    (Element.text
+                        (if chat.draft == Nothing then
+                            "For example: one bowl of dal, about 300 g"
+
+                         else
+                            "For example: use 250 g and reduce the oil"
+                        )
+                    )
                 )
-        , label = Input.labelAbove [] (Ui.fieldLabel theme "Food description or answer")
+        , label =
+            Input.labelAbove []
+                (Ui.fieldLabel theme
+                    (if chat.draft == Nothing then
+                        "Food description or answer"
+
+                     else
+                        "What should change?"
+                    )
+                )
         , spellcheck = True
         }
 
@@ -838,12 +858,6 @@ photoPicker theme device chat =
             , Element.spacing DesignTokens.space8
             ]
             ([ Element.el [ Font.bold ] (Element.text "Photos (optional)")
-             , Typography.mutedParagraph theme
-                (String.concat
-                    [ "Photos are used only for the current assistant request and "
-                    , "are not persisted by CalCo."
-                    ]
-                )
              , photoActionView theme device chat
              ]
                 ++ photoErrorView theme chat.photoError
@@ -872,15 +886,14 @@ photoActionView theme device chat =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
             ]
-            [ cameraInput chat
-            , choosePhotosButton theme device chat
-            , Typography.mutedParagraph theme
-                (String.concat
-                    [ "Camera capture usually requires HTTPS or localhost. "
-                    , "If camera access is denied or unavailable, choose photos instead. "
-                    , "Your browser may show a chooser even when camera capture is requested."
-                    ]
-                )
+            [ Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                ]
+                [ Element.el [ Element.width Element.fill ] (cameraInput chat)
+                , Element.el [ Element.width Element.fill ]
+                    (choosePhotosButton theme device chat)
+                ]
             ]
 
 
@@ -895,22 +908,18 @@ choosePhotosButton theme device chat =
             else
                 "Choose more photos"
     in
-    if chat.request == Sending then
-        Input.button
-            [ Element.width Element.fill
-            , Element.padding DesignTokens.space12
-            , Border.width 1
-            , Border.color theme.divider
-            , Border.rounded DesignTokens.radiusControl
-            , Background.color theme.inputFill
-            , Font.color theme.textMuted
-            ]
-            { onPress = Nothing
-            , label = Element.el [ Element.centerX ] (Element.text label)
-            }
+    Ui.secondarySubmitButton device
+        theme
+        { state =
+            if chat.request == Sending then
+                Ui.Disabled
 
-    else
-        Ui.fullWidthGhostButton device theme label ChoosePhotos
+            else
+                Ui.Idle
+        , idleLabel = label
+        , submittingLabel = label
+        , onPress = ChoosePhotos
+        }
 
 
 cameraInput : ChatModel -> Element Msg
@@ -1078,7 +1087,21 @@ draftPreviewView theme device formHasManualInput chat =
                 , Border.color theme.divider
                 , Border.rounded DesignTokens.radiusControl
                 ]
-                [ Typography.subsectionTitle theme "Draft preview"
+                [ Element.row [ Element.width Element.fill ]
+                    [ Typography.subsectionTitle theme "Draft preview"
+                    , if chat.request == Sending then
+                        Element.none
+
+                      else
+                        Element.el [ Element.alignRight ]
+                            (Ui.compactDangerOutlineButton
+                                device
+                                theme
+                                Ui.CompactContent
+                                "New session"
+                                NewSessionClicked
+                            )
+                    ]
                 , previewRows theme preview.details
                 , previewSection theme "Nutrition per 100 g" preview.nutrients
                 , previewSection theme "Servings" preview.servings
@@ -1215,14 +1238,39 @@ draftActionView theme device formHasManualInput chat =
                     ]
 
             else
-                Ui.primarySubmitButton
-                    device
-                    theme
-                    { state = Ui.Idle
-                    , idleLabel = "Apply to form"
-                    , submittingLabel = "Applying…"
-                    , onPress = ApplyDraftClicked formHasManualInput
-                    }
+                Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space8
+                    ]
+                    [ Element.el [ Element.width Element.fill ]
+                        (Ui.secondarySubmitButton device
+                            theme
+                            { state = Ui.Idle
+                            , idleLabel =
+                                if chat.askingForChanges then
+                                    "Cancel changes"
+
+                                else
+                                    "Ask for changes"
+                            , submittingLabel = "Ask for changes"
+                            , onPress =
+                                if chat.askingForChanges then
+                                    CancelChangesClicked
+
+                                else
+                                    AskForChangesClicked
+                            }
+                        )
+                    , Element.el [ Element.width Element.fill ]
+                        (Ui.primarySubmitButton device
+                            theme
+                            { state = Ui.Idle
+                            , idleLabel = "Apply to form"
+                            , submittingLabel = "Applying…"
+                            , onPress = ApplyDraftClicked formHasManualInput
+                            }
+                        )
+                    ]
 
 
 confirmationSurface : Theme -> List (Element msg) -> Element msg

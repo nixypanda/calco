@@ -334,6 +334,9 @@ screenMeta device session route =
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }
 
+        CustomFoodCreateWithAi ->
+            { title = "Create with AI", leading = GoBack CustomFoodList }
+
         CustomFoodEdit _ ->
             { title = "Edit Food", leading = GoBack CustomFoodList }
 

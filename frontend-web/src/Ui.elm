@@ -15,7 +15,6 @@ module Ui exposing
     , chipBackground
     , chips
     , coloredPill
-    , compactBrandOutlineButton
     , compactDangerButton
     , compactDangerOutlineButton
     , compactGhostButton
@@ -698,26 +697,6 @@ compactPrimaryButton device theme width label msg =
         , Font.center
         , uiClass "ui-motion ui-pressable"
         , hoverEffect device [ Background.color theme.brandBluePressed ]
-        ]
-        { onPress = Just msg, label = Element.text label }
-
-
-compactBrandOutlineButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
-compactBrandOutlineButton device theme width label msg =
-    Input.button
-        [ Background.color theme.cardBg
-        , Font.color theme.brandBlue
-        , Border.width 1
-        , Border.color theme.brandBlue
-        , Border.rounded radiusPill
-        , compactButtonWidth device width
-        , Element.height (Element.px 44)
-        , Element.paddingXY space12 space8
-        , Font.medium
-        , Font.size 14
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBlueSoft ]
         ]
         { onPress = Just msg, label = Element.text label }
 

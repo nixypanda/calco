@@ -37,6 +37,7 @@ tests =
         , parses "/foods/abc?date=2026-06-04&meal_slot=breakfast"
             (FoodShow "abc" (Just "2026-06-04") (Just Breakfast))
         , parses "/foods/custom/new" CustomFoodCreate
+        , parses "/foods/custom/new/ai" CustomFoodCreateWithAi
         , parses "/foods/custom/abc/edit" (CustomFoodEdit "abc")
         , parses "/foods/custom" CustomFoodList
         , parses "/meals" MealList
@@ -86,6 +87,7 @@ routeFuzzer =
         , Fuzz.map3 FoodShow safeSegmentFuzzer maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.constant CustomFoodList
         , Fuzz.constant CustomFoodCreate
+        , Fuzz.constant CustomFoodCreateWithAi
         , Fuzz.map CustomFoodEdit safeSegmentFuzzer
         , Fuzz.map CustomFoodShow safeSegmentFuzzer
         , Fuzz.constant MealList

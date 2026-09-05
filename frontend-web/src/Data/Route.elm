@@ -28,6 +28,7 @@ type Route
     | FoodShow String (Maybe String) (Maybe MealSlot)
     | CustomFoodList
     | CustomFoodCreate
+    | CustomFoodCreateWithAi
     | CustomFoodEdit String
     | CustomFoodShow String
     | MealList
@@ -66,6 +67,8 @@ routeParser =
             )
         , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
+        , Parser.map CustomFoodCreateWithAi
+            (s "foods" </> s "custom" </> s "new" </> s "ai")
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
         , Parser.map CustomFoodShow (s "foods" </> s "custom" </> string)
@@ -90,6 +93,9 @@ primaryRoute route =
             FoodSearch maybeDate maybeSlot
 
         CustomFoodCreate ->
+            CustomFoodList
+
+        CustomFoodCreateWithAi ->
             CustomFoodList
 
         CustomFoodEdit _ ->
@@ -194,6 +200,9 @@ routeToPath route =
 
         CustomFoodCreate ->
             "/foods/custom/new"
+
+        CustomFoodCreateWithAi ->
+            "/foods/custom/new/ai"
 
         CustomFoodEdit id ->
             "/foods/custom/" ++ id ++ "/edit"

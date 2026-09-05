@@ -13,9 +13,14 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Page.CustomFood.Create"
-        [ test "init requests initial data" <|
+        [ test "manual init does not request assistant status" <|
             \_ ->
                 CustomFoodCreate.init
+                    |> Tuple.second
+                    |> Expect.equal CustomFoodCreate.NoOp
+        , test "AI init requests assistant status" <|
+            \_ ->
+                CustomFoodCreate.initWithAssistant
                     |> Tuple.second
                     |> Expect.equal CustomFoodCreate.RequestInitialData
         , test "nutrient load stores items and seeds form catalog" <|

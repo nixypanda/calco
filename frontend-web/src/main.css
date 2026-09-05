@@ -110,15 +110,27 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 44px;
+  min-height: 56px;
   box-sizing: border-box;
   overflow: hidden;
-  border: 1px solid var(--ui-divider);
-  border-radius: 8px;
-  color: var(--ui-text-primary);
+  border: 1px solid var(--ui-brand-blue);
+  border-radius: 999px;
+  background: var(--ui-card-bg);
+  color: var(--ui-brand-blue);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .photo-capture-label:hover {
+    background: var(--ui-brand-blue-soft);
+  }
+}
+
+.photo-capture-label:active {
+  transform: scale(0.99);
 }
 
 .photo-capture-label input {
