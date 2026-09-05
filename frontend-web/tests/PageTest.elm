@@ -50,19 +50,23 @@ workspaceTests =
                 expectPaneKeys
                     (FoodSearch (Just date) (Just Lunch))
                     [ diaryKey date Nothing, "food-search" ]
-        , test "dated food opens diary, search, and food detail panes" <|
+        , test "dated food opens diary and food detail panes" <|
             \_ ->
                 expectPaneKeys
                     (FoodShow "food-1" (Just date) (Just Lunch))
                     [ diaryKey date Nothing
-                    , "food-search"
                     , "food-detail:food-1:" ++ date ++ ":lunch"
                     ]
-        , test "dated log opens diary and edit-log panes" <|
+        , test "dated log editing is standalone" <|
             \_ ->
                 expectPaneKeys
                     (FoodLogEntry "log-1" (Just date) Nothing)
-                    [ diaryKey date Nothing, "log-detail:log-1" ]
+                    [ "log-detail:log-1" ]
+        , test "nutrition details retain the diary pane" <|
+            \_ ->
+                expectPaneKeys
+                    (NutritionDetails (Just date))
+                    [ diaryKey date Nothing, "nutrition-details:" ++ date ]
         , test "custom food detail retains its list pane" <|
             \_ ->
                 expectPaneKeys
@@ -73,11 +77,29 @@ workspaceTests =
                 expectPaneKeys
                     (MealShow "meal-1")
                     [ "meal-list", "meal-detail:meal-1" ]
-        , test "user edit retains the admin list pane" <|
+        , test "user edit is standalone" <|
             \_ ->
                 expectPaneKeys
                     (AdminEditUser "user-1")
-                    [ "admin-users", "admin-edit-user:user-1" ]
+                    [ "admin-edit-user:user-1" ]
+        , test "custom food create and edit are standalone" <|
+            \_ ->
+                ( paneKeysForRoute CustomFoodCreate
+                , paneKeysForRoute (CustomFoodEdit "food-1")
+                )
+                    |> Expect.equal
+                        ( [ "custom-food-create" ]
+                        , [ "custom-food-edit:food-1" ]
+                        )
+        , test "meal create and edit are standalone" <|
+            \_ ->
+                ( paneKeysForRoute MealCreate
+                , paneKeysForRoute (MealEdit "meal-1")
+                )
+                    |> Expect.equal
+                        ( [ "meal-create" ]
+                        , [ "meal-edit:meal-1" ]
+                        )
         , test "generic search stays standalone" <|
             \_ ->
                 expectPaneKeys
@@ -116,7 +138,7 @@ workspaceTests =
                     |> Page.paneKeys
                     |> Expect.equal
                         [ "food-search", "food-detail:food-1:none:none" ]
-        , test "diary search retains both panes when custom food creation opens" <|
+        , test "custom food creation replaces its entire contextual workspace" <|
             \_ ->
                 Page.init
                     { route = FoodSearch (Just date) (Just Lunch)
@@ -127,12 +149,8 @@ workspaceTests =
                         { route = CustomFoodCreate, today = Just today }
                     |> first
                     |> Page.paneKeys
-                    |> Expect.equal
-                        [ diaryKey date Nothing
-                        , "food-search"
-                        , "custom-food-create"
-                        ]
-        , test "AI creation uses the same contextual create workspace" <|
+                    |> Expect.equal [ "custom-food-create" ]
+        , test "AI creation is also standalone" <|
             \_ ->
                 Page.init
                     { route = FoodSearch (Just date) (Just Lunch)
@@ -143,19 +161,12 @@ workspaceTests =
                         { route = CustomFoodCreateWithAi, today = Just today }
                     |> first
                     |> Page.paneKeys
-                    |> Expect.equal
-                        [ diaryKey date Nothing
-                        , "food-search"
-                        , "custom-food-create"
-                        ]
-        , test "calendar-aware log opens all three contextual panes" <|
+                    |> Expect.equal [ "custom-food-create" ]
+        , test "calendar-aware log editing is standalone" <|
             \_ ->
                 expectPaneKeys
                     (FoodLogEntry "log-1" (Just date) (Just month))
-                    [ "calendar:" ++ month
-                    , diaryKey date (Just month)
-                    , "log-detail:log-1"
-                    ]
+                    [ "log-detail:log-1" ]
         ]
 
 
@@ -230,7 +241,7 @@ routeFlowTests =
                     |> first
                     |> Page.paneKeys
                     |> Expect.equal [ diaryKey date Nothing, "food-search" ]
-        , test "opening a logged row from search retains the diary pane" <|
+        , test "opening a logged row from search opens standalone editing" <|
             \_ ->
                 Page.init
                     { route = FoodSearch (Just date) (Just Lunch)
@@ -243,7 +254,113 @@ routeFlowTests =
                         }
                     |> first
                     |> Page.paneKeys
-                    |> Expect.equal [ diaryKey date Nothing, "log-detail:log-1" ]
+                    |> Expect.equal [ "log-detail:log-1" ]
+        , test "food detail replaces search without replacing the diary" <|
+            \_ ->
+                Page.init
+                    { route = FoodSearch (Just date) (Just Lunch)
+                    , today = Just today
+                    }
+                    |> first
+                    |> Page.initPreserving
+                        { route = FoodShow "food-1" (Just date) (Just Lunch)
+                        , today = Just today
+                        }
+                    |> first
+                    |> Page.paneKeys
+                    |> Expect.equal
+                        [ diaryKey date Nothing
+                        , "food-detail:food-1:" ++ date ++ ":lunch"
+                        ]
+        , test "meal detail replaces search without replacing the diary" <|
+            \_ ->
+                Page.init
+                    { route = FoodSearch (Just date) (Just Lunch)
+                    , today = Just today
+                    }
+                    |> first
+                    |> Page.initPreserving
+                        { route = MealShow "meal-1", today = Just today }
+                    |> first
+                    |> Page.paneKeys
+                    |> Expect.equal
+                        [ diaryKey date Nothing, "meal-detail:meal-1" ]
+        , test "another food detail replaces the current right pane" <|
+            \_ ->
+                Page.init
+                    { route = CustomFoodShow "food-1", today = Just today }
+                    |> first
+                    |> Page.initPreserving
+                        { route = CustomFoodShow "food-2", today = Just today }
+                    |> first
+                    |> Page.paneKeys
+                    |> Expect.equal
+                        [ "custom-food-list", "custom-food-detail:food-2" ]
+        , test "calendar stays main while contextual panes are replaced" <|
+            \_ ->
+                Page.init
+                    { route = DiaryCalendar (Just month), today = Just today }
+                    |> first
+                    |> Page.initPreserving
+                        { route = DiaryDay (Just date) (Just month)
+                        , today = Just today
+                        }
+                    |> first
+                    |> Page.initPreserving
+                        { route = FoodSearch (Just date) (Just Lunch)
+                        , today = Just today
+                        }
+                    |> first
+                    |> Page.initPreserving
+                        { route = FoodShow "food-1" (Just date) (Just Lunch)
+                        , today = Just today
+                        }
+                    |> first
+                    |> Page.paneKeys
+                    |> Expect.equal
+                        [ "calendar:" ++ month
+                        , "food-detail:food-1:" ++ date ++ ":lunch"
+                        ]
+        , test "using a contextual diary promotes it to the main pane" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = DiaryDay (Just date) (Just month)
+                        , today = Just today
+                        }
+                in
+                Page.init context
+                    |> first
+                    |> Page.update context
+                        (Page.GotDiaryMsg DiaryDayPage.MacroModeToggled)
+                    |> Maybe.map first
+                    |> Maybe.map Page.paneKeys
+                    |> Expect.equal (Just [ diaryKey date Nothing ])
+        , test "promoted diary navigation drops its calendar lineage" <|
+            \_ ->
+                let
+                    context : Page.InitContext
+                    context =
+                        { route = DiaryDay (Just date) (Just month)
+                        , today = Just today
+                        }
+                in
+                Page.init context
+                    |> first
+                    |> Page.update context
+                        (Page.GotDiaryMsg DiaryDayPage.PreviousDayClicked)
+                    |> Maybe.map
+                        (\( model, _, outMsg ) ->
+                            ( Page.paneKeys model, outMsg )
+                        )
+                    |> Expect.equal
+                        (Just
+                            ( [ diaryKey date Nothing ]
+                            , Page.Navigate
+                                (DiaryDay (Just previousDate) Nothing)
+                            )
+                        )
         , test "moving to another day changes the diary key" <|
             \_ ->
                 Page.init
@@ -354,10 +471,15 @@ initializeDesired item =
 
 expectPaneKeys : Route -> List String -> Expect.Expectation
 expectPaneKeys route expected =
+    paneKeysForRoute route
+        |> Expect.equal expected
+
+
+paneKeysForRoute : Route -> List String
+paneKeysForRoute route =
     Page.init { route = route, today = Just today }
         |> first
         |> Page.paneKeys
-        |> Expect.equal expected
 
 
 diaryKey : String -> Maybe String -> String
