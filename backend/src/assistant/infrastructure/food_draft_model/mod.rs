@@ -77,8 +77,15 @@ impl FoodDraftModel for FoodDraftModelAdapter {
             })
             .await
             .map_err(map_chat_error)?;
+        let turn = parse_model_turn(&response.content, vocabulary).map_err(|error| {
+            tracing::error!(
+                provider_response = %response.content,
+                "provider response failed food draft validation"
+            );
+            error
+        })?;
         Ok(FoodDraftResult {
-            turn: parse_model_turn(&response.content, vocabulary)?,
+            turn,
             usage: response.usage.map(map_usage),
         })
     }
