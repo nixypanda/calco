@@ -840,14 +840,13 @@ panesForRoute context existing =
 
         AdminCreateUser ->
             Just
-                [ adminDesired context
-                , simpleDesired
+                [ simpleDesired
                     "admin-create-user"
                     (AdminCreateUserPane AdminCreateUser.init)
                 ]
 
         AdminEditUser userId ->
-            Just [ adminDesired context, adminEditDesired context userId ]
+            Just [ adminEditDesired context userId ]
 
         DiaryDay dateParam calendarMonth ->
             context.today
@@ -855,9 +854,10 @@ panesForRoute context existing =
                     (\today ->
                         case calendarMonth of
                             Just month ->
-                                [ calendarDesired context today (Just month)
-                                , diaryDesired context today dateParam calendarMonth
-                                ]
+                                contextualWorkspace
+                                    existing
+                                    [ calendarDesired context today (Just month) ]
+                                    (diaryDesired context today dateParam calendarMonth)
 
                             Nothing ->
                                 [ diaryDesired context today dateParam Nothing ]
@@ -869,7 +869,13 @@ panesForRoute context existing =
 
         NutritionDetails dateParam ->
             context.today
-                |> Maybe.map (\today -> [ nutritionDesired context today dateParam ])
+                |> Maybe.map
+                    (\today ->
+                        contextualWorkspace
+                            existing
+                            [ diaryDesired context today dateParam Nothing ]
+                            (nutritionDesired context today dateParam)
+                    )
 
         GoalSettings ->
             context.today
@@ -879,30 +885,34 @@ panesForRoute context existing =
             Just [ diarySettingsDesired context ]
 
         FoodSearch dateParam mealSlot ->
-            Just (searchWorkspaceDesired context dateParam mealSlot)
+            Just (searchWorkspaceDesired context existing dateParam mealSlot)
 
         FoodShow productId dateParam mealSlot ->
             Just (foodWorkspaceDesired context existing productId dateParam mealSlot)
 
-        FoodLogEntry logId dateParam calendarMonth ->
-            Just (logWorkspaceDesired context logId dateParam calendarMonth)
+        FoodLogEntry logId _ _ ->
+            Just [ foodLogDetailDesired context logId ]
 
         CustomFoodCreate ->
-            Just (customFoodCreateDesired context existing CustomFoodCreate.init)
+            Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
 
         CustomFoodCreateWithAi ->
             Just
-                (customFoodCreateDesired
+                [ customFoodCreatePaneDesired
                     context
-                    existing
                     CustomFoodCreate.initWithAssistant
-                )
+                ]
 
         CustomFoodEdit productId ->
-            Just [ customFoodListDesired context, customFoodEditDesired context productId ]
+            Just [ customFoodEditDesired context productId ]
 
         CustomFoodShow productId ->
-            Just [ customFoodListDesired context, customFoodShowDesired context productId ]
+            Just
+                (contextualWorkspace
+                    existing
+                    [ customFoodListDesired context ]
+                    (customFoodShowDesired context productId)
+                )
 
         CustomFoodList ->
             Just [ customFoodListDesired context ]
@@ -911,13 +921,18 @@ panesForRoute context existing =
             Just [ mealListDesired context ]
 
         MealCreate ->
-            Just [ mealListDesired context, mealCreateDesired context ]
+            Just [ mealCreateDesired context ]
 
         MealEdit mealId ->
-            Just [ mealListDesired context, mealEditDesired context mealId ]
+            Just [ mealEditDesired context mealId ]
 
         MealShow mealId ->
-            Just [ mealListDesired context, mealDetailDesired context mealId ]
+            Just
+                (contextualWorkspace
+                    existing
+                    [ mealListDesired context ]
+                    (mealDetailDesired context mealId)
+                )
 
         _ ->
             Just
@@ -1054,13 +1069,19 @@ searchDesired _ dateParam mealSlot =
         )
 
 
-searchWorkspaceDesired : InitContext -> Maybe String -> Maybe MealSlot -> List DesiredPane
-searchWorkspaceDesired context dateParam mealSlot =
+searchWorkspaceDesired :
+    InitContext
+    -> List Pane
+    -> Maybe String
+    -> Maybe MealSlot
+    -> List DesiredPane
+searchWorkspaceDesired context existing dateParam mealSlot =
     case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
         ( Just today, Just _ ) ->
-            [ diaryDesired context today dateParam Nothing
-            , searchDesired context dateParam mealSlot
-            ]
+            contextualWorkspace
+                existing
+                [ diaryDesired context today dateParam Nothing ]
+                (searchDesired context dateParam mealSlot)
 
         _ ->
             [ searchDesired context dateParam mealSlot ]
@@ -1081,17 +1102,13 @@ foodWorkspaceDesired context existing productId dateParam mealSlot =
     in
     case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
         ( Just today, Just _ ) ->
-            [ diaryDesired context today dateParam Nothing
-            , searchDesired context dateParam mealSlot
-            , detail
-            ]
+            contextualWorkspace
+                existing
+                [ diaryDesired context today dateParam Nothing ]
+                detail
 
         _ ->
-            if List.any isFoodSearchPane existing then
-                [ searchDesired context dateParam mealSlot, detail ]
-
-            else
-                [ detail ]
+            contextualWorkspace existing [] detail
 
 
 foodDetailDesired : InitContext -> String -> Maybe String -> Maybe MealSlot -> DesiredPane
@@ -1116,29 +1133,6 @@ foodDetailDesired context productId dateParam mealSlot =
         (\_ -> FoodShow.init productId dateParam mealSlot)
 
 
-logWorkspaceDesired : InitContext -> String -> Maybe String -> Maybe String -> List DesiredPane
-logWorkspaceDesired context logId dateParam calendarMonth =
-    let
-        detail : DesiredPane
-        detail =
-            foodLogDetailDesired context logId
-    in
-    case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
-        ( Just today, Just _ ) ->
-            case calendarMonth of
-                Just month ->
-                    [ calendarDesired context today (Just month)
-                    , diaryDesired context today dateParam calendarMonth
-                    , detail
-                    ]
-
-                Nothing ->
-                    [ diaryDesired context today dateParam Nothing, detail ]
-
-        _ ->
-            [ detail ]
-
-
 foodLogDetailDesired : InitContext -> String -> DesiredPane
 foodLogDetailDesired context logId =
     fromInit context
@@ -1148,25 +1142,23 @@ foodLogDetailDesired context logId =
         (\_ -> FoodLogEntry.init logId)
 
 
-customFoodCreateDesired :
-    InitContext
-    -> List Pane
-    -> ( CustomFoodCreate.Model, CustomFoodCreate.OutMsg )
-    -> List DesiredPane
-customFoodCreateDesired context existing createInit =
-    if List.any isFoodSearchPane existing then
-        existing
-            |> List.filter (\pane -> isDiaryPane pane || isFoodSearchPane pane)
-            |> List.map preservePane
-            |> (\prefix -> prefix ++ [ customFoodCreatePaneDesired context createInit ])
-
-    else
-        [ customFoodListDesired context, customFoodCreatePaneDesired context createInit ]
-
-
 preservePane : Pane -> DesiredPane
 preservePane pane =
     simpleDesired (paneKey pane) pane
+
+
+contextualWorkspace : List Pane -> List DesiredPane -> DesiredPane -> List DesiredPane
+contextualWorkspace existing fallbackMain contextual =
+    case List.head existing of
+        Just pane ->
+            if isMainPane pane then
+                [ preservePane pane, contextual ]
+
+            else
+                fallbackMain ++ [ contextual ]
+
+        Nothing ->
+            fallbackMain ++ [ contextual ]
 
 
 customFoodListDesired : InitContext -> DesiredPane
@@ -1236,20 +1228,22 @@ mealDetailDesired context mealId =
         (\_ -> MealShow.init mealId)
 
 
-isDiaryPane : Pane -> Bool
-isDiaryPane pane =
+isMainPane : Pane -> Bool
+isMainPane pane =
     case pane of
         DiaryPane _ _ ->
             True
 
-        _ ->
-            False
+        DiaryCalendarPane _ _ ->
+            True
 
-
-isFoodSearchPane : Pane -> Bool
-isFoodSearchPane pane =
-    case pane of
         FoodSearchPane _ ->
+            True
+
+        CustomFoodListPane _ ->
+            True
+
+        MealListPane _ ->
             True
 
         _ ->
