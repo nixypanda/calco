@@ -81,24 +81,9 @@ Or directly:
 cd frontend-web && elm-test
 ```
 
-## Running With Nextest
-
-Nextest runs each test in its own process, which suits `#[sqlx::test]` well. Each test still gets its own database, so parallelism is safe.
-
-```bash
-cargo install cargo-nextest --locked
-cd backend && cargo nextest run
-```
-
-Watch `max_connections` if the suite grows. Each test builds a pool of 5; Postgres allows 100 by default. If `too many connections` shows up, cap parallelism:
-
-```bash
-cargo nextest run --test-threads 8
-```
-
 ## Coverage
 
-Coverage is produced by `cargo-llvm-cov`, which integrates with nextest.
+Coverage is produced by `cargo-llvm-cov`.
 
 Install once:
 
@@ -110,25 +95,25 @@ rustup component add llvm-tools-preview
 Terminal summary:
 
 ```bash
-cd backend && cargo llvm-cov nextest
+cd backend && cargo llvm-cov
 ```
 
 Browsable HTML report:
 
 ```bash
-cd backend && cargo llvm-cov nextest --html --open
+cd backend && cargo llvm-cov --html --open
 ```
 
 LCOV for CI / IDE integrations:
 
 ```bash
-cd backend && cargo llvm-cov nextest --lcov --output-path lcov.info
+cd backend && cargo llvm-cov --lcov --output-path lcov.info
 ```
 
 Exclude the test harness from coverage math:
 
 ```bash
-cd backend && cargo llvm-cov nextest --ignore-filename-regex 'tests/'
+cd backend && cargo llvm-cov --ignore-filename-regex 'tests/'
 ```
 
 Instrumented builds use a separate `target/llvm-cov-target/` directory, so the first run recompiles from scratch. Subsequent runs are incremental.

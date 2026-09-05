@@ -55,11 +55,11 @@ backend-format:
 
 # Run backend tests
 backend-test:
-    cargo nextest run --manifest-path backend/Cargo.toml
+    cargo test --manifest-path backend/Cargo.toml
 
 # Run backend coverage
 backend-coverage:
-    cargo llvm-cov nextest --manifest-path backend/Cargo.toml
+    cargo llvm-cov --manifest-path backend/Cargo.toml
 
 # Run backend migrations
 backend-migrate:

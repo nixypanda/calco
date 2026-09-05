@@ -68,7 +68,7 @@ Test:
 nix develop -c just backend-test
 ```
 
-See [testing.md](testing.md) for integration tests, nextest, and coverage.
+See [testing.md](testing.md) for integration tests and coverage.
 
 ## Frontend
 

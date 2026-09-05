@@ -513,4 +513,4 @@ or:
 nix develop -c just backend-test
 ```
 
-See [testing.md](testing.md) for the integration test harness, nextest, and coverage workflow.
+See [testing.md](testing.md) for the integration test harness and coverage workflow.
