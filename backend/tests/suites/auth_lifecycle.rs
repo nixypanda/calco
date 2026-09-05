@@ -1,7 +1,5 @@
-mod common;
-
 use axum::http::{Method, StatusCode, header};
-use common::*;
+use crate::common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 

@@ -1,5 +1,3 @@
-mod common;
-
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
@@ -18,7 +16,7 @@ use calco_backend::assistant::infrastructure::{
 };
 use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
-use common::*;
+use crate::common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
