@@ -566,10 +566,10 @@ validatePhotoMetadata existingPhotos selectedPhotos =
         Err "Photos must be JPEG, PNG, or WebP."
 
     else if List.any (\photo -> photo.size > maxPhotoBytes) photos then
-        Err "Each photo must be 5 MiB or smaller."
+        Err "Each photo must be 15 MiB or smaller."
 
     else if List.sum (List.map .size photos) > maxTotalPhotoBytes then
-        Err "Photos together must be 12 MiB or smaller."
+        Err "Photos together must be 40 MiB or smaller."
 
     else
         Ok ()
@@ -587,12 +587,12 @@ maxPhotoCount =
 
 maxPhotoBytes : Int
 maxPhotoBytes =
-    5 * 1024 * 1024
+    15 * 1024 * 1024
 
 
 maxTotalPhotoBytes : Int
 maxTotalPhotoBytes =
-    12 * 1024 * 1024
+    40 * 1024 * 1024
 
 
 revokePreviewUrls : ChatModel -> OutMsg

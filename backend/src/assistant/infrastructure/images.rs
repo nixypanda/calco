@@ -1,21 +1,41 @@
 //! Bounded normalization of untrusted food-photo uploads.
 
 use std::io::Cursor;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use image::{ImageFormat, ImageReader, load_from_memory_with_format};
+use image::{ImageFormat, ImageReader, Limits};
+use tokio::sync::Semaphore;
 
 use crate::assistant::application::{
     FoodImageError, FoodImageLimits, FoodImageSanitizer, FoodPhotoMimeType, SanitizedFoodPhoto,
 };
 
 pub const MAX_FOOD_PHOTOS: usize = 4;
-pub const MAX_FOOD_PHOTO_BYTES: usize = 5 * 1024 * 1024;
-pub const MAX_FOOD_PHOTO_TOTAL_BYTES: usize = 12 * 1024 * 1024;
+pub const MAX_FOOD_PHOTO_BYTES: usize = 15 * 1024 * 1024;
+pub const MAX_FOOD_PHOTO_TOTAL_BYTES: usize = 40 * 1024 * 1024;
 pub const MAX_FOOD_PHOTO_DIMENSION: u32 = 2_048;
-pub const MAX_FOOD_PHOTO_PIXELS: u64 = 12_000_000;
+pub const MAX_FOOD_PHOTO_PIXELS: u64 = 50_000_000;
+const MAX_DECODE_ALLOC_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_CONCURRENT_DECODES: usize = 1;
 
-pub struct SafeFoodImageSanitizer;
+pub struct SafeFoodImageSanitizer {
+    decode_permits: Arc<Semaphore>,
+}
+
+impl SafeFoodImageSanitizer {
+    pub fn new() -> Self {
+        Self {
+            decode_permits: Arc::new(Semaphore::new(MAX_CONCURRENT_DECODES)),
+        }
+    }
+}
+
+impl Default for SafeFoodImageSanitizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[async_trait]
 impl FoodImageSanitizer for SafeFoodImageSanitizer {
@@ -32,6 +52,12 @@ impl FoodImageSanitizer for SafeFoodImageSanitizer {
         declared_mime_type: &str,
         bytes: Vec<u8>,
     ) -> Result<SanitizedFoodPhoto, FoodImageError> {
+        let _decode_permit = self
+            .decode_permits
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|_| FoodImageError::Internal)?;
         let declared_mime_type = declared_mime_type.to_owned();
         tokio::task::spawn_blocking(move || sanitize_food_photo(&declared_mime_type, bytes))
             .await
@@ -61,8 +87,11 @@ pub fn sanitize_food_photo(
         .map_err(|_| FoodImageError::InvalidData)?;
     validate_dimensions(width, height)?;
 
-    let decoded = load_from_memory_with_format(&bytes, image_format(mime_type))
-        .map_err(|_| FoodImageError::InvalidData)?;
+    let mut decoder = ImageReader::with_format(Cursor::new(&bytes), image_format(mime_type));
+    let mut limits = Limits::default();
+    limits.max_alloc = Some(MAX_DECODE_ALLOC_BYTES);
+    decoder.limits(limits);
+    let decoded = decoder.decode().map_err(|_| FoodImageError::InvalidData)?;
     validate_dimensions(decoded.width(), decoded.height())?;
     let normalized = if decoded.width() > MAX_FOOD_PHOTO_DIMENSION
         || decoded.height() > MAX_FOOD_PHOTO_DIMENSION
@@ -161,7 +190,8 @@ mod tests {
 
     #[test]
     fn strips_jpeg_metadata_and_downscales_large_images() {
-        let encoded = image_bytes(ImageFormat::Jpeg, 3_000, 2_000);
+        // A common 12 MP phone-camera resolution that exceeded the old limit.
+        let encoded = image_bytes(ImageFormat::Jpeg, 4_032, 3_024);
         let marker = b"Exif\0\0calco-private-marker";
         let length = u16::try_from(marker.len() + 2).unwrap().to_be_bytes();
         let mut with_metadata = Vec::new();
@@ -185,10 +215,11 @@ mod tests {
     }
 
     #[test]
-    fn rejects_pixel_bombs_before_decode() {
-        let png = image_bytes(ImageFormat::Png, 4_000, 4_000);
+    fn accepts_modern_phone_dimensions_and_rejects_larger_images() {
+        assert_eq!(validate_dimensions(4_032, 3_024), Ok(()));
+        assert_eq!(validate_dimensions(8_160, 6_120), Ok(()));
         assert_eq!(
-            sanitize_food_photo("image/png", png),
+            validate_dimensions(8_192, 6_144),
             Err(FoodImageError::DimensionsTooLarge)
         );
     }

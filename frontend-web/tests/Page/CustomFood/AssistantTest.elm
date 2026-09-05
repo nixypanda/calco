@@ -365,10 +365,10 @@ tests =
         , test "photo metadata accepts supported files at the limits" <|
             \_ ->
                 Assistant.validatePhotoMetadata
-                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
-                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 15 * 1024 * 1024 }
                     ]
-                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 }
+                    [ { mimeType = "image/webp", size = 10 * 1024 * 1024 }
                     , { mimeType = "image/jpeg", size = 0 }
                     ]
                     |> Expect.equal (Ok ())
@@ -377,11 +377,11 @@ tests =
                 ( Assistant.validatePhotoMetadata []
                     [ { mimeType = "image/gif", size = 1 } ]
                 , Assistant.validatePhotoMetadata []
-                    [ { mimeType = "image/png", size = 5 * 1024 * 1024 + 1 } ]
+                    [ { mimeType = "image/png", size = 15 * 1024 * 1024 + 1 } ]
                 )
                     |> Expect.equal
                         ( Err "Photos must be JPEG, PNG, or WebP."
-                        , Err "Each photo must be 5 MiB or smaller."
+                        , Err "Each photo must be 15 MiB or smaller."
                         )
         , test "photo metadata enforces four-photo and combined-size limits" <|
             \_ ->
@@ -389,14 +389,14 @@ tests =
                     (List.repeat 4 { mimeType = "image/jpeg", size = 1 })
                     [ { mimeType = "image/png", size = 1 } ]
                 , Assistant.validatePhotoMetadata
-                    [ { mimeType = "image/jpeg", size = 5 * 1024 * 1024 }
-                    , { mimeType = "image/png", size = 5 * 1024 * 1024 }
+                    [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
+                    , { mimeType = "image/png", size = 15 * 1024 * 1024 }
                     ]
-                    [ { mimeType = "image/webp", size = 2 * 1024 * 1024 + 1 } ]
+                    [ { mimeType = "image/webp", size = 10 * 1024 * 1024 + 1 } ]
                 )
                     |> Expect.equal
                         ( Err "Only four photos can be attached."
-                        , Err "Photos together must be 12 MiB or smaller."
+                        , Err "Photos together must be 40 MiB or smaller."
                         )
         , test "removing a photo keeps file and preview positions aligned" <|
             \_ ->

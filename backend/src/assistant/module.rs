@@ -78,9 +78,9 @@ impl AssistantModule {
                 let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
                     catalog.services.clone(),
                 ));
-                let images = settings
-                    .supports_images
-                    .then(|| Arc::new(SafeFoodImageSanitizer) as Arc<dyn FoodImageSanitizer>);
+                let images = settings.supports_images.then(|| {
+                    Arc::new(SafeFoodImageSanitizer::new()) as Arc<dyn FoodImageSanitizer>
+                });
                 (
                     Some(Arc::new(FoodDraftService::new(model, vocabulary))),
                     images,

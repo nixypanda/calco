@@ -52,7 +52,7 @@ fn fake_assistant_with_images(result: Result<FoodDraftResult, AssistantError>) -
             }),
             Arc::new(FakeVocabulary),
         )),
-        Arc::new(SafeFoodImageSanitizer),
+        Arc::new(SafeFoodImageSanitizer::new()),
     )
 }
 
@@ -297,7 +297,7 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
     ));
     let router = app_with_assistant(
         pool,
-        AssistantModule::from_service_with_images(service, Arc::new(SafeFoodImageSanitizer)),
+        AssistantModule::from_service_with_images(service, Arc::new(SafeFoodImageSanitizer::new())),
     )
     .await;
     let (_, user) = bootstrap_and_user(&router).await;

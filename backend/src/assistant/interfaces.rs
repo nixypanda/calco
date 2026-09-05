@@ -21,7 +21,7 @@ use crate::assistant::domain::{
 use crate::assistant::module::{AdmissionError, AssistantModule};
 use crate::auth::interfaces::http::AuthUser;
 
-const MAX_REQUEST_BYTES: usize = 13 * 1024 * 1024;
+const MAX_REQUEST_BYTES: usize = 41 * 1024 * 1024;
 const MAX_CONVERSATION_FIELD_BYTES: usize = 92 * 1024;
 const MAX_MULTIPART_FIELDS: usize = 5;
 
@@ -488,7 +488,7 @@ fn image_failure(error: FoodImageError) -> DraftHttpResult {
         FoodImageError::DimensionsTooLarge => rejected(
             StatusCode::BAD_REQUEST,
             "photo_dimensions_too_large",
-            "a photo has too many pixels; resize it below 12 megapixels and retry",
+            "a photo has too many pixels; use a photo at or below 50 megapixels",
             "photo dimensions exceeded pixel limit",
         ),
         FoodImageError::EncodedTooLarge => rejected(
