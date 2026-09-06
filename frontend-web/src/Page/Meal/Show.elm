@@ -509,7 +509,7 @@ view { model, device, theme } =
                         Ui.errorBanner theme message
 
                     Loading _ ->
-                        Ui.skeletonLoading theme
+                        mealShowSkeleton theme
                 ]
             , footer = Nothing
             }
@@ -521,7 +521,7 @@ view { model, device, theme } =
                 Ui.errorBanner theme message
 
             Loading _ ->
-                Ui.skeletonLoading theme
+                mealShowSkeleton theme
         ]
 
 
@@ -664,3 +664,25 @@ deleteModalView theme device loaded =
         , onConfirm = ConfirmDeleteClicked
         }
         loaded.delete
+
+
+mealShowSkeleton : Theme -> Element msg
+mealShowSkeleton theme =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Ui.skeletonCard theme { rows = 2 }
+        , Ui.section theme
+            { header =
+                Just
+                    (Ui.skeletonBarCustom theme
+                        { width = Element.fillPortion 1, height = 16 }
+                    )
+            , body = List.map (\_ -> Ui.skeletonListRow theme) (List.range 1 3)
+            , footer = Nothing
+            }
+        , Ui.skeletonCard theme { rows = 2 }
+        , Ui.skeletonCard theme { rows = 3 }
+        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
+            , Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
+            ]
+        ]

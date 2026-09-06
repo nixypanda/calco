@@ -587,7 +587,7 @@ bodyView theme device model =
             Element.none
 
         Loading _ ->
-            Ui.skeletonLoading theme
+            foodLogEntrySkeleton theme
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -788,3 +788,18 @@ deleteModalView theme device loaded =
         , onConfirm = ConfirmDeleteClicked
         }
         loaded.delete
+
+
+foodLogEntrySkeleton : Theme -> Element Msg
+foodLogEntrySkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Ui.skeletonCard theme { rows = 2 }
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonButton theme
+        , Ui.skeletonCard theme { rows = 3 }
+        ]
