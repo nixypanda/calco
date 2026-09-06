@@ -153,16 +153,16 @@ capabilities. They are grouped by theme so they can be ranked later.
       log form prefills the latest logged quantity and unit, and each recent row
       offers up to five quick-add quantity chips ranked the same time-decayed
       way.
-- [ ] As a user, I want to duplicate an existing log to another meal slot or
-      another day so that fixing or repeating entries is faster than re-entering
-      them.
+Duplicating an existing log to another meal slot or day is not planned. Users
+can log against previous days, which is sufficient for the current workflow.
 
 ### Search And Selection
 
 - [ ] As a user, I want search results to rank foods I have used before ahead of
       equally relevant unfamiliar foods so that logging gets faster over time.
-- [ ] As a user, I want search results from my history or recents to appear
-      before the full catalog so that I can pick familiar items faster.
+History and recent results do not need to appear before the full catalog. The
+search tabs already let users search their history explicitly without imposing
+one result-source ordering on every search.
 - [ ] As a user, I want exact barcode matches, exact name matches, and recent
       matches to be visually surfaced before fuzzy matches so that search intent
       is clearer.
@@ -193,9 +193,10 @@ capabilities. They are grouped by theme so they can be ranked later.
 - [ ] As a user, I want to move an existing log to a different day so that I can
       correct late-night or backfilled entries without deleting and recreating
       them.
-- [ ] As a user, I want faster inline edits for quantity, unit, or meal slot
-      from the diary view so that minor corrections do not require opening the
-      full log detail.
+
+Inline diary editing for quantity, unit, or meal slot is not planned. The
+side-by-side layout already keeps editing convenient on larger screens, while
+inline controls would make smaller screens too cluttered.
 
 ## Later User Stories
 
