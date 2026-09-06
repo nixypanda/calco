@@ -650,7 +650,13 @@ view theme device formHasManualInput model =
     case model of
         LoadingStatus ->
             Ui.card theme
-                [ Ui.loading theme "Checking whether food assistance is available..." ]
+                [ Ui.skeletonBarCustom theme
+                    { width = Element.fillPortion 1, height = 16 }
+                , Ui.skeletonBar theme
+                , Ui.skeletonBar theme
+                , Ui.skeletonInput theme
+                , Ui.skeletonButton theme
+                ]
 
         Disabled ->
             Ui.card theme

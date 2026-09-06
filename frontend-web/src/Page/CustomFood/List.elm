@@ -131,7 +131,7 @@ bodyView theme device model =
             Element.none
 
         Loading ->
-            Ui.skeletonLoading theme
+            customFoodListSkeleton theme
 
 
 createActions : Device -> Theme -> Element Msg
@@ -198,3 +198,27 @@ foodSummaryText food =
         food.nutritionSummary.per100g.energyKcal
     ]
         |> Ui.dotSeparated
+
+
+customFoodListSkeleton : Theme -> Element msg
+customFoodListSkeleton theme =
+    Ui.section theme
+        { header =
+            Just
+                (Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing 12
+                    ]
+                    [ Element.el [ Element.width Element.fill ]
+                        (Ui.skeletonButton theme)
+                    , Element.el [ Element.width Element.fill ]
+                        (Ui.skeletonButton theme)
+                    ]
+                )
+        , body =
+            List.intersperse (Ui.hairline theme)
+                (List.map (\_ -> Ui.skeletonListRow theme)
+                    (List.range 1 3)
+                )
+        , footer = Nothing
+        }

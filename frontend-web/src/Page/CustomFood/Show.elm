@@ -15,9 +15,12 @@ import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import Element.Background as Background
+import Element.Border as Border
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
 import View.Product
@@ -274,7 +277,7 @@ bodyView theme device model =
             Element.none
 
         Loading _ ->
-            Ui.skeletonLoading theme
+            customFoodShowSkeleton theme
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -334,3 +337,31 @@ customFoodEditRoute food =
 
     else
         Nothing
+
+
+customFoodShowSkeleton : Theme -> Element msg
+customFoodShowSkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Element.el
+            [ Element.width Element.fill
+            , Element.height (Element.px 120)
+            , Background.color theme.inputFill
+            , Border.rounded DesignTokens.radiusCard
+            , Typography.uiClass "ui-skeleton"
+            ]
+            Element.none
+        , Ui.skeletonBar theme
+        , Ui.skeletonBarCustom theme
+            { width = Element.fillPortion 2, height = 12 }
+        , Ui.skeletonCard theme { rows = 3 }
+        , Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space12
+            ]
+            [ Ui.skeletonButton theme
+            , Ui.skeletonButton theme
+            ]
+        ]

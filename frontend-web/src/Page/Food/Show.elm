@@ -441,7 +441,7 @@ bodyView theme device model =
             Element.none
 
         Loading _ ->
-            Ui.skeletonLoading theme
+            foodShowSkeleton theme
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -491,3 +491,21 @@ foodNutrientsForDisplay food form =
         food.servings
         food.nutrients
         |> Maybe.withDefault (View.Product.foodNutrientsPer100g food)
+
+
+foodShowSkeleton : Theme -> Element msg
+foodShowSkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Ui.skeletonBarCustom theme
+            { width = Element.fill, height = 120 }
+        , Ui.skeletonBarCustom theme
+            { width = Element.fillPortion 2, height = 16 }
+        , Ui.skeletonBarCustom theme
+            { width = Element.fillPortion 3, height = 12 }
+        , Ui.skeletonInput theme
+        , Ui.skeletonButton theme
+        , Ui.skeletonCard theme { rows = 3 }
+        ]
