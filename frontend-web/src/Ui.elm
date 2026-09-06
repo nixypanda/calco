@@ -519,6 +519,7 @@ type SubmitState
     = Idle
     | Submitting
     | Disabled
+    | Submitted
 
 
 type ButtonTone
@@ -715,11 +716,17 @@ textButton device theme config =
          , Font.medium
          , Font.size 14
          , uiClass "ui-motion ui-pressable"
-         , hoverEffect device
-            [ Background.color toneColors.hoverBg
-            , Font.color toneColors.hoverFg
-            ]
          ]
+            ++ (if isActive then
+                    [ hoverEffect device
+                        [ Background.color toneColors.hoverBg
+                        , Font.color toneColors.hoverFg
+                        ]
+                    ]
+
+                else
+                    []
+               )
             ++ (if isGhost then
                     []
 
@@ -727,7 +734,7 @@ textButton device theme config =
                     [ Font.center ]
                )
             ++ borderAttrs
-            ++ (if isOutline then
+            ++ (if isOutline && isActive then
                     [ Border.color toneColors.border
                     , hoverEffect device
                         [ Background.color toneColors.hoverBg
@@ -735,6 +742,9 @@ textButton device theme config =
                         , Border.color toneColors.hoverBorder
                         ]
                     ]
+
+                else if isOutline then
+                    [ Border.color toneColors.border ]
 
                 else
                     []

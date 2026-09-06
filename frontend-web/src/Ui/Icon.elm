@@ -17,8 +17,6 @@ type Icon
     | ChevronUp
     | ChevronDown
     | Plus
-    | LoaderCircle
-    | Check
     | Close
 
 
@@ -101,12 +99,6 @@ shapes icon =
             [ line [ SvgA.x1 "12", SvgA.y1 "5", SvgA.x2 "12", SvgA.y2 "19" ] []
             , line [ SvgA.x1 "5", SvgA.y1 "12", SvgA.x2 "19", SvgA.y2 "12" ] []
             ]
-
-        LoaderCircle ->
-            [ path [ SvgA.d "M21 12a9 9 0 1 1-6.2-8.6" ] [] ]
-
-        Check ->
-            [ polyline [ SvgA.points "20 6 9 17 4 12" ] [] ]
 
         Close ->
             [ line [ SvgA.x1 "6", SvgA.y1 "6", SvgA.x2 "18", SvgA.y2 "18" ] []
