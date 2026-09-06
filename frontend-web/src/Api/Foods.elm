@@ -58,7 +58,6 @@ type alias ProductDetail =
     , categories : List String
     , defaultQuantity : Maybe String
     , defaultUnit : Maybe String
-    , servingSizeG : Maybe String
     , nutritionSummary : ProductNutritionSummary
     , nutrients : List NutrientEntry
     , servings : List ServingEntry
@@ -68,7 +67,6 @@ type alias ProductDetail =
 
 type alias ProductNutritionSummary =
     { per100g : NutritionSummary
-    , perServing : Maybe NutritionSummary
     }
 
 
@@ -82,10 +80,8 @@ type alias NutrientEntry =
 
 
 type alias ServingEntry =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
+    { unit : String
+    , gramsPerUnit : String
     }
 
 
@@ -118,7 +114,6 @@ type alias CreateFoodRequest =
     { name : String
     , brand : Maybe String
     , categories : List String
-    , servingSizeG : Maybe String
     , defaultQuantity : Maybe String
     , defaultUnit : Maybe String
     , nutrients : List CreateFoodNutrientRequest
@@ -133,10 +128,8 @@ type alias CreateFoodNutrientRequest =
 
 
 type alias CreateFoodServingRequest =
-    { label : String
-    , quantity : Float
-    , unit : String
-    , grams : Float
+    { unit : String
+    , gramsPerUnit : Float
     }
 
 
@@ -192,7 +185,6 @@ type alias SearchResult =
     , name : String
     , brand : Maybe String
     , categories : List String
-    , servingSizeG : Maybe String
     , nutritionSummary : ProductNutritionSummary
     }
 
@@ -330,7 +322,6 @@ createFoodRequestEncoder request =
         [ ( "name", Encode.string request.name )
         , ( "brand", Json.maybe Encode.string request.brand )
         , ( "categories", Encode.list Encode.string request.categories )
-        , ( "serving_size_g", Json.maybe Encode.string request.servingSizeG )
         , ( "default_quantity", Json.maybe Encode.string request.defaultQuantity )
         , ( "default_unit", Json.maybe Encode.string request.defaultUnit )
         , ( "nutrients", Encode.list nutrientRequestEncoder request.nutrients )
@@ -349,10 +340,8 @@ nutrientRequestEncoder nutrient =
 servingRequestEncoder : CreateFoodServingRequest -> Encode.Value
 servingRequestEncoder serving =
     Encode.object
-        [ ( "label", Encode.string serving.label )
-        , ( "quantity", Encode.float serving.quantity )
-        , ( "unit", Encode.string serving.unit )
-        , ( "grams", Encode.float serving.grams )
+        [ ( "unit", Encode.string serving.unit )
+        , ( "grams_per_unit", Encode.float serving.gramsPerUnit )
         ]
 
 
@@ -381,7 +370,6 @@ productDetailDecoder =
         (Decode.field "categories" (Decode.list Decode.string))
         |> Json.andMap (Decode.field "default_quantity" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "default_unit" (Decode.nullable Decode.string))
-        |> Json.andMap (Decode.field "serving_size_g" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "nutrition_summary" productNutritionSummaryDecoder)
         |> Json.andMap (Decode.field "nutrients" (Decode.list nutrientEntryDecoder))
         |> Json.andMap (Decode.field "servings" (Decode.list servingEntryDecoder))
@@ -390,9 +378,8 @@ productDetailDecoder =
 
 productNutritionSummaryDecoder : Decoder ProductNutritionSummary
 productNutritionSummaryDecoder =
-    Decode.map2 ProductNutritionSummary
+    Decode.map ProductNutritionSummary
         (Decode.field "per_100g" Nutrition.summaryDecoder)
-        (Decode.field "per_serving" (Decode.nullable Nutrition.summaryDecoder))
 
 
 nutrientEntryDecoder : Decoder NutrientEntry
@@ -407,11 +394,9 @@ nutrientEntryDecoder =
 
 servingEntryDecoder : Decoder ServingEntry
 servingEntryDecoder =
-    Decode.map4 ServingEntry
-        (Decode.field "label" Decode.string)
-        (Decode.field "quantity" Decode.string)
+    Decode.map2 ServingEntry
         (Decode.field "unit" Decode.string)
-        (Decode.field "grams" Decode.string)
+        (Decode.field "grams_per_unit" Decode.string)
 
 
 unitListResponseDecoder : Decoder UnitListResponse
@@ -457,7 +442,7 @@ unitItemDecoder =
 
 searchResultDecoder : Decoder SearchResult
 searchResultDecoder =
-    Decode.map8 SearchResult
+    Decode.map7 SearchResult
         (Decode.field "id" Decode.string)
         (Decode.field "source" Decode.string)
         (Decode.field "source_id" (Decode.nullable Decode.string))
@@ -465,7 +450,6 @@ searchResultDecoder =
         (Decode.field "name" Decode.string)
         (Decode.field "brand" (Decode.nullable Decode.string))
         (Decode.field "categories" (Decode.list Decode.string))
-        (Decode.field "serving_size_g" (Decode.nullable Decode.string))
         |> Json.andMap (Decode.field "nutrition_summary" productNutritionSummaryDecoder)
 
 

@@ -54,7 +54,6 @@ Food row:
   "name": "Rice, white, raw",
   "brand": null,
   "categories": ["grain"],
-  "serving_size_g": 100,
   "row_number": 1
 }
 ```
@@ -77,10 +76,8 @@ Serving row:
 {
   "source": "OFF",
   "source_id": "abc",
-  "label": "serving",
-  "quantity": 1,
   "unit": "serving",
-  "grams": 30,
+  "grams_per_unit": 30,
   "row_number": 1
 }
 ```

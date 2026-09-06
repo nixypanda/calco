@@ -249,7 +249,7 @@ validLoadedModel =
                 , token = ticket 0
                 }
             , nutrients = [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
-            , servings = [ { label = "cube", quantity = "2", unit = "piece", grams = "50" } ]
+            , servings = [ { unit = "piece", gramsPerUnit = "50" } ]
         }
 
 
@@ -284,11 +284,10 @@ validRequest =
     { name = "Paneer"
     , brand = Just "Local"
     , categories = [ "dairy" ]
-    , servingSizeG = Nothing
     , defaultQuantity = Nothing
-    , defaultUnit = Just "g"
+    , defaultUnit = Nothing
     , nutrients = [ { code = "PROTEIN_G", amountPer100g = 18 } ]
-    , servings = [ { label = "cube", quantity = 2, unit = "piece", grams = 50 } ]
+    , servings = [ { unit = "piece", gramsPerUnit = 50 } ]
     }
 
 
@@ -304,8 +303,7 @@ food =
     , categories = [ "dairy" ]
     , defaultQuantity = Just "1"
     , defaultUnit = Just "cup"
-    , servingSizeG = Just "245"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]

@@ -605,7 +605,6 @@ mod tests {
             "Dal".into(),
             None,
             vec!["lentils".into()],
-            Some(rust_decimal::Decimal::new(35_050, 2)),
             Some(rust_decimal::Decimal::ONE),
             Some("bowl".into()),
             vec![
@@ -617,8 +616,6 @@ mod tests {
             ],
             vec![
                 crate::assistant::domain::DraftServing::new(
-                    "one bowl".into(),
-                    rust_decimal::Decimal::ONE,
                     "bowl".into(),
                     rust_decimal::Decimal::new(35_050, 2),
                 )
@@ -640,7 +637,6 @@ mod tests {
                     "name": "Dal",
                     "brand": null,
                     "categories": ["lentils"],
-                    "serving_size_g": "350.50",
                     "default_quantity": "1",
                     "default_unit": "bowl",
                     "nutrients": [{
@@ -648,10 +644,8 @@ mod tests {
                         "amount_per_100g": "172.125"
                     }],
                     "servings": [{
-                        "label": "one bowl",
-                        "quantity": "1",
                         "unit": "bowl",
-                        "grams": "350.50"
+                        "grams_per_unit": "350.50"
                     }]
                 },
                 "warnings": []

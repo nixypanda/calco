@@ -221,7 +221,7 @@ nutrientAmount code nutrients =
 
 servingGrams :
     { quantity | amount : String, unit : String }
-    -> List { serving | quantity : String, unit : String, grams : String }
+    -> List { serving | unit : String, gramsPerUnit : String }
     -> Maybe Float
 servingGrams quantity servings =
     let
@@ -266,7 +266,7 @@ scalePer100g grams nutrients =
 
 nutrientsForQuantity :
     { quantity | amount : String, unit : String }
-    -> List { serving | quantity : String, unit : String, grams : String }
+    -> List { serving | unit : String, gramsPerUnit : String }
     -> List { nutrient | code : String, amountPer100g : String, unit : String }
     -> Maybe (List NutrientAmount)
 nutrientsForQuantity quantity servings nutrients =
@@ -322,22 +322,14 @@ positiveAmount raw =
             Nothing
 
 
-gramsFromServing : Float -> { serving | quantity : String, grams : String } -> Maybe Float
+gramsFromServing : Float -> { serving | gramsPerUnit : String } -> Maybe Float
 gramsFromServing amount serving =
-    let
-        servingQuantity : Float
-        servingQuantity =
-            safeAmount serving.quantity
+    case positiveAmount serving.gramsPerUnit of
+        Just gramsPerUnit ->
+            Just (amount * gramsPerUnit)
 
-        grams : Float
-        grams =
-            safeAmount serving.grams
-    in
-    if servingQuantity > 0 then
-        Just (amount * grams / servingQuantity)
-
-    else
-        Nothing
+        Nothing ->
+            Nothing
 
 
 type alias Quantity =

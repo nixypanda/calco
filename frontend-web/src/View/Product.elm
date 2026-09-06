@@ -47,10 +47,7 @@ foodHeader theme food extraMeta =
 
 metaItems : ProductDetail -> List (Maybe String) -> List String
 metaItems food extraItems =
-    [ food.brand
-    , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-    ]
-        ++ extraItems
+    (food.brand :: extraItems)
         |> List.filterMap identity
 
 

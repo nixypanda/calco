@@ -98,10 +98,8 @@ EXTRA_WIDE_RELATIVE_TOLERANCE = Decimal("0.40")
 
 @dataclass(frozen=True)
 class ProductServing:
-    label: str
-    quantity: Decimal
     unit: str
-    grams: Decimal
+    grams_per_unit: Decimal
 
 
 @dataclass(frozen=True)
@@ -109,7 +107,8 @@ class ProductCandidate:
     id: str
     name: str
     brand: str | None
-    serving_size_g: Decimal | None
+    default_quantity: Decimal | None
+    default_unit: str | None
     nutrients_per_100g: dict[str, Decimal]
     servings: list[ProductServing]
 
@@ -162,7 +161,8 @@ class PsqlCatalogRepository(CatalogRepository):
             p.id::text AS id,
             p.name,
             p.brand,
-            p.serving_size_g::text AS serving_size_g,
+            p.default_quantity,
+            p.default_unit,
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
@@ -179,12 +179,10 @@ class PsqlCatalogRepository(CatalogRepository):
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
-                        'label', ps.label,
-                        'quantity', ps.quantity,
                         'unit', ps.unit,
-                        'grams', ps.grams
+                        'grams_per_unit', ps.grams_per_unit
                     )
-                    ORDER BY ps.label, ps.unit
+                    ORDER BY ps.unit
                 )
                 FROM product_servings ps
                 WHERE ps.product_id = p.id
@@ -233,7 +231,6 @@ class PsqlCatalogRepository(CatalogRepository):
                 p.id,
                 p.name,
                 p.brand,
-                p.serving_size_g,
                 GREATEST(
                     similarity(lower(p.name), lower(:'normalized_query')),
                     similarity(lower(COALESCE(p.brand, '')), lower(:'query'))
@@ -263,7 +260,8 @@ class PsqlCatalogRepository(CatalogRepository):
             c.id::text AS id,
             c.name,
             c.brand,
-            c.serving_size_g::text AS serving_size_g,
+            c.default_quantity,
+            c.default_unit,
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
@@ -280,12 +278,10 @@ class PsqlCatalogRepository(CatalogRepository):
             COALESCE((
                 SELECT json_agg(
                     json_build_object(
-                        'label', ps.label,
-                        'quantity', ps.quantity,
                         'unit', ps.unit,
-                        'grams', ps.grams
+                        'grams_per_unit', ps.grams_per_unit
                     )
-                    ORDER BY ps.label, ps.unit
+                    ORDER BY ps.unit
                 )
                 FROM product_servings ps
                 WHERE ps.product_id = c.id
@@ -333,20 +329,20 @@ def _parse_psql_candidates(output: str) -> list[ProductCandidate]:
         }
         servings = [
             ProductServing(
-                label=str(item.get("label") or ""),
-                quantity=_to_decimal(str(item.get("quantity"))) or Decimal(0),
                 unit=str(item.get("unit") or ""),
-                grams=_to_decimal(str(item.get("grams"))) or Decimal(0),
+                grams_per_unit=_to_decimal(str(item.get("grams_per_unit")))
+                or Decimal(0),
             )
             for item in json.loads(row["servings_json"] or "[]")
-            if item.get("label") is not None
+            if item.get("unit") is not None
         ]
         candidates.append(
             ProductCandidate(
                 id=row["id"],
                 name=row["name"],
                 brand=row.get("brand") or None,
-                serving_size_g=_to_decimal(row.get("serving_size_g")),
+                default_quantity=_to_decimal(row.get("default_quantity")),
+                default_unit=row.get("default_unit") or None,
                 nutrients_per_100g=nutrients,
                 servings=servings,
             )
@@ -532,15 +528,26 @@ def _candidate_serving_basis(
     candidate: ProductCandidate,
     target_grams: Decimal,
 ) -> str:
+    if candidate.default_quantity is not None and candidate.default_unit:
+        for serving in candidate.servings:
+            if serving.unit != candidate.default_unit:
+                continue
+            default_grams = candidate.default_quantity * serving.grams_per_unit
+            if (
+                default_grams > 0
+                and _serving_grams_matches(target_grams, default_grams)
+            ):
+                return (
+                    "candidate default portion "
+                    f"'{candidate.default_quantity} {candidate.default_unit}' "
+                    f"{default_grams}g"
+                )
     for serving in candidate.servings:
-        if serving.grams > 0 and _serving_grams_matches(target_grams, serving.grams):
-            return f"candidate serving '{serving.label}' {serving.grams}g"
-    if (
-        candidate.serving_size_g
-        and candidate.serving_size_g > 0
-        and _serving_grams_matches(target_grams, candidate.serving_size_g)
-    ):
-        return f"candidate serving_size_g {candidate.serving_size_g}g"
+        if (
+            serving.grams_per_unit > 0
+            and _serving_grams_matches(target_grams, serving.grams_per_unit)
+        ):
+            return f"candidate unit '{serving.unit}' {serving.grams_per_unit}g per unit"
     return "candidate serving grams differ"
 
 

@@ -542,10 +542,8 @@ productDetail =
     , categories = [ "dairy" ]
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
-    , servingSizeG = Nothing
     , nutritionSummary =
         { per100g = Nutrition.emptySummary
-        , perServing = Nothing
         }
     , nutrients = []
     , servings = []
@@ -562,10 +560,8 @@ searchResult =
     , name = "Milk"
     , brand = Nothing
     , categories = [ "dairy" ]
-    , servingSizeG = Nothing
     , nutritionSummary =
         { per100g = Nutrition.emptySummary
-        , perServing = Nothing
         }
     }
 
@@ -584,10 +580,8 @@ searchResultForId productId =
     , name = "Product " ++ productId
     , brand = Nothing
     , categories = []
-    , servingSizeG = Nothing
     , nutritionSummary =
         { per100g = Nutrition.emptySummary
-        , perServing = Nothing
         }
     }
 

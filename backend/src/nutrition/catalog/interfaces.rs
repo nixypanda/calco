@@ -107,7 +107,6 @@ pub struct ProductSearchItemDto {
     pub name: String,
     pub brand: Option<String>,
     pub categories: Vec<String>,
-    pub serving_size_g: Option<Decimal>,
     pub nutrition_summary: ProductNutritionSummaryDto,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -140,7 +139,6 @@ pub struct ProductDetailResponse {
     pub categories: Vec<String>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
-    pub serving_size_g: Option<Decimal>,
     pub nutrition_summary: ProductNutritionSummaryDto,
     pub nutrients: Vec<ProductNutrientDto>,
     pub servings: Vec<ProductServingDto>,
@@ -152,7 +150,6 @@ pub struct ProductDetailResponse {
 #[derive(Serialize)]
 pub struct ProductNutritionSummaryDto {
     pub per_100g: NutrientSummaryDto,
-    pub per_serving: Option<NutrientSummaryDto>,
 }
 
 #[derive(Serialize)]
@@ -166,10 +163,8 @@ pub struct ProductNutrientDto {
 
 #[derive(Serialize)]
 pub struct ProductServingDto {
-    pub label: String,
-    pub quantity: Decimal,
     pub unit: String,
-    pub grams: Decimal,
+    pub grams_per_unit: Decimal,
 }
 
 #[derive(Deserialize)]
@@ -178,7 +173,6 @@ pub struct CreateCustomFoodRequest {
     pub brand: Option<String>,
     #[serde(default)]
     pub categories: Vec<String>,
-    pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub nutrients: Vec<CreateProductNutrientDto>,
@@ -195,10 +189,8 @@ pub struct CreateProductNutrientDto {
 
 #[derive(Deserialize)]
 pub struct CreateProductServingDto {
-    pub label: String,
-    pub quantity: Decimal,
     pub unit: String,
-    pub grams: Decimal,
+    pub grams_per_unit: Decimal,
 }
 
 #[derive(Serialize)]
@@ -444,7 +436,6 @@ fn custom_food_request_to_input(req: CreateCustomFoodRequest) -> CustomFoodInput
         name: req.name,
         brand: req.brand,
         categories: req.categories,
-        serving_size_g: req.serving_size_g,
         default_quantity: req.default_quantity,
         default_unit: req.default_unit,
         nutrients: product_nutrient_dtos_to_inputs(req.nutrients),
@@ -481,10 +472,8 @@ fn product_serving_dtos_to_inputs(
 
 fn product_serving_dto_to_input(entry: CreateProductServingDto) -> ProductServingInput {
     ProductServingInput {
-        label: entry.label,
-        quantity: entry.quantity,
         unit: entry.unit,
-        grams: entry.grams,
+        grams_per_unit: entry.grams_per_unit,
     }
 }
 
@@ -521,7 +510,6 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
         name: product.name.into_inner(),
         brand: product.brand.map(|b| b.0),
         categories: product.categories.into_iter().map(|c| c.0).collect(),
-        serving_size_g: product.serving_size_g,
         nutrition_summary,
         created_at: product.created_at,
         updated_at: product.updated_at,
@@ -535,19 +523,7 @@ fn product_nutrition_summary(product: &Product) -> ProductNutritionSummaryDto {
             .iter()
             .map(|n| (n.nutrient_code.0.clone(), n.amount_per_100g.value())),
     );
-    let per_serving = product.serving_size_g.map(|serving_size_g| {
-        let factor = serving_size_g / Decimal::new(100, 0);
-        nutrient_summary_from_entries(product.nutrients.iter().map(|n| {
-            (
-                n.nutrient_code.0.clone(),
-                n.amount_per_100g.value() * factor,
-            )
-        }))
-    });
-    ProductNutritionSummaryDto {
-        per_100g,
-        per_serving,
-    }
+    ProductNutritionSummaryDto { per_100g }
 }
 
 fn category_suggestion_to_item_dto(category: CategorySuggestion) -> CategoryItemDto {
@@ -593,7 +569,6 @@ fn product_to_detail_response(
         categories: product.categories.iter().map(|c| c.0.clone()).collect(),
         default_quantity: product.default_quantity,
         default_unit: product.default_unit.as_ref().map(|u| u.0.clone()),
-        serving_size_g: product.serving_size_g,
         nutrition_summary: product_nutrition_summary(product),
         nutrients: product
             .nutrients
@@ -626,9 +601,7 @@ fn product_nutrient_to_dto(nutrient: &ProductNutrient) -> ProductNutrientDto {
 
 fn product_serving_to_dto(serving: &ProductServing) -> ProductServingDto {
     ProductServingDto {
-        label: serving.label.0.clone(),
-        quantity: serving.quantity,
         unit: serving.unit.0.clone(),
-        grams: serving.grams,
+        grams_per_unit: serving.grams_per_unit,
     }
 }

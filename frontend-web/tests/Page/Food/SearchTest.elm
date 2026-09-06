@@ -891,8 +891,7 @@ apple =
     , name = "Apple"
     , brand = Just "Local"
     , categories = [ "fruit" ]
-    , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = applePer100g, perServing = Nothing }
+    , nutritionSummary = { per100g = applePer100g }
     }
 
 
@@ -918,8 +917,7 @@ appleDetail =
     , categories = [ "fruit" ]
     , defaultQuantity = Just "1"
     , defaultUnit = Just "g"
-    , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = []

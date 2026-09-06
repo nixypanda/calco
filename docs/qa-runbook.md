@@ -111,7 +111,7 @@ Before starting each numbered section below:
 2. Submit an empty form and verify required-field errors.
 3. Create `<run-id> Food Alpha` using the nutrition values above.
 4. Add a category and serving conversion, then verify both appear on the detail page.
-5. Verify the food detail shows the expected brand, serving size, calories, and macros.
+5. Verify the food detail shows the expected brand, common servings, calories, and macros.
 6. Edit the food name to `<run-id> Food Updated`, change one nutrient, and save.
 7. Reload and verify the changes persisted.
 8. Restore the original nutrient values if the food will be used for later total assertions.

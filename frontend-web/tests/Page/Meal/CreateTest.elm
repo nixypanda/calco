@@ -250,8 +250,7 @@ result =
     , name = "Rice"
     , brand = Nothing
     , categories = []
-    , servingSizeG = Nothing
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     }
 
 

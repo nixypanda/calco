@@ -43,7 +43,6 @@ struct WireDraft {
     name: String,
     brand: Option<String>,
     categories: Vec<String>,
-    serving_size_g: Option<Decimal>,
     default_quantity: Option<Decimal>,
     default_unit: Option<String>,
     nutrients: Vec<WireNutrient>,
@@ -60,10 +59,8 @@ struct WireNutrient {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireServing {
-    label: String,
-    quantity: Decimal,
     unit: String,
-    grams: Decimal,
+    grams_per_unit: Decimal,
 }
 
 pub(super) fn parse_model_turn(
@@ -109,23 +106,11 @@ fn parse_draft(wire: WireDraft, vocabulary: &FoodVocabulary) -> Result<FoodDraft
         .iter()
         .map(|value| (value.code.as_str(), value.unit.as_str()))
         .collect();
-    let default_units: HashSet<&str> = vocabulary
-        .default_units
-        .iter()
-        .map(|value| value.code.as_str())
-        .collect();
     let serving_units: HashSet<&str> = vocabulary
         .serving_units
         .iter()
         .map(|value| value.code.as_str())
         .collect();
-    if wire
-        .default_unit
-        .as_deref()
-        .is_some_and(|unit| !default_units.contains(unit))
-    {
-        return Err(AssistantError::InvalidModelResponse);
-    }
     let mut seen = HashSet::new();
     let mut nutrients = Vec::with_capacity(wire.nutrients.len());
     for value in wire.nutrients {
@@ -145,25 +130,26 @@ fn parse_draft(wire: WireDraft, vocabulary: &FoodVocabulary) -> Result<FoodDraft
         return Err(AssistantError::InvalidModelResponse);
     }
     let mut servings = Vec::with_capacity(wire.servings.len());
+    let mut seen_serving_units = HashSet::new();
     for value in wire.servings {
         if !serving_units.contains(value.unit.as_str())
-            || value.quantity > MAX_SERVING_VALUE
-            || value.grams > MAX_SERVING_VALUE
+            || !seen_serving_units.insert(value.unit.clone())
+            || value.grams_per_unit > MAX_SERVING_VALUE
         {
             return Err(AssistantError::InvalidModelResponse);
         }
-        servings.push(DraftServing::new(
-            value.label,
-            value.quantity,
-            value.unit,
-            value.grams,
-        )?);
+        servings.push(DraftServing::new(value.unit, value.grams_per_unit)?);
+    }
+    if let Some(unit) = wire.default_unit.as_deref()
+        && unit != "g"
+        && !servings.iter().any(|serving| serving.unit == unit)
+    {
+        return Err(AssistantError::InvalidModelResponse);
     }
     FoodDraft::new(
         wire.name,
         wire.brand,
         wire.categories,
-        wire.serving_size_g,
         wire.default_quantity,
         wire.default_unit,
         nutrients,
@@ -243,7 +229,7 @@ mod tests {
 
     #[test]
     fn parses_complete_draft_directly_to_reviewable_domain_type() {
-        let value = parse_model_turn(r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"serving_size_g":100,"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#, &vocabulary()).unwrap();
+        let value = parse_model_turn(r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#, &vocabulary()).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = value else {
             panic!("expected a complete draft")
         };
@@ -256,14 +242,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_mass_default_unit_but_accepts_it_for_a_serving() {
-        let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"serving_size_g":null,"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
+    fn default_unit_must_be_grams_or_use_a_configured_serving_unit() {
+        let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
         assert!(parse_model_turn(default_cup, &vocabulary()).is_err());
-        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"serving_size_g":null,"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"label":"one cup","quantity":1,"unit":"cup","grams":240}]},"warnings":[]}"#;
+        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":2,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
         let turn = parse_model_turn(serving_cup, &vocabulary()).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")
         };
         assert_eq!(draft.servings[0].unit, "cup");
+        assert_eq!(draft.default_quantity, Some(Decimal::new(2, 0)));
+        assert_eq!(draft.default_unit.as_deref(), Some("cup"));
     }
 }

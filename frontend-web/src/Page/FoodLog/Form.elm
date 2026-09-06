@@ -33,7 +33,7 @@ import View.QuantityInput
 
 defaultQuantity : String
 defaultQuantity =
-    "1"
+    "100"
 
 
 sourceForFood : Maybe ProductDetail -> List UnitItem -> List UnitItem
@@ -89,8 +89,20 @@ type ValidationError
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
 initLogFormFromFood mealSlot food =
-    { amount = food.defaultQuantity |> Maybe.withDefault defaultQuantity
-    , unit = food.defaultUnit |> Maybe.withDefault defaultCode
+    let
+        fallback : ( String, String )
+        fallback =
+            List.head food.servings
+                |> Maybe.map (\serving -> ( "1", serving.unit ))
+                |> Maybe.withDefault ( defaultQuantity, defaultCode )
+
+        portion : ( String, String )
+        portion =
+            Maybe.map2 Tuple.pair food.defaultQuantity food.defaultUnit
+                |> Maybe.withDefault fallback
+    in
+    { amount = Tuple.first portion
+    , unit = Tuple.second portion
     , mealSlot = mealSlot
     , notes = ""
     , openDropdown = NoDropdownOpen

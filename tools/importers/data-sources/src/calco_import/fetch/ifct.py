@@ -58,7 +58,6 @@ def _build_ifct_food_row(
         "name": name,
         "brand": None,
         "categories": categories_from_value(category),
-        "serving_size_g": None,
     }
 
 

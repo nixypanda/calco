@@ -17,14 +17,14 @@ tests =
                         (\turn ->
                             case turn of
                                 DraftReady result ->
-                                    ( result.draft.servingSizeG
+                                    ( result.draft.defaultQuantity
                                     , List.map .amountPer100g result.draft.nutrients
                                     )
 
                                 NeedsClarification _ ->
                                     ( Nothing, [] )
                         )
-                    |> Expect.equal (Ok ( Just "350.50", [ "172.125" ] ))
+                    |> Expect.equal (Ok ( Just "1", [ "172.125" ] ))
         , test "rejects inconsistent clarification state" <|
             \_ ->
                 Decode.decodeString FoodAssistant.foodDraftTurnDecoder
@@ -49,15 +49,15 @@ tests =
             \_ ->
                 Decode.decodeString FoodAssistant.foodDraftTurnDecoder
                     (String.replace
-                        "\"serving_size_g\":\"350.50\""
-                        "\"serving_size_g\":\"not revalidated here\""
+                        "\"default_quantity\":\"1\""
+                        "\"default_quantity\":\"not revalidated here\""
                         readyJson
                     )
                     |> Result.map
                         (\turn ->
                             case turn of
                                 DraftReady result ->
-                                    result.draft.servingSizeG
+                                    result.draft.defaultQuantity
 
                                 NeedsClarification _ ->
                                     Nothing
@@ -67,8 +67,8 @@ tests =
             \_ ->
                 Decode.decodeString FoodAssistant.foodDraftTurnDecoder
                     (String.replace
-                        "\"serving_size_g\":\"350.50\""
-                        "\"serving_size_g\":350.50"
+                        "\"default_quantity\":\"1\""
+                        "\"default_quantity\":1"
                         readyJson
                     )
                     |> Result.mapError (always ())
@@ -102,10 +102,10 @@ readyJson =
         [ "{\"assistant_message\":\"Review this estimate.\","
         , "\"status\":\"draft_ready\","
         , "\"draft\":{\"name\":\"Dal\",\"brand\":null,"
-        , "\"categories\":[\"lentils\"],\"serving_size_g\":\"350.50\","
+        , "\"categories\":[\"lentils\"],"
         , "\"default_quantity\":\"1\",\"default_unit\":\"bowl\","
         , "\"nutrients\":[{\"code\":\"ENERGY_KCAL\","
         , "\"amount_per_100g\":\"172.125\"}],"
-        , "\"servings\":[{\"label\":\"one bowl\",\"quantity\":\"1\","
-        , "\"unit\":\"bowl\",\"grams\":\"350.50\"}]},\"warnings\":[]}"
+        , "\"servings\":[{\"unit\":\"bowl\","
+        , "\"grams_per_unit\":\"350.50\"}]},\"warnings\":[]}"
         ]

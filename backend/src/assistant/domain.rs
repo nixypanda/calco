@@ -9,7 +9,6 @@ pub const MAX_ASSISTANT_MESSAGE_CHARS: usize = 4_000;
 pub const MAX_DRAFT_NAME_CHARS: usize = 200;
 pub const MAX_DRAFT_CODE_CHARS: usize = 100;
 pub const MAX_DRAFT_UNIT_CHARS: usize = 100;
-pub const MAX_DRAFT_SERVING_LABEL_CHARS: usize = 200;
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AssistantError {
@@ -110,7 +109,6 @@ pub struct FoodDraft {
     pub name: String,
     pub brand: Option<String>,
     pub categories: Vec<String>,
-    pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub nutrients: Vec<DraftNutrient>,
@@ -123,7 +121,6 @@ impl FoodDraft {
         name: String,
         brand: Option<String>,
         categories: Vec<String>,
-        serving_size_g: Option<Decimal>,
         default_quantity: Option<Decimal>,
         default_unit: Option<String>,
         nutrients: Vec<DraftNutrient>,
@@ -132,9 +129,14 @@ impl FoodDraft {
         let name = bounded_text(name, MAX_DRAFT_NAME_CHARS)?;
         let brand = optional_bounded_text(brand, MAX_DRAFT_NAME_CHARS)?;
         let default_unit = optional_bounded_text(default_unit, MAX_DRAFT_UNIT_CHARS)?;
-        if serving_size_g.is_some_and(|value| value <= Decimal::ZERO)
-            || default_quantity.is_some_and(|value| value <= Decimal::ZERO)
+        if default_quantity.is_some_and(|value| value <= Decimal::ZERO)
             || default_quantity.is_some() != default_unit.is_some()
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
+        if let Some(unit) = default_unit.as_deref()
+            && unit != "g"
+            && !servings.iter().any(|serving| serving.unit == unit)
         {
             return Err(AssistantError::InvalidModelResponse);
         }
@@ -156,7 +158,6 @@ impl FoodDraft {
             name,
             brand,
             categories: normalized_categories,
-            serving_size_g,
             default_quantity,
             default_unit,
             nutrients,
@@ -186,29 +187,19 @@ impl DraftNutrient {
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct DraftServing {
-    pub label: String,
-    pub quantity: Decimal,
     pub unit: String,
-    pub grams: Decimal,
+    pub grams_per_unit: Decimal,
 }
 
 impl DraftServing {
-    pub fn new(
-        label: String,
-        quantity: Decimal,
-        unit: String,
-        grams: Decimal,
-    ) -> Result<Self, AssistantError> {
-        let label = bounded_text(label, MAX_DRAFT_SERVING_LABEL_CHARS)?;
+    pub fn new(unit: String, grams_per_unit: Decimal) -> Result<Self, AssistantError> {
         let unit = bounded_text(unit, MAX_DRAFT_UNIT_CHARS)?;
-        if quantity <= Decimal::ZERO || grams <= Decimal::ZERO {
+        if grams_per_unit <= Decimal::ZERO {
             return Err(AssistantError::InvalidModelResponse);
         }
         Ok(Self {
-            label,
-            quantity,
             unit,
-            grams,
+            grams_per_unit: grams_per_unit.round_dp(6),
         })
     }
 }

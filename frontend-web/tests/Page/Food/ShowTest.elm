@@ -412,8 +412,7 @@ food =
     , categories = [ "fruit" ]
     , defaultQuantity = Just "2"
     , defaultUnit = Just "serving"
-    , servingSizeG = Just "100"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients = []
     , servings = []
     , allowedUnits = [ gram ]
@@ -432,10 +431,8 @@ foodWithNutrition =
               }
             ]
         , servings =
-            [ { label = "Serving"
-              , quantity = "1"
-              , unit = "serving"
-              , grams = "50"
+            [ { unit = "serving"
+              , gramsPerUnit = "50"
               }
             ]
     }

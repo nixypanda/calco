@@ -4,10 +4,14 @@ import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
 import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition as Nutrition
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -58,7 +62,7 @@ tests =
                             ]
                     }
                     |> Expect.equal (Err (Form.InvalidNutrientAmount "-1"))
-        , test "non-positive serving quantity is rejected" <|
+        , test "non-positive serving grams per unit is rejected" <|
             \_ ->
                 let
                     base : Form.FormModel
@@ -69,14 +73,12 @@ tests =
                     { base
                         | name = "Paneer"
                         , servings =
-                            [ { label = "cube"
-                              , quantity = "0"
-                              , unit = "piece"
-                              , grams = "50"
+                            [ { unit = "piece"
+                              , gramsPerUnit = "0"
                               }
                             ]
                     }
-                    |> Expect.equal (Err (Form.InvalidServingQuantity "0"))
+                    |> Expect.equal (Err (Form.InvalidServingGrams "0"))
         , test "categories are passed through in selection order" <|
             \_ ->
                 let
@@ -107,7 +109,6 @@ tests =
                     { base
                         | name = "  Paneer  "
                         , brand = " "
-                        , servingSizeG = ""
                         , defaultQuantity = ""
                         , categoryInput =
                             { selected = [ "dairy" ]
@@ -126,15 +127,11 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "cube"
-                              , quantity = "2"
-                              , unit = "piece"
-                              , grams = "50"
+                            [ { unit = "piece"
+                              , gramsPerUnit = "50"
                               }
-                            , { label = "bad"
-                              , quantity = ""
-                              , unit = "g"
-                              , grams = "5"
+                            , { unit = ""
+                              , gramsPerUnit = "5"
                               }
                             ]
                     }
@@ -143,7 +140,6 @@ tests =
                             { name = request.name
                             , brand = request.brand
                             , categories = request.categories
-                            , servingSizeG = request.servingSizeG
                             , defaultQuantity = request.defaultQuantity
                             , nutrients = request.nutrients
                             , servings = request.servings
@@ -154,15 +150,12 @@ tests =
                             { name = "Paneer"
                             , brand = Nothing
                             , categories = [ "dairy" ]
-                            , servingSizeG = Nothing
                             , defaultQuantity = Nothing
                             , nutrients =
                                 [ { code = "PROTEIN_G", amountPer100g = 18 } ]
                             , servings =
-                                [ { label = "cube"
-                                  , quantity = 2
-                                  , unit = "piece"
-                                  , grams = 50
+                                [ { unit = "piece"
+                                  , gramsPerUnit = 50
                                   }
                                 ]
                             }
@@ -189,10 +182,8 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "cup"
-                              , quantity = "1"
-                              , unit = "cup"
-                              , grams = "245"
+                            [ { unit = "cup"
+                              , gramsPerUnit = "245.124"
                               }
                             ]
                         }
@@ -318,6 +309,28 @@ tests =
             \_ ->
                 Form.unitGhostText "g"
                     |> Expect.equal "g"
+        , test "default serving options use catalog-friendly unit labels" <|
+            \_ ->
+                let
+                    form : Form.FormModel
+                    form =
+                        Form.emptyForm
+
+                    formWithServing : Form.FormModel
+                    formWithServing =
+                        { form | servings = [ { unit = "tbsp", gramsPerUnit = "15" } ] }
+                in
+                Form.view
+                    Theme.light
+                    { class = Phone, orientation = Portrait }
+                    []
+                    [ { code = "tbsp", name = "Tablespoon", kind = "volume" } ]
+                    (Form.update Form.ToggleDefaultUnitDropdown formWithServing
+                        |> first
+                    )
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Tablespoon (tbsp)" ]
         , test "blank category query opens without requesting suggestions" <|
             \_ ->
                 Form.update (Form.CategoryQueryChanged "   ") Form.emptyForm
@@ -465,28 +478,73 @@ tests =
             \_ ->
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingLabelChanged 0 "cube")
-                    |> updateForm (Form.ServingQuantityChanged 0 "2")
                     |> updateForm (Form.ServingUnitChanged 0 "piece")
-                    |> updateForm (Form.ServingGramsChanged 0 "50")
+                    |> updateForm (Form.ServingGramsPerUnitChanged 0 "50")
                     |> .servings
                     |> Expect.equal
-                        [ { label = "cube"
-                          , quantity = "2"
-                          , unit = "piece"
-                          , grams = "50"
+                        [ { unit = "piece"
+                          , gramsPerUnit = "50"
                           }
                         ]
+        , test "new serving rows do not preselect grams" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> .servings
+                    |> List.map .unit
+                    |> Expect.equal [ "" ]
         , test "remove serving row removes the selected row" <|
             \_ ->
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingLabelChanged 1 "second")
+                    |> updateForm (Form.ServingUnitChanged 1 "second")
                     |> updateForm (Form.RemoveServingRow 0)
                     |> .servings
-                    |> List.map .label
+                    |> List.map .unit
                     |> Expect.equal [ "second" ]
+        , test "selecting a serving initializes an editable default portion" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> updateForm (Form.ServingUnitChanged 0 "cup")
+                    |> updateForm (Form.ServingGramsPerUnitChanged 0 "240")
+                    |> updateForm (Form.DefaultUnitChanged "cup")
+                    |> updateForm (Form.DefaultQuantityChanged "2")
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "2", "cup" )
+        , test "no default option clears the selected default without staying selected" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm (Form.DefaultUnitChanged "g")
+                    |> updateForm (Form.DefaultUnitChanged "__no_default__")
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "", "" )
+        , test "removing the selected serving clears the default portion" <|
+            \_ ->
+                Form.emptyForm
+                    |> updateForm Form.AddServingRow
+                    |> updateForm (Form.ServingUnitChanged 0 "cup")
+                    |> updateForm (Form.DefaultUnitChanged "cup")
+                    |> updateForm (Form.RemoveServingRow 0)
+                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
+                    |> Expect.equal ( "", "" )
+        , test "duplicate serving units are rejected" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+                in
+                Form.toCreateFoodRequest
+                    { base
+                        | name = "Soup"
+                        , servings =
+                            [ { unit = "cup", gramsPerUnit = "180" }
+                            , { unit = "cup", gramsPerUnit = "360" }
+                            ]
+                    }
+                    |> Expect.equal (Err (Form.DuplicateServingUnit "cup"))
         , test "category tag ignores blanks and duplicates" <|
             \_ ->
                 [ Form.addCategoryTag " " [ "snack" ]
@@ -502,7 +560,6 @@ tests =
                             { name = form.name
                             , brand = form.brand
                             , categories = form.categoryInput.selected
-                            , servingSizeG = form.servingSizeG
                             , defaultQuantity = form.defaultQuantity
                             , defaultUnit = form.defaultUnit
                             , nutrients = form.nutrients
@@ -513,7 +570,6 @@ tests =
                         { name = "Dal"
                         , brand = "Kitchen"
                         , categories = [ "lentils", "dinner" ]
-                        , servingSizeG = "300.50"
                         , defaultQuantity = "1"
                         , defaultUnit = "bowl"
                         , nutrients =
@@ -523,10 +579,8 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "one bowl"
-                              , quantity = "1"
-                              , unit = "bowl"
-                              , grams = "300.50"
+                            [ { unit = "bowl"
+                              , gramsPerUnit = "300.50"
                               }
                             ]
                         }
@@ -549,16 +603,13 @@ assistantDraft =
     { name = "Dal"
     , brand = Just "Kitchen"
     , categories = [ "Lentils", "DINNER" ]
-    , servingSizeG = Just "300.50"
     , defaultQuantity = Just "1"
     , defaultUnit = Just "bowl"
     , nutrients =
         [ { code = "ENERGY_KCAL", amountPer100g = "120.125000" } ]
     , servings =
-        [ { label = "one bowl"
-          , quantity = "1"
-          , unit = "bowl"
-          , grams = "300.50"
+        [ { unit = "bowl"
+          , gramsPerUnit = "300.50"
           }
         ]
     }
@@ -576,8 +627,7 @@ product =
     , categories = [ "dairy" ]
     , defaultQuantity = Just "1"
     , defaultUnit = Just "cup"
-    , servingSizeG = Just "245"
-    , nutritionSummary = { per100g = Nutrition.emptySummary, perServing = Nothing }
+    , nutritionSummary = { per100g = Nutrition.emptySummary }
     , nutrients =
         [ { code = "PROTEIN_G"
           , amountPer100g = "3.5"
@@ -586,7 +636,7 @@ product =
           , confidence = Nothing
           }
         ]
-    , servings = [ { label = "cup", quantity = "1", unit = "cup", grams = "245" } ]
+    , servings = [ { unit = "cup", gramsPerUnit = "245.1236000000" } ]
     , allowedUnits = [ gram ]
     }
 

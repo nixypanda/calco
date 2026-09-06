@@ -718,9 +718,7 @@ metaSubtitle device maybeFood log =
             let
                 productMeta : List String
                 productMeta =
-                    [ food.brand
-                    , Maybe.map (\grams -> "Serving " ++ grams ++ "g") food.servingSizeG
-                    ]
+                    [ food.brand ]
                         |> List.filterMap identity
 
                 loggedMeta : String

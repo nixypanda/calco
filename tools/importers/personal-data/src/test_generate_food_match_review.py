@@ -107,14 +107,16 @@ def _candidate(
     protein: str,
     carbs: str,
     fat: str,
-    serving_size_g: str | None = None,
     servings: list[ProductServing] | None = None,
+    default_quantity: Decimal | None = None,
+    default_unit: str | None = None,
 ) -> ProductCandidate:
     return ProductCandidate(
         id=product_id,
         name=name,
         brand=None,
-        serving_size_g=Decimal(serving_size_g) if serving_size_g else None,
+        default_quantity=default_quantity,
+        default_unit=default_unit,
         nutrients_per_100g={
             "ENERGY_KCAL": Decimal(energy),
             "PROTEIN_G": Decimal(protein),
@@ -253,10 +255,8 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
                         fat="9.5",
                         servings=[
                             ProductServing(
-                                label="1 egg",
-                                quantity=Decimal(1),
                                 unit="serving",
-                                grams=Decimal(50),
+                                grams_per_unit=Decimal(50),
                             ),
                         ],
                     ),
@@ -280,6 +280,45 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         assert result["auto_matched"] == 1
         assert rows[0]["matched_food_id"] == "egg-1"
         assert "derived from serving grams 50g" in rows[0]["match_notes"]
+
+    def test_match_notes_use_candidate_default_portion_weight(self) -> None:
+        repo = FakeRepo(
+            {
+                "Snack": [
+                    _candidate(
+                        product_id="snack-1",
+                        name="Snack",
+                        energy="300",
+                        protein="10",
+                        carbs="40",
+                        fat="10",
+                        default_quantity=Decimal(3),
+                        default_unit="piece",
+                        servings=[
+                            ProductServing(
+                                unit="piece",
+                                grams_per_unit=Decimal(14),
+                            ),
+                        ],
+                    ),
+                ],
+            },
+        )
+        row = _base_row(
+            description="Snack",
+            reference_basis="per_serving",
+            reference_calories="126",
+            reference_protein_g="4.2",
+            reference_carbs_g="16.8",
+            reference_fat_g="4.2",
+            current_serving_grams="42",
+        )
+
+        result = self._run([row], repo)
+        rows = self._read_csv()
+
+        assert result["auto_matched"] == 1
+        assert "candidate default portion '3 piece' 42g" in rows[0]["match_notes"]
 
     def test_volume_basis_matches_exact_liquid_name(self) -> None:
         repo = FakeRepo(

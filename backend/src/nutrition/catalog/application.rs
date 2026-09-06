@@ -11,7 +11,6 @@ pub struct CustomFoodInput {
     pub name: String,
     pub brand: Option<String>,
     pub categories: Vec<String>,
-    pub serving_size_g: Option<Decimal>,
     pub default_quantity: Option<Decimal>,
     pub default_unit: Option<String>,
     pub nutrients: Vec<ProductNutrientInput>,
@@ -119,13 +118,11 @@ impl CatalogService {
             input.name,
             input.brand,
             input.categories,
-            input.serving_size_g,
             input.default_quantity,
             input.default_unit,
             input.nutrients,
             input.servings,
             &nutrient_catalog,
-            &self.unit_converter,
         )?;
         self.product_repo.create(&product).await?;
         Ok(product)
@@ -144,13 +141,11 @@ impl CatalogService {
             input.name,
             input.brand,
             input.categories,
-            input.serving_size_g,
             input.default_quantity,
             input.default_unit,
             input.nutrients,
             input.servings,
             &nutrient_catalog,
-            &self.unit_converter,
         )?;
         self.product_repo.update(&updated).await?;
         Ok(updated)
@@ -182,17 +177,6 @@ impl CatalogService {
         REQUIRED_CUSTOM_FOOD_NUTRIENT_CODES
             .iter()
             .map(|code| (*code).to_owned())
-            .collect()
-    }
-
-    /// Unit codes accepted by the catalog for a custom food's default quantity.
-    ///
-    /// Keep callers on the same mass-only policy used by `Product::new_custom`
-    /// instead of reconstructing that policy from unit metadata.
-    pub fn custom_food_default_unit_codes(&self) -> Vec<String> {
-        self.unit_converter
-            .mass_unit_codes()
-            .map(str::to_owned)
             .collect()
     }
 

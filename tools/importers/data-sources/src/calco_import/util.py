@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from collections.abc import Mapping
 from typing import TextIO, cast
@@ -52,9 +53,47 @@ def parse_amount(value: str | int | float | None) -> float | None:
         if m:
             value = m.group(1)
     try:
-        return round(float(value), 6)
+        amount = float(value)
     except (ValueError, TypeError):
         return None
+    return round(amount, 6) if math.isfinite(amount) else None
+
+
+def serving_conversion(row: Mapping[str, object]) -> tuple[str, float] | None:
+    """Return a valid catalog serving conversion from a current or legacy row."""
+    unit_value = row.get("unit")
+    if not isinstance(unit_value, str):
+        return None
+    unit = unit_value.strip()
+    if not unit:
+        return None
+
+    grams_per_unit_value = row.get("grams_per_unit")
+    grams_per_unit = (
+        parse_amount(grams_per_unit_value)
+        if isinstance(grams_per_unit_value, str | int | float)
+        else None
+    )
+    if grams_per_unit is None:
+        grams_value = row.get("grams")
+        quantity_value = row.get("quantity")
+        grams = (
+            parse_amount(grams_value)
+            if isinstance(grams_value, str | int | float)
+            else None
+        )
+        quantity = (
+            parse_amount(quantity_value)
+            if isinstance(quantity_value, str | int | float)
+            else None
+        )
+        if grams is None or quantity is None or quantity <= 0:
+            return None
+        grams_per_unit = round(grams / quantity, 6)
+
+    if grams_per_unit <= 0:
+        return None
+    return unit, grams_per_unit
 
 
 def load_jsonl(
@@ -77,7 +116,17 @@ def load_jsonl(
             elif t == "nutrient":
                 nutrients.append(row)
             elif t == "serving":
-                servings.append(row)
+                conversion = serving_conversion(obj)
+                if conversion is not None:
+                    unit, grams_per_unit = conversion
+                    servings.append(
+                        {
+                            "source": obj.get("source"),
+                            "source_id": obj.get("source_id"),
+                            "unit": unit,
+                            "grams_per_unit": grams_per_unit,
+                        }
+                    )
     return foods, nutrients, servings
 
 

@@ -1,5 +1,5 @@
-use axum::http::StatusCode;
 use crate::common::*;
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -7,7 +7,6 @@ async fn seed_product(router: &axum::Router, user: &str, name: &str, kcal: i64) 
     let payload = json!({
         "name": name,
         "categories": ["test"],
-        "serving_size_g": 100,
         "default_quantity": 1,
         "default_unit": "g",
         "nutrients": [
@@ -17,7 +16,7 @@ async fn seed_product(router: &axum::Router, user: &str, name: &str, kcal: i64) 
             { "code": "FAT_G", "amount_per_100g": 2 }
         ],
         "servings": [
-            { "label": "100g", "quantity": 100, "unit": "g", "grams": 100 }
+            { "unit": "g", "grams_per_unit": 1 }
         ]
     });
     let created: Value = post_json(

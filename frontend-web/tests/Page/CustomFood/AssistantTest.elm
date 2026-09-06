@@ -225,11 +225,10 @@ tests =
                             [ ( "Name", "Dal" )
                             , ( "Brand", "Not specified" )
                             , ( "Categories", "lentils" )
-                            , ( "Serving size", "300 g" )
                             , ( "Default quantity", "1 bowl" )
                             ]
                         , nutrients = [ ( "Energy", "120.5 kcal" ) ]
-                        , servings = [ ( "one bowl", "1 bowl = 300 g" ) ]
+                        , servings = [ ( "bowl", "1 bowl = 300 g" ) ]
                         }
         , test "new session asks before clearing transient assistant state" <|
             \_ ->
@@ -599,11 +598,10 @@ draft =
     { name = "Dal"
     , brand = Nothing
     , categories = [ "lentils" ]
-    , servingSizeG = Just "300"
     , defaultQuantity = Just "1"
     , defaultUnit = Just "bowl"
     , nutrients = [ { code = "ENERGY_KCAL", amountPer100g = "120.5" } ]
-    , servings = [ { label = "one bowl", quantity = "1", unit = "bowl", grams = "300" } ]
+    , servings = [ { unit = "bowl", gramsPerUnit = "300" } ]
     }
 
 

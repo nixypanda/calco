@@ -139,18 +139,15 @@ def _servings(row: dict[str, str]) -> list[dict[str, int | float | str]]:
     basis = row["reference_basis"].strip()
     if basis == "per_serving":
         grams = _required_serving_grams(row)
-        label = _clean_text(row.get("example_serving", "")) or "1 serving"
         return [
             {
-                "label": label,
-                "quantity": 1,
                 "unit": "serving",
-                "grams": _json_number(grams),
+                "grams_per_unit": _json_number(grams),
             }
         ]
     if basis == "per_100ml":
-        return [{"label": "100 ml", "quantity": 100, "unit": "ml", "grams": 100}]
-    return [{"label": "100 g", "quantity": 100, "unit": "g", "grams": 100}]
+        return [{"unit": "ml", "grams_per_unit": 1}]
+    return [{"unit": "g", "grams_per_unit": 1}]
 
 
 def _default_unit(row: dict[str, str]) -> str:
@@ -211,7 +208,6 @@ def _build_record(row: dict[str, str], input_path: str | Path) -> dict[str, obje
         "name": description,
         "brand": MFP_BRAND,
         "categories": MFP_CATEGORIES,
-        "serving_size_g": _json_number(serving_grams),
         "default_quantity": 1,
         "default_unit": _default_unit(row),
         "nutrients": nutrients,

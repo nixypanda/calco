@@ -1,5 +1,5 @@
-use axum::http::StatusCode;
 use crate::common::*;
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -33,7 +33,6 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
                 "name": "Imported Yogurt",
                 "brand": "ImportCo",
                 "categories": ["dairy"],
-                "serving_size_g": 150
             },
             {
                 "row_number": 2,
@@ -43,7 +42,6 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
                 "name": "Imported Bar",
                 "brand": "ImportCo",
                 "categories": ["snacks"],
-                "serving_size_g": 40
             }
         ]
     });
@@ -93,10 +91,8 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
                 "row_number": 1,
                 "source": "OFF",
                 "source_id": "111111",
-                "label": "1 cup",
-                "quantity": 1,
                 "unit": "cup",
-                "grams": 245
+                "grams_per_unit": 245
             }
         ]
     });

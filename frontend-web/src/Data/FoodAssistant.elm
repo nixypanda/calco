@@ -54,7 +54,6 @@ type alias FoodDraft =
     { name : String
     , brand : Maybe String
     , categories : List String
-    , servingSizeG : Maybe String
     , defaultQuantity : Maybe String
     , defaultUnit : Maybe String
     , nutrients : List DraftNutrient
@@ -69,10 +68,8 @@ type alias DraftNutrient =
 
 
 type alias DraftServing =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
+    { unit : String
+    , gramsPerUnit : String
     }
 
 
@@ -133,18 +130,16 @@ foodDraftDecoder =
         [ "name"
         , "brand"
         , "categories"
-        , "serving_size_g"
         , "default_quantity"
         , "default_unit"
         , "nutrients"
         , "servings"
         ]
     <|
-        Decode.map8 FoodDraft
+        Decode.map7 FoodDraft
             (Decode.field "name" Decode.string)
             (Decode.field "brand" (Decode.nullable Decode.string))
             (Decode.field "categories" (Decode.list Decode.string))
-            (Decode.field "serving_size_g" (Decode.nullable Decode.string))
             (Decode.field "default_quantity" (Decode.nullable Decode.string))
             (Decode.field "default_unit" (Decode.nullable Decode.string))
             (Decode.field "nutrients" (Decode.list draftNutrientDecoder))
@@ -161,12 +156,10 @@ draftNutrientDecoder =
 
 draftServingDecoder : Decoder DraftServing
 draftServingDecoder =
-    strictObject [ "label", "quantity", "unit", "grams" ] <|
-        Decode.map4 DraftServing
-            (Decode.field "label" Decode.string)
-            (Decode.field "quantity" Decode.string)
+    strictObject [ "unit", "grams_per_unit" ] <|
+        Decode.map2 DraftServing
             (Decode.field "unit" Decode.string)
-            (Decode.field "grams" Decode.string)
+            (Decode.field "grams_per_unit" Decode.string)
 
 
 strictObject : List String -> Decoder a -> Decoder a
