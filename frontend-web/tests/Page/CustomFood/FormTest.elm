@@ -183,7 +183,7 @@ tests =
                             ]
                         , servings =
                             [ { unit = "cup"
-                              , gramsPerUnit = "245"
+                              , gramsPerUnit = "245.124"
                               }
                             ]
                         }
@@ -636,7 +636,7 @@ product =
           , confidence = Nothing
           }
         ]
-    , servings = [ { unit = "cup", gramsPerUnit = "245" } ]
+    , servings = [ { unit = "cup", gramsPerUnit = "245.1236000000" } ]
     , allowedUnits = [ gram ]
     }
 

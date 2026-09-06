@@ -35,6 +35,7 @@ import Data.FoodAssistant exposing (FoodDraft)
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
 import Lib.ListExtra as ListExtra
+import Lib.Number as Number
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Ui
@@ -296,11 +297,19 @@ fromProductDetail food =
             List.map
                 (\s ->
                     { unit = s.unit
-                    , gramsPerUnit = s.gramsPerUnit
+                    , gramsPerUnit = formatServingGrams s.gramsPerUnit
                     }
                 )
                 food.servings
     }
+
+
+formatServingGrams : String -> String
+formatServingGrams value =
+    value
+        |> String.toFloat
+        |> Maybe.map (Number.toFixedTrimmed 3)
+        |> Maybe.withDefault value
 
 
 withNutrientCatalog : List NutrientItem -> FormModel -> FormModel
@@ -874,24 +883,7 @@ defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Ms
 defaultPortionCard theme device units form =
     Ui.formSection theme
         "Default Portion"
-        [ Ui.selectDropdown device
-            theme
-            { label = "Default Unit"
-            , selected = form.defaultUnit
-            , options = defaultPortionOptions units form
-            , onChange = DefaultUnitChanged
-            , isOpen = form.openDropdown == DefaultUnitOpen
-            , onToggle = ToggleDefaultUnitDropdown
-            }
-        , if String.isEmpty form.defaultUnit then
-            Element.none
-
-          else
-            Ui.decimalInput theme
-                { label = "Default Quantity"
-                , value = form.defaultQuantity
-                , onChange = DefaultQuantityChanged
-                }
+        [ defaultPortionFields theme device units form
         , Typography.mutedCaption theme
             (if form.defaultUnit == "" then
                 if List.isEmpty form.servings then
@@ -907,6 +899,46 @@ defaultPortionCard theme device units form =
                 "Enter how many of the selected serving to prefill."
             )
         ]
+
+
+defaultPortionFields : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
+defaultPortionFields theme device units form =
+    let
+        unitSelector : Element Msg
+        unitSelector =
+            Ui.selectDropdown device
+                theme
+                { label = "Default Unit"
+                , selected = form.defaultUnit
+                , options = defaultPortionOptions units form
+                , onChange = DefaultUnitChanged
+                , isOpen = form.openDropdown == DefaultUnitOpen
+                , onToggle = ToggleDefaultUnitDropdown
+                }
+
+        quantityInput : Element Msg
+        quantityInput =
+            if String.isEmpty form.defaultUnit then
+                Element.none
+
+            else
+                Ui.decimalInput theme
+                    { label = "Default Quantity"
+                    , value = form.defaultQuantity
+                    , onChange = DefaultQuantityChanged
+                    }
+
+        attributes : List (Element.Attribute Msg)
+        attributes =
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+    in
+    if Ui.isSmall device then
+        Element.column attributes [ unitSelector, quantityInput ]
+
+    else
+        Element.row attributes [ unitSelector, quantityInput ]
 
 
 defaultPortionOptions : List UnitItem -> FormModel -> List ( String, String )
@@ -1168,41 +1200,56 @@ servingRowView :
     -> ServingRow
     -> Element Msg
 servingRowView theme device units openDropdown index row =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space8
-        ]
-        [ Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
-            [ Element.el
-                [ Element.width (Element.fill |> Element.maximum 160) ]
-                (Ui.selectDropdown device
-                    theme
-                    { label = "Unit"
-                    , selected = row.unit
-                    , options = View.QuantityInput.unitOptions row.unit units
-                    , onChange = ServingUnitChanged index
-                    , isOpen = openDropdown == ServingUnitOpen index
-                    , onToggle = ToggleServingUnitDropdown index
-                    }
-                )
-            , Element.el [ Element.width Element.fill ]
-                (Ui.decimalInput theme
-                    { label = "Grams per unit"
-                    , value = row.gramsPerUnit
-                    , onChange = ServingGramsPerUnitChanged index
-                    }
-                )
-            , rowActionButton theme
+    let
+        selector : Element Msg
+        selector =
+            Ui.selectDropdown device
+                theme
+                { label = "Unit"
+                , selected = row.unit
+                , options = View.QuantityInput.unitOptions row.unit units
+                , onChange = ServingUnitChanged index
+                , isOpen = openDropdown == ServingUnitOpen index
+                , onToggle = ToggleServingUnitDropdown index
+                }
+
+        gramsInput : Element Msg
+        gramsInput =
+            Ui.decimalInputWithSuffix theme
+                { label = "Grams per unit"
+                , text = row.gramsPerUnit
+                , suffix = "g"
+                , onChange = ServingGramsPerUnitChanged index
+                }
+
+        removeButton : Element Msg
+        removeButton =
+            rowActionButton theme
                 device
                 { icon = Icon.Close
                 , title = "Remove"
                 , onPress = RemoveServingRow index
                 }
+    in
+    if Ui.isSmall device then
+        Element.column
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
             ]
-        ]
+            [ selector
+            , Element.row
+                [ Element.width Element.fill
+                , Element.spacing DesignTokens.space8
+                ]
+                [ gramsInput, removeButton ]
+            ]
+
+    else
+        Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space8
+            ]
+            [ selector, gramsInput, removeButton ]
 
 
 rowActionButton :
