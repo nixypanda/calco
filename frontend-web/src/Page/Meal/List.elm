@@ -137,7 +137,7 @@ bodyView theme device model =
             Element.none
 
         Loading ->
-            Ui.skeletonLoading theme
+            mealListSkeleton theme
 
 
 mealRow : Theme -> Device -> Meal -> Element Msg
@@ -176,3 +176,17 @@ mealSummaryText meal =
     , Just (String.fromInt (List.length meal.components) ++ " components")
     ]
         |> Ui.dotSeparated
+
+
+mealListSkeleton : Theme -> Element msg
+mealListSkeleton theme =
+    Ui.section theme
+        { header =
+            Just (Ui.skeletonButton theme)
+        , body =
+            List.intersperse (Ui.hairline theme)
+                (List.map (\_ -> Ui.skeletonListRow theme)
+                    (List.range 1 3)
+                )
+        , footer = Nothing
+        }

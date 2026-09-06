@@ -110,7 +110,7 @@ bodyView device theme model =
                 }
 
         Loading ->
-            Ui.skeletonLoading theme
+            adminDashboardSkeleton theme
 
         LoadFailed error ->
             Ui.errorBanner theme (Client.displayError error)
@@ -124,4 +124,14 @@ userListRow theme config =
         , title = Typography.wrappedListItemTitle theme config.user.username
         , subtitle = [ Typography.mutedBodyParagraph theme config.user.displayName ]
         , trailing = [ Ui.statusBadge theme config.user.status ]
+        }
+
+
+adminDashboardSkeleton : Theme -> Element msg
+adminDashboardSkeleton theme =
+    Ui.listCard theme
+        { rows =
+            List.map (\_ -> Ui.skeletonListRow theme)
+                (List.range 1 3)
+        , footer = Just (Ui.skeletonButton theme)
         }
