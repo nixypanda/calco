@@ -44,6 +44,28 @@ tests =
                             ]
                     }
                     |> Expect.equal (Err (Form.InvalidNutrientAmount "abc"))
+        , test "initial create payload discards portions and servings" <|
+            \_ ->
+                let
+                    base : Form.FormModel
+                    base =
+                        Form.emptyForm
+                in
+                Form.toInitialCreateFoodRequest
+                    { base
+                        | name = "Paneer"
+                        , defaultQuantity = "1"
+                        , defaultUnit = "piece"
+                        , servings = [ { unit = "piece", gramsPerUnit = "50" } ]
+                    }
+                    |> Result.map
+                        (\request ->
+                            ( request.defaultQuantity
+                            , request.defaultUnit
+                            , request.servings
+                            )
+                        )
+                    |> Expect.equal (Ok ( Nothing, Nothing, [] ))
         , test "negative nutrient amount is rejected" <|
             \_ ->
                 let

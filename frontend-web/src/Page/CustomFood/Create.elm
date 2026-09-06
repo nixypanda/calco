@@ -165,7 +165,7 @@ update msg model =
             )
 
         SubmitClicked ->
-            case Form.toCreateFoodRequest model.form of
+            case Form.toInitialCreateFoodRequest model.form of
                 Ok request ->
                     ( { model | form = withSubmit Form.Submitting model.form, error = Nothing }
                     , Cmd.none
@@ -286,7 +286,7 @@ view { model, device, theme } =
 
             else
                 [ Element.map FormMsg
-                    (Form.view theme device model.nutrients model.units model.form)
+                    (Form.viewForCreate theme device model.nutrients model.form)
                 , Ui.textButton device
                     theme
                     { tone = Ui.Primary

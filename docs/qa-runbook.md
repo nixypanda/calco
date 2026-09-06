@@ -109,12 +109,14 @@ Before starting each numbered section below:
 
 1. Open `/foods/custom/new`.
 2. Submit an empty form and verify required-field errors.
-3. Create `<run-id> Food Alpha` using the nutrition values above.
-4. Add a category and serving conversion, then verify both appear on the detail page.
-5. Verify the food detail shows the expected brand, common servings, calories, and macros.
-6. Edit the food name to `<run-id> Food Updated`, change one nutrient, and save.
-7. Reload and verify the changes persisted.
-8. Restore the original nutrient values if the food will be used for later total assertions.
+3. Verify the create form has no default-portion or serving-conversion section.
+4. Create `<run-id> Food Alpha` using the nutrition values above.
+5. Verify the food detail shows the expected brand, calories, and macros per 100 g.
+6. Edit the food, add a category and serving conversion, and save.
+7. Verify both appear on the detail page.
+8. Edit the food name to `<run-id> Food Updated`, change one nutrient, and save.
+9. Reload and verify the changes persisted.
+10. Restore the original nutrient values if the food will be used for later total assertions.
 
 ### 5. Food search, completion, and history
 

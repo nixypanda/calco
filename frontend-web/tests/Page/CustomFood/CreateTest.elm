@@ -3,11 +3,15 @@ module Page.CustomFood.CreateTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (CategorySuggestion, CreateFoodRequest, NutrientItem, UnitItem)
 import Data.Route exposing (Route(..))
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -123,6 +127,22 @@ tests =
                         ( Form.Submitting
                         , CustomFoodCreate.RequestCreateFood validRequest
                         )
+        , test "create view only asks for per-100 g food data" <|
+            \_ ->
+                CustomFoodCreate.view
+                    { model = validModel
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Expect.all
+                        [ Query.has [ Selector.text "Nutrients" ]
+                        , Query.hasNot
+                            [ Selector.text "Servings"
+                            , Selector.text "Default Portion"
+                            ]
+                        ]
         , test "save success navigates to detail" <|
             \_ ->
                 CustomFoodCreate.update
@@ -176,6 +196,8 @@ validModel =
                     }
                 , nutrients =
                     [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
+                , defaultQuantity = "2"
+                , defaultUnit = "piece"
                 , servings =
                     [ { unit = "piece", gramsPerUnit = "50" } ]
             }
@@ -190,7 +212,7 @@ validRequest =
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
     , nutrients = [ { code = "PROTEIN_G", amountPer100g = 18 } ]
-    , servings = [ { unit = "piece", gramsPerUnit = 50 } ]
+    , servings = []
     }
 
 

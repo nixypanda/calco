@@ -15,9 +15,11 @@ module Page.CustomFood.Form exposing
     , hasManualInput
     , isSubmitting
     , toCreateFoodRequest
+    , toInitialCreateFoodRequest
     , unitGhostText
     , update
     , view
+    , viewForCreate
     , withNutrientCatalog
     )
 
@@ -373,6 +375,16 @@ toCreateFoodRequest form =
             nutrientsResult
             servingsResult
             defaultResult
+
+
+toInitialCreateFoodRequest : FormModel -> Result ValidationError CreateFoodRequest
+toInitialCreateFoodRequest form =
+    toCreateFoodRequest
+        { form
+            | defaultQuantity = ""
+            , defaultUnit = ""
+            , servings = []
+        }
 
 
 uniqueServingUnits :
@@ -866,6 +878,15 @@ view theme device nutrients units form =
         , nutrientsCard theme device form nutrients
         , servingsCard theme device form units
         , defaultPortionCard theme device units form
+        ]
+
+
+viewForCreate : Theme -> Device -> List NutrientItem -> FormModel -> Element Msg
+viewForCreate theme device nutrients form =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        , basicInfoCard theme device form
+        , nutrientsCard theme device form nutrients
         ]
 
 

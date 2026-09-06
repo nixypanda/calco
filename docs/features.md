@@ -120,10 +120,11 @@ product goal is a simple food tracker, not an analytics or trend platform.
 - [ ] Add image support to the food assistant so that users can provide food or
       nutrition-label photos as context when drafting a custom food. Image input
       must remain review-before-write and must not create catalog data by itself.
-- [ ] Remove the portion section from the create-custom-food flow. Custom foods
+- [x] Remove the portion section from the create-custom-food flow. Custom foods
       should initially be created from their per-100 g nutrition data without
       requiring the user to define an additional portion; serving support for
-      catalog foods and food logging remains unchanged.
+      catalog foods and food logging remains unchanged. The create form submits
+      no default portion or servings; those fields remain available when editing.
 - [ ] When a barcode is not present in the local catalog, look it up in Open Food
       Facts (OFF). If OFF has a match, pull its product and nutrition data into
       CalCo and let the user continue with that food instead of entering it
