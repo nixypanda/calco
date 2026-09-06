@@ -155,7 +155,7 @@ view { model, device, theme } =
     Ui.pageContainer device
         (case model of
             Loading ->
-                [ Ui.skeletonLoading theme ]
+                [ diarySettingsSkeleton theme ]
 
             Failed message ->
                 [ Ui.errorBanner theme message ]
@@ -213,3 +213,14 @@ saveError state =
 
         _ ->
             Nothing
+
+
+diarySettingsSkeleton : Theme -> Element msg
+diarySettingsSkeleton theme =
+    Ui.card theme
+        [ Ui.skeletonBar theme
+        , Ui.skeletonBar theme
+        , Ui.skeletonBar theme
+        , Ui.skeletonBar theme
+        , Ui.skeletonButton theme
+        ]

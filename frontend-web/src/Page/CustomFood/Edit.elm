@@ -376,4 +376,15 @@ bodyView { model, device, theme } =
             Ui.errorBanner theme message
 
         Loading _ ->
-            Ui.skeletonLoading theme
+            customFoodFormSkeleton theme
+
+
+customFoodFormSkeleton : Theme -> Element msg
+customFoodFormSkeleton theme =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonButton theme
+        ]

@@ -276,7 +276,7 @@ contentViewWithSelection selectedDate { model, device, theme } =
         ]
         (case model.status of
             Loading ->
-                [ Ui.loading theme "Loading calendar" ]
+                [ Ui.skeletonCard theme { rows = 3 } ]
 
             Failed message ->
                 [ Ui.errorBanner theme message ]

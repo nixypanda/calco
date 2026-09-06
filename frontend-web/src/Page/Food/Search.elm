@@ -1070,7 +1070,12 @@ bodyView theme model device =
             Ui.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Ui.card theme [ Ui.skeletonLoading theme ]
+            Ui.listCard theme
+                { rows =
+                    List.map (\_ -> Ui.skeletonListRow theme)
+                        (List.range 1 3)
+                , footer = Nothing
+                }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
@@ -1122,7 +1127,7 @@ barcodeBodyView theme device model =
             Ui.emptyState theme "Enter a barcode to look up a food."
 
         Loading ->
-            Ui.card theme [ Ui.skeletonLoading theme ]
+            Ui.skeletonCard theme { rows = 3 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
@@ -1275,7 +1280,7 @@ recentsView device theme model =
                 Element.none
 
             Loading ->
-                Ui.card theme [ Ui.skeletonLoading theme ]
+                Ui.skeletonCard theme { rows = 2 }
 
             Failure _ ->
                 Element.none

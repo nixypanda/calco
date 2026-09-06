@@ -269,7 +269,7 @@ userInfoView : Theme -> Model -> List (Element Msg)
 userInfoView theme model =
     case model.status of
         Loading ->
-            [ Ui.skeletonLoading theme ]
+            [ editUserSkeleton theme ]
 
         LoadFailed error ->
             [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
@@ -415,4 +415,16 @@ userSummaryCard theme user =
                 "Created"
                 (Element.el [ Typography.caption ] (Element.text user.createdAt))
             ]
+        ]
+
+
+editUserSkeleton : Theme -> Element msg
+editUserSkeleton theme =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        ]
+        [ Ui.skeletonCard theme { rows = 3 }
+        , Ui.skeletonCard theme { rows = 2 }
+        , Ui.skeletonButton theme
         ]

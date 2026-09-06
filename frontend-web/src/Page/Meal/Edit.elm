@@ -386,7 +386,7 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ Ui.skeletonLoading theme ]
+            Ui.pageContainer device [ mealEditSkeleton theme ]
 
         EditLoadFailed message ->
             Ui.pageContainer device [ Ui.errorBanner theme message ]
@@ -414,4 +414,16 @@ nutritionView : Theme -> LoadedModel -> Element Msg
 nutritionView theme loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ View.Nutrients.preview theme loaded.nutrition
+        ]
+
+
+mealEditSkeleton : Theme -> Element msg
+mealEditSkeleton theme =
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonInput theme
+        , Ui.skeletonCard theme { rows = 3 }
+        , Ui.skeletonButton theme
         ]
