@@ -104,6 +104,7 @@ bodyView device theme model =
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
                             , submittingLabel = Nothing
+                            , trailing = Nothing
                             }
                         )
                 }

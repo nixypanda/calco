@@ -149,6 +149,7 @@ createActions device theme =
                 , onPress = CreateWithAiClicked
                 , submitState = Just Ui.Idle
                 , submittingLabel = Just "Create with AI"
+                , trailing = Nothing
                 }
             )
         , Element.el [ Element.width Element.fill ]
@@ -160,6 +161,7 @@ createActions device theme =
                 , onPress = CreateManuallyClicked
                 , submitState = Just Ui.Idle
                 , submittingLabel = Just "Enter manually"
+                , trailing = Nothing
                 }
             )
         ]

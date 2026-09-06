@@ -181,6 +181,7 @@ view { model, device, theme } =
                     , onPress = SaveClicked
                     , submitState = Just (Ui.submittingOrIdle (loaded.saveState == Saving))
                     , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 ]
         )

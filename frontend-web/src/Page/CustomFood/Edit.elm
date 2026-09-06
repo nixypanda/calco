@@ -368,6 +368,7 @@ bodyView { model, device, theme } =
                     , submitState =
                         Just (Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit))
                     , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 ]
 

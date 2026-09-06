@@ -996,6 +996,7 @@ nutrientsCard theme device form nutrients =
                     , onPress = AddNutrientRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
+                    , trailing = Nothing
                     }
                 )
         }
@@ -1031,6 +1032,7 @@ servingsCard theme device form units =
                     , onPress = AddServingRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
+                    , trailing = Nothing
                     }
                 )
         }

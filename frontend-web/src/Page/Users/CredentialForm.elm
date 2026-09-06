@@ -159,6 +159,7 @@ view config { model, device, theme } =
                 , onPress = Submitted
                 , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
                 , submittingLabel = Just config.submittingLabel
+                , trailing = Nothing
                 }
             ]
         )

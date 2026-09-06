@@ -295,6 +295,7 @@ view { model, device, theme } =
                     , onPress = SubmitClicked
                     , submitState = Just (Ui.submittingOrIdle (Form.isSubmitting model.form.submit))
                     , submittingLabel = Just "Creating..."
+                    , trailing = Nothing
                     }
                 ]
     in

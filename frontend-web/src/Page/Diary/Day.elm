@@ -651,16 +651,16 @@ dateCard theme model device =
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
-                    totalsView theme targets (Nutrition.totalsFromLogs logs)
+                    totalsView device theme targets (Nutrition.totalsFromLogs logs)
 
                 Nothing ->
-                    totalsView theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
+                    totalsView device theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
         ]
 
 
-totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
-totalsView theme targets summary =
+totalsView : Device -> Theme -> GoalTargets -> List NutrientAmount -> Element Msg
+totalsView device theme targets summary =
     let
         calories : Float
         calories =
@@ -689,35 +689,21 @@ totalsView theme targets summary =
               , tolerance = macroTolerance targets.fatTargetG
               }
             ]
-        , detailsAction theme
+        , detailsAction device theme
         ]
 
 
-detailsAction : Theme -> Element Msg
-detailsAction theme =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach
-            { top = 14
-            , right = DesignTokens.space16
-            , bottom = 14
-            , left = DesignTokens.space16
-            }
-        , Background.color theme.brandBlueSoft
-        , Border.rounded DesignTokens.radiusPill
-        , Font.color theme.brandBlue
-        , Typography.body
-        , Font.medium
-        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
-        ]
-        { onPress = Just DetailsClicked
-        , label =
-            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-                [ Element.text "Details"
-                , Element.el [ Element.alignRight ]
-                    (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
-                ]
+detailsAction : Device -> Theme -> Element Msg
+detailsAction device theme =
+    Ui.textButton device
+        theme
+        { tone = Ui.GhostFilled
+        , width = Ui.FullWidth
+        , label = "Details"
+        , onPress = DetailsClicked
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Just (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
         }
 
 
@@ -1205,6 +1191,7 @@ slotView theme device model section =
                                 , onPress = AddFoodClicked slot
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
+                                , trailing = Nothing
                                 }
                            ]
 

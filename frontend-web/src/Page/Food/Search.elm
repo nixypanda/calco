@@ -856,6 +856,7 @@ barcodeInputView theme device model =
                             Ui.Idle
                         )
                 , submittingLabel = Just "Searching"
+                , trailing = Nothing
                 }
 
         scanButton : Element Msg
@@ -870,6 +871,7 @@ barcodeInputView theme device model =
                         , onPress = BarcodeScanClicked
                         , submitState = Just Ui.Submitting
                         , submittingLabel = Just "Starting"
+                        , trailing = Nothing
                         }
 
                 ScannerActive ->
@@ -881,6 +883,7 @@ barcodeInputView theme device model =
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
+                        , trailing = Nothing
                         }
 
                 _ ->
@@ -892,6 +895,7 @@ barcodeInputView theme device model =
                         , onPress = BarcodeScanClicked
                         , submitState = Just Ui.Idle
                         , submittingLabel = Just "Starting"
+                        , trailing = Nothing
                         }
 
         controls : Element Msg
@@ -1134,6 +1138,7 @@ barcodeBodyView theme device model =
                     , onPress = CreateCustomFoodClicked
                     , submitState = Just Ui.Idle
                     , submittingLabel = Just "Create Custom Food"
+                    , trailing = Nothing
                     }
                 ]
 
@@ -1171,6 +1176,7 @@ textEmptyState theme device scope =
                         , onPress = CreateCustomFoodClicked
                         , submitState = Just Ui.Idle
                         , submittingLabel = Just "Create Custom Food"
+                        , trailing = Nothing
                         }
                     ]
 

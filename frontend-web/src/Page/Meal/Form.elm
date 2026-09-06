@@ -393,6 +393,7 @@ viewFormFields theme device toMsg form =
                         , onPress = toMsg AddComponentClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
+                        , trailing = Nothing
                         }
                     )
             }

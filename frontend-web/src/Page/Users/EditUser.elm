@@ -301,6 +301,7 @@ resetPasswordView device theme model =
                 , onPress = ResetSubmitted
                 , submitState = Nothing
                 , submittingLabel = Nothing
+                , trailing = Nothing
                 }
             ]
         ]

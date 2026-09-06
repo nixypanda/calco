@@ -762,6 +762,7 @@ detailActionsView theme device model =
                     , onPress = SubmitClicked
                     , submitState = Just (submitState model)
                     , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 )
             , Element.el [ Element.width Element.fill ]

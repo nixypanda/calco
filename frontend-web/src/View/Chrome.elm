@@ -622,6 +622,7 @@ profileMenuContent config =
         , onPress = config.onNavigate (DiaryCalendar Nothing)
         , submitState = Nothing
         , submittingLabel = Nothing
+        , trailing = Nothing
         }
     , Ui.textButton config.device
         config.theme
@@ -631,6 +632,7 @@ profileMenuContent config =
         , onPress = config.onNavigate GoalSettings
         , submitState = Nothing
         , submittingLabel = Nothing
+        , trailing = Nothing
         }
     , Ui.textButton config.device
         config.theme
@@ -640,6 +642,7 @@ profileMenuContent config =
         , onPress = config.onNavigate DiarySettings
         , submitState = Nothing
         , submittingLabel = Nothing
+        , trailing = Nothing
         }
     , Ui.textButton config.device
         config.theme
@@ -649,5 +652,6 @@ profileMenuContent config =
         , onPress = config.onLogout
         , submitState = Nothing
         , submittingLabel = Nothing
+        , trailing = Nothing
         }
     ]

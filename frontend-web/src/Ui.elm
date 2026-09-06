@@ -527,6 +527,7 @@ type ButtonTone
     | Danger
     | DangerOutline
     | Ghost
+    | GhostFilled
 
 
 type ButtonWidth
@@ -551,6 +552,7 @@ type alias ButtonConfig msg =
     , onPress : msg
     , submitState : Maybe SubmitState
     , submittingLabel : Maybe String
+    , trailing : Maybe (Element msg)
     }
 
 
@@ -649,6 +651,15 @@ textButton device theme config =
                     , hoverBorder = Element.rgba255 0 0 0 0
                     }
 
+                GhostFilled ->
+                    { bg = theme.brandBlueSoft
+                    , fg = theme.brandBlue
+                    , border = Element.rgba255 0 0 0 0
+                    , hoverBg = theme.brandBlueSoft
+                    , hoverFg = theme.brandBlue
+                    , hoverBorder = Element.rgba255 0 0 0 0
+                    }
+
         widthAttr : Element.Attribute msg
         widthAttr =
             case config.width of
@@ -683,9 +694,12 @@ textButton device theme config =
                 Ghost ->
                     []
 
+                GhostFilled ->
+                    []
+
         isGhost : Bool
         isGhost =
-            config.tone == Ghost
+            config.tone == Ghost || config.tone == GhostFilled
 
         isOutline : Bool
         isOutline =
@@ -732,7 +746,16 @@ textButton device theme config =
 
             else
                 Nothing
-        , label = Element.text label
+        , label =
+            case config.trailing of
+                Nothing ->
+                    Element.text label
+
+                Just trailingEl ->
+                    Element.row [ Element.width Element.fill, Element.spacing space4 ]
+                        [ Element.text label
+                        , Element.el [ Element.alignRight ] trailingEl
+                        ]
         }
 
 
@@ -754,6 +777,7 @@ bottomActionButtons device theme buttons =
                     , onPress = config.onPress
                     , submitState = Nothing
                     , submittingLabel = Nothing
+                    , trailing = Nothing
                     }
                 )
 

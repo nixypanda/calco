@@ -480,6 +480,7 @@ submitActionView theme device requestState =
         , onPress = SubmitClicked
         , submitState = Just (Ui.submittingOrIdle (requestState == Saving))
         , submittingLabel = Just "Logging..."
+        , trailing = Nothing
         }
 
 

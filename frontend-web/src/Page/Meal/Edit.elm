@@ -405,6 +405,7 @@ view { model, device, theme } =
                     , submitState =
                         Just (Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
                     , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 ]
 

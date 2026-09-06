@@ -120,6 +120,7 @@ bodyView theme device model =
                             , onPress = CreateMealClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
+                            , trailing = Nothing
                             }
                         )
                 , body =

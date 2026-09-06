@@ -672,6 +672,7 @@ view theme device formHasManualInput model =
                     , onPress = RetryStatusClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
+                    , trailing = Nothing
                     }
                 ]
 
@@ -741,6 +742,7 @@ conversationView theme device chat =
                             , onPress = NewSessionClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
+                            , trailing = Nothing
                             }
                         )
                 ]
@@ -785,6 +787,7 @@ newSessionConfirmation theme device =
                 , onPress = CancelNewSessionClicked
                 , submitState = Nothing
                 , submittingLabel = Nothing
+                , trailing = Nothing
                 }
             , Ui.textButton device
                 theme
@@ -794,6 +797,7 @@ newSessionConfirmation theme device =
                 , onPress = ConfirmNewSessionClicked
                 , submitState = Nothing
                 , submittingLabel = Nothing
+                , trailing = Nothing
                 }
             ]
         ]
@@ -936,6 +940,7 @@ choosePhotosButton theme device chat =
                     Ui.Idle
                 )
         , submittingLabel = Just label
+        , trailing = Nothing
         }
 
 
@@ -1014,6 +1019,7 @@ photoPreview theme device index photo maybeUrl =
                 , onPress = RemovePhoto index
                 , submitState = Nothing
                 , submittingLabel = Nothing
+                , trailing = Nothing
                 }
             ]
         ]
@@ -1045,6 +1051,7 @@ sendButton theme device request =
                     Ui.Idle
                 )
         , submittingLabel = Just "Generating draft…"
+        , trailing = Nothing
         }
 
 
@@ -1063,6 +1070,7 @@ requestErrorView theme device request =
                     , onPress = RetryClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
+                    , trailing = Nothing
                     }
                 ]
 
@@ -1130,6 +1138,7 @@ draftPreviewView theme device formHasManualInput chat =
                                 , onPress = NewSessionClicked
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
+                                , trailing = Nothing
                                 }
                             )
                     ]
@@ -1256,6 +1265,7 @@ draftActionView theme device formHasManualInput chat =
                             , onPress = CancelOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
+                            , trailing = Nothing
                             }
                         , Ui.textButton device
                             theme
@@ -1265,6 +1275,7 @@ draftActionView theme device formHasManualInput chat =
                             , onPress = ConfirmOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
+                            , trailing = Nothing
                             }
                         ]
                     ]
@@ -1293,6 +1304,7 @@ draftActionView theme device formHasManualInput chat =
                                     AskForChangesClicked
                             , submitState = Just Ui.Idle
                             , submittingLabel = Just "Ask for changes"
+                            , trailing = Nothing
                             }
                         )
                     , Element.el [ Element.width Element.fill ]
@@ -1304,6 +1316,7 @@ draftActionView theme device formHasManualInput chat =
                             , onPress = ApplyDraftClicked formHasManualInput
                             , submitState = Just Ui.Idle
                             , submittingLabel = Just "Applying…"
+                            , trailing = Nothing
                             }
                         )
                     ]
