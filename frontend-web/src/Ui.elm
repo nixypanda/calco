@@ -710,8 +710,8 @@ textButton device theme config =
          , Font.color toneColors.fg
          , Border.rounded radiusPill
          , widthAttr
-         , Element.height (Element.px 44)
-         , Element.paddingEach { top = 15, right = 16, bottom = 15, left = 16 }
+         , Element.height (Element.px 48)
+         , Element.paddingEach { top = 17, right = 16, bottom = 17, left = 16 }
          , Font.medium
          , Font.size 14
          , uiClass "ui-motion ui-pressable"
