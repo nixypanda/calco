@@ -683,6 +683,10 @@ textButton device theme config =
                 Ghost ->
                     []
 
+        isGhost : Bool
+        isGhost =
+            config.tone == Ghost
+
         isOutline : Bool
         isOutline =
             config.tone == PrimaryOutline || config.tone == DangerOutline
@@ -696,13 +700,18 @@ textButton device theme config =
          , Element.paddingEach { top = 15, right = 16, bottom = 15, left = 16 }
          , Font.medium
          , Font.size 14
-         , Font.center
          , uiClass "ui-motion ui-pressable"
          , hoverEffect device
             [ Background.color toneColors.hoverBg
             , Font.color toneColors.hoverFg
             ]
          ]
+            ++ (if isGhost then
+                    []
+
+                else
+                    [ Font.center ]
+               )
             ++ borderAttrs
             ++ (if isOutline then
                     [ Border.color toneColors.border
