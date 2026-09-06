@@ -24,9 +24,10 @@ type alias ButtonConfig msg =
     }
 ```
 
-All text buttons are 44px tall, pill-shaped (`radiusPill`), and use
+All text buttons are 48px tall, pill-shaped (`radiusPill`), and use
 `Font.medium` at 14px. Ghost and GhostFilled tones are left-aligned;
-all other tones are centered.
+all other tones are centered. Hover effects are suppressed when the
+button is not active (`Disabled`, `Submitting`, or `Submitted`).
 
 ### iconButton
 
@@ -51,7 +52,7 @@ state (muted colors, no interaction).
 | `PrimaryOutline` | cardBg | brandBlue | 1px brandBlue | Secondary actions (Cancel, Choose photos) |
 | `Danger` | dangerSolid | white | none | Destructive actions (Delete, Confirm) |
 | `DangerOutline` | cardBg | dangerFg | 1px dangerFg | Destructive secondary (Remove photo) |
-| `Ghost` | transparent | brandBlue | none | Text links ("+ Add Food", "+ Create Meal") |
+| `Ghost` | transparent | brandBlue (muted when disabled) | none | Text links ("+ Add Food", "+ Create Meal") |
 | `GhostFilled` | brandBlueSoft | brandBlue | none | Filled links ("Details", "Load earlier") |
 
 ### ButtonWidth
@@ -69,6 +70,7 @@ state (muted colors, no interaction).
 | `Idle` | Active, pressable |
 | `Submitting` | Shows `submittingLabel`, press disabled |
 | `Disabled` | Press disabled, muted styling |
+| `Submitted` | Press disabled, muted styling (for completed actions) |
 
 ## Buttons outside the unified system
 
@@ -82,13 +84,7 @@ The "Take photo" button renders a hidden `<input type="file"
 capture="environment">` inside an `Html.label`. This is the only way to
 trigger the native camera picker on mobile. The CSS classes
 `.photo-capture-label` match the `PrimaryOutline` visual style (blue
-border, blue text, card bg, pill shape, 44px height).
-
-### Latest slot button (`Page/Diary/Day.elm`)
-
-A 24px-tall ghost link with a hover-reveal background. Too small for the
-standard 44px button height and has unique hover behavior not covered by
-any tone.
+border, blue text, card bg, pill shape, 48px height).
 
 ### Macro mode toggle (`Page/Diary/Day.elm`)
 
@@ -107,12 +103,6 @@ accepts a `String` label, not a multi-element layout.
 A segmented control with two visual states (selected: solid blue bg +
 white text; unselected: neutral bg + medium text). Structurally a
 toggle group, not a standalone button.
-
-### Quick-add chip (`Page/Food/Search.elm`)
-
-A stateful chip with 4 visual states (CanAdd, Adding, Added, Blocked)
-and an icon+label. Domain-specific component with complex state
-transitions.
 
 ### Calendar day cell (`Page/Diary/Calendar.elm`)
 

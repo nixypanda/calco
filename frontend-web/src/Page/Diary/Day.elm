@@ -153,7 +153,8 @@ currentLogs model =
 
 
 type Msg
-    = LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    = SlotNoOp
+    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
     | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
     | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
@@ -186,6 +187,9 @@ type CopyRefresh
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
+        SlotNoOp ->
+            ( model, Cmd.none, NoOp )
+
         LogsLoaded requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
                 ( model, Cmd.none, NoOp )
@@ -1209,22 +1213,41 @@ emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
 emptySlotView theme device model slot =
     case latestSlotSourceFor model.currentDate slot model.latestSlots of
         Just source ->
+            let
+                isLogging : Bool
+                isLogging =
+                    case model.copyState of
+                        Copying copyingSlot ->
+                            copyingSlot == source.slot
+
+                        _ ->
+                            False
+            in
             emptySlotBody
-                (latestSlotButton
-                    device
+                (Ui.textButton device
                     theme
-                    (copyLatestLabel model.copyState source)
-                    (CopyLatestClicked source)
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = logLatestLabel source
+                    , onPress = CopyLatestClicked source
+                    , submitState = Just (Ui.submittingOrIdle isLogging)
+                    , submittingLabel = Just "Logging..."
+                    , trailing = Nothing
+                    }
                 )
 
         Nothing ->
             emptySlotBody
-                (Element.el
-                    [ Font.color theme.textMuted
-                    , Element.centerX
-                    , Element.centerY
-                    ]
-                    (Element.text "No items")
+                (Ui.textButton device
+                    theme
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "No items"
+                    , onPress = SlotNoOp
+                    , submitState = Just Ui.Disabled
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
                 )
 
 
@@ -1234,47 +1257,7 @@ emptySlotBody content =
         [ Element.width Element.fill
         , Element.padding DesignTokens.space12
         ]
-        (Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 24)
-            ]
-            content
-        )
-
-
-latestSlotButton : Device -> Theme -> String -> Msg -> Element Msg
-latestSlotButton device theme label msg =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height (Element.px 24)
-        , Border.rounded DesignTokens.radiusPill
-        , Font.color theme.brandBlue
-        , Font.medium
-        , Font.center
-        , if Ui.isSmall device then
-            Element.mouseOver []
-
-          else
-            Element.mouseOver [ Background.color theme.brandBlueSoft ]
-        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-copyLatestLabel : CopyState -> LatestSlotSource -> String
-copyLatestLabel copyState source =
-    case copyState of
-        Copying copyingSlot ->
-            if copyingSlot == source.slot then
-                "Logging..."
-
-            else
-                logLatestLabel source
-
-        _ ->
-            logLatestLabel source
+        content
 
 
 logLatestLabel : LatestSlotSource -> String

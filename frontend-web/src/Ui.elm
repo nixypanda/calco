@@ -645,7 +645,12 @@ textButton device theme config =
 
                 Ghost ->
                     { bg = Element.rgba255 0 0 0 0
-                    , fg = theme.brandBlue
+                    , fg =
+                        if isActive then
+                            theme.brandBlue
+
+                        else
+                            theme.textMuted
                     , border = Element.rgba255 0 0 0 0
                     , hoverBg = theme.brandBlueSoft
                     , hoverFg = theme.brandBlue
