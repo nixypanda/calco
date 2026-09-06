@@ -301,12 +301,12 @@ loadedView theme device loaded =
 bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
 bottomActionsView theme device food =
     let
-        actions : List { label : String, onPress : Msg, tone : Ui.BottomActionTone }
+        actions : List { label : String, onPress : Msg, tone : Ui.ButtonTone }
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = "Edit Food", onPress = EditClicked, tone = Ui.PrimaryAction }
-                    , { label = "Delete Food", onPress = DeleteClicked, tone = Ui.DangerAction }
+                    [ { label = "Edit Food", onPress = EditClicked, tone = Ui.Primary }
+                    , { label = "Delete Food", onPress = DeleteClicked, tone = Ui.Danger }
                     ]
 
                 Nothing ->

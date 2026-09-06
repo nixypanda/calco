@@ -141,21 +141,25 @@ createActions device theme =
         , Element.spacing 12
         ]
         [ Element.el [ Element.width Element.fill ]
-            (Ui.primarySubmitButton device
+            (Ui.textButton device
                 theme
-                { state = Ui.Idle
-                , idleLabel = "Create with AI"
-                , submittingLabel = "Create with AI"
+                { tone = Ui.Primary
+                , width = Ui.FullWidth
+                , label = "Create with AI"
                 , onPress = CreateWithAiClicked
+                , submitState = Just Ui.Idle
+                , submittingLabel = Just "Create with AI"
                 }
             )
         , Element.el [ Element.width Element.fill ]
-            (Ui.secondarySubmitButton device
+            (Ui.textButton device
                 theme
-                { state = Ui.Idle
-                , idleLabel = "Enter manually"
-                , submittingLabel = "Enter manually"
+                { tone = Ui.PrimaryOutline
+                , width = Ui.FullWidth
+                , label = "Enter manually"
                 , onPress = CreateManuallyClicked
+                , submitState = Just Ui.Idle
+                , submittingLabel = Just "Enter manually"
                 }
             )
         ]

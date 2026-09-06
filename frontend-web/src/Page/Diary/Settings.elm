@@ -168,17 +168,19 @@ view { model, device, theme } =
                         :: List.map (slotCheckbox loaded.selected) MealSlot.all
                     )
                 , Ui.maybeErrorBanner theme (saveError loaded.saveState)
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (loaded.saveState == Saving)
-                    , idleLabel =
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label =
                         if loaded.saveState == Saved then
                             "Saved"
 
                         else
                             "Save meal slots"
-                    , submittingLabel = "Saving..."
                     , onPress = SaveClicked
+                    , submitState = Just (Ui.submittingOrIdle (loaded.saveState == Saving))
+                    , submittingLabel = Just "Saving..."
                     }
                 ]
         )

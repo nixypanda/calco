@@ -111,7 +111,17 @@ bodyView theme device model =
         Loaded meals ->
             Ui.section theme
                 { header =
-                    Just (Ui.fullWidthGhostButton device theme "+ Create Meal" CreateMealClicked)
+                    Just
+                        (Ui.textButton device
+                            theme
+                            { tone = Ui.Ghost
+                            , width = Ui.FullWidth
+                            , label = "+ Create Meal"
+                            , onPress = CreateMealClicked
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            }
+                        )
                 , body =
                     if List.isEmpty meals then
                         [ Typography.mutedBodyParagraph theme "No items yet." ]

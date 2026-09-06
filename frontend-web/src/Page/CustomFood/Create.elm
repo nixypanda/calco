@@ -287,12 +287,14 @@ view { model, device, theme } =
             else
                 [ Element.map FormMsg
                     (Form.view theme device model.nutrients model.units model.form)
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (Form.isSubmitting model.form.submit)
-                    , idleLabel = "Create Food"
-                    , submittingLabel = "Creating..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Create Food"
                     , onPress = SubmitClicked
+                    , submitState = Just (Ui.submittingOrIdle (Form.isSubmitting model.form.submit))
+                    , submittingLabel = Just "Creating..."
                     }
                 ]
     in

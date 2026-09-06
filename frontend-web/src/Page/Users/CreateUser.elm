@@ -205,12 +205,14 @@ view { model, device, theme } =
                         , onChange = PasswordChanged
                         }
                     ]
-               , Ui.primarySubmitButton device
+               , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (isSubmitting model)
-                    , idleLabel = "Save"
-                    , submittingLabel = "Saving..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Save"
                     , onPress = Submitted
+                    , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
+                    , submittingLabel = Just "Saving..."
                     }
                ]
         )

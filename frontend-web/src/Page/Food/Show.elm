@@ -472,12 +472,14 @@ loadedView theme device loaded =
 
 submitActionView : Theme -> Device -> RequestState -> Element Msg
 submitActionView theme device requestState =
-    Ui.primarySubmitButton device
+    Ui.textButton device
         theme
-        { state = Ui.submittingOrIdle (requestState == Saving)
-        , idleLabel = "Log Food"
-        , submittingLabel = "Logging..."
+        { tone = Ui.Primary
+        , width = Ui.FullWidth
+        , label = "Log Food"
         , onPress = SubmitClicked
+        , submitState = Just (Ui.submittingOrIdle (requestState == Saving))
+        , submittingLabel = Just "Logging..."
         }
 
 

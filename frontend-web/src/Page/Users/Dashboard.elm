@@ -95,7 +95,17 @@ bodyView device theme model =
                         )
                         users
                 , footer =
-                    Just (Ui.fullWidthGhostButton device theme "+ Create User" NavigateCreateUser)
+                    Just
+                        (Ui.textButton device
+                            theme
+                            { tone = Ui.Ghost
+                            , width = Ui.FullWidth
+                            , label = "+ Create User"
+                            , onPress = NavigateCreateUser
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            }
+                        )
                 }
 
         Loading ->

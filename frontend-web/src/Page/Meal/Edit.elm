@@ -396,12 +396,15 @@ view { model, device, theme } =
                 [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme loaded
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit)
-                    , idleLabel = "Update Meal"
-                    , submittingLabel = "Saving..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Update Meal"
                     , onPress = SubmitClicked
+                    , submitState =
+                        Just (Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
+                    , submittingLabel = Just "Saving..."
                     }
                 ]
 

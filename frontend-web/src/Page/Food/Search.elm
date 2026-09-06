@@ -838,44 +838,60 @@ barcodeInputView theme device model =
 
         searchButton : Element Msg
         searchButton =
-            Ui.secondarySubmitButton device
+            Ui.textButton device
                 theme
-                { state =
-                    if model.barcodeLookup == Loading then
-                        Ui.Submitting
-
-                    else if String.isEmpty (String.trim model.barcodeQuery) then
-                        Ui.Disabled
-
-                    else
-                        Ui.Idle
-                , idleLabel = "Search"
-                , submittingLabel = "Searching"
+                { tone = Ui.PrimaryOutline
+                , width = Ui.FullWidth
+                , label = "Search"
                 , onPress = BarcodeSubmitted
+                , submitState =
+                    Just
+                        (if model.barcodeLookup == Loading then
+                            Ui.Submitting
+
+                         else if String.isEmpty (String.trim model.barcodeQuery) then
+                            Ui.Disabled
+
+                         else
+                            Ui.Idle
+                        )
+                , submittingLabel = Just "Searching"
                 }
 
         scanButton : Element Msg
         scanButton =
             case model.barcodeScanner of
                 ScannerStarting ->
-                    Ui.primarySubmitButton device
+                    Ui.textButton device
                         theme
-                        { state = Ui.Submitting
-                        , idleLabel = "Scan"
-                        , submittingLabel = "Starting"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Scan"
                         , onPress = BarcodeScanClicked
+                        , submitState = Just Ui.Submitting
+                        , submittingLabel = Just "Starting"
                         }
 
                 ScannerActive ->
-                    Ui.fullWidthDangerButton device theme "Cancel" BarcodeScanCancelClicked
+                    Ui.textButton device
+                        theme
+                        { tone = Ui.Danger
+                        , width = Ui.FullWidth
+                        , label = "Cancel"
+                        , onPress = BarcodeScanCancelClicked
+                        , submitState = Nothing
+                        , submittingLabel = Nothing
+                        }
 
                 _ ->
-                    Ui.primarySubmitButton device
+                    Ui.textButton device
                         theme
-                        { state = Ui.Idle
-                        , idleLabel = "Scan"
-                        , submittingLabel = "Starting"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Scan"
                         , onPress = BarcodeScanClicked
+                        , submitState = Just Ui.Idle
+                        , submittingLabel = Just "Starting"
                         }
 
         controls : Element Msg
@@ -1110,12 +1126,14 @@ barcodeBodyView theme device model =
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Ui.errorBanner theme (barcodeErrorMessage error)
                 , Ui.emptyState theme "No food found for that barcode."
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.Idle
-                    , idleLabel = "Create Custom Food"
-                    , submittingLabel = "Create Custom Food"
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Create Custom Food"
                     , onPress = CreateCustomFoodClicked
+                    , submitState = Just Ui.Idle
+                    , submittingLabel = Just "Create Custom Food"
                     }
                 ]
 
@@ -1145,12 +1163,14 @@ textEmptyState theme device scope =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         (Ui.emptyState theme message
             :: (if canCreate then
-                    [ Ui.primarySubmitButton device
+                    [ Ui.textButton device
                         theme
-                        { state = Ui.Idle
-                        , idleLabel = "Create Custom Food"
-                        , submittingLabel = "Create Custom Food"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Create Custom Food"
                         , onPress = CreateCustomFoodClicked
+                        , submitState = Just Ui.Idle
+                        , submittingLabel = Just "Create Custom Food"
                         }
                     ]
 

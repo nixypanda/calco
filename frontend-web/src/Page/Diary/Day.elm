@@ -616,7 +616,11 @@ dateCard theme model device =
             ]
             [ Ui.iconButton device
                 theme
-                { icon = Icon.ChevronLeft, title = "Previous Day", onPress = PreviousDayClicked }
+                { icon = Icon.ChevronLeft
+                , title = "Previous Day"
+                , onPress = Just PreviousDayClicked
+                , tone = Ui.Primary
+                }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
@@ -625,10 +629,20 @@ dateCard theme model device =
             , if canGoNext then
                 Ui.iconButton device
                     theme
-                    { icon = Icon.ChevronRight, title = "Next Day", onPress = NextDayClicked }
+                    { icon = Icon.ChevronRight
+                    , title = "Next Day"
+                    , onPress = Just NextDayClicked
+                    , tone = Ui.Primary
+                    }
 
               else
-                Ui.disabledIconButton theme { icon = Icon.ChevronRight }
+                Ui.iconButton device
+                    theme
+                    { icon = Icon.ChevronRight
+                    , title = ""
+                    , onPress = Nothing
+                    , tone = Ui.Primary
+                    }
             ]
         , Ui.hairline theme
         , Element.column
@@ -1183,11 +1197,15 @@ slotView theme device model section =
                         List.map (logRow theme) section.logs
                     )
                         ++ [ Ui.hairline theme
-                           , Ui.fullWidthGhostButton
-                                device
+                           , Ui.textButton device
                                 theme
-                                "+ Add Food"
-                                (AddFoodClicked slot)
+                                { tone = Ui.Ghost
+                                , width = Ui.FullWidth
+                                , label = "+ Add Food"
+                                , onPress = AddFoodClicked slot
+                                , submitState = Nothing
+                                , submittingLabel = Nothing
+                                }
                            ]
 
                 Nothing ->

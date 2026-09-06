@@ -1,9 +1,9 @@
 module Ui exposing
-    ( BottomActionTone(..)
-    , CompactButtonWidth(..)
+    ( ButtonConfig
+    , ButtonTone(..)
+    , ButtonWidth(..)
     , InputConfig
     , PageHeaderSubtitle(..)
-    , SubmitButtonConfig
     , SubmitState(..)
     , accentDot
     , badge
@@ -15,17 +15,11 @@ module Ui exposing
     , chipBackground
     , chips
     , coloredPill
-    , compactDangerButton
-    , compactDangerOutlineButton
-    , compactGhostButton
-    , compactPrimaryButton
     , completionDropdown
     , completionRow
-    , dangerIconButton
     , decimalInput
     , decimalInputWithSuffix
     , detailRow
-    , disabledIconButton
     , dotSeparated
     , drawerItem
     , drawerPanel
@@ -33,8 +27,6 @@ module Ui exposing
     , errorBanner
     , fieldLabel
     , formSection
-    , fullWidthDangerButton
-    , fullWidthGhostButton
     , hairline
     , heroCard
     , iconButton
@@ -53,11 +45,9 @@ module Ui exposing
     , pageContainer
     , pageHeader
     , passwordInput
-    , primarySubmitButton
     , removableChip
     , scrimOverlay
     , searchInput
-    , secondarySubmitButton
     , section
     , selectDropdown
     , skeletonBar
@@ -65,6 +55,7 @@ module Ui exposing
     , statusBadge
     , submittingOrIdle
     , suggestionList
+    , textButton
     , toggleSwitch
     )
 
@@ -530,14 +521,18 @@ type SubmitState
     | Disabled
 
 
-type BottomActionTone
-    = PrimaryAction
-    | DangerAction
+type ButtonTone
+    = Primary
+    | PrimaryOutline
+    | Danger
+    | DangerOutline
+    | Ghost
 
 
-type CompactButtonWidth
-    = CompactContent
-    | CompactResponsive
+type ButtonWidth
+    = ContentWidth
+    | ResponsiveWidth
+    | FullWidth
 
 
 submittingOrIdle : Bool -> SubmitState
@@ -549,226 +544,208 @@ submittingOrIdle isSubmitting =
         Idle
 
 
-type alias SubmitButtonConfig msg =
-    { state : SubmitState
-    , idleLabel : String
-    , submittingLabel : String
+type alias ButtonConfig msg =
+    { tone : ButtonTone
+    , width : ButtonWidth
+    , label : String
     , onPress : msg
+    , submitState : Maybe SubmitState
+    , submittingLabel : Maybe String
     }
 
 
-primarySubmitButton : Device -> Theme -> SubmitButtonConfig msg -> Element msg
-primarySubmitButton device theme config =
+textButton : Device -> Theme -> ButtonConfig msg -> Element msg
+textButton device theme config =
     let
+        isActive : Bool
+        isActive =
+            case config.submitState of
+                Nothing ->
+                    True
+
+                Just state ->
+                    state == Idle
+
         label : String
         label =
-            case config.state of
-                Submitting ->
-                    config.submittingLabel
+            case ( config.submitState, config.submittingLabel ) of
+                ( Just Submitting, Just subLabel ) ->
+                    subLabel
 
                 _ ->
-                    config.idleLabel
+                    config.label
 
-        active : Bool
-        active =
-            config.state == Idle
+        toneColors :
+            { bg : Element.Color
+            , fg : Element.Color
+            , border : Element.Color
+            , hoverBg : Element.Color
+            , hoverFg : Element.Color
+            , hoverBorder : Element.Color
+            }
+        toneColors =
+            case config.tone of
+                Primary ->
+                    { bg =
+                        if isActive then
+                            theme.brandBlue
+
+                        else
+                            theme.brandBlueDisabled
+                    , fg = Element.rgb255 255 255 255
+                    , border =
+                        if isActive then
+                            theme.brandBlue
+
+                        else
+                            theme.brandBlueDisabled
+                    , hoverBg = theme.brandBluePressed
+                    , hoverFg = Element.rgb255 255 255 255
+                    , hoverBorder = theme.brandBluePressed
+                    }
+
+                PrimaryOutline ->
+                    let
+                        c : Element.Color
+                        c =
+                            if isActive then
+                                theme.brandBlue
+
+                            else
+                                theme.brandBlueDisabled
+                    in
+                    { bg = theme.cardBg
+                    , fg = c
+                    , border = c
+                    , hoverBg = theme.brandBlueSoft
+                    , hoverFg = theme.brandBlue
+                    , hoverBorder = theme.brandBlue
+                    }
+
+                Danger ->
+                    { bg = theme.dangerSolid
+                    , fg = Element.rgb255 255 255 255
+                    , border = theme.dangerSolid
+                    , hoverBg = theme.dangerFg
+                    , hoverFg = Element.rgb255 255 255 255
+                    , hoverBorder = theme.dangerFg
+                    }
+
+                DangerOutline ->
+                    { bg = theme.cardBg
+                    , fg = theme.dangerFg
+                    , border = theme.dangerFg
+                    , hoverBg = theme.dangerBg
+                    , hoverFg = theme.dangerFg
+                    , hoverBorder = theme.dangerFg
+                    }
+
+                Ghost ->
+                    { bg = Element.rgba255 0 0 0 0
+                    , fg = theme.brandBlue
+                    , border = Element.rgba255 0 0 0 0
+                    , hoverBg = theme.brandBlueSoft
+                    , hoverFg = theme.brandBlue
+                    , hoverBorder = Element.rgba255 0 0 0 0
+                    }
+
+        widthAttr : Element.Attribute msg
+        widthAttr =
+            case config.width of
+                FullWidth ->
+                    Element.width Element.fill
+
+                ContentWidth ->
+                    Element.width Element.shrink
+
+                ResponsiveWidth ->
+                    if isSmall device then
+                        Element.width Element.fill
+
+                    else
+                        Element.width Element.shrink
+
+        borderAttrs : List (Element.Attribute msg)
+        borderAttrs =
+            case config.tone of
+                Primary ->
+                    []
+
+                PrimaryOutline ->
+                    [ Border.width 1 ]
+
+                Danger ->
+                    []
+
+                DangerOutline ->
+                    [ Border.width 1 ]
+
+                Ghost ->
+                    []
+
+        isOutline : Bool
+        isOutline =
+            config.tone == PrimaryOutline || config.tone == DangerOutline
     in
     Input.button
-        [ Background.color
-            (if active then
-                theme.brandBlue
-
-             else
-                theme.brandBlueDisabled
-            )
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
-        , Font.medium
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , if active then
-            hoverEffect device [ Background.color theme.brandBluePressed ]
-
-          else
-            hoverEffect device []
-        ]
-        { onPress =
-            if active then
-                Just config.onPress
-
-            else
-                Nothing
-        , label = Element.text label
-        }
-
-
-secondarySubmitButton : Device -> Theme -> SubmitButtonConfig msg -> Element msg
-secondarySubmitButton device theme config =
-    let
-        label : String
-        label =
-            case config.state of
-                Submitting ->
-                    config.submittingLabel
-
-                _ ->
-                    config.idleLabel
-
-        active : Bool
-        active =
-            config.state == Idle
-
-        foreground : Element.Color
-        foreground =
-            if active then
-                theme.brandBlue
-
-            else
-                theme.brandBlueDisabled
-    in
-    Input.button
-        [ Background.color theme.cardBg
-        , Border.width 1
-        , Border.color foreground
-        , Border.rounded radiusPill
-        , Font.color foreground
-        , Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach { top = 13, right = 20, bottom = 13, left = 20 }
-        , Font.medium
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , if active then
-            hoverEffect device [ Background.color theme.brandBlueSoft ]
-
-          else
-            hoverEffect device []
-        ]
-        { onPress =
-            if active then
-                Just config.onPress
-
-            else
-                Nothing
-        , label = Element.text label
-        }
-
-
-compactGhostButton :
-    Device
-    -> Theme
-    -> CompactButtonWidth
-    -> String
-    -> msg
-    -> Element msg
-compactGhostButton device theme width label msg =
-    Input.button
-        [ compactButtonWidth device width
-        , Element.height (Element.px 44)
-        , Element.paddingXY space12 space8
-        , Border.rounded radiusPill
-        , Font.color theme.textMuted
-        , Font.medium
-        , Font.size 14
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device
-            [ Background.color theme.brandBlueSoft
-            , Font.color theme.brandBlue
+        ([ Background.color toneColors.bg
+         , Font.color toneColors.fg
+         , Border.rounded radiusPill
+         , widthAttr
+         , Element.height (Element.px 44)
+         , Element.paddingEach { top = 15, right = 16, bottom = 15, left = 16 }
+         , Font.medium
+         , Font.size 14
+         , Font.center
+         , uiClass "ui-motion ui-pressable"
+         , hoverEffect device
+            [ Background.color toneColors.hoverBg
+            , Font.color toneColors.hoverFg
             ]
-        ]
-        { onPress = Just msg, label = Element.text label }
+         ]
+            ++ borderAttrs
+            ++ (if isOutline then
+                    [ Border.color toneColors.border
+                    , hoverEffect device
+                        [ Background.color toneColors.hoverBg
+                        , Font.color toneColors.hoverFg
+                        , Border.color toneColors.hoverBorder
+                        ]
+                    ]
 
-
-compactPrimaryButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
-compactPrimaryButton device theme width label msg =
-    Input.button
-        [ Background.color theme.brandBlue
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , compactButtonWidth device width
-        , Element.height (Element.px 48)
-        , Element.paddingXY space16 space8
-        , Font.medium
-        , Font.size 14
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBluePressed ]
-        ]
-        { onPress = Just msg, label = Element.text label }
-
-
-compactDangerButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
-compactDangerButton device theme width label msg =
-    Input.button
-        [ Background.color theme.dangerSolid
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , compactButtonWidth device width
-        , Element.height (Element.px 48)
-        , Element.paddingXY space16 space8
-        , Font.medium
-        , Font.size 14
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.dangerFg ]
-        ]
-        { onPress = Just msg, label = Element.text label }
-
-
-compactDangerOutlineButton : Device -> Theme -> CompactButtonWidth -> String -> msg -> Element msg
-compactDangerOutlineButton device theme width label msg =
-    Input.button
-        [ Background.color theme.cardBg
-        , Font.color theme.dangerFg
-        , Border.width 1
-        , Border.color theme.dangerFg
-        , Border.rounded radiusPill
-        , compactButtonWidth device width
-        , Element.height (Element.px 44)
-        , Element.paddingXY space12 space8
-        , Font.medium
-        , Font.size 14
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.dangerBg ]
-        ]
-        { onPress = Just msg, label = Element.text label }
-
-
-compactButtonWidth : Device -> CompactButtonWidth -> Element.Attribute msg
-compactButtonWidth device width =
-    case width of
-        CompactContent ->
-            Element.width Element.shrink
-
-        CompactResponsive ->
-            if isSmall device then
-                Element.width Element.fill
+                else
+                    []
+               )
+        )
+        { onPress =
+            if isActive then
+                Just config.onPress
 
             else
-                Element.width Element.shrink
+                Nothing
+        , label = Element.text label
+        }
 
 
 bottomActionButtons :
     Device
     -> Theme
-    -> List { label : String, onPress : msg, tone : BottomActionTone }
+    -> List { label : String, onPress : msg, tone : ButtonTone }
     -> Element msg
 bottomActionButtons device theme buttons =
     let
-        buttonView : { label : String, onPress : msg, tone : BottomActionTone } -> Element msg
+        buttonView : { label : String, onPress : msg, tone : ButtonTone } -> Element msg
         buttonView config =
             Element.el [ Element.width Element.fill ]
-                (case config.tone of
-                    PrimaryAction ->
-                        primaryActionButton device theme config.label config.onPress
-
-                    DangerAction ->
-                        fullWidthDangerButton device theme config.label config.onPress
+                (textButton device
+                    theme
+                    { tone = config.tone
+                    , width = FullWidth
+                    , label = config.label
+                    , onPress = config.onPress
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    }
                 )
 
         buttonElements : List (Element msg)
@@ -799,61 +776,6 @@ bottomActionButtons device theme buttons =
                 , Element.spacing space12
                 ]
                 buttonElements
-
-
-primaryActionButton : Device -> Theme -> String -> msg -> Element msg
-primaryActionButton device theme label msg =
-    Input.button
-        [ Background.color theme.brandBlue
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
-        , Font.medium
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBluePressed ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-fullWidthDangerButton : Device -> Theme -> String -> msg -> Element msg
-fullWidthDangerButton device theme label msg =
-    Input.button
-        [ Background.color theme.dangerSolid
-        , Font.color (Element.rgb255 255 255 255)
-        , Border.rounded radiusPill
-        , Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach { top = 14, right = 20, bottom = 14, left = 20 }
-        , Font.medium
-        , Font.center
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.dangerFg ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-fullWidthGhostButton : Device -> Theme -> String -> msg -> Element msg
-fullWidthGhostButton device theme label msg =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach { top = 14, right = 16, bottom = 14, left = 16 }
-        , Border.rounded radiusPill
-        , Font.color theme.brandBlue
-        , Font.medium
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device [ Background.color theme.brandBlueSoft ]
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
 
 
 bottomNavBar : Theme -> List (Element msg) -> Element msg
@@ -1499,43 +1421,52 @@ skeletonBar theme =
         Element.none
 
 
-iconButton : Device -> Theme -> { icon : Icon, title : String, onPress : msg } -> Element msg
-iconButton device theme config =
-    Input.button
-        [ Element.width (Element.px 44)
-        , Element.height (Element.px 44)
-        , Background.color theme.cardBg
-        , Font.color theme.textPrimary
-        , Font.center
-        , Border.rounded radiusPill
-        , Border.width 1
-        , Border.color theme.divider
-        , uiClass "ui-motion ui-pressable"
-        , hoverEffect device
-            [ Background.color theme.brandBlueSoft
-            , Border.color theme.brandBlue
-            ]
-        , Element.htmlAttribute (Html.Attributes.title config.title)
-        ]
-        { onPress = Just config.onPress
-        , label =
-            Element.el [ Element.centerX, Element.centerY ]
-                (Icon.view
-                    { icon = config.icon
-                    , size = 22
-                    , color = theme.textPrimary
-                    }
-                )
-        }
-
-
-dangerIconButton :
+iconButton :
     Device
     -> Theme
-    -> { icon : Icon, title : String, onPress : msg }
+    -> { icon : Icon, title : String, onPress : Maybe msg, tone : ButtonTone }
     -> Element msg
-dangerIconButton device theme config =
+iconButton device theme config =
     let
+        isActive : Bool
+        isActive =
+            config.onPress /= Nothing
+
+        iconTone :
+            { iconColor : Element.Color
+            , bgColor : Element.Color
+            , border : Element.Color
+            , hoverBg : Element.Color
+            , hoverBorder : Element.Color
+            }
+        iconTone =
+            case config.tone of
+                Danger ->
+                    { iconColor = theme.dangerFg
+                    , bgColor = theme.cardBg
+                    , border = theme.dangerFg
+                    , hoverBg = theme.dangerSolid
+                    , hoverBorder = theme.dangerSolid
+                    }
+
+                _ ->
+                    { iconColor =
+                        if isActive then
+                            theme.textPrimary
+
+                        else
+                            theme.textMuted
+                    , bgColor =
+                        if isActive then
+                            theme.cardBg
+
+                        else
+                            theme.inputFill
+                    , border = theme.divider
+                    , hoverBg = theme.brandBlueSoft
+                    , hoverBorder = theme.brandBlue
+                    }
+
         iconSize : Int
         iconSize =
             case config.icon of
@@ -1548,49 +1479,26 @@ dangerIconButton device theme config =
     Input.button
         [ Element.width (Element.px 44)
         , Element.height (Element.px 44)
-        , Background.color theme.cardBg
-        , Font.color theme.dangerFg
+        , Background.color iconTone.bgColor
+        , Font.color iconTone.iconColor
         , Font.center
         , Border.rounded radiusPill
         , Border.width 1
-        , Border.color theme.dangerFg
+        , Border.color iconTone.border
         , uiClass "ui-motion ui-pressable"
         , hoverEffect device
-            [ Background.color theme.dangerSolid
-            , Font.color (Element.rgb255 255 255 255)
-            , Border.color theme.dangerSolid
+            [ Background.color iconTone.hoverBg
+            , Border.color iconTone.hoverBorder
             ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
-        { onPress = Just config.onPress
+        { onPress = config.onPress
         , label =
             Element.el [ Element.centerX, Element.centerY ]
                 (Icon.view
                     { icon = config.icon
                     , size = iconSize
-                    , color = theme.dangerFg
-                    }
-                )
-        }
-
-
-disabledIconButton : Theme -> { icon : Icon } -> Element msg
-disabledIconButton theme config =
-    Input.button
-        [ Element.width (Element.px 40)
-        , Element.height (Element.px 40)
-        , Background.color theme.inputFill
-        , Font.color theme.textMuted
-        , Font.center
-        , Border.rounded radiusPill
-        ]
-        { onPress = Nothing
-        , label =
-            Element.el [ Element.centerX, Element.centerY ]
-                (Icon.view
-                    { icon = config.icon
-                    , size = 22
-                    , color = theme.textMuted
+                    , color = iconTone.iconColor
                     }
                 )
         }
