@@ -664,11 +664,16 @@ view theme device formHasManualInput model =
                 [ Typography.subsectionTitle theme "Create with AI"
                 , Ui.errorBanner theme
                     "Food-assistant availability could not be checked."
-                , Ui.fullWidthGhostButton
-                    device
+                , Ui.textButton device
                     theme
-                    "Retry availability check"
-                    RetryStatusClicked
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "Retry availability check"
+                    , onPress = RetryStatusClicked
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
                 ]
 
         Enabled chat ->
@@ -729,12 +734,16 @@ conversationView theme device chat =
 
                   else
                     Element.el [ Element.alignRight ]
-                        (Ui.compactPrimaryButton
-                            device
+                        (Ui.textButton device
                             theme
-                            Ui.CompactContent
-                            "New session"
-                            NewSessionClicked
+                            { tone = Ui.Primary
+                            , width = Ui.ContentWidth
+                            , label = "New session"
+                            , onPress = NewSessionClicked
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            , trailing = Nothing
+                            }
                         )
                 ]
              , Element.column
@@ -770,18 +779,26 @@ newSessionConfirmation theme device =
                 )
             ]
         , compactActionRow device
-            [ Ui.compactGhostButton
-                device
+            [ Ui.textButton device
                 theme
-                Ui.CompactResponsive
-                "Cancel"
-                CancelNewSessionClicked
-            , Ui.compactDangerOutlineButton
-                device
+                { tone = Ui.Ghost
+                , width = Ui.ResponsiveWidth
+                , label = "Cancel"
+                , onPress = CancelNewSessionClicked
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
+            , Ui.textButton device
                 theme
-                Ui.CompactResponsive
-                "Start new session"
-                ConfirmNewSessionClicked
+                { tone = Ui.DangerOutline
+                , width = Ui.ResponsiveWidth
+                , label = "Start new session"
+                , onPress = ConfirmNewSessionClicked
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
             ]
         ]
 
@@ -908,17 +925,22 @@ choosePhotosButton theme device chat =
             else
                 "Choose more photos"
     in
-    Ui.secondarySubmitButton device
+    Ui.textButton device
         theme
-        { state =
-            if chat.request == Sending then
-                Ui.Disabled
-
-            else
-                Ui.Idle
-        , idleLabel = label
-        , submittingLabel = label
+        { tone = Ui.PrimaryOutline
+        , width = Ui.FullWidth
+        , label = label
         , onPress = ChoosePhotos
+        , submitState =
+            Just
+                (if chat.request == Sending then
+                    Ui.Disabled
+
+                 else
+                    Ui.Idle
+                )
+        , submittingLabel = Just label
+        , trailing = Nothing
         }
 
 
@@ -989,12 +1011,16 @@ photoPreview theme device index photo maybeUrl =
             [ Element.paragraph [ Element.width Element.fill ]
                 [ Element.text (File.name photo) ]
             , Typography.mutedParagraph theme (formatPhotoSize (File.size photo))
-            , Ui.compactDangerOutlineButton
-                device
+            , Ui.textButton device
                 theme
-                Ui.CompactContent
-                "Remove photo"
-                (RemovePhoto index)
+                { tone = Ui.DangerOutline
+                , width = Ui.ContentWidth
+                , label = "Remove photo"
+                , onPress = RemovePhoto index
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
             ]
         ]
 
@@ -1010,17 +1036,22 @@ formatPhotoSize bytes =
 
 sendButton : Theme -> Device -> RequestState -> Element Msg
 sendButton theme device request =
-    Ui.primarySubmitButton device
+    Ui.textButton device
         theme
-        { state =
-            if request == Sending then
-                Ui.Submitting
-
-            else
-                Ui.Idle
-        , idleLabel = "Send"
-        , submittingLabel = "Generating draft…"
+        { tone = Ui.Primary
+        , width = Ui.FullWidth
+        , label = "Send"
         , onPress = SendClicked
+        , submitState =
+            Just
+                (if request == Sending then
+                    Ui.Submitting
+
+                 else
+                    Ui.Idle
+                )
+        , submittingLabel = Just "Generating draft…"
+        , trailing = Nothing
         }
 
 
@@ -1031,11 +1062,16 @@ requestErrorView theme device request =
             Element.column
                 [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Ui.errorBanner theme message
-                , Ui.fullWidthGhostButton
-                    device
+                , Ui.textButton device
                     theme
-                    "Retry last request"
-                    RetryClicked
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "Retry last request"
+                    , onPress = RetryClicked
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
                 ]
 
         InputFailed message ->
@@ -1094,12 +1130,16 @@ draftPreviewView theme device formHasManualInput chat =
 
                       else
                         Element.el [ Element.alignRight ]
-                            (Ui.compactDangerOutlineButton
-                                device
+                            (Ui.textButton device
                                 theme
-                                Ui.CompactContent
-                                "New session"
-                                NewSessionClicked
+                                { tone = Ui.DangerOutline
+                                , width = Ui.ContentWidth
+                                , label = "New session"
+                                , onPress = NewSessionClicked
+                                , submitState = Nothing
+                                , submittingLabel = Nothing
+                                , trailing = Nothing
+                                }
                             )
                     ]
                 , previewRows theme preview.details
@@ -1217,18 +1257,26 @@ draftActionView theme device formHasManualInput chat =
                             "Applying this draft will replace the values already in the form."
                         ]
                     , compactActionRow device
-                        [ Ui.compactGhostButton
-                            device
+                        [ Ui.textButton device
                             theme
-                            Ui.CompactResponsive
-                            "Cancel"
-                            CancelOverwriteClicked
-                        , Ui.compactDangerButton
-                            device
+                            { tone = Ui.Ghost
+                            , width = Ui.ResponsiveWidth
+                            , label = "Cancel"
+                            , onPress = CancelOverwriteClicked
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            , trailing = Nothing
+                            }
+                        , Ui.textButton device
                             theme
-                            Ui.CompactResponsive
-                            "Replace form values"
-                            ConfirmOverwriteClicked
+                            { tone = Ui.Danger
+                            , width = Ui.ResponsiveWidth
+                            , label = "Replace form values"
+                            , onPress = ConfirmOverwriteClicked
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            , trailing = Nothing
+                            }
                         ]
                     ]
 
@@ -1238,31 +1286,37 @@ draftActionView theme device formHasManualInput chat =
                     , Element.spacing DesignTokens.space8
                     ]
                     [ Element.el [ Element.width Element.fill ]
-                        (Ui.secondarySubmitButton device
+                        (Ui.textButton device
                             theme
-                            { state = Ui.Idle
-                            , idleLabel =
+                            { tone = Ui.PrimaryOutline
+                            , width = Ui.FullWidth
+                            , label =
                                 if chat.askingForChanges then
                                     "Cancel changes"
 
                                 else
                                     "Ask for changes"
-                            , submittingLabel = "Ask for changes"
                             , onPress =
                                 if chat.askingForChanges then
                                     CancelChangesClicked
 
                                 else
                                     AskForChangesClicked
+                            , submitState = Just Ui.Idle
+                            , submittingLabel = Just "Ask for changes"
+                            , trailing = Nothing
                             }
                         )
                     , Element.el [ Element.width Element.fill ]
-                        (Ui.primarySubmitButton device
+                        (Ui.textButton device
                             theme
-                            { state = Ui.Idle
-                            , idleLabel = "Apply to form"
-                            , submittingLabel = "Applying…"
+                            { tone = Ui.Primary
+                            , width = Ui.FullWidth
+                            , label = "Apply to form"
                             , onPress = ApplyDraftClicked formHasManualInput
+                            , submitState = Just Ui.Idle
+                            , submittingLabel = Just "Applying…"
+                            , trailing = Nothing
                             }
                         )
                     ]

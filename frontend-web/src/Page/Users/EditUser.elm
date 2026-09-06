@@ -288,16 +288,21 @@ resetPasswordView device theme model =
                 , value = currentPassword model.status
                 , onChange = PasswordChanged
                 }
-            , Ui.fullWidthGhostButton
-                device
+            , Ui.textButton device
                 theme
-                (if isResetPending model.status then
-                    "Resetting..."
+                { tone = Ui.Ghost
+                , width = Ui.FullWidth
+                , label =
+                    if isResetPending model.status then
+                        "Resetting..."
 
-                 else
-                    "Reset Password"
-                )
-                ResetSubmitted
+                    else
+                        "Reset Password"
+                , onPress = ResetSubmitted
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
             ]
         ]
     ]
@@ -317,7 +322,7 @@ accountActionView device theme model =
                         else
                             "Disable User"
                     , onPress = DisableClicked
-                    , tone = Ui.DangerAction
+                    , tone = Ui.Danger
                     }
 
                   else
@@ -328,7 +333,7 @@ accountActionView device theme model =
                         else
                             "Enable User"
                     , onPress = EnableClicked
-                    , tone = Ui.PrimaryAction
+                    , tone = Ui.Primary
                     }
                 ]
             ]

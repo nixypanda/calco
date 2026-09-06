@@ -161,12 +161,22 @@ leadingButton : Device -> Theme -> LeadingAction -> msg -> (Route -> msg) -> Ele
 leadingButton device theme leading onMenuClick onNavigate =
     case leading of
         OpenMenu ->
-            Ui.iconButton device theme { icon = Icon.Menu, title = "Menu", onPress = onMenuClick }
+            Ui.iconButton device
+                theme
+                { icon = Icon.Menu
+                , title = "Menu"
+                , onPress = Just onMenuClick
+                , tone = Ui.Primary
+                }
 
         GoBack route ->
             Ui.iconButton device
                 theme
-                { icon = Icon.ChevronLeft, title = "Back", onPress = onNavigate route }
+                { icon = Icon.ChevronLeft
+                , title = "Back"
+                , onPress = Just (onNavigate route)
+                , tone = Ui.Primary
+                }
 
         NoLeadingAction ->
             Element.el [ Element.width (Element.px 40) ] Element.none
@@ -502,7 +512,11 @@ drawerView config =
         (Element.row [ Element.spacing DesignTokens.space8 ]
             [ Ui.iconButton config.device
                 config.theme
-                { icon = Icon.Menu, title = "Close", onPress = config.onClose }
+                { icon = Icon.Menu
+                , title = "Close"
+                , onPress = Just config.onClose
+                , tone = Ui.Primary
+                }
             , Typography.sectionTitle config.theme "CalCo"
             ]
             :: Ui.hairline config.theme
@@ -600,14 +614,44 @@ profileMenuContent config =
             _ ->
                 "Signed in"
         )
-    , Ui.fullWidthGhostButton config.device
+    , Ui.textButton config.device
         config.theme
-        "Calendar"
-        (config.onNavigate (DiaryCalendar Nothing))
-    , Ui.fullWidthGhostButton config.device config.theme "Goals" (config.onNavigate GoalSettings)
-    , Ui.fullWidthGhostButton config.device
+        { tone = Ui.Ghost
+        , width = Ui.FullWidth
+        , label = "Calendar"
+        , onPress = config.onNavigate (DiaryCalendar Nothing)
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
+    , Ui.textButton config.device
         config.theme
-        "Meal slots"
-        (config.onNavigate DiarySettings)
-    , Ui.fullWidthDangerButton config.device config.theme "Logout" config.onLogout
+        { tone = Ui.Ghost
+        , width = Ui.FullWidth
+        , label = "Goals"
+        , onPress = config.onNavigate GoalSettings
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
+    , Ui.textButton config.device
+        config.theme
+        { tone = Ui.Ghost
+        , width = Ui.FullWidth
+        , label = "Meal slots"
+        , onPress = config.onNavigate DiarySettings
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
+    , Ui.textButton config.device
+        config.theme
+        { tone = Ui.Danger
+        , width = Ui.FullWidth
+        , label = "Logout"
+        , onPress = config.onLogout
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
+        }
     ]

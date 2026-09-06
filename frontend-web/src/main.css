@@ -110,7 +110,7 @@ body {
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 56px;
+  min-height: 44px;
   box-sizing: border-box;
   overflow: hidden;
   border: 1px solid var(--ui-brand-blue);

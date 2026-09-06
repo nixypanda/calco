@@ -135,11 +135,14 @@ view { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
-        , Ui.primarySubmitButton device
+        , Ui.textButton device
             theme
-            { state = Ui.submittingOrIdle (Common.isSubmitting model.submit)
-            , idleLabel = "Create Meal"
-            , submittingLabel = "Saving..."
+            { tone = Ui.Primary
+            , width = Ui.FullWidth
+            , label = "Create Meal"
             , onPress = SubmitClicked
+            , submitState = Just (Ui.submittingOrIdle (Common.isSubmitting model.submit))
+            , submittingLabel = Just "Saving..."
+            , trailing = Nothing
             }
         ]

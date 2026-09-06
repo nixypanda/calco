@@ -177,7 +177,8 @@ dateHeader theme device model =
                         theme
                         { icon = Icon.ChevronLeft
                         , title = "Previous day"
-                        , onPress = PreviousDayClicked
+                        , onPress = Just PreviousDayClicked
+                        , tone = Ui.Primary
                         }
                     )
             , title = Typography.sectionTitle theme "Nutrition details"
@@ -188,11 +189,18 @@ dateHeader theme device model =
                         theme
                         { icon = Icon.ChevronRight
                         , title = "Next day"
-                        , onPress = NextDayClicked
+                        , onPress = Just NextDayClicked
+                        , tone = Ui.Primary
                         }
 
                   else
-                    Ui.disabledIconButton theme { icon = Icon.ChevronRight }
+                    Ui.iconButton device
+                        theme
+                        { icon = Icon.ChevronRight
+                        , title = ""
+                        , onPress = Nothing
+                        , tone = Ui.Primary
+                        }
                 ]
             }
         ]

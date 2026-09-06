@@ -754,12 +754,15 @@ detailActionsView theme device model =
             , Element.spacing DesignTokens.space12
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.primarySubmitButton device
+                (Ui.textButton device
                     theme
-                    { state = submitState model
-                    , idleLabel = "Save"
-                    , submittingLabel = "Saving..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Save"
                     , onPress = SubmitClicked
+                    , submitState = Just (submitState model)
+                    , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 )
             , Element.el [ Element.width Element.fill ]
@@ -767,7 +770,7 @@ detailActionsView theme device model =
                     theme
                     [ { label = "Delete Log"
                       , onPress = DeleteClicked
-                      , tone = Ui.DangerAction
+                      , tone = Ui.Danger
                       }
                     ]
                 )

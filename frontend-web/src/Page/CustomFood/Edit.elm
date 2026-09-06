@@ -359,12 +359,16 @@ bodyView { model, device, theme } =
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
                     (Form.view theme device loaded.nutrients loaded.units loaded.form)
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit)
-                    , idleLabel = "Save Food"
-                    , submittingLabel = "Saving..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Save Food"
                     , onPress = SubmitClicked
+                    , submitState =
+                        Just (Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit))
+                    , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 ]
 

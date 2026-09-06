@@ -385,10 +385,16 @@ viewFormFields theme device toMsg form =
                     (List.map (componentRowView theme device toMsg) form.components)
             , footer =
                 Just
-                    (Ui.fullWidthGhostButton device
+                    (Ui.textButton device
                         theme
-                        "+ Add Component"
-                        (toMsg AddComponentClicked)
+                        { tone = Ui.Ghost
+                        , width = Ui.FullWidth
+                        , label = "+ Add Component"
+                        , onPress = toMsg AddComponentClicked
+                        , submitState = Nothing
+                        , submittingLabel = Nothing
+                        , trailing = Nothing
+                        }
                     )
             }
         ]
@@ -684,11 +690,12 @@ componentRowView theme device toMsg row =
                 , onUnitChange = toMsg << ComponentUnitChanged row.rowId
                 }
             , Element.el [ Element.centerY ]
-                (Ui.dangerIconButton device
+                (Ui.iconButton device
                     theme
                     { icon = Icon.Close
                     , title = "Remove"
-                    , onPress = toMsg (RemoveComponentClicked row.rowId)
+                    , onPress = Just (toMsg (RemoveComponentClicked row.rowId))
+                    , tone = Ui.Danger
                     }
                 )
             ]

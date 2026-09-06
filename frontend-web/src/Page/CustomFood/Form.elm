@@ -986,7 +986,19 @@ nutrientsCard theme device form nutrients =
                     form.nutrients
                 )
             ]
-        , footer = Just (Ui.fullWidthGhostButton device theme "+ Add Nutrient" AddNutrientRow)
+        , footer =
+            Just
+                (Ui.textButton device
+                    theme
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "+ Add Nutrient"
+                    , onPress = AddNutrientRow
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                )
         }
 
 
@@ -1010,7 +1022,19 @@ servingsCard theme device form units =
                         form.servings
                 )
             ]
-        , footer = Just (Ui.fullWidthGhostButton device theme "+ Add Serving" AddServingRow)
+        , footer =
+            Just
+                (Ui.textButton device
+                    theme
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "+ Add Serving"
+                    , onPress = AddServingRow
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                )
         }
 
 
@@ -1044,7 +1068,11 @@ addCategoryButton : Theme -> Device -> CategoryInput -> Element Msg
 addCategoryButton theme device input =
     Ui.iconButton device
         theme
-        { icon = Icon.Plus, title = "Add category", onPress = AddCategory input.query }
+        { icon = Icon.Plus
+        , title = "Add category"
+        , onPress = Just (AddCategory input.query)
+        , tone = Ui.Primary
+        }
 
 
 chipRowView : Theme -> Device -> List String -> Element Msg
@@ -1262,7 +1290,14 @@ rowActionButton theme device config =
         [ Element.width (Element.px 44)
         , Element.paddingEach { top = DesignTokens.space16, right = 0, bottom = 0, left = 0 }
         ]
-        (Ui.dangerIconButton device theme config)
+        (Ui.iconButton device
+            theme
+            { icon = config.icon
+            , title = config.title
+            , onPress = Just config.onPress
+            , tone = Ui.Danger
+            }
+        )
 
 
 addRowHint : Theme -> Element msg

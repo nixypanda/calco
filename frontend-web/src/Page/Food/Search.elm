@@ -9,7 +9,6 @@ module Page.Food.Search exposing
     , SearchScope(..)
     , contentView
     , init
-    , quickAddChipPressable
     , quickAddChipState
     , retarget
     , update
@@ -42,7 +41,6 @@ import Process
 import Task
 import Ui
 import Ui.DesignTokens as DesignTokens
-import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Product
@@ -838,44 +836,64 @@ barcodeInputView theme device model =
 
         searchButton : Element Msg
         searchButton =
-            Ui.secondarySubmitButton device
+            Ui.textButton device
                 theme
-                { state =
-                    if model.barcodeLookup == Loading then
-                        Ui.Submitting
-
-                    else if String.isEmpty (String.trim model.barcodeQuery) then
-                        Ui.Disabled
-
-                    else
-                        Ui.Idle
-                , idleLabel = "Search"
-                , submittingLabel = "Searching"
+                { tone = Ui.PrimaryOutline
+                , width = Ui.FullWidth
+                , label = "Search"
                 , onPress = BarcodeSubmitted
+                , submitState =
+                    Just
+                        (if model.barcodeLookup == Loading then
+                            Ui.Submitting
+
+                         else if String.isEmpty (String.trim model.barcodeQuery) then
+                            Ui.Disabled
+
+                         else
+                            Ui.Idle
+                        )
+                , submittingLabel = Just "Searching"
+                , trailing = Nothing
                 }
 
         scanButton : Element Msg
         scanButton =
             case model.barcodeScanner of
                 ScannerStarting ->
-                    Ui.primarySubmitButton device
+                    Ui.textButton device
                         theme
-                        { state = Ui.Submitting
-                        , idleLabel = "Scan"
-                        , submittingLabel = "Starting"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Scan"
                         , onPress = BarcodeScanClicked
+                        , submitState = Just Ui.Submitting
+                        , submittingLabel = Just "Starting"
+                        , trailing = Nothing
                         }
 
                 ScannerActive ->
-                    Ui.fullWidthDangerButton device theme "Cancel" BarcodeScanCancelClicked
+                    Ui.textButton device
+                        theme
+                        { tone = Ui.Danger
+                        , width = Ui.FullWidth
+                        , label = "Cancel"
+                        , onPress = BarcodeScanCancelClicked
+                        , submitState = Nothing
+                        , submittingLabel = Nothing
+                        , trailing = Nothing
+                        }
 
                 _ ->
-                    Ui.primarySubmitButton device
+                    Ui.textButton device
                         theme
-                        { state = Ui.Idle
-                        , idleLabel = "Scan"
-                        , submittingLabel = "Starting"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Scan"
                         , onPress = BarcodeScanClicked
+                        , submitState = Just Ui.Idle
+                        , submittingLabel = Just "Starting"
+                        , trailing = Nothing
                         }
 
         controls : Element Msg
@@ -1088,13 +1106,13 @@ searchContentView theme device model =
             barcodeBodyView theme device model
 
         else
-            recentsView theme model
+            recentsView device theme model
 
     else if hasActiveSearch model then
         bodyView theme model device
 
     else
-        recentsView theme model
+        recentsView device theme model
 
 
 barcodeBodyView : Theme -> Device -> Model -> Element Msg
@@ -1110,12 +1128,15 @@ barcodeBodyView theme device model =
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Ui.errorBanner theme (barcodeErrorMessage error)
                 , Ui.emptyState theme "No food found for that barcode."
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.Idle
-                    , idleLabel = "Create Custom Food"
-                    , submittingLabel = "Create Custom Food"
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Create Custom Food"
                     , onPress = CreateCustomFoodClicked
+                    , submitState = Just Ui.Idle
+                    , submittingLabel = Just "Create Custom Food"
+                    , trailing = Nothing
                     }
                 ]
 
@@ -1145,12 +1166,15 @@ textEmptyState theme device scope =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         (Ui.emptyState theme message
             :: (if canCreate then
-                    [ Ui.primarySubmitButton device
+                    [ Ui.textButton device
                         theme
-                        { state = Ui.Idle
-                        , idleLabel = "Create Custom Food"
-                        , submittingLabel = "Create Custom Food"
+                        { tone = Ui.Primary
+                        , width = Ui.FullWidth
+                        , label = "Create Custom Food"
                         , onPress = CreateCustomFoodClicked
+                        , submitState = Just Ui.Idle
+                        , submittingLabel = Just "Create Custom Food"
+                        , trailing = Nothing
                         }
                     ]
 
@@ -1242,8 +1266,8 @@ onEnterSubmit submitMsg =
         )
 
 
-recentsView : Theme -> Model -> Element Msg
-recentsView theme model =
+recentsView : Device -> Theme -> Model -> Element Msg
+recentsView device theme model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Ui.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
@@ -1265,15 +1289,15 @@ recentsView theme model =
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Typography.sectionTitle theme "Recent"
                         , Ui.listCard theme
-                            { rows = List.map (recentItemRow theme model) items
+                            { rows = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
                         ]
         ]
 
 
-recentItemRow : Theme -> Model -> Logs.RecentItem -> Element Msg
-recentItemRow theme model item =
+recentItemRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
+recentItemRow device theme model item =
     Element.column [ Element.width Element.fill ]
         [ Ui.listRow
             { onSelect = RecentItemClicked item
@@ -1292,12 +1316,12 @@ recentItemRow theme model item =
 
         -- Quick-add chips sit outside `Ui.listRow`, whose subtitle slot is
         -- inside the row-select button and cannot hold nested buttons.
-        , quickAddChipRow theme model item
+        , quickAddChipRow device theme model item
         ]
 
 
-quickAddChipRow : Theme -> Model -> Logs.RecentItem -> Element Msg
-quickAddChipRow theme model item =
+quickAddChipRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
+quickAddChipRow device theme model item =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
@@ -1308,7 +1332,7 @@ quickAddChipRow theme model item =
             , left = DesignTokens.space16
             }
         ]
-        (List.map (quickAddChip theme model item) (quickAddQuantities item))
+        (List.map (quickAddChip device theme model item) (quickAddQuantities item))
 
 
 quickAddQuantities : Logs.RecentItem -> List Nutrition.Quantity
@@ -1343,134 +1367,41 @@ quickAddChipState model item quantity =
         QuickAddCanAdd
 
 
-quickAddChipPressable : QuickAddButtonState -> Bool
-quickAddChipPressable state =
-    case state of
-        QuickAddCanAdd ->
-            True
-
-        QuickAddAdded ->
-            True
-
-        QuickAddAdding ->
-            False
-
-        QuickAddBlocked ->
-            False
-
-
-quickAddChip : Theme -> Model -> Logs.RecentItem -> Nutrition.Quantity -> Element Msg
-quickAddChip theme model item quantity =
+quickAddChip : Device -> Theme -> Model -> Logs.RecentItem -> Nutrition.Quantity -> Element Msg
+quickAddChip device theme model item quantity =
     let
         state : QuickAddButtonState
         state =
             quickAddChipState model item quantity
 
-        pressable : Bool
-        pressable =
-            quickAddChipPressable state
-
         label : String
         label =
-            Nutrition.quantityText quantity
+            "+ " ++ Nutrition.quantityText quantity
 
-        title : String
-        title =
-            quickAddButtonTitle state ++ " " ++ label
-
-        foreground : Element.Color
-        foreground =
+        ( tone, submitState, submittingLabel ) =
             case state of
-                QuickAddAdded ->
-                    Element.rgb255 255 255 255
-
-                QuickAddBlocked ->
-                    theme.textMuted
+                QuickAddCanAdd ->
+                    ( Ui.GhostFilled, Nothing, Nothing )
 
                 QuickAddAdding ->
-                    theme.textPrimary
+                    ( Ui.GhostFilled, Just Ui.Submitting, Just "Adding..." )
 
-                QuickAddCanAdd ->
-                    theme.textPrimary
+                QuickAddAdded ->
+                    ( Ui.Primary, Just Ui.Submitted, Nothing )
+
+                QuickAddBlocked ->
+                    ( Ui.GhostFilled, Just Ui.Disabled, Nothing )
     in
-    Input.button
-        [ Background.color
-            (if state == QuickAddAdded then
-                theme.brandBlue
-
-             else
-                Ui.chipBackground theme False
-            )
-        , Font.color foreground
-        , Border.rounded DesignTokens.radiusPill
-        , Border.width 1
-        , Border.color theme.chipBorder
-        , Element.height (Element.px 44)
-        , Element.paddingXY DesignTokens.space12 0
-        , Font.medium
-        , Element.htmlAttribute (Html.Attributes.title title)
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" title)
-        , Element.htmlAttribute
-            (Html.Attributes.attribute "aria-disabled"
-                (if pressable then
-                    "false"
-
-                 else
-                    "true"
-                )
-            )
-        ]
-        { onPress =
-            if pressable then
-                Just (RecentQuickAddClicked item quantity)
-
-            else
-                Nothing
-        , label =
-            Element.row
-                [ Element.spacing DesignTokens.space4
-                , Element.centerY
-                ]
-                [ Icon.view
-                    { icon = quickAddButtonIcon state
-                    , size = 16
-                    , color = foreground
-                    }
-                , Element.text label
-                ]
+    Ui.textButton device
+        theme
+        { tone = tone
+        , width = Ui.ContentWidth
+        , label = label
+        , onPress = RecentQuickAddClicked item quantity
+        , submitState = submitState
+        , submittingLabel = submittingLabel
+        , trailing = Nothing
         }
-
-
-quickAddButtonTitle : QuickAddButtonState -> String
-quickAddButtonTitle state =
-    case state of
-        QuickAddCanAdd ->
-            "Add"
-
-        QuickAddAdding ->
-            "Adding"
-
-        QuickAddBlocked ->
-            "Add"
-
-        QuickAddAdded ->
-            "Added"
-
-
-quickAddButtonIcon : QuickAddButtonState -> Icon
-quickAddButtonIcon state =
-    case state of
-        QuickAddCanAdd ->
-            Icon.Plus
-
-        QuickAddAdding ->
-            Icon.LoaderCircle
-
-        QuickAddBlocked ->
-            Icon.Plus
-
-        QuickAddAdded ->
-            Icon.Check
 
 
 hasActiveSearch : Model -> Bool

@@ -153,7 +153,8 @@ currentLogs model =
 
 
 type Msg
-    = LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
+    = SlotNoOp
+    | LogsLoaded LocalDate (Result Client.ApiError (List FoodLog))
     | GoalLoaded LocalDate (Result Client.ApiError GoalSnapshot)
     | PreferencesLoaded (Result Client.ApiError DiaryPreferences)
     | LatestSlotsReceived LocalDate (Result Client.ApiError LatestSlotsResponse)
@@ -186,6 +187,9 @@ type CopyRefresh
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
+        SlotNoOp ->
+            ( model, Cmd.none, NoOp )
+
         LogsLoaded requestDate result ->
             if not (LocalDate.equals requestDate model.currentDate) then
                 ( model, Cmd.none, NoOp )
@@ -616,7 +620,11 @@ dateCard theme model device =
             ]
             [ Ui.iconButton device
                 theme
-                { icon = Icon.ChevronLeft, title = "Previous Day", onPress = PreviousDayClicked }
+                { icon = Icon.ChevronLeft
+                , title = "Previous Day"
+                , onPress = Just PreviousDayClicked
+                , tone = Ui.Primary
+                }
             , Element.el
                 [ Element.width Element.fill
                 , Font.center
@@ -625,10 +633,20 @@ dateCard theme model device =
             , if canGoNext then
                 Ui.iconButton device
                     theme
-                    { icon = Icon.ChevronRight, title = "Next Day", onPress = NextDayClicked }
+                    { icon = Icon.ChevronRight
+                    , title = "Next Day"
+                    , onPress = Just NextDayClicked
+                    , tone = Ui.Primary
+                    }
 
               else
-                Ui.disabledIconButton theme { icon = Icon.ChevronRight }
+                Ui.iconButton device
+                    theme
+                    { icon = Icon.ChevronRight
+                    , title = ""
+                    , onPress = Nothing
+                    , tone = Ui.Primary
+                    }
             ]
         , Ui.hairline theme
         , Element.column
@@ -637,16 +655,16 @@ dateCard theme model device =
             ]
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
-                    totalsView theme targets (Nutrition.totalsFromLogs logs)
+                    totalsView device theme targets (Nutrition.totalsFromLogs logs)
 
                 Nothing ->
-                    totalsView theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
+                    totalsView device theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
         ]
 
 
-totalsView : Theme -> GoalTargets -> List NutrientAmount -> Element Msg
-totalsView theme targets summary =
+totalsView : Device -> Theme -> GoalTargets -> List NutrientAmount -> Element Msg
+totalsView device theme targets summary =
     let
         calories : Float
         calories =
@@ -675,35 +693,21 @@ totalsView theme targets summary =
               , tolerance = macroTolerance targets.fatTargetG
               }
             ]
-        , detailsAction theme
+        , detailsAction device theme
         ]
 
 
-detailsAction : Theme -> Element Msg
-detailsAction theme =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Element.paddingEach
-            { top = 14
-            , right = DesignTokens.space16
-            , bottom = 14
-            , left = DesignTokens.space16
-            }
-        , Background.color theme.brandBlueSoft
-        , Border.rounded DesignTokens.radiusPill
-        , Font.color theme.brandBlue
-        , Typography.body
-        , Font.medium
-        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
-        ]
-        { onPress = Just DetailsClicked
-        , label =
-            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-                [ Element.text "Details"
-                , Element.el [ Element.alignRight ]
-                    (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
-                ]
+detailsAction : Device -> Theme -> Element Msg
+detailsAction device theme =
+    Ui.textButton device
+        theme
+        { tone = Ui.GhostFilled
+        , width = Ui.FullWidth
+        , label = "Details"
+        , onPress = DetailsClicked
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Just (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
         }
 
 
@@ -1183,11 +1187,16 @@ slotView theme device model section =
                         List.map (logRow theme) section.logs
                     )
                         ++ [ Ui.hairline theme
-                           , Ui.fullWidthGhostButton
-                                device
+                           , Ui.textButton device
                                 theme
-                                "+ Add Food"
-                                (AddFoodClicked slot)
+                                { tone = Ui.Ghost
+                                , width = Ui.FullWidth
+                                , label = "+ Add Food"
+                                , onPress = AddFoodClicked slot
+                                , submitState = Nothing
+                                , submittingLabel = Nothing
+                                , trailing = Nothing
+                                }
                            ]
 
                 Nothing ->
@@ -1204,22 +1213,41 @@ emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
 emptySlotView theme device model slot =
     case latestSlotSourceFor model.currentDate slot model.latestSlots of
         Just source ->
+            let
+                isLogging : Bool
+                isLogging =
+                    case model.copyState of
+                        Copying copyingSlot ->
+                            copyingSlot == source.slot
+
+                        _ ->
+                            False
+            in
             emptySlotBody
-                (latestSlotButton
-                    device
+                (Ui.textButton device
                     theme
-                    (copyLatestLabel model.copyState source)
-                    (CopyLatestClicked source)
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = logLatestLabel source
+                    , onPress = CopyLatestClicked source
+                    , submitState = Just (Ui.submittingOrIdle isLogging)
+                    , submittingLabel = Just "Logging..."
+                    , trailing = Nothing
+                    }
                 )
 
         Nothing ->
             emptySlotBody
-                (Element.el
-                    [ Font.color theme.textMuted
-                    , Element.centerX
-                    , Element.centerY
-                    ]
-                    (Element.text "No items")
+                (Ui.textButton device
+                    theme
+                    { tone = Ui.Ghost
+                    , width = Ui.FullWidth
+                    , label = "No items"
+                    , onPress = SlotNoOp
+                    , submitState = Just Ui.Disabled
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
                 )
 
 
@@ -1229,47 +1257,7 @@ emptySlotBody content =
         [ Element.width Element.fill
         , Element.padding DesignTokens.space12
         ]
-        (Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 24)
-            ]
-            content
-        )
-
-
-latestSlotButton : Device -> Theme -> String -> Msg -> Element Msg
-latestSlotButton device theme label msg =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height (Element.px 24)
-        , Border.rounded DesignTokens.radiusPill
-        , Font.color theme.brandBlue
-        , Font.medium
-        , Font.center
-        , if Ui.isSmall device then
-            Element.mouseOver []
-
-          else
-            Element.mouseOver [ Background.color theme.brandBlueSoft ]
-        , Element.htmlAttribute (Html.Attributes.class "ui-motion ui-pressable")
-        ]
-        { onPress = Just msg
-        , label = Element.text label
-        }
-
-
-copyLatestLabel : CopyState -> LatestSlotSource -> String
-copyLatestLabel copyState source =
-    case copyState of
-        Copying copyingSlot ->
-            if copyingSlot == source.slot then
-                "Logging..."
-
-            else
-                logLatestLabel source
-
-        _ ->
-            logLatestLabel source
+        content
 
 
 logLatestLabel : LatestSlotSource -> String

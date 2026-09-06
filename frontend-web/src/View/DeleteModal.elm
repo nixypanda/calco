@@ -54,7 +54,7 @@ deleteModalContent theme device config maybeError deleting =
         , actions =
             Ui.bottomActionButtons device
                 theme
-                [ { label = "Cancel", onPress = config.onCancel, tone = Ui.PrimaryAction }
+                [ { label = "Cancel", onPress = config.onCancel, tone = Ui.Primary }
                 , { label =
                         if deleting then
                             "Deleting..."
@@ -62,7 +62,7 @@ deleteModalContent theme device config maybeError deleting =
                         else
                             "Confirm Delete"
                   , onPress = config.onConfirm
-                  , tone = Ui.DangerAction
+                  , tone = Ui.Danger
                   }
                 ]
         , onBackgroundPress = Just config.onCancel

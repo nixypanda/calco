@@ -151,12 +151,15 @@ view config { model, device, theme } =
                     }
                 , Ui.maybeErrorBanner theme (errorMessage model)
                 ]
-            , Ui.primarySubmitButton device
+            , Ui.textButton device
                 theme
-                { state = Ui.submittingOrIdle (isSubmitting model)
-                , idleLabel = config.submitLabel
-                , submittingLabel = config.submittingLabel
+                { tone = Ui.Primary
+                , width = Ui.FullWidth
+                , label = config.submitLabel
                 , onPress = Submitted
+                , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
+                , submittingLabel = Just config.submittingLabel
+                , trailing = Nothing
                 }
             ]
         )

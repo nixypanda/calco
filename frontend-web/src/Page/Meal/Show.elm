@@ -649,8 +649,8 @@ bottomActionsView : Theme -> Device -> Element Msg
 bottomActionsView theme device =
     Ui.bottomActionButtons device
         theme
-        [ { label = "Edit Meal", onPress = EditClicked, tone = Ui.PrimaryAction }
-        , { label = "Delete Meal", onPress = DeleteClicked, tone = Ui.DangerAction }
+        [ { label = "Edit Meal", onPress = EditClicked, tone = Ui.Primary }
+        , { label = "Delete Meal", onPress = DeleteClicked, tone = Ui.Danger }
         ]
 
 

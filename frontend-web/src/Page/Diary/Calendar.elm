@@ -269,7 +269,7 @@ contentViewWithSelection :
     Maybe LocalDate
     -> { model : Model, device : Device, theme : Theme }
     -> Element Msg
-contentViewWithSelection selectedDate { model, theme } =
+contentViewWithSelection selectedDate { model, device, theme } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -282,18 +282,18 @@ contentViewWithSelection selectedDate { model, theme } =
                 [ Ui.errorBanner theme message ]
 
             Ready ->
-                monthsView theme model selectedDate False
+                monthsView device theme model selectedDate False
 
             LoadingEarlier ->
-                monthsView theme model selectedDate True
+                monthsView device theme model selectedDate True
         )
 
 
-monthsView : Theme -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
-monthsView theme model selectedDate loadingEarlier =
+monthsView : Device -> Theme -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
+monthsView device theme model selectedDate loadingEarlier =
     monthRange model.newestMonth model.oldestMonth
         |> List.map (monthView theme model selectedDate)
-        |> (\months -> months ++ [ loadEarlierButton theme loadingEarlier ])
+        |> (\months -> months ++ [ loadEarlierButton device theme loadingEarlier ])
 
 
 monthRange : String -> String -> List String
@@ -507,30 +507,20 @@ dayAriaLabel date maybeSummary =
             date ++ ", no food logged"
 
 
-loadEarlierButton : Theme -> Bool -> Element Msg
-loadEarlierButton theme loading =
-    Input.button
-        [ Element.width Element.fill
-        , Element.centerX
-        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
-        , Background.color theme.brandBlueSoft
-        , Font.color theme.brandBlue
-        , Font.center
-        , Font.semiBold
-        , Border.rounded DesignTokens.radiusControl
-        ]
-        { onPress =
+loadEarlierButton : Device -> Theme -> Bool -> Element Msg
+loadEarlierButton device theme loading =
+    Ui.textButton device
+        theme
+        { tone = Ui.GhostFilled
+        , width = Ui.FullWidth
+        , label =
             if loading then
-                Nothing
+                "Loading..."
 
             else
-                Just LoadEarlierClicked
-        , label =
-            Element.text
-                (if loading then
-                    "Loading…"
-
-                 else
-                    "Load earlier"
-                )
+                "Load earlier"
+        , onPress = LoadEarlierClicked
+        , submitState = Nothing
+        , submittingLabel = Nothing
+        , trailing = Nothing
         }

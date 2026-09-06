@@ -642,10 +642,6 @@ tests =
                     recentProduct
                     siblingQuantity
                     |> Expect.equal FoodSearch.QuickAddBlocked
-        , test "blocked quantity chip is not pressable" <|
-            \_ ->
-                FoodSearch.quickAddChipPressable FoodSearch.QuickAddBlocked
-                    |> Expect.equal False
         , test "submitting quantity chip keeps its own adding state" <|
             \_ ->
                 FoodSearch.quickAddChipState submittingQuickAddModel

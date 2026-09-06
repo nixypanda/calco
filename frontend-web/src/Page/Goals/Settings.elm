@@ -354,12 +354,15 @@ view { model, device, theme } =
                         }
                     , Ui.maybeErrorBanner theme (formError ready.save)
                     ]
-                , Ui.primarySubmitButton device
+                , Ui.textButton device
                     theme
-                    { state = Ui.submittingOrIdle (isSaving ready.save)
-                    , idleLabel = "Save Goals"
-                    , submittingLabel = "Saving..."
+                    { tone = Ui.Primary
+                    , width = Ui.FullWidth
+                    , label = "Save Goals"
                     , onPress = SaveClicked
+                    , submitState = Just (Ui.submittingOrIdle (isSaving ready.save))
+                    , submittingLabel = Just "Saving..."
+                    , trailing = Nothing
                     }
                 ]
         )
