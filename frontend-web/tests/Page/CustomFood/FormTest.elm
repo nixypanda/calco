@@ -4,10 +4,14 @@ import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
 import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition as Nutrition
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Form as Form
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -305,6 +309,28 @@ tests =
             \_ ->
                 Form.unitGhostText "g"
                     |> Expect.equal "g"
+        , test "default serving options use catalog-friendly unit labels" <|
+            \_ ->
+                let
+                    form : Form.FormModel
+                    form =
+                        Form.emptyForm
+
+                    formWithServing : Form.FormModel
+                    formWithServing =
+                        { form | servings = [ { unit = "tbsp", gramsPerUnit = "15" } ] }
+                in
+                Form.view
+                    Theme.light
+                    { class = Phone, orientation = Portrait }
+                    []
+                    [ { code = "tbsp", name = "Tablespoon", kind = "volume" } ]
+                    (Form.update Form.ToggleDefaultUnitDropdown formWithServing
+                        |> first
+                    )
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has [ Selector.text "Tablespoon (tbsp)" ]
         , test "blank category query opens without requesting suggestions" <|
             \_ ->
                 Form.update (Form.CategoryQueryChanged "   ") Form.emptyForm

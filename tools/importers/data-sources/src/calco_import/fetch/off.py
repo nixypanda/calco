@@ -141,15 +141,12 @@ def _build_off_serving_row(
     serving_grams = parse_amount(row[indices.serving_qty])
     if serving_grams is None or serving_grams <= 0:
         return None
-    serving_label = row[indices.serving_size].strip()[:80] or "serving"
     return {
         "type": "serving",
         "source": "OFF",
         "source_id": source_id,
-        "label": serving_label,
-        "quantity": 1.0,
         "unit": "serving",
-        "grams": serving_grams,
+        "grams_per_unit": serving_grams,
     }
 
 

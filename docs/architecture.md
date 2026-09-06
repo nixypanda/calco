@@ -187,7 +187,7 @@ Local barcode lookup
 
 Custom foods store nutrition per 100 g and may define ordered, food-specific
 serving conversions. An optional default portion is only a logging-form prefill:
-it is either a gram quantity or an exact configured serving.
+it is either a gram quantity or a quantity using a configured serving unit.
 
 ## Transaction And Consistency Decisions
 

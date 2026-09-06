@@ -62,7 +62,10 @@ def _build_food_row(food: dict) -> dict | None:
 
 
 def _build_serving_rows(food: dict, fdc_id: str) -> Iterator[dict]:
-    seen: set[tuple[str, str]] = set()
+    # Product servings are keyed by unit. USDA can provide multiple descriptions
+    # for the same unit, but the catalog cannot represent multiple conversions
+    # for it, so preserve the first usable conversion.
+    seen_units: set[str] = set()
     for portion in food.get("foodPortions", []):
         gram_weight = parse_amount(portion.get("gramWeight"))
         amount = parse_amount(portion.get("amount"))
@@ -78,20 +81,15 @@ def _build_serving_rows(food: dict, fdc_id: str) -> Iterator[dict]:
         unit = (raw_unit or "serving").strip()
         if not unit or unit.lower() == "undetermined":
             unit = "serving"
-        label = portion.get("portionDescription") or portion.get("modifier") or unit
-        label = (label or "serving").strip()[:80] or "serving"
-        key = (label, unit)
-        if key in seen:
+        if unit in seen_units:
             continue
-        seen.add(key)
+        seen_units.add(unit)
         yield {
             "type": "serving",
             "source": "USDA",
             "source_id": fdc_id,
-            "label": label,
-            "quantity": amount,
             "unit": unit,
-            "grams": gram_weight,
+            "grams_per_unit": round(gram_weight / amount, 6),
         }
 
 

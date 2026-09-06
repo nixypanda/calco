@@ -856,7 +856,7 @@ view theme device nutrients units form =
         , basicInfoCard theme device form
         , nutrientsCard theme device form nutrients
         , servingsCard theme device form units
-        , defaultPortionCard theme device form
+        , defaultPortionCard theme device units form
         ]
 
 
@@ -870,15 +870,15 @@ basicInfoCard theme device form =
         ]
 
 
-defaultPortionCard : Theme -> Device -> FormModel -> Element Msg
-defaultPortionCard theme device form =
+defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
+defaultPortionCard theme device units form =
     Ui.formSection theme
         "Default Portion"
         [ Ui.selectDropdown device
             theme
             { label = "Default Unit"
             , selected = form.defaultUnit
-            , options = defaultPortionOptions form
+            , options = defaultPortionOptions units form
             , onChange = DefaultUnitChanged
             , isOpen = form.openDropdown == DefaultUnitOpen
             , onToggle = ToggleDefaultUnitDropdown
@@ -909,17 +909,31 @@ defaultPortionCard theme device form =
         ]
 
 
-defaultPortionOptions : FormModel -> List ( String, String )
-defaultPortionOptions form =
+defaultPortionOptions : List UnitItem -> FormModel -> List ( String, String )
+defaultPortionOptions units form =
     ( noDefaultOption, "No default" )
         :: ( "g", "Grams" )
         :: List.map
             (\serving ->
                 ( serving.unit
-                , serving.unit
+                , servingUnitLabel units serving.unit
                 )
             )
             (List.filter hasServingInput form.servings)
+
+
+servingUnitLabel : List UnitItem -> String -> String
+servingUnitLabel units code =
+    case List.filter (\unit -> unit.code == code) units |> List.head of
+        Just unit ->
+            if unit.name == unit.code then
+                unit.code
+
+            else
+                unit.name ++ " (" ++ unit.code ++ ")"
+
+        Nothing ->
+            code
 
 
 nutrientsCard : Theme -> Device -> FormModel -> List NutrientItem -> Element Msg

@@ -6,7 +6,12 @@ from typing import cast
 
 import rapidfuzz
 
-from calco_import.util import normalize_categories, normalize_name, write_jsonl_row
+from calco_import.util import (
+    normalize_categories,
+    normalize_name,
+    serving_conversion,
+    write_jsonl_row,
+)
 
 PREFERENCE = ["USDA", "IFCT", "INDB", "OFF"]
 MACRO_CODES = {"ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G"}
@@ -55,14 +60,15 @@ def load_source(filepath: str) -> SourceData:
                 if isinstance(amount, str | int | float):
                     nutrients[sid][str(obj["nutrient_code"])] = float(amount)
             elif t == "serving":
-                servings[sid].append(
-                    {
-                        "label": obj.get("label"),
-                        "quantity": obj.get("quantity"),
-                        "unit": obj.get("unit"),
-                        "grams": obj.get("grams"),
-                    }
-                )
+                conversion = serving_conversion(obj)
+                if conversion is not None:
+                    unit, grams_per_unit = conversion
+                    servings[sid].append(
+                        {
+                            "unit": unit,
+                            "grams_per_unit": grams_per_unit,
+                        }
+                    )
     return foods, nutrients, servings
 
 
@@ -287,21 +293,19 @@ def build_merged_rows(
                     "amount_per_100g": amount,
                 }
             )
-            rows.extend(
-                {
-                    "type": "serving",
-                    "source": food["source"],
-                    "source_id": food["source_id"],
-                    "label": s.get("label"),
-                    "quantity": s.get("quantity"),
-                    "unit": s.get("unit"),
-                    "grams": s.get("grams"),
-                }
-                for s in servings
-            )
-            for src in order:
-                if src in group:
-                    written[src].add(group[src])
+        rows.extend(
+            {
+                "type": "serving",
+                "source": food["source"],
+                "source_id": food["source_id"],
+                "unit": s["unit"],
+                "grams_per_unit": s["grams_per_unit"],
+            }
+            for s in servings
+        )
+        for src in order:
+            if src in group:
+                written[src].add(group[src])
 
     for src in order:
         foods, nutrients_by_sid, servings_by_sid = sources_data[src]
@@ -327,10 +331,8 @@ def build_merged_rows(
                     "type": "serving",
                     "source": src,
                     "source_id": sid,
-                    "label": s.get("label"),
-                    "quantity": s.get("quantity"),
-                    "unit": s.get("unit"),
-                    "grams": s.get("grams"),
+                    "unit": s["unit"],
+                    "grams_per_unit": s["grams_per_unit"],
                 }
                 for s in servings_by_sid.get(sid, [])
             )

@@ -242,15 +242,16 @@ mod tests {
     }
 
     #[test]
-    fn default_unit_must_be_grams_or_match_a_serving() {
+    fn default_unit_must_be_grams_or_use_a_configured_serving_unit() {
         let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
         assert!(parse_model_turn(default_cup, &vocabulary()).is_err());
-        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
+        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":2,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
         let turn = parse_model_turn(serving_cup, &vocabulary()).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")
         };
         assert_eq!(draft.servings[0].unit, "cup");
+        assert_eq!(draft.default_quantity, Some(Decimal::new(2, 0)));
         assert_eq!(draft.default_unit.as_deref(), Some("cup"));
     }
 }

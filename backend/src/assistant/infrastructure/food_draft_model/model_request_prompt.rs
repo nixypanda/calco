@@ -32,7 +32,7 @@ ingredients, preparation steps, allergens, health advice, confidence scores, or 
 Supported nutrients (code | name | unit):
 {nutrients}
 
-Supported default-quantity units (grams or an exact configured serving; code | name | kind):
+Supported default-quantity units (grams or a configured serving unit; code | name | kind):
 {default_units}
 
 Supported serving units (code | name | kind):
@@ -40,6 +40,9 @@ Supported serving units (code | name | kind):
 
 Every completed draft requires:
 - {required}
+
+For a non-gram default unit, include a serving definition with that unit. The default
+quantity is an independent logging prefill and does not need to equal one serving unit.
 
 Use only supplied codes. Amounts are non-negative per 100 grams. If essential information
 is missing, return one concise clarification question. Otherwise estimate cautiously and
@@ -76,7 +79,8 @@ mod tests {
         assert!(prompt.contains("ENERGY_KCAL | Energy | kcal"));
         assert!(prompt.contains("g | Gram | mass"));
         assert!(prompt.contains("cup | Cup | volume"));
-        assert!(prompt.contains("exact configured serving"));
+        assert!(prompt.contains("configured serving unit"));
+        assert!(prompt.contains("does not need to equal one serving unit"));
         assert!(prompt.contains("Never save a food"));
     }
 }

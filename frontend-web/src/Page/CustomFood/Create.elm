@@ -221,7 +221,7 @@ validationMessage err =
             "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"
 
         Form.InvalidDefaultPortion ->
-            "Default portion must be grams or match a configured serving"
+            "Default portion must be grams or use a configured serving unit"
 
 
 withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel

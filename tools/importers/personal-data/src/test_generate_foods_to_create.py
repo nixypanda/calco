@@ -315,7 +315,7 @@ class GenerateFoodsToCreateTests(unittest.TestCase):
 
         assert records[0]["default_unit"] == "ml"
         assert records[0]["servings"] == [
-            {"label": "100 ml", "quantity": 100, "unit": "ml", "grams": 100}
+            {"unit": "ml", "grams_per_unit": 1}
         ]
         assert records[0]["provenance"]["reference_basis"] == "per_100ml"
 

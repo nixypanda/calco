@@ -54,10 +54,8 @@ def _record(**overrides: object) -> dict[str, object]:
         ],
         "servings": [
             {
-                "label": "1 serving",
-                "quantity": 1,
                 "unit": "serving",
-                "grams": 30,
+                "grams_per_unit": 30,
             }
         ],
     }
@@ -107,6 +105,20 @@ class CreateFoodsHelperTests(unittest.TestCase):
         )
         self.assertEqual(list(source_ids), ["Whey"])
         self.assertTrue(source_ids["Whey"].startswith("mfp-personal-data:"))
+
+    def test_stage_import_rows_forwards_simplified_servings(self) -> None:
+        _foods, _nutrients, servings, _source_ids = _stage_import_rows([_record()])
+
+        self.assertEqual(
+            servings[0],
+            {
+                "row_number": 1,
+                "source": "USER",
+                "source_id": servings[0]["source_id"],
+                "unit": "serving",
+                "grams_per_unit": 30,
+            },
+        )
 
 
 if __name__ == "__main__":

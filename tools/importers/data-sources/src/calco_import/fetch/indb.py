@@ -84,18 +84,12 @@ def _build_indb_serving_row(
     if serving_grams <= 0:
         return None
 
-    servings_unit_idx = col_index.get("servings_unit")
-    serving_unit = str(
-        row[servings_unit_idx] if servings_unit_idx is not None else "serving"
-    ).strip()
     return {
         "type": "serving",
         "source": "INDB",
         "source_id": source_id,
-        "label": serving_unit,
-        "quantity": 1.0,
         "unit": "serving",
-        "grams": serving_grams,
+        "grams_per_unit": serving_grams,
     }
 
 

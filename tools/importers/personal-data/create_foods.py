@@ -261,10 +261,8 @@ def _stage_import_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, An
                     "row_number": row_number,
                     "source": IMPORT_SOURCE,
                     "source_id": source_id,
-                    "label": serving["label"],
-                    "quantity": serving["quantity"],
                     "unit": serving["unit"],
-                    "grams": serving["grams"],
+                    "grams_per_unit": serving["grams_per_unit"],
                 }
             )
 

@@ -139,18 +139,15 @@ def _servings(row: dict[str, str]) -> list[dict[str, int | float | str]]:
     basis = row["reference_basis"].strip()
     if basis == "per_serving":
         grams = _required_serving_grams(row)
-        label = _clean_text(row.get("example_serving", "")) or "1 serving"
         return [
             {
-                "label": label,
-                "quantity": 1,
                 "unit": "serving",
-                "grams": _json_number(grams),
+                "grams_per_unit": _json_number(grams),
             }
         ]
     if basis == "per_100ml":
-        return [{"label": "100 ml", "quantity": 100, "unit": "ml", "grams": 100}]
-    return [{"label": "100 g", "quantity": 100, "unit": "g", "grams": 100}]
+        return [{"unit": "ml", "grams_per_unit": 1}]
+    return [{"unit": "g", "grams_per_unit": 1}]
 
 
 def _default_unit(row: dict[str, str]) -> str:
