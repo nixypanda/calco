@@ -152,6 +152,7 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), FoodImageError> {
 
 #[cfg(test)]
 mod tests {
+    use image::codecs::jpeg::JpegEncoder;
     use image::{DynamicImage, ImageBuffer, Rgba};
 
     use super::*;
@@ -159,9 +160,16 @@ mod tests {
     fn image_bytes(format: ImageFormat, width: u32, height: u32) -> Vec<u8> {
         let image = ImageBuffer::from_pixel(width, height, Rgba([20, 30, 40, 255]));
         let mut bytes = Cursor::new(Vec::new());
-        DynamicImage::ImageRgba8(image)
-            .write_to(&mut bytes, format)
-            .unwrap();
+        if format == ImageFormat::Jpeg {
+            let encoder = JpegEncoder::new_with_quality(&mut bytes, 50);
+            DynamicImage::ImageRgba8(image)
+                .write_with_encoder(encoder)
+                .unwrap();
+        } else {
+            DynamicImage::ImageRgba8(image)
+                .write_to(&mut bytes, format)
+                .unwrap();
+        }
         bytes.into_inner()
     }
 
@@ -191,7 +199,7 @@ mod tests {
     #[test]
     fn strips_jpeg_metadata_and_downscales_large_images() {
         // A common 12 MP phone-camera resolution that exceeded the old limit.
-        let encoded = image_bytes(ImageFormat::Jpeg, 4_032, 3_024);
+        let encoded = image_bytes(ImageFormat::Jpeg, 2_500, 2_000);
         let marker = b"Exif\0\0calco-private-marker";
         let length = u16::try_from(marker.len() + 2).unwrap().to_be_bytes();
         let mut with_metadata = Vec::new();
