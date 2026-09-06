@@ -128,21 +128,18 @@ impl ImportRepository for PostgresImportRepository {
 
         for s in servings {
             sqlx::query(
-                r#"INSERT INTO staging_product_servings (import_id, source, source_id, label, quantity, unit, grams, raw_payload, row_number)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                   ON CONFLICT (import_id, source, source_id, label, unit) DO UPDATE SET
-                       quantity = EXCLUDED.quantity,
-                       grams = EXCLUDED.grams,
+                r#"INSERT INTO staging_product_servings (import_id, source, source_id, unit, grams_per_unit, raw_payload, row_number)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7)
+                   ON CONFLICT (import_id, source, source_id, unit) DO UPDATE SET
+                       grams_per_unit = EXCLUDED.grams_per_unit,
                        raw_payload = EXCLUDED.raw_payload,
                        row_number = EXCLUDED.row_number"#,
             )
             .bind(import_id.0)
             .bind(&s.source)
             .bind(&s.source_id)
-            .bind(&s.label)
-            .bind(s.quantity)
             .bind(&s.unit)
-            .bind(s.grams)
+            .bind(s.grams_per_unit)
             .bind(&s.raw_payload)
             .bind(s.row_number)
             .execute(&mut *tx)
@@ -266,25 +263,24 @@ impl ImportRepository for PostgresImportRepository {
 
         let servings_count: (i64,) = sqlx::query_as(
             r#"WITH unique_servings AS (
-                   SELECT p.id AS product_id, ss.label, ss.quantity, ss.unit, ss.grams,
-                          ss.row_number,
+                   SELECT p.id AS product_id, ss.unit, ss.grams_per_unit, ss.row_number,
                           row_number() OVER (
                               PARTITION BY p.id, ss.unit
-                              ORDER BY ss.row_number, ss.label
+                              ORDER BY ss.row_number, ss.unit
                           ) AS unit_rank
                    FROM staging_product_servings ss
                    JOIN products p ON p.source = ss.source AND p.source_id = ss.source_id
                    WHERE ss.import_id = $1
                ), positioned AS (
-                   SELECT product_id, label, quantity, unit, grams,
+                   SELECT product_id, unit, grams_per_unit,
                           (row_number() OVER (
-                              PARTITION BY product_id ORDER BY row_number, label, unit
+                              PARTITION BY product_id ORDER BY row_number, unit
                           ) - 1)::integer AS position
                    FROM unique_servings
                    WHERE unit_rank = 1
                ), inserted AS (
-                   INSERT INTO product_servings (id, product_id, label, quantity, unit, grams, position, created_at)
-                   SELECT gen_random_uuid(), product_id, label, quantity, unit, grams, position, NOW()
+                   INSERT INTO product_servings (id, product_id, unit, grams_per_unit, position, created_at)
+                   SELECT gen_random_uuid(), product_id, unit, grams_per_unit, position, NOW()
                    FROM positioned
                    RETURNING 1 AS flag
                )

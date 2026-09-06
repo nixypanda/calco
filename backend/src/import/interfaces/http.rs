@@ -166,10 +166,8 @@ struct ImportServingRowDto {
     row_number: Option<i32>,
     source: String,
     source_id: String,
-    label: String,
-    quantity: Decimal,
     unit: String,
-    grams: Decimal,
+    grams_per_unit: Decimal,
 }
 
 async fn stage_servings_handler(
@@ -362,10 +360,8 @@ fn import_serving_row_dto_to_serving(row: ImportServingRowDto) -> StagedImportSe
     StagedImportServing {
         source: row.source,
         source_id: row.source_id,
-        label: row.label,
-        quantity: row.quantity,
         unit: row.unit,
-        grams: row.grams,
+        grams_per_unit: row.grams_per_unit,
         raw_payload: None,
         row_number: row.row_number,
     }

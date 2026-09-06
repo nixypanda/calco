@@ -1,5 +1,5 @@
-use axum::http::StatusCode;
 use crate::common::*;
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -17,7 +17,7 @@ async fn seed_product(router: &axum::Router, user: &str) -> String {
             { "code": "FAT_G", "amount_per_100g": 0 }
         ],
         "servings": [
-            { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }
+            { "unit": "serving", "grams_per_unit": 100 }
         ]
     });
     let created: Value = post_json(
@@ -127,7 +127,7 @@ async fn diary_lifecycle_create_read_list_update_delete(pool: PgPool) {
             { "code": "FAT_G", "amount_per_100g": 0 }
         ],
         "servings": [
-            { "label": "1 apple", "quantity": 1, "unit": "serving", "grams": 100 }
+            { "unit": "serving", "grams_per_unit": 100 }
         ]
     });
     let _: Value = put_json(

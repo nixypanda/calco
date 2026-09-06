@@ -1,5 +1,5 @@
-use axum::http::StatusCode;
 use crate::common::*;
+use axum::http::StatusCode;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -24,7 +24,7 @@ async fn product_to_meal_to_log(pool: PgPool) {
             { "code": "FAT_G", "amount_per_100g": 3 }
         ],
         "servings": [
-            { "label": "slice", "quantity": 1, "unit": "serving", "grams": 30 }
+            { "unit": "serving", "grams_per_unit": 30 }
         ]
     });
     let product: Value = post_json(
@@ -150,7 +150,7 @@ async fn shared_content_keeps_creator_writes_and_food_logs_private(pool: PgPool)
             { "code": "FAT_G", "amount_per_100g": 3 }
         ],
         "servings": [
-            { "label": "slice", "quantity": 1, "unit": "serving", "grams": 30 }
+            { "unit": "serving", "grams_per_unit": 30 }
         ]
     });
     let product: Value = post_json(

@@ -268,10 +268,8 @@ productDetailJson =
          , "confidence": null
          }]
     , "servings":
-        [{ "label": "Small"
-         , "quantity": "1"
-         , "unit": "piece"
-         , "grams": "100"
+        [{ "unit": "piece"
+         , "grams_per_unit": "100"
          }]
     , "allowed_units":
         [{ "code": "g"

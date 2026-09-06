@@ -32,17 +32,11 @@ fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> 
     if serving.source_id.is_empty() {
         return Err("source_id is required".into());
     }
-    if serving.label.is_empty() {
-        return Err("label is required".into());
-    }
     if serving.unit.is_empty() {
         return Err("unit is required".into());
     }
-    if serving.quantity <= rust_decimal::Decimal::ZERO {
-        return Err("quantity must be positive".into());
-    }
-    if serving.grams <= rust_decimal::Decimal::ZERO {
-        return Err("grams must be positive".into());
+    if serving.grams_per_unit <= rust_decimal::Decimal::ZERO {
+        return Err("grams_per_unit must be positive".into());
     }
     Ok(())
 }

@@ -37,7 +37,7 @@ tests =
                         | defaultQuantity = Nothing
                         , defaultUnit = Nothing
                         , servings =
-                            [ { label = "one cup", quantity = "1", unit = "cup", grams = "240" }
+                            [ { unit = "cup", gramsPerUnit = "240" }
                             ]
                     }
                     |> (\current -> ( current.amount, current.unit ))

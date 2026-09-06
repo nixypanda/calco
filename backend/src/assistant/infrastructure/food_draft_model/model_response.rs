@@ -59,10 +59,8 @@ struct WireNutrient {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WireServing {
-    label: String,
-    quantity: Decimal,
     unit: String,
-    grams: Decimal,
+    grams_per_unit: Decimal,
 }
 
 pub(super) fn parse_model_turn(
@@ -136,23 +134,15 @@ fn parse_draft(wire: WireDraft, vocabulary: &FoodVocabulary) -> Result<FoodDraft
     for value in wire.servings {
         if !serving_units.contains(value.unit.as_str())
             || !seen_serving_units.insert(value.unit.clone())
-            || value.quantity > MAX_SERVING_VALUE
-            || value.grams > MAX_SERVING_VALUE
+            || value.grams_per_unit > MAX_SERVING_VALUE
         {
             return Err(AssistantError::InvalidModelResponse);
         }
-        servings.push(DraftServing::new(
-            value.label,
-            value.quantity,
-            value.unit,
-            value.grams,
-        )?);
+        servings.push(DraftServing::new(value.unit, value.grams_per_unit)?);
     }
-    if let (Some(quantity), Some(unit)) = (wire.default_quantity, wire.default_unit.as_deref())
+    if let Some(unit) = wire.default_unit.as_deref()
         && unit != "g"
-        && !servings
-            .iter()
-            .any(|serving| serving.unit == unit && serving.quantity == quantity)
+        && !servings.iter().any(|serving| serving.unit == unit)
     {
         return Err(AssistantError::InvalidModelResponse);
     }
@@ -255,7 +245,7 @@ mod tests {
     fn default_unit_must_be_grams_or_match_a_serving() {
         let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
         assert!(parse_model_turn(default_cup, &vocabulary()).is_err());
-        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"label":"one cup","quantity":1,"unit":"cup","grams":240}]},"warnings":[]}"#;
+        let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
         let turn = parse_model_turn(serving_cup, &vocabulary()).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")

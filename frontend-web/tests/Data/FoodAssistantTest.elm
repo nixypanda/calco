@@ -106,6 +106,6 @@ readyJson =
         , "\"default_quantity\":\"1\",\"default_unit\":\"bowl\","
         , "\"nutrients\":[{\"code\":\"ENERGY_KCAL\","
         , "\"amount_per_100g\":\"172.125\"}],"
-        , "\"servings\":[{\"label\":\"one bowl\",\"quantity\":\"1\","
-        , "\"unit\":\"bowl\",\"grams\":\"350.50\"}]},\"warnings\":[]}"
+        , "\"servings\":[{\"unit\":\"bowl\","
+        , "\"grams_per_unit\":\"350.50\"}]},\"warnings\":[]}"
         ]

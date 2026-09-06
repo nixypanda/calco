@@ -1,6 +1,6 @@
-use axum::http::{Method, StatusCode};
 use crate::common;
 use crate::common::*;
+use axum::http::{Method, StatusCode};
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -25,7 +25,7 @@ async fn create_custom_product(
             { "code": "FAT_G", "amount_per_100g": 1 }
         ],
         "servings": [
-            { "label": "1 serving", "quantity": 1, "unit": "serving", "grams": 100 }
+            { "unit": "serving", "grams_per_unit": 100 }
         ]
     });
     let created: Value = post_json(
@@ -102,7 +102,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
             { "code": "FAT_G", "amount_per_100g": 15 }
         ],
         "servings": [
-            { "label": "1 bowl", "quantity": 1, "unit": "serving", "grams": 50 }
+            { "unit": "serving", "grams_per_unit": 50 }
         ]
     });
     let created: Value = post_json(
@@ -133,7 +133,10 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
         .collect();
     assert!(nutrient_codes.contains(&"ENERGY_KCAL"));
     assert!(nutrient_codes.contains(&"PROTEIN_G"));
-    assert_eq!(detail["servings"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        detail["servings"],
+        json!([{ "unit": "serving", "grams_per_unit": "50" }])
+    );
 
     // ── Update ──────────────────────────────────────────────────────────
     let update_payload = json!({
@@ -149,7 +152,7 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
             { "code": "FAT_G", "amount_per_100g": 18 }
         ],
         "servings": [
-            { "label": "1 bowl", "quantity": 1, "unit": "serving", "grams": 55 }
+            { "unit": "serving", "grams_per_unit": 55 }
         ]
     });
     let _: Value = put_json(
@@ -206,7 +209,10 @@ async fn product_lifecycle_create_read_update_search_delete(pool: PgPool) {
     );
     let listed_nutrients = listed["nutrients"].as_array().expect("nutrients");
     assert_eq!(listed_nutrients.len(), 4);
-    assert_eq!(listed["servings"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        listed["servings"],
+        json!([{ "unit": "serving", "grams_per_unit": "55" }])
+    );
     let allowed_units = listed["allowed_units"].as_array().expect("allowed_units");
     assert!(
         !allowed_units.is_empty(),

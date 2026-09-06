@@ -1,6 +1,7 @@
 use std::io::Cursor;
 use std::sync::{Arc, Mutex};
 
+use crate::common::*;
 use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
@@ -16,7 +17,6 @@ use calco_backend::assistant::infrastructure::{
 };
 use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
-use crate::common::*;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -408,15 +408,7 @@ async fn real_catalog_vocabulary_reaches_model_and_trusted_draft_is_submittable(
             nutrient("CARBS_G", 20),
             nutrient("FAT_G", 2),
         ],
-        vec![
-            DraftServing::new(
-                "one cup".into(),
-                rust_decimal::Decimal::ONE,
-                "cup".into(),
-                rust_decimal::Decimal::new(240, 0),
-            )
-            .unwrap(),
-        ],
+        vec![DraftServing::new("cup".into(), rust_decimal::Decimal::new(240, 0)).unwrap()],
     )
     .unwrap();
     let (router, observed_vocabulary) = app_with_model_result_and_real_vocabulary(

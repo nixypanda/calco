@@ -463,10 +463,8 @@ foodWithNutrition =
               }
             ]
         , servings =
-            [ { label = "Serving"
-              , quantity = "1"
-              , unit = "serving"
-              , grams = "50"
+            [ { unit = "serving"
+              , gramsPerUnit = "50"
               }
             ]
     }

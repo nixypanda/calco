@@ -113,17 +113,14 @@ type alias NutrientRow =
 
 
 type alias ServingRow =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
+    { unit : String
+    , gramsPerUnit : String
     }
 
 
 type ValidationError
     = NameRequired
     | InvalidNutrientAmount String
-    | InvalidServingQuantity String
     | InvalidServingGrams String
     | DuplicateServingUnit String
     | InvalidDefaultPortion
@@ -168,7 +165,7 @@ emptyNutrientRow =
 
 emptyServingRow : ServingRow
 emptyServingRow =
-    { label = "", quantity = "", unit = "", grams = "" }
+    { unit = "", gramsPerUnit = "" }
 
 
 noDefaultOption : String
@@ -208,10 +205,8 @@ applyAiDraft draft form =
         , servings =
             List.map
                 (\serving ->
-                    { label = serving.label
-                    , quantity = serving.quantity
-                    , unit = serving.unit
-                    , grams = serving.grams
+                    { unit = serving.unit
+                    , gramsPerUnit = serving.gramsPerUnit
                     }
                 )
                 draft.servings
@@ -238,9 +233,7 @@ hasManualInput form =
             form.nutrients
         || List.any
             (\row ->
-                not (String.isEmpty (String.trim row.label))
-                    || not (String.isEmpty (String.trim row.quantity))
-                    || not (String.isEmpty (String.trim row.grams))
+                not (String.isEmpty (String.trim row.gramsPerUnit))
                     || not (String.isEmpty (String.trim row.unit))
             )
             form.servings
@@ -267,11 +260,9 @@ type Msg
     | NutrientAmountChanged Int String
     | AddNutrientRow
     | RemoveNutrientRow Int
-    | ServingLabelChanged Int String
-    | ServingQuantityChanged Int String
     | ServingUnitChanged Int String
     | ToggleServingUnitDropdown Int
-    | ServingGramsChanged Int String
+    | ServingGramsPerUnitChanged Int String
     | AddServingRow
     | RemoveServingRow Int
 
@@ -304,10 +295,8 @@ fromProductDetail food =
         , servings =
             List.map
                 (\s ->
-                    { label = s.label
-                    , quantity = s.quantity
-                    , unit = s.unit
-                    , grams = s.grams
+                    { unit = s.unit
+                    , gramsPerUnit = s.gramsPerUnit
                     }
                 )
                 food.servings
@@ -421,9 +410,11 @@ toDefaultPortion form =
 
         ( Just quantity, Just unit ) ->
             if
-                List.any
-                    (\serving -> serving.unit == unit && serving.quantity == quantity)
-                    form.servings
+                (String.toFloat quantity
+                    |> Maybe.map ((<) 0)
+                    |> Maybe.withDefault False
+                )
+                    && List.any (\serving -> serving.unit == unit) form.servings
             then
                 Ok ( Just quantity, Just unit )
 
@@ -442,10 +433,8 @@ hasNutrientInput row =
 
 hasServingInput : ServingRow -> Bool
 hasServingInput row =
-    not (String.isEmpty (String.trim row.label))
-        && not (String.isEmpty (String.trim row.quantity))
-        && not (String.isEmpty (String.trim row.unit))
-        && not (String.isEmpty (String.trim row.grams))
+    not (String.isEmpty (String.trim row.unit))
+        && not (String.isEmpty (String.trim row.gramsPerUnit))
 
 
 toNutrientRequest : NutrientRow -> Result ValidationError Api.Foods.CreateFoodNutrientRequest
@@ -468,42 +457,26 @@ toNutrientRequest row =
 toServingRequest : ServingRow -> Result ValidationError Api.Foods.CreateFoodServingRequest
 toServingRequest row =
     let
-        quantity : Result ValidationError Float
-        quantity =
-            case String.toFloat (String.trim row.quantity) of
+        gramsPerUnit : Result ValidationError Float
+        gramsPerUnit =
+            case String.toFloat (String.trim row.gramsPerUnit) of
                 Just v ->
                     if v > 0 then
                         Ok v
 
                     else
-                        Err (InvalidServingQuantity row.quantity)
+                        Err (InvalidServingGrams row.gramsPerUnit)
 
                 Nothing ->
-                    Err (InvalidServingQuantity row.quantity)
-
-        grams : Result ValidationError Float
-        grams =
-            case String.toFloat (String.trim row.grams) of
-                Just v ->
-                    if v > 0 then
-                        Ok v
-
-                    else
-                        Err (InvalidServingGrams row.grams)
-
-                Nothing ->
-                    Err (InvalidServingGrams row.grams)
+                    Err (InvalidServingGrams row.gramsPerUnit)
     in
-    Result.map2
-        (\q g ->
-            { label = String.trim row.label
-            , quantity = q
-            , unit = String.trim row.unit
-            , grams = g
+    Result.map
+        (\value ->
+            { unit = String.trim row.unit
+            , gramsPerUnit = value
             }
         )
-        quantity
-        grams
+        gramsPerUnit
 
 
 categorySuggestionsRequest : String -> CategorySuggestionRequest
@@ -545,11 +518,11 @@ update msg formIn =
             ( { form | brand = value }, Cmd.none, NoOutMsg )
 
         DefaultQuantityChanged value ->
-            ( if form.defaultUnit == "g" then
-                { form | defaultQuantity = value }
+            ( if String.isEmpty form.defaultUnit then
+                form
 
               else
-                form
+                { form | defaultQuantity = value }
             , Cmd.none
             , NoOutMsg
             )
@@ -577,11 +550,7 @@ update msg formIn =
                             "100"
 
                     else
-                        form.servings
-                            |> List.filter (\serving -> serving.unit == selectedUnit)
-                            |> List.head
-                            |> Maybe.map .quantity
-                            |> Maybe.withDefault ""
+                        "1"
             in
             ( { form
                 | defaultUnit = selectedUnit
@@ -765,43 +734,6 @@ update msg formIn =
             , NoOutMsg
             )
 
-        ServingLabelChanged index value ->
-            ( { form
-                | servings =
-                    ListExtra.updateAt
-                        index
-                        (\row -> { row | label = value })
-                        form.servings
-              }
-            , Cmd.none
-            , NoOutMsg
-            )
-
-        ServingQuantityChanged index value ->
-            let
-                selected : Bool
-                selected =
-                    servingAt index form.servings
-                        |> Maybe.map (\row -> row.unit == form.defaultUnit)
-                        |> Maybe.withDefault False
-            in
-            ( { form
-                | servings =
-                    ListExtra.updateAt
-                        index
-                        (\row -> { row | quantity = value })
-                        form.servings
-                , defaultQuantity =
-                    if selected then
-                        value
-
-                    else
-                        form.defaultQuantity
-              }
-            , Cmd.none
-            , NoOutMsg
-            )
-
         ServingUnitChanged index value ->
             let
                 oldUnit : Maybe String
@@ -832,12 +764,12 @@ update msg formIn =
             , NoOutMsg
             )
 
-        ServingGramsChanged index value ->
+        ServingGramsPerUnitChanged index value ->
             ( { form
                 | servings =
                     ListExtra.updateAt
                         index
-                        (\row -> { row | grams = value })
+                        (\row -> { row | gramsPerUnit = value })
                         form.servings
               }
             , Cmd.none
@@ -951,15 +883,11 @@ defaultPortionCard theme device form =
             , isOpen = form.openDropdown == DefaultUnitOpen
             , onToggle = ToggleDefaultUnitDropdown
             }
-        , if form.defaultUnit == "g" then
-            Ui.decimalInput theme
-                { label = "Default Quantity"
-                , value = form.defaultQuantity
-                , onChange = DefaultQuantityChanged
-                }
+        , if String.isEmpty form.defaultUnit then
+            Element.none
 
           else
-            Ui.readOnlyDecimalInput theme
+            Ui.decimalInput theme
                 { label = "Default Quantity"
                 , value = form.defaultQuantity
                 , onChange = DefaultQuantityChanged
@@ -976,7 +904,7 @@ defaultPortionCard theme device form =
                 "Enter the gram amount to prefill when logging this food."
 
              else
-                "Quantity is defined by the selected serving."
+                "Enter how many of the selected serving to prefill."
             )
         ]
 
@@ -988,7 +916,7 @@ defaultPortionOptions form =
         :: List.map
             (\serving ->
                 ( serving.unit
-                , serving.label ++ " (" ++ serving.quantity ++ " " ++ serving.unit ++ ")"
+                , serving.unit
                 )
             )
             (List.filter hasServingInput form.servings)
@@ -1230,23 +1158,11 @@ servingRowView theme device units openDropdown index row =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
         ]
-        [ Ui.input theme
-            { label = "Label"
-            , value = row.label
-            , onChange = ServingLabelChanged index
-            }
-        , Element.row
+        [ Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
             ]
-            [ Element.el [ Element.width Element.fill ]
-                (Ui.decimalInput theme
-                    { label = "Qty"
-                    , value = row.quantity
-                    , onChange = ServingQuantityChanged index
-                    }
-                )
-            , Element.el
+            [ Element.el
                 [ Element.width (Element.fill |> Element.maximum 160) ]
                 (Ui.selectDropdown device
                     theme
@@ -1260,9 +1176,9 @@ servingRowView theme device units openDropdown index row =
                 )
             , Element.el [ Element.width Element.fill ]
                 (Ui.decimalInput theme
-                    { label = "Grams"
-                    , value = row.grams
-                    , onChange = ServingGramsChanged index
+                    { label = "Grams per unit"
+                    , value = row.gramsPerUnit
+                    , onChange = ServingGramsPerUnitChanged index
                     }
                 )
             , rowActionButton theme

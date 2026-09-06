@@ -53,7 +53,7 @@ impl PostgresProductRepository {
 
     async fn load_servings(&self, product_id: Uuid) -> Result<Vec<ProductServing>, NutritionError> {
         let rows = sqlx::query_as::<_, ProductServingRow>(
-            "SELECT label, quantity, unit, grams FROM product_servings WHERE product_id = $1 ORDER BY position",
+            "SELECT unit, grams_per_unit FROM product_servings WHERE product_id = $1 ORDER BY position",
         )
         .bind(product_id)
         .fetch_all(&self.pool)
@@ -62,10 +62,8 @@ impl PostgresProductRepository {
         Ok(rows
             .into_iter()
             .map(|r| ProductServing {
-                label: ServingLabel(r.label),
-                quantity: r.quantity,
                 unit: UnitCode(r.unit),
-                grams: r.grams,
+                grams_per_unit: r.grams_per_unit,
             })
             .collect())
     }
@@ -114,7 +112,7 @@ impl PostgresProductRepository {
         }
         let rows = sqlx::query_as::<_, ProductServingWithProductRow>(
             r#"
-            SELECT product_id, label, quantity, unit, grams
+            SELECT product_id, unit, grams_per_unit
             FROM product_servings
             WHERE product_id = ANY($1)
             ORDER BY product_id, position
@@ -130,10 +128,8 @@ impl PostgresProductRepository {
                 .entry(r.product_id)
                 .or_default()
                 .push(ProductServing {
-                    label: ServingLabel(r.label),
-                    quantity: r.quantity,
                     unit: UnitCode(r.unit),
-                    grams: r.grams,
+                    grams_per_unit: r.grams_per_unit,
                 });
         }
         Ok(by_product)
@@ -624,19 +620,15 @@ struct SearchNutrientRow {
 
 #[derive(sqlx::FromRow)]
 struct ProductServingRow {
-    label: String,
-    quantity: Decimal,
     unit: String,
-    grams: Decimal,
+    grams_per_unit: Decimal,
 }
 
 #[derive(sqlx::FromRow)]
 struct ProductServingWithProductRow {
     product_id: Uuid,
-    label: String,
-    quantity: Decimal,
     unit: String,
-    grams: Decimal,
+    grams_per_unit: Decimal,
 }
 
 #[derive(sqlx::FromRow)]
@@ -845,25 +837,21 @@ async fn insert_product_servings(
         return Ok(());
     }
 
-    let labels: Vec<String> = servings.iter().map(|s| s.label.0.clone()).collect();
-    let quantities: Vec<Decimal> = servings.iter().map(|s| s.quantity).collect();
     let units: Vec<String> = servings.iter().map(|s| s.unit.0.clone()).collect();
-    let grams: Vec<Decimal> = servings.iter().map(|s| s.grams).collect();
+    let grams_per_unit: Vec<Decimal> = servings.iter().map(|s| s.grams_per_unit).collect();
     let positions: Vec<i32> = (0..servings.len() as i32).collect();
 
     sqlx::query(
         r#"
-        INSERT INTO product_servings (product_id, label, quantity, unit, grams, position)
-        SELECT $1, v.label, v.quantity, v.unit, v.grams, v.position
-        FROM UNNEST($2::text[], $3::numeric[], $4::text[], $5::numeric[], $6::integer[])
-            AS v(label, quantity, unit, grams, position)
+        INSERT INTO product_servings (product_id, unit, grams_per_unit, position)
+        SELECT $1, v.unit, v.grams_per_unit, v.position
+        FROM UNNEST($2::text[], $3::numeric[], $4::integer[])
+            AS v(unit, grams_per_unit, position)
         "#,
     )
     .bind(product_id)
-    .bind(&labels)
-    .bind(&quantities)
     .bind(&units)
-    .bind(&grams)
+    .bind(&grams_per_unit)
     .bind(&positions)
     .execute(&mut **tx)
     .await?;

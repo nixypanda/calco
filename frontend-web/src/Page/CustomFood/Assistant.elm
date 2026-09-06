@@ -1164,12 +1164,11 @@ draftPreviewData draft =
     , servings =
         List.map
             (\serving ->
-                ( serving.label
-                , serving.quantity
-                    ++ " "
+                ( serving.unit
+                , "1 "
                     ++ serving.unit
                     ++ " = "
-                    ++ serving.grams
+                    ++ serving.gramsPerUnit
                     ++ " g"
                 )
             )

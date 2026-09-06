@@ -214,11 +214,8 @@ validationMessage err =
         Form.InvalidNutrientAmount value ->
             "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
 
-        Form.InvalidServingQuantity value ->
-            "Serving quantity must be a positive number (got: " ++ value ++ ")"
-
         Form.InvalidServingGrams value ->
-            "Serving grams must be a positive number (got: " ++ value ++ ")"
+            "Grams per serving unit must be a positive number (got: " ++ value ++ ")"
 
         Form.DuplicateServingUnit unit ->
             "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"

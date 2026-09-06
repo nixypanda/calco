@@ -616,8 +616,6 @@ mod tests {
             ],
             vec![
                 crate::assistant::domain::DraftServing::new(
-                    "one bowl".into(),
-                    rust_decimal::Decimal::ONE,
                     "bowl".into(),
                     rust_decimal::Decimal::new(35_050, 2),
                 )
@@ -646,10 +644,8 @@ mod tests {
                         "amount_per_100g": "172.125"
                     }],
                     "servings": [{
-                        "label": "one bowl",
-                        "quantity": "1",
                         "unit": "bowl",
-                        "grams": "350.50"
+                        "grams_per_unit": "350.50"
                     }]
                 },
                 "warnings": []

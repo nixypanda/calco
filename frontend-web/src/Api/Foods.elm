@@ -80,10 +80,8 @@ type alias NutrientEntry =
 
 
 type alias ServingEntry =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
+    { unit : String
+    , gramsPerUnit : String
     }
 
 
@@ -130,10 +128,8 @@ type alias CreateFoodNutrientRequest =
 
 
 type alias CreateFoodServingRequest =
-    { label : String
-    , quantity : Float
-    , unit : String
-    , grams : Float
+    { unit : String
+    , gramsPerUnit : Float
     }
 
 
@@ -344,10 +340,8 @@ nutrientRequestEncoder nutrient =
 servingRequestEncoder : CreateFoodServingRequest -> Encode.Value
 servingRequestEncoder serving =
     Encode.object
-        [ ( "label", Encode.string serving.label )
-        , ( "quantity", Encode.float serving.quantity )
-        , ( "unit", Encode.string serving.unit )
-        , ( "grams", Encode.float serving.grams )
+        [ ( "unit", Encode.string serving.unit )
+        , ( "grams_per_unit", Encode.float serving.gramsPerUnit )
         ]
 
 
@@ -400,11 +394,9 @@ nutrientEntryDecoder =
 
 servingEntryDecoder : Decoder ServingEntry
 servingEntryDecoder =
-    Decode.map4 ServingEntry
-        (Decode.field "label" Decode.string)
-        (Decode.field "quantity" Decode.string)
+    Decode.map2 ServingEntry
         (Decode.field "unit" Decode.string)
-        (Decode.field "grams" Decode.string)
+        (Decode.field "grams_per_unit" Decode.string)
 
 
 unitListResponseDecoder : Decoder UnitListResponse

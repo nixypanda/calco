@@ -58,7 +58,7 @@ tests =
                             ]
                     }
                     |> Expect.equal (Err (Form.InvalidNutrientAmount "-1"))
-        , test "non-positive serving quantity is rejected" <|
+        , test "non-positive serving grams per unit is rejected" <|
             \_ ->
                 let
                     base : Form.FormModel
@@ -69,14 +69,12 @@ tests =
                     { base
                         | name = "Paneer"
                         , servings =
-                            [ { label = "cube"
-                              , quantity = "0"
-                              , unit = "piece"
-                              , grams = "50"
+                            [ { unit = "piece"
+                              , gramsPerUnit = "0"
                               }
                             ]
                     }
-                    |> Expect.equal (Err (Form.InvalidServingQuantity "0"))
+                    |> Expect.equal (Err (Form.InvalidServingGrams "0"))
         , test "categories are passed through in selection order" <|
             \_ ->
                 let
@@ -125,15 +123,11 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "cube"
-                              , quantity = "2"
-                              , unit = "piece"
-                              , grams = "50"
+                            [ { unit = "piece"
+                              , gramsPerUnit = "50"
                               }
-                            , { label = "bad"
-                              , quantity = ""
-                              , unit = "g"
-                              , grams = "5"
+                            , { unit = ""
+                              , gramsPerUnit = "5"
                               }
                             ]
                     }
@@ -156,10 +150,8 @@ tests =
                             , nutrients =
                                 [ { code = "PROTEIN_G", amountPer100g = 18 } ]
                             , servings =
-                                [ { label = "cube"
-                                  , quantity = 2
-                                  , unit = "piece"
-                                  , grams = 50
+                                [ { unit = "piece"
+                                  , gramsPerUnit = 50
                                   }
                                 ]
                             }
@@ -186,10 +178,8 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "cup"
-                              , quantity = "1"
-                              , unit = "cup"
-                              , grams = "245"
+                            [ { unit = "cup"
+                              , gramsPerUnit = "245"
                               }
                             ]
                         }
@@ -462,16 +452,12 @@ tests =
             \_ ->
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingLabelChanged 0 "cube")
-                    |> updateForm (Form.ServingQuantityChanged 0 "2")
                     |> updateForm (Form.ServingUnitChanged 0 "piece")
-                    |> updateForm (Form.ServingGramsChanged 0 "50")
+                    |> updateForm (Form.ServingGramsPerUnitChanged 0 "50")
                     |> .servings
                     |> Expect.equal
-                        [ { label = "cube"
-                          , quantity = "2"
-                          , unit = "piece"
-                          , grams = "50"
+                        [ { unit = "piece"
+                          , gramsPerUnit = "50"
                           }
                         ]
         , test "new serving rows do not preselect grams" <|
@@ -486,24 +472,21 @@ tests =
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingLabelChanged 1 "second")
+                    |> updateForm (Form.ServingUnitChanged 1 "second")
                     |> updateForm (Form.RemoveServingRow 0)
                     |> .servings
-                    |> List.map .label
+                    |> List.map .unit
                     |> Expect.equal [ "second" ]
-        , test "selecting a serving sets and synchronizes the default portion" <|
+        , test "selecting a serving initializes an editable default portion" <|
             \_ ->
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingLabelChanged 0 "one cup")
-                    |> updateForm (Form.ServingQuantityChanged 0 "1")
                     |> updateForm (Form.ServingUnitChanged 0 "cup")
-                    |> updateForm (Form.ServingGramsChanged 0 "240")
+                    |> updateForm (Form.ServingGramsPerUnitChanged 0 "240")
                     |> updateForm (Form.DefaultUnitChanged "cup")
                     |> updateForm (Form.DefaultQuantityChanged "2")
-                    |> updateForm (Form.ServingQuantityChanged 0 "1.5")
                     |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
-                    |> Expect.equal ( "1.5", "cup" )
+                    |> Expect.equal ( "2", "cup" )
         , test "no default option clears the selected default without staying selected" <|
             \_ ->
                 Form.emptyForm
@@ -515,7 +498,6 @@ tests =
             \_ ->
                 Form.emptyForm
                     |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingQuantityChanged 0 "1")
                     |> updateForm (Form.ServingUnitChanged 0 "cup")
                     |> updateForm (Form.DefaultUnitChanged "cup")
                     |> updateForm (Form.RemoveServingRow 0)
@@ -532,8 +514,8 @@ tests =
                     { base
                         | name = "Soup"
                         , servings =
-                            [ { label = "small cup", quantity = "1", unit = "cup", grams = "180" }
-                            , { label = "large cup", quantity = "2", unit = "cup", grams = "360" }
+                            [ { unit = "cup", gramsPerUnit = "180" }
+                            , { unit = "cup", gramsPerUnit = "360" }
                             ]
                     }
                     |> Expect.equal (Err (Form.DuplicateServingUnit "cup"))
@@ -571,10 +553,8 @@ tests =
                               }
                             ]
                         , servings =
-                            [ { label = "one bowl"
-                              , quantity = "1"
-                              , unit = "bowl"
-                              , grams = "300.50"
+                            [ { unit = "bowl"
+                              , gramsPerUnit = "300.50"
                               }
                             ]
                         }
@@ -602,10 +582,8 @@ assistantDraft =
     , nutrients =
         [ { code = "ENERGY_KCAL", amountPer100g = "120.125000" } ]
     , servings =
-        [ { label = "one bowl"
-          , quantity = "1"
-          , unit = "bowl"
-          , grams = "300.50"
+        [ { unit = "bowl"
+          , gramsPerUnit = "300.50"
           }
         ]
     }
@@ -632,7 +610,7 @@ product =
           , confidence = Nothing
           }
         ]
-    , servings = [ { label = "cup", quantity = "1", unit = "cup", grams = "245" } ]
+    , servings = [ { unit = "cup", gramsPerUnit = "245" } ]
     , allowedUnits = [ gram ]
     }
 

@@ -160,9 +160,9 @@ macros =
     ]
 
 
-servings : List { label : String, quantity : String, unit : String, grams : String }
+servings : List { unit : String, gramsPerUnit : String }
 servings =
-    [ { label = "Piece", quantity = "1", unit = "piece", grams = "50" } ]
+    [ { unit = "piece", gramsPerUnit = "50" } ]
 
 
 per100g : List { code : String, amountPer100g : String, unit : String }

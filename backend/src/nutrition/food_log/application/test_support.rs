@@ -235,10 +235,8 @@ pub(super) fn sample_product() -> Product {
 pub(super) fn sample_product_with_serving() -> Product {
     let mut product = sample_product();
     product.servings = vec![ProductServing {
-        label: ServingLabel("slice".to_string()),
-        quantity: Decimal::new(1, 0),
         unit: UnitCode("slice".to_string()),
-        grams: Decimal::new(30, 0),
+        grams_per_unit: Decimal::new(30, 0),
     }];
     product
 }

@@ -93,7 +93,7 @@ initLogFormFromFood mealSlot food =
         fallback : ( String, String )
         fallback =
             List.head food.servings
-                |> Maybe.map (\serving -> ( serving.quantity, serving.unit ))
+                |> Maybe.map (\serving -> ( "1", serving.unit ))
                 |> Maybe.withDefault ( defaultQuantity, defaultCode )
 
         portion : ( String, String )

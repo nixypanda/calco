@@ -68,10 +68,8 @@ type alias DraftNutrient =
 
 
 type alias DraftServing =
-    { label : String
-    , quantity : String
-    , unit : String
-    , grams : String
+    { unit : String
+    , gramsPerUnit : String
     }
 
 
@@ -158,12 +156,10 @@ draftNutrientDecoder =
 
 draftServingDecoder : Decoder DraftServing
 draftServingDecoder =
-    strictObject [ "label", "quantity", "unit", "grams" ] <|
-        Decode.map4 DraftServing
-            (Decode.field "label" Decode.string)
-            (Decode.field "quantity" Decode.string)
+    strictObject [ "unit", "grams_per_unit" ] <|
+        Decode.map2 DraftServing
             (Decode.field "unit" Decode.string)
-            (Decode.field "grams" Decode.string)
+            (Decode.field "grams_per_unit" Decode.string)
 
 
 strictObject : List String -> Decoder a -> Decoder a

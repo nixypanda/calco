@@ -177,7 +177,7 @@ validModel =
                 , nutrients =
                     [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
                 , servings =
-                    [ { label = "cube", quantity = "2", unit = "piece", grams = "50" } ]
+                    [ { unit = "piece", gramsPerUnit = "50" } ]
             }
     }
 
@@ -190,7 +190,7 @@ validRequest =
     , defaultQuantity = Nothing
     , defaultUnit = Nothing
     , nutrients = [ { code = "PROTEIN_G", amountPer100g = 18 } ]
-    , servings = [ { label = "cube", quantity = 2, unit = "piece", grams = 50 } ]
+    , servings = [ { unit = "piece", gramsPerUnit = 50 } ]
     }
 
 

@@ -42,12 +42,10 @@ pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
                             }},
                             "servings": { "type": "array", "maxItems": 20, "items": {
                                 "type": "object", "additionalProperties": false,
-                                "required": ["label", "quantity", "unit", "grams"],
+                                "required": ["unit", "grams_per_unit"],
                                 "properties": {
-                                    "label": { "type": "string", "maxLength": 200 },
-                                    "quantity": { "type": "number", "exclusiveMinimum": 0 },
                                     "unit": { "type": "string", "maxLength": 100, "enum": serving_units },
-                                    "grams": { "type": "number", "exclusiveMinimum": 0 }
+                                    "grams_per_unit": { "type": "number", "exclusiveMinimum": 0 }
                                 }
                             }}
                         }

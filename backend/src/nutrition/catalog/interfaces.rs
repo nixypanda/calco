@@ -163,10 +163,8 @@ pub struct ProductNutrientDto {
 
 #[derive(Serialize)]
 pub struct ProductServingDto {
-    pub label: String,
-    pub quantity: Decimal,
     pub unit: String,
-    pub grams: Decimal,
+    pub grams_per_unit: Decimal,
 }
 
 #[derive(Deserialize)]
@@ -191,10 +189,8 @@ pub struct CreateProductNutrientDto {
 
 #[derive(Deserialize)]
 pub struct CreateProductServingDto {
-    pub label: String,
-    pub quantity: Decimal,
     pub unit: String,
-    pub grams: Decimal,
+    pub grams_per_unit: Decimal,
 }
 
 #[derive(Serialize)]
@@ -476,10 +472,8 @@ fn product_serving_dtos_to_inputs(
 
 fn product_serving_dto_to_input(entry: CreateProductServingDto) -> ProductServingInput {
     ProductServingInput {
-        label: entry.label,
-        quantity: entry.quantity,
         unit: entry.unit,
-        grams: entry.grams,
+        grams_per_unit: entry.grams_per_unit,
     }
 }
 
@@ -607,9 +601,7 @@ fn product_nutrient_to_dto(nutrient: &ProductNutrient) -> ProductNutrientDto {
 
 fn product_serving_to_dto(serving: &ProductServing) -> ProductServingDto {
     ProductServingDto {
-        label: serving.label.0.clone(),
-        quantity: serving.quantity,
         unit: serving.unit.0.clone(),
-        grams: serving.grams,
+        grams_per_unit: serving.grams_per_unit,
     }
 }
