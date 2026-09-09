@@ -32,10 +32,13 @@ tests =
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
         , parses "/search?date=2026-06-04&meal_slot=breakfast"
             (FoodSearch (Just "2026-06-04") (Just Breakfast))
-        , parses "/foods/abc" (FoodShow "abc" Nothing Nothing)
-        , parses "/foods/abc?meal_slot=breakfast" (FoodShow "abc" Nothing (Just Breakfast))
+        , parses "/foods/abc" (FoodShow "abc" Nothing Nothing Nothing)
+        , parses "/foods/abc?meal_slot=breakfast"
+            (FoodShow "abc" Nothing (Just Breakfast) Nothing)
         , parses "/foods/abc?date=2026-06-04&meal_slot=breakfast"
-            (FoodShow "abc" (Just "2026-06-04") (Just Breakfast))
+            (FoodShow "abc" (Just "2026-06-04") (Just Breakfast) Nothing)
+        , parses "/foods/abc?lookup_note=Imported%20from%20OFF"
+            (FoodShow "abc" Nothing Nothing (Just "Imported from OFF"))
         , parses "/foods/custom/new" CustomFoodCreate
         , parses "/foods/custom/new/ai" CustomFoodCreateWithAi
         , parses "/foods/custom/abc/edit" (CustomFoodEdit "abc")
@@ -84,7 +87,12 @@ routeFuzzer =
         , Fuzz.constant GoalSettings
         , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
-        , Fuzz.map3 FoodShow safeSegmentFuzzer maybeDateFuzzer maybeMealSlotFuzzer
+        , Fuzz.map4
+            FoodShow
+            safeSegmentFuzzer
+            maybeDateFuzzer
+            maybeMealSlotFuzzer
+            maybeLookupNoteFuzzer
         , Fuzz.constant CustomFoodList
         , Fuzz.constant CustomFoodCreate
         , Fuzz.constant CustomFoodCreateWithAi
@@ -102,6 +110,14 @@ maybeDateFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Nothing
         , Fuzz.map Just dateStringFuzzer
+        ]
+
+
+maybeLookupNoteFuzzer : Fuzzer (Maybe String)
+maybeLookupNoteFuzzer =
+    Fuzz.oneOf
+        [ Fuzz.constant Nothing
+        , Fuzz.constant (Just "Imported from Open Food Facts")
         ]
 
 

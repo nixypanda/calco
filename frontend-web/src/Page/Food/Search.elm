@@ -161,7 +161,7 @@ type Msg
     | BarcodeScanClicked
     | BarcodeScanCancelClicked
     | BarcodeScannerEventReceived ScannerEvent
-    | BarcodeLookupCompleted Ticket (Result Client.ApiError Foods.ProductDetail)
+    | BarcodeLookupCompleted Ticket (Result Client.ApiError Foods.BarcodeLookupResponse)
     | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
@@ -386,10 +386,16 @@ update msg model =
 
             else
                 case result of
-                    Ok product ->
-                        ( { model | barcodeLookup = Success product }
+                    Ok response ->
+                        ( { model | barcodeLookup = Success response.product }
                         , Cmd.none
-                        , Navigate (FoodShow product.id model.date model.mealSlot)
+                        , Navigate
+                            (FoodShow
+                                response.product.id
+                                model.date
+                                model.mealSlot
+                                response.lookup.note
+                            )
                         )
 
                     Err error ->
@@ -533,7 +539,10 @@ update msg model =
         RecentItemClicked item ->
             case item.item.itemType of
                 ItemRef.Product ->
-                    ( model, Cmd.none, Navigate (FoodShow item.item.id model.date model.mealSlot) )
+                    ( model
+                    , Cmd.none
+                    , Navigate (FoodShow item.item.id model.date model.mealSlot Nothing)
+                    )
 
                 ItemRef.Meal ->
                     ( model, Cmd.none, Navigate (MealShow item.item.id) )
@@ -629,7 +638,7 @@ update msg model =
             )
 
         ResultClicked id ->
-            ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot) )
+            ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot Nothing) )
 
         CreateCustomFoodClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )

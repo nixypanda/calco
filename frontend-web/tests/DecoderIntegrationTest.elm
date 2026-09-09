@@ -77,6 +77,24 @@ tests =
                             )
                         )
                     |> Expect.equal (Ok ( "Apple", 1, 1 ))
+        , test "decodes Open Food Facts barcode lookup metadata" <|
+            \_ ->
+                Decode.decodeString Foods.barcodeLookupResponseDecoder barcodeLookupJson
+                    |> Result.map
+                        (\response ->
+                            ( response.product.name
+                            , response.lookup.origin
+                            , response.lookup.note
+                            )
+                        )
+                    |> Expect.equal
+                        (Ok
+                            ( "Apple"
+                            , Foods.OpenFoodFacts
+                            , Just
+                                "Food was not found locally and was imported from Open Food Facts."
+                            )
+                        )
         , test "decodes unit list" <|
             \_ ->
                 Decode.decodeString Foods.unitListResponseDecoder unitListJson
@@ -278,6 +296,13 @@ productDetailJson =
          }]
     }
     """
+
+
+barcodeLookupJson : String
+barcodeLookupJson =
+    String.dropRight 1 (String.trim productDetailJson)
+        ++ ", \"lookup\": { \"origin\": \"open_food_facts\", \"note\": "
+        ++ "\"Food was not found locally and was imported from Open Food Facts.\" } }"
 
 
 unitListJson : String

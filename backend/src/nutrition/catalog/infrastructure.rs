@@ -7,6 +7,9 @@ use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::*;
 
+mod open_food_facts;
+pub use open_food_facts::OpenFoodFactsClient;
+
 // ─── Product Repository ────────────────────────────────────────
 
 const SEARCH_NUTRIENT_CODES: [&str; 5] =

@@ -5,11 +5,13 @@ use sqlx::PgPool;
 
 use crate::AppState;
 use crate::BoxError;
+use crate::nutrition::catalog::application::ExternalProductCatalog;
 use crate::nutrition::catalog::application::{CatalogReadPort, CatalogService};
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::nutrition::catalog::infrastructure::{
-    PostgresNutrientRepository, PostgresProductRepository, PostgresUnitRepository,
+    OpenFoodFactsClient, PostgresNutrientRepository, PostgresProductRepository,
+    PostgresUnitRepository,
 };
 use crate::nutrition::diary::application::DiaryPreferencesService;
 use crate::nutrition::diary::domain::DiaryPreferencesRepository;
@@ -132,6 +134,8 @@ impl NutritionModule {
             as Arc<dyn GoalTargetRepository>;
         let nutrient_guidance_repo = Arc::new(StaticNutrientGuidanceRepository::new())
             as Arc<dyn NutrientGuidanceRepository>;
+        let external_catalog =
+            Arc::new(OpenFoodFactsClient::new()?) as Arc<dyn ExternalProductCatalog>;
 
         let mass_factors = unit_repo.list_mass_factors().await?;
         let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
@@ -141,6 +145,7 @@ impl NutritionModule {
             nutrient_repo,
             unit_repo,
             unit_converter.clone(),
+            external_catalog,
         ));
         let catalog_reads: Arc<dyn CatalogReadPort> = catalog_services.clone();
         let meal_services = Arc::new(MealService::new(

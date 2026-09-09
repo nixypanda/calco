@@ -333,7 +333,7 @@ screenMeta device session route =
             , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
-        FoodShow _ maybeDate maybeSlot ->
+        FoodShow _ maybeDate maybeSlot _ ->
             { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
         FoodLogEntry _ maybeDate maybeCalendarMonth ->

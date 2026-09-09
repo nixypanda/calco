@@ -45,6 +45,7 @@ type alias LoadingModel =
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
     , lastUsedDefault : Maybe Nutrition.Quantity
+    , lookupNote : Maybe String
     }
 
 
@@ -57,6 +58,7 @@ type alias LoadedModel =
     , form : FoodLogForm.Model
     , request : RequestState
     , lastUsedDefault : Maybe Nutrition.Quantity
+    , lookupNote : Maybe String
     }
 
 
@@ -75,8 +77,8 @@ type OutMsg
     | SessionExpired
 
 
-init : String -> Maybe String -> Maybe MealSlot -> ( Model, OutMsg )
-init productId logDate mealSlot =
+init : String -> Maybe String -> Maybe MealSlot -> Maybe String -> ( Model, OutMsg )
+init productId logDate mealSlot lookupNote =
     ( Loading
         { productId = productId
         , logDate = logDate
@@ -84,6 +86,7 @@ init productId logDate mealSlot =
         , food = Nothing
         , units = Nothing
         , lastUsedDefault = Nothing
+        , lookupNote = lookupNote
         }
     , RequestInitialData productId
     )
@@ -339,6 +342,7 @@ completeLoading loading =
                         (FoodLogForm.initLogFormFromFood loading.mealSlot food)
                 , request = Idle
                 , lastUsedDefault = loading.lastUsedDefault
+                , lookupNote = loading.lookupNote
                 }
 
         _ ->
@@ -463,7 +467,9 @@ loadedView theme device loaded =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ View.Product.foodHeader theme food []
+        [ Maybe.withDefault Element.none
+            (Maybe.map (Ui.infoBanner theme) loaded.lookupNote)
+        , View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request
         , View.Nutrients.nutritionCard theme nutrients

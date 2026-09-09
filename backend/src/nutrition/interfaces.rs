@@ -78,6 +78,26 @@ impl IntoResponse for NutritionError {
             NutritionError::NotFound(msg) => error_response("not_found", msg).into_response(),
             NutritionError::Forbidden(msg) => error_response("forbidden", msg).into_response(),
             NutritionError::Validation(msg) => error_response("validation", msg).into_response(),
+            NutritionError::ExternalUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "external_unavailable".into(),
+                        message: "external food catalog is temporarily unavailable".into(),
+                    },
+                }),
+            )
+                .into_response(),
+            NutritionError::ExternalInvalidResponse => (
+                StatusCode::BAD_GATEWAY,
+                Json(ErrorResponse {
+                    error: ErrorBody {
+                        code: "external_invalid_response".into(),
+                        message: "external food catalog returned unusable product data".into(),
+                    },
+                }),
+            )
+                .into_response(),
             NutritionError::Database(_) | NutritionError::Internal(_) => {
                 internal_error(self).into_response()
             }

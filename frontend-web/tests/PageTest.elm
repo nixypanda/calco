@@ -53,7 +53,7 @@ workspaceTests =
         , test "dated food opens diary and food detail panes" <|
             \_ ->
                 expectPaneKeys
-                    (FoodShow "food-1" (Just date) (Just Lunch))
+                    (FoodShow "food-1" (Just date) (Just Lunch) Nothing)
                     [ diaryKey date Nothing
                     , "food-detail:food-1:" ++ date ++ ":lunch"
                     ]
@@ -113,7 +113,7 @@ workspaceTests =
         , test "undated food degrades to standalone detail on direct entry" <|
             \_ ->
                 expectPaneKeys
-                    (FoodShow "food-1" Nothing Nothing)
+                    (FoodShow "food-1" Nothing Nothing Nothing)
                     [ "food-detail:food-1:none:none" ]
         , test "undated log degrades to standalone detail" <|
             \_ ->
@@ -131,7 +131,7 @@ workspaceTests =
                 Page.init { route = FoodSearch Nothing Nothing, today = Just today }
                     |> first
                     |> Page.initPreserving
-                        { route = FoodShow "food-1" Nothing Nothing
+                        { route = FoodShow "food-1" Nothing Nothing Nothing
                         , today = Just today
                         }
                     |> first
@@ -263,7 +263,7 @@ routeFlowTests =
                     }
                     |> first
                     |> Page.initPreserving
-                        { route = FoodShow "food-1" (Just date) (Just Lunch)
+                        { route = FoodShow "food-1" (Just date) (Just Lunch) Nothing
                         , today = Just today
                         }
                     |> first
@@ -312,7 +312,7 @@ routeFlowTests =
                         }
                     |> first
                     |> Page.initPreserving
-                        { route = FoodShow "food-1" (Just date) (Just Lunch)
+                        { route = FoodShow "food-1" (Just date) (Just Lunch) Nothing
                         , today = Just today
                         }
                     |> first

@@ -30,6 +30,7 @@ module Ui exposing
     , hairline
     , heroCard
     , iconButton
+    , infoBanner
     , input
     , isSmall
     , layout
@@ -509,6 +510,18 @@ errorBanner theme message =
     Element.paragraph
         [ Background.color theme.dangerBg
         , Font.color theme.dangerFg
+        , Border.rounded radiusControl
+        , Element.padding space12
+        , Element.width Element.fill
+        ]
+        [ Element.text message ]
+
+
+infoBanner : Theme -> String -> Element msg
+infoBanner theme message =
+    Element.paragraph
+        [ Background.color theme.brandBlueSoft
+        , Font.color theme.textPrimary
         , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill
