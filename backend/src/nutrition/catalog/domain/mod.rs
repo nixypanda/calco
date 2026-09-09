@@ -376,6 +376,58 @@ pub struct Product {
 
 impl Product {
     #[allow(clippy::too_many_arguments)]
+    pub fn new_external(
+        source: Source,
+        source_id: String,
+        barcode: String,
+        name: String,
+        brand: Option<String>,
+        categories: Vec<String>,
+        default_quantity: Option<Decimal>,
+        default_unit: Option<String>,
+        nutrients: Vec<ProductNutrientInput>,
+        servings: Vec<ProductServingInput>,
+        nutrient_catalog: &NutrientCatalog,
+    ) -> Result<Self, NutritionError> {
+        if source == Source::User {
+            return Err(NutritionError::Validation(
+                "external food must have an external source".into(),
+            ));
+        }
+        if source_id.trim().is_empty() || barcode.trim().is_empty() {
+            return Err(NutritionError::Validation(
+                "external food must have a source id and barcode".into(),
+            ));
+        }
+
+        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
+        let servings = build_product_servings(servings)?;
+        let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
+        let now = Utc::now();
+
+        Ok(Self {
+            id: ProductId::new(),
+            source,
+            source_id: Some(source_id.trim().to_owned()),
+            user_id: None,
+            visibility: ProductVisibility::Global,
+            barcode: Some(Barcode(barcode.trim().to_owned())),
+            name: ProductName::new(&name)?,
+            brand: brand
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+                .map(Brand),
+            categories: Category::normalize_list(categories),
+            default_quantity: default_quantity.as_ref().map(|q| q.amount),
+            default_unit: default_quantity.map(|q| q.unit),
+            nutrients,
+            servings,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub fn new_custom(
         user_id: Uuid,
         name: String,

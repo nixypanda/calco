@@ -438,7 +438,14 @@ tests =
         , test "barcode lookup success navigates to food detail with context" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted (ticket 1) (Ok appleDetail))
+                    (FoodSearch.BarcodeLookupCompleted
+                        (ticket 1)
+                        (Ok
+                            { product = appleDetail
+                            , lookup = { origin = Foods.Local, note = Nothing }
+                            }
+                        )
+                    )
                     { emptyModel
                         | scope = FoodSearch.Barcode
                         , barcodeToken = ticket 1
@@ -448,7 +455,35 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch))
+                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) Nothing)
+                        )
+        , test "fresh Open Food Facts lookup carries its note to food detail" <|
+            \_ ->
+                let
+                    note : String
+                    note =
+                        "Food was not found locally and was imported from Open Food Facts."
+                in
+                FoodSearch.update
+                    (FoodSearch.BarcodeLookupCompleted
+                        (ticket 1)
+                        (Ok
+                            { product = appleDetail
+                            , lookup =
+                                { origin = Foods.OpenFoodFacts
+                                , note = Just note
+                                }
+                            }
+                        )
+                    )
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeToken = ticket 1
+                    }
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.Navigate
+                            (FoodShow "food-1" Nothing Nothing (Just note))
                         )
         , test "barcode lookup failure keeps error on page" <|
             \_ ->
@@ -475,7 +510,14 @@ tests =
         , test "stale barcode lookup is ignored" <|
             \_ ->
                 FoodSearch.update
-                    (FoodSearch.BarcodeLookupCompleted (ticket 1) (Ok appleDetail))
+                    (FoodSearch.BarcodeLookupCompleted
+                        (ticket 1)
+                        (Ok
+                            { product = appleDetail
+                            , lookup = { origin = Foods.Local, note = Nothing }
+                            }
+                        )
+                    )
                     { emptyModel
                         | scope = FoodSearch.Barcode
                         , barcodeToken = ticket 2
@@ -603,7 +645,7 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Dinner))
+                            (FoodShow "food-1" (Just "2026-05-29") (Just Dinner) Nothing)
                         )
         , test "recent meal click navigates to meal detail" <|
             \_ ->
@@ -835,7 +877,7 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch))
+                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) Nothing)
                         )
         , test "create custom food navigates to custom food create" <|
             \_ ->

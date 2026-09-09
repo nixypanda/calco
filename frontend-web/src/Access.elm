@@ -96,7 +96,7 @@ resolveKnownSession session adminExists route =
             FoodSearch _ _ ->
                 Render route
 
-            FoodShow _ _ _ ->
+            FoodShow _ _ _ _ ->
                 Render route
 
             CustomFoodList ->

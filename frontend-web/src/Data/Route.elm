@@ -25,7 +25,7 @@ type Route
     | DiarySettings
     | FoodLogEntry String (Maybe String) (Maybe String)
     | FoodSearch (Maybe String) (Maybe MealSlot)
-    | FoodShow String (Maybe String) (Maybe MealSlot)
+    | FoodShow String (Maybe String) (Maybe MealSlot) (Maybe String)
     | CustomFoodList
     | CustomFoodCreate
     | CustomFoodCreateWithAi
@@ -72,7 +72,13 @@ routeParser =
         , Parser.map CustomFoodCreate (s "foods" </> s "custom" </> s "new")
         , Parser.map CustomFoodEdit (s "foods" </> s "custom" </> string </> s "edit")
         , Parser.map CustomFoodShow (s "foods" </> s "custom" </> string)
-        , Parser.map FoodShow (s "foods" </> string <?> Query.string "date" <?> mealSlotQuery)
+        , Parser.map FoodShow
+            (s "foods"
+                </> string
+                <?> Query.string "date"
+                <?> mealSlotQuery
+                <?> Query.string "lookup_note"
+            )
         , Parser.map MealList (s "meals")
         , Parser.map MealCreate (s "meals" </> s "new")
         , Parser.map MealEdit (s "meals" </> string </> s "edit")
@@ -89,7 +95,7 @@ mealSlotQuery =
 primaryRoute : Route -> Route
 primaryRoute route =
     case route of
-        FoodShow _ maybeDate maybeSlot ->
+        FoodShow _ maybeDate maybeSlot _ ->
             FoodSearch maybeDate maybeSlot
 
         CustomFoodCreate ->
@@ -192,8 +198,16 @@ routeToPath route =
         FoodSearch maybeDate maybeSlot ->
             withFoodContext "/search" maybeDate maybeSlot
 
-        FoodShow id maybeDate maybeSlot ->
-            withFoodContext ("/foods/" ++ id) maybeDate maybeSlot
+        FoodShow id maybeDate maybeSlot lookupNote ->
+            withQueryParams ("/foods/" ++ id)
+                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                , Maybe.map
+                    (\slot -> "meal_slot=" ++ MealSlot.toString slot)
+                    maybeSlot
+                , Maybe.map
+                    (\note -> "lookup_note=" ++ Url.percentEncode note)
+                    lookupNote
+                ]
 
         CustomFoodList ->
             "/foods/custom"

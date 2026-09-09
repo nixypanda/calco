@@ -790,7 +790,7 @@ retargetSearchForRoute route panes =
         FoodSearch dateParam mealSlot ->
             retargetSearch dateParam mealSlot panes
 
-        FoodShow _ dateParam mealSlot ->
+        FoodShow _ dateParam mealSlot _ ->
             retargetSearch dateParam mealSlot panes
 
         _ ->
@@ -887,8 +887,16 @@ panesForRoute context existing =
         FoodSearch dateParam mealSlot ->
             Just (searchWorkspaceDesired context existing dateParam mealSlot)
 
-        FoodShow productId dateParam mealSlot ->
-            Just (foodWorkspaceDesired context existing productId dateParam mealSlot)
+        FoodShow productId dateParam mealSlot lookupNote ->
+            Just
+                (foodWorkspaceDesired
+                    context
+                    existing
+                    productId
+                    dateParam
+                    mealSlot
+                    lookupNote
+                )
 
         FoodLogEntry logId _ _ ->
             Just [ foodLogDetailDesired context logId ]
@@ -1093,12 +1101,13 @@ foodWorkspaceDesired :
     -> String
     -> Maybe String
     -> Maybe MealSlot
+    -> Maybe String
     -> List DesiredPane
-foodWorkspaceDesired context existing productId dateParam mealSlot =
+foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
     let
         detail : DesiredPane
         detail =
-            foodDetailDesired context productId dateParam mealSlot
+            foodDetailDesired context productId dateParam mealSlot lookupNote
     in
     case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
         ( Just today, Just _ ) ->
@@ -1111,8 +1120,14 @@ foodWorkspaceDesired context existing productId dateParam mealSlot =
             contextualWorkspace existing [] detail
 
 
-foodDetailDesired : InitContext -> String -> Maybe String -> Maybe MealSlot -> DesiredPane
-foodDetailDesired context productId dateParam mealSlot =
+foodDetailDesired :
+    InitContext
+    -> String
+    -> Maybe String
+    -> Maybe MealSlot
+    -> Maybe String
+    -> DesiredPane
+foodDetailDesired context productId dateParam mealSlot lookupNote =
     let
         contextKey : String
         contextKey =
@@ -1124,13 +1139,18 @@ foodDetailDesired context productId dateParam mealSlot =
 
         key : String
         key =
-            "food-detail:" ++ productId ++ ":" ++ contextKey
+            "food-detail:"
+                ++ productId
+                ++ ":"
+                ++ contextKey
+                ++ Maybe.withDefault ""
+                    (Maybe.map (\_ -> ":lookup") lookupNote)
     in
     fromInit context
         key
         (FoodDetailPane key)
         applyFoodDetailOutMsg
-        (\_ -> FoodShow.init productId dateParam mealSlot)
+        (\_ -> FoodShow.init productId dateParam mealSlot lookupNote)
 
 
 foodLogDetailDesired : InitContext -> String -> DesiredPane
@@ -2545,7 +2565,7 @@ applyCustomFoodCreateOutMsgForPanes panes context outMsg =
     case ( outMsg, foodSearchModel panes ) of
         ( CustomFoodCreate.Navigate (CustomFoodShow productId), Just search ) ->
             ( Cmd.none
-            , Navigate (FoodShow productId search.date search.mealSlot)
+            , Navigate (FoodShow productId search.date search.mealSlot Nothing)
             )
 
         _ ->
@@ -2965,7 +2985,7 @@ pageProps props subModel =
 lastUsedProductDefaultCmd : Route -> String -> List (Cmd Msg)
 lastUsedProductDefaultCmd route productId =
     case route of
-        FoodShow _ maybeDate maybeSlot ->
+        FoodShow _ maybeDate maybeSlot _ ->
             case recentItemsRequest maybeDate maybeSlot of
                 Just request ->
                     [ Api.Logs.lastUsedItems

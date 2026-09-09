@@ -351,10 +351,13 @@ async fn barcode_lookup_returns_shared_custom_foods(pool: PgPool) {
         owner_lookup["nutrition_summary"]["per_100g"]["energy_kcal"],
         "320"
     );
+    assert_eq!(owner_lookup["lookup"]["origin"], "local");
+    assert!(owner_lookup["lookup"]["note"].is_null());
 
     let other_lookup: Value =
         get_json(&router, "/api/foods/barcode/private-barcode-123", &other).await;
     assert_eq!(other_lookup["id"], product_id);
+    assert_eq!(other_lookup["lookup"]["origin"], "local");
 }
 
 #[sqlx::test]

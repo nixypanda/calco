@@ -8,6 +8,10 @@ pub enum NutritionError {
     Validation(String),
     #[error("database: {0}")]
     Database(#[from] sqlx::Error),
+    #[error("external food catalog unavailable")]
+    ExternalUnavailable,
+    #[error("external food catalog returned invalid product data")]
+    ExternalInvalidResponse,
     #[error("internal: {0}")]
     Internal(String),
 }

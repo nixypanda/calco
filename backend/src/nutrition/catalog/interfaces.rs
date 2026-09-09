@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
-use crate::nutrition::catalog::application::CustomFoodInput;
+use crate::nutrition::catalog::application::{BarcodeLookupOrigin, CustomFoodInput};
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::module::CatalogModule;
 
@@ -145,6 +145,26 @@ pub struct ProductDetailResponse {
     pub allowed_units: Vec<UnitItemDto>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub struct BarcodeLookupResponse {
+    #[serde(flatten)]
+    pub product: ProductDetailResponse,
+    pub lookup: BarcodeLookupMetadataDto,
+}
+
+#[derive(Serialize)]
+pub struct BarcodeLookupMetadataDto {
+    pub origin: BarcodeLookupOriginDto,
+    pub note: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarcodeLookupOriginDto {
+    Local,
+    OpenFoodFacts,
 }
 
 #[derive(Serialize)]
@@ -306,8 +326,8 @@ async fn barcode_lookup_handler(
     State(state): State<CatalogModule>,
     Path(barcode): Path<String>,
 ) -> impl IntoResponse {
-    let product = match state.services.find_by_barcode(auth.0.id, &barcode).await {
-        Ok(Some(p)) => p,
+    let result = match state.services.find_by_barcode(auth.0.id, &barcode).await {
+        Ok(Some(result)) => result,
         Ok(None) => {
             return error_response(
                 "not_found",
@@ -315,11 +335,11 @@ async fn barcode_lookup_handler(
             )
             .into_response();
         }
-        Err(e) => return internal_error(e).into_response(),
+        Err(e) => return e.into_response(),
     };
 
-    match state.services.allowed_units(&product).await {
-        Ok(units) => Json(product_to_detail_response(&product, units)).into_response(),
+    match state.services.allowed_units(&result.product).await {
+        Ok(units) => Json(barcode_lookup_response(result, units)).into_response(),
         Err(e) => internal_error(e).into_response(),
     }
 }
@@ -586,6 +606,23 @@ fn product_to_detail_response(
             .collect(),
         created_at: product.created_at,
         updated_at: product.updated_at,
+    }
+}
+
+fn barcode_lookup_response(
+    result: crate::nutrition::catalog::application::BarcodeLookupResult,
+    allowed_units: Vec<(UnitCode, String, String)>,
+) -> BarcodeLookupResponse {
+    let (origin, note) = match result.origin {
+        BarcodeLookupOrigin::Local => (BarcodeLookupOriginDto::Local, None),
+        BarcodeLookupOrigin::OpenFoodFacts => (
+            BarcodeLookupOriginDto::OpenFoodFacts,
+            Some("Food was not found locally and was imported from Open Food Facts.".into()),
+        ),
+    };
+    BarcodeLookupResponse {
+        product: product_to_detail_response(&result.product, allowed_units),
+        lookup: BarcodeLookupMetadataDto { origin, note },
     }
 }
 

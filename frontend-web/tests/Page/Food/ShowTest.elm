@@ -24,6 +24,7 @@ tests =
                     "food-1"
                     (Just "2026-05-29")
                     (Just Lunch)
+                    Nothing
                     |> Tuple.second
                     |> Expect.equal (FoodShow.RequestInitialData "food-1")
         , test "food load success initializes the log form" <|
@@ -279,6 +280,7 @@ emptyModel =
         , food = Nothing
         , units = Nothing
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 
@@ -293,6 +295,7 @@ loadedModel =
         , form = form
         , request = FoodShow.Idle
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 
@@ -307,6 +310,7 @@ contextReadyModel =
         , form = form
         , request = FoodShow.RequestingLocalContext
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 
@@ -321,6 +325,7 @@ contextReadyWithoutDateModel =
         , form = form
         , request = FoodShow.RequestingLocalContext
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 
@@ -335,6 +340,7 @@ savingModel =
         , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , request = FoodShow.Saving
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 
@@ -349,6 +355,7 @@ loadedWithForm nextForm =
         , form = nextForm
         , request = FoodShow.Idle
         , lastUsedDefault = Nothing
+        , lookupNote = Nothing
         }
 
 

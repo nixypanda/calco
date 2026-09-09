@@ -1,5 +1,8 @@
 module Api.Foods exposing
-    ( CategorySuggestion
+    ( BarcodeLookupMetadata
+    , BarcodeLookupOrigin(..)
+    , BarcodeLookupResponse
+    , CategorySuggestion
     , CategorySuggestionRequest
     , CategorySuggestionResponse
     , CreateFoodNutrientRequest
@@ -19,6 +22,7 @@ module Api.Foods exposing
     , ServingEntry
     , UnitItem
     , UnitListResponse
+    , barcodeLookupResponseDecoder
     , barcodePath
     , categorySuggestionPath
     , categorySuggestionResponseDecoder
@@ -63,6 +67,23 @@ type alias ProductDetail =
     , servings : List ServingEntry
     , allowedUnits : List UnitItem
     }
+
+
+type alias BarcodeLookupResponse =
+    { product : ProductDetail
+    , lookup : BarcodeLookupMetadata
+    }
+
+
+type alias BarcodeLookupMetadata =
+    { origin : BarcodeLookupOrigin
+    , note : Maybe String
+    }
+
+
+type BarcodeLookupOrigin
+    = Local
+    | OpenFoodFacts
 
 
 type alias ProductNutritionSummary =
@@ -221,11 +242,11 @@ searchFoods request toMsg =
         toMsg
 
 
-lookupBarcode : String -> (Result Client.ApiError ProductDetail -> msg) -> Cmd msg
+lookupBarcode : String -> (Result Client.ApiError BarcodeLookupResponse -> msg) -> Cmd msg
 lookupBarcode barcode toMsg =
     Client.get
         (barcodePath barcode)
-        productDetailDecoder
+        barcodeLookupResponseDecoder
         toMsg
 
 
@@ -374,6 +395,37 @@ productDetailDecoder =
         |> Json.andMap (Decode.field "nutrients" (Decode.list nutrientEntryDecoder))
         |> Json.andMap (Decode.field "servings" (Decode.list servingEntryDecoder))
         |> Json.andMap (Decode.field "allowed_units" (Decode.list unitItemDecoder))
+
+
+barcodeLookupResponseDecoder : Decoder BarcodeLookupResponse
+barcodeLookupResponseDecoder =
+    Decode.map2 BarcodeLookupResponse
+        productDetailDecoder
+        (Decode.field "lookup" barcodeLookupMetadataDecoder)
+
+
+barcodeLookupMetadataDecoder : Decoder BarcodeLookupMetadata
+barcodeLookupMetadataDecoder =
+    Decode.map2 BarcodeLookupMetadata
+        (Decode.field "origin" barcodeLookupOriginDecoder)
+        (Decode.field "note" (Decode.nullable Decode.string))
+
+
+barcodeLookupOriginDecoder : Decoder BarcodeLookupOrigin
+barcodeLookupOriginDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\value ->
+                case value of
+                    "local" ->
+                        Decode.succeed Local
+
+                    "open_food_facts" ->
+                        Decode.succeed OpenFoodFacts
+
+                    _ ->
+                        Decode.fail ("unknown barcode lookup origin: " ++ value)
+            )
 
 
 productNutritionSummaryDecoder : Decoder ProductNutritionSummary
