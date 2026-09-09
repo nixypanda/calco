@@ -73,13 +73,13 @@ in
 
     backendPackage = mkOption {
       type = types.package;
-      default = self.packages.${pkgs.system}.backend;
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.backend;
       description = "Backend package to deploy.";
     };
 
     frontendPackage = mkOption {
       type = types.package;
-      default = self.packages.${pkgs.system}.frontend;
+      default = self.packages.${pkgs.stdenv.hostPlatform.system}.frontend;
       description = ''
         Frontend static-asset package. Consumers point their reverse proxy
         (caddy/nginx/...) at `''${cfg.frontendPackage}/share/calco/web`.

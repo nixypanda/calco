@@ -10,7 +10,7 @@ let
   evalCalco =
     ai:
     lib.nixosSystem {
-      system = pkgs.system;
+      system = pkgs.stdenv.hostPlatform.system;
       modules = [
         self.nixosModules.default
         {
@@ -53,7 +53,8 @@ in
 pkgs.runCommand "calco-nixos-module-evaluation"
   {
     disabledConfig = disabled.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
-    bearerConfig = bearerWithMissingSecret.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
+    bearerConfig =
+      bearerWithMissingSecret.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
     headerConfig = header.config.systemd.services.calco-backend.environment.CALCO_CONFIG_FILE;
   }
   ''
