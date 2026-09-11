@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::assistant::domain::{AssistantError, Conversation, FoodDraftTurn};
+use crate::assistant::domain::{AssistantError, Conversation, FoodDraftPolicy, FoodDraftTurn};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
@@ -82,6 +82,18 @@ pub struct FoodVocabulary {
     pub required_nutrient_codes: Vec<String>,
 }
 
+impl FoodVocabulary {
+    fn draft_policy(&self) -> FoodDraftPolicy {
+        FoodDraftPolicy::new(
+            self.nutrients
+                .iter()
+                .map(|nutrient| (nutrient.code.clone(), nutrient.unit.clone())),
+            self.serving_units.iter().map(|unit| unit.code.clone()),
+            self.required_nutrient_codes.iter().cloned(),
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupportedNutrient {
     pub code: String,
@@ -96,7 +108,11 @@ pub struct SupportedUnit {
     pub kind: String,
 }
 
-/// Outbound application boundary for producing a trusted CalCo food draft.
+/// Outbound application boundary for proposing a CalCo food draft.
+///
+/// Implementations translate provider output into domain types. The application
+/// service remains responsible for validating the proposal against the current
+/// CalCo vocabulary before returning it to a caller.
 #[async_trait]
 pub trait FoodDraftModel: Send + Sync {
     async fn generate(
@@ -126,6 +142,94 @@ impl FoodDraftService {
         request: FoodDraftRequest,
     ) -> Result<FoodDraftResult, AssistantError> {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
-        self.model.generate(&request, &vocabulary).await
+        let result = self.model.generate(&request, &vocabulary).await?;
+        vocabulary.draft_policy().validate(&result.turn)?;
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rust_decimal::Decimal;
+
+    use super::*;
+    use crate::assistant::domain::{DraftNutrient, FoodDraft, FoodDraftTurn};
+
+    struct StubModel {
+        result: FoodDraftResult,
+    }
+
+    #[async_trait]
+    impl FoodDraftModel for StubModel {
+        async fn generate(
+            &self,
+            _request: &FoodDraftRequest,
+            _vocabulary: &FoodVocabulary,
+        ) -> Result<FoodDraftResult, AssistantError> {
+            Ok(self.result.clone())
+        }
+    }
+
+    struct StubVocabulary {
+        value: FoodVocabulary,
+    }
+
+    #[async_trait]
+    impl FoodVocabularyPort for StubVocabulary {
+        async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError> {
+            Ok(self.value.clone())
+        }
+    }
+
+    fn request() -> FoodDraftRequest {
+        FoodDraftRequest {
+            conversation: Conversation::new(vec![
+                crate::assistant::domain::ConversationTurn::new(
+                    crate::assistant::domain::ConversationRole::User,
+                    "dal",
+                )
+                .unwrap(),
+            ])
+            .unwrap(),
+            photos: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn service_rejects_a_model_draft_outside_the_current_vocabulary() {
+        let draft = FoodDraft::new(
+            "Dal".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![DraftNutrient::new("UNKNOWN".into(), Decimal::ONE).unwrap()],
+            vec![],
+        )
+        .unwrap();
+        let service = FoodDraftService::new(
+            Arc::new(StubModel {
+                result: FoodDraftResult {
+                    turn: FoodDraftTurn::ready("Review", draft, vec![]).unwrap(),
+                    usage: None,
+                },
+            }),
+            Arc::new(StubVocabulary {
+                value: FoodVocabulary {
+                    nutrients: vec![SupportedNutrient {
+                        code: "ENERGY_KCAL".into(),
+                        name: "Energy".into(),
+                        unit: "kcal".into(),
+                    }],
+                    required_nutrient_codes: vec!["ENERGY_KCAL".into()],
+                    ..FoodVocabulary::default()
+                },
+            }),
+        );
+
+        assert!(matches!(
+            service.draft(request()).await,
+            Err(AssistantError::InvalidModelResponse)
+        ));
     }
 }

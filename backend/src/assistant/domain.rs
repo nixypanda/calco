@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -9,6 +9,19 @@ pub const MAX_ASSISTANT_MESSAGE_CHARS: usize = 4_000;
 pub const MAX_DRAFT_NAME_CHARS: usize = 200;
 pub const MAX_DRAFT_CODE_CHARS: usize = 100;
 pub const MAX_DRAFT_UNIT_CHARS: usize = 100;
+pub const MAX_DRAFT_CATEGORIES: usize = 20;
+pub const MAX_DRAFT_CATEGORY_CHARS: usize = 200;
+pub const MAX_DRAFT_NUTRIENTS: usize = 100;
+pub const MAX_DRAFT_SERVINGS: usize = 20;
+pub const MAX_DRAFT_WARNINGS: usize = 20;
+pub const MAX_DRAFT_WARNING_CHARS: usize = 500;
+
+const MAX_NUTRIENT_G: Decimal = Decimal::from_parts(100, 0, 0, false, 0);
+const MAX_NUTRIENT_MG: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
+const MAX_NUTRIENT_UG: Decimal = Decimal::from_parts(100_000_000, 0, 0, false, 0);
+const MAX_NUTRIENT_KCAL: Decimal = Decimal::from_parts(1_000, 0, 0, false, 0);
+const MAX_NUTRIENT_OTHER: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
+const MAX_SERVING_VALUE: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AssistantError {
@@ -96,11 +109,82 @@ impl FoodDraftTurn {
         draft: FoodDraft,
         warnings: Vec<String>,
     ) -> Result<Self, AssistantError> {
+        if warnings.len() > MAX_DRAFT_WARNINGS
+            || warnings
+                .iter()
+                .any(|value| value.chars().count() > MAX_DRAFT_WARNING_CHARS)
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
         Ok(Self::DraftReady {
             assistant_message: bounded_text(message.into(), MAX_ASSISTANT_MESSAGE_CHARS)?,
             draft,
-            warnings,
+            warnings: warnings
+                .into_iter()
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+                .collect(),
         })
+    }
+}
+
+/// Domain policy for validating a draft against the current CalCo vocabulary.
+///
+/// The vocabulary is supplied at runtime, but the decision about whether a
+/// model-produced draft is acceptable remains independent of any model adapter.
+pub struct FoodDraftPolicy {
+    nutrient_units: HashMap<String, String>,
+    serving_units: HashSet<String>,
+    required_nutrient_codes: HashSet<String>,
+}
+
+impl FoodDraftPolicy {
+    pub fn new(
+        nutrient_units: impl IntoIterator<Item = (String, String)>,
+        serving_units: impl IntoIterator<Item = String>,
+        required_nutrient_codes: impl IntoIterator<Item = String>,
+    ) -> Self {
+        Self {
+            nutrient_units: nutrient_units.into_iter().collect(),
+            serving_units: serving_units.into_iter().collect(),
+            required_nutrient_codes: required_nutrient_codes.into_iter().collect(),
+        }
+    }
+
+    pub fn validate(&self, turn: &FoodDraftTurn) -> Result<(), AssistantError> {
+        let FoodDraftTurn::DraftReady { draft, .. } = turn else {
+            return Ok(());
+        };
+
+        let nutrient_codes: HashSet<&str> = draft
+            .nutrients
+            .iter()
+            .map(|nutrient| nutrient.code.as_str())
+            .collect();
+        if self
+            .required_nutrient_codes
+            .iter()
+            .any(|code| !nutrient_codes.contains(code.as_str()))
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
+        for nutrient in &draft.nutrients {
+            let unit = self
+                .nutrient_units
+                .get(&nutrient.code)
+                .ok_or(AssistantError::InvalidModelResponse)?;
+            if nutrient.amount_per_100g > maximum_nutrient(unit) {
+                return Err(AssistantError::InvalidModelResponse);
+            }
+        }
+        if draft
+            .servings
+            .iter()
+            .any(|serving| !self.serving_units.contains(&serving.unit))
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
+        Ok(())
     }
 }
 
@@ -126,6 +210,15 @@ impl FoodDraft {
         nutrients: Vec<DraftNutrient>,
         servings: Vec<DraftServing>,
     ) -> Result<Self, AssistantError> {
+        if categories.len() > MAX_DRAFT_CATEGORIES
+            || nutrients.len() > MAX_DRAFT_NUTRIENTS
+            || servings.len() > MAX_DRAFT_SERVINGS
+            || categories
+                .iter()
+                .any(|value| value.chars().count() > MAX_DRAFT_CATEGORY_CHARS)
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
         let name = bounded_text(name, MAX_DRAFT_NAME_CHARS)?;
         let brand = optional_bounded_text(brand, MAX_DRAFT_NAME_CHARS)?;
         let default_unit = optional_bounded_text(default_unit, MAX_DRAFT_UNIT_CHARS)?;
@@ -151,6 +244,13 @@ impl FoodDraft {
         if nutrients
             .iter()
             .any(|value| !codes.insert(value.code.clone()))
+        {
+            return Err(AssistantError::InvalidModelResponse);
+        }
+        let mut serving_units = HashSet::new();
+        if servings
+            .iter()
+            .any(|value| !serving_units.insert(value.unit.clone()))
         {
             return Err(AssistantError::InvalidModelResponse);
         }
@@ -194,13 +294,23 @@ pub struct DraftServing {
 impl DraftServing {
     pub fn new(unit: String, grams_per_unit: Decimal) -> Result<Self, AssistantError> {
         let unit = bounded_text(unit, MAX_DRAFT_UNIT_CHARS)?;
-        if grams_per_unit <= Decimal::ZERO {
+        if grams_per_unit <= Decimal::ZERO || grams_per_unit > MAX_SERVING_VALUE {
             return Err(AssistantError::InvalidModelResponse);
         }
         Ok(Self {
             unit,
             grams_per_unit: grams_per_unit.round_dp(6),
         })
+    }
+}
+
+fn maximum_nutrient(unit: &str) -> Decimal {
+    match unit.to_ascii_lowercase().as_str() {
+        "g" => MAX_NUTRIENT_G,
+        "mg" => MAX_NUTRIENT_MG,
+        "ug" | "µg" => MAX_NUTRIENT_UG,
+        "kcal" => MAX_NUTRIENT_KCAL,
+        _ => MAX_NUTRIENT_OTHER,
     }
 }
 
@@ -240,6 +350,56 @@ mod tests {
     fn clarification_cannot_be_empty() {
         assert!(matches!(
             FoodDraftTurn::clarification("  "),
+            Err(AssistantError::InvalidModelResponse)
+        ));
+    }
+
+    #[test]
+    fn draft_structure_limits_are_domain_invariants() {
+        let categories = vec!["category".to_owned(); MAX_DRAFT_CATEGORIES + 1];
+        assert!(matches!(
+            FoodDraft::new("Dal".into(), None, categories, None, None, vec![], vec![]),
+            Err(AssistantError::InvalidModelResponse)
+        ));
+
+        let serving = DraftServing::new("cup".into(), Decimal::ONE).unwrap();
+        assert!(matches!(
+            FoodDraft::new(
+                "Dal".into(),
+                None,
+                vec![],
+                None,
+                None,
+                vec![],
+                vec![serving.clone(), serving],
+            ),
+            Err(AssistantError::InvalidModelResponse)
+        ));
+    }
+
+    #[test]
+    fn draft_policy_enforces_runtime_vocabulary_and_plausibility() {
+        let policy = FoodDraftPolicy::new(
+            [("ENERGY_KCAL".into(), "kcal".into())],
+            ["cup".into()],
+            ["ENERGY_KCAL".into()],
+        );
+        let excessive_energy =
+            DraftNutrient::new("ENERGY_KCAL".into(), Decimal::from(1_001)).unwrap();
+        let draft = FoodDraft::new(
+            "Dal".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![excessive_energy],
+            vec![],
+        )
+        .unwrap();
+        let turn = FoodDraftTurn::ready("Review", draft, vec![]).unwrap();
+
+        assert!(matches!(
+            policy.validate(&turn),
             Err(AssistantError::InvalidModelResponse)
         ));
     }

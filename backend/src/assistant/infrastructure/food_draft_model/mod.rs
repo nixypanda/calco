@@ -77,7 +77,7 @@ impl FoodDraftModel for FoodDraftModelAdapter {
             })
             .await
             .map_err(map_chat_error)?;
-        let turn = parse_model_turn(&response.content, vocabulary).map_err(|error| {
+        let turn = parse_model_turn(&response.content).map_err(|error| {
             tracing::error!(
                 provider_response = %response.content,
                 "provider response failed food draft validation"
