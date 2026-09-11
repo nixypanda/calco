@@ -85,6 +85,10 @@ impl AuthSessionService {
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
+        if session.identity_security_stamp != identity.session_security_stamp {
+            return Err(AuthError::SessionRevoked);
+        }
+
         if !identity.is_active() {
             return Err(AuthError::IdentityDisabled);
         }

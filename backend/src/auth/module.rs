@@ -50,8 +50,7 @@ impl AuthModule {
             credentials.clone(),
             session_policy,
         );
-        let admin_users =
-            AdminUserService::new(identity_repo, session_repo, profile_repo, credentials);
+        let admin_users = AdminUserService::new(identity_repo, profile_repo, credentials);
 
         Self {
             cookie_config,

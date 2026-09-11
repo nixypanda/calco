@@ -10,7 +10,6 @@ use crate::auth::domain::*;
 #[derive(Clone)]
 pub struct AdminUserService {
     identity_repo: Arc<dyn IdentityRepository>,
-    session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
     password_hasher: Arc<dyn PasswordHasher>,
 }
@@ -18,13 +17,11 @@ pub struct AdminUserService {
 impl AdminUserService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
-        session_repo: Arc<dyn SessionRepository>,
         profile_repo: Arc<dyn UserProfileRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
     ) -> Self {
         Self {
             identity_repo,
-            session_repo,
             profile_repo,
             password_hasher,
         }
@@ -113,8 +110,7 @@ impl AdminUserService {
             .ok_or(AuthError::IdentityNotFound)?;
         let identity = identity.change_password(password_hash, Utc::now());
 
-        self.identity_repo.update(&identity).await?;
-        self.revoke_sessions_for_identity(profile.identity_id).await
+        self.identity_repo.update(&identity).await
     }
 
     pub async fn disable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
@@ -131,8 +127,7 @@ impl AdminUserService {
             .ok_or(AuthError::IdentityNotFound)?;
         let identity = identity.disable(Utc::now());
 
-        self.identity_repo.update(&identity).await?;
-        self.revoke_sessions_for_identity(profile.identity_id).await
+        self.identity_repo.update(&identity).await
     }
 
     pub async fn enable_user(&self, user_id: Uuid) -> Result<(), AuthError> {
@@ -150,17 +145,5 @@ impl AdminUserService {
         let identity = identity.enable(Utc::now());
 
         self.identity_repo.update(&identity).await
-    }
-
-    async fn revoke_sessions_for_identity(&self, identity_id: IdentityId) -> Result<(), AuthError> {
-        let now = Utc::now();
-        let sessions = self.session_repo.list_by_identity_id(identity_id).await?;
-        let revoked_sessions: Vec<Session> = sessions
-            .into_iter()
-            .filter(|session| session.revoked_at.is_none())
-            .map(|session| session.revoke(now))
-            .collect();
-
-        self.session_repo.update_many(&revoked_sessions).await
     }
 }

@@ -224,6 +224,18 @@ async fn admin_user_workflows_disable_enable_reset_password(pool: PgPool) {
     let (enable_status, _enable_headers, enable_bytes) = send(&router, enable_req).await;
     assert_status(enable_status, StatusCode::OK, &enable_bytes);
 
+    let pre_disable_session_req =
+        empty_request(Method::GET, "/api/auth/session", Some(&user_cookie));
+    let (pre_disable_session_status, _headers, pre_disable_session_bytes) =
+        send(&router, pre_disable_session_req).await;
+    assert_status(
+        pre_disable_session_status,
+        StatusCode::UNAUTHORIZED,
+        &pre_disable_session_bytes,
+    );
+    let pre_disable_session_body: Value = parse_json(&pre_disable_session_bytes);
+    assert_eq!(pre_disable_session_body["error"]["code"], "session_revoked");
+
     let old_password_cookie = login(&router, "tester", "testpassword").await;
 
     let reset_req = json_request(

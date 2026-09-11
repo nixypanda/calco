@@ -25,6 +25,21 @@ impl From<uuid::Uuid> for IdentityId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionSecurityStamp(pub uuid::Uuid);
+
+impl Default for SessionSecurityStamp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SessionSecurityStamp {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Username(String);
 
@@ -186,6 +201,10 @@ pub struct Identity {
     pub password_hash: PasswordHash,
     pub role: IdentityRole,
     pub status: IdentityStatus,
+    /// Opaque value copied into new sessions and rotated by security-sensitive
+    /// identity changes. This makes invalidation a single-aggregate write and
+    /// avoids an application-level unit of work spanning identities and sessions.
+    pub session_security_stamp: SessionSecurityStamp,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -211,6 +230,7 @@ impl Identity {
             password_hash,
             role,
             status: IdentityStatus::Active,
+            session_security_stamp: SessionSecurityStamp::new(),
             created_at: now,
             updated_at: now,
         }
@@ -223,6 +243,7 @@ impl Identity {
     pub fn change_password(&self, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
         Self {
             password_hash,
+            session_security_stamp: SessionSecurityStamp::new(),
             updated_at: now,
             ..self.clone()
         }
@@ -231,6 +252,7 @@ impl Identity {
     pub fn disable(&self, now: DateTime<Utc>) -> Self {
         Self {
             status: IdentityStatus::Disabled,
+            session_security_stamp: SessionSecurityStamp::new(),
             updated_at: now,
             ..self.clone()
         }
@@ -274,6 +296,8 @@ impl UserProfile {
 pub struct Session {
     pub id: uuid::Uuid,
     pub identity_id: IdentityId,
+    /// Snapshot of the identity's security stamp when this session was issued.
+    pub identity_security_stamp: SessionSecurityStamp,
     pub session_token_hash: SessionTokenHash,
     pub created_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
@@ -329,6 +353,7 @@ pub fn create_session(
     let session = Session {
         id: Uuid::new_v4(),
         identity_id: identity.id,
+        identity_security_stamp: identity.session_security_stamp,
         session_token_hash: token_hash,
         created_at: now,
         last_seen_at: now,
@@ -404,10 +429,7 @@ pub trait IdentityRepository: Send + Sync {
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
-    async fn list_by_identity_id(&self, identity_id: IdentityId)
-    -> Result<Vec<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
-    async fn update_many(&self, sessions: &[Session]) -> Result<(), AuthError>;
 }
 
 #[async_trait]
@@ -424,6 +446,57 @@ pub trait UserProfileRepository: Send + Sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn password_change_and_disable_rotate_the_session_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("old-hash".into()),
+            now,
+        );
+
+        let password_changed =
+            identity.change_password(PasswordHash("new-hash".into()), now + Duration::seconds(1));
+        assert_ne!(
+            password_changed.session_security_stamp,
+            identity.session_security_stamp
+        );
+
+        let disabled = password_changed.disable(now + Duration::seconds(2));
+        assert_ne!(
+            disabled.session_security_stamp,
+            password_changed.session_security_stamp
+        );
+
+        let enabled = disabled.enable(now + Duration::seconds(3));
+        assert_eq!(
+            enabled.session_security_stamp,
+            disabled.session_security_stamp
+        );
+    }
+
+    #[test]
+    fn session_captures_the_identity_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+
+        let (_, session) = create_session(
+            &identity,
+            &SessionPolicy::new(Duration::hours(1)).unwrap(),
+            now,
+        )
+        .unwrap();
+
+        assert_eq!(
+            session.identity_security_stamp,
+            identity.session_security_stamp
+        );
+    }
 
     #[test]
     fn new_password_enforces_length_boundaries() {

@@ -19,7 +19,7 @@ impl PostgresIdentityRepository {
 impl IdentityRepository for PostgresIdentityRepository {
     async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError> {
         let row = sqlx::query_as::<_, IdentityRow>(
-            "SELECT id, username, password_hash, role, status, created_at, updated_at \
+            "SELECT id, username, password_hash, role, status, session_security_stamp, created_at, updated_at \
              FROM identities WHERE username = $1",
         )
         .bind(username)
@@ -31,7 +31,7 @@ impl IdentityRepository for PostgresIdentityRepository {
 
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError> {
         let row = sqlx::query_as::<_, IdentityRow>(
-            "SELECT id, username, password_hash, role, status, created_at, updated_at \
+            "SELECT id, username, password_hash, role, status, session_security_stamp, created_at, updated_at \
              FROM identities WHERE id = $1",
         )
         .bind(id.0)
@@ -44,7 +44,7 @@ impl IdentityRepository for PostgresIdentityRepository {
     async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError> {
         let ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
         let rows = sqlx::query_as::<_, IdentityRow>(
-            "SELECT id, username, password_hash, role, status, created_at, updated_at \
+            "SELECT id, username, password_hash, role, status, session_security_stamp, created_at, updated_at \
              FROM identities WHERE id = ANY($1)",
         )
         .bind(ids)
@@ -56,14 +56,15 @@ impl IdentityRepository for PostgresIdentityRepository {
 
     async fn create(&self, identity: &Identity) -> Result<(), AuthError> {
         let result = sqlx::query(
-            "INSERT INTO identities (id, username, password_hash, role, status, created_at, updated_at) \
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO identities (id, username, password_hash, role, status, session_security_stamp, created_at, updated_at) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         )
         .bind(identity.id.0)
         .bind(identity.username.as_str())
         .bind(&identity.password_hash.0)
         .bind(identity.role.as_str())
         .bind(identity.status.as_str())
+        .bind(identity.session_security_stamp.0)
         .bind(identity.created_at)
         .bind(identity.updated_at)
         .execute(&self.pool)
@@ -77,11 +78,12 @@ impl IdentityRepository for PostgresIdentityRepository {
 
     async fn update(&self, identity: &Identity) -> Result<(), AuthError> {
         sqlx::query(
-            "UPDATE identities SET password_hash = $1, status = $2, updated_at = $3 \
-             WHERE id = $4",
+            "UPDATE identities SET password_hash = $1, status = $2, session_security_stamp = $3, updated_at = $4 \
+             WHERE id = $5",
         )
         .bind(&identity.password_hash.0)
         .bind(identity.status.as_str())
+        .bind(identity.session_security_stamp.0)
         .bind(identity.updated_at)
         .bind(identity.id.0)
         .execute(&self.pool)
@@ -122,6 +124,7 @@ struct IdentityRow {
     password_hash: String,
     role: String,
     status: String,
+    session_security_stamp: Uuid,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -133,6 +136,7 @@ fn identity_row_to_identity(row: IdentityRow) -> Result<Identity, AuthError> {
         password_hash: PasswordHash(row.password_hash),
         role: row.role.parse::<IdentityRole>()?,
         status: row.status.parse::<IdentityStatus>()?,
+        session_security_stamp: SessionSecurityStamp(row.session_security_stamp),
         created_at: row.created_at,
         updated_at: row.updated_at,
     })
