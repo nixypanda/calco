@@ -63,6 +63,67 @@ async fn session_lifecycle_bootstrap_login_session_logout(pool: PgPool) {
 }
 
 #[sqlx::test]
+async fn new_password_policy_errors_are_reported_as_bad_requests(pool: PgPool) {
+    let router = app(pool).await;
+
+    let short_bootstrap_req = json_request(
+        Method::POST,
+        "/api/auth/bootstrap/admin",
+        None,
+        &json!({
+            "username": "admin",
+            "password": "short",
+        }),
+    );
+    let (status, _headers, bytes) = send(&router, short_bootstrap_req).await;
+    assert_status(status, StatusCode::BAD_REQUEST, &bytes);
+    let body: Value = parse_json(&bytes);
+    assert_eq!(body["error"]["code"], "invalid_password");
+
+    let admin_cookie = bootstrap_admin(&router).await;
+    let short_create_req = json_request(
+        Method::POST,
+        "/api/admin/users",
+        Some(&admin_cookie),
+        &json!({
+            "username": "tester",
+            "display_name": "Tester",
+            "initial_password": "short",
+        }),
+    );
+    let (status, _headers, bytes) = send(&router, short_create_req).await;
+    assert_status(status, StatusCode::BAD_REQUEST, &bytes);
+    let body: Value = parse_json(&bytes);
+    assert_eq!(body["error"]["code"], "invalid_password");
+
+    let valid_create_req = json_request(
+        Method::POST,
+        "/api/admin/users",
+        Some(&admin_cookie),
+        &json!({
+            "username": "tester",
+            "display_name": "Tester",
+            "initial_password": "testpassword",
+        }),
+    );
+    let (status, _headers, bytes) = send(&router, valid_create_req).await;
+    assert_status(status, StatusCode::CREATED, &bytes);
+    let body: Value = parse_json(&bytes);
+    let user_id = body["profile"]["id"].as_str().unwrap();
+
+    let short_reset_req = json_request(
+        Method::POST,
+        &format!("/api/admin/users/{user_id}/reset-password"),
+        Some(&admin_cookie),
+        &json!({ "new_password": "short" }),
+    );
+    let (status, _headers, bytes) = send(&router, short_reset_req).await;
+    assert_status(status, StatusCode::BAD_REQUEST, &bytes);
+    let body: Value = parse_json(&bytes);
+    assert_eq!(body["error"]["code"], "invalid_password");
+}
+
+#[sqlx::test]
 async fn admin_user_workflows_disable_enable_reset_password(pool: PgPool) {
     let router = app(pool).await;
     let admin_cookie = bootstrap_admin(&router).await;
@@ -162,6 +223,18 @@ async fn admin_user_workflows_disable_enable_reset_password(pool: PgPool) {
     );
     let (enable_status, _enable_headers, enable_bytes) = send(&router, enable_req).await;
     assert_status(enable_status, StatusCode::OK, &enable_bytes);
+
+    let pre_disable_session_req =
+        empty_request(Method::GET, "/api/auth/session", Some(&user_cookie));
+    let (pre_disable_session_status, _headers, pre_disable_session_bytes) =
+        send(&router, pre_disable_session_req).await;
+    assert_status(
+        pre_disable_session_status,
+        StatusCode::UNAUTHORIZED,
+        &pre_disable_session_bytes,
+    );
+    let pre_disable_session_body: Value = parse_json(&pre_disable_session_bytes);
+    assert_eq!(pre_disable_session_body["error"]["code"], "session_revoked");
 
     let old_password_cookie = login(&router, "tester", "testpassword").await;
 

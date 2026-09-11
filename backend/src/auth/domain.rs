@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use std::str::FromStr;
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IdentityId(pub uuid::Uuid);
@@ -21,6 +22,21 @@ impl IdentityId {
 impl From<uuid::Uuid> for IdentityId {
     fn from(id: uuid::Uuid) -> Self {
         Self(id)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SessionSecurityStamp(pub uuid::Uuid);
+
+impl Default for SessionSecurityStamp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SessionSecurityStamp {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
     }
 }
 
@@ -50,7 +66,45 @@ impl Username {
     }
 }
 
-#[derive(Debug, Clone)]
+pub struct Password(String);
+
+impl Password {
+    pub fn new(raw: impl Into<String>) -> Self {
+        Self(raw.into())
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl Drop for Password {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+pub struct NewPassword(Password);
+
+impl NewPassword {
+    const MIN_LEN: usize = 8;
+    const MAX_LEN: usize = 256;
+
+    pub fn new(raw: impl Into<String>) -> Result<Self, AuthError> {
+        let password = raw.into();
+        if password.len() < Self::MIN_LEN || password.len() > Self::MAX_LEN {
+            return Err(AuthError::InvalidPassword);
+        }
+
+        Ok(Self(Password::new(password)))
+    }
+
+    pub(crate) fn password(&self) -> &Password {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PasswordHash(pub String);
 
 #[derive(Debug, Clone)]
@@ -59,14 +113,31 @@ pub struct SessionToken(pub String);
 #[derive(Debug, Clone)]
 pub struct SessionTokenHash(pub String);
 
-/// The slice of configuration the auth context actually needs: how session
-/// cookies are named/secured and how long sessions live. Kept separate from the
-/// app-wide config so auth depends only on what it uses.
-#[derive(Debug, Clone)]
-pub struct SessionCookieConfig {
-    pub cookie_name: String,
-    pub cookie_secure: bool,
-    pub ttl_seconds: i64,
+#[derive(Debug, Clone, Copy)]
+pub struct SessionPolicy {
+    lifetime: Duration,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("session lifetime must be positive")]
+pub struct InvalidSessionLifetime;
+
+impl SessionPolicy {
+    pub fn new(lifetime: Duration) -> Result<Self, InvalidSessionLifetime> {
+        if lifetime <= Duration::zero() {
+            return Err(InvalidSessionLifetime);
+        }
+
+        Ok(Self { lifetime })
+    }
+
+    pub fn lifetime(&self) -> Duration {
+        self.lifetime
+    }
+
+    pub fn expires_at(&self, created_at: DateTime<Utc>) -> DateTime<Utc> {
+        created_at + self.lifetime
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,26 +201,49 @@ pub struct Identity {
     pub password_hash: PasswordHash,
     pub role: IdentityRole,
     pub status: IdentityStatus,
+    /// Opaque value copied into new sessions and rotated by security-sensitive
+    /// identity changes. This makes invalidation a single-aggregate write and
+    /// avoids an application-level unit of work spanning identities and sessions.
+    pub session_security_stamp: SessionSecurityStamp,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub last_login_at: Option<DateTime<Utc>>,
 }
 
 impl Identity {
-    pub fn is_active(&self) -> bool {
-        self.status == IdentityStatus::Active
+    pub fn new_user(username: Username, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
+        Self::new(username, password_hash, IdentityRole::User, now)
     }
 
-    pub fn record_login(&self, now: DateTime<Utc>) -> Self {
+    pub fn new_admin(username: Username, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
+        Self::new(username, password_hash, IdentityRole::Admin, now)
+    }
+
+    fn new(
+        username: Username,
+        password_hash: PasswordHash,
+        role: IdentityRole,
+        now: DateTime<Utc>,
+    ) -> Self {
         Self {
-            last_login_at: Some(now),
-            ..self.clone()
+            id: IdentityId::new(),
+            username,
+            password_hash,
+            role,
+            status: IdentityStatus::Active,
+            session_security_stamp: SessionSecurityStamp::new(),
+            created_at: now,
+            updated_at: now,
         }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.status == IdentityStatus::Active
     }
 
     pub fn change_password(&self, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
         Self {
             password_hash,
+            session_security_stamp: SessionSecurityStamp::new(),
             updated_at: now,
             ..self.clone()
         }
@@ -158,6 +252,7 @@ impl Identity {
     pub fn disable(&self, now: DateTime<Utc>) -> Self {
         Self {
             status: IdentityStatus::Disabled,
+            session_security_stamp: SessionSecurityStamp::new(),
             updated_at: now,
             ..self.clone()
         }
@@ -181,10 +276,28 @@ pub struct UserProfile {
     pub updated_at: DateTime<Utc>,
 }
 
+impl UserProfile {
+    pub fn new(
+        identity_id: IdentityId,
+        display_name: impl Into<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            identity_id,
+            display_name: display_name.into(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Session {
     pub id: uuid::Uuid,
     pub identity_id: IdentityId,
+    /// Snapshot of the identity's security stamp when this session was issued.
+    pub identity_security_stamp: SessionSecurityStamp,
     pub session_token_hash: SessionTokenHash,
     pub created_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
@@ -193,8 +306,16 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn ensure_usable(&self, now: DateTime<Utc>) -> Result<(), AuthError> {
-        if self.revoked_at.is_some() {
+    pub fn is_revoked_for(&self, identity: &Identity) -> bool {
+        self.revoked_at.is_some() || self.identity_security_stamp != identity.session_security_stamp
+    }
+
+    pub fn ensure_usable_for(
+        &self,
+        identity: &Identity,
+        now: DateTime<Utc>,
+    ) -> Result<(), AuthError> {
+        if self.is_revoked_for(identity) {
             return Err(AuthError::SessionRevoked);
         }
         if self.expires_at < now {
@@ -222,10 +343,49 @@ impl Session {
     }
 }
 
+pub fn create_session(
+    identity: &Identity,
+    policy: &SessionPolicy,
+    now: DateTime<Utc>,
+) -> Result<(SessionToken, Session), AuthError> {
+    use rand::RngCore;
+
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    let raw_token = SessionToken(base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        bytes,
+    ));
+    let token_hash = SessionTokenHash(hash_session_token(&raw_token.0));
+
+    let session = Session {
+        id: Uuid::new_v4(),
+        identity_id: identity.id,
+        identity_security_stamp: identity.session_security_stamp,
+        session_token_hash: token_hash,
+        created_at: now,
+        last_seen_at: now,
+        expires_at: policy.expires_at(now),
+        revoked_at: None,
+    };
+
+    Ok((raw_token, session))
+}
+
+pub fn hash_session_token(token: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AuthError {
     #[error("invalid_credentials")]
     InvalidCredentials,
+    #[error("invalid_password")]
+    InvalidPassword,
     #[error("identity_disabled")]
     IdentityDisabled,
     #[error("identity_not_found")]
@@ -244,8 +404,8 @@ pub enum AuthError {
     Unauthorized,
     #[error("database: {0}")]
     Database(#[from] sqlx::Error),
-    #[error("password_hash: {0}")]
-    PasswordHash(argon2::password_hash::Error),
+    #[error("credential_processing_failed")]
+    CredentialProcessingFailed,
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -255,10 +415,19 @@ pub struct UserWithProfile {
     pub profile: UserProfile,
 }
 
+pub trait PasswordHasher: Send + Sync {
+    fn hash(&self, password: &NewPassword) -> Result<PasswordHash, AuthError>;
+}
+
+pub trait CredentialVerifier: Send + Sync {
+    fn verify(&self, password: &Password, expected_hash: &PasswordHash) -> Result<bool, AuthError>;
+}
+
 #[async_trait]
 pub trait IdentityRepository: Send + Sync {
     async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError>;
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError>;
+    async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError>;
     async fn create(&self, identity: &Identity) -> Result<(), AuthError>;
     async fn update(&self, identity: &Identity) -> Result<(), AuthError>;
     async fn exists_admin(&self) -> Result<bool, AuthError>;
@@ -268,10 +437,7 @@ pub trait IdentityRepository: Send + Sync {
 pub trait SessionRepository: Send + Sync {
     async fn create(&self, session: &Session) -> Result<(), AuthError>;
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<Session>, AuthError>;
-    async fn list_by_identity_id(&self, identity_id: IdentityId)
-    -> Result<Vec<Session>, AuthError>;
     async fn update(&self, session: &Session) -> Result<(), AuthError>;
-    async fn update_many(&self, sessions: &[Session]) -> Result<(), AuthError>;
 }
 
 #[async_trait]
@@ -282,5 +448,170 @@ pub trait UserProfileRepository: Send + Sync {
     ) -> Result<Option<UserProfile>, AuthError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
-    async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError>;
+    async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn password_change_and_disable_rotate_the_session_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("old-hash".into()),
+            now,
+        );
+
+        let password_changed =
+            identity.change_password(PasswordHash("new-hash".into()), now + Duration::seconds(1));
+        assert_ne!(
+            password_changed.session_security_stamp,
+            identity.session_security_stamp
+        );
+
+        let disabled = password_changed.disable(now + Duration::seconds(2));
+        assert_ne!(
+            disabled.session_security_stamp,
+            password_changed.session_security_stamp
+        );
+
+        let enabled = disabled.enable(now + Duration::seconds(3));
+        assert_eq!(
+            enabled.session_security_stamp,
+            disabled.session_security_stamp
+        );
+    }
+
+    #[test]
+    fn session_captures_the_identity_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+
+        let (_, session) = create_session(
+            &identity,
+            &SessionPolicy::new(Duration::hours(1)).unwrap(),
+            now,
+        )
+        .unwrap();
+
+        assert_eq!(
+            session.identity_security_stamp,
+            identity.session_security_stamp
+        );
+    }
+
+    #[test]
+    fn session_is_revoked_when_its_identity_rotates_the_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let (_, session) = create_session(
+            &identity,
+            &SessionPolicy::new(Duration::hours(1)).unwrap(),
+            now,
+        )
+        .unwrap();
+
+        assert!(!session.is_revoked_for(&identity));
+        assert!(session.revoke(now).is_revoked_for(&identity));
+
+        let identity = identity.disable(now + Duration::seconds(1));
+
+        assert!(session.is_revoked_for(&identity));
+        assert!(matches!(
+            session.ensure_usable_for(&identity, now),
+            Err(AuthError::SessionRevoked)
+        ));
+    }
+
+    #[test]
+    fn new_password_enforces_length_boundaries() {
+        assert!(matches!(
+            NewPassword::new("a".repeat(7)),
+            Err(AuthError::InvalidPassword)
+        ));
+        assert!(NewPassword::new("a".repeat(8)).is_ok());
+        assert!(NewPassword::new("a".repeat(256)).is_ok());
+        assert!(matches!(
+            NewPassword::new("a".repeat(257)),
+            Err(AuthError::InvalidPassword)
+        ));
+    }
+
+    #[test]
+    fn login_password_does_not_apply_new_password_policy() {
+        let password = Password::new("short");
+
+        assert_eq!(password.as_bytes(), b"short");
+    }
+
+    #[test]
+    fn identity_factories_create_active_identity_with_requested_role() {
+        let now = Utc::now();
+        let user = Identity::new_user(
+            Username::new("user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let admin = Identity::new_admin(
+            Username::new("admin").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+
+        assert_eq!(user.role, IdentityRole::User);
+        assert_eq!(admin.role, IdentityRole::Admin);
+        assert_eq!(user.status, IdentityStatus::Active);
+        assert_eq!(admin.status, IdentityStatus::Active);
+        assert_eq!(user.created_at, now);
+        assert_eq!(user.updated_at, now);
+    }
+
+    #[test]
+    fn user_profile_factory_associates_a_new_profile_with_an_identity() {
+        let now = Utc::now();
+        let identity_id = IdentityId::new();
+        let profile = UserProfile::new(identity_id, "Display Name", now);
+
+        assert_eq!(profile.identity_id, identity_id);
+        assert_eq!(profile.display_name, "Display Name");
+        assert_eq!(profile.created_at, now);
+        assert_eq!(profile.updated_at, now);
+    }
+    #[test]
+    fn session_policy_requires_a_positive_lifetime() {
+        assert!(SessionPolicy::new(Duration::seconds(1)).is_ok());
+        assert!(matches!(
+            SessionPolicy::new(Duration::zero()),
+            Err(InvalidSessionLifetime)
+        ));
+        assert!(matches!(
+            SessionPolicy::new(Duration::seconds(-1)),
+            Err(InvalidSessionLifetime)
+        ));
+    }
+
+    #[test]
+    fn session_policy_determines_session_expiration() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let policy = SessionPolicy::new(Duration::hours(2)).unwrap();
+
+        let (_, session) = create_session(&identity, &policy, now).unwrap();
+
+        assert_eq!(session.expires_at, now + Duration::hours(2));
+    }
 }

@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::application::*;
 use crate::auth::domain::*;
+use crate::auth::interfaces::SessionCookieConfig;
 use crate::auth::module::AuthModule;
 
 pub fn auth_routes(state: AuthModule) -> Router {
@@ -284,7 +285,11 @@ async fn bootstrap_create_admin_handler(
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
+    let cookie = build_session_cookie(
+        &result.session_token.0,
+        &state.cookie_config,
+        &state.session_policy,
+    );
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::CREATED, [cookie], Json(resp)))
@@ -300,7 +305,11 @@ async fn login_handler(
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
+    let cookie = build_session_cookie(
+        &result.session_token.0,
+        &state.cookie_config,
+        &state.session_policy,
+    );
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::OK, [cookie], Json(resp)))
@@ -441,6 +450,7 @@ fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
 fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) {
     match err {
         AuthError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+        AuthError::InvalidPassword => (StatusCode::BAD_REQUEST, "invalid_password"),
         AuthError::IdentityDisabled => (StatusCode::FORBIDDEN, "identity_disabled"),
         AuthError::IdentityNotFound => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
         AuthError::SessionNotFound => (StatusCode::UNAUTHORIZED, "session_not_found"),
@@ -450,14 +460,16 @@ fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) 
         AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
         AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-        AuthError::PasswordHash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+        AuthError::CredentialProcessingFailed => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal_error")
+        }
         AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
     }
 }
 
 fn auth_error_to_message(err: &AuthError) -> String {
     match err {
-        AuthError::Database(_) | AuthError::PasswordHash(_) | AuthError::Internal(_) => {
+        AuthError::Database(_) | AuthError::CredentialProcessingFailed | AuthError::Internal(_) => {
             tracing::error!(error = %err, "auth request failed");
             "internal server error".to_string()
         }
@@ -554,10 +566,16 @@ fn extract_session_token(
     Err(auth_error_to_response(&AuthError::Unauthorized))
 }
 
-fn build_session_cookie(token: &str, config: &SessionCookieConfig) -> CookieHeader {
+fn build_session_cookie(
+    token: &str,
+    config: &SessionCookieConfig,
+    policy: &SessionPolicy,
+) -> CookieHeader {
     let mut cookie = format!(
         "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
-        config.cookie_name, token, config.ttl_seconds
+        config.cookie_name,
+        token,
+        policy.lifetime().num_seconds()
     );
     if config.cookie_secure {
         cookie.push_str("; Secure");
