@@ -98,14 +98,31 @@ pub struct SessionToken(pub String);
 #[derive(Debug, Clone)]
 pub struct SessionTokenHash(pub String);
 
-/// The slice of configuration the auth context actually needs: how session
-/// cookies are named/secured and how long sessions live. Kept separate from the
-/// app-wide config so auth depends only on what it uses.
-#[derive(Debug, Clone)]
-pub struct SessionCookieConfig {
-    pub cookie_name: String,
-    pub cookie_secure: bool,
-    pub ttl_seconds: i64,
+#[derive(Debug, Clone, Copy)]
+pub struct SessionPolicy {
+    lifetime: Duration,
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("session lifetime must be positive")]
+pub struct InvalidSessionLifetime;
+
+impl SessionPolicy {
+    pub fn new(lifetime: Duration) -> Result<Self, InvalidSessionLifetime> {
+        if lifetime <= Duration::zero() {
+            return Err(InvalidSessionLifetime);
+        }
+
+        Ok(Self { lifetime })
+    }
+
+    pub fn lifetime(&self) -> Duration {
+        self.lifetime
+    }
+
+    pub fn expires_at(&self, created_at: DateTime<Utc>) -> DateTime<Utc> {
+        created_at + self.lifetime
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -296,7 +313,7 @@ impl Session {
 
 pub fn create_session(
     identity: &Identity,
-    config: &SessionCookieConfig,
+    policy: &SessionPolicy,
     now: DateTime<Utc>,
 ) -> Result<(SessionToken, Session), AuthError> {
     use rand::RngCore;
@@ -315,7 +332,7 @@ pub fn create_session(
         session_token_hash: token_hash,
         created_at: now,
         last_seen_at: now,
-        expires_at: now + Duration::seconds(config.ttl_seconds),
+        expires_at: policy.expires_at(now),
         revoked_at: None,
     };
 
@@ -461,5 +478,32 @@ mod tests {
         assert_eq!(profile.display_name, "Display Name");
         assert_eq!(profile.created_at, now);
         assert_eq!(profile.updated_at, now);
+    }
+    #[test]
+    fn session_policy_requires_a_positive_lifetime() {
+        assert!(SessionPolicy::new(Duration::seconds(1)).is_ok());
+        assert!(matches!(
+            SessionPolicy::new(Duration::zero()),
+            Err(InvalidSessionLifetime)
+        ));
+        assert!(matches!(
+            SessionPolicy::new(Duration::seconds(-1)),
+            Err(InvalidSessionLifetime)
+        ));
+    }
+
+    #[test]
+    fn session_policy_determines_session_expiration() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let policy = SessionPolicy::new(Duration::hours(2)).unwrap();
+
+        let (_, session) = create_session(&identity, &policy, now).unwrap();
+
+        assert_eq!(session.expires_at, now + Duration::hours(2));
     }
 }

@@ -11,7 +11,7 @@ pub struct AuthSessionService {
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
     credential_verifier: Arc<dyn CredentialVerifier>,
-    config: SessionCookieConfig,
+    session_policy: SessionPolicy,
 }
 
 impl AuthSessionService {
@@ -20,14 +20,14 @@ impl AuthSessionService {
         session_repo: Arc<dyn SessionRepository>,
         profile_repo: Arc<dyn UserProfileRepository>,
         credential_verifier: Arc<dyn CredentialVerifier>,
-        config: SessionCookieConfig,
+        session_policy: SessionPolicy,
     ) -> Self {
         Self {
             identity_repo,
             session_repo,
             profile_repo,
             credential_verifier,
-            config,
+            session_policy,
         }
     }
 
@@ -52,7 +52,7 @@ impl AuthSessionService {
         }
 
         let now = Utc::now();
-        let (session_token, session) = create_session(&identity, &self.config, now)?;
+        let (session_token, session) = create_session(&identity, &self.session_policy, now)?;
         self.session_repo.create(&session).await?;
 
         let profile = if identity.role == IdentityRole::User {

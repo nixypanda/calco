@@ -11,7 +11,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::assistant::interfaces::assistant_routes;
 use crate::assistant::module::AssistantModule;
-use crate::auth::domain::SessionCookieConfig;
+use crate::auth::domain::SessionPolicy;
+use crate::auth::interfaces::SessionCookieConfig;
 use crate::auth::interfaces::http::auth_routes;
 use crate::auth::module::AuthModule;
 use crate::config::{AppConfig, EnvironmentConfig};
@@ -45,8 +46,10 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         SessionCookieConfig {
             cookie_name: config.environment.session.cookie_name.clone(),
             cookie_secure: config.environment.session.cookie_secure,
-            ttl_seconds: config.environment.session.ttl_seconds,
         },
+        SessionPolicy::new(chrono::Duration::seconds(
+            config.environment.session.ttl_seconds,
+        ))?,
     );
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(&pool);

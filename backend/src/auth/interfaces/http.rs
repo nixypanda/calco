@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::auth::application::*;
 use crate::auth::domain::*;
+use crate::auth::interfaces::SessionCookieConfig;
 use crate::auth::module::AuthModule;
 
 pub fn auth_routes(state: AuthModule) -> Router {
@@ -284,7 +285,11 @@ async fn bootstrap_create_admin_handler(
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
+    let cookie = build_session_cookie(
+        &result.session_token.0,
+        &state.cookie_config,
+        &state.session_policy,
+    );
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::CREATED, [cookie], Json(resp)))
@@ -300,7 +305,11 @@ async fn login_handler(
         .await
         .map_err(|e| auth_error_to_response(&e))?;
 
-    let cookie = build_session_cookie(&result.session_token.0, &state.cookie_config);
+    let cookie = build_session_cookie(
+        &result.session_token.0,
+        &state.cookie_config,
+        &state.session_policy,
+    );
     let resp = identity_and_profile_to_response(result.identity, result.profile);
 
     Ok((StatusCode::OK, [cookie], Json(resp)))
@@ -557,10 +566,16 @@ fn extract_session_token(
     Err(auth_error_to_response(&AuthError::Unauthorized))
 }
 
-fn build_session_cookie(token: &str, config: &SessionCookieConfig) -> CookieHeader {
+fn build_session_cookie(
+    token: &str,
+    config: &SessionCookieConfig,
+    policy: &SessionPolicy,
+) -> CookieHeader {
     let mut cookie = format!(
         "{}={}; HttpOnly; SameSite=Lax; Path=/; Max-Age={}",
-        config.cookie_name, token, config.ttl_seconds
+        config.cookie_name,
+        token,
+        policy.lifetime().num_seconds()
     );
     if config.cookie_secure {
         cookie.push_str("; Secure");

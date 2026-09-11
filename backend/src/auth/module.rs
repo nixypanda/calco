@@ -6,23 +6,29 @@ use sqlx::PgPool;
 use crate::AppState;
 use crate::auth::application::{AdminUserService, AuthBootstrapService, AuthSessionService};
 use crate::auth::domain::{
-    IdentityRepository, SessionCookieConfig, SessionRepository, UserProfileRepository,
+    IdentityRepository, SessionPolicy, SessionRepository, UserProfileRepository,
 };
 use crate::auth::infrastructure::argon2_credentials::Argon2Credentials;
 use crate::auth::infrastructure::postgres::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
 };
+use crate::auth::interfaces::SessionCookieConfig;
 
 #[derive(Clone)]
 pub struct AuthModule {
     pub cookie_config: SessionCookieConfig,
+    pub session_policy: SessionPolicy,
     pub bootstrap: AuthBootstrapService,
     pub sessions: AuthSessionService,
     pub admin_users: AdminUserService,
 }
 
 impl AuthModule {
-    pub fn build(pool: &PgPool, cookie_config: SessionCookieConfig) -> Self {
+    pub fn build(
+        pool: &PgPool,
+        cookie_config: SessionCookieConfig,
+        session_policy: SessionPolicy,
+    ) -> Self {
         let identity_repo =
             Arc::new(PostgresIdentityRepository::new(pool.clone())) as Arc<dyn IdentityRepository>;
         let session_repo =
@@ -35,20 +41,21 @@ impl AuthModule {
             identity_repo.clone(),
             session_repo.clone(),
             credentials.clone(),
-            cookie_config.clone(),
+            session_policy,
         );
         let sessions = AuthSessionService::new(
             identity_repo.clone(),
             session_repo.clone(),
             profile_repo.clone(),
             credentials.clone(),
-            cookie_config.clone(),
+            session_policy,
         );
         let admin_users =
             AdminUserService::new(identity_repo, session_repo, profile_repo, credentials);
 
         Self {
             cookie_config,
+            session_policy,
             bootstrap,
             sessions,
             admin_users,

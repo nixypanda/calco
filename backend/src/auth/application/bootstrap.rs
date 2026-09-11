@@ -10,7 +10,7 @@ pub struct AuthBootstrapService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     password_hasher: Arc<dyn PasswordHasher>,
-    config: SessionCookieConfig,
+    session_policy: SessionPolicy,
 }
 
 impl AuthBootstrapService {
@@ -18,13 +18,13 @@ impl AuthBootstrapService {
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
         password_hasher: Arc<dyn PasswordHasher>,
-        config: SessionCookieConfig,
+        session_policy: SessionPolicy,
     ) -> Self {
         Self {
             identity_repo,
             session_repo,
             password_hasher,
-            config,
+            session_policy,
         }
     }
 
@@ -50,7 +50,7 @@ impl AuthBootstrapService {
 
         self.identity_repo.create(&identity).await?;
 
-        let (session_token, session) = create_session(&identity, &self.config, now)?;
+        let (session_token, session) = create_session(&identity, &self.session_policy, now)?;
         self.session_repo.create(&session).await?;
 
         Ok(LoginResult {
