@@ -374,6 +374,15 @@ pub struct Product {
     pub updated_at: DateTime<Utc>,
 }
 
+struct ValidatedCustomFood {
+    name: ProductName,
+    brand: Option<Brand>,
+    categories: Vec<Category>,
+    default_quantity: Option<DefaultQuantity>,
+    nutrients: Vec<ProductNutrient>,
+    servings: Vec<ProductServing>,
+}
+
 impl Product {
     #[allow(clippy::too_many_arguments)]
     pub fn new_external(
@@ -439,11 +448,16 @@ impl Product {
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        let name = ProductName::new(&name)?;
-        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
-        validate_required_nutrients(&nutrients)?;
-        let servings = build_product_servings(servings)?;
-        let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
+        let validated = validate_custom_food(
+            name,
+            brand,
+            categories,
+            default_quantity,
+            default_unit,
+            nutrients,
+            servings,
+            nutrient_catalog,
+        )?;
 
         let now = Utc::now();
         Ok(Self {
@@ -453,13 +467,13 @@ impl Product {
             user_id: Some(user_id),
             visibility: ProductVisibility::Global,
             barcode: None,
-            name,
-            brand: brand.map(Brand),
-            categories: Category::normalize_list(categories),
-            default_quantity: default_quantity.as_ref().map(|q| q.amount),
-            default_unit: default_quantity.map(|q| q.unit),
-            nutrients,
-            servings,
+            name: validated.name,
+            brand: validated.brand,
+            categories: validated.categories,
+            default_quantity: validated.default_quantity.as_ref().map(|q| q.amount),
+            default_unit: validated.default_quantity.map(|q| q.unit),
+            nutrients: validated.nutrients,
+            servings: validated.servings,
             created_at: now,
             updated_at: now,
         })
@@ -477,22 +491,51 @@ impl Product {
         servings: Vec<ProductServingInput>,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        let name = ProductName::new(&name)?;
-        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
-        validate_required_nutrients(&nutrients)?;
-        let servings = build_product_servings(servings)?;
-        let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
-
-        Ok(Self {
+        let validated = validate_custom_food(
             name,
-            brand: brand.map(Brand),
-            categories: Category::normalize_list(categories),
-            default_quantity: default_quantity.as_ref().map(|q| q.amount),
-            default_unit: default_quantity.map(|q| q.unit),
+            brand,
+            categories,
+            default_quantity,
+            default_unit,
             nutrients,
             servings,
+            nutrient_catalog,
+        )?;
+
+        Ok(Self {
+            name: validated.name,
+            brand: validated.brand,
+            categories: validated.categories,
+            default_quantity: validated.default_quantity.as_ref().map(|q| q.amount),
+            default_unit: validated.default_quantity.map(|q| q.unit),
+            nutrients: validated.nutrients,
+            servings: validated.servings,
             ..self.clone()
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn validate_custom_draft(
+        name: String,
+        brand: Option<String>,
+        categories: Vec<String>,
+        default_quantity: Option<Decimal>,
+        default_unit: Option<String>,
+        nutrients: Vec<ProductNutrientInput>,
+        servings: Vec<ProductServingInput>,
+        nutrient_catalog: &NutrientCatalog,
+    ) -> Result<(), NutritionError> {
+        validate_custom_food(
+            name,
+            brand,
+            categories,
+            default_quantity,
+            default_unit,
+            nutrients,
+            servings,
+            nutrient_catalog,
+        )?;
+        Ok(())
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
@@ -547,6 +590,32 @@ impl Product {
         }
         allowed
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_custom_food(
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<ProductNutrientInput>,
+    servings: Vec<ProductServingInput>,
+    nutrient_catalog: &NutrientCatalog,
+) -> Result<ValidatedCustomFood, NutritionError> {
+    let name = ProductName::new(&name)?;
+    let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
+    validate_required_nutrients(&nutrients)?;
+    let servings = build_product_servings(servings)?;
+    let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
+    Ok(ValidatedCustomFood {
+        name,
+        brand: brand.map(Brand),
+        categories: Category::normalize_list(categories),
+        default_quantity,
+        nutrients,
+        servings,
+    })
 }
 
 #[derive(Debug, Clone)]

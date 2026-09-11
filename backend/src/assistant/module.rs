@@ -82,7 +82,11 @@ impl AssistantModule {
                     Arc::new(SafeFoodImageSanitizer::new()) as Arc<dyn FoodImageSanitizer>
                 });
                 (
-                    Some(Arc::new(FoodDraftService::new(model, vocabulary))),
+                    Some(Arc::new(FoodDraftService::new(
+                        model,
+                        vocabulary.clone(),
+                        vocabulary,
+                    ))),
                     images,
                 )
             }

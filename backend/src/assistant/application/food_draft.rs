@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::domain::{
-    AssistantError, Conversation, ConversationRole, FoodDraftPolicy, FoodDraftTurn,
+    AssistantError, Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftTurn,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -141,14 +141,28 @@ pub trait FoodVocabularyPort: Send + Sync {
     async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError>;
 }
 
+#[async_trait]
+pub trait FoodDraftAcceptancePort: Send + Sync {
+    async fn validate_draft(&self, draft: &FoodDraft) -> Result<(), AssistantError>;
+}
+
 pub struct FoodDraftService {
     model: Arc<dyn FoodDraftModel>,
     vocabulary: Arc<dyn FoodVocabularyPort>,
+    acceptance: Arc<dyn FoodDraftAcceptancePort>,
 }
 
 impl FoodDraftService {
-    pub fn new(model: Arc<dyn FoodDraftModel>, vocabulary: Arc<dyn FoodVocabularyPort>) -> Self {
-        Self { model, vocabulary }
+    pub fn new(
+        model: Arc<dyn FoodDraftModel>,
+        vocabulary: Arc<dyn FoodVocabularyPort>,
+        acceptance: Arc<dyn FoodDraftAcceptancePort>,
+    ) -> Self {
+        Self {
+            model,
+            vocabulary,
+            acceptance,
+        }
     }
 
     pub async fn draft(
@@ -159,6 +173,9 @@ impl FoodDraftService {
         let request = prepare_model_request(request)?;
         let result = self.model.generate(&request, &vocabulary).await?;
         vocabulary.draft_policy().validate(&result.turn)?;
+        if let FoodDraftTurn::DraftReady { draft, .. } = &result.turn {
+            self.acceptance.validate_draft(draft).await?;
+        }
         Ok(result)
     }
 }
@@ -212,6 +229,15 @@ mod tests {
         value: FoodVocabulary,
     }
 
+    struct AcceptAllDrafts;
+
+    #[async_trait]
+    impl FoodDraftAcceptancePort for AcceptAllDrafts {
+        async fn validate_draft(&self, _draft: &FoodDraft) -> Result<(), AssistantError> {
+            Ok(())
+        }
+    }
+
     #[async_trait]
     impl FoodVocabularyPort for StubVocabulary {
         async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError> {
@@ -263,6 +289,7 @@ mod tests {
                     ..FoodVocabulary::default()
                 },
             }),
+            Arc::new(AcceptAllDrafts),
         );
 
         assert!(matches!(

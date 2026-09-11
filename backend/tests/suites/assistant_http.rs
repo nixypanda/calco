@@ -6,8 +6,8 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodDraftService, FoodVocabulary,
-    FoodVocabularyPort, ModelUsage,
+    FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest, FoodDraftResult,
+    FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
 };
 use calco_backend::assistant::domain::{
     AssistantError, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
@@ -49,6 +49,7 @@ fn fake_assistant_with_images(result: Result<FoodDraftResult, AssistantError>) -
                 observed_vocabulary: None,
             }),
             Arc::new(FakeVocabulary),
+            Arc::new(FakeVocabulary),
         )),
         Arc::new(SafeFoodImageSanitizer::new()),
     )
@@ -61,12 +62,20 @@ impl FoodVocabularyPort for FakeVocabulary {
     }
 }
 
+#[async_trait]
+impl FoodDraftAcceptancePort for FakeVocabulary {
+    async fn validate_draft(&self, _draft: &FoodDraft) -> Result<(), AssistantError> {
+        Ok(())
+    }
+}
+
 fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
     AssistantModule::from_service(Arc::new(FoodDraftService::new(
         Arc::new(FakeModel {
             result,
             observed_vocabulary: None,
         }),
+        Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
     )))
 }
@@ -90,8 +99,11 @@ async fn app_with_model_result_and_real_vocabulary(
     let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
         state.nutrition.catalog.services.clone(),
     ));
-    state.assistant =
-        AssistantModule::from_service(Arc::new(FoodDraftService::new(model, vocabulary)));
+    state.assistant = AssistantModule::from_service(Arc::new(FoodDraftService::new(
+        model,
+        vocabulary.clone(),
+        vocabulary,
+    )));
     (build_router_from_state(state), observed_vocabulary)
 }
 
@@ -292,6 +304,7 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
     let observed = Arc::new(Mutex::new(vec![]));
     let service = Arc::new(FoodDraftService::new(
         Arc::new(ImageObservingModel(observed.clone())),
+        Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
     ));
     let router = app_with_assistant(
