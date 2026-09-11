@@ -259,6 +259,7 @@ pub struct UserWithProfile {
 pub trait IdentityRepository: Send + Sync {
     async fn find_by_username(&self, username: &str) -> Result<Option<Identity>, AuthError>;
     async fn find_by_id(&self, id: IdentityId) -> Result<Option<Identity>, AuthError>;
+    async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError>;
     async fn create(&self, identity: &Identity) -> Result<(), AuthError>;
     async fn update(&self, identity: &Identity) -> Result<(), AuthError>;
     async fn exists_admin(&self) -> Result<bool, AuthError>;
@@ -282,5 +283,5 @@ pub trait UserProfileRepository: Send + Sync {
     ) -> Result<Option<UserProfile>, AuthError>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
-    async fn list_all_with_identities(&self) -> Result<Vec<UserWithProfile>, AuthError>;
+    async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError>;
 }

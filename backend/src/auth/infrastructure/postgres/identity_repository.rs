@@ -41,6 +41,19 @@ impl IdentityRepository for PostgresIdentityRepository {
         row.map(identity_row_to_identity).transpose()
     }
 
+    async fn find_by_ids(&self, ids: &[IdentityId]) -> Result<Vec<Identity>, AuthError> {
+        let ids: Vec<Uuid> = ids.iter().map(|id| id.0).collect();
+        let rows = sqlx::query_as::<_, IdentityRow>(
+            "SELECT id, username, password_hash, role, status, created_at, updated_at, last_login_at \
+             FROM identities WHERE id = ANY($1)",
+        )
+        .bind(ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(identity_row_to_identity).collect()
+    }
+
     async fn create(&self, identity: &Identity) -> Result<(), AuthError> {
         let result = sqlx::query(
             "INSERT INTO identities (id, username, password_hash, role, status, created_at, updated_at, last_login_at) \

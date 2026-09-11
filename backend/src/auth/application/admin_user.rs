@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use argon2::Argon2;
@@ -43,7 +44,24 @@ impl AdminUserService {
     }
 
     pub async fn list_users(&self) -> Result<Vec<UserWithProfile>, AuthError> {
-        self.profile_repo.list_all_with_identities().await
+        let profiles = self.profile_repo.list_all().await?;
+        let identity_ids: Vec<IdentityId> =
+            profiles.iter().map(|profile| profile.identity_id).collect();
+        let identities = self.identity_repo.find_by_ids(&identity_ids).await?;
+        let mut identities_by_id: HashMap<IdentityId, Identity> = identities
+            .into_iter()
+            .map(|identity| (identity.id, identity))
+            .collect();
+
+        profiles
+            .into_iter()
+            .map(|profile| {
+                let identity = identities_by_id
+                    .remove(&profile.identity_id)
+                    .ok_or(AuthError::IdentityNotFound)?;
+                Ok(UserWithProfile { identity, profile })
+            })
+            .collect()
     }
 
     pub async fn create_user(
