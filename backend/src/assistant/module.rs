@@ -15,7 +15,7 @@ use crate::assistant::infrastructure::{
 use crate::assistant::llm::{
     Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
 };
-use crate::config::{AiAuthenticationSettings, AiRuntimeSettings};
+use crate::config::{AssistantAuthentication, AssistantConfig};
 use crate::nutrition::module::CatalogModule;
 
 const REQUESTS_PER_WINDOW: usize = 10;
@@ -47,18 +47,18 @@ pub(crate) enum AdmissionError {
 
 impl AssistantModule {
     pub fn build(
-        settings: &AiRuntimeSettings,
+        settings: &AssistantConfig,
         catalog: &CatalogModule,
     ) -> Result<Self, AssistantError> {
         let (service, images) = match settings {
-            AiRuntimeSettings::Disabled => (None, None),
-            AiRuntimeSettings::Enabled(settings) => {
+            AssistantConfig::Disabled => (None, None),
+            AssistantConfig::Enabled(settings) => {
                 let authentication = match &settings.authentication {
-                    AiAuthenticationSettings::None => Authentication::None,
-                    AiAuthenticationSettings::Bearer { api_key_file } => {
+                    AssistantAuthentication::None => Authentication::None,
+                    AssistantAuthentication::Bearer { api_key_file } => {
                         Authentication::BearerFile(api_key_file.clone())
                     }
-                    AiAuthenticationSettings::Header {
+                    AssistantAuthentication::Header {
                         header_name,
                         api_key_file,
                     } => Authentication::HeaderFile {

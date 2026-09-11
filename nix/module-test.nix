@@ -8,7 +8,7 @@ let
   lib = nixpkgs.lib;
 
   evalCalco =
-    ai:
+    assistant:
     lib.nixosSystem {
       system = pkgs.stdenv.hostPlatform.system;
       modules = [
@@ -19,7 +19,7 @@ let
           services.calco = {
             enable = true;
             backendPackage = pkgs.hello;
-            inherit ai;
+            inherit assistant;
           };
         }
       ];
@@ -35,7 +35,7 @@ let
       kind = "bearer";
       # This deliberately does not exist. Evaluation and generation must retain
       # this as metadata without reading it or copying it into the Nix store.
-      apiKeyFile = "/run/secrets/calco-ai-api-key-that-does-not-exist";
+      apiKeyFile = "/run/secrets/calco-assistant-api-key-that-does-not-exist";
     };
   };
 
@@ -46,7 +46,7 @@ let
     authentication = {
       kind = "header";
       headerName = "api-key";
-      apiKeyFile = "/run/secrets/calco-ai-api-key-that-does-not-exist";
+      apiKeyFile = "/run/secrets/calco-assistant-api-key-that-does-not-exist";
     };
   };
 in

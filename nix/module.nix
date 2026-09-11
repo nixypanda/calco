@@ -10,19 +10,19 @@ let
   cfg = config.services.calco;
   tomlFormat = pkgs.formats.toml { };
   generatedConfig = tomlFormat.generate "calco-config.toml" {
-    ai = {
-      enabled = cfg.ai.enable;
-      endpoint = cfg.ai.endpoint;
-      model = cfg.ai.model;
-      supports_images = cfg.ai.supportsImages;
+    assistant = {
+      enabled = cfg.assistant.enable;
+      endpoint = cfg.assistant.endpoint;
+      model = cfg.assistant.model;
+      supports_images = cfg.assistant.supportsImages;
       authentication = {
-        kind = cfg.ai.authentication.kind;
+        kind = cfg.assistant.authentication.kind;
       }
-      // lib.optionalAttrs (cfg.ai.authentication.headerName != null) {
-        header_name = cfg.ai.authentication.headerName;
+      // lib.optionalAttrs (cfg.assistant.authentication.headerName != null) {
+        header_name = cfg.assistant.authentication.headerName;
       }
-      // lib.optionalAttrs (cfg.ai.authentication.apiKeyFile != null) {
-        api_key_file = cfg.ai.authentication.apiKeyFile;
+      // lib.optionalAttrs (cfg.assistant.authentication.apiKeyFile != null) {
+        api_key_file = cfg.assistant.authentication.apiKeyFile;
       };
     };
   };
@@ -86,8 +86,8 @@ in
       '';
     };
 
-    ai = {
-      enable = mkEnableOption "CalCo AI food assistant";
+    assistant = {
+      enable = mkEnableOption "CalCo food assistant";
 
       endpoint = mkOption {
         type = types.str;
@@ -117,7 +117,7 @@ in
             "header"
           ];
           default = "none";
-          description = "Authentication method used by the AI provider.";
+          description = "Authentication method used by the assistant provider.";
         };
 
         headerName = mkOption {
@@ -130,7 +130,7 @@ in
           type = types.nullOr types.str;
           default = null;
           description = ''
-            Runtime path to the AI provider API-key file. This is a string,
+            Runtime path to the assistant provider API-key file. This is a string,
             rather than a Nix path, so a secret is never copied into the Nix
             store.
           '';

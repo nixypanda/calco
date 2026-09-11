@@ -94,6 +94,25 @@ you point your own reverse proxy at both.
 }
 ```
 
+### Example: assistant provider
+
+Assistant configuration is generated as TOML and passed to the backend through
+`CALCO_CONFIG_FILE`. API-key files are referenced by runtime path and are not
+read or copied into the Nix store.
+
+```nix
+services.calco.assistant = {
+  enable = true;
+  endpoint = "https://provider.example/v1/chat/completions";
+  model = "provider-model";
+  supportsImages = true;
+  authentication = {
+    kind = "bearer";
+    apiKeyFile = "/run/secrets/calco-assistant-api-key";
+  };
+};
+```
+
 ## `services.calco` options
 
 | option | type | default | description |
@@ -103,6 +122,13 @@ you point your own reverse proxy at both.
 | `secretsFile` | path | — | `EnvironmentFile` for the backend (see below) |
 | `backendPackage` | package | `calco.packages.<sys>.backend` | override the backend build |
 | `frontendPackage` | package | `calco.packages.<sys>.frontend` | static bundle root — point your proxy at `${pkg}/share/calco/web` |
+| `assistant.enable` | bool | `false` | enable the food assistant |
+| `assistant.endpoint` | string | `""` | complete OpenAI-compatible Chat Completions endpoint URL |
+| `assistant.model` | string | `""` | provider model identifier |
+| `assistant.supportsImages` | bool | `false` | whether the model accepts image input |
+| `assistant.authentication.kind` | `none`, `bearer`, or `header` | `none` | provider authentication method |
+| `assistant.authentication.headerName` | null or string | `null` | header used by `header` authentication |
+| `assistant.authentication.apiKeyFile` | null or string | `null` | runtime API-key file path |
 
 ## Secrets file format
 
@@ -118,7 +144,7 @@ SESSION_TTL_SECONDS=604800
 `DATABASE_URL`, `APP_HOST`, `APP_PORT` are set by the module itself — do
 not put them in this file.
 
-The module reads only `backend/src/config.rs` env vars; everything there
+The module reads only the environment variables in `backend/src/config/`; everything there
 has a sane default except `DATABASE_URL` (set by the module).
 
 ## What the module sets up

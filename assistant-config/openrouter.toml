@@ -1,12 +1,12 @@
 # Local AI food-assistant configuration for OpenRouter's free-model router.
 # Replace the contents of openrouter-api-key with your OpenRouter API key.
 
-[ai]
+[assistant]
 enabled = true
 endpoint = "https://openrouter.ai/api/v1/chat/completions"
 model = "openrouter/free"
 supports_images = true
 
-[ai.authentication]
+[assistant.authentication]
 kind = "bearer"
 api_key_file = "assistant-config/openrouter-api-key"

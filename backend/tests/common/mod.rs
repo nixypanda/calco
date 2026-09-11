@@ -6,7 +6,7 @@ use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, Method, Request, StatusCode, header};
 use calco_backend::build_router;
-use calco_backend::config::{AppConfig, EnvironmentConfig, FileConfig, SessionEnvironmentConfig};
+use calco_backend::config::{AppConfig, AssistantConfig, ServerConfig, SessionConfig};
 use http_body_util::BodyExt;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -18,17 +18,17 @@ pub const COOKIE_NAME: &str = "calco_session";
 
 pub fn test_config() -> AppConfig {
     AppConfig {
-        environment: EnvironmentConfig {
-            database_url: String::new(),
+        database_url: String::new(),
+        server: ServerConfig {
             bind_addr: SocketAddr::from(([127, 0, 0, 1], 0)),
-            session: SessionEnvironmentConfig {
-                cookie_name: COOKIE_NAME.into(),
-                cookie_secure: false,
-                ttl_seconds: 3600,
-            },
             cors_allowed_origins: Vec::new(),
         },
-        file: FileConfig::default(),
+        session: SessionConfig {
+            cookie_name: COOKIE_NAME.into(),
+            cookie_secure: false,
+            ttl_seconds: 3600,
+        },
+        assistant: AssistantConfig::Disabled,
     }
 }
 
