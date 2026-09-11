@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 
-use super::{LoginResult, create_session};
+use super::LoginResult;
 use crate::auth::domain::*;
 
 #[derive(Clone)]
