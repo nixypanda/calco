@@ -65,27 +65,27 @@ impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
     async fn validate_draft(&self, draft: &FoodDraft) -> Result<(), AssistantError> {
         self.catalog
             .validate_custom_food_draft(CustomFoodInput {
-                name: draft.name.clone(),
-                brand: draft.brand.clone(),
-                categories: draft.categories.clone(),
-                default_quantity: draft.default_quantity,
-                default_unit: draft.default_unit.clone(),
+                name: draft.name().to_owned(),
+                brand: draft.brand().map(str::to_owned),
+                categories: draft.categories().to_vec(),
+                default_quantity: draft.default_quantity(),
+                default_unit: draft.default_unit().map(str::to_owned),
                 nutrients: draft
-                    .nutrients
+                    .nutrients()
                     .iter()
                     .map(|nutrient| ProductNutrientInput {
-                        code: nutrient.code.clone(),
-                        amount_per_100g: nutrient.amount_per_100g,
+                        code: nutrient.code().to_owned(),
+                        amount_per_100g: nutrient.amount_per_100g(),
                         source: None,
                         confidence: None,
                     })
                     .collect(),
                 servings: draft
-                    .servings
+                    .servings()
                     .iter()
                     .map(|serving| ProductServingInput {
-                        unit: serving.unit.clone(),
-                        grams_per_unit: serving.grams_per_unit,
+                        unit: serving.unit().to_owned(),
+                        grams_per_unit: serving.grams_per_unit(),
                     })
                     .collect(),
             })

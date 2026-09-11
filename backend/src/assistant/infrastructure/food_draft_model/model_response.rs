@@ -111,10 +111,10 @@ mod tests {
         let FoodDraftTurn::DraftReady { draft, .. } = value else {
             panic!("expected a complete draft")
         };
-        assert_eq!(draft.name, "Dal");
-        assert_eq!(draft.categories, vec!["indian"]);
+        assert_eq!(draft.name(), "Dal");
+        assert_eq!(draft.categories(), &["indian"]);
         assert_eq!(
-            draft.nutrients[0].amount_per_100g,
+            draft.nutrients()[0].amount_per_100g(),
             Decimal::new(120_123457, 6)
         );
     }
@@ -128,8 +128,8 @@ mod tests {
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")
         };
-        assert_eq!(draft.servings[0].unit, "cup");
-        assert_eq!(draft.default_quantity, Some(Decimal::new(2, 0)));
-        assert_eq!(draft.default_unit.as_deref(), Some("cup"));
+        assert_eq!(draft.servings()[0].unit(), "cup");
+        assert_eq!(draft.default_quantity(), Some(Decimal::new(2, 0)));
+        assert_eq!(draft.default_unit(), Some("cup"));
     }
 }

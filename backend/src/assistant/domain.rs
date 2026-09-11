@@ -211,13 +211,13 @@ impl FoodDraftPolicy {
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct FoodDraft {
-    pub name: String,
-    pub brand: Option<String>,
-    pub categories: Vec<String>,
-    pub default_quantity: Option<Decimal>,
-    pub default_unit: Option<String>,
-    pub nutrients: Vec<DraftNutrient>,
-    pub servings: Vec<DraftServing>,
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<DraftNutrient>,
+    servings: Vec<DraftServing>,
 }
 
 impl FoodDraft {
@@ -285,12 +285,40 @@ impl FoodDraft {
             servings,
         })
     }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn brand(&self) -> Option<&str> {
+        self.brand.as_deref()
+    }
+
+    pub fn categories(&self) -> &[String] {
+        &self.categories
+    }
+
+    pub fn default_quantity(&self) -> Option<Decimal> {
+        self.default_quantity
+    }
+
+    pub fn default_unit(&self) -> Option<&str> {
+        self.default_unit.as_deref()
+    }
+
+    pub fn nutrients(&self) -> &[DraftNutrient] {
+        &self.nutrients
+    }
+
+    pub fn servings(&self) -> &[DraftServing] {
+        &self.servings
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct DraftNutrient {
-    pub code: String,
-    pub amount_per_100g: Decimal,
+    code: String,
+    amount_per_100g: Decimal,
 }
 
 impl DraftNutrient {
@@ -304,12 +332,20 @@ impl DraftNutrient {
             amount_per_100g: amount_per_100g.round_dp(6),
         })
     }
+
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    pub fn amount_per_100g(&self) -> Decimal {
+        self.amount_per_100g
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct DraftServing {
-    pub unit: String,
-    pub grams_per_unit: Decimal,
+    unit: String,
+    grams_per_unit: Decimal,
 }
 
 impl DraftServing {
@@ -322,6 +358,14 @@ impl DraftServing {
             unit,
             grams_per_unit: grams_per_unit.round_dp(6),
         })
+    }
+
+    pub fn unit(&self) -> &str {
+        &self.unit
+    }
+
+    pub fn grams_per_unit(&self) -> Decimal {
+        self.grams_per_unit
     }
 }
 
