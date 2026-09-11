@@ -61,13 +61,4 @@ fn hash_session_token(token: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
-const PASSWORD_MIN_LEN: usize = 8;
-const PASSWORD_MAX_LEN: usize = 256;
 const LAST_SEEN_REFRESH_SECONDS: i64 = 60;
-
-fn validate_password(password: &str) -> Result<(), AuthError> {
-    if password.len() < PASSWORD_MIN_LEN || password.len() > PASSWORD_MAX_LEN {
-        return Err(AuthError::InvalidCredentials);
-    }
-    Ok(())
-}

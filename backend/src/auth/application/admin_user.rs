@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use argon2::Argon2;
-use argon2::password_hash::{PasswordHasher, SaltString};
 use chrono::Utc;
 use uuid::Uuid;
 
-use super::{CreatedUser, validate_password};
+use super::CreatedUser;
 use crate::auth::domain::*;
 
 #[derive(Clone)]
@@ -14,6 +12,7 @@ pub struct AdminUserService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
+    password_hasher: Arc<dyn PasswordHasher>,
 }
 
 impl AdminUserService {
@@ -21,11 +20,13 @@ impl AdminUserService {
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
         profile_repo: Arc<dyn UserProfileRepository>,
+        password_hasher: Arc<dyn PasswordHasher>,
     ) -> Self {
         Self {
             identity_repo,
             session_repo,
             profile_repo,
+            password_hasher,
         }
     }
 
@@ -71,7 +72,7 @@ impl AdminUserService {
         initial_password: &str,
     ) -> Result<CreatedUser, AuthError> {
         let username = Username::new(username)?;
-        validate_password(initial_password)?;
+        let password = NewPassword::new(initial_password)?;
 
         if self
             .identity_repo
@@ -82,17 +83,13 @@ impl AdminUserService {
             return Err(AuthError::UsernameTaken);
         }
 
-        let salt = SaltString::generate(&mut rand::rngs::OsRng);
-        let hash = Argon2::default()
-            .hash_password(initial_password.as_bytes(), &salt)
-            .map_err(AuthError::PasswordHash)?
-            .to_string();
+        let password_hash = self.password_hasher.hash(&password)?;
 
         let now = Utc::now();
         let identity = Identity {
             id: IdentityId::new(),
             username,
-            password_hash: PasswordHash(hash),
+            password_hash,
             role: IdentityRole::User,
             status: IdentityStatus::Active,
             created_at: now,
@@ -121,20 +118,15 @@ impl AdminUserService {
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
-        validate_password(new_password)?;
-
-        let salt = SaltString::generate(&mut rand::rngs::OsRng);
-        let hash = Argon2::default()
-            .hash_password(new_password.as_bytes(), &salt)
-            .map_err(AuthError::PasswordHash)?
-            .to_string();
+        let password = NewPassword::new(new_password)?;
+        let password_hash = self.password_hasher.hash(&password)?;
 
         let identity = self
             .identity_repo
             .find_by_id(profile.identity_id)
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
-        let identity = identity.change_password(PasswordHash(hash), Utc::now());
+        let identity = identity.change_password(password_hash, Utc::now());
 
         self.identity_repo.update(&identity).await?;
         self.revoke_sessions_for_identity(profile.identity_id).await

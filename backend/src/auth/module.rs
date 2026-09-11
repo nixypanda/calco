@@ -8,6 +8,7 @@ use crate::auth::application::{AdminUserService, AuthBootstrapService, AuthSessi
 use crate::auth::domain::{
     IdentityRepository, SessionCookieConfig, SessionRepository, UserProfileRepository,
 };
+use crate::auth::infrastructure::argon2_credentials::Argon2Credentials;
 use crate::auth::infrastructure::postgres::{
     PostgresIdentityRepository, PostgresSessionRepository, PostgresUserProfileRepository,
 };
@@ -28,19 +29,23 @@ impl AuthModule {
             Arc::new(PostgresSessionRepository::new(pool.clone())) as Arc<dyn SessionRepository>;
         let profile_repo = Arc::new(PostgresUserProfileRepository::new(pool.clone()))
             as Arc<dyn UserProfileRepository>;
+        let credentials = Arc::new(Argon2Credentials);
 
         let bootstrap = AuthBootstrapService::new(
             identity_repo.clone(),
             session_repo.clone(),
+            credentials.clone(),
             cookie_config.clone(),
         );
         let sessions = AuthSessionService::new(
             identity_repo.clone(),
             session_repo.clone(),
             profile_repo.clone(),
+            credentials.clone(),
             cookie_config.clone(),
         );
-        let admin_users = AdminUserService::new(identity_repo, session_repo, profile_repo);
+        let admin_users =
+            AdminUserService::new(identity_repo, session_repo, profile_repo, credentials);
 
         Self {
             cookie_config,

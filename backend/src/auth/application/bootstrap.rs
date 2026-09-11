@@ -1,16 +1,15 @@
 use std::sync::Arc;
 
-use argon2::Argon2;
-use argon2::password_hash::{PasswordHasher, SaltString};
 use chrono::Utc;
 
-use super::{LoginResult, create_session, validate_password};
+use super::{LoginResult, create_session};
 use crate::auth::domain::*;
 
 #[derive(Clone)]
 pub struct AuthBootstrapService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
+    password_hasher: Arc<dyn PasswordHasher>,
     config: SessionCookieConfig,
 }
 
@@ -18,11 +17,13 @@ impl AuthBootstrapService {
     pub fn new(
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
+        password_hasher: Arc<dyn PasswordHasher>,
         config: SessionCookieConfig,
     ) -> Self {
         Self {
             identity_repo,
             session_repo,
+            password_hasher,
             config,
         }
     }
@@ -41,19 +42,14 @@ impl AuthBootstrapService {
         }
 
         let username = Username::new(username)?;
-        validate_password(password)?;
-
-        let salt = SaltString::generate(&mut rand::rngs::OsRng);
-        let hash = Argon2::default()
-            .hash_password(password.as_bytes(), &salt)
-            .map_err(AuthError::PasswordHash)?
-            .to_string();
+        let password = NewPassword::new(password)?;
+        let password_hash = self.password_hasher.hash(&password)?;
 
         let now = Utc::now();
         let identity = Identity {
             id: IdentityId::new(),
             username,
-            password_hash: PasswordHash(hash),
+            password_hash,
             role: IdentityRole::Admin,
             status: IdentityStatus::Active,
             created_at: now,

@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use argon2::Argon2;
-use argon2::password_hash::{PasswordHash as ArgonPasswordHash, PasswordVerifier};
 use chrono::Utc;
 
 use super::{
@@ -14,6 +12,7 @@ pub struct AuthSessionService {
     identity_repo: Arc<dyn IdentityRepository>,
     session_repo: Arc<dyn SessionRepository>,
     profile_repo: Arc<dyn UserProfileRepository>,
+    credential_verifier: Arc<dyn CredentialVerifier>,
     config: SessionCookieConfig,
 }
 
@@ -22,12 +21,14 @@ impl AuthSessionService {
         identity_repo: Arc<dyn IdentityRepository>,
         session_repo: Arc<dyn SessionRepository>,
         profile_repo: Arc<dyn UserProfileRepository>,
+        credential_verifier: Arc<dyn CredentialVerifier>,
         config: SessionCookieConfig,
     ) -> Self {
         Self {
             identity_repo,
             session_repo,
             profile_repo,
+            credential_verifier,
             config,
         }
     }
@@ -44,11 +45,13 @@ impl AuthSessionService {
             return Err(AuthError::IdentityDisabled);
         }
 
-        let parsed_hash =
-            ArgonPasswordHash::new(&identity.password_hash.0).map_err(AuthError::PasswordHash)?;
-        Argon2::default()
-            .verify_password(password.as_bytes(), &parsed_hash)
-            .map_err(|_| AuthError::InvalidCredentials)?;
+        let password = Password::new(password);
+        if !self
+            .credential_verifier
+            .verify(&password, &identity.password_hash)?
+        {
+            return Err(AuthError::InvalidCredentials);
+        }
 
         let now = Utc::now();
         let updated_identity = identity.record_login(now);

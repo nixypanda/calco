@@ -441,6 +441,7 @@ fn auth_error_to_response(err: &AuthError) -> AuthErrorResponse {
 fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) {
     match err {
         AuthError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+        AuthError::InvalidPassword => (StatusCode::BAD_REQUEST, "invalid_password"),
         AuthError::IdentityDisabled => (StatusCode::FORBIDDEN, "identity_disabled"),
         AuthError::IdentityNotFound => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
         AuthError::SessionNotFound => (StatusCode::UNAUTHORIZED, "session_not_found"),
@@ -450,14 +451,16 @@ fn auth_error_to_status_and_code(err: &AuthError) -> (StatusCode, &'static str) 
         AuthError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),
         AuthError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
         AuthError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
-        AuthError::PasswordHash(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
+        AuthError::CredentialProcessingFailed => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal_error")
+        }
         AuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal_error"),
     }
 }
 
 fn auth_error_to_message(err: &AuthError) -> String {
     match err {
-        AuthError::Database(_) | AuthError::PasswordHash(_) | AuthError::Internal(_) => {
+        AuthError::Database(_) | AuthError::CredentialProcessingFailed | AuthError::Internal(_) => {
             tracing::error!(error = %err, "auth request failed");
             "internal server error".to_string()
         }

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use std::str::FromStr;
 use uuid::Uuid;
+use zeroize::Zeroize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct IdentityId(pub uuid::Uuid);
@@ -50,7 +51,45 @@ impl Username {
     }
 }
 
-#[derive(Debug, Clone)]
+pub struct Password(String);
+
+impl Password {
+    pub fn new(raw: impl Into<String>) -> Self {
+        Self(raw.into())
+    }
+
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl Drop for Password {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+pub struct NewPassword(Password);
+
+impl NewPassword {
+    const MIN_LEN: usize = 8;
+    const MAX_LEN: usize = 256;
+
+    pub fn new(raw: impl Into<String>) -> Result<Self, AuthError> {
+        let password = raw.into();
+        if password.len() < Self::MIN_LEN || password.len() > Self::MAX_LEN {
+            return Err(AuthError::InvalidPassword);
+        }
+
+        Ok(Self(Password::new(password)))
+    }
+
+    pub(crate) fn password(&self) -> &Password {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PasswordHash(pub String);
 
 #[derive(Debug, Clone)]
@@ -226,6 +265,8 @@ impl Session {
 pub enum AuthError {
     #[error("invalid_credentials")]
     InvalidCredentials,
+    #[error("invalid_password")]
+    InvalidPassword,
     #[error("identity_disabled")]
     IdentityDisabled,
     #[error("identity_not_found")]
@@ -244,8 +285,8 @@ pub enum AuthError {
     Unauthorized,
     #[error("database: {0}")]
     Database(#[from] sqlx::Error),
-    #[error("password_hash: {0}")]
-    PasswordHash(argon2::password_hash::Error),
+    #[error("credential_processing_failed")]
+    CredentialProcessingFailed,
     #[error("internal: {0}")]
     Internal(String),
 }
@@ -253,6 +294,14 @@ pub enum AuthError {
 pub struct UserWithProfile {
     pub identity: Identity,
     pub profile: UserProfile,
+}
+
+pub trait PasswordHasher: Send + Sync {
+    fn hash(&self, password: &NewPassword) -> Result<PasswordHash, AuthError>;
+}
+
+pub trait CredentialVerifier: Send + Sync {
+    fn verify(&self, password: &Password, expected_hash: &PasswordHash) -> Result<bool, AuthError>;
 }
 
 #[async_trait]
@@ -284,4 +333,30 @@ pub trait UserProfileRepository: Send + Sync {
     async fn find_by_id(&self, id: Uuid) -> Result<Option<UserProfile>, AuthError>;
     async fn create(&self, profile: &UserProfile) -> Result<(), AuthError>;
     async fn list_all(&self) -> Result<Vec<UserProfile>, AuthError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_password_enforces_length_boundaries() {
+        assert!(matches!(
+            NewPassword::new("a".repeat(7)),
+            Err(AuthError::InvalidPassword)
+        ));
+        assert!(NewPassword::new("a".repeat(8)).is_ok());
+        assert!(NewPassword::new("a".repeat(256)).is_ok());
+        assert!(matches!(
+            NewPassword::new("a".repeat(257)),
+            Err(AuthError::InvalidPassword)
+        ));
+    }
+
+    #[test]
+    fn login_password_does_not_apply_new_password_policy() {
+        let password = Password::new("short");
+
+        assert_eq!(password.as_bytes(), b"short");
+    }
 }
