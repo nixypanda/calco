@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::assistant::application::{
-    AssistantError, FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
+    AssistantError, FoodDraftRequest, FoodDraftService, FoodImageError, FoodImageLimits, ModelUsage,
 };
 use crate::assistant::domain::{
     Conversation, ConversationRole, ConversationTurn, ConversationValidationError, FoodDraft,
@@ -220,7 +220,7 @@ async fn draft(
             );
         }
     };
-    let request = match parse_multipart(multipart, &module).await {
+    let request = match parse_multipart(multipart, &service).await {
         Ok(value) => value,
         Err(error) => return error,
     };
@@ -238,15 +238,14 @@ async fn draft(
 
 async fn parse_multipart(
     mut multipart: Multipart,
-    module: &AssistantModule,
+    service: &FoodDraftService,
 ) -> Result<FoodDraftRequest, DraftHttpResult> {
     let mut fields = 0;
     let mut conversation = None;
     let mut photos = Vec::new();
     let mut raw_photo_bytes = 0;
     let mut sanitized_photo_bytes = 0;
-    let image_sanitizer = module.image_sanitizer();
-    let image_limits = image_sanitizer.as_ref().map(|sanitizer| sanitizer.limits());
+    let image_limits = service.image_limits();
 
     loop {
         let field = match multipart.next_field().await {
@@ -279,7 +278,7 @@ async fn parse_multipart(
                 conversation = Some(read_conversation(field).await?);
             }
             Some("photos") => {
-                let (Some(sanitizer), Some(limits)) = (&image_sanitizer, image_limits) else {
+                let Some(limits) = image_limits else {
                     return Err(rejected(
                         StatusCode::BAD_REQUEST,
                         "photos_not_supported",
@@ -312,8 +311,8 @@ async fn parse_multipart(
                     )
                 })?;
                 let bytes = read_photo(field, &mut raw_photo_bytes, limits).await?;
-                let photo = sanitizer
-                    .sanitize(&mime_type, bytes)
+                let photo = service
+                    .sanitize_photo(&mime_type, bytes)
                     .await
                     .map_err(image_failure)?;
                 if photo.bytes.len() > limits.max_total_bytes.saturating_sub(sanitized_photo_bytes)
@@ -501,6 +500,12 @@ fn conversation_failure(error: ConversationValidationError) -> DraftHttpResult {
 
 fn image_failure(error: FoodImageError) -> DraftHttpResult {
     match error {
+        FoodImageError::NotSupported => rejected(
+            StatusCode::BAD_REQUEST,
+            "photos_not_supported",
+            "this assistant does not support photos",
+            "photo supplied to text-only assistant",
+        ),
         FoodImageError::Empty => rejected(
             StatusCode::BAD_REQUEST,
             "photo_empty",

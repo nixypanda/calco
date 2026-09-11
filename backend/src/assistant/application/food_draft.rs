@@ -68,6 +68,7 @@ pub struct FoodImageLimits {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FoodImageError {
+    NotSupported,
     Empty,
     UnsupportedType,
     TypeMismatch,
@@ -162,6 +163,7 @@ pub struct FoodDraftService {
     model: Arc<dyn FoodDraftModel>,
     vocabulary: Arc<dyn FoodVocabularyPort>,
     acceptance: Arc<dyn FoodDraftAcceptancePort>,
+    images: Option<Arc<dyn FoodImageSanitizer>>,
 }
 
 impl FoodDraftService {
@@ -169,12 +171,27 @@ impl FoodDraftService {
         model: Arc<dyn FoodDraftModel>,
         vocabulary: Arc<dyn FoodVocabularyPort>,
         acceptance: Arc<dyn FoodDraftAcceptancePort>,
+        images: Option<Arc<dyn FoodImageSanitizer>>,
     ) -> Self {
         Self {
             model,
             vocabulary,
             acceptance,
+            images,
         }
+    }
+
+    pub fn image_limits(&self) -> Option<FoodImageLimits> {
+        self.images.as_ref().map(|images| images.limits())
+    }
+
+    pub async fn sanitize_photo(
+        &self,
+        declared_mime_type: &str,
+        bytes: Vec<u8>,
+    ) -> Result<SanitizedFoodPhoto, FoodImageError> {
+        let images = self.images.as_ref().ok_or(FoodImageError::NotSupported)?;
+        images.sanitize(declared_mime_type, bytes).await
     }
 
     pub async fn draft(
@@ -305,6 +322,7 @@ mod tests {
                 },
             }),
             Arc::new(AcceptAllDrafts),
+            None,
         );
 
         assert!(matches!(

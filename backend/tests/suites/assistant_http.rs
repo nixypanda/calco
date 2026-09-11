@@ -40,17 +40,15 @@ impl FoodDraftModel for FakeModel {
 }
 
 fn fake_assistant_with_images(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
-    AssistantModule::from_service_with_images(
-        Arc::new(FoodDraftService::new(
-            Arc::new(FakeModel {
-                result,
-                observed_vocabulary: None,
-            }),
-            Arc::new(FakeVocabulary),
-            Arc::new(FakeVocabulary),
-        )),
-        Arc::new(SafeFoodImageSanitizer::new()),
-    )
+    AssistantModule::from_service(Arc::new(FoodDraftService::new(
+        Arc::new(FakeModel {
+            result,
+            observed_vocabulary: None,
+        }),
+        Arc::new(FakeVocabulary),
+        Arc::new(FakeVocabulary),
+        Some(Arc::new(SafeFoodImageSanitizer::new())),
+    )))
 }
 
 #[async_trait]
@@ -75,6 +73,7 @@ fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantM
         }),
         Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
+        None,
     )))
 }
 
@@ -101,6 +100,7 @@ async fn app_with_model_result_and_real_vocabulary(
         model,
         vocabulary.clone(),
         vocabulary,
+        None,
     )));
     (build_router_from_state(state), observed_vocabulary)
 }
@@ -304,12 +304,9 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
         Arc::new(ImageObservingModel(observed.clone())),
         Arc::new(FakeVocabulary),
         Arc::new(FakeVocabulary),
+        Some(Arc::new(SafeFoodImageSanitizer::new())),
     ));
-    let router = app_with_assistant(
-        pool,
-        AssistantModule::from_service_with_images(service, Arc::new(SafeFoodImageSanitizer::new())),
-    )
-    .await;
+    let router = app_with_assistant(pool, AssistantModule::from_service(service)).await;
     let (_, user) = bootstrap_and_user(&router).await;
     let status: Value = get_json(&router, "/api/ai/food-assistant/status", &user).await;
     assert_eq!(status, json!({"enabled": true, "supports_images": true}));
