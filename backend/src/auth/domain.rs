@@ -306,8 +306,16 @@ pub struct Session {
 }
 
 impl Session {
-    pub fn ensure_usable(&self, now: DateTime<Utc>) -> Result<(), AuthError> {
-        if self.revoked_at.is_some() {
+    pub fn is_revoked_for(&self, identity: &Identity) -> bool {
+        self.revoked_at.is_some() || self.identity_security_stamp != identity.session_security_stamp
+    }
+
+    pub fn ensure_usable_for(
+        &self,
+        identity: &Identity,
+        now: DateTime<Utc>,
+    ) -> Result<(), AuthError> {
+        if self.is_revoked_for(identity) {
             return Err(AuthError::SessionRevoked);
         }
         if self.expires_at < now {
@@ -496,6 +504,33 @@ mod tests {
             session.identity_security_stamp,
             identity.session_security_stamp
         );
+    }
+
+    #[test]
+    fn session_is_revoked_when_its_identity_rotates_the_security_stamp() {
+        let now = Utc::now();
+        let identity = Identity::new_user(
+            Username::new("tester").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let (_, session) = create_session(
+            &identity,
+            &SessionPolicy::new(Duration::hours(1)).unwrap(),
+            now,
+        )
+        .unwrap();
+
+        assert!(!session.is_revoked_for(&identity));
+        assert!(session.revoke(now).is_revoked_for(&identity));
+
+        let identity = identity.disable(now + Duration::seconds(1));
+
+        assert!(session.is_revoked_for(&identity));
+        assert!(matches!(
+            session.ensure_usable_for(&identity, now),
+            Err(AuthError::SessionRevoked)
+        ));
     }
 
     #[test]

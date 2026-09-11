@@ -76,18 +76,14 @@ impl AuthSessionService {
             .await?
             .ok_or(AuthError::SessionNotFound)?;
 
-        let now = Utc::now();
-        session.ensure_usable(now)?;
-
         let identity = self
             .identity_repo
             .find_by_id(session.identity_id)
             .await?
             .ok_or(AuthError::IdentityNotFound)?;
 
-        if session.identity_security_stamp != identity.session_security_stamp {
-            return Err(AuthError::SessionRevoked);
-        }
+        let now = Utc::now();
+        session.ensure_usable_for(&identity, now)?;
 
         if !identity.is_active() {
             return Err(AuthError::IdentityDisabled);
