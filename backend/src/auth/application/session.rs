@@ -52,22 +52,17 @@ impl AuthSessionService {
         }
 
         let now = Utc::now();
-        let updated_identity = identity.record_login(now);
-        self.identity_repo.update(&updated_identity).await?;
-
-        let (session_token, session) = create_session(&updated_identity, &self.config, now)?;
+        let (session_token, session) = create_session(&identity, &self.config, now)?;
         self.session_repo.create(&session).await?;
 
-        let profile = if updated_identity.role == IdentityRole::User {
-            self.profile_repo
-                .find_by_identity_id(updated_identity.id)
-                .await?
+        let profile = if identity.role == IdentityRole::User {
+            self.profile_repo.find_by_identity_id(identity.id).await?
         } else {
             None
         };
 
         Ok(LoginResult {
-            identity: updated_identity,
+            identity,
             profile,
             session_token,
         })

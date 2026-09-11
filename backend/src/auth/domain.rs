@@ -171,19 +171,11 @@ pub struct Identity {
     pub status: IdentityStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub last_login_at: Option<DateTime<Utc>>,
 }
 
 impl Identity {
     pub fn is_active(&self) -> bool {
         self.status == IdentityStatus::Active
-    }
-
-    pub fn record_login(&self, now: DateTime<Utc>) -> Self {
-        Self {
-            last_login_at: Some(now),
-            ..self.clone()
-        }
     }
 
     pub fn change_password(&self, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {

@@ -94,7 +94,6 @@ impl AdminUserService {
             status: IdentityStatus::Active,
             created_at: now,
             updated_at: now,
-            last_login_at: None,
         };
 
         self.identity_repo.create(&identity).await?;
