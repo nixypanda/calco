@@ -182,7 +182,11 @@ mod tests {
     fn missing_path_empty_file_and_comment_only_file_disable_the_assistant() {
         assert_eq!(load(None), Ok(AssistantConfig::Disabled));
 
-        for contents in ["", "# Assistant configuration is optional.\n"] {
+        for contents in [
+            "",
+            r#"# Assistant configuration is optional.
+"#,
+        ] {
             let file = TempFile::new(contents);
             assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
         }
@@ -202,16 +206,26 @@ mod tests {
 
     #[test]
     fn malformed_toml_is_rejected() {
-        let file = TempFile::new("[assistant\nenabled = true\n");
+        let file = TempFile::new(
+            r#"[assistant
+enabled = true
+"#,
+        );
         assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
     }
 
     #[test]
     fn unknown_fields_are_rejected() {
         for contents in [
-            "unexpected = true\n",
-            "[assistant]\nenabled = false\nunexpected = true\n",
-            "[assistant.authentication]\nkind = \"none\"\n",
+            r#"unexpected = true
+"#,
+            r#"[assistant]
+enabled = false
+unexpected = true
+"#,
+            r#"[assistant.authentication]
+kind = "none"
+"#,
         ] {
             let file = TempFile::new(contents);
             assert_eq!(
@@ -225,9 +239,19 @@ mod tests {
     #[test]
     fn absent_and_explicitly_disabled_assistant_configs_are_disabled() {
         for contents in [
-            "# Assistant configuration is optional\n",
-            "[assistant]\nenabled = false\n",
-            "[assistant]\nenabled = false\nendpoint = \"\"\nmodel = \"\"\n[assistant.authentication]\nkind = \"none\"\n",
+            r#"# Assistant configuration is optional
+"#,
+            r#"[assistant]
+enabled = false
+"#,
+            r#"[assistant]
+enabled = false
+endpoint = ""
+model = ""
+
+[assistant.authentication]
+kind = "none"
+"#,
         ] {
             let file = TempFile::new(contents);
             assert_eq!(load(Some(file.path())), Ok(AssistantConfig::Disabled));
@@ -237,7 +261,17 @@ mod tests {
     #[test]
     fn complete_enabled_config_is_runtime_ready() {
         let file = TempFile::new(
-            "[assistant]\nenabled = true\nendpoint = \"https://provider.example/v1/chat/completions\"\nmodel = \"  vision-model  \"\nsupports_images = true\n[assistant.authentication]\nkind = \"header\"\nheader_name = \"api-key\"\napi_key_file = \"/run/secrets/provider-key\"\n",
+            r#"[assistant]
+enabled = true
+endpoint = "https://provider.example/v1/chat/completions"
+model = "  vision-model  "
+supports_images = true
+
+[assistant.authentication]
+kind = "header"
+header_name = "api-key"
+api_key_file = "/run/secrets/provider-key"
+"#,
         );
         let loaded = load(Some(file.path())).unwrap();
         let settings = loaded.as_enabled().expect("assistant is enabled");
@@ -260,9 +294,30 @@ mod tests {
     #[test]
     fn invalid_urls_and_models_are_rejected() {
         for contents in [
-            "[assistant]\nenabled = true\nendpoint = \"ftp://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"   \"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"not a URL\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\n",
+            r#"[assistant]
+enabled = true
+endpoint = "ftp://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "   "
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "not a URL"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#,
         ] {
             let file = TempFile::new(contents);
             assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
@@ -273,17 +328,41 @@ mod tests {
     fn authentication_variants_are_supported() {
         let cases = [
             (
-                "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\n",
+                r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#,
                 AssistantAuthentication::None,
             ),
             (
-                "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"bearer\"\napi_key_file = \"/run/key\"\n",
+                r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "bearer"
+api_key_file = "/run/key"
+"#,
                 AssistantAuthentication::Bearer {
                     api_key_file: PathBuf::from("/run/key"),
                 },
             ),
             (
-                "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"header\"\nheader_name = \"api-key\"\napi_key_file = \"/run/key\"\n",
+                r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "header"
+header_name = "api-key"
+api_key_file = "/run/key"
+"#,
                 AssistantAuthentication::Header {
                     header_name: "api-key".parse().unwrap(),
                     api_key_file: PathBuf::from("/run/key"),
@@ -301,14 +380,79 @@ mod tests {
     #[test]
     fn invalid_authentication_field_combinations_are_rejected() {
         let invalid_configs = [
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"other\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\napi_key_file = \"/run/key\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"bearer\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"bearer\"\napi_key_file = \"\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"bearer\"\napi_key_file = \"/run/key\"\nheader_name = \"api-key\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"header\"\napi_key_file = \"/run/key\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"header\"\nheader_name = \"not a header\"\napi_key_file = \"/run/key\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n[assistant.authentication]\nkind = \"header\"\nheader_name = \"api-key\"\napi_key_file = \"\"\n",
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "other"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+api_key_file = "/run/key"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "bearer"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "bearer"
+api_key_file = ""
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "bearer"
+api_key_file = "/run/key"
+header_name = "api-key"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "header"
+api_key_file = "/run/key"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "header"
+header_name = "not a header"
+api_key_file = "/run/key"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+
+[assistant.authentication]
+kind = "header"
+header_name = "api-key"
+api_key_file = ""
+"#,
         ];
 
         for contents in invalid_configs {
@@ -324,13 +468,53 @@ mod tests {
     #[test]
     fn incomplete_or_wrongly_typed_enabled_configs_are_rejected() {
         let invalid_configs = [
-            "[assistant]\nenabled = \"true\"\n",
-            "[assistant]\nenabled = true\nendpoint = 42\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = 42\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\nsupports_images = \"yes\"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nmodel = \"model\"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\n[assistant.authentication]\nkind = \"none\"\n",
-            "[assistant]\nenabled = true\nendpoint = \"http://provider.example\"\nmodel = \"model\"\n",
+            r#"[assistant]
+enabled = "true"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = 42
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = 42
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+supports_images = "yes"
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+model = "model"
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+
+[assistant.authentication]
+kind = "none"
+"#,
+            r#"[assistant]
+enabled = true
+endpoint = "http://provider.example"
+model = "model"
+"#,
         ];
 
         for contents in invalid_configs {
@@ -374,7 +558,11 @@ mod tests {
 
     #[test]
     fn legacy_ai_section_is_rejected() {
-        let file = TempFile::new("[ai]\nenabled = false\n");
+        let file = TempFile::new(
+            r#"[ai]
+enabled = false
+"#,
+        );
         assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
     }
 }
