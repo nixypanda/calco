@@ -7,7 +7,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::application::{
-    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodVocabulary, ModelUsage,
+    FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodVocabulary, ModelUsage,
 };
 use crate::assistant::domain::{AssistantError, ConversationRole};
 use crate::assistant::llm::{
@@ -35,7 +35,7 @@ impl FoodDraftModelAdapter {
 impl FoodDraftModel for FoodDraftModelAdapter {
     async fn generate(
         &self,
-        request: &FoodDraftRequest,
+        request: &FoodDraftModelRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError> {
         let mut messages = vec![ChatMessage {
@@ -43,28 +43,23 @@ impl FoodDraftModel for FoodDraftModelAdapter {
             content: build_system_prompt(vocabulary),
             images: vec![],
         }];
-        messages.extend(request.conversation.turns().iter().map(|turn| ChatMessage {
-            role: match turn.role() {
-                ConversationRole::User => ChatRole::User,
-                ConversationRole::Assistant => ChatRole::Assistant,
-            },
-            content: turn.text().to_owned(),
-            images: vec![],
+        messages.extend(request.turns.iter().map(|turn| {
+            ChatMessage {
+                role: match turn.role {
+                    ConversationRole::User => ChatRole::User,
+                    ConversationRole::Assistant => ChatRole::Assistant,
+                },
+                content: turn.text.clone(),
+                images: turn
+                    .photos
+                    .iter()
+                    .map(|photo| ChatImage {
+                        mime_type: photo.mime_type.as_str(),
+                        bytes: photo.bytes.clone(),
+                    })
+                    .collect(),
+            }
         }));
-        if !request.photos.is_empty() {
-            let latest_user = messages
-                .iter_mut()
-                .rfind(|message| message.role == ChatRole::User)
-                .ok_or(AssistantError::InvalidInput)?;
-            latest_user.images = request
-                .photos
-                .iter()
-                .map(|photo| ChatImage {
-                    mime_type: photo.mime_type.as_str(),
-                    bytes: photo.bytes.clone(),
-                })
-                .collect();
-        }
         let response: ChatResponse = self
             .chat
             .complete(ChatRequest {
@@ -111,9 +106,11 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::assistant::application::{FoodPhotoMimeType, SanitizedFoodPhoto};
+    use crate::assistant::application::{
+        FoodDraftModelTurn, FoodPhotoMimeType, SanitizedFoodPhoto,
+    };
     use crate::assistant::application::{SupportedNutrient, SupportedUnit};
-    use crate::assistant::domain::{Conversation, ConversationTurn, FoodDraftTurn};
+    use crate::assistant::domain::FoodDraftTurn;
 
     struct FakeChat {
         request: Mutex<Option<ChatRequest>>,
@@ -139,10 +136,13 @@ mod tests {
             request: Mutex::new(None),
         });
         let model = FoodDraftModelAdapter::new(chat.clone());
-        let conversation = Conversation::new(vec![
-            ConversationTurn::new(ConversationRole::User, "one bowl of dal").unwrap(),
-        ])
-        .unwrap();
+        let request = FoodDraftModelRequest {
+            turns: vec![FoodDraftModelTurn {
+                role: ConversationRole::User,
+                text: "one bowl of dal".into(),
+                photos: vec![],
+            }],
+        };
         let vocabulary = FoodVocabulary {
             nutrients: vec![SupportedNutrient {
                 code: "ENERGY_KCAL".into(),
@@ -158,16 +158,7 @@ mod tests {
             required_nutrient_codes: vec!["ENERGY_KCAL".into()],
         };
 
-        let result = model
-            .generate(
-                &FoodDraftRequest {
-                    conversation,
-                    photos: vec![],
-                },
-                &vocabulary,
-            )
-            .await
-            .unwrap();
+        let result = model.generate(&request, &vocabulary).await.unwrap();
 
         assert!(matches!(
             result.turn,
@@ -184,29 +175,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn attaches_photos_only_to_the_latest_user_message() {
+    async fn translates_explicit_turn_photo_attachments() {
         let chat = Arc::new(FakeChat {
             request: Mutex::new(None),
         });
         let model = FoodDraftModelAdapter::new(chat.clone());
-        let conversation = Conversation::new(vec![
-            ConversationTurn::new(ConversationRole::User, "first description").unwrap(),
-            ConversationTurn::new(ConversationRole::Assistant, "clarifying question").unwrap(),
-            ConversationTurn::new(ConversationRole::User, "this is the pictured plate").unwrap(),
-        ])
-        .unwrap();
+        let photo = SanitizedFoodPhoto {
+            mime_type: FoodPhotoMimeType::Jpeg,
+            bytes: vec![1, 2, 3],
+        };
+        let request = FoodDraftModelRequest {
+            turns: vec![
+                FoodDraftModelTurn {
+                    role: ConversationRole::User,
+                    text: "first description".into(),
+                    photos: vec![],
+                },
+                FoodDraftModelTurn {
+                    role: ConversationRole::Assistant,
+                    text: "clarifying question".into(),
+                    photos: vec![],
+                },
+                FoodDraftModelTurn {
+                    role: ConversationRole::User,
+                    text: "this is the pictured plate".into(),
+                    photos: vec![photo],
+                },
+            ],
+        };
 
         model
-            .generate(
-                &FoodDraftRequest {
-                    conversation,
-                    photos: vec![SanitizedFoodPhoto {
-                        mime_type: FoodPhotoMimeType::Jpeg,
-                        bytes: vec![1, 2, 3],
-                    }],
-                },
-                &FoodVocabulary::default(),
-            )
+            .generate(&request, &FoodVocabulary::default())
             .await
             .unwrap();
 

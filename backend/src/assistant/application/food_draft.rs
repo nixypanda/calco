@@ -2,11 +2,25 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::assistant::domain::{AssistantError, Conversation, FoodDraftPolicy, FoodDraftTurn};
+use crate::assistant::domain::{
+    AssistantError, Conversation, ConversationRole, FoodDraftPolicy, FoodDraftTurn,
+};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
     pub conversation: Conversation,
+    pub photos: Vec<SanitizedFoodPhoto>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct FoodDraftModelRequest {
+    pub turns: Vec<FoodDraftModelTurn>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct FoodDraftModelTurn {
+    pub role: ConversationRole,
+    pub text: String,
     pub photos: Vec<SanitizedFoodPhoto>,
 }
 
@@ -117,7 +131,7 @@ pub struct SupportedUnit {
 pub trait FoodDraftModel: Send + Sync {
     async fn generate(
         &self,
-        request: &FoodDraftRequest,
+        request: &FoodDraftModelRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError>;
 }
@@ -142,10 +156,34 @@ impl FoodDraftService {
         request: FoodDraftRequest,
     ) -> Result<FoodDraftResult, AssistantError> {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
+        let request = prepare_model_request(request)?;
         let result = self.model.generate(&request, &vocabulary).await?;
         vocabulary.draft_policy().validate(&result.turn)?;
         Ok(result)
     }
+}
+
+fn prepare_model_request(
+    request: FoodDraftRequest,
+) -> Result<FoodDraftModelRequest, AssistantError> {
+    let mut turns = request
+        .conversation
+        .turns()
+        .iter()
+        .map(|turn| FoodDraftModelTurn {
+            role: turn.role(),
+            text: turn.text().to_owned(),
+            photos: vec![],
+        })
+        .collect::<Vec<_>>();
+    if !request.photos.is_empty() {
+        let latest_user = turns
+            .iter_mut()
+            .rfind(|turn| turn.role == ConversationRole::User)
+            .ok_or(AssistantError::InvalidInput)?;
+        latest_user.photos = request.photos;
+    }
+    Ok(FoodDraftModelRequest { turns })
 }
 
 #[cfg(test)]
@@ -163,7 +201,7 @@ mod tests {
     impl FoodDraftModel for StubModel {
         async fn generate(
             &self,
-            _request: &FoodDraftRequest,
+            _request: &FoodDraftModelRequest,
             _vocabulary: &FoodVocabulary,
         ) -> Result<FoodDraftResult, AssistantError> {
             Ok(self.result.clone())
@@ -231,5 +269,35 @@ mod tests {
             service.draft(request()).await,
             Err(AssistantError::InvalidModelResponse)
         ));
+    }
+
+    #[test]
+    fn model_request_attaches_photos_to_the_latest_user_turn() {
+        let conversation = Conversation::new(vec![
+            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "first")
+                .unwrap(),
+            crate::assistant::domain::ConversationTurn::new(
+                ConversationRole::Assistant,
+                "question",
+            )
+            .unwrap(),
+            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "latest")
+                .unwrap(),
+        ])
+        .unwrap();
+        let photo = SanitizedFoodPhoto {
+            mime_type: FoodPhotoMimeType::Jpeg,
+            bytes: vec![1, 2, 3],
+        };
+
+        let prepared = prepare_model_request(FoodDraftRequest {
+            conversation,
+            photos: vec![photo.clone()],
+        })
+        .unwrap();
+
+        assert!(prepared.turns[0].photos.is_empty());
+        assert!(prepared.turns[1].photos.is_empty());
+        assert_eq!(prepared.turns[2].photos, vec![photo]);
     }
 }

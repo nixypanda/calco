@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodDraftService, FoodVocabulary,
+    FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodDraftService, FoodVocabulary,
     FoodVocabularyPort, ModelUsage,
 };
 use calco_backend::assistant::domain::{
@@ -31,7 +31,7 @@ struct FakeVocabulary;
 impl FoodDraftModel for FakeModel {
     async fn generate(
         &self,
-        _request: &FoodDraftRequest,
+        _request: &FoodDraftModelRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError> {
         if let Some(observed) = &self.observed_vocabulary {
@@ -273,12 +273,13 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
     impl FoodDraftModel for ImageObservingModel {
         async fn generate(
             &self,
-            request: &FoodDraftRequest,
+            request: &FoodDraftModelRequest,
             _vocabulary: &FoodVocabulary,
         ) -> Result<FoodDraftResult, AssistantError> {
             *self.0.lock().unwrap() = request
-                .photos
+                .turns
                 .iter()
+                .flat_map(|turn| &turn.photos)
                 .map(|photo| (photo.bytes.len(), photo.mime_type.as_str()))
                 .collect();
             Ok(FoodDraftResult {
