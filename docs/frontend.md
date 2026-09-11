@@ -541,8 +541,14 @@ macro targets for the current local day.
 Custom foods use the same catalog model as imported/global foods, scoped by
 user ownership.
 
-Food search supports exact manual barcode lookup and camera scanning on
-compatible devices.
+Food search supports manual barcode lookup and camera scanning on compatible
+devices. Both use the same local-first API: a local match opens immediately,
+while a catalog miss is fetched from Open Food Facts, persisted, and then
+opened. The food detail page displays the API-provided import note for a newly
+fetched product. If neither source has the barcode, the existing not-found
+state offers custom-food creation. A `404` gets a barcode-specific not-found
+message; other failures retain the API error message in the error banner, while
+the custom-food action remains available.
 
 ### Logs
 

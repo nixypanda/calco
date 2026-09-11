@@ -55,7 +55,7 @@ Use these values throughout the run:
 | Meal | `<run-id> Meal Alpha` |
 | Meal notes | `<run-id> meal notes` |
 | Optional admin user | `qa_<run-id-lowercase-with-underscores>` |
-| Invalid barcode | `999` plus ten random digits |
+| Missing barcode | `999` plus ten random digits, verified absent from OFF |
 
 Custom food nutrition per 100 g:
 
@@ -133,12 +133,19 @@ Before starting each numbered section below:
 ### 6. Barcode lookup and scanning
 
 1. Select Barcode search.
-2. Enter the generated invalid barcode and press Search.
-3. Verify a single clear not-found state is shown and `Create Custom Food` is available.
-4. Enter a known barcode from an existing catalog fixture and verify it opens the correct food detail.
-5. On a compatible camera-enabled device, press Scan, grant permission, and
+2. Enter the generated missing barcode and press Search.
+3. Verify a single clear not-found state is shown after the OFF lookup and
+   `Create Custom Food` is available.
+4. Enter a known barcode from an existing local catalog fixture. Verify it opens
+   the correct food detail without an Open Food Facts import notice.
+5. Choose a real OFF barcode that is not yet in the local catalog. Enter it and
+   verify the product is opened with the notice that it was imported from Open
+   Food Facts. Verify its name and available per-100 g nutrition are usable.
+6. Search for that barcode again and verify the saved local product opens
+   without the one-time import notice.
+7. On a compatible camera-enabled device, press Scan, grant permission, and
    scan a known EAN or UPC barcode.
-6. Verify the detected barcode opens the correct food and the camera stops
+8. Verify the detected barcode opens the correct food and the camera stops
    after detection or cancellation. If no camera is available, mark these
    steps as not run rather than passed.
 

@@ -140,6 +140,9 @@ These notes capture endpoint choices surfaced during feature mapping.
 - Food detail uses `GET /foods/{id}` and includes product nutrients and
   servings. Do not add separate public `GET /foods/{id}/nutrients` or
   `GET /foods/{id}/servings` endpoints unless partial loading becomes necessary.
+- Barcode lookup uses `GET /foods/barcode/{barcode}`. It checks the actor-visible
+  local catalog first and calls Open Food Facts only on a miss. A usable OFF
+  result is persisted before the response is returned.
 - Log history uses `GET /logs?log_date=YYYY-MM-DD` for a single-day view. Do not
   add a separate `GET /logs/day/{date}` endpoint.
 - Nutrition summaries use
@@ -288,6 +291,43 @@ GET    /units
 ```
 
 Food detail includes product nutrients and servings. There are no separate public nutrient/serving detail endpoints.
+
+`GET /foods/barcode/{barcode}` trims the path value and uses local-first lookup.
+Locally cached values are returned without an external request. Only an
+uncached barcode is validated as 4 to 24 ASCII digits and sent to the Open Food
+Facts v3 product API. The response has the same top-level food-detail fields as
+`GET /foods/{id}`, plus lookup metadata. Abbreviated example:
+
+```json
+{
+  "id": "product-uuid",
+  "source": "OFF",
+  "name": "Example food",
+  "nutrients": [],
+  "servings": [],
+  "allowed_units": [],
+  "lookup": {
+    "origin": "open_food_facts",
+    "note": "Food was not found locally and was imported from Open Food Facts."
+  }
+}
+```
+
+`lookup.origin` is `local` or `open_food_facts`; `lookup.note` is `null` for a
+local match. An OFF match is stored as a globally visible `OFF` product using
+the returned code as source ID and barcode. The adapter imports the name,
+optional brand, up to 30 normalized categories, supported per-100 g nutrients,
+and a gram-based `serving` conversion when one can be parsed. Nutrient amounts
+are converted into the units of CalCo's nutrient catalog; unsupported units and
+invalid or negative values are skipped.
+
+Barcode-specific failures use the normal error envelope:
+
+- `400 validation`: an uncached barcode is not 4 to 24 digits.
+- `404 not_found`: neither the local catalog nor OFF contains the barcode.
+- `502 external_invalid_response`: OFF returned malformed or unusable data.
+- `503 external_unavailable`: the OFF request timed out or returned another
+  unsuccessful status.
 
 ### Logs And Summaries
 

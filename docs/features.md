@@ -7,7 +7,8 @@ granular implementation features and API calls.
 
 Current implementation covers the core food diary plus configurable meal slots,
 meals/recipes, repeat and recent-item logging, admin import staging/commit APIs,
-and Python dataset import tooling:
+Python dataset import tooling, and local-first barcode lookup with an Open Food
+Facts fallback:
 
 ```text
 Search/select food -> log quantity -> snapshot nutrients -> review daily totals
@@ -109,6 +110,11 @@ product goal is a simple food tracker, not an analytics or trend platform.
 - [x] As a user, I want to choose which meal slots appear in my diary so that
       the diary matches how I organize my day. Preferences are saved per user
       and editable from diary settings.
+- [x] As a user, I want a barcode missing from the local catalog to be looked up
+      in Open Food Facts so that I can continue logging without entering the
+      packaged food manually. A successful result is normalized, saved as a
+      global `OFF` catalog product, opened for logging, and identified with an
+      import notice on the food detail page.
 
 ## Next User Stories
 
@@ -125,10 +131,6 @@ product goal is a simple food tracker, not an analytics or trend platform.
       requiring the user to define an additional portion; serving support for
       catalog foods and food logging remains unchanged. The create form submits
       no default portion or servings; those fields remain available when editing.
-- [ ] When a barcode is not present in the local catalog, look it up in Open Food
-      Facts (OFF). If OFF has a match, pull its product and nutrition data into
-      CalCo and let the user continue with that food instead of entering it
-      manually.
 - [ ] When a barcode is absent from both the local catalog and OFF, let the user
       photograph the product's nutrition table. Use the image to prepare a
       custom-food draft, require the user to review and correct the extracted
@@ -154,16 +156,16 @@ capabilities. They are grouped by theme so they can be ranked later.
       log form prefills the latest logged quantity and unit, and each recent row
       offers up to five quick-add quantity chips ranked the same time-decayed
       way.
-Duplicating an existing log to another meal slot or day is not planned. Users
-can log against previous days, which is sufficient for the current workflow.
+      Duplicating an existing log to another meal slot or day is not planned. Users
+      can log against previous days, which is sufficient for the current workflow.
 
 ### Search And Selection
 
 - [ ] As a user, I want search results to rank foods I have used before ahead of
       equally relevant unfamiliar foods so that logging gets faster over time.
-History and recent results do not need to appear before the full catalog. The
-search tabs already let users search their history explicitly without imposing
-one result-source ordering on every search.
+      History and recent results do not need to appear before the full catalog. The
+      search tabs already let users search their history explicitly without imposing
+      one result-source ordering on every search.
 - [ ] As a user, I want exact barcode matches, exact name matches, and recent
       matches to be visually surfaced before fuzzy matches so that search intent
       is clearer.
@@ -181,19 +183,16 @@ one result-source ordering on every search.
       it, and opens the matching food.
 - [x] As a user, I want to enter a barcode manually when camera scanning is not
       practical so that barcode lookup still works on desktop or with poor
-      camera conditions. Barcode search accepts manual input and opens an exact
-      catalog match.
+      camera conditions. Barcode search accepts manual input, opens an exact
+      local match, or fetches and saves a matching Open Food Facts product.
 - [x] As a user, I want the app to take me directly into create or import flows
       when a barcode is not found so that missing packaged foods are quick to
       add. A failed lookup offers a direct action to the custom-food creation
-      form. Live OFF lookup and nutrition-table photo drafting are still planned
-      in **Food Capture And Assistant Todo**.
+      form after both the local catalog and Open Food Facts return no match.
+      Nutrition-table photo drafting is still planned in **Food Capture And
+      Assistant Todo**.
 
 ### Editing And Diary Cleanup
-
-- [ ] As a user, I want to move an existing log to a different day so that I can
-      correct late-night or backfilled entries without deleting and recreating
-      them.
 
 Inline diary editing for quantity, unit, or meal slot is not planned. The
 side-by-side layout already keeps editing convenient on larger screens, while
@@ -205,8 +204,6 @@ inline controls would make smaller screens too cluttered.
       vitamins and minerals in my diet. Nutrients are modeled generically and
       logged/summarized from snapshots; a dedicated micronutrient dashboard is
       still not present.
-- [ ] As a user, I want recent foods and today's logs cached offline so that
-      brief network loss does not stop logging.
 - [ ] As a user, I want to export my logs and custom foods so that I can back up
       or analyze my data elsewhere.
 - [ ] As an admin, I want backup and restore tooling so that user-entered data

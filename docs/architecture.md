@@ -122,6 +122,8 @@ The concrete dependency graph is:
 ```text
 HTTP interfaces
   -> catalog application service -> CatalogPolicy -> catalog repositories
+                                 \-> ExternalProductCatalog
+                                      -> OpenFoodFactsClient
   -> meal application service    -> MealPolicy    -> meal repository
                                 \-> CatalogReadPort
   -> food-log application service -> FoodLogPolicy -> food-log repository
@@ -141,6 +143,13 @@ guidance. `UnitConverter` remains a catalog shared-kernel value. Concrete
 PostgreSQL repositories are constructed only in `nutrition/module.rs`, injected
 into their owning services, and are not retained by `NutritionModule` or any
 HTTP-extractable submodule state.
+
+`ExternalProductCatalog` is the catalog application's outbound port for live
+barcode misses. Its `OpenFoodFactsClient` adapter is constructed in the same
+composition root. The catalog service always checks PostgreSQL first, so an
+existing product does not depend on external availability. A usable OFF match
+is converted into the `Product` aggregate and persisted as a globally visible
+`OFF` product before it is returned.
 
 Supporting domain pieces, all in `catalog/domain/` (the shared kernel), except the error at the nutrition root:
 
@@ -175,15 +184,23 @@ Image-capable providers accept bounded JPEG, PNG, and WebP multipart uploads.
 The backend validates file signatures and decoded dimensions, strips metadata
 by re-encoding, and sends images only with the latest user turn. The user must
 still review and explicitly submit the resulting draft before any catalog write
-occurs. The planned missing-barcode flow is:
+occurs. Barcode lookup now implements the first two levels of this flow:
 
 ```text
 Local barcode lookup
   -> match: open the catalog food
   -> miss: query Open Food Facts
-       -> match: pull the product data into CalCo and continue
-       -> miss: photograph nutrition table -> review draft -> create custom food
+       -> match: normalize and persist the product, then open it for logging
+       -> miss: offer custom-food creation
+            -> planned: photograph nutrition table -> review draft -> create
 ```
+
+The live OFF path accepts numeric barcodes from 4 to 24 digits, bounds the
+response to 1 MiB, and requires a usable product name. It maps supported
+per-100 g nutrients into CalCo's nutrient catalog, normalizes up to 30 category
+tags, and creates a `serving` conversion/default only when OFF provides a
+positive gram serving such as `15 g`. Unsupported or malformed nutrient values
+are omitted rather than guessed.
 
 Custom foods store nutrition per 100 g and may define ordered, food-specific
 serving conversions. An optional default portion is only a logging-form prefill:
@@ -196,6 +213,10 @@ it is either a gram quantity or a quantity using a configured serving unit.
 - Meal create/update replaces components atomically.
 - Goal target save upserts the current local day's version for a user.
 - Import commit is a batch database transaction that upserts products, nutrients, and servings.
+- A successful live OFF barcode miss is persisted before the response is
+  returned. Concurrent first scans can still race on the external source key;
+  this is an accepted homelab-scale tradeoff until an atomic create-or-load is
+  needed.
 - Summary reads aggregate `food_log_nutrients`, never live catalog nutrients.
 - Food-log writes are transactional. Food-log reads load headers and nutrient
   snapshots separately, so a concurrent update could theoretically produce a

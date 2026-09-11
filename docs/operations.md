@@ -49,6 +49,12 @@ SESSION_TTL_SECONDS=604800
 CORS_ALLOWED_ORIGINS=http://localhost:1234
 ```
 
+Barcode misses require outbound HTTPS access to
+`https://world.openfoodfacts.org`. The endpoint is currently fixed in the
+backend; no API key or additional environment variable is required. Requests
+use a 3-second connection timeout, an 8-second overall timeout, and accept at
+most a 1 MiB response. Local barcode hits do not make an OFF request.
+
 Run:
 
 ```bash
