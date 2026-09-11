@@ -15,7 +15,7 @@ use crate::auth::domain::SessionPolicy;
 use crate::auth::interfaces::SessionCookieConfig;
 use crate::auth::interfaces::http::auth_routes;
 use crate::auth::module::AuthModule;
-use crate::config::{AppConfig, EnvironmentConfig};
+use crate::config::{AppConfig, ServerConfig};
 use crate::import::interfaces::http::import_routes;
 use crate::import::module::ImportModule;
 use crate::nutrition::catalog::interfaces::catalog_routes;
@@ -44,16 +44,14 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let auth = AuthModule::build(
         &pool,
         SessionCookieConfig {
-            cookie_name: config.environment.session.cookie_name.clone(),
-            cookie_secure: config.environment.session.cookie_secure,
+            cookie_name: config.session.cookie_name.clone(),
+            cookie_secure: config.session.cookie_secure,
         },
-        SessionPolicy::new(chrono::Duration::seconds(
-            config.environment.session.ttl_seconds,
-        ))?,
+        SessionPolicy::new(chrono::Duration::seconds(config.session.ttl_seconds))?,
     );
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(&pool);
-    let assistant = AssistantModule::build(&config.file.ai, &nutrition.catalog)?;
+    let assistant = AssistantModule::build(&config.assistant, &nutrition.catalog)?;
 
     Ok(AppState {
         auth,
@@ -64,7 +62,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
 }
 
 pub async fn build_router(pool: PgPool, config: AppConfig) -> Result<Router, BoxError> {
-    let cors = build_cors_layer(&config.environment);
+    let cors = build_cors_layer(&config.server);
     let auth_state = build_app_state(pool, config).await?;
 
     Ok(build_router_from_state(auth_state).layer(cors))
@@ -90,7 +88,7 @@ pub fn build_router_from_state(auth_state: AppState) -> Router {
     Router::new().nest("/api", api)
 }
 
-fn build_cors_layer(config: &EnvironmentConfig) -> CorsLayer {
+fn build_cors_layer(config: &ServerConfig) -> CorsLayer {
     let methods = [
         Method::GET,
         Method::POST,

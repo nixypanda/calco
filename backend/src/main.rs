@@ -12,12 +12,12 @@ async fn main() {
     let _ = dotenvy::dotenv();
 
     let config = AppConfig::from_env().expect("invalid startup configuration");
-    let addr = config.environment.bind_addr;
+    let addr = config.server.bind_addr;
 
     tracing::info!("connecting to database...");
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&config.environment.database_url)
+        .connect(&config.database_url)
         .await
         .expect("failed to connect to database");
 
