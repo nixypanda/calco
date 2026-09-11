@@ -8,6 +8,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
@@ -63,8 +64,59 @@ enum ConversationRoleRequest {
 struct AssistantDraftResponse {
     assistant_message: String,
     status: DraftStatusResponse,
-    draft: Option<FoodDraft>,
+    draft: Option<FoodDraftResponse>,
     warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct FoodDraftResponse {
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<DraftNutrientResponse>,
+    servings: Vec<DraftServingResponse>,
+}
+
+#[derive(Serialize)]
+struct DraftNutrientResponse {
+    code: String,
+    amount_per_100g: Decimal,
+}
+
+#[derive(Serialize)]
+struct DraftServingResponse {
+    unit: String,
+    grams_per_unit: Decimal,
+}
+
+impl From<FoodDraft> for FoodDraftResponse {
+    fn from(draft: FoodDraft) -> Self {
+        Self {
+            name: draft.name().to_owned(),
+            brand: draft.brand().map(str::to_owned),
+            categories: draft.categories().to_vec(),
+            default_quantity: draft.default_quantity(),
+            default_unit: draft.default_unit().map(str::to_owned),
+            nutrients: draft
+                .nutrients()
+                .iter()
+                .map(|nutrient| DraftNutrientResponse {
+                    code: nutrient.code().to_owned(),
+                    amount_per_100g: nutrient.amount_per_100g(),
+                })
+                .collect(),
+            servings: draft
+                .servings()
+                .iter()
+                .map(|serving| DraftServingResponse {
+                    unit: serving.unit().to_owned(),
+                    grams_per_unit: serving.grams_per_unit(),
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -560,7 +612,7 @@ fn turn_to_response(turn: FoodDraftTurn) -> AssistantDraftResponse {
         } => AssistantDraftResponse {
             assistant_message,
             status: DraftStatusResponse::DraftReady,
-            draft: Some(draft),
+            draft: Some(draft.into()),
             warnings,
         },
     }
@@ -588,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn response_contract_serializes_the_validated_draft_directly() {
+    fn response_contract_maps_the_validated_draft_to_http_fields() {
         let draft = FoodDraft::new(
             "Dal".into(),
             None,
