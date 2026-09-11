@@ -15,8 +15,8 @@ use crate::assistant::application::{
     FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
 };
 use crate::assistant::domain::{
-    AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraft, FoodDraftTurn,
-    MAX_CONVERSATION_MESSAGE_CHARS, MAX_CONVERSATION_TURNS,
+    AssistantError, Conversation, ConversationRole, ConversationTurn, ConversationValidationError,
+    FoodDraft, FoodDraftTurn,
 };
 use crate::assistant::module::{AdmissionError, AssistantModule};
 use crate::auth::interfaces::http::AuthUser;
@@ -311,42 +311,6 @@ async fn parse_multipart(
             "conversation JSON did not match the request schema",
         )
     })?;
-    if wire.turns.is_empty() {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_empty",
-            "a conversation must contain a message",
-            "conversation contains no turns",
-        ));
-    }
-    if wire.turns.len() > MAX_CONVERSATION_TURNS {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_too_long",
-            "the conversation is full; start a new assistant session",
-            "conversation turn count exceeded limit",
-        ));
-    }
-    if wire.turns.iter().any(|turn| turn.text.trim().is_empty()) {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_message_empty",
-            "conversation messages cannot be empty",
-            "conversation contains an empty message",
-        ));
-    }
-    if wire
-        .turns
-        .iter()
-        .any(|turn| turn.text.chars().count() > MAX_CONVERSATION_MESSAGE_CHARS)
-    {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_message_too_long",
-            "conversation messages must be 4,000 characters or fewer",
-            "conversation message exceeded character limit",
-        ));
-    }
     let turns = wire
         .turns
         .into_iter()
@@ -358,9 +322,9 @@ async fn parse_multipart(
             ConversationTurn::new(role, turn.text)
         })
         .collect::<Result<Vec<_>, _>>()
-        .map_err(assistant_failure)?;
+        .map_err(conversation_failure)?;
     Ok(FoodDraftRequest {
-        conversation: Conversation::new(turns).map_err(assistant_failure)?,
+        conversation: Conversation::new(turns).map_err(conversation_failure)?,
         photos,
     })
 }
@@ -455,6 +419,35 @@ fn assistant_failure(error: AssistantError) -> DraftHttpResult {
             StatusCode::INTERNAL_SERVER_ERROR,
             "assistant_error",
             "assistant request failed",
+        ),
+    }
+}
+
+fn conversation_failure(error: ConversationValidationError) -> DraftHttpResult {
+    match error {
+        ConversationValidationError::Empty => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_empty",
+            "a conversation must contain a message",
+            "conversation contains no turns",
+        ),
+        ConversationValidationError::TooManyTurns => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_too_long",
+            "the conversation is full; start a new assistant session",
+            "conversation turn count exceeded limit",
+        ),
+        ConversationValidationError::EmptyMessage => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_empty",
+            "conversation messages cannot be empty",
+            "conversation contains an empty message",
+        ),
+        ConversationValidationError::MessageTooLong => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_too_long",
+            "conversation messages must be 4,000 characters or fewer",
+            "conversation message exceeded character limit",
         ),
     }
 }

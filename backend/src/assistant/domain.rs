@@ -37,15 +37,30 @@ pub enum AssistantError {
     Internal,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ConversationValidationError {
+    #[error("conversation must contain a turn")]
+    Empty,
+    #[error("conversation has too many turns")]
+    TooManyTurns,
+    #[error("conversation message must not be empty")]
+    EmptyMessage,
+    #[error("conversation message is too long")]
+    MessageTooLong,
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct Conversation {
     turns: Vec<ConversationTurn>,
 }
 
 impl Conversation {
-    pub fn new(turns: Vec<ConversationTurn>) -> Result<Self, AssistantError> {
-        if turns.is_empty() || turns.len() > MAX_CONVERSATION_TURNS {
-            return Err(AssistantError::InvalidInput);
+    pub fn new(turns: Vec<ConversationTurn>) -> Result<Self, ConversationValidationError> {
+        if turns.is_empty() {
+            return Err(ConversationValidationError::Empty);
+        }
+        if turns.len() > MAX_CONVERSATION_TURNS {
+            return Err(ConversationValidationError::TooManyTurns);
         }
         Ok(Self { turns })
     }
@@ -62,10 +77,16 @@ pub struct ConversationTurn {
 }
 
 impl ConversationTurn {
-    pub fn new(role: ConversationRole, text: impl Into<String>) -> Result<Self, AssistantError> {
+    pub fn new(
+        role: ConversationRole,
+        text: impl Into<String>,
+    ) -> Result<Self, ConversationValidationError> {
         let text = text.into().trim().to_owned();
-        if text.is_empty() || text.chars().count() > MAX_CONVERSATION_MESSAGE_CHARS {
-            return Err(AssistantError::InvalidInput);
+        if text.is_empty() {
+            return Err(ConversationValidationError::EmptyMessage);
+        }
+        if text.chars().count() > MAX_CONVERSATION_MESSAGE_CHARS {
+            return Err(ConversationValidationError::MessageTooLong);
         }
         Ok(Self { role, text })
     }
@@ -337,12 +358,12 @@ mod tests {
     fn conversation_is_non_empty_and_bounded() {
         assert!(matches!(
             Conversation::new(vec![]),
-            Err(AssistantError::InvalidInput)
+            Err(ConversationValidationError::Empty)
         ));
         let long = "x".repeat(MAX_CONVERSATION_MESSAGE_CHARS + 1);
         assert!(matches!(
             ConversationTurn::new(ConversationRole::User, long),
-            Err(AssistantError::InvalidInput)
+            Err(ConversationValidationError::MessageTooLong)
         ));
     }
 
