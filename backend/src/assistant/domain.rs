@@ -23,19 +23,9 @@ const MAX_NUTRIENT_KCAL: Decimal = Decimal::from_parts(1_000, 0, 0, false, 0);
 const MAX_NUTRIENT_OTHER: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
 const MAX_SERVING_VALUE: Decimal = Decimal::from_parts(100_000, 0, 0, false, 0);
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum AssistantError {
-    #[error("assistant is disabled")]
-    Disabled,
-    #[error("assistant input is invalid")]
-    InvalidInput,
-    #[error("assistant model is unavailable")]
-    ModelUnavailable,
-    #[error("assistant model returned an invalid response")]
-    InvalidModelResponse,
-    #[error("assistant operation failed")]
-    Internal,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("assistant draft is invalid")]
+pub struct DraftValidationError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ConversationValidationError {
@@ -119,7 +109,7 @@ pub enum FoodDraftTurn {
 }
 
 impl FoodDraftTurn {
-    pub fn clarification(message: impl Into<String>) -> Result<Self, AssistantError> {
+    pub fn clarification(message: impl Into<String>) -> Result<Self, DraftValidationError> {
         Ok(Self::NeedsClarification {
             assistant_message: bounded_text(message.into(), MAX_ASSISTANT_MESSAGE_CHARS)?,
         })
@@ -129,13 +119,13 @@ impl FoodDraftTurn {
         message: impl Into<String>,
         draft: FoodDraft,
         warnings: Vec<String>,
-    ) -> Result<Self, AssistantError> {
+    ) -> Result<Self, DraftValidationError> {
         if warnings.len() > MAX_DRAFT_WARNINGS
             || warnings
                 .iter()
                 .any(|value| value.chars().count() > MAX_DRAFT_WARNING_CHARS)
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         Ok(Self::DraftReady {
             assistant_message: bounded_text(message.into(), MAX_ASSISTANT_MESSAGE_CHARS)?,
@@ -172,7 +162,7 @@ impl FoodDraftPolicy {
         }
     }
 
-    pub fn validate(&self, turn: &FoodDraftTurn) -> Result<(), AssistantError> {
+    pub fn validate(&self, turn: &FoodDraftTurn) -> Result<(), DraftValidationError> {
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             return Ok(());
         };
@@ -187,15 +177,15 @@ impl FoodDraftPolicy {
             .iter()
             .any(|code| !nutrient_codes.contains(code.as_str()))
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         for nutrient in &draft.nutrients {
             let unit = self
                 .nutrient_units
                 .get(&nutrient.code)
-                .ok_or(AssistantError::InvalidModelResponse)?;
+                .ok_or(DraftValidationError)?;
             if nutrient.amount_per_100g > maximum_nutrient(unit) {
-                return Err(AssistantError::InvalidModelResponse);
+                return Err(DraftValidationError);
             }
         }
         if draft
@@ -203,7 +193,7 @@ impl FoodDraftPolicy {
             .iter()
             .any(|serving| !self.serving_units.contains(&serving.unit))
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         Ok(())
     }
@@ -230,7 +220,7 @@ impl FoodDraft {
         default_unit: Option<String>,
         nutrients: Vec<DraftNutrient>,
         servings: Vec<DraftServing>,
-    ) -> Result<Self, AssistantError> {
+    ) -> Result<Self, DraftValidationError> {
         if categories.len() > MAX_DRAFT_CATEGORIES
             || nutrients.len() > MAX_DRAFT_NUTRIENTS
             || servings.len() > MAX_DRAFT_SERVINGS
@@ -238,7 +228,7 @@ impl FoodDraft {
                 .iter()
                 .any(|value| value.chars().count() > MAX_DRAFT_CATEGORY_CHARS)
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         let name = bounded_text(name, MAX_DRAFT_NAME_CHARS)?;
         let brand = optional_bounded_text(brand, MAX_DRAFT_NAME_CHARS)?;
@@ -246,13 +236,13 @@ impl FoodDraft {
         if default_quantity.is_some_and(|value| value <= Decimal::ZERO)
             || default_quantity.is_some() != default_unit.is_some()
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         if let Some(unit) = default_unit.as_deref()
             && unit != "g"
             && !servings.iter().any(|serving| serving.unit == unit)
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         let mut normalized_categories = Vec::new();
         for category in categories {
@@ -266,14 +256,14 @@ impl FoodDraft {
             .iter()
             .any(|value| !codes.insert(value.code.clone()))
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         let mut serving_units = HashSet::new();
         if servings
             .iter()
             .any(|value| !serving_units.insert(value.unit.clone()))
         {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         Ok(Self {
             name,
@@ -322,10 +312,10 @@ pub struct DraftNutrient {
 }
 
 impl DraftNutrient {
-    pub fn new(code: String, amount_per_100g: Decimal) -> Result<Self, AssistantError> {
+    pub fn new(code: String, amount_per_100g: Decimal) -> Result<Self, DraftValidationError> {
         let code = bounded_text(code, MAX_DRAFT_CODE_CHARS)?;
         if amount_per_100g < Decimal::ZERO {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         Ok(Self {
             code,
@@ -349,10 +339,10 @@ pub struct DraftServing {
 }
 
 impl DraftServing {
-    pub fn new(unit: String, grams_per_unit: Decimal) -> Result<Self, AssistantError> {
+    pub fn new(unit: String, grams_per_unit: Decimal) -> Result<Self, DraftValidationError> {
         let unit = bounded_text(unit, MAX_DRAFT_UNIT_CHARS)?;
         if grams_per_unit <= Decimal::ZERO || grams_per_unit > MAX_SERVING_VALUE {
-            return Err(AssistantError::InvalidModelResponse);
+            return Err(DraftValidationError);
         }
         Ok(Self {
             unit,
@@ -379,10 +369,10 @@ fn maximum_nutrient(unit: &str) -> Decimal {
     }
 }
 
-fn bounded_text(value: String, maximum: usize) -> Result<String, AssistantError> {
+fn bounded_text(value: String, maximum: usize) -> Result<String, DraftValidationError> {
     let value = value.trim().to_owned();
     if value.is_empty() || value.chars().count() > maximum {
-        return Err(AssistantError::InvalidModelResponse);
+        return Err(DraftValidationError);
     }
     Ok(value)
 }
@@ -390,7 +380,7 @@ fn bounded_text(value: String, maximum: usize) -> Result<String, AssistantError>
 fn optional_bounded_text(
     value: Option<String>,
     maximum: usize,
-) -> Result<Option<String>, AssistantError> {
+) -> Result<Option<String>, DraftValidationError> {
     value.map(|value| bounded_text(value, maximum)).transpose()
 }
 
@@ -415,7 +405,7 @@ mod tests {
     fn clarification_cannot_be_empty() {
         assert!(matches!(
             FoodDraftTurn::clarification("  "),
-            Err(AssistantError::InvalidModelResponse)
+            Err(DraftValidationError)
         ));
     }
 
@@ -424,7 +414,7 @@ mod tests {
         let categories = vec!["category".to_owned(); MAX_DRAFT_CATEGORIES + 1];
         assert!(matches!(
             FoodDraft::new("Dal".into(), None, categories, None, None, vec![], vec![]),
-            Err(AssistantError::InvalidModelResponse)
+            Err(DraftValidationError)
         ));
 
         let serving = DraftServing::new("cup".into(), Decimal::ONE).unwrap();
@@ -438,7 +428,7 @@ mod tests {
                 vec![],
                 vec![serving.clone(), serving],
             ),
-            Err(AssistantError::InvalidModelResponse)
+            Err(DraftValidationError)
         ));
     }
 
@@ -463,9 +453,6 @@ mod tests {
         .unwrap();
         let turn = FoodDraftTurn::ready("Review", draft, vec![]).unwrap();
 
-        assert!(matches!(
-            policy.validate(&turn),
-            Err(AssistantError::InvalidModelResponse)
-        ));
+        assert!(matches!(policy.validate(&turn), Err(DraftValidationError)));
     }
 }

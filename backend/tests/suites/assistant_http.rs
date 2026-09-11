@@ -6,12 +6,10 @@ use async_trait::async_trait;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use calco_backend::assistant::application::{
-    FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest, FoodDraftResult,
-    FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
+    AssistantError, FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest,
+    FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
 };
-use calco_backend::assistant::domain::{
-    AssistantError, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
-};
+use calco_backend::assistant::domain::{DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn};
 use calco_backend::assistant::infrastructure::{
     NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
 };

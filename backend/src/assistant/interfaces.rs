@@ -12,11 +12,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::assistant::application::{
-    FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
+    AssistantError, FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
 };
 use crate::assistant::domain::{
-    AssistantError, Conversation, ConversationRole, ConversationTurn, ConversationValidationError,
-    FoodDraft, FoodDraftTurn,
+    Conversation, ConversationRole, ConversationTurn, ConversationValidationError, FoodDraft,
+    FoodDraftTurn,
 };
 use crate::assistant::module::{AdmissionError, AssistantModule};
 use crate::auth::interfaces::http::AuthUser;
@@ -394,11 +394,6 @@ async fn read_photo(
 
 fn assistant_failure(error: AssistantError) -> DraftHttpResult {
     match error {
-        AssistantError::Disabled => failure(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "assistant_disabled",
-            "assistant is unavailable",
-        ),
         AssistantError::InvalidInput => rejected(
             StatusCode::BAD_REQUEST,
             "invalid_conversation",

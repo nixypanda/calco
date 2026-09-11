@@ -1,8 +1,9 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 
+use crate::assistant::application::AssistantError;
 use crate::assistant::domain::{
-    AssistantError, DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn,
+    DraftNutrient, DraftServing, DraftValidationError, FoodDraft, FoodDraftTurn,
 };
 
 #[derive(Deserialize)]
@@ -54,11 +55,12 @@ pub(super) fn parse_model_turn(content: &str) -> Result<FoodDraftTurn, Assistant
     })?;
     match wire.status {
         WireStatus::NeedsClarification if wire.draft.is_none() && wire.warnings.is_empty() => {
-            FoodDraftTurn::clarification(wire.assistant_message)
+            FoodDraftTurn::clarification(wire.assistant_message).map_err(invalid_draft)
         }
         WireStatus::DraftReady => {
             let draft = parse_draft(wire.draft.ok_or(AssistantError::InvalidModelResponse)?)?;
             FoodDraftTurn::ready(wire.assistant_message, draft, wire.warnings)
+                .map_err(invalid_draft)
         }
         _ => Err(AssistantError::InvalidModelResponse),
     }
@@ -67,11 +69,12 @@ pub(super) fn parse_model_turn(content: &str) -> Result<FoodDraftTurn, Assistant
 fn parse_draft(wire: WireDraft) -> Result<FoodDraft, AssistantError> {
     let mut nutrients = Vec::with_capacity(wire.nutrients.len());
     for value in wire.nutrients {
-        nutrients.push(DraftNutrient::new(value.code, value.amount_per_100g)?);
+        nutrients
+            .push(DraftNutrient::new(value.code, value.amount_per_100g).map_err(invalid_draft)?);
     }
     let mut servings = Vec::with_capacity(wire.servings.len());
     for value in wire.servings {
-        servings.push(DraftServing::new(value.unit, value.grams_per_unit)?);
+        servings.push(DraftServing::new(value.unit, value.grams_per_unit).map_err(invalid_draft)?);
     }
     FoodDraft::new(
         wire.name,
@@ -82,6 +85,11 @@ fn parse_draft(wire: WireDraft) -> Result<FoodDraft, AssistantError> {
         nutrients,
         servings,
     )
+    .map_err(invalid_draft)
+}
+
+fn invalid_draft(_error: DraftValidationError) -> AssistantError {
+    AssistantError::InvalidModelResponse
 }
 
 #[cfg(test)]

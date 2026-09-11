@@ -3,8 +3,20 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::domain::{
-    AssistantError, Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftTurn,
+    Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftTurn,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AssistantError {
+    #[error("assistant input is invalid")]
+    InvalidInput,
+    #[error("assistant model is unavailable")]
+    ModelUnavailable,
+    #[error("assistant model returned an invalid response")]
+    InvalidModelResponse,
+    #[error("assistant operation failed")]
+    Internal,
+}
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
@@ -172,7 +184,10 @@ impl FoodDraftService {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
         let request = prepare_model_request(request)?;
         let result = self.model.generate(&request, &vocabulary).await?;
-        vocabulary.draft_policy().validate(&result.turn)?;
+        vocabulary
+            .draft_policy()
+            .validate(&result.turn)
+            .map_err(|_| AssistantError::InvalidModelResponse)?;
         if let FoodDraftTurn::DraftReady { draft, .. } = &result.turn {
             self.acceptance.validate_draft(draft).await?;
         }

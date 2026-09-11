@@ -7,9 +7,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::application::{
-    FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodVocabulary, ModelUsage,
+    AssistantError, FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodVocabulary,
+    ModelUsage,
 };
-use crate::assistant::domain::{AssistantError, ConversationRole};
+use crate::assistant::domain::ConversationRole;
 use crate::assistant::llm::{
     ChatClient, ChatError, ChatImage, ChatMessage, ChatRequest, ChatResponse, ChatRole,
     ResponseFormat, TokenUsage,

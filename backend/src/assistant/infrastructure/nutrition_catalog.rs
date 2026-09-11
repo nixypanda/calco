@@ -3,9 +3,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::application::{
-    FoodDraftAcceptancePort, FoodVocabulary, FoodVocabularyPort, SupportedNutrient, SupportedUnit,
+    AssistantError, FoodDraftAcceptancePort, FoodVocabulary, FoodVocabularyPort, SupportedNutrient,
+    SupportedUnit,
 };
-use crate::assistant::domain::{AssistantError, FoodDraft};
+use crate::assistant::domain::FoodDraft;
 use crate::nutrition::catalog::application::{CatalogService, CustomFoodInput};
 use crate::nutrition::catalog::domain::{ProductNutrientInput, ProductServingInput};
 use crate::nutrition::error::NutritionError;

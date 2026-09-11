@@ -7,8 +7,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::assistant::application::{FoodDraftService, FoodImageSanitizer};
-use crate::assistant::domain::AssistantError;
+use crate::assistant::application::{AssistantError, FoodDraftService, FoodImageSanitizer};
 use crate::assistant::infrastructure::{
     FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
 };
