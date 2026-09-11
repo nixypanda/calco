@@ -46,15 +46,7 @@ impl AuthBootstrapService {
         let password_hash = self.password_hasher.hash(&password)?;
 
         let now = Utc::now();
-        let identity = Identity {
-            id: IdentityId::new(),
-            username,
-            password_hash,
-            role: IdentityRole::Admin,
-            status: IdentityStatus::Active,
-            created_at: now,
-            updated_at: now,
-        };
+        let identity = Identity::new_admin(username, password_hash, now);
 
         self.identity_repo.create(&identity).await?;
 

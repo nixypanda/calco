@@ -86,25 +86,11 @@ impl AdminUserService {
         let password_hash = self.password_hasher.hash(&password)?;
 
         let now = Utc::now();
-        let identity = Identity {
-            id: IdentityId::new(),
-            username,
-            password_hash,
-            role: IdentityRole::User,
-            status: IdentityStatus::Active,
-            created_at: now,
-            updated_at: now,
-        };
+        let identity = Identity::new_user(username, password_hash, now);
 
         self.identity_repo.create(&identity).await?;
 
-        let profile = UserProfile {
-            id: Uuid::new_v4(),
-            identity_id: identity.id,
-            display_name: display_name.to_string(),
-            created_at: now,
-            updated_at: now,
-        };
+        let profile = UserProfile::new(identity.id, display_name, now);
         self.profile_repo.create(&profile).await?;
 
         Ok(CreatedUser { identity, profile })

@@ -174,6 +174,31 @@ pub struct Identity {
 }
 
 impl Identity {
+    pub fn new_user(username: Username, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
+        Self::new(username, password_hash, IdentityRole::User, now)
+    }
+
+    pub fn new_admin(username: Username, password_hash: PasswordHash, now: DateTime<Utc>) -> Self {
+        Self::new(username, password_hash, IdentityRole::Admin, now)
+    }
+
+    fn new(
+        username: Username,
+        password_hash: PasswordHash,
+        role: IdentityRole,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: IdentityId::new(),
+            username,
+            password_hash,
+            role,
+            status: IdentityStatus::Active,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
     pub fn is_active(&self) -> bool {
         self.status == IdentityStatus::Active
     }
@@ -210,6 +235,22 @@ pub struct UserProfile {
     pub display_name: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl UserProfile {
+    pub fn new(
+        identity_id: IdentityId,
+        display_name: impl Into<String>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            identity_id,
+            display_name: display_name.into(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -386,5 +427,39 @@ mod tests {
         let password = Password::new("short");
 
         assert_eq!(password.as_bytes(), b"short");
+    }
+
+    #[test]
+    fn identity_factories_create_active_identity_with_requested_role() {
+        let now = Utc::now();
+        let user = Identity::new_user(
+            Username::new("user").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+        let admin = Identity::new_admin(
+            Username::new("admin").unwrap(),
+            PasswordHash("hash".into()),
+            now,
+        );
+
+        assert_eq!(user.role, IdentityRole::User);
+        assert_eq!(admin.role, IdentityRole::Admin);
+        assert_eq!(user.status, IdentityStatus::Active);
+        assert_eq!(admin.status, IdentityStatus::Active);
+        assert_eq!(user.created_at, now);
+        assert_eq!(user.updated_at, now);
+    }
+
+    #[test]
+    fn user_profile_factory_associates_a_new_profile_with_an_identity() {
+        let now = Utc::now();
+        let identity_id = IdentityId::new();
+        let profile = UserProfile::new(identity_id, "Display Name", now);
+
+        assert_eq!(profile.identity_id, identity_id);
+        assert_eq!(profile.display_name, "Display Name");
+        assert_eq!(profile.created_at, now);
+        assert_eq!(profile.updated_at, now);
     }
 }
