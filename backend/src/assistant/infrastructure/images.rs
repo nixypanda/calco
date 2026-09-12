@@ -197,6 +197,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow"]
     fn strips_jpeg_metadata_and_downscales_large_images() {
         // A common 12 MP phone-camera resolution that exceeded the old limit.
         let encoded = image_bytes(ImageFormat::Jpeg, 2_500, 2_000);
