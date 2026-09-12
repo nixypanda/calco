@@ -750,25 +750,10 @@ pub struct ProductUpsertResult {
     /// Existing products whose stored parent columns changed in this call.
     /// Child-only changes are reported by the corresponding child counters.
     pub updated: i64,
-    /// Nutrient rows inserted, updated, or deleted by this call.
+    /// Nutrient rows inserted from the incoming authoritative collections.
     pub nutrients_written: i64,
-    /// Serving rows inserted, updated, or deleted by this call.
+    /// Serving rows inserted from the incoming authoritative collections.
     pub servings_written: i64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ProductUpsertOperationId(pub Uuid);
-
-impl ProductUpsertOperationId {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
-
-impl Default for ProductUpsertOperationId {
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 #[async_trait]
@@ -799,11 +784,9 @@ pub trait ProductRepository: Send + Sync {
     /// Every product is the complete desired aggregate: its nutrients and servings replace the
     /// stored collections, and an empty collection clears the corresponding stored children.
     /// Implementations must reject products whose source is [`Source::User`] or whose source ID
-    /// is absent, as well as duplicate `(source, source_id)` identities within one call. Reusing
-    /// an operation ID must return its original result without applying the products again.
+    /// is absent, as well as duplicate `(source, source_id)` identities within one call.
     async fn upsert_external_many(
         &self,
-        operation_id: ProductUpsertOperationId,
         products: &[Product],
     ) -> Result<ProductUpsertResult, NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;

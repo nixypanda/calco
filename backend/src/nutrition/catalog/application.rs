@@ -414,7 +414,6 @@ mod tests {
 
         async fn upsert_external_many(
             &self,
-            _operation_id: ProductUpsertOperationId,
             _products: &[Product],
         ) -> Result<ProductUpsertResult, NutritionError> {
             Ok(ProductUpsertResult::default())

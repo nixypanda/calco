@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::import::domain::*;
 use crate::nutrition::catalog::domain::{
     AmountPer100g, NutrientCatalog, NutrientRepository, Product, ProductNutrientInput,
-    ProductRepository, ProductServingInput, ProductUpsertOperationId, Source,
+    ProductRepository, ProductServingInput, Source,
 };
 use crate::nutrition::error::NutritionError;
 
@@ -207,11 +207,7 @@ impl ImportService {
                 return Err(error);
             }
         };
-        let written = match self
-            .product_repo
-            .upsert_external_many(ProductUpsertOperationId(import_id.0), &products)
-            .await
-        {
+        let written = match self.product_repo.upsert_external_many(&products).await {
             Ok(written) => written,
             Err(NutritionError::Validation(message)) => {
                 self.repo.fail_commit(import_id).await?;
@@ -503,7 +499,6 @@ mod tests {
     struct MockProductRepo {
         result: ProductUpsertResult,
         upserted: Mutex<Vec<Product>>,
-        operation_ids: Mutex<Vec<ProductUpsertOperationId>>,
     }
 
     #[async_trait]
@@ -555,10 +550,8 @@ mod tests {
 
         async fn upsert_external_many(
             &self,
-            operation_id: ProductUpsertOperationId,
             products: &[Product],
         ) -> Result<ProductUpsertResult, NutritionError> {
-            self.operation_ids.lock().unwrap().push(operation_id);
             self.upserted
                 .lock()
                 .unwrap()
@@ -604,7 +597,6 @@ mod tests {
             Arc::new(MockProductRepo {
                 result: ProductUpsertResult::default(),
                 upserted: Mutex::new(vec![]),
-                operation_ids: Mutex::new(vec![]),
             }),
             Arc::new(MockNutrientRepo),
         )
@@ -622,7 +614,6 @@ mod tests {
                     servings_written: result.servings_written,
                 },
                 upserted: Mutex::new(vec![]),
-                operation_ids: Mutex::new(vec![]),
             }),
             Arc::new(MockNutrientRepo),
         )
@@ -841,7 +832,6 @@ mod tests {
             Arc::new(MockProductRepo {
                 result: ProductUpsertResult::default(),
                 upserted: Mutex::new(vec![]),
-                operation_ids: Mutex::new(vec![]),
             }),
             Arc::new(MockNutrientRepo),
         );
@@ -927,7 +917,6 @@ mod tests {
                 servings_written: 1,
             },
             upserted: Mutex::new(vec![]),
-            operation_ids: Mutex::new(vec![]),
         });
         let services = ImportService::new(
             import_repo.clone(),
@@ -1005,10 +994,6 @@ mod tests {
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].row_number, Some(2));
         assert_eq!(errors[0].error, "Unknown nutrient code: UNKNOWN");
-        assert_eq!(
-            product_repo.operation_ids.lock().unwrap().as_slice(),
-            &[ProductUpsertOperationId(job.id.0)]
-        );
     }
 
     #[tokio::test]
@@ -1020,7 +1005,6 @@ mod tests {
                 ..ProductUpsertResult::default()
             },
             upserted: Mutex::new(vec![]),
-            operation_ids: Mutex::new(vec![]),
         });
         let services = ImportService::new(
             import_repo,

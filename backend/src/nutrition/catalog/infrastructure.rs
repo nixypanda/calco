@@ -526,36 +526,9 @@ impl ProductRepository for PostgresProductRepository {
 
     async fn upsert_external_many(
         &self,
-        operation_id: ProductUpsertOperationId,
         products: &[Product],
     ) -> Result<ProductUpsertResult, NutritionError> {
         let mut tx = self.pool.begin().await?;
-        let claimed = sqlx::query(
-            "INSERT INTO product_upsert_operations (id) VALUES ($1) ON CONFLICT DO NOTHING",
-        )
-        .bind(operation_id.0)
-        .execute(&mut *tx)
-        .await?
-        .rows_affected();
-
-        if claimed == 0 {
-            let (created, updated, nutrients_written, servings_written): (i64, i64, i64, i64) =
-                sqlx::query_as(
-                    r#"SELECT products_created, products_updated, nutrients_written,
-                              servings_written
-                       FROM product_upsert_operations
-                       WHERE id = $1"#,
-                )
-                .bind(operation_id.0)
-                .fetch_one(&mut *tx)
-                .await?;
-            return Ok(ProductUpsertResult {
-                created,
-                updated,
-                nutrients_written,
-                servings_written,
-            });
-        }
 
         validate_external_upsert_batch(products)?;
 
@@ -755,25 +728,9 @@ impl ProductRepository for PostgresProductRepository {
             .collect::<Result<_, _>>()?;
 
         result.nutrients_written =
-            synchronize_product_nutrients(&mut tx, &products, &product_ids, &nutrient_ids).await?;
+            replace_product_nutrients(&mut tx, &products, &product_ids, &nutrient_ids).await?;
         result.servings_written =
-            synchronize_product_servings(&mut tx, &products, &product_ids).await?;
-
-        sqlx::query(
-            r#"UPDATE product_upsert_operations SET
-                   products_created = $2,
-                   products_updated = $3,
-                   nutrients_written = $4,
-                   servings_written = $5
-               WHERE id = $1"#,
-        )
-        .bind(operation_id.0)
-        .bind(result.created)
-        .bind(result.updated)
-        .bind(result.nutrients_written)
-        .bind(result.servings_written)
-        .execute(&mut *tx)
-        .await?;
+            replace_product_servings(&mut tx, &products, &product_ids).await?;
 
         tx.commit().await?;
         Ok(result)
@@ -1171,7 +1128,7 @@ fn validate_external_upsert_batch(products: &[Product]) -> Result<(), NutritionE
     Ok(())
 }
 
-async fn synchronize_product_nutrients(
+async fn replace_product_nutrients(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     products: &[&Product],
     product_ids: &[Uuid],
@@ -1204,31 +1161,13 @@ async fn synchronize_product_nutrients(
         }
     }
 
-    let deleted = sqlx::query(
-        r#"
-        WITH incoming AS (
-            SELECT *
-            FROM UNNEST($2::uuid[], $3::uuid[]) AS value(product_id, nutrient_id)
-        )
-        DELETE FROM product_nutrients AS nutrient
-        WHERE nutrient.product_id = ANY($1)
-          AND NOT EXISTS (
-              SELECT 1
-              FROM incoming
-              WHERE incoming.product_id = nutrient.product_id
-                AND incoming.nutrient_id = nutrient.nutrient_id
-          )
-        "#,
-    )
-    .bind(product_ids)
-    .bind(&incoming_product_ids)
-    .bind(&incoming_nutrient_ids)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected() as i64;
+    sqlx::query("DELETE FROM product_nutrients WHERE product_id = ANY($1)")
+        .bind(product_ids)
+        .execute(&mut **tx)
+        .await?;
 
     if incoming_product_ids.is_empty() {
-        return Ok(deleted);
+        return Ok(0);
     }
 
     let written = sqlx::query(
@@ -1239,20 +1178,6 @@ async fn synchronize_product_nutrients(
         SELECT value.product_id, value.nutrient_id, value.amount, value.source, value.confidence
         FROM UNNEST($1::uuid[], $2::uuid[], $3::numeric[], $4::text[], $5::text[])
             AS value(product_id, nutrient_id, amount, source, confidence)
-        ON CONFLICT (product_id, nutrient_id) DO UPDATE SET
-            amount_per_100g = EXCLUDED.amount_per_100g,
-            source = EXCLUDED.source,
-            confidence = EXCLUDED.confidence,
-            updated_at = NOW()
-        WHERE ROW(
-            product_nutrients.amount_per_100g,
-            product_nutrients.source,
-            product_nutrients.confidence
-        ) IS DISTINCT FROM ROW(
-            EXCLUDED.amount_per_100g,
-            EXCLUDED.source,
-            EXCLUDED.confidence
-        )
         "#,
     )
     .bind(&incoming_product_ids)
@@ -1264,10 +1189,10 @@ async fn synchronize_product_nutrients(
     .await?
     .rows_affected() as i64;
 
-    Ok(deleted + written)
+    Ok(written)
 }
 
-async fn synchronize_product_servings(
+async fn replace_product_servings(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     products: &[&Product],
     product_ids: &[Uuid],
@@ -1289,60 +1214,14 @@ async fn synchronize_product_servings(
         }
     }
 
-    let deleted = sqlx::query(
-        r#"
-        WITH incoming AS (
-            SELECT *
-            FROM UNNEST($2::uuid[], $3::text[]) AS value(product_id, unit)
-        )
-        DELETE FROM product_servings AS serving
-        WHERE serving.product_id = ANY($1)
-          AND NOT EXISTS (
-              SELECT 1
-              FROM incoming
-              WHERE incoming.product_id = serving.product_id
-                AND incoming.unit = serving.unit
-          )
-        "#,
-    )
-    .bind(product_ids)
-    .bind(&incoming_product_ids)
-    .bind(&units)
-    .execute(&mut **tx)
-    .await?
-    .rows_affected() as i64;
+    sqlx::query("DELETE FROM product_servings WHERE product_id = ANY($1)")
+        .bind(product_ids)
+        .execute(&mut **tx)
+        .await?;
 
     if incoming_product_ids.is_empty() {
-        return Ok(deleted);
+        return Ok(0);
     }
-
-    // Move reordered rows beyond every occupied position before applying their desired
-    // positions. This avoids transient unique-constraint violations for swaps such as 0 <-> 1.
-    sqlx::query(
-        r#"
-        WITH incoming AS (
-            SELECT *
-            FROM UNNEST($2::uuid[], $3::text[], $4::integer[])
-                AS value(product_id, unit, position)
-        ), offset_value AS (
-            SELECT COALESCE(MAX(position), -1)::bigint + 1 AS value
-            FROM product_servings
-            WHERE product_id = ANY($1)
-        )
-        UPDATE product_servings AS serving
-        SET position = (serving.position::bigint + offset_value.value)::integer
-        FROM incoming, offset_value
-        WHERE serving.product_id = incoming.product_id
-          AND serving.unit = incoming.unit
-          AND serving.position <> incoming.position
-        "#,
-    )
-    .bind(product_ids)
-    .bind(&incoming_product_ids)
-    .bind(&units)
-    .bind(&positions)
-    .execute(&mut **tx)
-    .await?;
 
     let written = sqlx::query(
         r#"
@@ -1350,16 +1229,6 @@ async fn synchronize_product_servings(
         SELECT value.product_id, value.unit, value.grams_per_unit, value.position
         FROM UNNEST($1::uuid[], $2::text[], $3::numeric[], $4::integer[])
             AS value(product_id, unit, grams_per_unit, position)
-        ON CONFLICT (product_id, unit) DO UPDATE SET
-            grams_per_unit = EXCLUDED.grams_per_unit,
-            position = EXCLUDED.position
-        WHERE ROW(
-            product_servings.grams_per_unit,
-            product_servings.position
-        ) IS DISTINCT FROM ROW(
-            EXCLUDED.grams_per_unit,
-            EXCLUDED.position
-        )
         "#,
     )
     .bind(&incoming_product_ids)
@@ -1370,5 +1239,5 @@ async fn synchronize_product_servings(
     .await?
     .rows_affected() as i64;
 
-    Ok(deleted + written)
+    Ok(written)
 }

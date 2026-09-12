@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use calco_backend::nutrition::catalog::domain::{
     Nutrient, NutrientCatalog, NutrientCode, NutritionError, Product, ProductNutrientInput,
-    ProductRepository, ProductServingInput, ProductUpsertOperationId, Source, UnitCode,
+    ProductRepository, ProductServingInput, Source, UnitCode,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use rust_decimal::Decimal;
@@ -66,11 +64,12 @@ fn external_product(
 }
 
 #[sqlx::test]
-async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: PgPool) {
+async fn external_upsert_applies_each_authoritative_payload_and_accepts_missing_barcode(
+    pool: PgPool,
+) {
     let repository = PostgresProductRepository::new(pool.clone());
-    let operation_id = ProductUpsertOperationId::new();
     let product = external_product(
-        "state-idempotent",
+        "authoritative-replacement",
         None,
         "State idempotent food",
         &[("ENERGY_KCAL", 100), ("PROTEIN_G", 10)],
@@ -78,7 +77,7 @@ async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: P
     );
 
     let first = repository
-        .upsert_external_many(operation_id, std::slice::from_ref(&product))
+        .upsert_external_many(std::slice::from_ref(&product))
         .await
         .unwrap();
     assert_eq!(first.created, 1);
@@ -86,87 +85,55 @@ async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: P
     assert_eq!(first.nutrients_written, 2);
     assert_eq!(first.servings_written, 2);
 
-    let parent_before: (Uuid, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) =
-        sqlx::query_as(
-            "SELECT id, barcode, created_at, updated_at FROM products WHERE source = 'OFF' AND source_id = $1",
-        )
-        .bind("state-idempotent")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    let parent_before: (Uuid, Option<String>) =
+        sqlx::query_as("SELECT id, barcode FROM products WHERE source = 'OFF' AND source_id = $1")
+            .bind("authoritative-replacement")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
     assert_eq!(parent_before.0, product.id.0);
     assert_eq!(parent_before.1, None);
 
-    let nutrient_timestamps_before: Vec<(String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
-        r#"SELECT nutrient.code, product_nutrient.updated_at
-           FROM product_nutrients AS product_nutrient
-           JOIN nutrients AS nutrient ON nutrient.id = product_nutrient.nutrient_id
-           WHERE product_nutrient.product_id = $1
-           ORDER BY nutrient.code"#,
-    )
-    .bind(parent_before.0)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    let servings_before: Vec<(Uuid, String, i32)> = sqlx::query_as(
-        "SELECT id, unit, position FROM product_servings WHERE product_id = $1 ORDER BY position",
-    )
-    .bind(parent_before.0)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-
-    let changed_retry_payload = external_product(
-        "state-idempotent",
-        Some("should-not-be-applied"),
-        "Should not be applied",
+    let replacement = external_product(
+        "authoritative-replacement",
+        Some("replacement-barcode"),
+        "Replacement food",
         &[],
         &[],
     );
-    let retry = repository
-        .upsert_external_many(operation_id, std::slice::from_ref(&changed_retry_payload))
+    let replaced = repository
+        .upsert_external_many(std::slice::from_ref(&replacement))
         .await
         .unwrap();
-    assert_eq!(retry, first);
-    assert_eq!(retry.created, 1);
-    assert_eq!(retry.updated, 0);
-    assert_eq!(retry.nutrients_written, 2);
-    assert_eq!(retry.servings_written, 2);
+    assert_eq!(replaced.created, 0);
+    assert_eq!(replaced.updated, 1);
+    assert_eq!(replaced.nutrients_written, 0);
+    assert_eq!(replaced.servings_written, 0);
 
-    let parent_after: (Uuid, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) =
-        sqlx::query_as(
-            "SELECT id, barcode, created_at, updated_at FROM products WHERE source = 'OFF' AND source_id = $1",
-        )
-        .bind("state-idempotent")
-        .fetch_one(&pool)
-        .await
-        .unwrap();
-    let nutrient_timestamps_after: Vec<(String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
-        r#"SELECT nutrient.code, product_nutrient.updated_at
-           FROM product_nutrients AS product_nutrient
-           JOIN nutrients AS nutrient ON nutrient.id = product_nutrient.nutrient_id
-           WHERE product_nutrient.product_id = $1
-           ORDER BY nutrient.code"#,
+    let parent_after: (Uuid, String, Option<String>) = sqlx::query_as(
+        "SELECT id, name, barcode FROM products WHERE source = 'OFF' AND source_id = $1",
     )
-    .bind(parent_before.0)
-    .fetch_all(&pool)
+    .bind("authoritative-replacement")
+    .fetch_one(&pool)
     .await
     .unwrap();
-    let servings_after: Vec<(Uuid, String, i32)> = sqlx::query_as(
-        "SELECT id, unit, position FROM product_servings WHERE product_id = $1 ORDER BY position",
+    assert_eq!(parent_after.0, parent_before.0);
+    assert_eq!(parent_after.1, "Replacement food");
+    assert_eq!(parent_after.2.as_deref(), Some("replacement-barcode"));
+    let remaining_children: (i64, i64) = sqlx::query_as(
+        r#"SELECT
+               (SELECT COUNT(*) FROM product_nutrients WHERE product_id = $1),
+               (SELECT COUNT(*) FROM product_servings WHERE product_id = $1)"#,
     )
     .bind(parent_before.0)
-    .fetch_all(&pool)
+    .fetch_one(&pool)
     .await
     .unwrap();
-
-    assert_eq!(parent_after, parent_before);
-    assert_eq!(nutrient_timestamps_after, nutrient_timestamps_before);
-    assert_eq!(servings_after, servings_before);
+    assert_eq!(remaining_children, (0, 0));
 }
 
 #[sqlx::test]
-async fn external_upsert_replaces_children_and_preserves_ids_during_position_swaps(pool: PgPool) {
+async fn external_upsert_replaces_children_in_incoming_order(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
     let original = external_product(
         "authoritative-children",
@@ -176,10 +143,7 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[("cup", 240), ("slice", 30)],
     );
     repository
-        .upsert_external_many(
-            ProductUpsertOperationId::new(),
-            std::slice::from_ref(&original),
-        )
+        .upsert_external_many(std::slice::from_ref(&original))
         .await
         .unwrap();
 
@@ -189,16 +153,6 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
             .fetch_one(&pool)
             .await
             .unwrap();
-    let serving_ids_before: HashMap<String, Uuid> = sqlx::query_as::<_, (String, Uuid)>(
-        "SELECT unit, id FROM product_servings WHERE product_id = $1",
-    )
-    .bind(original_parent_id)
-    .fetch_all(&pool)
-    .await
-    .unwrap()
-    .into_iter()
-    .collect();
-
     let replacement = external_product(
         "authoritative-children",
         Some("654321"),
@@ -207,17 +161,14 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[("slice", 30), ("cup", 250)],
     );
     let changed = repository
-        .upsert_external_many(
-            ProductUpsertOperationId::new(),
-            std::slice::from_ref(&replacement),
-        )
+        .upsert_external_many(std::slice::from_ref(&replacement))
         .await
         .unwrap();
 
     assert_eq!(changed.created, 0);
     assert_eq!(changed.updated, 1);
-    assert_eq!(changed.nutrients_written, 2); // one update and one authoritative delete
-    assert_eq!(changed.servings_written, 2); // both rows changed position
+    assert_eq!(changed.nutrients_written, 1);
+    assert_eq!(changed.servings_written, 2);
 
     let parent_after: (Uuid, String, Option<String>) = sqlx::query_as(
         "SELECT id, name, barcode FROM products WHERE source = 'OFF' AND source_id = $1",
@@ -255,10 +206,6 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
     assert_eq!(servings_after[1].1, "cup");
     assert_eq!(servings_after[1].2, Decimal::from(250));
     assert_eq!(servings_after[1].3, 1);
-    for (id, unit, _, _) in &servings_after {
-        assert_eq!(serving_ids_before.get(unit), Some(id));
-    }
-
     let empty_children = external_product(
         "authoritative-children",
         Some("654321"),
@@ -267,15 +214,12 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[],
     );
     let cleared = repository
-        .upsert_external_many(
-            ProductUpsertOperationId::new(),
-            std::slice::from_ref(&empty_children),
-        )
+        .upsert_external_many(std::slice::from_ref(&empty_children))
         .await
         .unwrap();
     assert_eq!(cleared.updated, 0);
-    assert_eq!(cleared.nutrients_written, 1);
-    assert_eq!(cleared.servings_written, 2);
+    assert_eq!(cleared.nutrients_written, 0);
+    assert_eq!(cleared.servings_written, 0);
     let remaining_children: (i64, i64) = sqlx::query_as(
         r#"SELECT
                (SELECT COUNT(*) FROM product_nutrients WHERE product_id = $1),
@@ -294,9 +238,7 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
 
     let first = external_product("duplicate-key", None, "First", &[], &[]);
     let second = external_product("duplicate-key", None, "Second", &[], &[]);
-    let duplicate = repository
-        .upsert_external_many(ProductUpsertOperationId::new(), &[first, second])
-        .await;
+    let duplicate = repository.upsert_external_many(&[first, second]).await;
     assert!(matches!(duplicate, Err(NutritionError::Validation(_))));
 
     let mut valid = external_product("rolled-back-first", None, "Valid", &[], &[]);
@@ -304,10 +246,7 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
         external_product("rolled-back-second", None, "Collision", &[], &[]);
     primary_key_collision.id = valid.id;
     let failed = repository
-        .upsert_external_many(
-            ProductUpsertOperationId::new(),
-            &[valid.clone(), primary_key_collision],
-        )
+        .upsert_external_many(&[valid.clone(), primary_key_collision])
         .await;
     assert!(matches!(failed, Err(NutritionError::Database(_))));
 
@@ -338,9 +277,7 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
             source: None,
             confidence: None,
         });
-    let unknown_result = repository
-        .upsert_external_many(ProductUpsertOperationId::new(), &[valid, unknown])
-        .await;
+    let unknown_result = repository.upsert_external_many(&[valid, unknown]).await;
     assert!(matches!(unknown_result, Err(NutritionError::Validation(_))));
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
@@ -353,11 +290,10 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
 }
 
 #[sqlx::test]
-async fn concurrent_same_operation_replays_one_canonical_result(pool: PgPool) {
+async fn concurrent_same_payload_upserts_serialize_complete_aggregate(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
-    let operation_id = ProductUpsertOperationId::new();
     let product = external_product(
-        "concurrent-replay",
+        "concurrent-same-payload",
         None,
         "Concurrent replay",
         &[("ENERGY_KCAL", 100)],
@@ -367,18 +303,20 @@ async fn concurrent_same_operation_replays_one_canonical_result(pool: PgPool) {
     let second_batch = vec![product];
 
     let (first, second) = tokio::join!(
-        repository.upsert_external_many(operation_id, &first_batch),
-        repository.upsert_external_many(operation_id, &second_batch),
+        repository.upsert_external_many(&first_batch),
+        repository.upsert_external_many(&second_batch),
     );
     let first = first.unwrap();
     let second = second.unwrap();
 
-    assert_eq!(first, second);
-    assert_eq!(first.created, 1);
+    assert_eq!(first.created + second.created, 1);
+    assert_eq!(first.updated + second.updated, 0);
     assert_eq!(first.nutrients_written, 1);
     assert_eq!(first.servings_written, 1);
+    assert_eq!(second.nutrients_written, 1);
+    assert_eq!(second.servings_written, 1);
     let product_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = 'concurrent-replay'",
+        "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = 'concurrent-same-payload'",
     )
     .fetch_one(&pool)
     .await
@@ -387,7 +325,7 @@ async fn concurrent_same_operation_replays_one_canonical_result(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn concurrent_distinct_operations_leave_one_complete_aggregate(pool: PgPool) {
+async fn concurrent_overlapping_upserts_leave_one_complete_aggregate(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
     let original = external_product(
         "concurrent-overlap",
@@ -396,10 +334,7 @@ async fn concurrent_distinct_operations_leave_one_complete_aggregate(pool: PgPoo
         &[("ENERGY_KCAL", 100)],
         &[("cup", 200)],
     );
-    repository
-        .upsert_external_many(ProductUpsertOperationId::new(), &[original])
-        .await
-        .unwrap();
+    repository.upsert_external_many(&[original]).await.unwrap();
 
     let version_a = external_product(
         "concurrent-overlap",
@@ -420,8 +355,8 @@ async fn concurrent_distinct_operations_leave_one_complete_aggregate(pool: PgPoo
 
     let (result_a, result_b) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         tokio::join!(
-            repository.upsert_external_many(ProductUpsertOperationId::new(), &batch_a),
-            repository.upsert_external_many(ProductUpsertOperationId::new(), &batch_b),
+            repository.upsert_external_many(&batch_a),
+            repository.upsert_external_many(&batch_b),
         )
     })
     .await

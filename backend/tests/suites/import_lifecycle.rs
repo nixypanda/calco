@@ -1,7 +1,7 @@
 use crate::common::*;
 use axum::http::StatusCode;
 use calco_backend::nutrition::catalog::domain::{
-    NutrientCatalog, Product, ProductRepository, ProductUpsertOperationId, Source,
+    NutrientCatalog, Product, ProductRepository, Source,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use serde_json::{Value, json};
@@ -413,7 +413,7 @@ async fn legacy_committed_import_without_result_is_not_replayed_as_zeroes(pool: 
 }
 
 #[sqlx::test]
-async fn running_import_replays_catalog_result_after_pre_finalize_crash(pool: PgPool) {
+async fn running_import_reapplies_catalog_after_pre_finalize_crash(pool: PgPool) {
     let router = app(pool.clone()).await;
     let admin = bootstrap_admin(&router).await;
     let created: Value = post_json(
@@ -463,7 +463,7 @@ async fn running_import_replays_catalog_result_after_pre_finalize_crash(pool: Pg
     )
     .unwrap();
     let catalog_result = PostgresProductRepository::new(pool)
-        .upsert_external_many(ProductUpsertOperationId(import_uuid), &[product])
+        .upsert_external_many(&[product])
         .await
         .unwrap();
     assert_eq!(catalog_result.created, 1);
@@ -476,7 +476,7 @@ async fn running_import_replays_catalog_result_after_pre_finalize_crash(pool: Pg
         StatusCode::OK,
     )
     .await;
-    assert_eq!(committed["products_created"], 1);
+    assert_eq!(committed["products_created"], 0);
     assert_eq!(committed["status"], "committed");
 }
 
