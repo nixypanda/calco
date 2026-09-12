@@ -123,17 +123,15 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
     assert_eq!(commit["nutrients_written"], 2);
     assert_eq!(commit["servings_written"], 1);
 
-    // A lost response can be retried: the persisted canonical result is replayed without
-    // applying the catalog batch again.
-    let replay: Value = post_json(
+    // A terminal import cannot be committed again, so the catalog is not invoked twice.
+    let _: Value = post_json(
         &router,
         &format!("/api/imports/{import_id}/commit"),
         &admin,
         &json!({}),
-        StatusCode::OK,
+        StatusCode::CONFLICT,
     )
     .await;
-    assert_eq!(replay, commit);
 
     // ── 6. Status reflects committed state ──────────────────────────────
     let status: Value = get_json(&router, &format!("/api/imports/{import_id}"), &admin).await;
@@ -212,7 +210,7 @@ async fn import_commit_records_errors_for_unknown_nutrient(pool: PgPool) {
         &format!("/api/imports/{import_id}/commit"),
         &admin,
         &json!({}),
-        StatusCode::OK,
+        StatusCode::CONFLICT,
     )
     .await;
 
@@ -384,7 +382,7 @@ async fn deterministic_catalog_validation_marks_import_failed(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn legacy_committed_import_without_result_is_not_replayed_as_zeroes(pool: PgPool) {
+async fn committed_import_is_not_replayed(pool: PgPool) {
     let router = app(pool.clone()).await;
     let admin = bootstrap_admin(&router).await;
     let created: Value = post_json(

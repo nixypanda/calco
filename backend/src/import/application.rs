@@ -188,20 +188,24 @@ impl ImportService {
     }
 
     pub async fn commit_job(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
-        let batch = match self.repo.begin_commit(import_id).await? {
-            ImportCommitStart::Completed(result) => return Ok(result),
-            ImportCommitStart::Ready(batch) => batch,
-        };
+        let batch = self.repo.prepare_commit(import_id).await?;
 
-        let nutrient_catalog = self
-            .nutrient_catalog_reader
-            .nutrient_catalog()
-            .await
-            .map_err(import_product_error)?;
+        let nutrient_catalog = match self.nutrient_catalog_reader.nutrient_catalog().await {
+            Ok(catalog) => catalog,
+            Err(NutritionError::Validation(message)) => {
+                self.repo
+                    .finish_commit(import_id, ImportCommitOutcome::Failed)
+                    .await?;
+                return Err(ImportError::Validation(message));
+            }
+            Err(error) => return Err(import_product_error(error)),
+        };
         let (products, errors) = match assemble_products(batch, &nutrient_catalog) {
             Ok(assembled) => assembled,
             Err(error) => {
-                self.repo.fail_commit(import_id).await?;
+                self.repo
+                    .finish_commit(import_id, ImportCommitOutcome::Failed)
+                    .await?;
                 return Err(error);
             }
         };
@@ -212,7 +216,9 @@ impl ImportService {
         {
             Ok(written) => written,
             Err(NutritionError::Validation(message)) => {
-                self.repo.fail_commit(import_id).await?;
+                self.repo
+                    .finish_commit(import_id, ImportCommitOutcome::Failed)
+                    .await?;
                 return Err(ImportError::Validation(message));
             }
             Err(error) => return Err(import_product_error(error)),
@@ -225,7 +231,16 @@ impl ImportService {
             errors_logged: errors.len() as i64,
         };
 
-        self.repo.complete_commit(import_id, &result, &errors).await
+        self.repo
+            .finish_commit(
+                import_id,
+                ImportCommitOutcome::Committed {
+                    result: result.clone(),
+                    errors,
+                },
+            )
+            .await?;
+        Ok(result)
     }
 }
 
@@ -365,7 +380,6 @@ mod tests {
         nutrients: Mutex<Vec<StagedImportNutrient>>,
         servings: Mutex<Vec<StagedImportServing>>,
         errors: Mutex<Vec<ImportErrorRecord>>,
-        completed: Mutex<Option<ImportCommitResult>>,
     }
 
     impl MockImportRepo {
@@ -376,7 +390,6 @@ mod tests {
                 nutrients: Mutex::new(vec![]),
                 servings: Mutex::new(vec![]),
                 errors: Mutex::new(vec![]),
-                completed: Mutex::new(None),
             }
         }
     }
@@ -432,18 +445,18 @@ mod tests {
             Ok(())
         }
 
-        async fn begin_commit(
+        async fn prepare_commit(
             &self,
             import_id: ImportId,
-        ) -> Result<ImportCommitStart, ImportError> {
+        ) -> Result<StagedImportBatch, ImportError> {
             let mut jobs = self.jobs.lock().unwrap();
             let job = jobs
                 .iter_mut()
                 .find(|job| job.id == import_id)
                 .ok_or_else(|| ImportError::NotFound("import job not found".into()))?;
             if job.status == ImportStatus::Committed {
-                return Ok(ImportCommitStart::Completed(
-                    self.completed.lock().unwrap().clone().unwrap(),
+                return Err(ImportError::InvalidStatus(
+                    "cannot commit an already committed import".into(),
                 ));
             }
             if !matches!(job.status, ImportStatus::Pending | ImportStatus::Running) {
@@ -454,37 +467,30 @@ mod tests {
                 return Err(ImportError::Validation("no staged foods to commit".into()));
             }
             job.status = ImportStatus::Running;
-            Ok(ImportCommitStart::Ready(StagedImportBatch {
+            Ok(StagedImportBatch {
                 products,
                 nutrients: self.nutrients.lock().unwrap().clone(),
                 servings: self.servings.lock().unwrap().clone(),
-            }))
+            })
         }
 
-        async fn complete_commit(
+        async fn finish_commit(
             &self,
             import_id: ImportId,
-            result: &ImportCommitResult,
-            errors: &[ImportErrorRecord],
-        ) -> Result<ImportCommitResult, ImportError> {
+            outcome: ImportCommitOutcome,
+        ) -> Result<(), ImportError> {
             let mut jobs = self.jobs.lock().unwrap();
             let job = jobs.iter_mut().find(|job| job.id == import_id).unwrap();
-            if job.status == ImportStatus::Committed {
-                return Ok(self.completed.lock().unwrap().clone().unwrap());
-            }
             if job.status != ImportStatus::Running {
                 return Err(ImportError::InvalidStatus("import is not running".into()));
             }
-            self.errors.lock().unwrap().extend(errors.iter().cloned());
-            job.status = ImportStatus::Committed;
-            *self.completed.lock().unwrap() = Some(result.clone());
-            Ok(result.clone())
-        }
-
-        async fn fail_commit(&self, import_id: ImportId) -> Result<(), ImportError> {
-            let mut jobs = self.jobs.lock().unwrap();
-            let job = jobs.iter_mut().find(|job| job.id == import_id).unwrap();
-            job.status = ImportStatus::Failed;
+            match outcome {
+                ImportCommitOutcome::Committed { errors, .. } => {
+                    self.errors.lock().unwrap().extend(errors);
+                    job.status = ImportStatus::Committed;
+                }
+                ImportCommitOutcome::Failed => job.status = ImportStatus::Failed,
+            }
             Ok(())
         }
 
@@ -509,6 +515,26 @@ mod tests {
         ) -> Result<ProductUpsertResult, NutritionError> {
             self.upserted.lock().unwrap().extend(products);
             Ok(self.result)
+        }
+    }
+
+    struct FailingExternalProductWriter {
+        error_is_validation: bool,
+    }
+
+    #[async_trait]
+    impl ExternalProductWritePort for FailingExternalProductWriter {
+        async fn upsert_external_many(
+            &self,
+            _products: Vec<Product>,
+        ) -> Result<ProductUpsertResult, NutritionError> {
+            if self.error_is_validation {
+                Err(NutritionError::Validation(
+                    "deterministic catalog validation failure".into(),
+                ))
+            } else {
+                Err(NutritionError::ExternalUnavailable)
+            }
         }
     }
 
@@ -937,7 +963,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn completed_commit_replays_canonical_result_without_another_upsert() {
+    async fn completed_commit_is_rejected_without_another_upsert() {
         let import_repo = Arc::new(MockImportRepo::new());
         let product_writer = Arc::new(MockExternalProductWriter {
             result: ProductUpsertResult {
@@ -969,11 +995,85 @@ mod tests {
             .await
             .unwrap();
 
-        let first = services.commit_job(job.id).await.unwrap();
-        let replay = services.commit_job(job.id).await.unwrap();
+        services.commit_job(job.id).await.unwrap();
+        let error = services.commit_job(job.id).await.unwrap_err();
 
-        assert_eq!(replay.products_created, first.products_created);
+        assert!(matches!(error, ImportError::InvalidStatus(_)));
         assert_eq!(product_writer.upserted.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn deterministic_catalog_failure_marks_import_failed() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let services = ImportService::new(
+            import_repo.clone(),
+            Arc::new(FailingExternalProductWriter {
+                error_is_validation: true,
+            }),
+            Arc::new(MockNutrientCatalogReader),
+        );
+        let job = make_pending_job(&services, "USDA").await;
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let error = services.commit_job(job.id).await.unwrap_err();
+
+        assert!(matches!(error, ImportError::Validation(_)));
+        assert_eq!(
+            import_repo.find_job(job.id).await.unwrap().unwrap().status,
+            ImportStatus::Failed
+        );
+    }
+
+    #[tokio::test]
+    async fn transient_catalog_failure_leaves_import_running() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let services = ImportService::new(
+            import_repo.clone(),
+            Arc::new(FailingExternalProductWriter {
+                error_is_validation: false,
+            }),
+            Arc::new(MockNutrientCatalogReader),
+        );
+        let job = make_pending_job(&services, "USDA").await;
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let error = services.commit_job(job.id).await.unwrap_err();
+
+        assert!(matches!(error, ImportError::Catalog(_)));
+        assert_eq!(
+            import_repo.find_job(job.id).await.unwrap().unwrap().status,
+            ImportStatus::Running
+        );
     }
 
     #[test]

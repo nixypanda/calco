@@ -154,17 +154,10 @@ impl ImportRepository for PostgresImportRepository {
         Ok(())
     }
 
-    async fn begin_commit(&self, import_id: ImportId) -> Result<ImportCommitStart, ImportError> {
+    async fn prepare_commit(&self, import_id: ImportId) -> Result<StagedImportBatch, ImportError> {
         let mut tx = self.pool.begin().await?;
-        let state = self.lock_commit_state(&mut tx, import_id).await?;
-        match state.status.parse().unwrap_or(ImportStatus::Failed) {
-            ImportStatus::Committed => {
-                let result = state.result().ok_or_else(|| {
-                    ImportError::InvalidStatus("committed import has no replayable result".into())
-                })?;
-                tx.commit().await?;
-                Ok(ImportCommitStart::Completed(result))
-            }
+        let status = self.lock_job_status(&mut tx, import_id).await?;
+        match status.parse().unwrap_or(ImportStatus::Failed) {
             ImportStatus::Pending | ImportStatus::Running => {
                 let has_foods: (bool,) = sqlx::query_as(
                     "SELECT EXISTS(SELECT 1 FROM staging_products WHERE import_id = $1)",
@@ -176,7 +169,7 @@ impl ImportRepository for PostgresImportRepository {
                     return Err(ImportError::Validation("no staged foods to commit".into()));
                 }
 
-                if state.status == ImportStatus::Pending.as_str() {
+                if status == ImportStatus::Pending.as_str() {
                     sqlx::query("UPDATE imports SET status = 'running' WHERE id = $1")
                         .bind(import_id.0)
                         .execute(&mut *tx)
@@ -218,37 +211,38 @@ impl ImportRepository for PostgresImportRepository {
                 .collect();
 
                 tx.commit().await?;
-                Ok(ImportCommitStart::Ready(StagedImportBatch {
+                Ok(StagedImportBatch {
                     products,
                     nutrients,
                     servings,
-                }))
+                })
             }
             ImportStatus::Failed => Err(ImportError::InvalidStatus(
                 "cannot commit a failed import".into(),
             )),
+            ImportStatus::Committed => Err(ImportError::InvalidStatus(
+                "cannot commit an already committed import".into(),
+            )),
         }
     }
 
-    async fn complete_commit(
+    async fn finish_commit(
         &self,
         import_id: ImportId,
-        result: &ImportCommitResult,
-        errors: &[ImportErrorRecord],
-    ) -> Result<ImportCommitResult, ImportError> {
+        outcome: ImportCommitOutcome,
+    ) -> Result<(), ImportError> {
         let mut tx = self.pool.begin().await?;
-        let state = self.lock_commit_state(&mut tx, import_id).await?;
-        match state.status.parse().unwrap_or(ImportStatus::Failed) {
-            ImportStatus::Committed => {
-                let result = state.result().ok_or_else(|| {
-                    ImportError::InvalidStatus("committed import has no replayable result".into())
-                })?;
-                tx.commit().await?;
-                Ok(result)
-            }
-            ImportStatus::Running => {
+        let status = self.lock_job_status(&mut tx, import_id).await?;
+        if status != ImportStatus::Running.as_str() {
+            return Err(ImportError::InvalidStatus(
+                "can only finish a running import".into(),
+            ));
+        }
+
+        match outcome {
+            ImportCommitOutcome::Committed { result, errors } => {
                 for error in errors {
-                    self.add_error_in_tx(&mut tx, import_id, error).await?;
+                    self.add_error_in_tx(&mut tx, import_id, &error).await?;
                 }
                 sqlx::query(
                     r#"UPDATE imports
@@ -266,16 +260,19 @@ impl ImportRepository for PostgresImportRepository {
                 .bind(result.errors_logged)
                 .execute(&mut *tx)
                 .await?;
-                tx.commit().await?;
-                Ok(result.clone())
             }
-            ImportStatus::Pending => Err(ImportError::InvalidStatus(
-                "import has not been started".into(),
-            )),
-            ImportStatus::Failed => Err(ImportError::InvalidStatus(
-                "cannot complete a failed import".into(),
-            )),
+            ImportCommitOutcome::Failed => {
+                sqlx::query(
+                    "UPDATE imports SET status = 'failed', failed_at = NOW() WHERE id = $1",
+                )
+                .bind(import_id.0)
+                .execute(&mut *tx)
+                .await?;
+            }
         }
+
+        tx.commit().await?;
+        Ok(())
     }
 
     async fn get_errors(&self, import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError> {
@@ -287,33 +284,6 @@ impl ImportRepository for PostgresImportRepository {
         .await?;
 
         Ok(rows.into_iter().map(import_error_row_to_record).collect())
-    }
-
-    async fn fail_commit(&self, import_id: ImportId) -> Result<(), ImportError> {
-        let mut tx = self.pool.begin().await?;
-        let state = self.lock_commit_state(&mut tx, import_id).await?;
-        match state.status.parse().unwrap_or(ImportStatus::Failed) {
-            ImportStatus::Running => {
-                sqlx::query(
-                    "UPDATE imports SET status = 'failed', failed_at = NOW() WHERE id = $1",
-                )
-                .bind(import_id.0)
-                .execute(&mut *tx)
-                .await?;
-                tx.commit().await?;
-                Ok(())
-            }
-            ImportStatus::Failed => {
-                tx.commit().await?;
-                Ok(())
-            }
-            ImportStatus::Pending => Err(ImportError::InvalidStatus(
-                "import has not been started".into(),
-            )),
-            ImportStatus::Committed => Err(ImportError::InvalidStatus(
-                "cannot fail a committed import".into(),
-            )),
-        }
     }
 }
 
@@ -339,20 +309,16 @@ impl PostgresImportRepository {
         Ok(())
     }
 
-    async fn lock_commit_state(
+    async fn lock_job_status(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         import_id: ImportId,
-    ) -> Result<CommitStateRow, ImportError> {
-        sqlx::query_as::<_, CommitStateRow>(
-            r#"SELECT status, products_created, products_updated, nutrients_written,
-                      servings_written, errors_logged
-               FROM imports WHERE id = $1 FOR UPDATE"#,
-        )
-        .bind(import_id.0)
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or_else(|| ImportError::NotFound("import job not found".into()))
+    ) -> Result<String, ImportError> {
+        sqlx::query_scalar("SELECT status FROM imports WHERE id = $1 FOR UPDATE")
+            .bind(import_id.0)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ImportError::NotFound("import job not found".into()))
     }
 
     async fn add_error_in_tx(
@@ -381,28 +347,6 @@ impl PostgresImportRepository {
         .execute(&mut **tx)
         .await?;
         Ok(())
-    }
-}
-
-#[derive(sqlx::FromRow)]
-struct CommitStateRow {
-    status: String,
-    products_created: Option<i64>,
-    products_updated: Option<i64>,
-    nutrients_written: Option<i64>,
-    servings_written: Option<i64>,
-    errors_logged: Option<i64>,
-}
-
-impl CommitStateRow {
-    fn result(&self) -> Option<ImportCommitResult> {
-        Some(ImportCommitResult {
-            products_created: self.products_created?,
-            products_updated: self.products_updated?,
-            nutrients_written: self.nutrients_written?,
-            servings_written: self.servings_written?,
-            errors_logged: self.errors_logged?,
-        })
     }
 }
 

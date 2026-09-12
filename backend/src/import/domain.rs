@@ -153,9 +153,12 @@ pub struct StagedImportBatch {
 }
 
 #[derive(Debug, Clone)]
-pub enum ImportCommitStart {
-    Ready(StagedImportBatch),
-    Completed(ImportCommitResult),
+pub enum ImportCommitOutcome {
+    Committed {
+        result: ImportCommitResult,
+        errors: Vec<ImportErrorRecord>,
+    },
+    Failed,
 }
 
 #[async_trait]
@@ -180,13 +183,11 @@ pub trait ImportRepository: Send + Sync {
         servings: &[StagedImportServing],
         errors: &[ImportErrorRecord],
     ) -> Result<(), ImportError>;
-    async fn begin_commit(&self, import_id: ImportId) -> Result<ImportCommitStart, ImportError>;
-    async fn complete_commit(
+    async fn prepare_commit(&self, import_id: ImportId) -> Result<StagedImportBatch, ImportError>;
+    async fn finish_commit(
         &self,
         import_id: ImportId,
-        result: &ImportCommitResult,
-        errors: &[ImportErrorRecord],
-    ) -> Result<ImportCommitResult, ImportError>;
-    async fn fail_commit(&self, import_id: ImportId) -> Result<(), ImportError>;
+        outcome: ImportCommitOutcome,
+    ) -> Result<(), ImportError>;
     async fn get_errors(&self, import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError>;
 }
