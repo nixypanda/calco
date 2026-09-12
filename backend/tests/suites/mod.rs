@@ -8,3 +8,4 @@ mod import_lifecycle;
 mod meal_lifecycle;
 mod nutrition_details_lifecycle;
 mod product_lifecycle;
+mod product_repository;

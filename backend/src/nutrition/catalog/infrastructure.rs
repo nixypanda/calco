@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, QueryBuilder};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -14,6 +15,7 @@ pub use open_food_facts::OpenFoodFactsClient;
 
 const SEARCH_NUTRIENT_CODES: [&str; 5] =
     ["ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G"];
+const PRODUCT_UPSERT_CHUNK_SIZE: usize = 1_000;
 
 #[derive(Clone)]
 pub struct PostgresProductRepository {
@@ -522,6 +524,217 @@ impl ProductRepository for PostgresProductRepository {
         Ok(())
     }
 
+    async fn upsert_external_many(
+        &self,
+        products: &[Product],
+    ) -> Result<ProductUpsertResult, NutritionError> {
+        if products.is_empty() {
+            return Ok(ProductUpsertResult::default());
+        }
+
+        validate_external_upsert_batch(products)?;
+
+        let mut products: Vec<&Product> = products.iter().collect();
+        products.sort_by_key(|product| {
+            (
+                product.source.as_str(),
+                product.source_id.as_deref().unwrap_or_default(),
+            )
+        });
+
+        let mut tx = self.pool.begin().await?;
+
+        let requested_nutrient_codes: HashSet<String> = products
+            .iter()
+            .flat_map(|product| &product.nutrients)
+            .map(|nutrient| nutrient.nutrient_code.0.clone())
+            .collect();
+        let requested_nutrient_codes: Vec<String> = requested_nutrient_codes.into_iter().collect();
+        let nutrient_rows = if requested_nutrient_codes.is_empty() {
+            Vec::new()
+        } else {
+            sqlx::query_as::<_, (String, Uuid)>(
+                "SELECT code, id FROM nutrients WHERE code = ANY($1)",
+            )
+            .bind(&requested_nutrient_codes)
+            .fetch_all(&mut *tx)
+            .await?
+        };
+        let nutrient_ids: HashMap<String, Uuid> = nutrient_rows.into_iter().collect();
+        let mut unknown_codes: Vec<&str> = requested_nutrient_codes
+            .iter()
+            .filter(|code| !nutrient_ids.contains_key(code.as_str()))
+            .map(String::as_str)
+            .collect();
+        if !unknown_codes.is_empty() {
+            unknown_codes.sort_unstable();
+            return Err(NutritionError::Validation(format!(
+                "unknown nutrient code(s): {}",
+                unknown_codes.join(", ")
+            )));
+        }
+
+        // Existing rows are locked in identity order before the set-based writes. This makes
+        // overlapping batches serialize their aggregate replacement consistently.
+        for chunk in products.chunks(PRODUCT_UPSERT_CHUNK_SIZE) {
+            let mut query = QueryBuilder::<Postgres>::new(
+                "SELECT id FROM products WHERE (source, source_id) IN (",
+            );
+            for (index, product) in chunk.iter().enumerate() {
+                if index > 0 {
+                    query.push(", ");
+                }
+                query
+                    .push("(")
+                    .push_bind(product.source.as_str())
+                    .push(", ")
+                    .push_bind(product.source_id.as_deref().unwrap_or_default())
+                    .push(")");
+            }
+            query.push(") ORDER BY source, source_id FOR UPDATE");
+            query.build().execute(&mut *tx).await?;
+        }
+
+        let mut result = ProductUpsertResult::default();
+        for chunk in products.chunks(PRODUCT_UPSERT_CHUNK_SIZE) {
+            let mut query = QueryBuilder::<Postgres>::new(
+                r#"INSERT INTO products (
+                       id, source, source_id, user_id, visibility, barcode, name, brand,
+                       categories, default_quantity, default_unit
+                   ) "#,
+            );
+            query.push_values(chunk.iter().copied(), |mut row, product| {
+                row.push_bind(product.id.0)
+                    .push_bind(product.source.as_str())
+                    .push_bind(product.source_id.as_deref().unwrap_or_default())
+                    .push_bind(product.user_id)
+                    .push_bind(product.visibility.as_str())
+                    .push_bind(product.barcode.as_ref().map(|barcode| barcode.0.as_str()))
+                    .push_bind(product.name.as_str())
+                    .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
+                    .push_bind(
+                        product
+                            .categories
+                            .iter()
+                            .map(|category| category.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                    .push_bind(product.default_quantity)
+                    .push_bind(product.default_unit.as_ref().map(|unit| unit.0.as_str()));
+            });
+            query.push(" ON CONFLICT (source, source_id) DO NOTHING");
+            result.created += query.build().execute(&mut *tx).await?.rows_affected() as i64;
+
+            let mut query = QueryBuilder::<Postgres>::new(
+                r#"UPDATE products AS product SET
+                       user_id = incoming.user_id,
+                       visibility = incoming.visibility,
+                       barcode = incoming.barcode,
+                       name = incoming.name,
+                       brand = incoming.brand,
+                       categories = incoming.categories,
+                       default_quantity = incoming.default_quantity,
+                       default_unit = incoming.default_unit,
+                       deleted_at = NULL,
+                       updated_at = NOW()
+                   FROM ("#,
+            );
+            query.push_values(chunk.iter().copied(), |mut row, product| {
+                row.push_bind(product.source.as_str())
+                    .push_bind(product.source_id.as_deref().unwrap_or_default())
+                    .push_bind(product.user_id)
+                    .push_bind(product.visibility.as_str())
+                    .push_bind(product.barcode.as_ref().map(|barcode| barcode.0.as_str()))
+                    .push_bind(product.name.as_str())
+                    .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
+                    .push_bind(
+                        product
+                            .categories
+                            .iter()
+                            .map(|category| category.0.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                    .push_bind(product.default_quantity)
+                    .push_bind(product.default_unit.as_ref().map(|unit| unit.0.as_str()));
+            });
+            query.push(
+                r#") AS incoming(
+                       source, source_id, user_id, visibility, barcode, name, brand,
+                       categories, default_quantity, default_unit
+                   )
+                   WHERE product.source = incoming.source
+                     AND product.source_id = incoming.source_id
+                     AND ROW(
+                         product.user_id, product.visibility, product.barcode, product.name,
+                         product.brand, product.categories, product.default_quantity,
+                         product.default_unit, product.deleted_at
+                     ) IS DISTINCT FROM ROW(
+                         incoming.user_id, incoming.visibility, incoming.barcode, incoming.name,
+                         incoming.brand, incoming.categories, incoming.default_quantity,
+                         incoming.default_unit, NULL::timestamptz
+                     )"#,
+            );
+            result.updated += query.build().execute(&mut *tx).await?.rows_affected() as i64;
+        }
+
+        let mut product_ids_by_source: HashMap<(String, String), Uuid> = HashMap::new();
+        for chunk in products.chunks(PRODUCT_UPSERT_CHUNK_SIZE) {
+            let mut query = QueryBuilder::<Postgres>::new(
+                "SELECT id, source, source_id FROM products WHERE (source, source_id) IN (",
+            );
+            for (index, product) in chunk.iter().enumerate() {
+                if index > 0 {
+                    query.push(", ");
+                }
+                query
+                    .push("(")
+                    .push_bind(product.source.as_str())
+                    .push(", ")
+                    .push_bind(product.source_id.as_deref().unwrap_or_default())
+                    .push(")");
+            }
+            query.push(") ORDER BY source, source_id FOR UPDATE");
+            let rows = query
+                .build_query_as::<(Uuid, String, String)>()
+                .fetch_all(&mut *tx)
+                .await?;
+            for (id, source, source_id) in rows {
+                product_ids_by_source.insert((source, source_id), id);
+            }
+        }
+
+        if product_ids_by_source.len() != products.len() {
+            return Err(NutritionError::Internal(
+                "not every external product could be resolved after upsert".into(),
+            ));
+        }
+
+        let product_ids: Vec<Uuid> = products
+            .iter()
+            .map(|product| {
+                product_ids_by_source
+                    .get(&(
+                        product.source.as_str().to_owned(),
+                        product.source_id.as_deref().unwrap_or_default().to_owned(),
+                    ))
+                    .copied()
+                    .ok_or_else(|| {
+                        NutritionError::Internal(
+                            "external product identity missing after upsert".into(),
+                        )
+                    })
+            })
+            .collect::<Result<_, _>>()?;
+
+        result.nutrients_written =
+            synchronize_product_nutrients(&mut tx, &products, &product_ids, &nutrient_ids).await?;
+        result.servings_written =
+            synchronize_product_servings(&mut tx, &products, &product_ids).await?;
+
+        tx.commit().await?;
+        Ok(result)
+    }
+
     async fn update(&self, product: &Product) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
@@ -859,4 +1072,259 @@ async fn insert_product_servings(
     .execute(&mut **tx)
     .await?;
     Ok(())
+}
+
+fn validate_external_upsert_batch(products: &[Product]) -> Result<(), NutritionError> {
+    let mut identities = HashSet::new();
+
+    for product in products {
+        if product.source == Source::User {
+            return Err(NutritionError::Validation(
+                "external product upsert cannot contain user products".into(),
+            ));
+        }
+        if product.user_id.is_some() {
+            return Err(NutritionError::Validation(
+                "external product cannot have a user id".into(),
+            ));
+        }
+        let source_id = product
+            .source_id
+            .as_deref()
+            .filter(|source_id| !source_id.trim().is_empty())
+            .ok_or_else(|| {
+                NutritionError::Validation("external product must have a source id".into())
+            })?;
+        if !identities.insert((product.source.as_str(), source_id)) {
+            return Err(NutritionError::Validation(format!(
+                "duplicate external product identity: ({}, {})",
+                product.source.as_str(),
+                source_id
+            )));
+        }
+
+        let mut nutrient_codes = HashSet::new();
+        for nutrient in &product.nutrients {
+            if !nutrient_codes.insert(nutrient.nutrient_code.0.as_str()) {
+                return Err(NutritionError::Validation(format!(
+                    "duplicate nutrient code for external product: {}",
+                    nutrient.nutrient_code.0
+                )));
+            }
+        }
+
+        let mut serving_units = HashSet::new();
+        for serving in &product.servings {
+            if !serving_units.insert(serving.unit.0.as_str()) {
+                return Err(NutritionError::Validation(format!(
+                    "duplicate serving unit for external product: {}",
+                    serving.unit.0
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn synchronize_product_nutrients(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    products: &[&Product],
+    product_ids: &[Uuid],
+    nutrient_ids: &HashMap<String, Uuid>,
+) -> Result<i64, NutritionError> {
+    let mut incoming_product_ids = Vec::new();
+    let mut incoming_nutrient_ids = Vec::new();
+    let mut amounts = Vec::new();
+    let mut sources = Vec::new();
+    let mut confidences = Vec::new();
+
+    for (product, product_id) in products.iter().zip(product_ids) {
+        for nutrient in &product.nutrients {
+            incoming_product_ids.push(*product_id);
+            incoming_nutrient_ids.push(*nutrient_ids.get(&nutrient.nutrient_code.0).ok_or_else(
+                || {
+                    NutritionError::Internal(
+                        "validated nutrient identity missing during upsert".into(),
+                    )
+                },
+            )?);
+            amounts.push(nutrient.amount_per_100g.value());
+            sources.push(nutrient.source.clone());
+            confidences.push(
+                nutrient
+                    .confidence
+                    .as_ref()
+                    .map(|confidence| confidence.as_str().to_owned()),
+            );
+        }
+    }
+
+    let deleted = sqlx::query(
+        r#"
+        WITH incoming AS (
+            SELECT *
+            FROM UNNEST($2::uuid[], $3::uuid[]) AS value(product_id, nutrient_id)
+        )
+        DELETE FROM product_nutrients AS nutrient
+        WHERE nutrient.product_id = ANY($1)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM incoming
+              WHERE incoming.product_id = nutrient.product_id
+                AND incoming.nutrient_id = nutrient.nutrient_id
+          )
+        "#,
+    )
+    .bind(product_ids)
+    .bind(&incoming_product_ids)
+    .bind(&incoming_nutrient_ids)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected() as i64;
+
+    if incoming_product_ids.is_empty() {
+        return Ok(deleted);
+    }
+
+    let written = sqlx::query(
+        r#"
+        INSERT INTO product_nutrients (
+            product_id, nutrient_id, amount_per_100g, source, confidence
+        )
+        SELECT value.product_id, value.nutrient_id, value.amount, value.source, value.confidence
+        FROM UNNEST($1::uuid[], $2::uuid[], $3::numeric[], $4::text[], $5::text[])
+            AS value(product_id, nutrient_id, amount, source, confidence)
+        ON CONFLICT (product_id, nutrient_id) DO UPDATE SET
+            amount_per_100g = EXCLUDED.amount_per_100g,
+            source = EXCLUDED.source,
+            confidence = EXCLUDED.confidence,
+            updated_at = NOW()
+        WHERE ROW(
+            product_nutrients.amount_per_100g,
+            product_nutrients.source,
+            product_nutrients.confidence
+        ) IS DISTINCT FROM ROW(
+            EXCLUDED.amount_per_100g,
+            EXCLUDED.source,
+            EXCLUDED.confidence
+        )
+        "#,
+    )
+    .bind(&incoming_product_ids)
+    .bind(&incoming_nutrient_ids)
+    .bind(&amounts)
+    .bind(&sources)
+    .bind(&confidences)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected() as i64;
+
+    Ok(deleted + written)
+}
+
+async fn synchronize_product_servings(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    products: &[&Product],
+    product_ids: &[Uuid],
+) -> Result<i64, NutritionError> {
+    let mut incoming_product_ids = Vec::new();
+    let mut units = Vec::new();
+    let mut grams_per_unit = Vec::new();
+    let mut positions = Vec::new();
+
+    for (product, product_id) in products.iter().zip(product_ids) {
+        for (position, serving) in product.servings.iter().enumerate() {
+            let position = i32::try_from(position).map_err(|_| {
+                NutritionError::Validation("too many servings for external product".into())
+            })?;
+            incoming_product_ids.push(*product_id);
+            units.push(serving.unit.0.clone());
+            grams_per_unit.push(serving.grams_per_unit);
+            positions.push(position);
+        }
+    }
+
+    let deleted = sqlx::query(
+        r#"
+        WITH incoming AS (
+            SELECT *
+            FROM UNNEST($2::uuid[], $3::text[]) AS value(product_id, unit)
+        )
+        DELETE FROM product_servings AS serving
+        WHERE serving.product_id = ANY($1)
+          AND NOT EXISTS (
+              SELECT 1
+              FROM incoming
+              WHERE incoming.product_id = serving.product_id
+                AND incoming.unit = serving.unit
+          )
+        "#,
+    )
+    .bind(product_ids)
+    .bind(&incoming_product_ids)
+    .bind(&units)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected() as i64;
+
+    if incoming_product_ids.is_empty() {
+        return Ok(deleted);
+    }
+
+    // Move reordered rows beyond every occupied position before applying their desired
+    // positions. This avoids transient unique-constraint violations for swaps such as 0 <-> 1.
+    sqlx::query(
+        r#"
+        WITH incoming AS (
+            SELECT *
+            FROM UNNEST($2::uuid[], $3::text[], $4::integer[])
+                AS value(product_id, unit, position)
+        ), offset_value AS (
+            SELECT COALESCE(MAX(position), -1)::bigint + 1 AS value
+            FROM product_servings
+            WHERE product_id = ANY($1)
+        )
+        UPDATE product_servings AS serving
+        SET position = (serving.position::bigint + offset_value.value)::integer
+        FROM incoming, offset_value
+        WHERE serving.product_id = incoming.product_id
+          AND serving.unit = incoming.unit
+          AND serving.position <> incoming.position
+        "#,
+    )
+    .bind(product_ids)
+    .bind(&incoming_product_ids)
+    .bind(&units)
+    .bind(&positions)
+    .execute(&mut **tx)
+    .await?;
+
+    let written = sqlx::query(
+        r#"
+        INSERT INTO product_servings (product_id, unit, grams_per_unit, position)
+        SELECT value.product_id, value.unit, value.grams_per_unit, value.position
+        FROM UNNEST($1::uuid[], $2::text[], $3::numeric[], $4::integer[])
+            AS value(product_id, unit, grams_per_unit, position)
+        ON CONFLICT (product_id, unit) DO UPDATE SET
+            grams_per_unit = EXCLUDED.grams_per_unit,
+            position = EXCLUDED.position
+        WHERE ROW(
+            product_servings.grams_per_unit,
+            product_servings.position
+        ) IS DISTINCT FROM ROW(
+            EXCLUDED.grams_per_unit,
+            EXCLUDED.position
+        )
+        "#,
+    )
+    .bind(&incoming_product_ids)
+    .bind(&units)
+    .bind(&grams_per_unit)
+    .bind(&positions)
+    .execute(&mut **tx)
+    .await?
+    .rows_affected() as i64;
+
+    Ok(deleted + written)
 }

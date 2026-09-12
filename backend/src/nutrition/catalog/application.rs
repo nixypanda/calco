@@ -165,7 +165,7 @@ impl CatalogService {
         let product = Product::new_external(
             Source::Off,
             input.source_id,
-            input.barcode,
+            Some(input.barcode),
             input.name,
             input.brand,
             input.categories,
@@ -412,6 +412,13 @@ mod tests {
             Ok(())
         }
 
+        async fn upsert_external_many(
+            &self,
+            _products: &[Product],
+        ) -> Result<ProductUpsertResult, NutritionError> {
+            Ok(ProductUpsertResult::default())
+        }
+
         async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
             Ok(())
         }
@@ -472,7 +479,7 @@ mod tests {
         Product::new_external(
             Source::Off,
             barcode.into(),
-            barcode.into(),
+            Some(barcode.into()),
             "Stored food".into(),
             None,
             vec![],
