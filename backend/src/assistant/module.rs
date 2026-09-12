@@ -12,7 +12,7 @@ use crate::assistant::infrastructure::llm::{
     Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
 };
 use crate::assistant::infrastructure::{
-    FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
+    FoodDraftLlmAdapter, NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
 };
 use crate::config::{AssistantAuthentication, AssistantConfig};
 use crate::nutrition::module::CatalogModule;
@@ -72,7 +72,7 @@ impl AssistantModule {
                     })
                     .map_err(map_chat_startup_error)?,
                 );
-                let model = Arc::new(FoodDraftModelAdapter::new(chat));
+                let model = Arc::new(FoodDraftLlmAdapter::new(chat));
                 let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
                     catalog.services.clone(),
                 ));

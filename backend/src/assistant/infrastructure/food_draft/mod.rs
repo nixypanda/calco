@@ -1,6 +1,6 @@
-mod model_request_prompt;
-mod model_response;
-mod model_response_schema;
+mod prompt;
+mod response;
+mod schema;
 
 use std::sync::Arc;
 
@@ -16,24 +16,20 @@ use crate::assistant::infrastructure::llm::{
     ResponseFormat, TokenUsage,
 };
 
-use model_request_prompt::build_system_prompt;
-use model_response::parse_model_turn;
-use model_response_schema::food_draft_response_schema;
-
 const MAX_OUTPUT_TOKENS: u32 = 16_384;
 
-pub struct FoodDraftModelAdapter {
+pub struct FoodDraftLlmAdapter {
     chat: Arc<dyn ChatClient>,
 }
 
-impl FoodDraftModelAdapter {
+impl FoodDraftLlmAdapter {
     pub(crate) fn new(chat: Arc<dyn ChatClient>) -> Self {
         Self { chat }
     }
 }
 
 #[async_trait]
-impl FoodDraftModel for FoodDraftModelAdapter {
+impl FoodDraftModel for FoodDraftLlmAdapter {
     async fn generate(
         &self,
         request: &FoodDraftModelRequest,
@@ -41,7 +37,7 @@ impl FoodDraftModel for FoodDraftModelAdapter {
     ) -> Result<FoodDraftResult, AssistantError> {
         let mut messages = vec![ChatMessage {
             role: ChatRole::System,
-            content: build_system_prompt(vocabulary),
+            content: prompt::build(vocabulary),
             images: vec![],
         }];
         messages.extend(request.turns.iter().map(|turn| {
@@ -67,13 +63,13 @@ impl FoodDraftModel for FoodDraftModelAdapter {
                 messages,
                 response_format: ResponseFormat::JsonSchema {
                     name: "food_draft_response".into(),
-                    schema: food_draft_response_schema(vocabulary),
+                    schema: schema::build(vocabulary),
                 },
                 max_output_tokens: MAX_OUTPUT_TOKENS,
             })
             .await
             .map_err(map_chat_error)?;
-        let turn = parse_model_turn(&response.content).inspect_err(|_| {
+        let turn = response::parse(&response.content).inspect_err(|_| {
             tracing::error!(
                 provider_response = %response.content,
                 "provider response failed food draft validation"
@@ -135,7 +131,7 @@ mod tests {
         let chat = Arc::new(FakeChat {
             request: Mutex::new(None),
         });
-        let model = FoodDraftModelAdapter::new(chat.clone());
+        let model = FoodDraftLlmAdapter::new(chat.clone());
         let request = FoodDraftModelRequest {
             turns: vec![FoodDraftModelTurn {
                 role: ConversationRole::User,
@@ -179,7 +175,7 @@ mod tests {
         let chat = Arc::new(FakeChat {
             request: Mutex::new(None),
         });
-        let model = FoodDraftModelAdapter::new(chat.clone());
+        let model = FoodDraftLlmAdapter::new(chat.clone());
         let photo = SanitizedFoodPhoto {
             mime_type: FoodPhotoMimeType::Jpeg,
             bytes: vec![1, 2, 3],

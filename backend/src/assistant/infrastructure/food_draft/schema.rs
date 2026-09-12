@@ -7,7 +7,7 @@ use crate::assistant::domain::{
     MAX_DRAFT_UNIT_CHARS, MAX_DRAFT_WARNING_CHARS, MAX_DRAFT_WARNINGS,
 };
 
-pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
+pub(super) fn build(vocabulary: &FoodVocabulary) -> Value {
     let default_units = vocabulary
         .default_units
         .iter()
@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_fields_at_each_object_level() {
-        let value = food_draft_response_schema(&vocabulary());
+        let value = build(&vocabulary());
         assert_eq!(value["additionalProperties"], false);
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["additionalProperties"],

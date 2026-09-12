@@ -48,7 +48,7 @@ struct WireServing {
     grams_per_unit: Decimal,
 }
 
-pub(super) fn parse_model_turn(content: &str) -> Result<FoodDraftTurn, AssistantError> {
+pub(super) fn parse(content: &str) -> Result<FoodDraftTurn, AssistantError> {
     let wire: WireTurn = serde_json::from_str(content).map_err(|error| {
         tracing::error!(content = %content, error = %error, "failed to parse model response");
         AssistantError::InvalidModelResponse
@@ -98,15 +98,15 @@ mod tests {
 
     #[test]
     fn parses_clarification_directly_to_final_type() {
-        let value = parse_model_turn(r#"{"assistant_message":"How many grams?","status":"needs_clarification","draft":null,"warnings":[]}"#).unwrap();
+        let value = parse(r#"{"assistant_message":"How many grams?","status":"needs_clarification","draft":null,"warnings":[]}"#).unwrap();
         assert!(matches!(value, FoodDraftTurn::NeedsClarification { .. }));
     }
 
     #[test]
     fn rejects_unknown_fields_and_incomplete_drafts() {
-        assert!(parse_model_turn(r#"{"assistant_message":"x","status":"needs_clarification","draft":null,"warnings":[],"extra":1}"#).is_err());
+        assert!(parse(r#"{"assistant_message":"x","status":"needs_clarification","draft":null,"warnings":[],"extra":1}"#).is_err());
         assert!(
-            parse_model_turn(
+            parse(
                 r#"{"assistant_message":"ready","status":"draft_ready","draft":null,"warnings":[]}"#
             )
             .is_err()
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn parses_complete_draft_directly_to_reviewable_domain_type() {
-        let value = parse_model_turn(r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#).unwrap();
+        let value = parse(r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = value else {
             panic!("expected a complete draft")
         };
@@ -130,9 +130,9 @@ mod tests {
     #[test]
     fn default_unit_must_be_grams_or_use_a_configured_serving_unit() {
         let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
-        assert!(parse_model_turn(default_cup).is_err());
+        assert!(parse(default_cup).is_err());
         let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":2,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
-        let turn = parse_model_turn(serving_cup).unwrap();
+        let turn = parse(serving_cup).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")
         };
