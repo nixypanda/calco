@@ -273,7 +273,7 @@ fn import_error_to_status_code_message(err: &ImportError) -> (StatusCode, &'stat
         ImportError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
         ImportError::InvalidStatus(msg) => (StatusCode::CONFLICT, "invalid_status", msg.clone()),
         ImportError::Validation(msg) => (StatusCode::BAD_REQUEST, "validation_error", msg.clone()),
-        ImportError::Database(_) => {
+        ImportError::Database(_) | ImportError::Catalog(_) => {
             tracing::error!(error = %err, "import request failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,

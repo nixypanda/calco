@@ -1,15 +1,20 @@
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::import::domain::*;
-use crate::nutrition::catalog::domain::{AmountPer100g, Source};
+use crate::nutrition::catalog::domain::{
+    AmountPer100g, NutrientCatalog, NutrientRepository, Product, ProductNutrientInput,
+    ProductRepository, ProductServingInput, ProductUpsertOperationId, Source,
+};
+use crate::nutrition::error::NutritionError;
 
 fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
     Source::from_str(&food.source)?;
-    if food.source_id.is_empty() {
+    if food.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
-    if food.name.is_empty() {
+    if food.name.trim().is_empty() {
         return Err("name is required".into());
     }
     Ok(())
@@ -17,10 +22,10 @@ fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
 
 fn validate_staged_nutrient(nutrient: &StagedImportNutrient) -> Result<(), String> {
     Source::from_str(&nutrient.source)?;
-    if nutrient.source_id.is_empty() {
+    if nutrient.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
-    if nutrient.nutrient_code.is_empty() {
+    if nutrient.nutrient_code.trim().is_empty() {
         return Err("nutrient_code is required".into());
     }
     AmountPer100g::new(nutrient.amount_per_100g).map_err(|e| e.to_string())?;
@@ -29,10 +34,10 @@ fn validate_staged_nutrient(nutrient: &StagedImportNutrient) -> Result<(), Strin
 
 fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> {
     Source::from_str(&serving.source)?;
-    if serving.source_id.is_empty() {
+    if serving.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
-    if serving.unit.is_empty() {
+    if serving.unit.trim().is_empty() {
         return Err("unit is required".into());
     }
     if serving.grams_per_unit <= rust_decimal::Decimal::ZERO {
@@ -44,11 +49,21 @@ fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> 
 #[derive(Clone)]
 pub struct ImportService {
     repo: Arc<dyn ImportRepository>,
+    product_repo: Arc<dyn ProductRepository>,
+    nutrient_repo: Arc<dyn NutrientRepository>,
 }
 
 impl ImportService {
-    pub fn new(repo: Arc<dyn ImportRepository>) -> Self {
-        Self { repo }
+    pub fn new(
+        repo: Arc<dyn ImportRepository>,
+        product_repo: Arc<dyn ProductRepository>,
+        nutrient_repo: Arc<dyn NutrientRepository>,
+    ) -> Self {
+        Self {
+            repo,
+            product_repo,
+            nutrient_repo,
+        }
     }
 
     pub async fn stage_foods(
@@ -82,13 +97,9 @@ impl ImportService {
             }
         }
 
-        if !valid_foods.is_empty() {
-            self.repo.stage_foods(import_id, &valid_foods).await?;
-        }
-
-        for err in &errors {
-            self.repo.add_error(import_id, err).await?;
-        }
+        self.repo
+            .stage_foods(import_id, &valid_foods, &errors)
+            .await?;
 
         Ok(StageResult {
             accepted: valid_foods.len() as i64,
@@ -127,13 +138,9 @@ impl ImportService {
             }
         }
 
-        if !valid.is_empty() {
-            self.repo.stage_nutrients(import_id, &valid).await?;
-        }
-
-        for err in &errors {
-            self.repo.add_error(import_id, err).await?;
-        }
+        self.repo
+            .stage_nutrients(import_id, &valid, &errors)
+            .await?;
 
         Ok(StageResult {
             accepted: valid.len() as i64,
@@ -172,13 +179,7 @@ impl ImportService {
             }
         }
 
-        if !valid.is_empty() {
-            self.repo.stage_servings(import_id, &valid).await?;
-        }
-
-        for err in &errors {
-            self.repo.add_error(import_id, err).await?;
-        }
+        self.repo.stage_servings(import_id, &valid, &errors).await?;
 
         Ok(StageResult {
             accepted: valid.len() as i64,
@@ -187,26 +188,164 @@ impl ImportService {
     }
 
     pub async fn commit_job(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
-        let job = self
-            .repo
-            .find_job(import_id)
-            .await?
-            .ok_or_else(|| ImportError::NotFound("import job not found".into()))?;
+        let batch = match self.repo.begin_commit(import_id).await? {
+            ImportCommitStart::Completed(result) => return Ok(result),
+            ImportCommitStart::Ready(batch) => batch,
+        };
 
-        if job.status != ImportStatus::Pending {
-            return Err(ImportError::InvalidStatus(
-                "can only commit a pending import".into(),
-            ));
+        let nutrient_catalog: NutrientCatalog = self
+            .nutrient_repo
+            .list_all()
+            .await
+            .map_err(import_product_error)?
+            .into_iter()
+            .collect();
+        let (products, errors) = match assemble_products(batch, &nutrient_catalog) {
+            Ok(assembled) => assembled,
+            Err(error) => {
+                self.repo.fail_commit(import_id).await?;
+                return Err(error);
+            }
+        };
+        let written = match self
+            .product_repo
+            .upsert_external_many(ProductUpsertOperationId(import_id.0), &products)
+            .await
+        {
+            Ok(written) => written,
+            Err(NutritionError::Validation(message)) => {
+                self.repo.fail_commit(import_id).await?;
+                return Err(ImportError::Validation(message));
+            }
+            Err(error) => return Err(import_product_error(error)),
+        };
+        let result = ImportCommitResult {
+            products_created: written.created,
+            products_updated: written.updated,
+            // Keep the public import response compatible while the generic repository uses
+            // "written" to include inserted, updated, and authoritatively removed children.
+            nutrients_inserted: written.nutrients_written,
+            servings_inserted: written.servings_written,
+            errors_logged: errors.len() as i64,
+        };
+
+        self.repo.complete_commit(import_id, &result, &errors).await
+    }
+}
+
+type ProductKey = (String, String);
+
+fn product_key(source: &str, source_id: &str) -> ProductKey {
+    (source.to_owned(), source_id.trim().to_owned())
+}
+
+fn assemble_products(
+    batch: StagedImportBatch,
+    nutrient_catalog: &NutrientCatalog,
+) -> Result<(Vec<Product>, Vec<ImportErrorRecord>), ImportError> {
+    let mut nutrients_by_product: BTreeMap<ProductKey, Vec<StagedImportNutrient>> = BTreeMap::new();
+    for nutrient in batch.nutrients {
+        nutrients_by_product
+            .entry(product_key(&nutrient.source, &nutrient.source_id))
+            .or_default()
+            .push(nutrient);
+    }
+
+    let mut servings_by_product: BTreeMap<ProductKey, Vec<StagedImportServing>> = BTreeMap::new();
+    for serving in batch.servings {
+        servings_by_product
+            .entry(product_key(&serving.source, &serving.source_id))
+            .or_default()
+            .push(serving);
+    }
+
+    let mut products = Vec::with_capacity(batch.products.len());
+    let mut errors = Vec::new();
+
+    for staged in batch.products {
+        let key = product_key(&staged.source, &staged.source_id);
+        let source = Source::from_str(&staged.source).map_err(ImportError::Validation)?;
+        let confidence = source.default_nutrient_confidence().as_str().to_string();
+        let mut nutrient_inputs = Vec::new();
+
+        for nutrient in nutrients_by_product.remove(&key).unwrap_or_default() {
+            let nutrient_code = nutrient.nutrient_code.trim();
+            if nutrient_catalog.get(nutrient_code).is_none() {
+                errors.push(ImportErrorRecord {
+                    row_number: nutrient.row_number,
+                    error: format!("Unknown nutrient code: {}", nutrient.nutrient_code),
+                    raw_payload: nutrient.raw_payload,
+                });
+                continue;
+            }
+            nutrient_inputs.push(ProductNutrientInput {
+                code: nutrient_code.to_owned(),
+                amount_per_100g: nutrient.amount_per_100g,
+                source: Some(staged.source.clone()),
+                confidence: Some(confidence.clone()),
+            });
         }
 
-        // Foods are the primary entity — nutrients and servings attach to them, so an
-        // import with zero foods has nothing to commit even if other rows were staged.
-        let food_count = self.repo.count_staged_foods(import_id).await?;
-        if food_count == 0 {
-            return Err(ImportError::Validation("no staged foods to commit".into()));
-        }
+        let serving_inputs = servings_by_product
+            .remove(&key)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|serving| ProductServingInput {
+                unit: serving.unit.trim().to_owned(),
+                grams_per_unit: serving.grams_per_unit,
+            })
+            .collect();
 
-        self.repo.commit_import(import_id).await
+        products.push(
+            Product::new_external(
+                source,
+                staged.source_id,
+                staged.barcode,
+                staged.name,
+                staged.brand,
+                staged.categories,
+                None,
+                None,
+                nutrient_inputs,
+                serving_inputs,
+                nutrient_catalog,
+            )
+            .map_err(import_product_error)?,
+        );
+    }
+
+    for (_, orphaned) in nutrients_by_product {
+        for nutrient in orphaned {
+            errors.push(ImportErrorRecord {
+                row_number: nutrient.row_number,
+                error: format!(
+                    "No staged product for nutrient code {}: {}/{}",
+                    nutrient.nutrient_code, nutrient.source, nutrient.source_id
+                ),
+                raw_payload: nutrient.raw_payload,
+            });
+        }
+    }
+    for (_, orphaned) in servings_by_product {
+        for serving in orphaned {
+            errors.push(ImportErrorRecord {
+                row_number: serving.row_number,
+                error: format!(
+                    "No staged product for serving unit {}: {}/{}",
+                    serving.unit, serving.source, serving.source_id
+                ),
+                raw_payload: serving.raw_payload,
+            });
+        }
+    }
+
+    Ok((products, errors))
+}
+
+fn import_product_error(error: NutritionError) -> ImportError {
+    match error {
+        NutritionError::Validation(message) => ImportError::Validation(message),
+        other => ImportError::Catalog(other.to_string()),
     }
 }
 
@@ -220,7 +359,11 @@ pub struct StageResult {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use std::collections::HashSet;
     use std::sync::Mutex;
+    use uuid::Uuid;
+
+    use crate::nutrition::catalog::domain::*;
 
     struct MockImportRepo {
         jobs: Mutex<Vec<ImportJob>>,
@@ -228,7 +371,7 @@ mod tests {
         nutrients: Mutex<Vec<StagedImportNutrient>>,
         servings: Mutex<Vec<StagedImportServing>>,
         errors: Mutex<Vec<ImportErrorRecord>>,
-        commit_result: Mutex<Option<ImportCommitResult>>,
+        completed: Mutex<Option<ImportCommitResult>>,
     }
 
     impl MockImportRepo {
@@ -239,18 +382,7 @@ mod tests {
                 nutrients: Mutex::new(vec![]),
                 servings: Mutex::new(vec![]),
                 errors: Mutex::new(vec![]),
-                commit_result: Mutex::new(None),
-            }
-        }
-
-        fn with_commit_result(result: ImportCommitResult) -> Self {
-            Self {
-                jobs: Mutex::new(vec![]),
-                foods: Mutex::new(vec![]),
-                nutrients: Mutex::new(vec![]),
-                servings: Mutex::new(vec![]),
-                errors: Mutex::new(vec![]),
-                commit_result: Mutex::new(Some(result)),
+                completed: Mutex::new(None),
             }
         }
     }
@@ -271,8 +403,10 @@ mod tests {
             &self,
             _import_id: ImportId,
             foods: &[StagedImportProduct],
+            errors: &[ImportErrorRecord],
         ) -> Result<(), ImportError> {
             self.foods.lock().unwrap().extend(foods.iter().cloned());
+            self.errors.lock().unwrap().extend(errors.iter().cloned());
             Ok(())
         }
 
@@ -280,11 +414,13 @@ mod tests {
             &self,
             _import_id: ImportId,
             nutrients: &[StagedImportNutrient],
+            errors: &[ImportErrorRecord],
         ) -> Result<(), ImportError> {
             self.nutrients
                 .lock()
                 .unwrap()
                 .extend(nutrients.iter().cloned());
+            self.errors.lock().unwrap().extend(errors.iter().cloned());
             Ok(())
         }
 
@@ -292,36 +428,70 @@ mod tests {
             &self,
             _import_id: ImportId,
             servings: &[StagedImportServing],
+            errors: &[ImportErrorRecord],
         ) -> Result<(), ImportError> {
             self.servings
                 .lock()
                 .unwrap()
                 .extend(servings.iter().cloned());
+            self.errors.lock().unwrap().extend(errors.iter().cloned());
             Ok(())
         }
 
-        async fn add_error(
+        async fn begin_commit(
             &self,
-            _import_id: ImportId,
-            error: &ImportErrorRecord,
-        ) -> Result<(), ImportError> {
-            self.errors.lock().unwrap().push(error.clone());
-            Ok(())
+            import_id: ImportId,
+        ) -> Result<ImportCommitStart, ImportError> {
+            let mut jobs = self.jobs.lock().unwrap();
+            let job = jobs
+                .iter_mut()
+                .find(|job| job.id == import_id)
+                .ok_or_else(|| ImportError::NotFound("import job not found".into()))?;
+            if job.status == ImportStatus::Committed {
+                return Ok(ImportCommitStart::Completed(
+                    self.completed.lock().unwrap().clone().unwrap(),
+                ));
+            }
+            if !matches!(job.status, ImportStatus::Pending | ImportStatus::Running) {
+                return Err(ImportError::InvalidStatus("cannot commit import".into()));
+            }
+            let products = self.foods.lock().unwrap().clone();
+            if products.is_empty() {
+                return Err(ImportError::Validation("no staged foods to commit".into()));
+            }
+            job.status = ImportStatus::Running;
+            Ok(ImportCommitStart::Ready(StagedImportBatch {
+                products,
+                nutrients: self.nutrients.lock().unwrap().clone(),
+                servings: self.servings.lock().unwrap().clone(),
+            }))
         }
 
-        async fn count_staged_foods(&self, _import_id: ImportId) -> Result<i64, ImportError> {
-            Ok(self.foods.lock().unwrap().len() as i64)
-        }
-
-        async fn commit_import(
+        async fn complete_commit(
             &self,
-            _import_id: ImportId,
+            import_id: ImportId,
+            result: &ImportCommitResult,
+            errors: &[ImportErrorRecord],
         ) -> Result<ImportCommitResult, ImportError> {
-            self.commit_result
-                .lock()
-                .unwrap()
-                .clone()
-                .ok_or(ImportError::Database(sqlx::Error::RowNotFound))
+            let mut jobs = self.jobs.lock().unwrap();
+            let job = jobs.iter_mut().find(|job| job.id == import_id).unwrap();
+            if job.status == ImportStatus::Committed {
+                return Ok(self.completed.lock().unwrap().clone().unwrap());
+            }
+            if job.status != ImportStatus::Running {
+                return Err(ImportError::InvalidStatus("import is not running".into()));
+            }
+            self.errors.lock().unwrap().extend(errors.iter().cloned());
+            job.status = ImportStatus::Committed;
+            *self.completed.lock().unwrap() = Some(result.clone());
+            Ok(result.clone())
+        }
+
+        async fn fail_commit(&self, import_id: ImportId) -> Result<(), ImportError> {
+            let mut jobs = self.jobs.lock().unwrap();
+            let job = jobs.iter_mut().find(|job| job.id == import_id).unwrap();
+            job.status = ImportStatus::Failed;
+            Ok(())
         }
 
         async fn get_errors(
@@ -332,15 +502,132 @@ mod tests {
         }
     }
 
+    struct MockProductRepo {
+        result: ProductUpsertResult,
+        upserted: Mutex<Vec<Product>>,
+        operation_ids: Mutex<Vec<ProductUpsertOperationId>>,
+    }
+
+    #[async_trait]
+    impl ProductRepository for MockProductRepo {
+        async fn search(
+            &self,
+            _spec: ProductSearchSpec,
+            _scope: ProductSearchScope,
+            _user_id: Option<Uuid>,
+        ) -> Result<Vec<Product>, NutritionError> {
+            Ok(vec![])
+        }
+
+        async fn list_categories(
+            &self,
+            _query: &str,
+            _user_id: Option<Uuid>,
+            _limit: i64,
+        ) -> Result<Vec<CategorySuggestion>, NutritionError> {
+            Ok(vec![])
+        }
+
+        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, NutritionError> {
+            Ok(None)
+        }
+
+        async fn existing_ids(
+            &self,
+            _ids: &[ProductId],
+        ) -> Result<HashSet<ProductId>, NutritionError> {
+            Ok(HashSet::new())
+        }
+
+        async fn find_by_barcode(
+            &self,
+            _barcode: &str,
+            _user_id: Option<Uuid>,
+        ) -> Result<Option<Product>, NutritionError> {
+            Ok(None)
+        }
+
+        async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError> {
+            Ok(vec![])
+        }
+
+        async fn create(&self, _product: &Product) -> Result<(), NutritionError> {
+            Ok(())
+        }
+
+        async fn upsert_external_many(
+            &self,
+            operation_id: ProductUpsertOperationId,
+            products: &[Product],
+        ) -> Result<ProductUpsertResult, NutritionError> {
+            self.operation_ids.lock().unwrap().push(operation_id);
+            self.upserted
+                .lock()
+                .unwrap()
+                .extend(products.iter().cloned());
+            Ok(self.result)
+        }
+
+        async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
+            Ok(())
+        }
+
+        async fn delete(&self, _id: ProductId) -> Result<(), NutritionError> {
+            Ok(())
+        }
+    }
+
+    struct MockNutrientRepo;
+
+    fn energy_nutrient() -> Nutrient {
+        Nutrient {
+            code: NutrientCode("ENERGY_KCAL".into()),
+            name: "Energy".into(),
+            unit: UnitCode("kcal".into()),
+            category: "macro".into(),
+        }
+    }
+
+    #[async_trait]
+    impl NutrientRepository for MockNutrientRepo {
+        async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
+            Ok(vec![energy_nutrient()])
+        }
+
+        async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
+            Ok((code == "ENERGY_KCAL").then(energy_nutrient))
+        }
+    }
+
     fn make_services() -> ImportService {
         let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
-        ImportService::new(repo)
+        ImportService::new(
+            repo,
+            Arc::new(MockProductRepo {
+                result: ProductUpsertResult::default(),
+                upserted: Mutex::new(vec![]),
+                operation_ids: Mutex::new(vec![]),
+            }),
+            Arc::new(MockNutrientRepo),
+        )
     }
 
     fn make_services_with_result(result: ImportCommitResult) -> ImportService {
-        let repo =
-            Arc::new(MockImportRepo::with_commit_result(result)) as Arc<dyn ImportRepository>;
-        ImportService::new(repo)
+        let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
+        ImportService::new(
+            repo,
+            Arc::new(MockProductRepo {
+                result: ProductUpsertResult {
+                    created: result.products_created,
+                    updated: result.products_updated,
+                    nutrients_written: result.nutrients_inserted,
+                    servings_written: result.servings_inserted,
+                },
+                upserted: Mutex::new(vec![]),
+                operation_ids: Mutex::new(vec![]),
+            }),
+            Arc::new(MockNutrientRepo),
+        )
     }
 
     async fn make_pending_job(services: &ImportService, source: &str) -> ImportJob {
@@ -551,7 +838,15 @@ mod tests {
         job.status = ImportStatus::Committed;
         repo.create_job(&job).await.unwrap();
 
-        let services = ImportService::new(repo);
+        let services = ImportService::new(
+            repo,
+            Arc::new(MockProductRepo {
+                result: ProductUpsertResult::default(),
+                upserted: Mutex::new(vec![]),
+                operation_ids: Mutex::new(vec![]),
+            }),
+            Arc::new(MockNutrientRepo),
+        );
 
         let err = services
             .stage_foods(
@@ -603,9 +898,199 @@ mod tests {
             )
             .await
             .unwrap();
+        services
+            .stage_nutrients(
+                job.id,
+                vec![StagedImportNutrient {
+                    source: "USDA".into(),
+                    source_id: "999".into(),
+                    nutrient_code: "NOT_A_REAL_NUTRIENT".into(),
+                    amount_per_100g: rust_decimal::Decimal::ONE,
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
 
         let result = services.commit_job(job.id).await.unwrap();
         assert_eq!(result.products_created, 1);
         assert_eq!(result.errors_logged, 1);
+    }
+
+    #[tokio::test]
+    async fn commit_assembles_authoritative_product_and_filters_unknown_nutrients() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let product_repo = Arc::new(MockProductRepo {
+            result: ProductUpsertResult {
+                created: 1,
+                updated: 0,
+                nutrients_written: 1,
+                servings_written: 1,
+            },
+            upserted: Mutex::new(vec![]),
+            operation_ids: Mutex::new(vec![]),
+        });
+        let services = ImportService::new(
+            import_repo.clone(),
+            product_repo.clone(),
+            Arc::new(MockNutrientRepo),
+        );
+        let job = make_pending_job(&services, "OFF").await;
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "OFF".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+        services
+            .stage_nutrients(
+                job.id,
+                vec![
+                    StagedImportNutrient {
+                        source: "OFF".into(),
+                        source_id: "food-1".into(),
+                        nutrient_code: "ENERGY_KCAL".into(),
+                        amount_per_100g: rust_decimal::Decimal::new(100, 0),
+                        raw_payload: None,
+                        row_number: Some(1),
+                    },
+                    StagedImportNutrient {
+                        source: "OFF".into(),
+                        source_id: "food-1".into(),
+                        nutrient_code: "UNKNOWN".into(),
+                        amount_per_100g: rust_decimal::Decimal::ONE,
+                        raw_payload: Some(serde_json::json!({ "code": "UNKNOWN" })),
+                        row_number: Some(2),
+                    },
+                ],
+            )
+            .await
+            .unwrap();
+        services
+            .stage_servings(
+                job.id,
+                vec![StagedImportServing {
+                    source: "OFF".into(),
+                    source_id: "food-1".into(),
+                    unit: "piece".into(),
+                    grams_per_unit: rust_decimal::Decimal::new(25, 0),
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let result = services.commit_job(job.id).await.unwrap();
+
+        assert_eq!(result.errors_logged, 1);
+        let upserted = product_repo.upserted.lock().unwrap();
+        assert_eq!(upserted.len(), 1);
+        assert_eq!(upserted[0].nutrients.len(), 1);
+        assert_eq!(upserted[0].servings.len(), 1);
+        assert_eq!(
+            upserted[0].nutrients[0].confidence,
+            Some(NutrientConfidence::Derived)
+        );
+        let errors = import_repo.errors.lock().unwrap();
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].row_number, Some(2));
+        assert_eq!(errors[0].error, "Unknown nutrient code: UNKNOWN");
+        assert_eq!(
+            product_repo.operation_ids.lock().unwrap().as_slice(),
+            &[ProductUpsertOperationId(job.id.0)]
+        );
+    }
+
+    #[tokio::test]
+    async fn completed_commit_replays_canonical_result_without_another_upsert() {
+        let import_repo = Arc::new(MockImportRepo::new());
+        let product_repo = Arc::new(MockProductRepo {
+            result: ProductUpsertResult {
+                created: 1,
+                ..ProductUpsertResult::default()
+            },
+            upserted: Mutex::new(vec![]),
+            operation_ids: Mutex::new(vec![]),
+        });
+        let services = ImportService::new(
+            import_repo,
+            product_repo.clone(),
+            Arc::new(MockNutrientRepo),
+        );
+        let job = make_pending_job(&services, "USDA").await;
+        services
+            .stage_foods(
+                job.id,
+                vec![StagedImportProduct {
+                    source: "USDA".into(),
+                    source_id: "food-1".into(),
+                    barcode: None,
+                    name: "Food".into(),
+                    brand: None,
+                    categories: vec![],
+                    raw_payload: None,
+                    row_number: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let first = services.commit_job(job.id).await.unwrap();
+        let replay = services.commit_job(job.id).await.unwrap();
+
+        assert_eq!(replay.products_created, first.products_created);
+        assert_eq!(product_repo.upserted.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn aggregate_assembly_reports_children_without_a_staged_product() {
+        let batch = StagedImportBatch {
+            products: vec![StagedImportProduct {
+                source: "OFF".into(),
+                source_id: "present".into(),
+                barcode: None,
+                name: "Present food".into(),
+                brand: None,
+                categories: vec![],
+                raw_payload: None,
+                row_number: Some(1),
+            }],
+            nutrients: vec![StagedImportNutrient {
+                source: "OFF".into(),
+                source_id: "missing".into(),
+                nutrient_code: "ENERGY_KCAL".into(),
+                amount_per_100g: rust_decimal::Decimal::ONE,
+                raw_payload: None,
+                row_number: Some(2),
+            }],
+            servings: vec![StagedImportServing {
+                source: "OFF".into(),
+                source_id: "missing".into(),
+                unit: "cup".into(),
+                grams_per_unit: rust_decimal::Decimal::ONE,
+                raw_payload: None,
+                row_number: Some(3),
+            }],
+        };
+
+        let (products, errors) =
+            assemble_products(batch, &vec![energy_nutrient()].into_iter().collect()).unwrap();
+
+        assert_eq!(products.len(), 1);
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].error.contains("No staged product"));
+        assert!(errors[1].error.contains("No staged product"));
     }
 }
