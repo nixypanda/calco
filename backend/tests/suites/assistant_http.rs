@@ -9,11 +9,11 @@ use calco_backend::assistant::application::{
     AssistantError, FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest,
     FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
 };
+use calco_backend::assistant::composition::AssistantComponents;
 use calco_backend::assistant::domain::{DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn};
 use calco_backend::assistant::infrastructure::{
     NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
 };
-use calco_backend::assistant::module::AssistantModule;
 use calco_backend::{build_app_state, build_router_from_state};
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -39,8 +39,10 @@ impl FoodDraftModel for FakeModel {
     }
 }
 
-fn fake_assistant_with_images(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
-    AssistantModule::from_service(Arc::new(FoodDraftService::new(
+fn fake_assistant_with_images(
+    result: Result<FoodDraftResult, AssistantError>,
+) -> AssistantComponents {
+    AssistantComponents::from_food_draft_service(Arc::new(FoodDraftService::new(
         Arc::new(FakeModel {
             result,
             observed_vocabulary: None,
@@ -65,8 +67,8 @@ impl FoodDraftAcceptancePort for FakeVocabulary {
     }
 }
 
-fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantModule {
-    AssistantModule::from_service(Arc::new(FoodDraftService::new(
+fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantComponents {
+    AssistantComponents::from_food_draft_service(Arc::new(FoodDraftService::new(
         Arc::new(FakeModel {
             result,
             observed_vocabulary: None,
@@ -77,7 +79,7 @@ fn fake_assistant(result: Result<FoodDraftResult, AssistantError>) -> AssistantM
     )))
 }
 
-async fn app_with_assistant(pool: PgPool, assistant: AssistantModule) -> axum::Router {
+async fn app_with_assistant(pool: PgPool, assistant: AssistantComponents) -> axum::Router {
     let mut state = build_app_state(pool, test_config()).await.unwrap();
     state.assistant = assistant;
     build_router_from_state(state)
@@ -96,12 +98,9 @@ async fn app_with_model_result_and_real_vocabulary(
     let vocabulary = Arc::new(NutritionCatalogVocabularyAdapter::new(
         state.nutrition.catalog.services.clone(),
     ));
-    state.assistant = AssistantModule::from_service(Arc::new(FoodDraftService::new(
-        model,
-        vocabulary.clone(),
-        vocabulary,
-        None,
-    )));
+    state.assistant = AssistantComponents::from_food_draft_service(Arc::new(
+        FoodDraftService::new(model, vocabulary.clone(), vocabulary, None),
+    ));
     (build_router_from_state(state), observed_vocabulary)
 }
 
@@ -189,7 +188,7 @@ async fn routes_require_user_auth_and_expose_text_only_status(pool: PgPool) {
 
 #[sqlx::test]
 async fn disabled_malformed_and_provider_failures_are_safe(pool: PgPool) {
-    let disabled = app_with_assistant(pool.clone(), AssistantModule::disabled()).await;
+    let disabled = app_with_assistant(pool.clone(), AssistantComponents::disabled()).await;
     let (_, user) = bootstrap_and_user(&disabled).await;
     let status: Value = get_json(&disabled, "/api/ai/food-assistant/status", &user).await;
     assert_eq!(status, json!({"enabled": false, "supports_images": false}));
@@ -306,7 +305,8 @@ async fn valid_photo_is_sanitized_and_reaches_the_model(pool: PgPool) {
         Arc::new(FakeVocabulary),
         Some(Arc::new(SafeFoodImageSanitizer::new())),
     ));
-    let router = app_with_assistant(pool, AssistantModule::from_service(service)).await;
+    let router =
+        app_with_assistant(pool, AssistantComponents::from_food_draft_service(service)).await;
     let (_, user) = bootstrap_and_user(&router).await;
     let status: Value = get_json(&router, "/api/ai/food-assistant/status", &user).await;
     assert_eq!(status, json!({"enabled": true, "supports_images": true}));

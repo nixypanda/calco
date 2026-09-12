@@ -15,11 +15,12 @@ use crate::AppState;
 use crate::assistant::application::{
     AssistantError, FoodDraftRequest, FoodDraftService, FoodImageError, FoodImageLimits, ModelUsage,
 };
+use crate::assistant::composition::AssistantComponents;
 use crate::assistant::domain::{
     Conversation, ConversationRole, ConversationTurn, ConversationValidationError, FoodDraft,
     FoodDraftTurn,
 };
-use crate::assistant::module::{AdmissionError, AssistantModule};
+use crate::assistant::infrastructure::AdmissionRejection;
 use crate::auth::interfaces::http::AuthUser;
 
 const MAX_REQUEST_BYTES: usize = 41 * 1024 * 1024;
@@ -139,21 +140,21 @@ struct ErrorBody {
 
 async fn status_handler(
     _auth: AuthUser,
-    State(module): State<AssistantModule>,
+    State(components): State<AssistantComponents>,
 ) -> Json<AssistantStatusResponse> {
     Json(AssistantStatusResponse {
-        enabled: module.is_enabled(),
-        supports_images: module.supports_images(),
+        enabled: components.is_enabled(),
+        supports_images: components.supports_images(),
     })
 }
 
 async fn draft_handler(
     AuthUser(user): AuthUser,
-    State(module): State<AssistantModule>,
+    State(components): State<AssistantComponents>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Response {
     let started = Instant::now();
-    let result = draft(module, user.id, multipart).await;
+    let result = draft(components, user.id, multipart).await;
     if let Some(reason) = result.rejection_reason {
         tracing::warn!(
             user_id = %user.id,
@@ -183,11 +184,11 @@ struct DraftHttpResult {
 }
 
 async fn draft(
-    module: AssistantModule,
+    components: AssistantComponents,
     user_id: uuid::Uuid,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> DraftHttpResult {
-    let Some(service) = module.service() else {
+    let Some(service) = components.food_draft_service() else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "assistant_disabled",
@@ -197,13 +198,17 @@ async fn draft(
 
     // Admit immediately after authentication and the enabled check, before
     // buffering attacker-controlled multipart fields.
-    let _permit = match module.admit(user_id) {
+    let _permit = match components.request_admission.try_acquire(user_id) {
         Ok(permit) => permit,
-        Err(AdmissionError::RateLimited {
+        Err(AdmissionRejection::RateLimitExceeded {
             retry_after_seconds,
         }) => return throttled("rate_limited", "too many requests", retry_after_seconds),
-        Err(AdmissionError::Busy) => return throttled("assistant_busy", "assistant is busy", 1),
-        Err(AdmissionError::Internal) => return assistant_failure(AssistantError::Internal),
+        Err(AdmissionRejection::AtCapacity) => {
+            return throttled("assistant_busy", "assistant is busy", 1);
+        }
+        Err(AdmissionRejection::StateUnavailable) => {
+            return assistant_failure(AssistantError::Internal);
+        }
     };
 
     let multipart = match multipart {
