@@ -747,7 +747,8 @@ pub use crate::nutrition::error::NutritionError;
 pub struct ProductUpsertResult {
     /// Parent rows inserted by this call.
     pub created: i64,
-    /// Existing parent rows whose aggregate state changed in this call.
+    /// Existing products whose stored parent columns changed in this call.
+    /// Child-only changes are reported by the corresponding child counters.
     pub updated: i64,
     /// Nutrient rows inserted, updated, or deleted by this call.
     pub nutrients_written: i64,

@@ -351,3 +351,129 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
     .unwrap();
     assert_eq!(parent_count, 0);
 }
+
+#[sqlx::test]
+async fn concurrent_same_operation_replays_one_canonical_result(pool: PgPool) {
+    let repository = PostgresProductRepository::new(pool.clone());
+    let operation_id = ProductUpsertOperationId::new();
+    let product = external_product(
+        "concurrent-replay",
+        None,
+        "Concurrent replay",
+        &[("ENERGY_KCAL", 100)],
+        &[("cup", 200)],
+    );
+    let first_batch = vec![product.clone()];
+    let second_batch = vec![product];
+
+    let (first, second) = tokio::join!(
+        repository.upsert_external_many(operation_id, &first_batch),
+        repository.upsert_external_many(operation_id, &second_batch),
+    );
+    let first = first.unwrap();
+    let second = second.unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(first.created, 1);
+    assert_eq!(first.nutrients_written, 1);
+    assert_eq!(first.servings_written, 1);
+    let product_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = 'concurrent-replay'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(product_count, 1);
+}
+
+#[sqlx::test]
+async fn concurrent_distinct_operations_leave_one_complete_aggregate(pool: PgPool) {
+    let repository = PostgresProductRepository::new(pool.clone());
+    let original = external_product(
+        "concurrent-overlap",
+        None,
+        "Original",
+        &[("ENERGY_KCAL", 100)],
+        &[("cup", 200)],
+    );
+    repository
+        .upsert_external_many(ProductUpsertOperationId::new(), &[original])
+        .await
+        .unwrap();
+
+    let version_a = external_product(
+        "concurrent-overlap",
+        None,
+        "Version A",
+        &[("ENERGY_KCAL", 110)],
+        &[("cup", 210)],
+    );
+    let version_b = external_product(
+        "concurrent-overlap",
+        None,
+        "Version B",
+        &[("ENERGY_KCAL", 120), ("PROTEIN_G", 12)],
+        &[("slice", 30)],
+    );
+    let batch_a = vec![version_a];
+    let batch_b = vec![version_b];
+
+    let (result_a, result_b) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        tokio::join!(
+            repository.upsert_external_many(ProductUpsertOperationId::new(), &batch_a),
+            repository.upsert_external_many(ProductUpsertOperationId::new(), &batch_b),
+        )
+    })
+    .await
+    .expect("overlapping upserts must not deadlock");
+    result_a.unwrap();
+    result_b.unwrap();
+
+    let product_id: Uuid = sqlx::query_scalar(
+        "SELECT id FROM products WHERE source = 'OFF' AND source_id = 'concurrent-overlap'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let name: String = sqlx::query_scalar("SELECT name FROM products WHERE id = $1")
+        .bind(product_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let nutrients: Vec<(String, Decimal)> = sqlx::query_as(
+        r#"SELECT nutrient.code, product_nutrient.amount_per_100g
+           FROM product_nutrients AS product_nutrient
+           JOIN nutrients AS nutrient ON nutrient.id = product_nutrient.nutrient_id
+           WHERE product_nutrient.product_id = $1
+           ORDER BY nutrient.code"#,
+    )
+    .bind(product_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    let servings: Vec<(String, Decimal)> = sqlx::query_as(
+        "SELECT unit, grams_per_unit FROM product_servings WHERE product_id = $1 ORDER BY position",
+    )
+    .bind(product_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+
+    match name.as_str() {
+        "Version A" => {
+            assert_eq!(nutrients, vec![("ENERGY_KCAL".into(), Decimal::from(110))]);
+            assert_eq!(servings, vec![("cup".into(), Decimal::from(210))]);
+        }
+        "Version B" => {
+            assert_eq!(
+                nutrients,
+                vec![
+                    ("ENERGY_KCAL".into(), Decimal::from(120)),
+                    ("PROTEIN_G".into(), Decimal::from(12)),
+                ]
+            );
+            assert_eq!(servings, vec![("slice".into(), Decimal::from(30))]);
+        }
+        other => panic!("unexpected final product version: {other}"),
+    }
+}
