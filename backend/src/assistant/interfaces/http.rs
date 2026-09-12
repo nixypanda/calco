@@ -1,4 +1,4 @@
-//! Authenticated multipart transport for transient food drafts.
+//! Authenticated HTTP multipart transport for transient food drafts.
 
 use std::time::Instant;
 

@@ -9,7 +9,7 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::assistant::interfaces::assistant_routes;
+use crate::assistant::interfaces::http::assistant_routes;
 use crate::assistant::module::AssistantModule;
 use crate::auth::domain::SessionPolicy;
 use crate::auth::interfaces::SessionCookieConfig;
