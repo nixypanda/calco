@@ -222,10 +222,8 @@ impl ImportService {
         let result = ImportCommitResult {
             products_created: written.created,
             products_updated: written.updated,
-            // Keep the public import response compatible while the generic repository uses
-            // "written" to include inserted, updated, and authoritatively removed children.
-            nutrients_inserted: written.nutrients_written,
-            servings_inserted: written.servings_written,
+            nutrients_written: written.nutrients_written,
+            servings_written: written.servings_written,
             errors_logged: errors.len() as i64,
         };
 
@@ -620,8 +618,8 @@ mod tests {
                 result: ProductUpsertResult {
                     created: result.products_created,
                     updated: result.products_updated,
-                    nutrients_written: result.nutrients_inserted,
-                    servings_written: result.servings_inserted,
+                    nutrients_written: result.nutrients_written,
+                    servings_written: result.servings_written,
                 },
                 upserted: Mutex::new(vec![]),
                 operation_ids: Mutex::new(vec![]),
@@ -753,8 +751,8 @@ mod tests {
         let services = make_services_with_result(ImportCommitResult {
             products_created: 2,
             products_updated: 0,
-            nutrients_inserted: 4,
-            servings_inserted: 0,
+            nutrients_written: 4,
+            servings_written: 0,
             errors_logged: 0,
         });
         let job = make_pending_job(&services, "IFCT").await;
@@ -779,7 +777,7 @@ mod tests {
         let result = services.commit_job(job.id).await.unwrap();
         assert_eq!(result.products_created, 2);
         assert_eq!(result.products_updated, 0);
-        assert_eq!(result.nutrients_inserted, 4);
+        assert_eq!(result.nutrients_written, 4);
         assert_eq!(result.errors_logged, 0);
     }
 
@@ -788,8 +786,8 @@ mod tests {
         let services = make_services_with_result(ImportCommitResult {
             products_created: 2,
             products_updated: 0,
-            nutrients_inserted: 4,
-            servings_inserted: 0,
+            nutrients_written: 4,
+            servings_written: 0,
             errors_logged: 0,
         });
         let job = make_pending_job(&services, "INDB").await;
@@ -814,7 +812,7 @@ mod tests {
         let result = services.commit_job(job.id).await.unwrap();
         assert_eq!(result.products_created, 2);
         assert_eq!(result.products_updated, 0);
-        assert_eq!(result.nutrients_inserted, 4);
+        assert_eq!(result.nutrients_written, 4);
         assert_eq!(result.errors_logged, 0);
     }
 
@@ -876,8 +874,8 @@ mod tests {
         let services = make_services_with_result(ImportCommitResult {
             products_created: 1,
             products_updated: 0,
-            nutrients_inserted: 2,
-            servings_inserted: 0,
+            nutrients_written: 2,
+            servings_written: 0,
             errors_logged: 1,
         });
         let job = make_pending_job(&services, "USDA").await;

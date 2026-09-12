@@ -140,8 +140,8 @@ pub enum ImportError {
 pub struct ImportCommitResult {
     pub products_created: i64,
     pub products_updated: i64,
-    pub nutrients_inserted: i64,
-    pub servings_inserted: i64,
+    pub nutrients_written: i64,
+    pub servings_written: i64,
     pub errors_logged: i64,
 }
 

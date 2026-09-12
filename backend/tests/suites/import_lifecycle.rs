@@ -1,5 +1,9 @@
 use crate::common::*;
 use axum::http::StatusCode;
+use calco_backend::nutrition::catalog::domain::{
+    NutrientCatalog, Product, ProductRepository, ProductUpsertOperationId, Source,
+};
+use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 
@@ -116,6 +120,8 @@ async fn import_lifecycle_happy_path(pool: PgPool) {
     .await;
     assert_eq!(commit["status"], "committed");
     assert_eq!(commit["products_created"], 2);
+    assert_eq!(commit["nutrients_written"], 2);
+    assert_eq!(commit["servings_written"], 1);
 
     // A lost response can be retried: the persisted canonical result is replayed without
     // applying the catalog batch again.
@@ -404,4 +410,240 @@ async fn legacy_committed_import_without_result_is_not_replayed_as_zeroes(pool: 
         StatusCode::CONFLICT,
     )
     .await;
+}
+
+#[sqlx::test]
+async fn running_import_replays_catalog_result_after_pre_finalize_crash(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let admin = bootstrap_admin(&router).await;
+    let created: Value = post_json(
+        &router,
+        "/api/imports",
+        &admin,
+        &json!({ "source": "USDA" }),
+        StatusCode::CREATED,
+    )
+    .await;
+    let import_id = created["id"].as_str().unwrap();
+    let import_uuid = uuid::Uuid::parse_str(import_id).unwrap();
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{import_id}/foods"),
+        &admin,
+        &json!({
+            "rows": [{
+                "row_number": 1,
+                "source": "USDA",
+                "source_id": "crash-window",
+                "name": "Crash window food",
+                "categories": []
+            }]
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    sqlx::query("UPDATE imports SET status = 'running' WHERE id = $1")
+        .bind(import_uuid)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let product = Product::new_external(
+        Source::Usda,
+        "crash-window".into(),
+        None,
+        "Crash window food".into(),
+        None,
+        vec![],
+        None,
+        None,
+        vec![],
+        vec![],
+        &NutrientCatalog::default(),
+    )
+    .unwrap();
+    let catalog_result = PostgresProductRepository::new(pool)
+        .upsert_external_many(ProductUpsertOperationId(import_uuid), &[product])
+        .await
+        .unwrap();
+    assert_eq!(catalog_result.created, 1);
+
+    let committed: Value = post_json(
+        &router,
+        &format!("/api/imports/{import_id}/commit"),
+        &admin,
+        &json!({}),
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(committed["products_created"], 1);
+    assert_eq!(committed["status"], "committed");
+}
+
+#[sqlx::test]
+async fn later_import_authoritatively_removes_omitted_children(pool: PgPool) {
+    let router = app(pool.clone()).await;
+    let admin = bootstrap_admin(&router).await;
+    let first: Value = post_json(
+        &router,
+        "/api/imports",
+        &admin,
+        &json!({ "source": "OFF" }),
+        StatusCode::CREATED,
+    )
+    .await;
+    let first_id = first["id"].as_str().unwrap();
+    let food = json!({
+        "rows": [{
+            "row_number": 1,
+            "source": "OFF",
+            "source_id": "authoritative-import",
+            "name": "Authoritative food",
+            "categories": []
+        }]
+    });
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{first_id}/foods"),
+        &admin,
+        &food,
+        StatusCode::OK,
+    )
+    .await;
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{first_id}/nutrients"),
+        &admin,
+        &json!({
+            "rows": [
+                {
+                    "row_number": 1,
+                    "source": "OFF",
+                    "source_id": "authoritative-import",
+                    "nutrient_code": "ENERGY_KCAL",
+                    "amount_per_100g": 100
+                },
+                {
+                    "row_number": 2,
+                    "source": "OFF",
+                    "source_id": "authoritative-import",
+                    "nutrient_code": "PROTEIN_G",
+                    "amount_per_100g": 10
+                }
+            ]
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{first_id}/servings"),
+        &admin,
+        &json!({
+            "rows": [
+                {
+                    "row_number": 1,
+                    "source": "OFF",
+                    "source_id": "authoritative-import",
+                    "unit": "cup",
+                    "grams_per_unit": 200
+                },
+                {
+                    "row_number": 2,
+                    "source": "OFF",
+                    "source_id": "authoritative-import",
+                    "unit": "slice",
+                    "grams_per_unit": 30
+                }
+            ]
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{first_id}/commit"),
+        &admin,
+        &json!({}),
+        StatusCode::OK,
+    )
+    .await;
+
+    let second: Value = post_json(
+        &router,
+        "/api/imports",
+        &admin,
+        &json!({ "source": "OFF" }),
+        StatusCode::CREATED,
+    )
+    .await;
+    let second_id = second["id"].as_str().unwrap();
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{second_id}/foods"),
+        &admin,
+        &food,
+        StatusCode::OK,
+    )
+    .await;
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{second_id}/nutrients"),
+        &admin,
+        &json!({
+            "rows": [{
+                "row_number": 1,
+                "source": "OFF",
+                "source_id": "authoritative-import",
+                "nutrient_code": "ENERGY_KCAL",
+                "amount_per_100g": 100
+            }]
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    let _: Value = post_json(
+        &router,
+        &format!("/api/imports/{second_id}/servings"),
+        &admin,
+        &json!({
+            "rows": [{
+                "row_number": 1,
+                "source": "OFF",
+                "source_id": "authoritative-import",
+                "unit": "cup",
+                "grams_per_unit": 200
+            }]
+        }),
+        StatusCode::OK,
+    )
+    .await;
+    let result: Value = post_json(
+        &router,
+        &format!("/api/imports/{second_id}/commit"),
+        &admin,
+        &json!({}),
+        StatusCode::OK,
+    )
+    .await;
+
+    assert_eq!(result["products_updated"], 0);
+    assert_eq!(result["nutrients_written"], 1);
+    assert_eq!(result["servings_written"], 1);
+    let product_id: uuid::Uuid = sqlx::query_scalar(
+        "SELECT id FROM products WHERE source = 'OFF' AND source_id = 'authoritative-import'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    let child_counts: (i64, i64) = sqlx::query_as(
+        r#"SELECT
+               (SELECT COUNT(*) FROM product_nutrients WHERE product_id = $1),
+               (SELECT COUNT(*) FROM product_servings WHERE product_id = $1)"#,
+    )
+    .bind(product_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(child_counts, (1, 1));
 }

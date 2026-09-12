@@ -254,15 +254,15 @@ impl ImportRepository for PostgresImportRepository {
                     r#"UPDATE imports
                        SET status = 'committed', committed_at = NOW(),
                            products_created = $2, products_updated = $3,
-                           nutrients_inserted = $4, servings_inserted = $5,
+                           nutrients_written = $4, servings_written = $5,
                            errors_logged = $6
                        WHERE id = $1"#,
                 )
                 .bind(import_id.0)
                 .bind(result.products_created)
                 .bind(result.products_updated)
-                .bind(result.nutrients_inserted)
-                .bind(result.servings_inserted)
+                .bind(result.nutrients_written)
+                .bind(result.servings_written)
                 .bind(result.errors_logged)
                 .execute(&mut *tx)
                 .await?;
@@ -345,8 +345,8 @@ impl PostgresImportRepository {
         import_id: ImportId,
     ) -> Result<CommitStateRow, ImportError> {
         sqlx::query_as::<_, CommitStateRow>(
-            r#"SELECT status, products_created, products_updated, nutrients_inserted,
-                      servings_inserted, errors_logged
+            r#"SELECT status, products_created, products_updated, nutrients_written,
+                      servings_written, errors_logged
                FROM imports WHERE id = $1 FOR UPDATE"#,
         )
         .bind(import_id.0)
@@ -389,8 +389,8 @@ struct CommitStateRow {
     status: String,
     products_created: Option<i64>,
     products_updated: Option<i64>,
-    nutrients_inserted: Option<i64>,
-    servings_inserted: Option<i64>,
+    nutrients_written: Option<i64>,
+    servings_written: Option<i64>,
     errors_logged: Option<i64>,
 }
 
@@ -399,8 +399,8 @@ impl CommitStateRow {
         Some(ImportCommitResult {
             products_created: self.products_created?,
             products_updated: self.products_updated?,
-            nutrients_inserted: self.nutrients_inserted?,
-            servings_inserted: self.servings_inserted?,
+            nutrients_written: self.nutrients_written?,
+            servings_written: self.servings_written?,
             errors_logged: self.errors_logged?,
         })
     }

@@ -135,8 +135,8 @@ def commit_job(api_url: str, headers: Mapping[str, str], job_id: str) -> JsonRow
         "Committed: created=%d updated=%d nutrients=%d servings=%d errors=%d",
         result.get("products_created", 0),
         result.get("products_updated", 0),
-        result.get("nutrients_inserted", 0),
-        result.get("servings_inserted", 0),
+        result.get("nutrients_written", 0),
+        result.get("servings_written", 0),
         result.get("errors_logged", 0),
     )
     return result
@@ -260,7 +260,7 @@ def upload(cfg: dict[str, object], dataset: str | None = None) -> None:
     log.info("Pipeline complete for %s (job %s)", source, job_id)
     log.info(
         "Summary: %d/%d foods, %d/%d nutrients, %d/%d servings, "
-        "created=%d updated=%d nutrients_ins=%d servings_ins=%d errors=%d",
+        "created=%d updated=%d nutrients_written=%d servings_written=%d errors=%d",
         foods_accepted,
         len(foods),
         nut_accepted,
@@ -269,7 +269,7 @@ def upload(cfg: dict[str, object], dataset: str | None = None) -> None:
         len(servings),
         result.get("products_created", 0),
         result.get("products_updated", 0),
-        result.get("nutrients_inserted", 0),
-        result.get("servings_inserted", 0),
+        result.get("nutrients_written", 0),
+        result.get("servings_written", 0),
         result.get("errors_logged", 0),
     )

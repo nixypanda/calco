@@ -37,8 +37,8 @@ Staging tables:
 Commit behavior:
 
 - Upsert products by `(source, source_id)`.
-- Insert/update product nutrients by canonical nutrient code.
-- Insert/update servings.
+- Authoritatively synchronize product nutrients by canonical nutrient code.
+- Authoritatively synchronize servings.
 - Record unresolved or invalid rows as import errors.
 - Mark the import committed when done.
 
