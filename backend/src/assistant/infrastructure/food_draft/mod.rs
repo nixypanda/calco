@@ -1,88 +1,79 @@
-mod model_request_prompt;
-mod model_response;
-mod model_response_schema;
+mod prompt;
+mod response;
+mod schema;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
 use crate::assistant::application::{
-    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodVocabulary, ModelUsage,
+    AssistantError, FoodDraftModel, FoodDraftModelRequest, FoodDraftResult, FoodVocabulary,
+    ModelUsage,
 };
-use crate::assistant::domain::{AssistantError, ConversationRole};
-use crate::assistant::llm::{
+use crate::assistant::domain::ConversationRole;
+use crate::assistant::infrastructure::llm::{
     ChatClient, ChatError, ChatImage, ChatMessage, ChatRequest, ChatResponse, ChatRole,
     ResponseFormat, TokenUsage,
 };
 
-use model_request_prompt::build_system_prompt;
-use model_response::parse_model_turn;
-use model_response_schema::food_draft_response_schema;
-
 const MAX_OUTPUT_TOKENS: u32 = 16_384;
 
-pub struct FoodDraftModelAdapter {
+pub struct FoodDraftLlmAdapter {
     chat: Arc<dyn ChatClient>,
 }
 
-impl FoodDraftModelAdapter {
+impl FoodDraftLlmAdapter {
     pub(crate) fn new(chat: Arc<dyn ChatClient>) -> Self {
         Self { chat }
     }
 }
 
 #[async_trait]
-impl FoodDraftModel for FoodDraftModelAdapter {
+impl FoodDraftModel for FoodDraftLlmAdapter {
     async fn generate(
         &self,
-        request: &FoodDraftRequest,
+        request: &FoodDraftModelRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError> {
         let mut messages = vec![ChatMessage {
             role: ChatRole::System,
-            content: build_system_prompt(vocabulary),
+            content: prompt::build(vocabulary),
             images: vec![],
         }];
-        messages.extend(request.conversation.turns().iter().map(|turn| ChatMessage {
-            role: match turn.role() {
-                ConversationRole::User => ChatRole::User,
-                ConversationRole::Assistant => ChatRole::Assistant,
-            },
-            content: turn.text().to_owned(),
-            images: vec![],
+        messages.extend(request.turns.iter().map(|turn| {
+            ChatMessage {
+                role: match turn.role {
+                    ConversationRole::User => ChatRole::User,
+                    ConversationRole::Assistant => ChatRole::Assistant,
+                },
+                content: turn.text.clone(),
+                images: turn
+                    .photos
+                    .iter()
+                    .map(|photo| ChatImage {
+                        mime_type: photo.mime_type.as_str(),
+                        bytes: photo.bytes.clone(),
+                    })
+                    .collect(),
+            }
         }));
-        if !request.photos.is_empty() {
-            let latest_user = messages
-                .iter_mut()
-                .rfind(|message| message.role == ChatRole::User)
-                .ok_or(AssistantError::InvalidInput)?;
-            latest_user.images = request
-                .photos
-                .iter()
-                .map(|photo| ChatImage {
-                    mime_type: photo.mime_type.as_str(),
-                    bytes: photo.bytes.clone(),
-                })
-                .collect();
-        }
         let response: ChatResponse = self
             .chat
             .complete(ChatRequest {
                 messages,
                 response_format: ResponseFormat::JsonSchema {
                     name: "food_draft_response".into(),
-                    schema: food_draft_response_schema(vocabulary),
+                    schema: schema::build(vocabulary),
                 },
                 max_output_tokens: MAX_OUTPUT_TOKENS,
             })
             .await
             .map_err(map_chat_error)?;
-        let turn = parse_model_turn(&response.content, vocabulary).map_err(|error| {
+        let turn = response::parse(&response.content).inspect_err(|_| {
             tracing::error!(
                 provider_response = %response.content,
                 "provider response failed food draft validation"
             );
-            error
         })?;
         Ok(FoodDraftResult {
             turn,
@@ -111,9 +102,11 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::assistant::application::{FoodPhotoMimeType, SanitizedFoodPhoto};
+    use crate::assistant::application::{
+        FoodDraftModelTurn, FoodPhotoMimeType, SanitizedFoodPhoto,
+    };
     use crate::assistant::application::{SupportedNutrient, SupportedUnit};
-    use crate::assistant::domain::{Conversation, ConversationTurn, FoodDraftTurn};
+    use crate::assistant::domain::FoodDraftTurn;
 
     struct FakeChat {
         request: Mutex<Option<ChatRequest>>,
@@ -138,11 +131,14 @@ mod tests {
         let chat = Arc::new(FakeChat {
             request: Mutex::new(None),
         });
-        let model = FoodDraftModelAdapter::new(chat.clone());
-        let conversation = Conversation::new(vec![
-            ConversationTurn::new(ConversationRole::User, "one bowl of dal").unwrap(),
-        ])
-        .unwrap();
+        let model = FoodDraftLlmAdapter::new(chat.clone());
+        let request = FoodDraftModelRequest {
+            turns: vec![FoodDraftModelTurn {
+                role: ConversationRole::User,
+                text: "one bowl of dal".into(),
+                photos: vec![],
+            }],
+        };
         let vocabulary = FoodVocabulary {
             nutrients: vec![SupportedNutrient {
                 code: "ENERGY_KCAL".into(),
@@ -158,16 +154,7 @@ mod tests {
             required_nutrient_codes: vec!["ENERGY_KCAL".into()],
         };
 
-        let result = model
-            .generate(
-                &FoodDraftRequest {
-                    conversation,
-                    photos: vec![],
-                },
-                &vocabulary,
-            )
-            .await
-            .unwrap();
+        let result = model.generate(&request, &vocabulary).await.unwrap();
 
         assert!(matches!(
             result.turn,
@@ -184,29 +171,37 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn attaches_photos_only_to_the_latest_user_message() {
+    async fn translates_explicit_turn_photo_attachments() {
         let chat = Arc::new(FakeChat {
             request: Mutex::new(None),
         });
-        let model = FoodDraftModelAdapter::new(chat.clone());
-        let conversation = Conversation::new(vec![
-            ConversationTurn::new(ConversationRole::User, "first description").unwrap(),
-            ConversationTurn::new(ConversationRole::Assistant, "clarifying question").unwrap(),
-            ConversationTurn::new(ConversationRole::User, "this is the pictured plate").unwrap(),
-        ])
-        .unwrap();
+        let model = FoodDraftLlmAdapter::new(chat.clone());
+        let photo = SanitizedFoodPhoto {
+            mime_type: FoodPhotoMimeType::Jpeg,
+            bytes: vec![1, 2, 3],
+        };
+        let request = FoodDraftModelRequest {
+            turns: vec![
+                FoodDraftModelTurn {
+                    role: ConversationRole::User,
+                    text: "first description".into(),
+                    photos: vec![],
+                },
+                FoodDraftModelTurn {
+                    role: ConversationRole::Assistant,
+                    text: "clarifying question".into(),
+                    photos: vec![],
+                },
+                FoodDraftModelTurn {
+                    role: ConversationRole::User,
+                    text: "this is the pictured plate".into(),
+                    photos: vec![photo],
+                },
+            ],
+        };
 
         model
-            .generate(
-                &FoodDraftRequest {
-                    conversation,
-                    photos: vec![SanitizedFoodPhoto {
-                        mime_type: FoodPhotoMimeType::Jpeg,
-                        bytes: vec![1, 2, 3],
-                    }],
-                },
-                &FoodVocabulary::default(),
-            )
+            .generate(&request, &FoodVocabulary::default())
             .await
             .unwrap();
 

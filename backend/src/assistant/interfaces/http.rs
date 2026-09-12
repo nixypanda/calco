@@ -1,4 +1,4 @@
-//! Authenticated multipart transport for transient food drafts.
+//! Authenticated HTTP multipart transport for transient food drafts.
 
 use std::time::Instant;
 
@@ -8,17 +8,19 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::assistant::application::{
-    FoodDraftRequest, FoodImageError, FoodImageLimits, ModelUsage,
+    AssistantError, FoodDraftRequest, FoodDraftService, FoodImageError, FoodImageLimits, ModelUsage,
 };
+use crate::assistant::composition::AssistantComponents;
 use crate::assistant::domain::{
-    AssistantError, Conversation, ConversationRole, ConversationTurn, FoodDraft, FoodDraftTurn,
-    MAX_CONVERSATION_MESSAGE_CHARS, MAX_CONVERSATION_TURNS,
+    Conversation, ConversationRole, ConversationTurn, ConversationValidationError, FoodDraft,
+    FoodDraftTurn,
 };
-use crate::assistant::module::{AdmissionError, AssistantModule};
+use crate::assistant::infrastructure::AdmissionRejection;
 use crate::auth::interfaces::http::AuthUser;
 
 const MAX_REQUEST_BYTES: usize = 41 * 1024 * 1024;
@@ -63,8 +65,59 @@ enum ConversationRoleRequest {
 struct AssistantDraftResponse {
     assistant_message: String,
     status: DraftStatusResponse,
-    draft: Option<FoodDraft>,
+    draft: Option<FoodDraftResponse>,
     warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct FoodDraftResponse {
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<DraftNutrientResponse>,
+    servings: Vec<DraftServingResponse>,
+}
+
+#[derive(Serialize)]
+struct DraftNutrientResponse {
+    code: String,
+    amount_per_100g: Decimal,
+}
+
+#[derive(Serialize)]
+struct DraftServingResponse {
+    unit: String,
+    grams_per_unit: Decimal,
+}
+
+impl From<FoodDraft> for FoodDraftResponse {
+    fn from(draft: FoodDraft) -> Self {
+        Self {
+            name: draft.name().to_owned(),
+            brand: draft.brand().map(str::to_owned),
+            categories: draft.categories().to_vec(),
+            default_quantity: draft.default_quantity(),
+            default_unit: draft.default_unit().map(str::to_owned),
+            nutrients: draft
+                .nutrients()
+                .iter()
+                .map(|nutrient| DraftNutrientResponse {
+                    code: nutrient.code().to_owned(),
+                    amount_per_100g: nutrient.amount_per_100g(),
+                })
+                .collect(),
+            servings: draft
+                .servings()
+                .iter()
+                .map(|serving| DraftServingResponse {
+                    unit: serving.unit().to_owned(),
+                    grams_per_unit: serving.grams_per_unit(),
+                })
+                .collect(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -87,21 +140,21 @@ struct ErrorBody {
 
 async fn status_handler(
     _auth: AuthUser,
-    State(module): State<AssistantModule>,
+    State(components): State<AssistantComponents>,
 ) -> Json<AssistantStatusResponse> {
     Json(AssistantStatusResponse {
-        enabled: module.is_enabled(),
-        supports_images: module.supports_images(),
+        enabled: components.is_enabled(),
+        supports_images: components.supports_images(),
     })
 }
 
 async fn draft_handler(
     AuthUser(user): AuthUser,
-    State(module): State<AssistantModule>,
+    State(components): State<AssistantComponents>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> Response {
     let started = Instant::now();
-    let result = draft(module, user.id, multipart).await;
+    let result = draft(components, user.id, multipart).await;
     if let Some(reason) = result.rejection_reason {
         tracing::warn!(
             user_id = %user.id,
@@ -131,11 +184,11 @@ struct DraftHttpResult {
 }
 
 async fn draft(
-    module: AssistantModule,
+    components: AssistantComponents,
     user_id: uuid::Uuid,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> DraftHttpResult {
-    let Some(service) = module.service() else {
+    let Some(service) = components.food_draft_service() else {
         return failure(
             StatusCode::SERVICE_UNAVAILABLE,
             "assistant_disabled",
@@ -145,13 +198,17 @@ async fn draft(
 
     // Admit immediately after authentication and the enabled check, before
     // buffering attacker-controlled multipart fields.
-    let _permit = match module.admit(user_id) {
+    let _permit = match components.request_admission.try_acquire(user_id) {
         Ok(permit) => permit,
-        Err(AdmissionError::RateLimited {
+        Err(AdmissionRejection::RateLimitExceeded {
             retry_after_seconds,
         }) => return throttled("rate_limited", "too many requests", retry_after_seconds),
-        Err(AdmissionError::Busy) => return throttled("assistant_busy", "assistant is busy", 1),
-        Err(AdmissionError::Internal) => return assistant_failure(AssistantError::Internal),
+        Err(AdmissionRejection::AtCapacity) => {
+            return throttled("assistant_busy", "assistant is busy", 1);
+        }
+        Err(AdmissionRejection::StateUnavailable) => {
+            return assistant_failure(AssistantError::Internal);
+        }
     };
 
     let multipart = match multipart {
@@ -168,7 +225,7 @@ async fn draft(
             );
         }
     };
-    let request = match parse_multipart(multipart, &module).await {
+    let request = match parse_multipart(multipart, &service).await {
         Ok(value) => value,
         Err(error) => return error,
     };
@@ -186,15 +243,14 @@ async fn draft(
 
 async fn parse_multipart(
     mut multipart: Multipart,
-    module: &AssistantModule,
+    service: &FoodDraftService,
 ) -> Result<FoodDraftRequest, DraftHttpResult> {
     let mut fields = 0;
     let mut conversation = None;
     let mut photos = Vec::new();
     let mut raw_photo_bytes = 0;
     let mut sanitized_photo_bytes = 0;
-    let image_sanitizer = module.image_sanitizer();
-    let image_limits = image_sanitizer.as_ref().map(|sanitizer| sanitizer.limits());
+    let image_limits = service.image_limits();
 
     loop {
         let field = match multipart.next_field().await {
@@ -227,7 +283,7 @@ async fn parse_multipart(
                 conversation = Some(read_conversation(field).await?);
             }
             Some("photos") => {
-                let (Some(sanitizer), Some(limits)) = (&image_sanitizer, image_limits) else {
+                let Some(limits) = image_limits else {
                     return Err(rejected(
                         StatusCode::BAD_REQUEST,
                         "photos_not_supported",
@@ -260,8 +316,8 @@ async fn parse_multipart(
                     )
                 })?;
                 let bytes = read_photo(field, &mut raw_photo_bytes, limits).await?;
-                let photo = sanitizer
-                    .sanitize(&mime_type, bytes)
+                let photo = service
+                    .sanitize_photo(&mime_type, bytes)
                     .await
                     .map_err(image_failure)?;
                 if photo.bytes.len() > limits.max_total_bytes.saturating_sub(sanitized_photo_bytes)
@@ -311,42 +367,6 @@ async fn parse_multipart(
             "conversation JSON did not match the request schema",
         )
     })?;
-    if wire.turns.is_empty() {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_empty",
-            "a conversation must contain a message",
-            "conversation contains no turns",
-        ));
-    }
-    if wire.turns.len() > MAX_CONVERSATION_TURNS {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_too_long",
-            "the conversation is full; start a new assistant session",
-            "conversation turn count exceeded limit",
-        ));
-    }
-    if wire.turns.iter().any(|turn| turn.text.trim().is_empty()) {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_message_empty",
-            "conversation messages cannot be empty",
-            "conversation contains an empty message",
-        ));
-    }
-    if wire
-        .turns
-        .iter()
-        .any(|turn| turn.text.chars().count() > MAX_CONVERSATION_MESSAGE_CHARS)
-    {
-        return Err(rejected(
-            StatusCode::BAD_REQUEST,
-            "conversation_message_too_long",
-            "conversation messages must be 4,000 characters or fewer",
-            "conversation message exceeded character limit",
-        ));
-    }
     let turns = wire
         .turns
         .into_iter()
@@ -358,9 +378,9 @@ async fn parse_multipart(
             ConversationTurn::new(role, turn.text)
         })
         .collect::<Result<Vec<_>, _>>()
-        .map_err(assistant_failure)?;
+        .map_err(conversation_failure)?;
     Ok(FoodDraftRequest {
-        conversation: Conversation::new(turns).map_err(assistant_failure)?,
+        conversation: Conversation::new(turns).map_err(conversation_failure)?,
         photos,
     })
 }
@@ -430,11 +450,6 @@ async fn read_photo(
 
 fn assistant_failure(error: AssistantError) -> DraftHttpResult {
     match error {
-        AssistantError::Disabled => failure(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "assistant_disabled",
-            "assistant is unavailable",
-        ),
         AssistantError::InvalidInput => rejected(
             StatusCode::BAD_REQUEST,
             "invalid_conversation",
@@ -459,8 +474,43 @@ fn assistant_failure(error: AssistantError) -> DraftHttpResult {
     }
 }
 
+fn conversation_failure(error: ConversationValidationError) -> DraftHttpResult {
+    match error {
+        ConversationValidationError::Empty => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_empty",
+            "a conversation must contain a message",
+            "conversation contains no turns",
+        ),
+        ConversationValidationError::TooManyTurns => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_too_long",
+            "the conversation is full; start a new assistant session",
+            "conversation turn count exceeded limit",
+        ),
+        ConversationValidationError::EmptyMessage => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_empty",
+            "conversation messages cannot be empty",
+            "conversation contains an empty message",
+        ),
+        ConversationValidationError::MessageTooLong => rejected(
+            StatusCode::BAD_REQUEST,
+            "conversation_message_too_long",
+            "conversation messages must be 4,000 characters or fewer",
+            "conversation message exceeded character limit",
+        ),
+    }
+}
+
 fn image_failure(error: FoodImageError) -> DraftHttpResult {
     match error {
+        FoodImageError::NotSupported => rejected(
+            StatusCode::BAD_REQUEST,
+            "photos_not_supported",
+            "this assistant does not support photos",
+            "photo supplied to text-only assistant",
+        ),
         FoodImageError::Empty => rejected(
             StatusCode::BAD_REQUEST,
             "photo_empty",
@@ -572,7 +622,7 @@ fn turn_to_response(turn: FoodDraftTurn) -> AssistantDraftResponse {
         } => AssistantDraftResponse {
             assistant_message,
             status: DraftStatusResponse::DraftReady,
-            draft: Some(draft),
+            draft: Some(draft.into()),
             warnings,
         },
     }
@@ -600,7 +650,7 @@ mod tests {
     }
 
     #[test]
-    fn response_contract_serializes_the_validated_draft_directly() {
+    fn response_contract_maps_the_validated_draft_to_http_fields() {
         let draft = FoodDraft::new(
             "Dal".into(),
             None,

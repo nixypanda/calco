@@ -228,6 +228,23 @@ impl CatalogService {
         Ok(product)
     }
 
+    pub async fn validate_custom_food_draft(
+        &self,
+        input: CustomFoodInput,
+    ) -> Result<(), NutritionError> {
+        let nutrient_catalog = self.load_nutrient_catalog().await?;
+        Product::validate_custom_draft(
+            input.name,
+            input.brand,
+            input.categories,
+            input.default_quantity,
+            input.default_unit,
+            input.nutrients,
+            input.servings,
+            &nutrient_catalog,
+        )
+    }
+
     pub async fn update_custom_food(
         &self,
         actor_id: Uuid,

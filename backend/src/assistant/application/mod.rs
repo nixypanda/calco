@@ -1,7 +1,8 @@
 mod food_draft;
 
 pub use food_draft::{
-    FoodDraftModel, FoodDraftRequest, FoodDraftResult, FoodDraftService, FoodImageError,
+    AssistantError, FoodDraftAcceptancePort, FoodDraftModel, FoodDraftModelRequest,
+    FoodDraftModelTurn, FoodDraftRequest, FoodDraftResult, FoodDraftService, FoodImageError,
     FoodImageLimits, FoodImageSanitizer, FoodPhotoMimeType, FoodVocabulary, FoodVocabularyPort,
     ModelUsage, SanitizedFoodPhoto, SupportedNutrient, SupportedUnit,
 };

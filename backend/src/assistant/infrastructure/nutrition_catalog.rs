@@ -3,10 +3,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::application::{
-    FoodVocabulary, FoodVocabularyPort, SupportedNutrient, SupportedUnit,
+    AssistantError, FoodDraftAcceptancePort, FoodVocabulary, FoodVocabularyPort, SupportedNutrient,
+    SupportedUnit,
 };
-use crate::assistant::domain::AssistantError;
-use crate::nutrition::catalog::application::CatalogService;
+use crate::assistant::domain::FoodDraft;
+use crate::nutrition::catalog::application::{CatalogService, CustomFoodInput};
+use crate::nutrition::catalog::domain::{ProductNutrientInput, ProductServingInput};
+use crate::nutrition::error::NutritionError;
 
 /// Read-only anti-corruption adapter from nutrition reference data to the
 /// bounded vocabulary supplied to the model.
@@ -55,5 +58,42 @@ impl FoodVocabularyPort for NutritionCatalogVocabularyAdapter {
             serving_units,
             required_nutrient_codes: self.catalog.required_custom_food_nutrient_codes(),
         })
+    }
+}
+
+#[async_trait]
+impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
+    async fn validate_draft(&self, draft: &FoodDraft) -> Result<(), AssistantError> {
+        self.catalog
+            .validate_custom_food_draft(CustomFoodInput {
+                name: draft.name().to_owned(),
+                brand: draft.brand().map(str::to_owned),
+                categories: draft.categories().to_vec(),
+                default_quantity: draft.default_quantity(),
+                default_unit: draft.default_unit().map(str::to_owned),
+                nutrients: draft
+                    .nutrients()
+                    .iter()
+                    .map(|nutrient| ProductNutrientInput {
+                        code: nutrient.code().to_owned(),
+                        amount_per_100g: nutrient.amount_per_100g(),
+                        source: None,
+                        confidence: None,
+                    })
+                    .collect(),
+                servings: draft
+                    .servings()
+                    .iter()
+                    .map(|serving| ProductServingInput {
+                        unit: serving.unit().to_owned(),
+                        grams_per_unit: serving.grams_per_unit(),
+                    })
+                    .collect(),
+            })
+            .await
+            .map_err(|error| match error {
+                NutritionError::Validation(_) => AssistantError::InvalidModelResponse,
+                _ => AssistantError::Internal,
+            })
     }
 }

@@ -1,8 +1,13 @@
 use serde_json::{Value, json};
 
 use crate::assistant::application::FoodVocabulary;
+use crate::assistant::domain::{
+    MAX_ASSISTANT_MESSAGE_CHARS, MAX_DRAFT_CATEGORIES, MAX_DRAFT_CATEGORY_CHARS,
+    MAX_DRAFT_CODE_CHARS, MAX_DRAFT_NAME_CHARS, MAX_DRAFT_NUTRIENTS, MAX_DRAFT_SERVINGS,
+    MAX_DRAFT_UNIT_CHARS, MAX_DRAFT_WARNING_CHARS, MAX_DRAFT_WARNINGS,
+};
 
-pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
+pub(super) fn build(vocabulary: &FoodVocabulary) -> Value {
     let default_units = vocabulary
         .default_units
         .iter()
@@ -18,7 +23,7 @@ pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
         "additionalProperties": false,
         "required": ["assistant_message", "status", "draft", "warnings"],
         "properties": {
-            "assistant_message": { "type": "string", "maxLength": 4000 },
+            "assistant_message": { "type": "string", "maxLength": MAX_ASSISTANT_MESSAGE_CHARS },
             "status": { "type": "string", "enum": ["needs_clarification", "draft_ready"] },
             "draft": {
                 "oneOf": [
@@ -27,24 +32,24 @@ pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
                         "type": "object", "additionalProperties": false,
                         "required": ["name", "brand", "categories", "default_quantity", "default_unit", "nutrients", "servings"],
                         "properties": {
-                            "name": { "type": "string", "maxLength": 200 },
-                            "brand": { "type": ["string", "null"], "maxLength": 200 },
-                            "categories": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 200 } },
+                            "name": { "type": "string", "maxLength": MAX_DRAFT_NAME_CHARS },
+                            "brand": { "type": ["string", "null"], "maxLength": MAX_DRAFT_NAME_CHARS },
+                            "categories": { "type": "array", "maxItems": MAX_DRAFT_CATEGORIES, "items": { "type": "string", "maxLength": MAX_DRAFT_CATEGORY_CHARS } },
                             "default_quantity": { "type": ["number", "null"], "exclusiveMinimum": 0 },
-                            "default_unit": { "type": ["string", "null"], "maxLength": 100, "enum": default_units.into_iter().map(Some).chain(std::iter::once(None)).collect::<Vec<_>>() },
-                            "nutrients": { "type": "array", "maxItems": 100, "items": {
+                            "default_unit": { "type": ["string", "null"], "maxLength": MAX_DRAFT_UNIT_CHARS, "enum": default_units.into_iter().map(Some).chain(std::iter::once(None)).collect::<Vec<_>>() },
+                            "nutrients": { "type": "array", "maxItems": MAX_DRAFT_NUTRIENTS, "items": {
                                 "type": "object", "additionalProperties": false,
                                 "required": ["code", "amount_per_100g"],
                                 "properties": {
-                                    "code": { "type": "string", "maxLength": 100 },
+                                    "code": { "type": "string", "maxLength": MAX_DRAFT_CODE_CHARS },
                                     "amount_per_100g": { "type": "number", "minimum": 0 }
                                 }
                             }},
-                            "servings": { "type": "array", "maxItems": 20, "items": {
+                            "servings": { "type": "array", "maxItems": MAX_DRAFT_SERVINGS, "items": {
                                 "type": "object", "additionalProperties": false,
                                 "required": ["unit", "grams_per_unit"],
                                 "properties": {
-                                    "unit": { "type": "string", "maxLength": 100, "enum": serving_units },
+                                    "unit": { "type": "string", "maxLength": MAX_DRAFT_UNIT_CHARS, "enum": serving_units },
                                     "grams_per_unit": { "type": "number", "exclusiveMinimum": 0 }
                                 }
                             }}
@@ -52,7 +57,7 @@ pub(super) fn food_draft_response_schema(vocabulary: &FoodVocabulary) -> Value {
                     }
                 ]
             },
-            "warnings": { "type": "array", "maxItems": 20, "items": { "type": "string", "maxLength": 500 } }
+            "warnings": { "type": "array", "maxItems": MAX_DRAFT_WARNINGS, "items": { "type": "string", "maxLength": MAX_DRAFT_WARNING_CHARS } }
         }
     })
 }
@@ -87,7 +92,7 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_fields_at_each_object_level() {
-        let value = food_draft_response_schema(&vocabulary());
+        let value = build(&vocabulary());
         assert_eq!(value["additionalProperties"], false);
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["additionalProperties"],
@@ -105,6 +110,18 @@ mod tests {
             value["properties"]["draft"]["oneOf"][1]["properties"]["servings"]["items"]["properties"]
                 ["unit"]["enum"],
             json!(["g", "cup"])
+        );
+        assert_eq!(
+            value["properties"]["assistant_message"]["maxLength"],
+            MAX_ASSISTANT_MESSAGE_CHARS
+        );
+        assert_eq!(
+            value["properties"]["draft"]["oneOf"][1]["properties"]["categories"]["maxItems"],
+            MAX_DRAFT_CATEGORIES
+        );
+        assert_eq!(
+            value["properties"]["warnings"]["items"]["maxLength"],
+            MAX_DRAFT_WARNING_CHARS
         );
     }
 }

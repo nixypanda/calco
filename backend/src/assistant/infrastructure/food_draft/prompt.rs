@@ -1,6 +1,6 @@
 use crate::assistant::application::FoodVocabulary;
 
-pub(super) fn build_system_prompt(vocabulary: &FoodVocabulary) -> String {
+pub(super) fn build(vocabulary: &FoodVocabulary) -> String {
     let nutrients = vocabulary
         .nutrients
         .iter()
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn prompt_uses_bounded_catalog_vocabulary() {
-        let prompt = build_system_prompt(&FoodVocabulary {
+        let prompt = build(&FoodVocabulary {
             nutrients: vec![SupportedNutrient {
                 code: "ENERGY_KCAL".into(),
                 name: "Energy".into(),

@@ -9,8 +9,8 @@ use axum::{Router, routing::get};
 use sqlx::PgPool;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::assistant::interfaces::assistant_routes;
-use crate::assistant::module::AssistantModule;
+use crate::assistant::composition::AssistantComponents;
+use crate::assistant::interfaces::http::assistant_routes;
 use crate::auth::domain::SessionPolicy;
 use crate::auth::interfaces::SessionCookieConfig;
 use crate::auth::interfaces::http::auth_routes;
@@ -37,7 +37,7 @@ pub struct AppState {
     pub auth: AuthModule,
     pub nutrition: NutritionModule,
     pub import: ImportModule,
-    pub assistant: AssistantModule,
+    pub assistant: AssistantComponents,
 }
 
 pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState, BoxError> {
@@ -51,7 +51,7 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     );
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(&pool);
-    let assistant = AssistantModule::build(&config.assistant, &nutrition.catalog)?;
+    let assistant = AssistantComponents::from_config(&config.assistant, &nutrition.catalog)?;
 
     Ok(AppState {
         auth,

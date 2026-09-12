@@ -2,11 +2,37 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::assistant::domain::{AssistantError, Conversation, FoodDraftTurn};
+use crate::assistant::domain::{
+    Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftTurn,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum AssistantError {
+    #[error("assistant input is invalid")]
+    InvalidInput,
+    #[error("assistant model is unavailable")]
+    ModelUnavailable,
+    #[error("assistant model returned an invalid response")]
+    InvalidModelResponse,
+    #[error("assistant operation failed")]
+    Internal,
+}
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
     pub conversation: Conversation,
+    pub photos: Vec<SanitizedFoodPhoto>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct FoodDraftModelRequest {
+    pub turns: Vec<FoodDraftModelTurn>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct FoodDraftModelTurn {
+    pub role: ConversationRole,
+    pub text: String,
     pub photos: Vec<SanitizedFoodPhoto>,
 }
 
@@ -42,6 +68,7 @@ pub struct FoodImageLimits {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FoodImageError {
+    NotSupported,
     Empty,
     UnsupportedType,
     TypeMismatch,
@@ -82,6 +109,18 @@ pub struct FoodVocabulary {
     pub required_nutrient_codes: Vec<String>,
 }
 
+impl FoodVocabulary {
+    fn draft_policy(&self) -> FoodDraftPolicy {
+        FoodDraftPolicy::new(
+            self.nutrients
+                .iter()
+                .map(|nutrient| (nutrient.code.clone(), nutrient.unit.clone())),
+            self.serving_units.iter().map(|unit| unit.code.clone()),
+            self.required_nutrient_codes.iter().cloned(),
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SupportedNutrient {
     pub code: String,
@@ -96,12 +135,16 @@ pub struct SupportedUnit {
     pub kind: String,
 }
 
-/// Outbound application boundary for producing a trusted CalCo food draft.
+/// Outbound application boundary for proposing a CalCo food draft.
+///
+/// Implementations translate provider output into domain types. The application
+/// service remains responsible for validating the proposal against the current
+/// CalCo vocabulary before returning it to a caller.
 #[async_trait]
 pub trait FoodDraftModel: Send + Sync {
     async fn generate(
         &self,
-        request: &FoodDraftRequest,
+        request: &FoodDraftModelRequest,
         vocabulary: &FoodVocabulary,
     ) -> Result<FoodDraftResult, AssistantError>;
 }
@@ -111,14 +154,44 @@ pub trait FoodVocabularyPort: Send + Sync {
     async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError>;
 }
 
+#[async_trait]
+pub trait FoodDraftAcceptancePort: Send + Sync {
+    async fn validate_draft(&self, draft: &FoodDraft) -> Result<(), AssistantError>;
+}
+
 pub struct FoodDraftService {
     model: Arc<dyn FoodDraftModel>,
     vocabulary: Arc<dyn FoodVocabularyPort>,
+    acceptance: Arc<dyn FoodDraftAcceptancePort>,
+    images: Option<Arc<dyn FoodImageSanitizer>>,
 }
 
 impl FoodDraftService {
-    pub fn new(model: Arc<dyn FoodDraftModel>, vocabulary: Arc<dyn FoodVocabularyPort>) -> Self {
-        Self { model, vocabulary }
+    pub fn new(
+        model: Arc<dyn FoodDraftModel>,
+        vocabulary: Arc<dyn FoodVocabularyPort>,
+        acceptance: Arc<dyn FoodDraftAcceptancePort>,
+        images: Option<Arc<dyn FoodImageSanitizer>>,
+    ) -> Self {
+        Self {
+            model,
+            vocabulary,
+            acceptance,
+            images,
+        }
+    }
+
+    pub fn image_limits(&self) -> Option<FoodImageLimits> {
+        self.images.as_ref().map(|images| images.limits())
+    }
+
+    pub async fn sanitize_photo(
+        &self,
+        declared_mime_type: &str,
+        bytes: Vec<u8>,
+    ) -> Result<SanitizedFoodPhoto, FoodImageError> {
+        let images = self.images.as_ref().ok_or(FoodImageError::NotSupported)?;
+        images.sanitize(declared_mime_type, bytes).await
     }
 
     pub async fn draft(
@@ -126,6 +199,165 @@ impl FoodDraftService {
         request: FoodDraftRequest,
     ) -> Result<FoodDraftResult, AssistantError> {
         let vocabulary = self.vocabulary.supported_vocabulary().await?;
-        self.model.generate(&request, &vocabulary).await
+        let request = prepare_model_request(request)?;
+        let result = self.model.generate(&request, &vocabulary).await?;
+        vocabulary
+            .draft_policy()
+            .validate(&result.turn)
+            .map_err(|_| AssistantError::InvalidModelResponse)?;
+        if let FoodDraftTurn::DraftReady { draft, .. } = &result.turn {
+            self.acceptance.validate_draft(draft).await?;
+        }
+        Ok(result)
+    }
+}
+
+fn prepare_model_request(
+    request: FoodDraftRequest,
+) -> Result<FoodDraftModelRequest, AssistantError> {
+    let mut turns = request
+        .conversation
+        .turns()
+        .iter()
+        .map(|turn| FoodDraftModelTurn {
+            role: turn.role(),
+            text: turn.text().to_owned(),
+            photos: vec![],
+        })
+        .collect::<Vec<_>>();
+    if !request.photos.is_empty() {
+        let latest_user = turns
+            .iter_mut()
+            .rfind(|turn| turn.role == ConversationRole::User)
+            .ok_or(AssistantError::InvalidInput)?;
+        latest_user.photos = request.photos;
+    }
+    Ok(FoodDraftModelRequest { turns })
+}
+
+#[cfg(test)]
+mod tests {
+    use rust_decimal::Decimal;
+
+    use super::*;
+    use crate::assistant::domain::{DraftNutrient, FoodDraft, FoodDraftTurn};
+
+    struct StubModel {
+        result: FoodDraftResult,
+    }
+
+    #[async_trait]
+    impl FoodDraftModel for StubModel {
+        async fn generate(
+            &self,
+            _request: &FoodDraftModelRequest,
+            _vocabulary: &FoodVocabulary,
+        ) -> Result<FoodDraftResult, AssistantError> {
+            Ok(self.result.clone())
+        }
+    }
+
+    struct StubVocabulary {
+        value: FoodVocabulary,
+    }
+
+    struct AcceptAllDrafts;
+
+    #[async_trait]
+    impl FoodDraftAcceptancePort for AcceptAllDrafts {
+        async fn validate_draft(&self, _draft: &FoodDraft) -> Result<(), AssistantError> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl FoodVocabularyPort for StubVocabulary {
+        async fn supported_vocabulary(&self) -> Result<FoodVocabulary, AssistantError> {
+            Ok(self.value.clone())
+        }
+    }
+
+    fn request() -> FoodDraftRequest {
+        FoodDraftRequest {
+            conversation: Conversation::new(vec![
+                crate::assistant::domain::ConversationTurn::new(
+                    crate::assistant::domain::ConversationRole::User,
+                    "dal",
+                )
+                .unwrap(),
+            ])
+            .unwrap(),
+            photos: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn service_rejects_a_model_draft_outside_the_current_vocabulary() {
+        let draft = FoodDraft::new(
+            "Dal".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![DraftNutrient::new("UNKNOWN".into(), Decimal::ONE).unwrap()],
+            vec![],
+        )
+        .unwrap();
+        let service = FoodDraftService::new(
+            Arc::new(StubModel {
+                result: FoodDraftResult {
+                    turn: FoodDraftTurn::ready("Review", draft, vec![]).unwrap(),
+                    usage: None,
+                },
+            }),
+            Arc::new(StubVocabulary {
+                value: FoodVocabulary {
+                    nutrients: vec![SupportedNutrient {
+                        code: "ENERGY_KCAL".into(),
+                        name: "Energy".into(),
+                        unit: "kcal".into(),
+                    }],
+                    required_nutrient_codes: vec!["ENERGY_KCAL".into()],
+                    ..FoodVocabulary::default()
+                },
+            }),
+            Arc::new(AcceptAllDrafts),
+            None,
+        );
+
+        assert!(matches!(
+            service.draft(request()).await,
+            Err(AssistantError::InvalidModelResponse)
+        ));
+    }
+
+    #[test]
+    fn model_request_attaches_photos_to_the_latest_user_turn() {
+        let conversation = Conversation::new(vec![
+            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "first")
+                .unwrap(),
+            crate::assistant::domain::ConversationTurn::new(
+                ConversationRole::Assistant,
+                "question",
+            )
+            .unwrap(),
+            crate::assistant::domain::ConversationTurn::new(ConversationRole::User, "latest")
+                .unwrap(),
+        ])
+        .unwrap();
+        let photo = SanitizedFoodPhoto {
+            mime_type: FoodPhotoMimeType::Jpeg,
+            bytes: vec![1, 2, 3],
+        };
+
+        let prepared = prepare_model_request(FoodDraftRequest {
+            conversation,
+            photos: vec![photo.clone()],
+        })
+        .unwrap();
+
+        assert!(prepared.turns[0].photos.is_empty());
+        assert!(prepared.turns[1].photos.is_empty());
+        assert_eq!(prepared.turns[2].photos, vec![photo]);
     }
 }
