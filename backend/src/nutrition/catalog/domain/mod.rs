@@ -755,6 +755,21 @@ pub struct ProductUpsertResult {
     pub servings_written: i64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ProductUpsertOperationId(pub Uuid);
+
+impl ProductUpsertOperationId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
+    }
+}
+
+impl Default for ProductUpsertOperationId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
     async fn search(
@@ -783,10 +798,11 @@ pub trait ProductRepository: Send + Sync {
     /// Every product is the complete desired aggregate: its nutrients and servings replace the
     /// stored collections, and an empty collection clears the corresponding stored children.
     /// Implementations must reject products whose source is [`Source::User`] or whose source ID
-    /// is absent, as well as duplicate `(source, source_id)` identities within one call.
-    /// Reapplying the same products must leave the stored state unchanged and report no changes.
+    /// is absent, as well as duplicate `(source, source_id)` identities within one call. Reusing
+    /// an operation ID must return its original result without applying the products again.
     async fn upsert_external_many(
         &self,
+        operation_id: ProductUpsertOperationId,
         products: &[Product],
     ) -> Result<ProductUpsertResult, NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;

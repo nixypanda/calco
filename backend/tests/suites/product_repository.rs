@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use calco_backend::nutrition::catalog::domain::{
     Nutrient, NutrientCatalog, NutrientCode, NutritionError, Product, ProductNutrientInput,
-    ProductRepository, ProductServingInput, Source, UnitCode,
+    ProductRepository, ProductServingInput, ProductUpsertOperationId, Source, UnitCode,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use rust_decimal::Decimal;
@@ -68,6 +68,7 @@ fn external_product(
 #[sqlx::test]
 async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
+    let operation_id = ProductUpsertOperationId::new();
     let product = external_product(
         "state-idempotent",
         None,
@@ -77,7 +78,7 @@ async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: P
     );
 
     let first = repository
-        .upsert_external_many(std::slice::from_ref(&product))
+        .upsert_external_many(operation_id, std::slice::from_ref(&product))
         .await
         .unwrap();
     assert_eq!(first.created, 1);
@@ -115,14 +116,22 @@ async fn external_upsert_is_state_idempotent_and_accepts_missing_barcode(pool: P
     .await
     .unwrap();
 
+    let changed_retry_payload = external_product(
+        "state-idempotent",
+        Some("should-not-be-applied"),
+        "Should not be applied",
+        &[],
+        &[],
+    );
     let retry = repository
-        .upsert_external_many(std::slice::from_ref(&product))
+        .upsert_external_many(operation_id, std::slice::from_ref(&changed_retry_payload))
         .await
         .unwrap();
-    assert_eq!(retry.created, 0);
+    assert_eq!(retry, first);
+    assert_eq!(retry.created, 1);
     assert_eq!(retry.updated, 0);
-    assert_eq!(retry.nutrients_written, 0);
-    assert_eq!(retry.servings_written, 0);
+    assert_eq!(retry.nutrients_written, 2);
+    assert_eq!(retry.servings_written, 2);
 
     let parent_after: (Uuid, Option<String>, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>) =
         sqlx::query_as(
@@ -167,7 +176,10 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[("cup", 240), ("slice", 30)],
     );
     repository
-        .upsert_external_many(std::slice::from_ref(&original))
+        .upsert_external_many(
+            ProductUpsertOperationId::new(),
+            std::slice::from_ref(&original),
+        )
         .await
         .unwrap();
 
@@ -195,7 +207,10 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[("slice", 30), ("cup", 250)],
     );
     let changed = repository
-        .upsert_external_many(std::slice::from_ref(&replacement))
+        .upsert_external_many(
+            ProductUpsertOperationId::new(),
+            std::slice::from_ref(&replacement),
+        )
         .await
         .unwrap();
 
@@ -252,7 +267,10 @@ async fn external_upsert_replaces_children_and_preserves_ids_during_position_swa
         &[],
     );
     let cleared = repository
-        .upsert_external_many(std::slice::from_ref(&empty_children))
+        .upsert_external_many(
+            ProductUpsertOperationId::new(),
+            std::slice::from_ref(&empty_children),
+        )
         .await
         .unwrap();
     assert_eq!(cleared.updated, 0);
@@ -276,7 +294,9 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
 
     let first = external_product("duplicate-key", None, "First", &[], &[]);
     let second = external_product("duplicate-key", None, "Second", &[], &[]);
-    let duplicate = repository.upsert_external_many(&[first, second]).await;
+    let duplicate = repository
+        .upsert_external_many(ProductUpsertOperationId::new(), &[first, second])
+        .await;
     assert!(matches!(duplicate, Err(NutritionError::Validation(_))));
 
     let mut valid = external_product("rolled-back-first", None, "Valid", &[], &[]);
@@ -284,7 +304,10 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
         external_product("rolled-back-second", None, "Collision", &[], &[]);
     primary_key_collision.id = valid.id;
     let failed = repository
-        .upsert_external_many(&[valid.clone(), primary_key_collision])
+        .upsert_external_many(
+            ProductUpsertOperationId::new(),
+            &[valid.clone(), primary_key_collision],
+        )
         .await;
     assert!(matches!(failed, Err(NutritionError::Database(_))));
 
@@ -315,7 +338,9 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
             source: None,
             confidence: None,
         });
-    let unknown_result = repository.upsert_external_many(&[valid, unknown]).await;
+    let unknown_result = repository
+        .upsert_external_many(ProductUpsertOperationId::new(), &[valid, unknown])
+        .await;
     assert!(matches!(unknown_result, Err(NutritionError::Validation(_))));
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",

@@ -526,13 +526,43 @@ impl ProductRepository for PostgresProductRepository {
 
     async fn upsert_external_many(
         &self,
+        operation_id: ProductUpsertOperationId,
         products: &[Product],
     ) -> Result<ProductUpsertResult, NutritionError> {
-        if products.is_empty() {
-            return Ok(ProductUpsertResult::default());
+        let mut tx = self.pool.begin().await?;
+        let claimed = sqlx::query(
+            "INSERT INTO product_upsert_operations (id) VALUES ($1) ON CONFLICT DO NOTHING",
+        )
+        .bind(operation_id.0)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+
+        if claimed == 0 {
+            let (created, updated, nutrients_written, servings_written): (i64, i64, i64, i64) =
+                sqlx::query_as(
+                    r#"SELECT products_created, products_updated, nutrients_written,
+                              servings_written
+                       FROM product_upsert_operations
+                       WHERE id = $1"#,
+                )
+                .bind(operation_id.0)
+                .fetch_one(&mut *tx)
+                .await?;
+            return Ok(ProductUpsertResult {
+                created,
+                updated,
+                nutrients_written,
+                servings_written,
+            });
         }
 
         validate_external_upsert_batch(products)?;
+
+        if products.is_empty() {
+            tx.commit().await?;
+            return Ok(ProductUpsertResult::default());
+        }
 
         let mut products: Vec<&Product> = products.iter().collect();
         products.sort_by_key(|product| {
@@ -541,8 +571,6 @@ impl ProductRepository for PostgresProductRepository {
                 product.source_id.as_deref().unwrap_or_default(),
             )
         });
-
-        let mut tx = self.pool.begin().await?;
 
         let requested_nutrient_codes: HashSet<String> = products
             .iter()
@@ -730,6 +758,22 @@ impl ProductRepository for PostgresProductRepository {
             synchronize_product_nutrients(&mut tx, &products, &product_ids, &nutrient_ids).await?;
         result.servings_written =
             synchronize_product_servings(&mut tx, &products, &product_ids).await?;
+
+        sqlx::query(
+            r#"UPDATE product_upsert_operations SET
+                   products_created = $2,
+                   products_updated = $3,
+                   nutrients_written = $4,
+                   servings_written = $5
+               WHERE id = $1"#,
+        )
+        .bind(operation_id.0)
+        .bind(result.created)
+        .bind(result.updated)
+        .bind(result.nutrients_written)
+        .bind(result.servings_written)
+        .execute(&mut *tx)
+        .await?;
 
         tx.commit().await?;
         Ok(result)
