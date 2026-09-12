@@ -3,9 +3,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::import::domain::*;
+use crate::nutrition::catalog::application::{ExternalProductWritePort, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::{
-    AmountPer100g, NutrientCatalog, NutrientRepository, Product, ProductNutrientInput,
-    ProductRepository, ProductServingInput, Source,
+    AmountPer100g, NutrientCatalog, Product, ProductNutrientInput, ProductServingInput, Source,
 };
 use crate::nutrition::error::NutritionError;
 
@@ -49,20 +49,20 @@ fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> 
 #[derive(Clone)]
 pub struct ImportService {
     repo: Arc<dyn ImportRepository>,
-    product_repo: Arc<dyn ProductRepository>,
-    nutrient_repo: Arc<dyn NutrientRepository>,
+    external_product_writer: Arc<dyn ExternalProductWritePort>,
+    nutrient_catalog_reader: Arc<dyn NutrientCatalogReadPort>,
 }
 
 impl ImportService {
     pub fn new(
         repo: Arc<dyn ImportRepository>,
-        product_repo: Arc<dyn ProductRepository>,
-        nutrient_repo: Arc<dyn NutrientRepository>,
+        external_product_writer: Arc<dyn ExternalProductWritePort>,
+        nutrient_catalog_reader: Arc<dyn NutrientCatalogReadPort>,
     ) -> Self {
         Self {
             repo,
-            product_repo,
-            nutrient_repo,
+            external_product_writer,
+            nutrient_catalog_reader,
         }
     }
 
@@ -193,13 +193,11 @@ impl ImportService {
             ImportCommitStart::Ready(batch) => batch,
         };
 
-        let nutrient_catalog: NutrientCatalog = self
-            .nutrient_repo
-            .list_all()
+        let nutrient_catalog = self
+            .nutrient_catalog_reader
+            .nutrient_catalog()
             .await
-            .map_err(import_product_error)?
-            .into_iter()
-            .collect();
+            .map_err(import_product_error)?;
         let (products, errors) = match assemble_products(batch, &nutrient_catalog) {
             Ok(assembled) => assembled,
             Err(error) => {
@@ -207,7 +205,11 @@ impl ImportService {
                 return Err(error);
             }
         };
-        let written = match self.product_repo.upsert_external_many(&products).await {
+        let written = match self
+            .external_product_writer
+            .upsert_external_many(products)
+            .await
+        {
             Ok(written) => written,
             Err(NutritionError::Validation(message)) => {
                 self.repo.fail_commit(import_id).await?;
@@ -353,9 +355,7 @@ pub struct StageResult {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use std::collections::HashSet;
     use std::sync::Mutex;
-    use uuid::Uuid;
 
     use crate::nutrition::catalog::domain::*;
 
@@ -496,79 +496,23 @@ mod tests {
         }
     }
 
-    struct MockProductRepo {
+    struct MockExternalProductWriter {
         result: ProductUpsertResult,
         upserted: Mutex<Vec<Product>>,
     }
 
     #[async_trait]
-    impl ProductRepository for MockProductRepo {
-        async fn search(
-            &self,
-            _spec: ProductSearchSpec,
-            _scope: ProductSearchScope,
-            _user_id: Option<Uuid>,
-        ) -> Result<Vec<Product>, NutritionError> {
-            Ok(vec![])
-        }
-
-        async fn list_categories(
-            &self,
-            _query: &str,
-            _user_id: Option<Uuid>,
-            _limit: i64,
-        ) -> Result<Vec<CategorySuggestion>, NutritionError> {
-            Ok(vec![])
-        }
-
-        async fn find_by_id(&self, _id: ProductId) -> Result<Option<Product>, NutritionError> {
-            Ok(None)
-        }
-
-        async fn existing_ids(
-            &self,
-            _ids: &[ProductId],
-        ) -> Result<HashSet<ProductId>, NutritionError> {
-            Ok(HashSet::new())
-        }
-
-        async fn find_by_barcode(
-            &self,
-            _barcode: &str,
-            _user_id: Option<Uuid>,
-        ) -> Result<Option<Product>, NutritionError> {
-            Ok(None)
-        }
-
-        async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError> {
-            Ok(vec![])
-        }
-
-        async fn create(&self, _product: &Product) -> Result<(), NutritionError> {
-            Ok(())
-        }
-
+    impl ExternalProductWritePort for MockExternalProductWriter {
         async fn upsert_external_many(
             &self,
-            products: &[Product],
+            products: Vec<Product>,
         ) -> Result<ProductUpsertResult, NutritionError> {
-            self.upserted
-                .lock()
-                .unwrap()
-                .extend(products.iter().cloned());
+            self.upserted.lock().unwrap().extend(products);
             Ok(self.result)
-        }
-
-        async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
-            Ok(())
-        }
-
-        async fn delete(&self, _id: ProductId) -> Result<(), NutritionError> {
-            Ok(())
         }
     }
 
-    struct MockNutrientRepo;
+    struct MockNutrientCatalogReader;
 
     fn energy_nutrient() -> Nutrient {
         Nutrient {
@@ -580,13 +524,9 @@ mod tests {
     }
 
     #[async_trait]
-    impl NutrientRepository for MockNutrientRepo {
-        async fn list_all(&self) -> Result<Vec<Nutrient>, NutritionError> {
-            Ok(vec![energy_nutrient()])
-        }
-
-        async fn find_by_code(&self, code: &str) -> Result<Option<Nutrient>, NutritionError> {
-            Ok((code == "ENERGY_KCAL").then(energy_nutrient))
+    impl NutrientCatalogReadPort for MockNutrientCatalogReader {
+        async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+            Ok(vec![energy_nutrient()].into_iter().collect())
         }
     }
 
@@ -594,11 +534,11 @@ mod tests {
         let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
         ImportService::new(
             repo,
-            Arc::new(MockProductRepo {
+            Arc::new(MockExternalProductWriter {
                 result: ProductUpsertResult::default(),
                 upserted: Mutex::new(vec![]),
             }),
-            Arc::new(MockNutrientRepo),
+            Arc::new(MockNutrientCatalogReader),
         )
     }
 
@@ -606,7 +546,7 @@ mod tests {
         let repo = Arc::new(MockImportRepo::new()) as Arc<dyn ImportRepository>;
         ImportService::new(
             repo,
-            Arc::new(MockProductRepo {
+            Arc::new(MockExternalProductWriter {
                 result: ProductUpsertResult {
                     created: result.products_created,
                     updated: result.products_updated,
@@ -615,7 +555,7 @@ mod tests {
                 },
                 upserted: Mutex::new(vec![]),
             }),
-            Arc::new(MockNutrientRepo),
+            Arc::new(MockNutrientCatalogReader),
         )
     }
 
@@ -829,11 +769,11 @@ mod tests {
 
         let services = ImportService::new(
             repo,
-            Arc::new(MockProductRepo {
+            Arc::new(MockExternalProductWriter {
                 result: ProductUpsertResult::default(),
                 upserted: Mutex::new(vec![]),
             }),
-            Arc::new(MockNutrientRepo),
+            Arc::new(MockNutrientCatalogReader),
         );
 
         let err = services
@@ -909,7 +849,7 @@ mod tests {
     #[tokio::test]
     async fn commit_assembles_authoritative_product_and_filters_unknown_nutrients() {
         let import_repo = Arc::new(MockImportRepo::new());
-        let product_repo = Arc::new(MockProductRepo {
+        let product_writer = Arc::new(MockExternalProductWriter {
             result: ProductUpsertResult {
                 created: 1,
                 updated: 0,
@@ -920,8 +860,8 @@ mod tests {
         });
         let services = ImportService::new(
             import_repo.clone(),
-            product_repo.clone(),
-            Arc::new(MockNutrientRepo),
+            product_writer.clone(),
+            Arc::new(MockNutrientCatalogReader),
         );
         let job = make_pending_job(&services, "OFF").await;
         services
@@ -982,7 +922,7 @@ mod tests {
         let result = services.commit_job(job.id).await.unwrap();
 
         assert_eq!(result.errors_logged, 1);
-        let upserted = product_repo.upserted.lock().unwrap();
+        let upserted = product_writer.upserted.lock().unwrap();
         assert_eq!(upserted.len(), 1);
         assert_eq!(upserted[0].nutrients.len(), 1);
         assert_eq!(upserted[0].servings.len(), 1);
@@ -999,7 +939,7 @@ mod tests {
     #[tokio::test]
     async fn completed_commit_replays_canonical_result_without_another_upsert() {
         let import_repo = Arc::new(MockImportRepo::new());
-        let product_repo = Arc::new(MockProductRepo {
+        let product_writer = Arc::new(MockExternalProductWriter {
             result: ProductUpsertResult {
                 created: 1,
                 ..ProductUpsertResult::default()
@@ -1008,8 +948,8 @@ mod tests {
         });
         let services = ImportService::new(
             import_repo,
-            product_repo.clone(),
-            Arc::new(MockNutrientRepo),
+            product_writer.clone(),
+            Arc::new(MockNutrientCatalogReader),
         );
         let job = make_pending_job(&services, "USDA").await;
         services
@@ -1033,7 +973,7 @@ mod tests {
         let replay = services.commit_job(job.id).await.unwrap();
 
         assert_eq!(replay.products_created, first.products_created);
-        assert_eq!(product_repo.upserted.lock().unwrap().len(), 1);
+        assert_eq!(product_writer.upserted.lock().unwrap().len(), 1);
     }
 
     #[test]

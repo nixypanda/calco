@@ -1,7 +1,7 @@
 use crate::common::*;
 use axum::http::StatusCode;
 use calco_backend::nutrition::catalog::domain::{
-    NutrientCatalog, Product, ProductRepository, Source,
+    ExternalProductBatch, NutrientCatalog, Product, ProductRepository, Source,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use serde_json::{Value, json};
@@ -462,8 +462,9 @@ async fn running_import_reapplies_catalog_after_pre_finalize_crash(pool: PgPool)
         &NutrientCatalog::default(),
     )
     .unwrap();
+    let batch = ExternalProductBatch::new(vec![product]).unwrap();
     let catalog_result = PostgresProductRepository::new(pool)
-        .upsert_external_many(&[product])
+        .upsert_external_many(&batch)
         .await
         .unwrap();
     assert_eq!(catalog_result.created, 1);

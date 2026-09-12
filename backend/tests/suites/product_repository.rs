@@ -1,6 +1,6 @@
 use calco_backend::nutrition::catalog::domain::{
-    Nutrient, NutrientCatalog, NutrientCode, NutritionError, Product, ProductNutrientInput,
-    ProductRepository, ProductServingInput, Source, UnitCode,
+    ExternalProductBatch, Nutrient, NutrientCatalog, NutrientCode, NutritionError, Product,
+    ProductNutrientInput, ProductRepository, ProductServingInput, Source, UnitCode,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use rust_decimal::Decimal;
@@ -63,6 +63,10 @@ fn external_product(
     .expect("external product should be valid")
 }
 
+fn external_batch(products: Vec<Product>) -> ExternalProductBatch {
+    ExternalProductBatch::new(products).expect("external product batch should be valid")
+}
+
 #[sqlx::test]
 async fn external_upsert_applies_each_authoritative_payload_and_accepts_missing_barcode(
     pool: PgPool,
@@ -76,10 +80,8 @@ async fn external_upsert_applies_each_authoritative_payload_and_accepts_missing_
         &[("cup", 240), ("slice", 30)],
     );
 
-    let first = repository
-        .upsert_external_many(std::slice::from_ref(&product))
-        .await
-        .unwrap();
+    let first_batch = external_batch(vec![product.clone()]);
+    let first = repository.upsert_external_many(&first_batch).await.unwrap();
     assert_eq!(first.created, 1);
     assert_eq!(first.updated, 0);
     assert_eq!(first.nutrients_written, 2);
@@ -101,8 +103,9 @@ async fn external_upsert_applies_each_authoritative_payload_and_accepts_missing_
         &[],
         &[],
     );
+    let replacement_batch = external_batch(vec![replacement]);
     let replaced = repository
-        .upsert_external_many(std::slice::from_ref(&replacement))
+        .upsert_external_many(&replacement_batch)
         .await
         .unwrap();
     assert_eq!(replaced.created, 0);
@@ -142,8 +145,9 @@ async fn external_upsert_replaces_children_in_incoming_order(pool: PgPool) {
         &[("ENERGY_KCAL", 100), ("PROTEIN_G", 10)],
         &[("cup", 240), ("slice", 30)],
     );
+    let original_batch = external_batch(vec![original]);
     repository
-        .upsert_external_many(std::slice::from_ref(&original))
+        .upsert_external_many(&original_batch)
         .await
         .unwrap();
 
@@ -160,8 +164,9 @@ async fn external_upsert_replaces_children_in_incoming_order(pool: PgPool) {
         &[("ENERGY_KCAL", 120)],
         &[("slice", 30), ("cup", 250)],
     );
+    let replacement_batch = external_batch(vec![replacement]);
     let changed = repository
-        .upsert_external_many(std::slice::from_ref(&replacement))
+        .upsert_external_many(&replacement_batch)
         .await
         .unwrap();
 
@@ -213,10 +218,8 @@ async fn external_upsert_replaces_children_in_incoming_order(pool: PgPool) {
         &[],
         &[],
     );
-    let cleared = repository
-        .upsert_external_many(std::slice::from_ref(&empty_children))
-        .await
-        .unwrap();
+    let empty_batch = external_batch(vec![empty_children]);
+    let cleared = repository.upsert_external_many(&empty_batch).await.unwrap();
     assert_eq!(cleared.updated, 0);
     assert_eq!(cleared.nutrients_written, 0);
     assert_eq!(cleared.servings_written, 0);
@@ -233,31 +236,21 @@ async fn external_upsert_replaces_children_in_incoming_order(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: PgPool) {
+async fn external_upsert_rolls_back_all_parent_writes_on_persistence_errors(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
-
-    let first = external_product("duplicate-key", None, "First", &[], &[]);
-    let second = external_product("duplicate-key", None, "Second", &[], &[]);
-    let duplicate = repository.upsert_external_many(&[first, second]).await;
-    assert!(matches!(duplicate, Err(NutritionError::Validation(_))));
 
     let mut valid = external_product("rolled-back-first", None, "Valid", &[], &[]);
     let mut primary_key_collision =
         external_product("rolled-back-second", None, "Collision", &[], &[]);
     primary_key_collision.id = valid.id;
-    let failed = repository
-        .upsert_external_many(&[valid.clone(), primary_key_collision])
-        .await;
+    let colliding_batch = external_batch(vec![valid.clone(), primary_key_collision]);
+    let failed = repository.upsert_external_many(&colliding_batch).await;
     assert!(matches!(failed, Err(NutritionError::Database(_))));
 
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
     )
-    .bind(vec![
-        "duplicate-key",
-        "rolled-back-first",
-        "rolled-back-second",
-    ])
+    .bind(vec!["rolled-back-first", "rolled-back-second"])
     .fetch_one(&pool)
     .await
     .unwrap();
@@ -277,7 +270,8 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
             source: None,
             confidence: None,
         });
-    let unknown_result = repository.upsert_external_many(&[valid, unknown]).await;
+    let unknown_batch = external_batch(vec![valid, unknown]);
+    let unknown_result = repository.upsert_external_many(&unknown_batch).await;
     assert!(matches!(unknown_result, Err(NutritionError::Validation(_))));
     let parent_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM products WHERE source = 'OFF' AND source_id = ANY($1)",
@@ -290,6 +284,48 @@ async fn external_upsert_validates_batch_and_rolls_back_all_parent_writes(pool: 
 }
 
 #[sqlx::test]
+async fn external_upsert_table_locks_block_writers_but_allow_reads(pool: PgPool) {
+    for (index, table) in ["products", "product_nutrients", "product_servings"]
+        .into_iter()
+        .enumerate()
+    {
+        let mut blocker = pool.begin().await.unwrap();
+        sqlx::query(&format!("LOCK TABLE {table} IN ROW EXCLUSIVE MODE"))
+            .execute(&mut *blocker)
+            .await
+            .unwrap();
+
+        let repository = PostgresProductRepository::new(pool.clone());
+        let product =
+            external_product(&format!("blocked-by-{table}"), None, "Lock probe", &[], &[]);
+        let batch = external_batch(vec![product]);
+        let write = tokio::spawn(async move { repository.upsert_external_many(&batch).await });
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        assert!(
+            !write.is_finished(),
+            "upsert should wait for a writer lock held on {table}"
+        );
+
+        let read = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM products").fetch_one(&pool),
+        )
+        .await
+        .expect("ordinary reads should not be blocked by the chosen table lock")
+        .unwrap();
+        assert!(read >= index as i64);
+
+        blocker.rollback().await.unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), write)
+            .await
+            .expect("upsert should continue once the competing writer releases its lock")
+            .unwrap()
+            .unwrap();
+    }
+}
+
+#[sqlx::test]
 async fn concurrent_same_payload_upserts_serialize_complete_aggregate(pool: PgPool) {
     let repository = PostgresProductRepository::new(pool.clone());
     let product = external_product(
@@ -299,8 +335,8 @@ async fn concurrent_same_payload_upserts_serialize_complete_aggregate(pool: PgPo
         &[("ENERGY_KCAL", 100)],
         &[("cup", 200)],
     );
-    let first_batch = vec![product.clone()];
-    let second_batch = vec![product];
+    let first_batch = external_batch(vec![product.clone()]);
+    let second_batch = external_batch(vec![product]);
 
     let (first, second) = tokio::join!(
         repository.upsert_external_many(&first_batch),
@@ -334,7 +370,11 @@ async fn concurrent_overlapping_upserts_leave_one_complete_aggregate(pool: PgPoo
         &[("ENERGY_KCAL", 100)],
         &[("cup", 200)],
     );
-    repository.upsert_external_many(&[original]).await.unwrap();
+    let original_batch = external_batch(vec![original]);
+    repository
+        .upsert_external_many(&original_batch)
+        .await
+        .unwrap();
 
     let version_a = external_product(
         "concurrent-overlap",
@@ -350,8 +390,8 @@ async fn concurrent_overlapping_upserts_leave_one_complete_aggregate(pool: PgPoo
         &[("ENERGY_KCAL", 120), ("PROTEIN_G", 12)],
         &[("slice", 30)],
     );
-    let batch_a = vec![version_a];
-    let batch_b = vec![version_b];
+    let batch_a = external_batch(vec![version_a]);
+    let batch_b = external_batch(vec![version_b]);
 
     let (result_a, result_b) = tokio::time::timeout(std::time::Duration::from_secs(5), async {
         tokio::join!(

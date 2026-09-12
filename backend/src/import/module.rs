@@ -7,7 +7,7 @@ use crate::AppState;
 use crate::import::application::ImportService;
 use crate::import::domain::ImportRepository;
 use crate::import::infrastructure::postgres::PostgresImportRepository;
-use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository};
+use crate::nutrition::catalog::application::{ExternalProductWritePort, NutrientCatalogReadPort};
 
 #[derive(Clone)]
 pub struct ImportModule {
@@ -18,12 +18,16 @@ pub struct ImportModule {
 impl ImportModule {
     pub fn build(
         pool: &PgPool,
-        product_repo: Arc<dyn ProductRepository>,
-        nutrient_repo: Arc<dyn NutrientRepository>,
+        external_product_writer: Arc<dyn ExternalProductWritePort>,
+        nutrient_catalog_reader: Arc<dyn NutrientCatalogReadPort>,
     ) -> Self {
         let repo =
             Arc::new(PostgresImportRepository::new(pool.clone())) as Arc<dyn ImportRepository>;
-        let service = ImportService::new(repo.clone(), product_repo, nutrient_repo);
+        let service = ImportService::new(
+            repo.clone(),
+            external_product_writer,
+            nutrient_catalog_reader,
+        );
         Self { repo, service }
     }
 }
@@ -36,6 +40,16 @@ impl FromRef<AppState> for ImportModule {
 
 #[cfg(test)]
 mod architecture_tests {
+    #[test]
+    fn import_application_uses_catalog_application_ports_for_product_writes() {
+        let source = include_str!("application.rs");
+
+        assert!(!source.contains("ProductRepository"));
+        assert!(!source.contains("NutrientRepository"));
+        assert!(source.contains("ExternalProductWritePort"));
+        assert!(source.contains("NutrientCatalogReadPort"));
+    }
+
     #[test]
     fn postgres_import_repository_does_not_write_catalog_tables() {
         let source = include_str!("infrastructure/postgres.rs");

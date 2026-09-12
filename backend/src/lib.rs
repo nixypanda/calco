@@ -52,8 +52,8 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
     let nutrition = NutritionModule::build(&pool).await?;
     let import = ImportModule::build(
         &pool,
-        nutrition.catalog.product_repo.clone(),
-        nutrition.catalog.nutrient_repo.clone(),
+        nutrition.catalog.services.clone(),
+        nutrition.catalog.services.clone(),
     );
     let assistant = AssistantComponents::from_config(&config.assistant, &nutrition.catalog)?;
 

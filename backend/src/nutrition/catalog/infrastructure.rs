@@ -526,16 +526,19 @@ impl ProductRepository for PostgresProductRepository {
 
     async fn upsert_external_many(
         &self,
-        products: &[Product],
+        batch: &ExternalProductBatch,
     ) -> Result<ProductUpsertResult, NutritionError> {
-        let mut tx = self.pool.begin().await?;
-
-        validate_external_upsert_batch(products)?;
-
+        let products = batch.products();
         if products.is_empty() {
-            tx.commit().await?;
             return Ok(ProductUpsertResult::default());
         }
+
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "LOCK TABLE products, product_nutrients, product_servings IN SHARE ROW EXCLUSIVE MODE",
+        )
+        .execute(&mut *tx)
+        .await?;
 
         let mut products: Vec<&Product> = products.iter().collect();
         products.sort_by_key(|product| {
@@ -573,27 +576,6 @@ impl ProductRepository for PostgresProductRepository {
                 "unknown nutrient code(s): {}",
                 unknown_codes.join(", ")
             )));
-        }
-
-        // Existing rows are locked in identity order before the set-based writes. This makes
-        // overlapping batches serialize their aggregate replacement consistently.
-        for chunk in products.chunks(PRODUCT_UPSERT_CHUNK_SIZE) {
-            let mut query = QueryBuilder::<Postgres>::new(
-                "SELECT id FROM products WHERE (source, source_id) IN (",
-            );
-            for (index, product) in chunk.iter().enumerate() {
-                if index > 0 {
-                    query.push(", ");
-                }
-                query
-                    .push("(")
-                    .push_bind(product.source.as_str())
-                    .push(", ")
-                    .push_bind(product.source_id.as_deref().unwrap_or_default())
-                    .push(")");
-            }
-            query.push(") ORDER BY source, source_id FOR UPDATE");
-            query.build().execute(&mut *tx).await?;
         }
 
         let mut result = ProductUpsertResult::default();
@@ -694,7 +676,7 @@ impl ProductRepository for PostgresProductRepository {
                     .push_bind(product.source_id.as_deref().unwrap_or_default())
                     .push(")");
             }
-            query.push(") ORDER BY source, source_id FOR UPDATE");
+            query.push(") ORDER BY source, source_id");
             let rows = query
                 .build_query_as::<(Uuid, String, String)>()
                 .fetch_all(&mut *tx)
@@ -1072,59 +1054,6 @@ async fn insert_product_servings(
     .bind(&positions)
     .execute(&mut **tx)
     .await?;
-    Ok(())
-}
-
-fn validate_external_upsert_batch(products: &[Product]) -> Result<(), NutritionError> {
-    let mut identities = HashSet::new();
-
-    for product in products {
-        if product.source == Source::User {
-            return Err(NutritionError::Validation(
-                "external product upsert cannot contain user products".into(),
-            ));
-        }
-        if product.user_id.is_some() {
-            return Err(NutritionError::Validation(
-                "external product cannot have a user id".into(),
-            ));
-        }
-        let source_id = product
-            .source_id
-            .as_deref()
-            .filter(|source_id| !source_id.trim().is_empty())
-            .ok_or_else(|| {
-                NutritionError::Validation("external product must have a source id".into())
-            })?;
-        if !identities.insert((product.source.as_str(), source_id)) {
-            return Err(NutritionError::Validation(format!(
-                "duplicate external product identity: ({}, {})",
-                product.source.as_str(),
-                source_id
-            )));
-        }
-
-        let mut nutrient_codes = HashSet::new();
-        for nutrient in &product.nutrients {
-            if !nutrient_codes.insert(nutrient.nutrient_code.0.as_str()) {
-                return Err(NutritionError::Validation(format!(
-                    "duplicate nutrient code for external product: {}",
-                    nutrient.nutrient_code.0
-                )));
-            }
-        }
-
-        let mut serving_units = HashSet::new();
-        for serving in &product.servings {
-            if !serving_units.insert(serving.unit.0.as_str()) {
-                return Err(NutritionError::Validation(format!(
-                    "duplicate serving unit for external product: {}",
-                    serving.unit.0
-                )));
-            }
-        }
-    }
-
     Ok(())
 }
 

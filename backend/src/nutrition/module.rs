@@ -39,8 +39,6 @@ use crate::nutrition::meal::infrastructure::PostgresMealRepository;
 #[derive(Clone)]
 pub struct CatalogModule {
     pub services: Arc<CatalogService>,
-    pub(crate) product_repo: Arc<dyn ProductRepository>,
-    pub(crate) nutrient_repo: Arc<dyn NutrientRepository>,
 }
 
 impl FromRef<AppState> for CatalogModule {
@@ -166,8 +164,6 @@ impl NutritionModule {
 
         let catalog = CatalogModule {
             services: catalog_services,
-            product_repo,
-            nutrient_repo,
         };
         let meal = MealModule { meal_services };
         let food_log = FoodLogModule {

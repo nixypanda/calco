@@ -743,6 +743,76 @@ fn build_product_servings(
 
 pub use crate::nutrition::error::NutritionError;
 
+/// A validated collection of complete external product aggregates.
+///
+/// Construction enforces the invariants required by external catalog writes.
+/// Persistence receives this type instead of raw products, so those invariants
+/// cannot be bypassed by repository callers.
+#[derive(Debug, Clone)]
+pub struct ExternalProductBatch {
+    products: Vec<Product>,
+}
+
+impl ExternalProductBatch {
+    pub fn new(products: Vec<Product>) -> Result<Self, NutritionError> {
+        let mut identities = HashSet::new();
+
+        for product in &products {
+            if product.source == Source::User {
+                return Err(NutritionError::Validation(
+                    "external product batch cannot contain user products".into(),
+                ));
+            }
+            if product.user_id.is_some() {
+                return Err(NutritionError::Validation(
+                    "external product cannot have a user id".into(),
+                ));
+            }
+            let source_id = product
+                .source_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|source_id| !source_id.is_empty())
+                .ok_or_else(|| {
+                    NutritionError::Validation("external product must have a source id".into())
+                })?;
+            if !identities.insert((product.source.as_str(), source_id)) {
+                return Err(NutritionError::Validation(format!(
+                    "duplicate external product identity: ({}, {})",
+                    product.source.as_str(),
+                    source_id
+                )));
+            }
+
+            let mut nutrient_codes = HashSet::new();
+            for nutrient in &product.nutrients {
+                if !nutrient_codes.insert(nutrient.nutrient_code.0.as_str()) {
+                    return Err(NutritionError::Validation(format!(
+                        "duplicate nutrient code for external product: {}",
+                        nutrient.nutrient_code.0
+                    )));
+                }
+            }
+
+            let mut serving_units = HashSet::new();
+            for serving in &product.servings {
+                if !serving_units.insert(serving.unit.0.as_str()) {
+                    return Err(NutritionError::Validation(format!(
+                        "duplicate serving unit for external product: {}",
+                        serving.unit.0
+                    )));
+                }
+            }
+        }
+
+        Ok(Self { products })
+    }
+
+    pub fn products(&self) -> &[Product] {
+        &self.products
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ProductUpsertResult {
     /// Parent rows inserted by this call.
@@ -783,11 +853,9 @@ pub trait ProductRepository: Send + Sync {
     ///
     /// Every product is the complete desired aggregate: its nutrients and servings replace the
     /// stored collections, and an empty collection clears the corresponding stored children.
-    /// Implementations must reject products whose source is [`Source::User`] or whose source ID
-    /// is absent, as well as duplicate `(source, source_id)` identities within one call.
     async fn upsert_external_many(
         &self,
-        products: &[Product],
+        batch: &ExternalProductBatch,
     ) -> Result<ProductUpsertResult, NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
     async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
