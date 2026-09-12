@@ -11,7 +11,7 @@ use crate::assistant::application::{
     ModelUsage,
 };
 use crate::assistant::domain::ConversationRole;
-use crate::assistant::llm::{
+use crate::assistant::infrastructure::llm::{
     ChatClient, ChatError, ChatImage, ChatMessage, ChatRequest, ChatResponse, ChatRole,
     ResponseFormat, TokenUsage,
 };

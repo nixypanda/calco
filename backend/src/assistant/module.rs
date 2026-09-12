@@ -8,11 +8,11 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::assistant::application::{AssistantError, FoodDraftService, FoodImageSanitizer};
+use crate::assistant::infrastructure::llm::{
+    Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
+};
 use crate::assistant::infrastructure::{
     FoodDraftModelAdapter, NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
-};
-use crate::assistant::llm::{
-    Authentication, ChatError, OpenAiCompatibleClient, OpenAiCompatibleConfig,
 };
 use crate::config::{AssistantAuthentication, AssistantConfig};
 use crate::nutrition::module::CatalogModule;
