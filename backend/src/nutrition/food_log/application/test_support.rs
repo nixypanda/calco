@@ -39,7 +39,7 @@ impl FoodLogRepository for MockFoodLogRepo {
 
     async fn find_by_id(&self, id: FoodLogId) -> Result<Option<FoodLog>, NutritionError> {
         let logs = self.logs.lock().unwrap();
-        Ok(logs.iter().find(|l| l.id == id).cloned())
+        Ok(logs.iter().find(|l| l.id() == id).cloned())
     }
 
     async fn list_by_user_and_date(
@@ -50,7 +50,7 @@ impl FoodLogRepository for MockFoodLogRepo {
         let logs = self.logs.lock().unwrap();
         Ok(logs
             .iter()
-            .filter(|l| l.user_id == user_id && l.log_date == log_date)
+            .filter(|l| l.user_id() == user_id && l.log_date() == log_date)
             .cloned()
             .collect())
     }
@@ -63,16 +63,16 @@ impl FoodLogRepository for MockFoodLogRepo {
         Ok(logs
             .iter()
             .filter(|log| {
-                log.user_id == filter.user_id
-                    && matches_date_range(log.log_date, &filter.date_range)
+                log.user_id() == filter.user_id
+                    && matches_date_range(log.log_date(), &filter.date_range)
                     && filter
                         .meal_slot
-                        .is_none_or(|slot| log.meal_slot == Some(slot))
+                        .is_none_or(|slot| log.meal_slot() == Some(slot))
                     && (filter.items.is_empty()
                         || filter
                             .items
                             .iter()
-                            .any(|item| log_item_matches(&log.item, item)))
+                            .any(|item| log_item_matches(log.item(), item)))
             })
             .cloned()
             .collect())
@@ -80,7 +80,7 @@ impl FoodLogRepository for MockFoodLogRepo {
 
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut logs = self.logs.lock().unwrap();
-        if let Some(existing) = logs.iter_mut().find(|l| l.id == log.id) {
+        if let Some(existing) = logs.iter_mut().find(|l| l.id() == log.id()) {
             *existing = log.clone();
             Ok(())
         } else {
@@ -92,7 +92,7 @@ impl FoodLogRepository for MockFoodLogRepo {
         let mut logs = self.logs.lock().unwrap();
         let idx = logs
             .iter()
-            .position(|l| l.id == id)
+            .position(|l| l.id() == id)
             .ok_or_else(|| NutritionError::NotFound("not found".into()))?;
         logs.remove(idx);
         Ok(())

@@ -89,30 +89,38 @@ impl FoodLogService {
                     .into_iter()
                     .find_map(|(id, product)| (id == product_id).then_some(product))
                     .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
-                FoodLog::new_product_log(
+                let nutrition = product
+                    .nutrition_for(&input.quantity, &self.unit_converter)
+                    .map_err(NutritionError::Validation)?;
+                FoodLogBuilder::new(
                     actor_id,
                     input.log_date,
-                    input.meal_slot,
-                    input.device_timezone,
-                    &product,
+                    FoodLogItemSnapshot::from_product(&product),
                     input.quantity,
-                    &self.unit_converter,
-                    input.notes,
-                )?
+                    nutrition,
+                )
+                .meal_slot(input.meal_slot)
+                .device_timezone(input.device_timezone)
+                .notes(input.notes)
+                .build()
             }
             FoodLogItemRef::Meal(meal_id) => {
                 let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
-                FoodLog::new_meal_log(
+                let nutrition = resolved
+                    .meal
+                    .nutrition_for(&input.quantity, &resolved.products, &self.unit_converter)
+                    .map_err(NutritionError::Validation)?;
+                FoodLogBuilder::new(
                     actor_id,
                     input.log_date,
-                    input.meal_slot,
-                    input.device_timezone,
-                    &resolved.meal,
+                    FoodLogItemSnapshot::from_meal(&resolved.meal),
                     input.quantity,
-                    &resolved.products,
-                    &self.unit_converter,
-                    input.notes,
-                )?
+                    nutrition,
+                )
+                .meal_slot(input.meal_slot)
+                .device_timezone(input.device_timezone)
+                .notes(input.notes)
+                .build()
             }
         };
         Ok(log)
@@ -126,21 +134,23 @@ impl FoodLogService {
     ) -> Result<FoodLog, NutritionError> {
         let existing = self.get_food_log(id, actor_id).await?;
 
-        let item = input.item.unwrap_or_else(|| existing.item.as_ref());
+        let item = input.item.unwrap_or_else(|| existing.item().as_ref());
         let quantity = input.quantity.unwrap_or_else(|| {
-            Quantity::new(existing.quantity_amount, existing.quantity_unit.clone())
+            Quantity::new(existing.quantity_amount(), existing.quantity_unit().clone())
                 .expect("existing food log quantity must be valid")
         });
-        let log_date = input.log_date.unwrap_or(existing.log_date);
+        let log_date = input.log_date.unwrap_or(existing.log_date());
         let meal_slot = match input.meal_slot {
             Some(opt) => opt,
-            None => existing.meal_slot,
+            None => existing.meal_slot(),
         };
         let device_timezone = match input.device_timezone {
             Some(opt) => opt,
-            None => existing.device_timezone.clone(),
+            None => existing.device_timezone().map(str::to_owned),
         };
-        let notes = input.notes.unwrap_or_else(|| existing.notes.clone());
+        let notes = input
+            .notes
+            .unwrap_or_else(|| existing.notes().map(str::to_owned));
 
         let updated = match item {
             FoodLogItemRef::Product(product_id) => {
@@ -269,11 +279,11 @@ mod tests {
 
         assert!(result.is_ok());
         let log = result.unwrap();
-        assert_eq!(log.user_id, user_id);
-        assert_eq!(log.meal_slot, Some(MealSlot::Lunch));
-        assert_eq!(log.quantity_amount, Decimal::new(100, 0));
-        assert_eq!(log.nutrient_snapshots.len(), 1);
-        assert_eq!(log.nutrient_snapshots[0].nutrient_code.0, "ENERGY_KCAL");
+        assert_eq!(log.user_id(), user_id);
+        assert_eq!(log.meal_slot(), Some(MealSlot::Lunch));
+        assert_eq!(log.quantity_amount(), Decimal::new(100, 0));
+        assert_eq!(log.nutrient_snapshots().len(), 1);
+        assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
     }
 
     #[tokio::test]
@@ -323,8 +333,13 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(services.delete_food_log(created.id, user_id).await.is_ok());
-        let still_there = food_log_repo.find_by_id(created.id).await.unwrap();
+        assert!(
+            services
+                .delete_food_log(created.id(), user_id)
+                .await
+                .is_ok()
+        );
+        let still_there = food_log_repo.find_by_id(created.id()).await.unwrap();
         assert!(still_there.is_none());
     }
 
@@ -350,7 +365,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = services.delete_food_log(created.id, other).await;
+        let result = services.delete_food_log(created.id(), other).await;
         assert!(result.is_err());
         match result.unwrap_err() {
             NutritionError::NotFound(_) => {}
@@ -381,10 +396,10 @@ mod tests {
             .unwrap();
 
         assert!(matches!(
-            services.get_food_log(created.id, other).await,
+            services.get_food_log(created.id(), other).await,
             Err(NutritionError::NotFound(_))
         ));
-        assert!(services.get_food_log(created.id, owner).await.is_ok());
+        assert!(services.get_food_log(created.id(), owner).await.is_ok());
     }
 
     #[tokio::test]
@@ -460,7 +475,7 @@ mod tests {
 
         let updated = services
             .update_food_log(
-                created.id,
+                created.id(),
                 user_id,
                 UpdateFoodInput {
                     log_date: Some(sample_log_date()),
@@ -476,9 +491,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(updated.meal_slot, Some(MealSlot::Dinner));
-        assert_eq!(updated.quantity_amount, Decimal::new(200, 0));
-        assert_eq!(updated.notes, Some("updated notes".to_string()));
+        assert_eq!(updated.meal_slot(), Some(MealSlot::Dinner));
+        assert_eq!(updated.quantity_amount(), Decimal::new(200, 0));
+        assert_eq!(updated.notes(), Some("updated notes"));
     }
 
     #[tokio::test]
@@ -504,7 +519,7 @@ mod tests {
 
         let updated = services
             .update_food_log(
-                created.id,
+                created.id(),
                 user_id,
                 UpdateFoodInput {
                     log_date: None,
@@ -518,9 +533,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(updated.meal_slot, None);
-        assert_eq!(updated.device_timezone, None);
-        assert_eq!(updated.notes, None);
+        assert_eq!(updated.meal_slot(), None);
+        assert_eq!(updated.device_timezone(), None);
+        assert_eq!(updated.notes(), None);
     }
 
     #[tokio::test]
@@ -544,7 +559,7 @@ mod tests {
             .unwrap();
 
         // sample product has 100 kcal per 100g → 2 kg = 2000 g → 2000 kcal
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(2000, 0));
+        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(2000, 0));
     }
 
     #[tokio::test]
@@ -589,7 +604,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(60, 0));
+        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(60, 0));
     }
 
     #[tokio::test]
@@ -616,7 +631,7 @@ mod tests {
 
         let result = services
             .update_food_log(
-                created.id,
+                created.id(),
                 other,
                 UpdateFoodInput {
                     log_date: None,
@@ -658,12 +673,12 @@ mod tests {
 
         assert!(result.is_ok());
         let log = result.unwrap();
-        assert_eq!(log.user_id, user_id);
-        assert_eq!(log.meal_slot, Some(MealSlot::Dinner));
-        assert!(matches!(log.item, FoodLogItemSnapshot::Meal { .. }));
-        assert_eq!(log.nutrient_snapshots.len(), 1);
-        assert_eq!(log.nutrient_snapshots[0].nutrient_code.0, "ENERGY_KCAL");
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(150, 0));
+        assert_eq!(log.user_id(), user_id);
+        assert_eq!(log.meal_slot(), Some(MealSlot::Dinner));
+        assert!(matches!(log.item(), FoodLogItemSnapshot::Meal { .. }));
+        assert_eq!(log.nutrient_snapshots().len(), 1);
+        assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
+        assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(150, 0));
     }
 
     #[tokio::test]
@@ -689,7 +704,7 @@ mod tests {
 
         let updated = services
             .update_food_log(
-                created.id,
+                created.id(),
                 user_id,
                 UpdateFoodInput {
                     log_date: None,
@@ -705,9 +720,9 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(matches!(updated.item, FoodLogItemSnapshot::Meal { .. }));
-        assert_eq!(updated.quantity_amount, Decimal::new(200, 0));
-        assert_eq!(updated.nutrient_snapshots[0].amount, Decimal::new(200, 0));
+        assert!(matches!(updated.item(), FoodLogItemSnapshot::Meal { .. }));
+        assert_eq!(updated.quantity_amount(), Decimal::new(200, 0));
+        assert_eq!(updated.nutrient_snapshots()[0].amount, Decimal::new(200, 0));
     }
 
     #[tokio::test]

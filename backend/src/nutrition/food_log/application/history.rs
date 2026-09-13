@@ -151,7 +151,7 @@ fn latest_slots_from_logs(logs: Vec<FoodLog>) -> Vec<LatestSlotLogs> {
     let mut by_slot = BTreeMap::<MealSlot, LatestSlotLogs>::new();
 
     for log in logs {
-        let Some(meal_slot) = log.meal_slot else {
+        let Some(meal_slot) = log.meal_slot() else {
             continue;
         };
 
@@ -161,14 +161,14 @@ fn latest_slots_from_logs(logs: Vec<FoodLog>) -> Vec<LatestSlotLogs> {
                     meal_slot,
                     LatestSlotLogs {
                         meal_slot,
-                        source_date: log.log_date,
+                        source_date: log.log_date(),
                         logs: vec![log],
                     },
                 );
             }
-            Some(slot) => match log.log_date.cmp(&slot.source_date) {
+            Some(slot) => match log.log_date().cmp(&slot.source_date) {
                 Ordering::Greater => {
-                    slot.source_date = log.log_date;
+                    slot.source_date = log.log_date();
                     slot.logs = vec![log];
                 }
                 Ordering::Equal => slot.logs.push(log),
@@ -179,7 +179,7 @@ fn latest_slots_from_logs(logs: Vec<FoodLog>) -> Vec<LatestSlotLogs> {
 
     for slot in by_slot.values_mut() {
         slot.logs
-            .sort_by_key(|log| std::cmp::Reverse(log.created_at));
+            .sort_by_key(|log| std::cmp::Reverse(log.created_at()));
     }
 
     by_slot.into_values().collect()
@@ -190,16 +190,16 @@ fn summarize_logs_by_date(logs: Vec<FoodLog>) -> Vec<FoodLogDaySummary> {
 
     for log in logs {
         let summary = summaries
-            .entry(log.log_date)
+            .entry(log.log_date())
             .or_insert_with(|| FoodLogDaySummary {
-                log_date: log.log_date,
+                log_date: log.log_date(),
                 energy_kcal: Decimal::ZERO,
                 protein_g: Decimal::ZERO,
                 carbs_g: Decimal::ZERO,
                 fat_g: Decimal::ZERO,
             });
 
-        for snapshot in log.nutrient_snapshots {
+        for snapshot in log.nutrient_snapshots() {
             match snapshot.nutrient_code.0.as_str() {
                 "ENERGY_KCAL" => summary.energy_kcal += snapshot.amount,
                 "PROTEIN_G" => summary.protein_g += snapshot.amount,
@@ -219,23 +219,23 @@ fn recent_items_from_logs(
 ) -> Vec<RecentFoodLogItem> {
     logs.sort_by(|left, right| {
         right
-            .log_date
-            .cmp(&left.log_date)
-            .then_with(|| right.created_at.cmp(&left.created_at))
+            .log_date()
+            .cmp(&left.log_date())
+            .then_with(|| right.created_at().cmp(&left.created_at()))
     });
 
     let mut items: Vec<RecentFoodLogItem> = Vec::new();
     for log in logs {
-        let weight = recency_weight(log.log_date, reference_date);
+        let weight = recency_weight(log.log_date(), reference_date);
         let usage = QuantityUsage {
-            amount: log.quantity_amount.normalize(),
-            unit: log.quantity_unit.clone(),
+            amount: log.quantity_amount().normalize(),
+            unit: log.quantity_unit().clone(),
             log_count: 1,
             score: weight,
         };
         match items
             .iter_mut()
-            .find(|item| same_item_snapshot(&item.item, &log.item))
+            .find(|item| same_item_snapshot(&item.item, log.item()))
         {
             Some(item) => {
                 item.score += weight;
@@ -288,12 +288,12 @@ fn recency_weight(log_date: NaiveDate, reference_date: NaiveDate) -> u32 {
 
 fn recent_item_from_log(log: FoodLog) -> RecentFoodLogItem {
     RecentFoodLogItem {
-        item: log.item,
-        log_date: log.log_date,
-        meal_slot: log.meal_slot,
-        quantity_amount: log.quantity_amount,
-        quantity_unit: log.quantity_unit,
-        nutrient_snapshots: log.nutrient_snapshots,
+        item: log.item().clone(),
+        log_date: log.log_date(),
+        meal_slot: log.meal_slot(),
+        quantity_amount: log.quantity_amount(),
+        quantity_unit: log.quantity_unit().clone(),
+        nutrient_snapshots: log.nutrient_snapshots().to_vec(),
         top_quantities: Vec::new(),
         score: 0,
     }
@@ -377,7 +377,7 @@ mod tests {
                 (MealSlot::Lunch, sunday, 1),
             ]
         );
-        assert_eq!(slots[1].logs[0].quantity_amount, Decimal::new(250, 0));
+        assert_eq!(slots[1].logs[0].quantity_amount(), Decimal::new(250, 0));
     }
 
     #[tokio::test]
@@ -397,7 +397,7 @@ mod tests {
 
         assert_eq!(slots.len(), 1);
         assert_eq!(slots[0].source_date, sunday);
-        assert_eq!(slots[0].logs[0].quantity_amount, Decimal::new(125, 0));
+        assert_eq!(slots[0].logs[0].quantity_amount(), Decimal::new(125, 0));
     }
 
     #[tokio::test]
@@ -769,34 +769,49 @@ mod tests {
     }
 
     fn quantity_log(created_at_offset_secs: i64, amount: &str) -> FoodLog {
-        let mut log = aged_log("Test Food", 1, 0, amount);
-        log.created_at = DateTime::from_timestamp(created_at_offset_secs, 0).unwrap();
-        log.updated_at = log.created_at;
-        log
+        let created_at = DateTime::from_timestamp(created_at_offset_secs, 0).unwrap();
+        FoodLog::restore(
+            FoodLogId::new(),
+            Uuid::nil(),
+            reference_date(),
+            Some(MealSlot::Breakfast),
+            None,
+            FoodLogItemSnapshot::Product {
+                id: ProductId(Uuid::from_u128(1)),
+                name: "Test Food".to_string(),
+                brand: None,
+            },
+            Decimal::from_str(amount).unwrap(),
+            UnitCode("g".to_string()),
+            Vec::new(),
+            None,
+            created_at,
+            created_at,
+        )
     }
 
     fn aged_log(name: &str, item_id: u128, days_ago: i64, amount: &str) -> FoodLog {
         let log_date = reference_date() - Duration::days(days_ago);
         let created_at = DateTime::from_timestamp(86_400 * (366 - days_ago), 0).unwrap();
 
-        FoodLog {
-            id: FoodLogId::new(),
-            user_id: Uuid::nil(),
+        FoodLog::restore(
+            FoodLogId::new(),
+            Uuid::nil(),
             log_date,
-            meal_slot: Some(MealSlot::Breakfast),
-            device_timezone: None,
-            item: FoodLogItemSnapshot::Product {
+            Some(MealSlot::Breakfast),
+            None,
+            FoodLogItemSnapshot::Product {
                 id: ProductId(Uuid::from_u128(item_id)),
                 name: name.to_string(),
                 brand: None,
             },
-            quantity_amount: Decimal::from_str(amount).unwrap(),
-            quantity_unit: UnitCode("g".to_string()),
-            nutrient_snapshots: Vec::new(),
-            notes: None,
+            Decimal::from_str(amount).unwrap(),
+            UnitCode("g".to_string()),
+            Vec::new(),
+            None,
             created_at,
-            updated_at: created_at,
-        }
+            created_at,
+        )
     }
 
     fn usage(amount: &str, log_count: u32, score: u32) -> QuantityUsage {
