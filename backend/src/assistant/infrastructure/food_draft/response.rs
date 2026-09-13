@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::assistant::application::AssistantError;
 use crate::assistant::domain::{
-    DraftNutrient, DraftServing, DraftValidationError, FoodDraft, FoodDraftTurn,
+    DraftNutrient, DraftServing, DraftValidationError, FoodDraft, FoodDraftBuilder, FoodDraftTurn,
 };
 
 #[derive(Deserialize)]
@@ -76,16 +76,14 @@ fn parse_draft(wire: WireDraft) -> Result<FoodDraft, AssistantError> {
     for value in wire.servings {
         servings.push(DraftServing::new(value.unit, value.grams_per_unit).map_err(invalid_draft)?);
     }
-    FoodDraft::new(
-        wire.name,
-        wire.brand,
-        wire.categories,
-        wire.default_quantity,
-        wire.default_unit,
-        nutrients,
-        servings,
-    )
-    .map_err(invalid_draft)
+    FoodDraftBuilder::new(wire.name)
+        .optional_brand(wire.brand)
+        .categories(wire.categories)
+        .optional_default_quantity(wire.default_quantity, wire.default_unit)
+        .nutrients(nutrients)
+        .servings(servings)
+        .build()
+        .map_err(invalid_draft)
 }
 
 fn invalid_draft(_error: DraftValidationError) -> AssistantError {
