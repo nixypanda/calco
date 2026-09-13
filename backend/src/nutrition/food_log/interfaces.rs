@@ -621,21 +621,21 @@ fn food_logs_to_list_response(log_date: NaiveDate, logs: Vec<FoodLog>) -> LogLis
 
 fn food_log_to_response(log: &FoodLog) -> LogResponse {
     LogResponse {
-        id: log.id.0,
-        log_date: log.log_date,
-        meal_slot: log.meal_slot.map(Into::into),
-        device_timezone: log.device_timezone.clone(),
-        item: item_to_dto(&log.item),
-        quantity: quantity_to_dto(log.quantity_amount, log.quantity_unit.0.clone()),
+        id: log.id().0,
+        log_date: log.log_date(),
+        meal_slot: log.meal_slot().map(Into::into),
+        device_timezone: log.device_timezone().map(str::to_owned),
+        item: item_to_dto(log.item()),
+        quantity: quantity_to_dto(log.quantity_amount(), log.quantity_unit().0.clone()),
         nutrients: log
-            .nutrient_snapshots
+            .nutrient_snapshots()
             .iter()
             .filter(|snapshot| is_summary_nutrient_code(&snapshot.nutrient_code.0))
             .map(nutrient_snapshot_to_dto)
             .collect(),
-        notes: log.notes.clone(),
-        created_at: log.created_at,
-        updated_at: log.updated_at,
+        notes: log.notes().map(str::to_owned),
+        created_at: log.created_at(),
+        updated_at: log.updated_at(),
     }
 }
 

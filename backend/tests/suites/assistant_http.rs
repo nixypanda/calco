@@ -10,7 +10,9 @@ use calco_backend::assistant::application::{
     FoodDraftResult, FoodDraftService, FoodVocabulary, FoodVocabularyPort, ModelUsage,
 };
 use calco_backend::assistant::composition::AssistantComponents;
-use calco_backend::assistant::domain::{DraftNutrient, DraftServing, FoodDraft, FoodDraftTurn};
+use calco_backend::assistant::domain::{
+    DraftNutrient, DraftServing, FoodDraft, FoodDraftBuilder, FoodDraftTurn,
+};
 use calco_backend::assistant::infrastructure::{
     NutritionCatalogVocabularyAdapter, SafeFoodImageSanitizer,
 };
@@ -405,21 +407,18 @@ async fn real_catalog_vocabulary_reaches_model_and_trusted_draft_is_submittable(
     let nutrient = |code: &str, amount: i64| {
         DraftNutrient::new(code.into(), rust_decimal::Decimal::new(amount, 0)).unwrap()
     };
-    let draft = FoodDraft::new(
-        "Dal".into(),
-        None,
-        vec!["lentils".into()],
-        Some(rust_decimal::Decimal::ONE),
-        Some("g".into()),
-        vec![
+    let draft = FoodDraftBuilder::new("Dal")
+        .categories(["lentils"])
+        .default_quantity(rust_decimal::Decimal::ONE, "g")
+        .nutrients([
             nutrient("ENERGY_KCAL", 120),
             nutrient("PROTEIN_G", 7),
             nutrient("CARBS_G", 20),
             nutrient("FAT_G", 2),
-        ],
-        vec![DraftServing::new("cup".into(), rust_decimal::Decimal::new(240, 0)).unwrap()],
-    )
-    .unwrap();
+        ])
+        .servings([DraftServing::new("cup".into(), rust_decimal::Decimal::new(240, 0)).unwrap()])
+        .build()
+        .unwrap();
     let (router, observed_vocabulary) = app_with_model_result_and_real_vocabulary(
         pool,
         FoodDraftResult {

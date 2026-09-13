@@ -7,9 +7,9 @@ use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::nutrition::catalog::application::{ExternalProductCatalog, ExternalProductInput};
+use crate::nutrition::catalog::application::ExternalProductCatalog;
 use crate::nutrition::catalog::domain::{
-    NutritionError, ProductNutrientInput, ProductServingInput,
+    ExternalProductBuilder, NutritionError, ProductNutrientInput, ProductServingInput,
 };
 
 const ENDPOINT: &str = "https://world.openfoodfacts.org/api/v3/product/";
@@ -41,7 +41,7 @@ impl ExternalProductCatalog for OpenFoodFactsClient {
     async fn find_by_barcode(
         &self,
         barcode: &str,
-    ) -> Result<Option<ExternalProductInput>, NutritionError> {
+    ) -> Result<Option<ExternalProductBuilder>, NutritionError> {
         let response = self
             .client
             .get(
@@ -104,7 +104,7 @@ struct OffProduct {
 }
 
 impl OffProduct {
-    fn into_input(self, requested_barcode: &str) -> Result<ExternalProductInput, NutritionError> {
+    fn into_input(self, requested_barcode: &str) -> Result<ExternalProductBuilder, NutritionError> {
         let code = self
             .code
             .filter(|code| !code.trim().is_empty())
@@ -127,22 +127,19 @@ impl OffProduct {
             None => (None, None, vec![]),
         };
 
-        Ok(ExternalProductInput {
-            source_id: code.clone(),
-            barcode: code,
-            name,
-            brand: self.brands,
-            categories: self
-                .categories_tags
-                .into_iter()
-                .take(30)
-                .map(|tag| tag.strip_prefix("en:").unwrap_or(&tag).replace('-', " "))
-                .collect(),
-            default_quantity,
-            default_unit,
-            nutrients,
-            servings,
-        })
+        Ok(ExternalProductBuilder::new(code.clone(), name)
+            .barcode(Some(code))
+            .brand(self.brands)
+            .categories(
+                self.categories_tags
+                    .into_iter()
+                    .take(30)
+                    .map(|tag| tag.strip_prefix("en:").unwrap_or(&tag).replace('-', " "))
+                    .collect(),
+            )
+            .optional_default_portion(default_quantity, default_unit)?
+            .nutrients(nutrients)
+            .servings(servings))
     }
 }
 
@@ -230,6 +227,7 @@ fn parse_gram_serving(value: &str) -> Option<Decimal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::nutrition::catalog::domain::{ExternalSource, NutrientCatalog, Product};
     use serde_json::json;
 
     #[test]
@@ -263,7 +261,7 @@ mod tests {
 
     #[test]
     fn builds_a_conservative_serving_and_normalizes_categories() {
-        let product = OffProduct {
+        let input = OffProduct {
             code: Some("3017620422003".into()),
             product_name: Some("Nutella".into()),
             brands: Some("Ferrero".into()),
@@ -273,9 +271,14 @@ mod tests {
         }
         .into_input("ignored")
         .unwrap();
+        let product =
+            Product::new_external(ExternalSource::Off, input, &NutrientCatalog::default()).unwrap();
 
-        assert_eq!(product.categories, vec!["sweet spreads"]);
-        assert_eq!(product.default_unit.as_deref(), Some("serving"));
+        assert_eq!(product.categories[0].0, "sweet spreads");
+        assert_eq!(
+            product.default_unit.as_ref().map(|unit| unit.0.as_str()),
+            Some("serving")
+        );
         assert_eq!(product.servings[0].grams_per_unit, Decimal::from(15));
     }
 }

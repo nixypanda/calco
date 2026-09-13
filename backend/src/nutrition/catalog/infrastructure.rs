@@ -498,11 +498,11 @@ impl ProductRepository for PostgresProductRepository {
             "#,
         )
         .bind(product.id.0)
-        .bind(product.source.as_str())
-        .bind(&product.source_id)
-        .bind(product.user_id)
+        .bind(product.origin.source_code())
+        .bind(product.origin.source_id())
+        .bind(product.origin.owner_id())
         .bind(product.visibility.as_str())
-        .bind(product.barcode.as_ref().map(|b| &b.0))
+        .bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
         .bind(product.name.as_str())
         .bind(product.brand.as_ref().map(|b| &b.0))
         .bind(
@@ -543,8 +543,8 @@ impl ProductRepository for PostgresProductRepository {
         let mut products: Vec<&Product> = products.iter().collect();
         products.sort_by_key(|product| {
             (
-                product.source.as_str(),
-                product.source_id.as_deref().unwrap_or_default(),
+                product.origin.source_code(),
+                product.origin.source_id().unwrap_or_default(),
             )
         });
 
@@ -588,11 +588,11 @@ impl ProductRepository for PostgresProductRepository {
             );
             query.push_values(chunk.iter().copied(), |mut row, product| {
                 row.push_bind(product.id.0)
-                    .push_bind(product.source.as_str())
-                    .push_bind(product.source_id.as_deref().unwrap_or_default())
-                    .push_bind(product.user_id)
+                    .push_bind(product.origin.source_code())
+                    .push_bind(product.origin.source_id().unwrap_or_default())
+                    .push_bind(product.origin.owner_id())
                     .push_bind(product.visibility.as_str())
-                    .push_bind(product.barcode.as_ref().map(|barcode| barcode.0.as_str()))
+                    .push_bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
                     .push_bind(product.name.as_str())
                     .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
                     .push_bind(
@@ -623,11 +623,11 @@ impl ProductRepository for PostgresProductRepository {
                    FROM ("#,
             );
             query.push_values(chunk.iter().copied(), |mut row, product| {
-                row.push_bind(product.source.as_str())
-                    .push_bind(product.source_id.as_deref().unwrap_or_default())
-                    .push_bind(product.user_id)
+                row.push_bind(product.origin.source_code())
+                    .push_bind(product.origin.source_id().unwrap_or_default())
+                    .push_bind(product.origin.owner_id())
                     .push_bind(product.visibility.as_str())
-                    .push_bind(product.barcode.as_ref().map(|barcode| barcode.0.as_str()))
+                    .push_bind(product.origin.barcode().map(|barcode| barcode.0.as_str()))
                     .push_bind(product.name.as_str())
                     .push_bind(product.brand.as_ref().map(|brand| brand.0.as_str()))
                     .push_bind(
@@ -671,9 +671,9 @@ impl ProductRepository for PostgresProductRepository {
                 }
                 query
                     .push("(")
-                    .push_bind(product.source.as_str())
+                    .push_bind(product.origin.source_code())
                     .push(", ")
-                    .push_bind(product.source_id.as_deref().unwrap_or_default())
+                    .push_bind(product.origin.source_id().unwrap_or_default())
                     .push(")");
             }
             query.push(") ORDER BY source, source_id");
@@ -697,8 +697,8 @@ impl ProductRepository for PostgresProductRepository {
             .map(|product| {
                 product_ids_by_source
                     .get(&(
-                        product.source.as_str().to_owned(),
-                        product.source_id.as_deref().unwrap_or_default().to_owned(),
+                        product.origin.source_code().to_owned(),
+                        product.origin.source_id().unwrap_or_default().to_owned(),
                     ))
                     .copied()
                     .ok_or_else(|| {
@@ -841,19 +841,49 @@ fn product_row_to_product(
     nutrients: Vec<ProductNutrient>,
     servings: Vec<ProductServing>,
 ) -> Result<Product, NutritionError> {
+    let origin = match row.source.as_str() {
+        "USER" => {
+            let user_id = row.user_id.ok_or_else(|| {
+                NutritionError::Internal("custom product row is missing user_id".into())
+            })?;
+            if row.source_id.is_some() || row.barcode.is_some() {
+                return Err(NutritionError::Internal(
+                    "custom product row contains external identity fields".into(),
+                ));
+            }
+            ProductOrigin::Custom { user_id }
+        }
+        _ => {
+            let source = row
+                .source
+                .parse::<ExternalSource>()
+                .map_err(NutritionError::Internal)?;
+            if row.user_id.is_some() {
+                return Err(NutritionError::Internal(
+                    "external product row contains user_id".into(),
+                ));
+            }
+            let source_id = ExternalProductId::new(row.source_id.ok_or_else(|| {
+                NutritionError::Internal("external product row is missing source_id".into())
+            })?)
+            .map_err(|_| {
+                NutritionError::Internal("external product row has a blank source_id".into())
+            })?;
+            ProductOrigin::External {
+                source,
+                source_id,
+                barcode: row.barcode.map(Barcode),
+            }
+        }
+    };
+
     Ok(Product {
         id: ProductId(row.id),
-        source: row
-            .source
-            .parse::<Source>()
-            .map_err(NutritionError::Internal)?,
-        source_id: row.source_id,
-        user_id: row.user_id,
+        origin,
         visibility: row
             .visibility
             .parse::<ProductVisibility>()
             .map_err(NutritionError::Internal)?,
-        barcode: row.barcode.map(Barcode),
         name: ProductName::new(&row.name)?,
         brand: row.brand.map(Brand),
         categories: row.categories.into_iter().map(Category).collect(),

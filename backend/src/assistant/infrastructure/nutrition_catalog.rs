@@ -7,8 +7,10 @@ use crate::assistant::application::{
     SupportedUnit,
 };
 use crate::assistant::domain::FoodDraft;
-use crate::nutrition::catalog::application::{CatalogService, CustomFoodInput};
-use crate::nutrition::catalog::domain::{ProductNutrientInput, ProductServingInput};
+use crate::nutrition::catalog::application::CatalogService;
+use crate::nutrition::catalog::domain::{
+    CustomProductBuilder, ProductNutrientInput, ProductServingInput,
+};
 use crate::nutrition::error::NutritionError;
 
 /// Read-only anti-corruption adapter from nutrition reference data to the
@@ -64,14 +66,16 @@ impl FoodVocabularyPort for NutritionCatalogVocabularyAdapter {
 #[async_trait]
 impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
     async fn validate_draft(&self, draft: &FoodDraft) -> Result<(), AssistantError> {
-        self.catalog
-            .validate_custom_food_draft(CustomFoodInput {
-                name: draft.name().to_owned(),
-                brand: draft.brand().map(str::to_owned),
-                categories: draft.categories().to_vec(),
-                default_quantity: draft.default_quantity(),
-                default_unit: draft.default_unit().map(str::to_owned),
-                nutrients: draft
+        let input = CustomProductBuilder::new(draft.name())
+            .brand(draft.brand().map(str::to_owned))
+            .categories(draft.categories().to_vec())
+            .optional_default_portion(
+                draft.default_quantity(),
+                draft.default_unit().map(str::to_owned),
+            )
+            .map_err(|_| AssistantError::InvalidModelResponse)?
+            .nutrients(
+                draft
                     .nutrients()
                     .iter()
                     .map(|nutrient| ProductNutrientInput {
@@ -81,7 +85,9 @@ impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
                         confidence: None,
                     })
                     .collect(),
-                servings: draft
+            )
+            .servings(
+                draft
                     .servings()
                     .iter()
                     .map(|serving| ProductServingInput {
@@ -89,7 +95,9 @@ impl FoodDraftAcceptancePort for NutritionCatalogVocabularyAdapter {
                         grams_per_unit: serving.grams_per_unit(),
                     })
                     .collect(),
-            })
+            );
+        self.catalog
+            .validate_custom_food_draft(input)
             .await
             .map_err(|error| match error {
                 NutritionError::Validation(_) => AssistantError::InvalidModelResponse,

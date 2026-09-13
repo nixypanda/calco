@@ -1,6 +1,7 @@
 use calco_backend::nutrition::catalog::domain::{
-    ExternalProductBatch, Nutrient, NutrientCatalog, NutrientCode, NutritionError, Product,
-    ProductNutrientInput, ProductRepository, ProductServingInput, Source, UnitCode,
+    ExternalProductBatch, ExternalProductBuilder, ExternalSource, Nutrient, NutrientCatalog,
+    NutrientCode, NutritionError, Product, ProductNutrientInput, ProductRepository,
+    ProductServingInput, UnitCode,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use rust_decimal::Decimal;
@@ -34,30 +35,31 @@ fn external_product(
     servings: &[(&str, i64)],
 ) -> Product {
     Product::new_external(
-        Source::Off,
-        source_id.into(),
-        barcode.map(str::to_owned),
-        name.into(),
-        Some("Test brand".into()),
-        vec!["test".into()],
-        None,
-        None,
-        nutrients
-            .iter()
-            .map(|(code, amount)| ProductNutrientInput {
-                code: (*code).into(),
-                amount_per_100g: Decimal::from(*amount),
-                source: Some("OFF".into()),
-                confidence: Some("derived".into()),
-            })
-            .collect(),
-        servings
-            .iter()
-            .map(|(unit, grams)| ProductServingInput {
-                unit: (*unit).into(),
-                grams_per_unit: Decimal::from(*grams),
-            })
-            .collect(),
+        ExternalSource::Off,
+        ExternalProductBuilder::new(source_id, name)
+            .barcode(barcode.map(str::to_owned))
+            .brand(Some("Test brand".into()))
+            .categories(vec!["test".into()])
+            .nutrients(
+                nutrients
+                    .iter()
+                    .map(|(code, amount)| ProductNutrientInput {
+                        code: (*code).into(),
+                        amount_per_100g: Decimal::from(*amount),
+                        source: Some("OFF".into()),
+                        confidence: Some("derived".into()),
+                    })
+                    .collect(),
+            )
+            .servings(
+                servings
+                    .iter()
+                    .map(|(unit, grams)| ProductServingInput {
+                        unit: (*unit).into(),
+                        grams_per_unit: Decimal::from(*grams),
+                    })
+                    .collect(),
+            ),
         &nutrient_catalog(),
     )
     .expect("external product should be valid")

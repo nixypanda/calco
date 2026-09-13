@@ -631,6 +631,7 @@ fn turn_to_response(turn: FoodDraftTurn) -> AssistantDraftResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assistant::domain::FoodDraftBuilder;
 
     #[test]
     fn response_contract_is_stable_for_clarification() {
@@ -651,28 +652,21 @@ mod tests {
 
     #[test]
     fn response_contract_maps_the_validated_draft_to_http_fields() {
-        let draft = FoodDraft::new(
-            "Dal".into(),
-            None,
-            vec!["lentils".into()],
-            Some(rust_decimal::Decimal::ONE),
-            Some("bowl".into()),
-            vec![
-                crate::assistant::domain::DraftNutrient::new(
-                    "ENERGY_KCAL".into(),
-                    rust_decimal::Decimal::new(172_125, 3),
-                )
-                .unwrap(),
-            ],
-            vec![
-                crate::assistant::domain::DraftServing::new(
-                    "bowl".into(),
-                    rust_decimal::Decimal::new(35_050, 2),
-                )
-                .unwrap(),
-            ],
-        )
-        .unwrap();
+        let draft = FoodDraftBuilder::new("Dal")
+            .categories(["lentils"])
+            .default_quantity(rust_decimal::Decimal::ONE, "bowl")
+            .nutrients([crate::assistant::domain::DraftNutrient::new(
+                "ENERGY_KCAL".into(),
+                rust_decimal::Decimal::new(172_125, 3),
+            )
+            .unwrap()])
+            .servings([crate::assistant::domain::DraftServing::new(
+                "bowl".into(),
+                rust_decimal::Decimal::new(35_050, 2),
+            )
+            .unwrap()])
+            .build()
+            .unwrap();
         let value = serde_json::to_value(turn_to_response(
             FoodDraftTurn::ready("Review this estimate.", draft, vec![]).unwrap(),
         ))

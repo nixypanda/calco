@@ -127,18 +127,86 @@ pub struct FoodLogNutrientSnapshot {
 
 #[derive(Debug, Clone)]
 pub struct FoodLog {
-    pub id: FoodLogId,
-    pub user_id: Uuid,
-    pub log_date: NaiveDate,
-    pub meal_slot: Option<MealSlot>,
-    pub device_timezone: Option<String>,
-    pub item: FoodLogItemSnapshot,
-    pub quantity_amount: Decimal,
-    pub quantity_unit: UnitCode,
-    pub nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
-    pub notes: Option<String>,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    id: FoodLogId,
+    user_id: Uuid,
+    log_date: NaiveDate,
+    meal_slot: Option<MealSlot>,
+    device_timezone: Option<String>,
+    item: FoodLogItemSnapshot,
+    quantity_amount: Decimal,
+    quantity_unit: UnitCode,
+    nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
+    notes: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug)]
+pub struct FoodLogBuilder {
+    user_id: Uuid,
+    log_date: NaiveDate,
+    item: FoodLogItemSnapshot,
+    quantity: Quantity,
+    nutrition: CalculatedNutrition,
+    meal_slot: Option<MealSlot>,
+    device_timezone: Option<String>,
+    notes: Option<String>,
+}
+
+impl FoodLogBuilder {
+    pub fn new(
+        user_id: Uuid,
+        log_date: NaiveDate,
+        item: FoodLogItemSnapshot,
+        quantity: Quantity,
+        nutrition: CalculatedNutrition,
+    ) -> Self {
+        Self {
+            user_id,
+            log_date,
+            item,
+            quantity,
+            nutrition,
+            meal_slot: None,
+            device_timezone: None,
+            notes: None,
+        }
+    }
+
+    pub fn meal_slot(mut self, meal_slot: Option<MealSlot>) -> Self {
+        self.meal_slot = meal_slot;
+        self
+    }
+
+    pub fn device_timezone(mut self, device_timezone: Option<String>) -> Self {
+        self.device_timezone = device_timezone;
+        self
+    }
+
+    pub fn notes(mut self, notes: Option<String>) -> Self {
+        self.notes = notes;
+        self
+    }
+
+    pub fn build(self) -> FoodLog {
+        let now = Utc::now();
+        let (quantity_amount, quantity_unit) = self.quantity.into_parts();
+
+        FoodLog {
+            id: FoodLogId::new(),
+            user_id: self.user_id,
+            log_date: self.log_date,
+            meal_slot: self.meal_slot,
+            device_timezone: self.device_timezone,
+            item: self.item,
+            quantity_amount,
+            quantity_unit,
+            nutrient_snapshots: snapshots_from_calculated(self.nutrition),
+            notes: self.notes,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -209,57 +277,52 @@ pub struct FoodLogListFilter {
 }
 
 impl FoodLog {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_product_log(
-        user_id: Uuid,
-        log_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-        device_timezone: Option<String>,
-        product: &Product,
-        quantity: Quantity,
-        unit_converter: &UnitConverter,
-        notes: Option<String>,
-    ) -> Result<Self, NutritionError> {
-        let nutrition = product
-            .nutrition_for(&quantity, unit_converter)
-            .map_err(NutritionError::Validation)?;
-        Ok(Self::new(
-            user_id,
-            log_date,
-            meal_slot,
-            device_timezone,
-            FoodLogItemSnapshot::from_product(product),
-            quantity,
-            nutrition,
-            notes,
-        ))
+    pub fn id(&self) -> FoodLogId {
+        self.id
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_meal_log(
-        user_id: Uuid,
-        log_date: NaiveDate,
-        meal_slot: Option<MealSlot>,
-        device_timezone: Option<String>,
-        meal: &Meal,
-        quantity: Quantity,
-        products: &[(ProductId, Product)],
-        unit_converter: &UnitConverter,
-        notes: Option<String>,
-    ) -> Result<Self, NutritionError> {
-        let nutrition = meal
-            .nutrition_for(&quantity, products, unit_converter)
-            .map_err(NutritionError::Validation)?;
-        Ok(Self::new(
-            user_id,
-            log_date,
-            meal_slot,
-            device_timezone,
-            FoodLogItemSnapshot::from_meal(meal),
-            quantity,
-            nutrition,
-            notes,
-        ))
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    pub fn log_date(&self) -> NaiveDate {
+        self.log_date
+    }
+
+    pub fn meal_slot(&self) -> Option<MealSlot> {
+        self.meal_slot
+    }
+
+    pub fn device_timezone(&self) -> Option<&str> {
+        self.device_timezone.as_deref()
+    }
+
+    pub fn item(&self) -> &FoodLogItemSnapshot {
+        &self.item
+    }
+
+    pub fn quantity_amount(&self) -> Decimal {
+        self.quantity_amount
+    }
+
+    pub fn quantity_unit(&self) -> &UnitCode {
+        &self.quantity_unit
+    }
+
+    pub fn nutrient_snapshots(&self) -> &[FoodLogNutrientSnapshot] {
+        &self.nutrient_snapshots
+    }
+
+    pub fn notes(&self) -> Option<&str> {
+        self.notes.as_deref()
+    }
+
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    pub fn updated_at(&self) -> DateTime<Utc> {
+        self.updated_at
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -318,20 +381,22 @@ impl FoodLog {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn new(
+    pub(crate) fn restore(
+        id: FoodLogId,
         user_id: Uuid,
         log_date: NaiveDate,
         meal_slot: Option<MealSlot>,
         device_timezone: Option<String>,
         item: FoodLogItemSnapshot,
-        quantity: Quantity,
-        nutrition: CalculatedNutrition,
+        quantity_amount: Decimal,
+        quantity_unit: UnitCode,
+        nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
         notes: Option<String>,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
     ) -> Self {
-        let now = Utc::now();
-        let (quantity_amount, quantity_unit) = quantity.into_parts();
         Self {
-            id: FoodLogId::new(),
+            id,
             user_id,
             log_date,
             meal_slot,
@@ -339,10 +404,10 @@ impl FoodLog {
             item,
             quantity_amount,
             quantity_unit,
-            nutrient_snapshots: snapshots_from_calculated(nutrition),
+            nutrient_snapshots,
             notes,
-            created_at: now,
-            updated_at: now,
+            created_at,
+            updated_at,
         }
     }
 
@@ -425,7 +490,7 @@ mod tests {
     use super::*;
     use crate::nutrition::catalog::domain::calculation::Quantity;
     use crate::nutrition::catalog::domain::{
-        AmountPer100g, ProductName, ProductNutrient, ProductVisibility, Source,
+        AmountPer100g, ProductName, ProductNutrient, ProductOrigin, ProductVisibility,
     };
     use crate::nutrition::meal::domain::{MealComponent, MealComponentItem};
     use std::str::FromStr;
@@ -433,11 +498,10 @@ mod tests {
     fn sample_product() -> Product {
         Product {
             id: ProductId(Uuid::nil()),
-            source: Source::User,
-            source_id: None,
-            user_id: None,
+            origin: ProductOrigin::Custom {
+                user_id: Uuid::nil(),
+            },
             visibility: ProductVisibility::Global,
-            barcode: None,
             name: ProductName::new("Test").unwrap(),
             brand: None,
             categories: vec![],
@@ -512,17 +576,19 @@ mod tests {
     fn product_log_construction_sets_item_quantity_and_snapshots() {
         let product = sample_product();
         let converter = sample_unit_converter();
-        let log = FoodLog::new_product_log(
+        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
+        let nutrition = product.nutrition_for(&quantity, &converter).unwrap();
+        let log = FoodLogBuilder::new(
             Uuid::new_v4(),
             sample_log_date(),
-            Some(MealSlot::Breakfast),
-            Some("Asia/Kolkata".into()),
-            &product,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
-            &converter,
-            Some("notes".into()),
+            FoodLogItemSnapshot::from_product(&product),
+            quantity,
+            nutrition,
         )
-        .unwrap();
+        .meal_slot(Some(MealSlot::Breakfast))
+        .device_timezone(Some("Asia/Kolkata".into()))
+        .notes(Some("notes".into()))
+        .build();
 
         assert_eq!(
             log.item,
@@ -544,18 +610,19 @@ mod tests {
         let product = sample_product();
         let meal = sample_meal();
         let converter = sample_unit_converter();
-        let log = FoodLog::new_meal_log(
+        let quantity = Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap();
+        let nutrition = meal
+            .nutrition_for(&quantity, &[(product.id, product.clone())], &converter)
+            .unwrap();
+        let log = FoodLogBuilder::new(
             Uuid::new_v4(),
             sample_log_date(),
-            Some(MealSlot::Dinner),
-            None,
-            &meal,
-            Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap(),
-            &[(product.id, product.clone())],
-            &converter,
-            None,
+            FoodLogItemSnapshot::from_meal(&meal),
+            quantity,
+            nutrition,
         )
-        .unwrap();
+        .meal_slot(Some(MealSlot::Dinner))
+        .build();
 
         assert_eq!(
             log.item,
@@ -576,18 +643,19 @@ mod tests {
         let product = sample_product();
         let meal = sample_meal();
         let converter = sample_unit_converter();
-        let original = FoodLog::new_meal_log(
+        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
+        let nutrition = meal
+            .nutrition_for(&quantity, &[(product.id, product.clone())], &converter)
+            .unwrap();
+        let original = FoodLogBuilder::new(
             user_id,
             sample_log_date(),
-            Some(MealSlot::Lunch),
-            None,
-            &meal,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
-            &[(product.id, product.clone())],
-            &converter,
-            None,
+            FoodLogItemSnapshot::from_meal(&meal),
+            quantity,
+            nutrition,
         )
-        .unwrap();
+        .meal_slot(Some(MealSlot::Lunch))
+        .build();
         let original_id = original.id;
         let log_date = NaiveDate::from_ymd_opt(2026, 6, 2).unwrap();
 
@@ -628,17 +696,17 @@ mod tests {
         let product = sample_product();
         let meal = sample_meal();
         let converter = sample_unit_converter();
-        let original = FoodLog::new_product_log(
+        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
+        let nutrition = product.nutrition_for(&quantity, &converter).unwrap();
+        let original = FoodLogBuilder::new(
             user_id,
             sample_log_date(),
-            None,
-            Some("Asia/Kolkata".into()),
-            &product,
-            Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap(),
-            &converter,
-            None,
+            FoodLogItemSnapshot::from_product(&product),
+            quantity,
+            nutrition,
         )
-        .unwrap();
+        .device_timezone(Some("Asia/Kolkata".into()))
+        .build();
         let original_id = original.id;
         let log_date = NaiveDate::from_ymd_opt(2026, 6, 3).unwrap();
 

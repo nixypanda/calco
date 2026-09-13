@@ -98,7 +98,7 @@ fn detail_entry_from_logs(guidance: &NutrientGuidance, logs: &[FoodLog]) -> Nutr
     let mut items_with_data = 0;
     for log in logs {
         let mut item_has_data = false;
-        for snapshot in &log.nutrient_snapshots {
+        for snapshot in log.nutrient_snapshots() {
             if snapshot.nutrient_code == *guidance.nutrient_code()
                 && snapshot.unit == *guidance.unit()
             {
@@ -112,7 +112,7 @@ fn detail_entry_from_logs(guidance: &NutrientGuidance, logs: &[FoodLog]) -> Nutr
     }
     let has_meal_log = logs
         .iter()
-        .any(|log| matches!(log.item, FoodLogItemSnapshot::Meal { .. }));
+        .any(|log| matches!(log.item(), FoodLogItemSnapshot::Meal { .. }));
     let coverage = match (logs.len(), items_with_data, has_meal_log) {
         (_, 0, _) => NutrientCoverage::None,
         (count, items, false) if count == items => NutrientCoverage::Complete,
@@ -195,7 +195,7 @@ mod tests {
             Ok(self
                 .logs
                 .iter()
-                .filter(|log| log.user_id == actor_id && log.log_date == date)
+                .filter(|log| log.user_id() == actor_id && log.log_date() == date)
                 .cloned()
                 .collect())
         }
@@ -205,20 +205,33 @@ mod tests {
         NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()
     }
     fn log(snapshots: Vec<(&str, Decimal, &str)>) -> FoodLog {
-        FoodLog {
-            id: FoodLogId::new(),
-            user_id: Uuid::new_v4(),
-            log_date: date(),
-            meal_slot: None,
-            device_timezone: None,
-            item: FoodLogItemSnapshot::Product {
+        log_with(
+            Uuid::new_v4(),
+            FoodLogItemSnapshot::Product {
                 id: ProductId::new(),
                 name: "Test food".into(),
                 brand: None,
             },
-            quantity_amount: Decimal::ONE,
-            quantity_unit: UnitCode("g".into()),
-            nutrient_snapshots: snapshots
+            snapshots,
+        )
+    }
+
+    fn log_with(
+        user_id: Uuid,
+        item: FoodLogItemSnapshot,
+        snapshots: Vec<(&str, Decimal, &str)>,
+    ) -> FoodLog {
+        let now = Utc::now();
+        FoodLog::restore(
+            FoodLogId::new(),
+            user_id,
+            date(),
+            None,
+            None,
+            item,
+            Decimal::ONE,
+            UnitCode("g".into()),
+            snapshots
                 .into_iter()
                 .map(|(code, amount, unit)| FoodLogNutrientSnapshot {
                     nutrient_code: NutrientCode(code.into()),
@@ -226,10 +239,10 @@ mod tests {
                     unit: UnitCode(unit.into()),
                 })
                 .collect(),
-            notes: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
+            None,
+            now,
+            now,
+        )
     }
     fn set() -> NutrientGuidanceSet {
         StaticNutrientGuidanceRepository::new().current()
@@ -246,10 +259,24 @@ mod tests {
     async fn details_query_is_scoped_to_the_authenticated_actor() {
         let actor_id = Uuid::new_v4();
         let other_user_id = Uuid::new_v4();
-        let mut actors_log = log(vec![("ENERGY_KCAL", Decimal::from(100), "kcal")]);
-        actors_log.user_id = actor_id;
-        let mut other_users_log = log(vec![("ENERGY_KCAL", Decimal::from(900), "kcal")]);
-        other_users_log.user_id = other_user_id;
+        let actors_log = log_with(
+            actor_id,
+            FoodLogItemSnapshot::Product {
+                id: ProductId::new(),
+                name: "Test food".into(),
+                brand: None,
+            },
+            vec![("ENERGY_KCAL", Decimal::from(100), "kcal")],
+        );
+        let other_users_log = log_with(
+            other_user_id,
+            FoodLogItemSnapshot::Product {
+                id: ProductId::new(),
+                name: "Test food".into(),
+                brand: None,
+            },
+            vec![("ENERGY_KCAL", Decimal::from(900), "kcal")],
+        );
         let food_logs = Arc::new(MockFoodLogQueryPort {
             logs: vec![actors_log, other_users_log],
             requests: Mutex::new(Vec::new()),
@@ -329,11 +356,14 @@ mod tests {
     }
     #[test]
     fn meal_log_never_claims_complete_coverage() {
-        let mut meal = log(vec![("FIBER_G", Decimal::from(28), "g")]);
-        meal.item = FoodLogItemSnapshot::Meal {
-            id: MealId::new(),
-            name: "Meal".into(),
-        };
+        let meal = log_with(
+            Uuid::new_v4(),
+            FoodLogItemSnapshot::Meal {
+                id: MealId::new(),
+                name: "Meal".into(),
+            },
+            vec![("FIBER_G", Decimal::from(28), "g")],
+        );
         let report = nutrition_details_from_logs(date(), set(), vec![meal]);
         assert_eq!(
             entry(&report, "FIBER_G").coverage,

@@ -240,7 +240,7 @@ mod tests {
     use rust_decimal::Decimal;
 
     use super::*;
-    use crate::assistant::domain::{DraftNutrient, FoodDraft, FoodDraftTurn};
+    use crate::assistant::domain::{DraftNutrient, FoodDraft, FoodDraftBuilder, FoodDraftTurn};
 
     struct StubModel {
         result: FoodDraftResult,
@@ -293,16 +293,10 @@ mod tests {
 
     #[tokio::test]
     async fn service_rejects_a_model_draft_outside_the_current_vocabulary() {
-        let draft = FoodDraft::new(
-            "Dal".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![DraftNutrient::new("UNKNOWN".into(), Decimal::ONE).unwrap()],
-            vec![],
-        )
-        .unwrap();
+        let draft = FoodDraftBuilder::new("Dal")
+            .nutrients([DraftNutrient::new("UNKNOWN".into(), Decimal::ONE).unwrap()])
+            .build()
+            .unwrap();
         let service = FoodDraftService::new(
             Arc::new(StubModel {
                 result: FoodDraftResult {

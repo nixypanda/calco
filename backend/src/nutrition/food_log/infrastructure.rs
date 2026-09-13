@@ -204,20 +204,20 @@ fn food_log_row_to_food_log(
         ));
     };
 
-    Ok(FoodLog {
-        id: FoodLogId(row.id),
-        user_id: row.user_id,
-        log_date: row.log_date,
-        meal_slot: row.meal_slot.and_then(|s| s.parse().ok()),
-        device_timezone: row.device_timezone,
+    Ok(FoodLog::restore(
+        FoodLogId(row.id),
+        row.user_id,
+        row.log_date,
+        row.meal_slot.and_then(|s| s.parse().ok()),
+        row.device_timezone,
         item,
-        quantity_amount: row.quantity,
-        quantity_unit: UnitCode(row.unit),
-        nutrient_snapshots: snapshots,
-        notes: row.notes,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-    })
+        row.quantity,
+        UnitCode(row.unit),
+        snapshots,
+        row.notes,
+        row.created_at,
+        row.updated_at,
+    ))
 }
 
 #[async_trait]
@@ -230,7 +230,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
         let mut tx = self.pool.begin().await?;
 
         for log in logs {
-            let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
+            let (product_id, meal_id, item_name, item_brand) = item_to_columns(log.item());
 
             sqlx::query(
                 r#"
@@ -238,24 +238,24 @@ impl FoodLogRepository for PostgresFoodLogRepository {
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                 "#,
             )
-            .bind(log.id.0)
-            .bind(log.user_id)
-            .bind(log.log_date)
-            .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
-            .bind(&log.device_timezone)
+            .bind(log.id().0)
+            .bind(log.user_id())
+            .bind(log.log_date())
+            .bind(log.meal_slot().map(|m| m.as_str()))
+            .bind(log.device_timezone())
             .bind(product_id)
             .bind(meal_id)
             .bind(item_name)
             .bind(item_brand)
-            .bind(log.quantity_amount)
-            .bind(&log.quantity_unit.0)
-            .bind(&log.notes)
-            .bind(log.created_at)
-            .bind(log.updated_at)
+            .bind(log.quantity_amount())
+            .bind(&log.quantity_unit().0)
+            .bind(log.notes())
+            .bind(log.created_at())
+            .bind(log.updated_at())
             .execute(&mut *tx)
             .await?;
 
-            insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
+            insert_food_log_nutrients(&mut tx, log.id().0, log.nutrient_snapshots()).await?;
         }
 
         tx.commit().await?;
@@ -327,7 +327,7 @@ impl FoodLogRepository for PostgresFoodLogRepository {
     async fn update(&self, log: &FoodLog) -> Result<(), NutritionError> {
         let mut tx = self.pool.begin().await?;
 
-        let (product_id, meal_id, item_name, item_brand) = item_to_columns(&log.item);
+        let (product_id, meal_id, item_name, item_brand) = item_to_columns(log.item());
 
         sqlx::query(
             r#"
@@ -338,26 +338,26 @@ impl FoodLogRepository for PostgresFoodLogRepository {
             WHERE id=$1
             "#,
         )
-        .bind(log.id.0)
-        .bind(log.log_date)
-        .bind(log.meal_slot.as_ref().map(|m| m.as_str()))
-        .bind(&log.device_timezone)
+        .bind(log.id().0)
+        .bind(log.log_date())
+        .bind(log.meal_slot().map(|m| m.as_str()))
+        .bind(log.device_timezone())
         .bind(product_id)
         .bind(meal_id)
         .bind(item_name)
         .bind(item_brand)
-        .bind(log.quantity_amount)
-        .bind(&log.quantity_unit.0)
-        .bind(&log.notes)
+        .bind(log.quantity_amount())
+        .bind(&log.quantity_unit().0)
+        .bind(log.notes())
         .execute(&mut *tx)
         .await?;
 
         sqlx::query("DELETE FROM food_log_nutrients WHERE food_log_id = $1")
-            .bind(log.id.0)
+            .bind(log.id().0)
             .execute(&mut *tx)
             .await?;
 
-        insert_food_log_nutrients(&mut tx, log.id.0, &log.nutrient_snapshots).await?;
+        insert_food_log_nutrients(&mut tx, log.id().0, log.nutrient_snapshots()).await?;
 
         tx.commit().await?;
         Ok(())

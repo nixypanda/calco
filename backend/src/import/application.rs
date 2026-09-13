@@ -5,12 +5,13 @@ use std::sync::Arc;
 use crate::import::domain::*;
 use crate::nutrition::catalog::application::{ExternalProductWritePort, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::{
-    AmountPer100g, NutrientCatalog, Product, ProductNutrientInput, ProductServingInput, Source,
+    AmountPer100g, ExternalProductBuilder, ExternalSource, NutrientCatalog, Product,
+    ProductNutrientInput, ProductServingInput,
 };
 use crate::nutrition::error::NutritionError;
 
 fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
-    Source::from_str(&food.source)?;
+    ExternalSource::from_str(&food.source)?;
     if food.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
@@ -21,7 +22,7 @@ fn validate_staged_food(food: &StagedImportProduct) -> Result<(), String> {
 }
 
 fn validate_staged_nutrient(nutrient: &StagedImportNutrient) -> Result<(), String> {
-    Source::from_str(&nutrient.source)?;
+    ExternalSource::from_str(&nutrient.source)?;
     if nutrient.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
@@ -33,7 +34,7 @@ fn validate_staged_nutrient(nutrient: &StagedImportNutrient) -> Result<(), Strin
 }
 
 fn validate_staged_serving(serving: &StagedImportServing) -> Result<(), String> {
-    Source::from_str(&serving.source)?;
+    ExternalSource::from_str(&serving.source)?;
     if serving.source_id.trim().is_empty() {
         return Err("source_id is required".into());
     }
@@ -275,7 +276,7 @@ fn assemble_products(
 
     for staged in batch.products {
         let key = product_key(&staged.source, &staged.source_id);
-        let source = Source::from_str(&staged.source).map_err(ImportError::Validation)?;
+        let source = ExternalSource::from_str(&staged.source).map_err(ImportError::Validation)?;
         let confidence = source.default_nutrient_confidence().as_str().to_string();
         let mut nutrient_inputs = Vec::new();
 
@@ -310,15 +311,12 @@ fn assemble_products(
         products.push(
             Product::new_external(
                 source,
-                staged.source_id,
-                staged.barcode,
-                staged.name,
-                staged.brand,
-                staged.categories,
-                None,
-                None,
-                nutrient_inputs,
-                serving_inputs,
+                ExternalProductBuilder::new(staged.source_id, staged.name)
+                    .barcode(staged.barcode)
+                    .brand(staged.brand)
+                    .categories(staged.categories)
+                    .nutrients(nutrient_inputs)
+                    .servings(serving_inputs),
                 nutrient_catalog,
             )
             .map_err(import_product_error)?,

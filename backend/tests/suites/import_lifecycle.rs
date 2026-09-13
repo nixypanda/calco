@@ -1,7 +1,8 @@
 use crate::common::*;
 use axum::http::StatusCode;
 use calco_backend::nutrition::catalog::domain::{
-    ExternalProductBatch, NutrientCatalog, Product, ProductRepository, Source,
+    ExternalProductBatch, ExternalProductBuilder, ExternalSource, NutrientCatalog, Product,
+    ProductRepository,
 };
 use calco_backend::nutrition::catalog::infrastructure::PostgresProductRepository;
 use serde_json::{Value, json};
@@ -447,16 +448,8 @@ async fn running_import_reapplies_catalog_after_pre_finalize_crash(pool: PgPool)
         .unwrap();
 
     let product = Product::new_external(
-        Source::Usda,
-        "crash-window".into(),
-        None,
-        "Crash window food".into(),
-        None,
-        vec![],
-        None,
-        None,
-        vec![],
-        vec![],
+        ExternalSource::Usda,
+        ExternalProductBuilder::new("crash-window", "Crash window food"),
         &NutrientCatalog::default(),
     )
     .unwrap();

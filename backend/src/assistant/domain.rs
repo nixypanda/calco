@@ -209,17 +209,84 @@ pub struct FoodDraft {
     servings: Vec<DraftServing>,
 }
 
-impl FoodDraft {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        name: String,
-        brand: Option<String>,
-        categories: Vec<String>,
-        default_quantity: Option<Decimal>,
-        default_unit: Option<String>,
-        nutrients: Vec<DraftNutrient>,
-        servings: Vec<DraftServing>,
-    ) -> Result<Self, DraftValidationError> {
+pub struct FoodDraftBuilder {
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_quantity: Option<Decimal>,
+    default_unit: Option<String>,
+    nutrients: Vec<DraftNutrient>,
+    servings: Vec<DraftServing>,
+}
+
+impl FoodDraftBuilder {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            brand: None,
+            categories: Vec::new(),
+            default_quantity: None,
+            default_unit: None,
+            nutrients: Vec::new(),
+            servings: Vec::new(),
+        }
+    }
+
+    pub fn brand(mut self, brand: impl Into<String>) -> Self {
+        self.brand = Some(brand.into());
+        self
+    }
+
+    pub(crate) fn optional_brand(mut self, brand: Option<String>) -> Self {
+        self.brand = brand;
+        self
+    }
+
+    pub fn categories<I, S>(mut self, categories: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.categories = categories.into_iter().map(Into::into).collect();
+        self
+    }
+
+    pub fn default_quantity(mut self, quantity: Decimal, unit: impl Into<String>) -> Self {
+        self.default_quantity = Some(quantity);
+        self.default_unit = Some(unit.into());
+        self
+    }
+
+    pub(crate) fn optional_default_quantity(
+        mut self,
+        quantity: Option<Decimal>,
+        unit: Option<String>,
+    ) -> Self {
+        self.default_quantity = quantity;
+        self.default_unit = unit;
+        self
+    }
+
+    pub fn nutrients(mut self, nutrients: impl IntoIterator<Item = DraftNutrient>) -> Self {
+        self.nutrients = nutrients.into_iter().collect();
+        self
+    }
+
+    pub fn servings(mut self, servings: impl IntoIterator<Item = DraftServing>) -> Self {
+        self.servings = servings.into_iter().collect();
+        self
+    }
+
+    pub fn build(self) -> Result<FoodDraft, DraftValidationError> {
+        let Self {
+            name,
+            brand,
+            categories,
+            default_quantity,
+            default_unit,
+            nutrients,
+            servings,
+        } = self;
         if categories.len() > MAX_DRAFT_CATEGORIES
             || nutrients.len() > MAX_DRAFT_NUTRIENTS
             || servings.len() > MAX_DRAFT_SERVINGS
@@ -264,7 +331,7 @@ impl FoodDraft {
         {
             return Err(DraftValidationError);
         }
-        Ok(Self {
+        Ok(FoodDraft {
             name,
             brand,
             categories: normalized_categories,
@@ -274,7 +341,9 @@ impl FoodDraft {
             servings,
         })
     }
+}
 
+impl FoodDraft {
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -412,21 +481,51 @@ mod tests {
     fn draft_structure_limits_are_domain_invariants() {
         let categories = vec!["category".to_owned(); MAX_DRAFT_CATEGORIES + 1];
         assert!(matches!(
-            FoodDraft::new("Dal".into(), None, categories, None, None, vec![], vec![]),
+            FoodDraftBuilder::new("Dal").categories(categories).build(),
             Err(DraftValidationError)
         ));
 
         let serving = DraftServing::new("cup".into(), Decimal::ONE).unwrap();
         assert!(matches!(
-            FoodDraft::new(
-                "Dal".into(),
-                None,
-                vec![],
-                None,
-                None,
-                vec![],
-                vec![serving.clone(), serving],
-            ),
+            FoodDraftBuilder::new("Dal")
+                .servings([serving.clone(), serving])
+                .build(),
+            Err(DraftValidationError)
+        ));
+    }
+
+    #[test]
+    fn draft_builder_defaults_optional_fields_and_normalizes_categories() {
+        let draft = FoodDraftBuilder::new(" Dal ")
+            .brand(" Amul ")
+            .categories([" Dairy ", "dairy", " "])
+            .default_quantity(Decimal::from(200), "g")
+            .build()
+            .unwrap();
+
+        assert_eq!(draft.name(), "Dal");
+        assert_eq!(draft.brand(), Some("Amul"));
+        assert_eq!(draft.categories(), &["dairy"]);
+        assert_eq!(draft.default_quantity(), Some(Decimal::from(200)));
+        assert_eq!(draft.default_unit(), Some("g"));
+        assert!(draft.nutrients().is_empty());
+        assert!(draft.servings().is_empty());
+    }
+
+    #[test]
+    fn draft_builder_enforces_default_quantity_and_duplicate_code_invariants() {
+        assert!(matches!(
+            FoodDraftBuilder::new("Dal")
+                .optional_default_quantity(Some(Decimal::ONE), None)
+                .build(),
+            Err(DraftValidationError)
+        ));
+
+        let nutrient = DraftNutrient::new("PROTEIN_G".into(), Decimal::ONE).unwrap();
+        assert!(matches!(
+            FoodDraftBuilder::new("Dal")
+                .nutrients([nutrient.clone(), nutrient])
+                .build(),
             Err(DraftValidationError)
         ));
     }
@@ -440,16 +539,10 @@ mod tests {
         );
         let excessive_energy =
             DraftNutrient::new("ENERGY_KCAL".into(), Decimal::from(1_001)).unwrap();
-        let draft = FoodDraft::new(
-            "Dal".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![excessive_energy],
-            vec![],
-        )
-        .unwrap();
+        let draft = FoodDraftBuilder::new("Dal")
+            .nutrients([excessive_energy])
+            .build()
+            .unwrap();
         let turn = FoodDraftTurn::ready("Review", draft, vec![]).unwrap();
 
         assert!(matches!(policy.validate(&turn), Err(DraftValidationError)));
