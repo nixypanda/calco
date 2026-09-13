@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::auth::interfaces::http::AuthUser;
-use crate::nutrition::catalog::application::{BarcodeLookupOrigin, CustomFoodInput};
+use crate::nutrition::catalog::application::BarcodeLookupOrigin;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::module::CatalogModule;
 
@@ -54,14 +54,16 @@ pub enum SourceDto {
     Indb,
 }
 
-impl From<Source> for SourceDto {
-    fn from(source: Source) -> Self {
-        match source {
-            Source::User => SourceDto::User,
-            Source::Off => SourceDto::Off,
-            Source::Usda => SourceDto::Usda,
-            Source::Ifct => SourceDto::Ifct,
-            Source::Indb => SourceDto::Indb,
+impl From<&ProductOrigin> for SourceDto {
+    fn from(origin: &ProductOrigin) -> Self {
+        match origin {
+            ProductOrigin::Custom { .. } => SourceDto::User,
+            ProductOrigin::External { source, .. } => match source {
+                ExternalSource::Off => SourceDto::Off,
+                ExternalSource::Usda => SourceDto::Usda,
+                ExternalSource::Ifct => SourceDto::Ifct,
+                ExternalSource::Indb => SourceDto::Indb,
+            },
         }
     }
 }
@@ -365,7 +367,10 @@ async fn create_custom_food_handler(
     State(state): State<CatalogModule>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let input = custom_food_request_to_input(req);
+    let input = match custom_food_request_to_input(req) {
+        Ok(input) => input,
+        Err(error) => return error.into_response(),
+    };
     let product = match state.services.create_custom_food(auth.0.id, input).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),
@@ -379,7 +384,10 @@ async fn update_custom_food_handler(
     Path(id): Path<Uuid>,
     Json(req): Json<CreateCustomFoodRequest>,
 ) -> impl IntoResponse {
-    let input = custom_food_request_to_input(req);
+    let input = match custom_food_request_to_input(req) {
+        Ok(input) => input,
+        Err(error) => return error.into_response(),
+    };
     let updated = match state
         .services
         .update_custom_food(auth.0.id, ProductId(id), input)
@@ -451,16 +459,15 @@ async fn list_units_handler(
 
 // ─── Conversions ───────────────────────────────────────────────
 
-fn custom_food_request_to_input(req: CreateCustomFoodRequest) -> CustomFoodInput {
-    CustomFoodInput {
-        name: req.name,
-        brand: req.brand,
-        categories: req.categories,
-        default_quantity: req.default_quantity,
-        default_unit: req.default_unit,
-        nutrients: product_nutrient_dtos_to_inputs(req.nutrients),
-        servings: product_serving_dtos_to_inputs(req.servings),
-    }
+fn custom_food_request_to_input(
+    req: CreateCustomFoodRequest,
+) -> Result<CustomProductBuilder, NutritionError> {
+    Ok(CustomProductBuilder::new(req.name)
+        .brand(req.brand)
+        .categories(req.categories)
+        .optional_default_portion(req.default_quantity, req.default_unit)?
+        .nutrients(product_nutrient_dtos_to_inputs(req.nutrients))
+        .servings(product_serving_dtos_to_inputs(req.servings)))
 }
 
 fn product_nutrient_dtos_to_inputs(
@@ -524,9 +531,9 @@ fn product_to_search_item_dto(product: Product) -> ProductSearchItemDto {
 
     ProductSearchItemDto {
         id: product.id.0,
-        source: product.source.into(),
-        source_id: product.source_id,
-        barcode: product.barcode.map(|b| b.0),
+        source: (&product.origin).into(),
+        source_id: product.origin.source_id().map(str::to_owned),
+        barcode: product.origin.barcode().map(|b| b.0.clone()),
         name: product.name.into_inner(),
         brand: product.brand.map(|b| b.0),
         categories: product.categories.into_iter().map(|c| c.0).collect(),
@@ -580,10 +587,10 @@ fn product_to_detail_response(
 ) -> ProductDetailResponse {
     ProductDetailResponse {
         id: product.id.0,
-        source: product.source.into(),
-        source_id: product.source_id.clone(),
+        source: (&product.origin).into(),
+        source_id: product.origin.source_id().map(str::to_owned),
         visibility: product.visibility.into(),
-        barcode: product.barcode.as_ref().map(|b| b.0.clone()),
+        barcode: product.origin.barcode().map(|b| b.0.clone()),
         name: product.name.as_str().to_string(),
         brand: product.brand.as_ref().map(|b| b.0.clone()),
         categories: product.categories.iter().map(|c| c.0.clone()).collect(),

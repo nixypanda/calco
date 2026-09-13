@@ -115,45 +115,43 @@ impl From<Uuid> for ProductId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Source {
-    User,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternalSource {
     Off,
     Usda,
     Ifct,
     Indb,
 }
 
-impl Source {
+impl ExternalSource {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Source::User => "USER",
-            Source::Off => "OFF",
-            Source::Usda => "USDA",
-            Source::Ifct => "IFCT",
-            Source::Indb => "INDB",
+            ExternalSource::Off => "OFF",
+            ExternalSource::Usda => "USDA",
+            ExternalSource::Ifct => "IFCT",
+            ExternalSource::Indb => "INDB",
         }
     }
 
     pub fn default_nutrient_confidence(&self) -> NutrientConfidence {
         match self {
-            Source::Usda | Source::Ifct | Source::Indb => NutrientConfidence::Approved,
-            Source::Off => NutrientConfidence::Derived,
-            Source::User => NutrientConfidence::Unknown,
+            ExternalSource::Usda | ExternalSource::Ifct | ExternalSource::Indb => {
+                NutrientConfidence::Approved
+            }
+            ExternalSource::Off => NutrientConfidence::Derived,
         }
     }
 }
 
-impl FromStr for Source {
+impl FromStr for ExternalSource {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "USER" => Ok(Source::User),
-            "OFF" => Ok(Source::Off),
-            "USDA" => Ok(Source::Usda),
-            "IFCT" => Ok(Source::Ifct),
-            "INDB" => Ok(Source::Indb),
+            "OFF" => Ok(ExternalSource::Off),
+            "USDA" => Ok(ExternalSource::Usda),
+            "IFCT" => Ok(ExternalSource::Ifct),
+            "INDB" => Ok(ExternalSource::Indb),
             _ => Err(format!("invalid source: {s}")),
         }
     }
@@ -251,6 +249,76 @@ pub struct UnitCode(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Barcode(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExternalProductId(String);
+
+impl ExternalProductId {
+    pub fn new(value: impl Into<String>) -> Result<Self, NutritionError> {
+        let value = value.into().trim().to_owned();
+        if value.is_empty() {
+            return Err(NutritionError::Validation(
+                "external food must have a source id".into(),
+            ));
+        }
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProductOrigin {
+    Custom {
+        user_id: Uuid,
+    },
+    External {
+        source: ExternalSource,
+        source_id: ExternalProductId,
+        barcode: Option<Barcode>,
+    },
+}
+
+impl ProductOrigin {
+    pub fn source_code(&self) -> &'static str {
+        match self {
+            Self::Custom { .. } => "USER",
+            Self::External { source, .. } => source.as_str(),
+        }
+    }
+
+    pub fn source_id(&self) -> Option<&str> {
+        match self {
+            Self::Custom { .. } => None,
+            Self::External { source_id, .. } => Some(source_id.as_str()),
+        }
+    }
+
+    pub fn owner_id(&self) -> Option<Uuid> {
+        match self {
+            Self::Custom { user_id } => Some(*user_id),
+            Self::External { .. } => None,
+        }
+    }
+
+    pub fn barcode(&self) -> Option<&Barcode> {
+        match self {
+            Self::Custom { .. } => None,
+            Self::External { barcode, .. } => barcode.as_ref(),
+        }
+    }
+
+    pub fn external_identity(&self) -> Option<(ExternalSource, &ExternalProductId)> {
+        match self {
+            Self::Custom { .. } => None,
+            Self::External {
+                source, source_id, ..
+            } => Some((*source, source_id)),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductName(String);
@@ -366,11 +434,8 @@ impl AmountPer100g {
 #[derive(Debug, Clone)]
 pub struct Product {
     pub id: ProductId,
-    pub source: Source,
-    pub source_id: Option<String>,
-    pub user_id: Option<Uuid>,
+    pub origin: ProductOrigin,
     pub visibility: ProductVisibility,
-    pub barcode: Option<Barcode>,
     pub name: ProductName,
     pub brand: Option<Brand>,
     pub categories: Vec<Category>,
@@ -380,6 +445,151 @@ pub struct Product {
     pub servings: Vec<ProductServing>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
+struct DefaultPortionInput {
+    amount: Decimal,
+    unit: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CustomProductBuilder {
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_portion: Option<DefaultPortionInput>,
+    nutrients: Vec<ProductNutrientInput>,
+    servings: Vec<ProductServingInput>,
+}
+
+impl CustomProductBuilder {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            brand: None,
+            categories: Vec::new(),
+            default_portion: None,
+            nutrients: Vec::new(),
+            servings: Vec::new(),
+        }
+    }
+
+    pub fn brand(mut self, brand: Option<String>) -> Self {
+        self.brand = brand;
+        self
+    }
+
+    pub fn categories(mut self, categories: Vec<String>) -> Self {
+        self.categories = categories;
+        self
+    }
+
+    pub fn default_portion(mut self, amount: Decimal, unit: impl Into<String>) -> Self {
+        self.default_portion = Some(DefaultPortionInput {
+            amount,
+            unit: unit.into(),
+        });
+        self
+    }
+
+    pub fn optional_default_portion(
+        self,
+        amount: Option<Decimal>,
+        unit: Option<String>,
+    ) -> Result<Self, NutritionError> {
+        match (amount, unit) {
+            (None, None) => Ok(self),
+            (Some(amount), Some(unit)) => Ok(self.default_portion(amount, unit)),
+            _ => Err(NutritionError::Validation(
+                "default quantity and default unit must be provided together".into(),
+            )),
+        }
+    }
+
+    pub fn nutrients(mut self, nutrients: Vec<ProductNutrientInput>) -> Self {
+        self.nutrients = nutrients;
+        self
+    }
+
+    pub fn servings(mut self, servings: Vec<ProductServingInput>) -> Self {
+        self.servings = servings;
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ExternalProductBuilder {
+    source_id: String,
+    name: String,
+    barcode: Option<String>,
+    brand: Option<String>,
+    categories: Vec<String>,
+    default_portion: Option<DefaultPortionInput>,
+    nutrients: Vec<ProductNutrientInput>,
+    servings: Vec<ProductServingInput>,
+}
+
+impl ExternalProductBuilder {
+    pub fn new(source_id: impl Into<String>, name: impl Into<String>) -> Self {
+        Self {
+            source_id: source_id.into(),
+            name: name.into(),
+            barcode: None,
+            brand: None,
+            categories: Vec::new(),
+            default_portion: None,
+            nutrients: Vec::new(),
+            servings: Vec::new(),
+        }
+    }
+
+    pub fn barcode(mut self, barcode: Option<String>) -> Self {
+        self.barcode = barcode;
+        self
+    }
+
+    pub fn brand(mut self, brand: Option<String>) -> Self {
+        self.brand = brand;
+        self
+    }
+
+    pub fn categories(mut self, categories: Vec<String>) -> Self {
+        self.categories = categories;
+        self
+    }
+
+    pub fn default_portion(mut self, amount: Decimal, unit: impl Into<String>) -> Self {
+        self.default_portion = Some(DefaultPortionInput {
+            amount,
+            unit: unit.into(),
+        });
+        self
+    }
+
+    pub fn optional_default_portion(
+        self,
+        amount: Option<Decimal>,
+        unit: Option<String>,
+    ) -> Result<Self, NutritionError> {
+        match (amount, unit) {
+            (None, None) => Ok(self),
+            (Some(amount), Some(unit)) => Ok(self.default_portion(amount, unit)),
+            _ => Err(NutritionError::Validation(
+                "default quantity and default unit must be provided together".into(),
+            )),
+        }
+    }
+
+    pub fn nutrients(mut self, nutrients: Vec<ProductNutrientInput>) -> Self {
+        self.nutrients = nutrients;
+        self
+    }
+
+    pub fn servings(mut self, servings: Vec<ProductServingInput>) -> Self {
+        self.servings = servings;
+        self
+    }
 }
 
 struct ValidatedCustomFood {
@@ -392,52 +602,36 @@ struct ValidatedCustomFood {
 }
 
 impl Product {
-    #[allow(clippy::too_many_arguments)]
     pub fn new_external(
-        source: Source,
-        source_id: String,
-        barcode: Option<String>,
-        name: String,
-        brand: Option<String>,
-        categories: Vec<String>,
-        default_quantity: Option<Decimal>,
-        default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientInput>,
-        servings: Vec<ProductServingInput>,
+        source: ExternalSource,
+        input: ExternalProductBuilder,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        if source == Source::User {
-            return Err(NutritionError::Validation(
-                "external food must have an external source".into(),
-            ));
-        }
-        if source_id.trim().is_empty() {
-            return Err(NutritionError::Validation(
-                "external food must have a source id".into(),
-            ));
-        }
-
-        let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
-        let servings = build_product_servings(servings)?;
+        let nutrients = build_product_nutrients(input.nutrients, nutrient_catalog)?;
+        let servings = build_product_servings(input.servings)?;
+        let (default_quantity, default_unit) = default_portion_parts(input.default_portion);
         let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
         let now = Utc::now();
 
         Ok(Self {
             id: ProductId::new(),
-            source,
-            source_id: Some(source_id.trim().to_owned()),
-            user_id: None,
+            origin: ProductOrigin::External {
+                source,
+                source_id: ExternalProductId::new(input.source_id)?,
+                barcode: input
+                    .barcode
+                    .map(|value| value.trim().to_owned())
+                    .filter(|value| !value.is_empty())
+                    .map(Barcode),
+            },
             visibility: ProductVisibility::Global,
-            barcode: barcode
-                .map(|value| value.trim().to_owned())
-                .filter(|value| !value.is_empty())
-                .map(Barcode),
-            name: ProductName::new(&name)?,
-            brand: brand
+            name: ProductName::new(&input.name)?,
+            brand: input
+                .brand
                 .map(|value| value.trim().to_owned())
                 .filter(|value| !value.is_empty())
                 .map(Brand),
-            categories: Category::normalize_list(categories),
+            categories: Category::normalize_list(input.categories),
             default_quantity: default_quantity.as_ref().map(|q| q.amount),
             default_unit: default_quantity.map(|q| q.unit),
             nutrients,
@@ -447,37 +641,18 @@ impl Product {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn new_custom(
         user_id: Uuid,
-        name: String,
-        brand: Option<String>,
-        categories: Vec<String>,
-        default_quantity: Option<Decimal>,
-        default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientInput>,
-        servings: Vec<ProductServingInput>,
+        input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        let validated = validate_custom_food(
-            name,
-            brand,
-            categories,
-            default_quantity,
-            default_unit,
-            nutrients,
-            servings,
-            nutrient_catalog,
-        )?;
+        let validated = validate_custom_food(input, nutrient_catalog)?;
 
         let now = Utc::now();
         Ok(Self {
             id: ProductId::new(),
-            source: Source::User,
-            source_id: None,
-            user_id: Some(user_id),
+            origin: ProductOrigin::Custom { user_id },
             visibility: ProductVisibility::Global,
-            barcode: None,
             name: validated.name,
             brand: validated.brand,
             categories: validated.categories,
@@ -490,28 +665,17 @@ impl Product {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn update_custom(
         &self,
-        name: String,
-        brand: Option<String>,
-        categories: Vec<String>,
-        default_quantity: Option<Decimal>,
-        default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientInput>,
-        servings: Vec<ProductServingInput>,
+        input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<Self, NutritionError> {
-        let validated = validate_custom_food(
-            name,
-            brand,
-            categories,
-            default_quantity,
-            default_unit,
-            nutrients,
-            servings,
-            nutrient_catalog,
-        )?;
+        if !matches!(self.origin, ProductOrigin::Custom { .. }) {
+            return Err(NutritionError::Validation(
+                "external products cannot be updated as custom foods".into(),
+            ));
+        }
+        let validated = validate_custom_food(input, nutrient_catalog)?;
 
         Ok(Self {
             name: validated.name,
@@ -525,32 +689,16 @@ impl Product {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn validate_custom_draft(
-        name: String,
-        brand: Option<String>,
-        categories: Vec<String>,
-        default_quantity: Option<Decimal>,
-        default_unit: Option<String>,
-        nutrients: Vec<ProductNutrientInput>,
-        servings: Vec<ProductServingInput>,
+        input: CustomProductBuilder,
         nutrient_catalog: &NutrientCatalog,
     ) -> Result<(), NutritionError> {
-        validate_custom_food(
-            name,
-            brand,
-            categories,
-            default_quantity,
-            default_unit,
-            nutrients,
-            servings,
-            nutrient_catalog,
-        )?;
+        validate_custom_food(input, nutrient_catalog)?;
         Ok(())
     }
 
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
-        self.user_id == Some(user_id)
+        matches!(self.origin, ProductOrigin::Custom { user_id: owner_id } if owner_id == user_id)
     }
 
     pub fn quantity_to_grams(
@@ -603,30 +751,33 @@ impl Product {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn validate_custom_food(
-    name: String,
-    brand: Option<String>,
-    categories: Vec<String>,
-    default_quantity: Option<Decimal>,
-    default_unit: Option<String>,
-    nutrients: Vec<ProductNutrientInput>,
-    servings: Vec<ProductServingInput>,
+    input: CustomProductBuilder,
     nutrient_catalog: &NutrientCatalog,
 ) -> Result<ValidatedCustomFood, NutritionError> {
-    let name = ProductName::new(&name)?;
-    let nutrients = build_product_nutrients(nutrients, nutrient_catalog)?;
+    let name = ProductName::new(&input.name)?;
+    let nutrients = build_product_nutrients(input.nutrients, nutrient_catalog)?;
     validate_required_nutrients(&nutrients)?;
-    let servings = build_product_servings(servings)?;
+    let servings = build_product_servings(input.servings)?;
+    let (default_quantity, default_unit) = default_portion_parts(input.default_portion);
     let default_quantity = DefaultQuantity::new(default_quantity, default_unit, &servings)?;
     Ok(ValidatedCustomFood {
         name,
-        brand: brand.map(Brand),
-        categories: Category::normalize_list(categories),
+        brand: input.brand.map(Brand),
+        categories: Category::normalize_list(input.categories),
         default_quantity,
         nutrients,
         servings,
     })
+}
+
+fn default_portion_parts(
+    default_portion: Option<DefaultPortionInput>,
+) -> (Option<Decimal>, Option<String>) {
+    match default_portion {
+        Some(default_portion) => (Some(default_portion.amount), Some(default_portion.unit)),
+        None => (None, None),
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -758,29 +909,16 @@ impl ExternalProductBatch {
         let mut identities = HashSet::new();
 
         for product in &products {
-            if product.source == Source::User {
+            let Some((source, source_id)) = product.origin.external_identity() else {
                 return Err(NutritionError::Validation(
-                    "external product batch cannot contain user products".into(),
+                    "external product batch cannot contain custom products".into(),
                 ));
-            }
-            if product.user_id.is_some() {
-                return Err(NutritionError::Validation(
-                    "external product cannot have a user id".into(),
-                ));
-            }
-            let source_id = product
-                .source_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|source_id| !source_id.is_empty())
-                .ok_or_else(|| {
-                    NutritionError::Validation("external product must have a source id".into())
-                })?;
-            if !identities.insert((product.source.as_str(), source_id)) {
+            };
+            if !identities.insert((source, source_id)) {
                 return Err(NutritionError::Validation(format!(
                     "duplicate external product identity: ({}, {})",
-                    product.source.as_str(),
-                    source_id
+                    source.as_str(),
+                    source_id.as_str()
                 )));
             }
 
@@ -878,17 +1016,15 @@ impl CatalogPolicy {
         actor_id: Uuid,
         product: &Product,
     ) -> Result<(), NutritionError> {
-        if product.source != Source::User {
-            return Err(NutritionError::Forbidden(
+        match product.origin {
+            ProductOrigin::External { .. } => Err(NutritionError::Forbidden(
                 "system catalog products are read-only".into(),
-            ));
+            )),
+            ProductOrigin::Custom { user_id } if user_id != actor_id => Err(
+                NutritionError::Forbidden("only the creator may modify this custom food".into()),
+            ),
+            ProductOrigin::Custom { .. } => Ok(()),
         }
-        if !product.is_owned_by(actor_id) {
-            return Err(NutritionError::Forbidden(
-                "only the creator may modify this custom food".into(),
-            ));
-        }
-        Ok(())
     }
 }
 
@@ -1030,46 +1166,36 @@ mod tests {
     #[test]
     fn source_provides_default_nutrient_confidence() {
         assert_eq!(
-            Source::Usda.default_nutrient_confidence(),
+            ExternalSource::Usda.default_nutrient_confidence(),
             NutrientConfidence::Approved
         );
         assert_eq!(
-            Source::Ifct.default_nutrient_confidence(),
+            ExternalSource::Ifct.default_nutrient_confidence(),
             NutrientConfidence::Approved
         );
         assert_eq!(
-            Source::Indb.default_nutrient_confidence(),
+            ExternalSource::Indb.default_nutrient_confidence(),
             NutrientConfidence::Approved
         );
         assert_eq!(
-            Source::Off.default_nutrient_confidence(),
+            ExternalSource::Off.default_nutrient_confidence(),
             NutrientConfidence::Derived
-        );
-        assert_eq!(
-            Source::User.default_nutrient_confidence(),
-            NutrientConfidence::Unknown
         );
     }
 
     #[test]
     fn external_product_creation_accepts_missing_barcode_and_empty_children() {
         let product = Product::new_external(
-            Source::Usda,
-            "  foundation-123  ".into(),
-            None,
-            "  Brown rice  ".into(),
-            Some("  Generic  ".into()),
-            vec![" Grains ".into()],
-            None,
-            None,
-            vec![],
-            vec![],
+            ExternalSource::Usda,
+            ExternalProductBuilder::new("  foundation-123  ", "  Brown rice  ")
+                .brand(Some("  Generic  ".into()))
+                .categories(vec![" Grains ".into()]),
             &test_catalog(),
         )
         .unwrap();
 
-        assert_eq!(product.source_id.as_deref(), Some("foundation-123"));
-        assert_eq!(product.barcode, None);
+        assert_eq!(product.origin.source_id(), Some("foundation-123"));
+        assert_eq!(product.origin.barcode(), None);
         assert_eq!(product.name.as_str(), "Brown rice");
         assert_eq!(product.brand, Some(Brand("Generic".into())));
         assert!(product.nutrients.is_empty());
@@ -1079,51 +1205,20 @@ mod tests {
     #[test]
     fn external_product_creation_normalizes_blank_barcode_to_none() {
         let product = Product::new_external(
-            Source::Off,
-            "source-id".into(),
-            Some("  ".into()),
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![],
-            vec![],
+            ExternalSource::Off,
+            ExternalProductBuilder::new("source-id", "Food").barcode(Some("  ".into())),
             &test_catalog(),
         )
         .unwrap();
 
-        assert_eq!(product.barcode, None);
+        assert_eq!(product.origin.barcode(), None);
     }
 
     #[test]
-    fn external_product_creation_rejects_user_source_and_blank_source_id() {
-        let user_source = Product::new_external(
-            Source::User,
-            "source-id".into(),
-            None,
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![],
-            vec![],
-            &test_catalog(),
-        );
-        assert!(matches!(user_source, Err(NutritionError::Validation(_))));
-
+    fn external_product_creation_rejects_blank_source_id() {
         let blank_source_id = Product::new_external(
-            Source::Off,
-            "  ".into(),
-            None,
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![],
-            vec![],
+            ExternalSource::Off,
+            ExternalProductBuilder::new("  ", "Food"),
             &test_catalog(),
         );
         assert!(matches!(
@@ -1137,18 +1232,17 @@ mod tests {
         let catalog = test_catalog();
         let product = Product::new_custom(
             Uuid::new_v4(),
-            "  Rice Bowl  ".into(),
-            Some("Kitchen".into()),
-            vec![" Meals ".into(), "meals".into(), "Dinner".into()],
-            Some(Decimal::new(1, 0)),
-            Some("g".into()),
-            required_nutrient_inputs(Decimal::new(120, 0)),
-            vec![serving_input(Decimal::new(250, 0))],
+            CustomProductBuilder::new("  Rice Bowl  ")
+                .brand(Some("Kitchen".into()))
+                .categories(vec![" Meals ".into(), "meals".into(), "Dinner".into()])
+                .default_portion(Decimal::new(1, 0), "g")
+                .nutrients(required_nutrient_inputs(Decimal::new(120, 0)))
+                .servings(vec![serving_input(Decimal::new(250, 0))]),
             &catalog,
         )
         .unwrap();
 
-        assert_eq!(product.source, Source::User);
+        assert!(matches!(product.origin, ProductOrigin::Custom { .. }));
         assert_eq!(product.visibility, ProductVisibility::Global);
         assert_eq!(product.name.as_str(), "Rice Bowl");
         assert_eq!(
@@ -1174,13 +1268,9 @@ mod tests {
         assert!(
             Product::new_custom(
                 user_id,
-                " ".into(),
-                None,
-                vec![],
-                None,
-                None,
-                vec![nutrient_input(Decimal::ZERO)],
-                vec![serving_input(Decimal::new(100, 0))],
+                CustomProductBuilder::new(" ")
+                    .nutrients(vec![nutrient_input(Decimal::ZERO)])
+                    .servings(vec![serving_input(Decimal::new(100, 0))]),
                 &catalog,
             )
             .is_err()
@@ -1189,13 +1279,9 @@ mod tests {
         assert!(
             Product::new_custom(
                 user_id,
-                "Food".into(),
-                None,
-                vec![],
-                None,
-                None,
-                vec![nutrient_input(Decimal::new(-1, 0))],
-                vec![serving_input(Decimal::new(100, 0))],
+                CustomProductBuilder::new("Food")
+                    .nutrients(vec![nutrient_input(Decimal::new(-1, 0))])
+                    .servings(vec![serving_input(Decimal::new(100, 0))]),
                 &catalog,
             )
             .is_err()
@@ -1204,13 +1290,9 @@ mod tests {
         assert!(
             Product::new_custom(
                 user_id,
-                "Food".into(),
-                None,
-                vec![],
-                None,
-                None,
-                vec![nutrient_input(Decimal::ZERO)],
-                vec![serving_input(Decimal::ZERO)],
+                CustomProductBuilder::new("Food")
+                    .nutrients(vec![nutrient_input(Decimal::ZERO)])
+                    .servings(vec![serving_input(Decimal::ZERO)]),
                 &catalog,
             )
             .is_err()
@@ -1231,18 +1313,14 @@ mod tests {
         let catalog = test_catalog();
         let result = Product::new_custom(
             user_id,
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![ProductNutrientInput {
-                code: "NOT_A_CODE".into(),
-                amount_per_100g: Decimal::new(10, 0),
-                source: None,
-                confidence: None,
-            }],
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .nutrients(vec![ProductNutrientInput {
+                    code: "NOT_A_CODE".into(),
+                    amount_per_100g: Decimal::new(10, 0),
+                    source: None,
+                    confidence: None,
+                }])
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         );
         assert!(matches!(result, Err(NutritionError::Validation(_))));
@@ -1252,40 +1330,26 @@ mod tests {
     fn custom_product_update_preserves_identity_and_source_fields() {
         let user_id = Uuid::new_v4();
         let catalog = test_catalog();
-        let mut product = Product::new_custom(
+        let product = Product::new_custom(
             user_id,
-            "Original".into(),
-            None,
-            vec!["old".into()],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Original")
+                .categories(vec!["old".into()])
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         )
         .unwrap();
-        product.source_id = Some("external-id".into());
-        product.barcode = Some(Barcode("123".into()));
-
-        let updated = product
-            .update_custom(
-                " Updated ".into(),
-                Some("Brand".into()),
-                vec!["New".into()],
-                Some(Decimal::new(2, 0)),
-                Some("serving".into()),
-                required_nutrient_inputs(Decimal::new(20, 0)),
-                vec![serving_input(Decimal::new(50, 0))],
-                &catalog,
-            )
-            .unwrap();
+        let input = CustomProductBuilder::new(" Updated ")
+            .brand(Some("Brand".into()))
+            .categories(vec!["New".into()])
+            .default_portion(Decimal::new(2, 0), "serving")
+            .nutrients(required_nutrient_inputs(Decimal::new(20, 0)))
+            .servings(vec![serving_input(Decimal::new(50, 0))]);
+        let updated = product.update_custom(input, &catalog).unwrap();
 
         assert_eq!(updated.id, product.id);
-        assert_eq!(updated.source, product.source);
-        assert_eq!(updated.source_id, product.source_id);
-        assert_eq!(updated.user_id, product.user_id);
+        assert_eq!(updated.origin, product.origin);
         assert_eq!(updated.visibility, product.visibility);
-        assert_eq!(updated.barcode, product.barcode);
         assert_eq!(updated.name.as_str(), "Updated");
         assert_eq!(updated.brand.unwrap().0, "Brand");
         assert_eq!(updated.default_unit.unwrap().0, "serving");
@@ -1297,13 +1361,9 @@ mod tests {
         let catalog = test_catalog();
         let result = Product::new_custom(
             user_id,
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![nutrient_input(Decimal::new(100, 0))],
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .nutrients(vec![nutrient_input(Decimal::new(100, 0))])
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         );
         match result {
@@ -1323,27 +1383,17 @@ mod tests {
         let catalog = test_catalog();
         let product = Product::new_custom(
             user_id,
-            "Original".into(),
-            None,
-            vec![],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(100, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Original")
+                .nutrients(required_nutrient_inputs(Decimal::new(100, 0)))
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         )
         .unwrap();
 
-        let result = product.update_custom(
-            "Updated".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![nutrient_input(Decimal::new(200, 0))],
-            vec![serving_input(Decimal::new(100, 0))],
-            &catalog,
-        );
+        let input = CustomProductBuilder::new("Updated")
+            .nutrients(vec![nutrient_input(Decimal::new(200, 0))])
+            .servings(vec![serving_input(Decimal::new(100, 0))]);
+        let result = product.update_custom(input, &catalog);
         match result {
             Err(NutritionError::Validation(msg)) => {
                 assert!(msg.contains("PROTEIN_G"), "msg: {msg}");
@@ -1359,48 +1409,25 @@ mod tests {
         let catalog = test_catalog();
         let result = Product::new_custom(
             Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![
-                serving_input(Decimal::new(100, 0)),
-                serving_input(Decimal::new(200, 0)),
-            ],
+            CustomProductBuilder::new("Food")
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+                .servings(vec![
+                    serving_input(Decimal::new(100, 0)),
+                    serving_input(Decimal::new(200, 0)),
+                ]),
             &catalog,
         );
         assert!(matches!(result, Err(NutritionError::Validation(_))));
     }
 
     #[test]
-    fn custom_product_creation_rejects_half_default_quantity_pair() {
-        let catalog = test_catalog();
-        let missing_unit = Product::new_custom(
-            Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            Some(Decimal::new(1, 0)),
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
-            &catalog,
-        );
+    fn custom_product_builder_rejects_half_default_quantity_pair() {
+        let missing_unit = CustomProductBuilder::new("Food")
+            .optional_default_portion(Some(Decimal::new(1, 0)), None);
         assert!(matches!(missing_unit, Err(NutritionError::Validation(_))));
 
-        let missing_quantity = Product::new_custom(
-            Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            Some("serving".into()),
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
-            &catalog,
-        );
+        let missing_quantity = CustomProductBuilder::new("Food")
+            .optional_default_portion(None, Some("serving".into()));
         assert!(matches!(
             missing_quantity,
             Err(NutritionError::Validation(_))
@@ -1412,13 +1439,10 @@ mod tests {
         let catalog = test_catalog();
         let result = Product::new_custom(
             Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            Some(Decimal::new(2, 0)),
-            Some("slice".into()),
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .default_portion(Decimal::new(2, 0), "slice")
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         );
         assert!(matches!(result, Err(NutritionError::Validation(_))));
@@ -1429,13 +1453,10 @@ mod tests {
         let catalog = test_catalog();
         let product = Product::new_custom(
             Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            Some(Decimal::new(3, 0)),
-            Some("serving".into()),
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .default_portion(Decimal::new(3, 0), "serving")
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         )
         .unwrap();
@@ -1447,13 +1468,9 @@ mod tests {
     fn quantity_to_grams_multiplies_amount_by_grams_per_unit() {
         let product = Product::new_custom(
             Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![serving_input(Decimal::new(14, 0))],
+            CustomProductBuilder::new("Food")
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
+                .servings(vec![serving_input(Decimal::new(14, 0))]),
             &test_catalog(),
         )
         .unwrap();
@@ -1474,13 +1491,9 @@ mod tests {
 
         let result = Product::new_custom(
             Uuid::new_v4(),
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            nutrients,
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .nutrients(nutrients)
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         );
         match result {
@@ -1498,18 +1511,14 @@ mod tests {
         let catalog = test_catalog();
         let result = Product::new_custom(
             user_id,
-            "Food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![ProductNutrientInput {
-                code: "NOT_A_CODE".into(),
-                amount_per_100g: Decimal::new(10, 0),
-                source: None,
-                confidence: None,
-            }],
-            vec![serving_input(Decimal::new(100, 0))],
+            CustomProductBuilder::new("Food")
+                .nutrients(vec![ProductNutrientInput {
+                    code: "NOT_A_CODE".into(),
+                    amount_per_100g: Decimal::new(10, 0),
+                    source: None,
+                    confidence: None,
+                }])
+                .servings(vec![serving_input(Decimal::new(100, 0))]),
             &catalog,
         );
         match result {
@@ -1527,13 +1536,8 @@ mod tests {
         let other = Uuid::new_v4();
         let product = Product::new_custom(
             owner,
-            "Shared food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![],
+            CustomProductBuilder::new("Shared food")
+                .nutrients(required_nutrient_inputs(Decimal::new(10, 0))),
             &test_catalog(),
         )
         .unwrap();
@@ -1550,20 +1554,12 @@ mod tests {
     #[test]
     fn catalog_policy_keeps_imported_products_read_only() {
         let actor = Uuid::new_v4();
-        let mut product = Product::new_custom(
-            actor,
-            "Imported food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            required_nutrient_inputs(Decimal::new(10, 0)),
-            vec![],
+        let product = Product::new_external(
+            ExternalSource::Off,
+            ExternalProductBuilder::new("imported-food", "Imported food"),
             &test_catalog(),
         )
         .unwrap();
-        product.source = Source::Off;
-        product.user_id = None;
 
         assert!(matches!(
             CatalogPolicy.authorize_mutation(actor, &product),

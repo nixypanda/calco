@@ -334,11 +334,10 @@ mod tests {
     fn sample_product() -> Product {
         Product {
             id: ProductId(Uuid::nil()),
-            source: Source::User,
-            source_id: None,
-            user_id: None,
+            origin: ProductOrigin::Custom {
+                user_id: Uuid::nil(),
+            },
             visibility: ProductVisibility::Global,
-            barcode: None,
             name: ProductName::new("Test Food").unwrap(),
             brand: None,
             categories: vec![],

@@ -322,12 +322,10 @@ async fn product_search_scopes_filter_and_order_results(pool: PgPool) {
 }
 
 #[sqlx::test]
-async fn barcode_lookup_returns_shared_custom_foods(pool: PgPool) {
+async fn database_rejects_barcodes_on_custom_foods(pool: PgPool) {
     let router = app(pool.clone()).await;
     let admin = bootstrap_admin(&router).await;
     let owner = create_user_session(&router, &admin, "barcode_owner", "testpassword").await;
-    let other = create_user_session(&router, &admin, "barcode_other", "testpassword").await;
-
     let product_id = create_custom_product(
         &router,
         &owner,
@@ -337,27 +335,17 @@ async fn barcode_lookup_returns_shared_custom_foods(pool: PgPool) {
         320,
     )
     .await;
-    sqlx::query("UPDATE products SET barcode = $1 WHERE id = $2")
+    let result = sqlx::query("UPDATE products SET barcode = $1 WHERE id = $2")
         .bind("private-barcode-123")
         .bind(uuid::Uuid::parse_str(&product_id).expect("product id uuid"))
         .execute(&pool)
-        .await
-        .expect("set barcode");
+        .await;
 
-    let owner_lookup: Value =
-        get_json(&router, "/api/foods/barcode/private-barcode-123", &owner).await;
-    assert_eq!(owner_lookup["id"], product_id);
+    let error = result.expect_err("custom products must not acquire external identity fields");
     assert_eq!(
-        owner_lookup["nutrition_summary"]["per_100g"]["energy_kcal"],
-        "320"
+        error.as_database_error().and_then(|error| error.code()),
+        Some("23514".into())
     );
-    assert_eq!(owner_lookup["lookup"]["origin"], "local");
-    assert!(owner_lookup["lookup"]["note"].is_null());
-
-    let other_lookup: Value =
-        get_json(&router, "/api/foods/barcode/private-barcode-123", &other).await;
-    assert_eq!(other_lookup["id"], product_id);
-    assert_eq!(other_lookup["lookup"]["origin"], "local");
 }
 
 #[sqlx::test]

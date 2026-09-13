@@ -425,7 +425,7 @@ mod tests {
     use super::*;
     use crate::nutrition::catalog::domain::calculation::Quantity;
     use crate::nutrition::catalog::domain::{
-        AmountPer100g, ProductName, ProductNutrient, ProductVisibility, Source,
+        AmountPer100g, ProductName, ProductNutrient, ProductOrigin, ProductVisibility,
     };
     use crate::nutrition::meal::domain::{MealComponent, MealComponentItem};
     use std::str::FromStr;
@@ -433,11 +433,10 @@ mod tests {
     fn sample_product() -> Product {
         Product {
             id: ProductId(Uuid::nil()),
-            source: Source::User,
-            source_id: None,
-            user_id: None,
+            origin: ProductOrigin::Custom {
+                user_id: Uuid::nil(),
+            },
             visibility: ProductVisibility::Global,
-            barcode: None,
             name: ProductName::new("Test").unwrap(),
             brand: None,
             categories: vec![],

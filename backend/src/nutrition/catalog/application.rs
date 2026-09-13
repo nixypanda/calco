@@ -1,41 +1,19 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+#[cfg(test)]
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 
-pub struct CustomFoodInput {
-    pub name: String,
-    pub brand: Option<String>,
-    pub categories: Vec<String>,
-    pub default_quantity: Option<Decimal>,
-    pub default_unit: Option<String>,
-    pub nutrients: Vec<ProductNutrientInput>,
-    pub servings: Vec<ProductServingInput>,
-}
-
-#[derive(Debug, Clone)]
-pub struct ExternalProductInput {
-    pub source_id: String,
-    pub barcode: String,
-    pub name: String,
-    pub brand: Option<String>,
-    pub categories: Vec<String>,
-    pub default_quantity: Option<Decimal>,
-    pub default_unit: Option<String>,
-    pub nutrients: Vec<ProductNutrientInput>,
-    pub servings: Vec<ProductServingInput>,
-}
-
 #[async_trait]
 pub trait ExternalProductCatalog: Send + Sync {
     async fn find_by_barcode(
         &self,
         barcode: &str,
-    ) -> Result<Option<ExternalProductInput>, NutritionError>;
+    ) -> Result<Option<ExternalProductBuilder>, NutritionError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,20 +160,8 @@ impl CatalogService {
             return Ok(None);
         };
         let nutrient_catalog = self.load_nutrient_catalog().await?;
-        let product = Product::new_external(
-            Source::Off,
-            input.source_id,
-            Some(input.barcode),
-            input.name,
-            input.brand,
-            input.categories,
-            input.default_quantity,
-            input.default_unit,
-            input.nutrients,
-            input.servings,
-            &nutrient_catalog,
-        )
-        .map_err(|_| NutritionError::ExternalInvalidResponse)?;
+        let product = Product::new_external(ExternalSource::Off, input, &nutrient_catalog)
+            .map_err(|_| NutritionError::ExternalInvalidResponse)?;
 
         // CalCo is a small homelab deployment, so a plain create is intentional.
         // Concurrent first scans could race on (source, source_id); if that becomes
@@ -230,60 +196,32 @@ impl CatalogService {
     pub async fn create_custom_food(
         &self,
         actor_id: Uuid,
-        input: CustomFoodInput,
+        input: CustomProductBuilder,
     ) -> Result<Product, NutritionError> {
         let nutrient_catalog = self.load_nutrient_catalog().await?;
-        let product = Product::new_custom(
-            actor_id,
-            input.name,
-            input.brand,
-            input.categories,
-            input.default_quantity,
-            input.default_unit,
-            input.nutrients,
-            input.servings,
-            &nutrient_catalog,
-        )?;
+        let product = Product::new_custom(actor_id, input, &nutrient_catalog)?;
         self.product_repo.create(&product).await?;
         Ok(product)
     }
 
     pub async fn validate_custom_food_draft(
         &self,
-        input: CustomFoodInput,
+        input: CustomProductBuilder,
     ) -> Result<(), NutritionError> {
         let nutrient_catalog = self.load_nutrient_catalog().await?;
-        Product::validate_custom_draft(
-            input.name,
-            input.brand,
-            input.categories,
-            input.default_quantity,
-            input.default_unit,
-            input.nutrients,
-            input.servings,
-            &nutrient_catalog,
-        )
+        Product::validate_custom_draft(input, &nutrient_catalog)
     }
 
     pub async fn update_custom_food(
         &self,
         actor_id: Uuid,
         id: ProductId,
-        input: CustomFoodInput,
+        input: CustomProductBuilder,
     ) -> Result<Product, NutritionError> {
         let existing = self.get_product(actor_id, id).await?;
         self.policy.authorize_mutation(actor_id, &existing)?;
         let nutrient_catalog = self.load_nutrient_catalog().await?;
-        let updated = existing.update_custom(
-            input.name,
-            input.brand,
-            input.categories,
-            input.default_quantity,
-            input.default_unit,
-            input.nutrients,
-            input.servings,
-            &nutrient_catalog,
-        )?;
+        let updated = existing.update_custom(input, &nutrient_catalog)?;
         self.product_repo.update(&updated).await?;
         Ok(updated)
     }
@@ -506,7 +444,7 @@ mod tests {
     }
 
     struct MockExternalCatalog {
-        product: Option<ExternalProductInput>,
+        product: Option<ExternalProductBuilder>,
         calls: AtomicUsize,
     }
 
@@ -515,7 +453,7 @@ mod tests {
         async fn find_by_barcode(
             &self,
             _barcode: &str,
-        ) -> Result<Option<ExternalProductInput>, NutritionError> {
+        ) -> Result<Option<ExternalProductBuilder>, NutritionError> {
             self.calls.fetch_add(1, Ordering::Relaxed);
             Ok(self.product.clone())
         }
@@ -523,38 +461,24 @@ mod tests {
 
     fn local_product(barcode: &str) -> Product {
         Product::new_external(
-            Source::Off,
-            barcode.into(),
-            Some(barcode.into()),
-            "Stored food".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![],
-            vec![],
+            ExternalSource::Off,
+            ExternalProductBuilder::new(barcode, "Stored food").barcode(Some(barcode.into())),
             &NutrientCatalog::default(),
         )
         .unwrap()
     }
 
-    fn external_input(barcode: &str) -> ExternalProductInput {
-        ExternalProductInput {
-            source_id: barcode.into(),
-            barcode: barcode.into(),
-            name: "Fetched food".into(),
-            brand: Some("Brand".into()),
-            categories: vec!["snacks".into()],
-            default_quantity: None,
-            default_unit: None,
-            nutrients: vec![ProductNutrientInput {
+    fn external_input(barcode: &str) -> ExternalProductBuilder {
+        ExternalProductBuilder::new(barcode, "Fetched food")
+            .barcode(Some(barcode.into()))
+            .brand(Some("Brand".into()))
+            .categories(vec!["snacks".into()])
+            .nutrients(vec![ProductNutrientInput {
                 code: "PROTEIN_G".into(),
                 amount_per_100g: Decimal::from(7),
                 source: Some("open_food_facts".into()),
                 confidence: Some("unknown".into()),
-            }],
-            servings: vec![],
-        }
+            }])
     }
 
     fn service(
@@ -612,7 +536,13 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(product.product.source, Source::Off);
+        assert!(matches!(
+            product.product.origin,
+            ProductOrigin::External {
+                source: ExternalSource::Off,
+                ..
+            }
+        ));
         assert_eq!(product.product.name.as_str(), "Fetched food");
         assert_eq!(product.origin, BarcodeLookupOrigin::OpenFoodFacts);
         assert_eq!(external.calls.load(Ordering::Relaxed), 1);
@@ -663,24 +593,18 @@ mod tests {
 
     fn external_product_for_write() -> Product {
         Product::new_external(
-            Source::Off,
-            "catalog-product".into(),
-            None,
-            "Catalog product".into(),
-            None,
-            vec![],
-            None,
-            None,
-            vec![ProductNutrientInput {
-                code: "PROTEIN_G".into(),
-                amount_per_100g: Decimal::from(7),
-                source: None,
-                confidence: None,
-            }],
-            vec![ProductServingInput {
-                unit: "piece".into(),
-                grams_per_unit: Decimal::from(25),
-            }],
+            ExternalSource::Off,
+            ExternalProductBuilder::new("catalog-product", "Catalog product")
+                .nutrients(vec![ProductNutrientInput {
+                    code: "PROTEIN_G".into(),
+                    amount_per_100g: Decimal::from(7),
+                    source: None,
+                    confidence: None,
+                }])
+                .servings(vec![ProductServingInput {
+                    unit: "piece".into(),
+                    grams_per_unit: Decimal::from(25),
+                }]),
             &vec![Nutrient {
                 code: NutrientCode("PROTEIN_G".into()),
                 name: "Protein".into(),
@@ -707,14 +631,10 @@ mod tests {
         let service = service(repo.clone(), external);
         let product = external_product_for_write();
 
-        let mut user_source = product.clone();
-        user_source.source = Source::User;
-        let mut owned = product.clone();
-        owned.user_id = Some(Uuid::new_v4());
-        let mut absent_source_id = product.clone();
-        absent_source_id.source_id = None;
-        let mut blank_source_id = product.clone();
-        blank_source_id.source_id = Some("   ".into());
+        let mut custom = product.clone();
+        custom.origin = ProductOrigin::Custom {
+            user_id: Uuid::new_v4(),
+        };
         let mut duplicate_nutrient = product.clone();
         duplicate_nutrient
             .nutrients
@@ -723,14 +643,10 @@ mod tests {
         duplicate_serving
             .servings
             .push(duplicate_serving.servings[0].clone());
-        let mut duplicate_identity = product.clone();
-        duplicate_identity.source_id = Some(" catalog-product ".into());
+        let duplicate_identity = product.clone();
 
         let invalid_batches = [
-            vec![user_source],
-            vec![owned],
-            vec![absent_source_id],
-            vec![blank_source_id],
+            vec![custom],
             vec![product.clone(), duplicate_identity],
             vec![duplicate_nutrient],
             vec![duplicate_serving],
