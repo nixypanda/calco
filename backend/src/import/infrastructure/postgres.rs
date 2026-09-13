@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
 
@@ -48,12 +49,10 @@ impl ImportRepository for PostgresImportRepository {
         &self,
         import_id: ImportId,
         foods: &[StagedImportProduct],
+        errors: &[ImportErrorRecord],
     ) -> Result<(), ImportError> {
-        if foods.is_empty() {
-            return Ok(());
-        }
-
         let mut tx = self.pool.begin().await?;
+        self.lock_pending_job(&mut tx, import_id).await?;
 
         for food in foods {
             sqlx::query(
@@ -76,6 +75,9 @@ impl ImportRepository for PostgresImportRepository {
             .execute(&mut *tx)
             .await?;
         }
+        for error in errors {
+            self.add_error_in_tx(&mut tx, import_id, error).await?;
+        }
 
         tx.commit().await?;
         Ok(())
@@ -85,12 +87,10 @@ impl ImportRepository for PostgresImportRepository {
         &self,
         import_id: ImportId,
         nutrients: &[StagedImportNutrient],
+        errors: &[ImportErrorRecord],
     ) -> Result<(), ImportError> {
-        if nutrients.is_empty() {
-            return Ok(());
-        }
-
         let mut tx = self.pool.begin().await?;
+        self.lock_pending_job(&mut tx, import_id).await?;
 
         for nutrient in nutrients {
             sqlx::query(
@@ -110,6 +110,9 @@ impl ImportRepository for PostgresImportRepository {
             .execute(&mut *tx)
             .await?;
         }
+        for error in errors {
+            self.add_error_in_tx(&mut tx, import_id, error).await?;
+        }
 
         tx.commit().await?;
         Ok(())
@@ -119,12 +122,10 @@ impl ImportRepository for PostgresImportRepository {
         &self,
         import_id: ImportId,
         servings: &[StagedImportServing],
+        errors: &[ImportErrorRecord],
     ) -> Result<(), ImportError> {
-        if servings.is_empty() {
-            return Ok(());
-        }
-
         let mut tx = self.pool.begin().await?;
+        self.lock_pending_job(&mut tx, import_id).await?;
 
         for s in servings {
             sqlx::query(
@@ -145,180 +146,133 @@ impl ImportRepository for PostgresImportRepository {
             .execute(&mut *tx)
             .await?;
         }
+        for error in errors {
+            self.add_error_in_tx(&mut tx, import_id, error).await?;
+        }
 
         tx.commit().await?;
         Ok(())
     }
 
-    async fn add_error(
+    async fn prepare_commit(&self, import_id: ImportId) -> Result<StagedImportBatch, ImportError> {
+        let mut tx = self.pool.begin().await?;
+        let status = self.lock_job_status(&mut tx, import_id).await?;
+        match status.parse().unwrap_or(ImportStatus::Failed) {
+            ImportStatus::Pending | ImportStatus::Running => {
+                let has_foods: (bool,) = sqlx::query_as(
+                    "SELECT EXISTS(SELECT 1 FROM staging_products WHERE import_id = $1)",
+                )
+                .bind(import_id.0)
+                .fetch_one(&mut *tx)
+                .await?;
+                if !has_foods.0 {
+                    return Err(ImportError::Validation("no staged foods to commit".into()));
+                }
+
+                if status == ImportStatus::Pending.as_str() {
+                    sqlx::query("UPDATE imports SET status = 'running' WHERE id = $1")
+                        .bind(import_id.0)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+
+                let products = sqlx::query_as::<_, StagedProductRow>(
+                    r#"SELECT source, source_id, barcode, name, brand, categories, raw_payload, row_number
+                       FROM staging_products WHERE import_id = $1
+                       ORDER BY source, source_id"#,
+                )
+                .bind(import_id.0)
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect();
+                let nutrients = sqlx::query_as::<_, StagedNutrientRow>(
+                    r#"SELECT source, source_id, nutrient_code, amount_per_100g, raw_payload, row_number
+                       FROM staging_product_nutrients WHERE import_id = $1
+                       ORDER BY source, source_id, row_number NULLS LAST, nutrient_code"#,
+                )
+                .bind(import_id.0)
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect();
+                let servings = sqlx::query_as::<_, StagedServingRow>(
+                    r#"SELECT source, source_id, unit, grams_per_unit, raw_payload, row_number
+                       FROM staging_product_servings WHERE import_id = $1
+                       ORDER BY source, source_id, row_number NULLS LAST, unit"#,
+                )
+                .bind(import_id.0)
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect();
+
+                tx.commit().await?;
+                Ok(StagedImportBatch {
+                    products,
+                    nutrients,
+                    servings,
+                })
+            }
+            ImportStatus::Failed => Err(ImportError::InvalidStatus(
+                "cannot commit a failed import".into(),
+            )),
+            ImportStatus::Committed => Err(ImportError::InvalidStatus(
+                "cannot commit an already committed import".into(),
+            )),
+        }
+    }
+
+    async fn finish_commit(
         &self,
         import_id: ImportId,
-        error: &ImportErrorRecord,
+        outcome: ImportCommitOutcome,
     ) -> Result<(), ImportError> {
-        sqlx::query(
-            r#"INSERT INTO import_errors (id, import_id, row_number, error, raw_payload, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)"#,
-        )
-        .bind(Uuid::new_v4())
-        .bind(import_id.0)
-        .bind(error.row_number)
-        .bind(&error.error)
-        .bind(&error.raw_payload)
-        .bind(Utc::now())
-        .execute(&self.pool)
-        .await?;
-        Ok(())
-    }
-
-    async fn count_staged_foods(&self, import_id: ImportId) -> Result<i64, ImportError> {
-        let row: (i64,) =
-            sqlx::query_as(r#"SELECT COUNT(*)::BIGINT FROM staging_products WHERE import_id = $1"#)
-                .bind(import_id.0)
-                .fetch_one(&self.pool)
-                .await?;
-        Ok(row.0)
-    }
-
-    async fn commit_import(&self, import_id: ImportId) -> Result<ImportCommitResult, ImportError> {
         let mut tx = self.pool.begin().await?;
-
-        // Claim the job conditionally so two concurrent commits can't both proceed:
-        // the loser sees zero rows affected and the transaction rolls back on return.
-        let claimed = sqlx::query(
-            r#"UPDATE imports SET status = 'running' WHERE id = $1 AND status = 'pending'"#,
-        )
-        .bind(import_id.0)
-        .execute(&mut *tx)
-        .await?;
-        if claimed.rows_affected() == 0 {
+        let status = self.lock_job_status(&mut tx, import_id).await?;
+        if status != ImportStatus::Running.as_str() {
             return Err(ImportError::InvalidStatus(
-                "import is no longer pending".into(),
+                "can only finish a running import".into(),
             ));
         }
 
-        // Single upsert distinguishes inserts from updates via `xmax = 0` (true only for
-        // freshly inserted rows), so a brand-new import no longer counts rows as both.
-        let (created, updated): (i64, i64) = sqlx::query_as(
-            r#"WITH upserted AS (
-                   INSERT INTO products (id, source, source_id, barcode, name, brand, categories, visibility, created_at, updated_at)
-                   SELECT gen_random_uuid(), sp.source, sp.source_id, sp.barcode, sp.name, sp.brand, sp.categories, 'global', NOW(), NOW()
-                   FROM staging_products sp
-                   WHERE sp.import_id = $1
-                   ON CONFLICT (source, source_id) DO UPDATE SET
-                       barcode = EXCLUDED.barcode, name = EXCLUDED.name, brand = EXCLUDED.brand,
-                       categories = EXCLUDED.categories, updated_at = NOW()
-                   RETURNING (xmax = 0) AS inserted
-               )
-               SELECT
-                   COALESCE(SUM(CASE WHEN inserted THEN 1 ELSE 0 END), 0)::BIGINT,
-                   COALESCE(SUM(CASE WHEN inserted THEN 0 ELSE 1 END), 0)::BIGINT
-               FROM upserted"#,
-        )
-        .bind(import_id.0)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        let nutrients: (i64,) = sqlx::query_as(
-            r#"WITH inserted AS (
-                   INSERT INTO product_nutrients (product_id, nutrient_id, amount_per_100g, source, confidence, created_at, updated_at)
-                   SELECT p.id, n.id, sn.amount_per_100g, sn.source,
-                          CASE sn.source
-                               WHEN 'USDA' THEN 'approved'
-                               WHEN 'IFCT' THEN 'approved'
-                               WHEN 'INDB' THEN 'approved'
-                               WHEN 'OFF' THEN 'derived'
-                               ELSE 'unknown'
-                           END,
-                          NOW(), NOW()
-                   FROM staging_product_nutrients sn
-                   JOIN products p ON p.source = sn.source AND p.source_id = sn.source_id
-                   JOIN nutrients n ON n.code = sn.nutrient_code
-                   WHERE sn.import_id = $1
-                   ON CONFLICT (product_id, nutrient_id) DO UPDATE SET
-                       amount_per_100g = EXCLUDED.amount_per_100g,
-                       source = EXCLUDED.source,
-                       confidence = EXCLUDED.confidence,
-                       updated_at = NOW()
-                   RETURNING 1 AS flag
-               )
-               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,
-        )
-        .bind(import_id.0)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        // Replace servings for any product touched by this import, then bulk-insert from staging.
-        sqlx::query(
-            r#"DELETE FROM product_servings
-               WHERE product_id IN (
-                   SELECT p.id FROM products p
-                   JOIN staging_product_servings ss
-                     ON ss.source = p.source AND ss.source_id = p.source_id
-                   WHERE ss.import_id = $1
-               )"#,
-        )
-        .bind(import_id.0)
-        .execute(&mut *tx)
-        .await?;
-
-        let servings_count: (i64,) = sqlx::query_as(
-            r#"WITH unique_servings AS (
-                   SELECT p.id AS product_id, ss.unit, ss.grams_per_unit, ss.row_number,
-                          row_number() OVER (
-                              PARTITION BY p.id, ss.unit
-                              ORDER BY ss.row_number, ss.unit
-                          ) AS unit_rank
-                   FROM staging_product_servings ss
-                   JOIN products p ON p.source = ss.source AND p.source_id = ss.source_id
-                   WHERE ss.import_id = $1
-               ), positioned AS (
-                   SELECT product_id, unit, grams_per_unit,
-                          (row_number() OVER (
-                              PARTITION BY product_id ORDER BY row_number, unit
-                          ) - 1)::integer AS position
-                   FROM unique_servings
-                   WHERE unit_rank = 1
-               ), inserted AS (
-                   INSERT INTO product_servings (id, product_id, unit, grams_per_unit, position, created_at)
-                   SELECT gen_random_uuid(), product_id, unit, grams_per_unit, position, NOW()
-                   FROM positioned
-                   RETURNING 1 AS flag
-               )
-               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM inserted"#,
-        )
-        .bind(import_id.0)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        let errors: (i64,) = sqlx::query_as(
-            r#"WITH errs AS (
-                   INSERT INTO import_errors (id, import_id, row_number, error, raw_payload, created_at)
-                   SELECT gen_random_uuid(), $1, sn.row_number,
-                          'Unknown nutrient code: ' || sn.nutrient_code,
-                          sn.raw_payload, NOW()
-                   FROM staging_product_nutrients sn
-                   WHERE sn.import_id = $1
-                     AND sn.nutrient_code NOT IN (SELECT code FROM nutrients)
-                   RETURNING 1 AS flag
-               )
-               SELECT COALESCE(COUNT(*)::BIGINT, 0) FROM errs"#,
-        )
-        .bind(import_id.0)
-        .fetch_one(&mut *tx)
-        .await?;
-
-        self.update_job_status_in_tx(&mut tx, import_id, &ImportStatus::Committed)
-            .await?;
+        match outcome {
+            ImportCommitOutcome::Committed { result, errors } => {
+                for error in errors {
+                    self.add_error_in_tx(&mut tx, import_id, &error).await?;
+                }
+                sqlx::query(
+                    r#"UPDATE imports
+                       SET status = 'committed', committed_at = NOW(),
+                           products_created = $2, products_updated = $3,
+                           nutrients_written = $4, servings_written = $5,
+                           errors_logged = $6
+                       WHERE id = $1"#,
+                )
+                .bind(import_id.0)
+                .bind(result.products_created)
+                .bind(result.products_updated)
+                .bind(result.nutrients_written)
+                .bind(result.servings_written)
+                .bind(result.errors_logged)
+                .execute(&mut *tx)
+                .await?;
+            }
+            ImportCommitOutcome::Failed => {
+                sqlx::query(
+                    "UPDATE imports SET status = 'failed', failed_at = NOW() WHERE id = $1",
+                )
+                .bind(import_id.0)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
 
         tx.commit().await?;
-
-        Ok(ImportCommitResult {
-            products_created: created,
-            products_updated: updated,
-            nutrients_inserted: nutrients.0,
-            servings_inserted: servings_count.0,
-            errors_logged: errors.0,
-        })
+        Ok(())
     }
 
     async fn get_errors(&self, import_id: ImportId) -> Result<Vec<ImportErrorRecord>, ImportError> {
@@ -334,32 +288,138 @@ impl ImportRepository for PostgresImportRepository {
 }
 
 impl PostgresImportRepository {
-    async fn update_job_status_in_tx(
+    async fn lock_pending_job(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        id: ImportId,
-        status: &ImportStatus,
+        import_id: ImportId,
     ) -> Result<(), ImportError> {
-        let (status_str, committed_at, failed_at) = match status {
-            ImportStatus::Committed => (status.as_str(), Some(Utc::now()), None::<DateTime<Utc>>),
-            ImportStatus::Failed => (status.as_str(), None::<DateTime<Utc>>, Some(Utc::now())),
-            _ => (
-                status.as_str(),
-                None::<DateTime<Utc>>,
-                None::<DateTime<Utc>>,
-            ),
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT status FROM imports WHERE id = $1 FOR UPDATE")
+                .bind(import_id.0)
+                .fetch_optional(&mut **tx)
+                .await?;
+        let Some((status,)) = row else {
+            return Err(ImportError::NotFound("import job not found".into()));
         };
+        if status != ImportStatus::Pending.as_str() {
+            return Err(ImportError::InvalidStatus(
+                "can only stage rows on a pending import".into(),
+            ));
+        }
+        Ok(())
+    }
 
+    async fn lock_job_status(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        import_id: ImportId,
+    ) -> Result<String, ImportError> {
+        sqlx::query_scalar("SELECT status FROM imports WHERE id = $1 FOR UPDATE")
+            .bind(import_id.0)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| ImportError::NotFound("import job not found".into()))
+    }
+
+    async fn add_error_in_tx(
+        &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        import_id: ImportId,
+        error: &ImportErrorRecord,
+    ) -> Result<(), ImportError> {
         sqlx::query(
-            r#"UPDATE imports SET status = $1, committed_at = COALESCE($2, committed_at), failed_at = COALESCE($3, failed_at) WHERE id = $4"#,
+            r#"INSERT INTO import_errors (id, import_id, row_number, error, raw_payload, created_at)
+               SELECT $1, $2, $3, $4, $5, $6
+               WHERE NOT EXISTS (
+                   SELECT 1 FROM import_errors
+                   WHERE import_id = $2
+                     AND row_number IS NOT DISTINCT FROM $3
+                     AND error = $4
+                     AND raw_payload IS NOT DISTINCT FROM $5
+               )"#,
         )
-        .bind(status_str)
-        .bind(committed_at)
-        .bind(failed_at)
-        .bind(id.0)
+        .bind(Uuid::new_v4())
+        .bind(import_id.0)
+        .bind(error.row_number)
+        .bind(&error.error)
+        .bind(&error.raw_payload)
+        .bind(Utc::now())
         .execute(&mut **tx)
         .await?;
         Ok(())
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct StagedProductRow {
+    source: String,
+    source_id: String,
+    barcode: Option<String>,
+    name: String,
+    brand: Option<String>,
+    categories: Vec<String>,
+    raw_payload: Option<serde_json::Value>,
+    row_number: Option<i32>,
+}
+
+impl From<StagedProductRow> for StagedImportProduct {
+    fn from(row: StagedProductRow) -> Self {
+        Self {
+            source: row.source,
+            source_id: row.source_id,
+            barcode: row.barcode,
+            name: row.name,
+            brand: row.brand,
+            categories: row.categories,
+            raw_payload: row.raw_payload,
+            row_number: row.row_number,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct StagedNutrientRow {
+    source: String,
+    source_id: String,
+    nutrient_code: String,
+    amount_per_100g: Decimal,
+    raw_payload: Option<serde_json::Value>,
+    row_number: Option<i32>,
+}
+
+impl From<StagedNutrientRow> for StagedImportNutrient {
+    fn from(row: StagedNutrientRow) -> Self {
+        Self {
+            source: row.source,
+            source_id: row.source_id,
+            nutrient_code: row.nutrient_code,
+            amount_per_100g: row.amount_per_100g,
+            raw_payload: row.raw_payload,
+            row_number: row.row_number,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct StagedServingRow {
+    source: String,
+    source_id: String,
+    unit: String,
+    grams_per_unit: Decimal,
+    raw_payload: Option<serde_json::Value>,
+    row_number: Option<i32>,
+}
+
+impl From<StagedServingRow> for StagedImportServing {
+    fn from(row: StagedServingRow) -> Self {
+        Self {
+            source: row.source,
+            source_id: row.source_id,
+            unit: row.unit,
+            grams_per_unit: row.grams_per_unit,
+            raw_payload: row.raw_payload,
+            row_number: row.row_number,
+        }
     }
 }
 

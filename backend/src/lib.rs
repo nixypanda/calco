@@ -50,7 +50,11 @@ pub async fn build_app_state(pool: PgPool, config: AppConfig) -> Result<AppState
         SessionPolicy::new(chrono::Duration::seconds(config.session.ttl_seconds))?,
     );
     let nutrition = NutritionModule::build(&pool).await?;
-    let import = ImportModule::build(&pool);
+    let import = ImportModule::build(
+        &pool,
+        nutrition.catalog.services.clone(),
+        nutrition.catalog.services.clone(),
+    );
     let assistant = AssistantComponents::from_config(&config.assistant, &nutrition.catalog)?;
 
     Ok(AppState {

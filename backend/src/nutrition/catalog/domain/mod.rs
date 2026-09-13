@@ -134,6 +134,14 @@ impl Source {
             Source::Indb => "INDB",
         }
     }
+
+    pub fn default_nutrient_confidence(&self) -> NutrientConfidence {
+        match self {
+            Source::Usda | Source::Ifct | Source::Indb => NutrientConfidence::Approved,
+            Source::Off => NutrientConfidence::Derived,
+            Source::User => NutrientConfidence::Unknown,
+        }
+    }
 }
 
 impl FromStr for Source {
@@ -388,7 +396,7 @@ impl Product {
     pub fn new_external(
         source: Source,
         source_id: String,
-        barcode: String,
+        barcode: Option<String>,
         name: String,
         brand: Option<String>,
         categories: Vec<String>,
@@ -403,9 +411,9 @@ impl Product {
                 "external food must have an external source".into(),
             ));
         }
-        if source_id.trim().is_empty() || barcode.trim().is_empty() {
+        if source_id.trim().is_empty() {
             return Err(NutritionError::Validation(
-                "external food must have a source id and barcode".into(),
+                "external food must have a source id".into(),
             ));
         }
 
@@ -420,7 +428,10 @@ impl Product {
             source_id: Some(source_id.trim().to_owned()),
             user_id: None,
             visibility: ProductVisibility::Global,
-            barcode: Some(Barcode(barcode.trim().to_owned())),
+            barcode: barcode
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+                .map(Barcode),
             name: ProductName::new(&name)?,
             brand: brand
                 .map(|value| value.trim().to_owned())
@@ -732,6 +743,89 @@ fn build_product_servings(
 
 pub use crate::nutrition::error::NutritionError;
 
+/// A validated collection of complete external product aggregates.
+///
+/// Construction enforces the invariants required by external catalog writes.
+/// Persistence receives this type instead of raw products, so those invariants
+/// cannot be bypassed by repository callers.
+#[derive(Debug, Clone)]
+pub struct ExternalProductBatch {
+    products: Vec<Product>,
+}
+
+impl ExternalProductBatch {
+    pub fn new(products: Vec<Product>) -> Result<Self, NutritionError> {
+        let mut identities = HashSet::new();
+
+        for product in &products {
+            if product.source == Source::User {
+                return Err(NutritionError::Validation(
+                    "external product batch cannot contain user products".into(),
+                ));
+            }
+            if product.user_id.is_some() {
+                return Err(NutritionError::Validation(
+                    "external product cannot have a user id".into(),
+                ));
+            }
+            let source_id = product
+                .source_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|source_id| !source_id.is_empty())
+                .ok_or_else(|| {
+                    NutritionError::Validation("external product must have a source id".into())
+                })?;
+            if !identities.insert((product.source.as_str(), source_id)) {
+                return Err(NutritionError::Validation(format!(
+                    "duplicate external product identity: ({}, {})",
+                    product.source.as_str(),
+                    source_id
+                )));
+            }
+
+            let mut nutrient_codes = HashSet::new();
+            for nutrient in &product.nutrients {
+                if !nutrient_codes.insert(nutrient.nutrient_code.0.as_str()) {
+                    return Err(NutritionError::Validation(format!(
+                        "duplicate nutrient code for external product: {}",
+                        nutrient.nutrient_code.0
+                    )));
+                }
+            }
+
+            let mut serving_units = HashSet::new();
+            for serving in &product.servings {
+                if !serving_units.insert(serving.unit.0.as_str()) {
+                    return Err(NutritionError::Validation(format!(
+                        "duplicate serving unit for external product: {}",
+                        serving.unit.0
+                    )));
+                }
+            }
+        }
+
+        Ok(Self { products })
+    }
+
+    pub fn products(&self) -> &[Product] {
+        &self.products
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ProductUpsertResult {
+    /// Parent rows inserted by this call.
+    pub created: i64,
+    /// Existing products whose stored parent columns changed in this call.
+    /// Child-only changes are reported by the corresponding child counters.
+    pub updated: i64,
+    /// Nutrient rows inserted from the incoming authoritative collections.
+    pub nutrients_written: i64,
+    /// Serving rows inserted from the incoming authoritative collections.
+    pub servings_written: i64,
+}
+
 #[async_trait]
 pub trait ProductRepository: Send + Sync {
     async fn search(
@@ -755,6 +849,14 @@ pub trait ProductRepository: Send + Sync {
     ) -> Result<Option<Product>, NutritionError>;
     async fn list_custom_foods(&self) -> Result<Vec<Product>, NutritionError>;
     async fn create(&self, product: &Product) -> Result<(), NutritionError>;
+    /// Creates or updates external products identified by `(source, source_id)`.
+    ///
+    /// Every product is the complete desired aggregate: its nutrients and servings replace the
+    /// stored collections, and an empty collection clears the corresponding stored children.
+    async fn upsert_external_many(
+        &self,
+        batch: &ExternalProductBatch,
+    ) -> Result<ProductUpsertResult, NutritionError>;
     async fn update(&self, product: &Product) -> Result<(), NutritionError>;
     async fn delete(&self, id: ProductId) -> Result<(), NutritionError>;
 }
@@ -923,6 +1025,111 @@ mod tests {
         ]
         .into_iter()
         .collect()
+    }
+
+    #[test]
+    fn source_provides_default_nutrient_confidence() {
+        assert_eq!(
+            Source::Usda.default_nutrient_confidence(),
+            NutrientConfidence::Approved
+        );
+        assert_eq!(
+            Source::Ifct.default_nutrient_confidence(),
+            NutrientConfidence::Approved
+        );
+        assert_eq!(
+            Source::Indb.default_nutrient_confidence(),
+            NutrientConfidence::Approved
+        );
+        assert_eq!(
+            Source::Off.default_nutrient_confidence(),
+            NutrientConfidence::Derived
+        );
+        assert_eq!(
+            Source::User.default_nutrient_confidence(),
+            NutrientConfidence::Unknown
+        );
+    }
+
+    #[test]
+    fn external_product_creation_accepts_missing_barcode_and_empty_children() {
+        let product = Product::new_external(
+            Source::Usda,
+            "  foundation-123  ".into(),
+            None,
+            "  Brown rice  ".into(),
+            Some("  Generic  ".into()),
+            vec![" Grains ".into()],
+            None,
+            None,
+            vec![],
+            vec![],
+            &test_catalog(),
+        )
+        .unwrap();
+
+        assert_eq!(product.source_id.as_deref(), Some("foundation-123"));
+        assert_eq!(product.barcode, None);
+        assert_eq!(product.name.as_str(), "Brown rice");
+        assert_eq!(product.brand, Some(Brand("Generic".into())));
+        assert!(product.nutrients.is_empty());
+        assert!(product.servings.is_empty());
+    }
+
+    #[test]
+    fn external_product_creation_normalizes_blank_barcode_to_none() {
+        let product = Product::new_external(
+            Source::Off,
+            "source-id".into(),
+            Some("  ".into()),
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![],
+            vec![],
+            &test_catalog(),
+        )
+        .unwrap();
+
+        assert_eq!(product.barcode, None);
+    }
+
+    #[test]
+    fn external_product_creation_rejects_user_source_and_blank_source_id() {
+        let user_source = Product::new_external(
+            Source::User,
+            "source-id".into(),
+            None,
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![],
+            vec![],
+            &test_catalog(),
+        );
+        assert!(matches!(user_source, Err(NutritionError::Validation(_))));
+
+        let blank_source_id = Product::new_external(
+            Source::Off,
+            "  ".into(),
+            None,
+            "Food".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![],
+            vec![],
+            &test_catalog(),
+        );
+        assert!(matches!(
+            blank_source_id,
+            Err(NutritionError::Validation(_))
+        ));
     }
 
     #[test]

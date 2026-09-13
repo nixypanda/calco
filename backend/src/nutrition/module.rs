@@ -141,8 +141,8 @@ impl NutritionModule {
         let unit_converter = Arc::new(UnitConverter::from_entries(mass_factors));
 
         let catalog_services = Arc::new(CatalogService::new(
-            product_repo,
-            nutrient_repo,
+            product_repo.clone(),
+            nutrient_repo.clone(),
             unit_repo,
             unit_converter.clone(),
             external_catalog,

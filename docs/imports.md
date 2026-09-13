@@ -37,10 +37,14 @@ Staging tables:
 Commit behavior:
 
 - Upsert products by `(source, source_id)`.
-- Insert/update product nutrients by canonical nutrient code.
-- Insert/update servings.
+- Authoritatively synchronize product nutrients by canonical nutrient code.
+- Authoritatively synchronize servings.
 - Record unresolved or invalid rows as import errors.
-- Mark the import committed when done.
+- Freeze staging by moving a pending import to `running` before catalog writes.
+- Retry a `running` import from the same staged batch after transient failures.
+- Mark deterministic validation failures as `failed`; transient infrastructure
+  failures leave the import `running`.
+- Mark the import `committed` when done and reject any later commit attempt.
 
 ## Normalized Row Shapes
 

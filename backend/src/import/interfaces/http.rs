@@ -191,8 +191,8 @@ struct ImportCommitResponse {
     status: String,
     products_created: i64,
     products_updated: i64,
-    nutrients_inserted: i64,
-    servings_inserted: i64,
+    nutrients_written: i64,
+    servings_written: i64,
     errors_logged: i64,
 }
 
@@ -273,7 +273,7 @@ fn import_error_to_status_code_message(err: &ImportError) -> (StatusCode, &'stat
         ImportError::NotFound(msg) => (StatusCode::NOT_FOUND, "not_found", msg.clone()),
         ImportError::InvalidStatus(msg) => (StatusCode::CONFLICT, "invalid_status", msg.clone()),
         ImportError::Validation(msg) => (StatusCode::BAD_REQUEST, "validation_error", msg.clone()),
-        ImportError::Database(_) => {
+        ImportError::Database(_) | ImportError::Catalog(_) => {
             tracing::error!(error = %err, "import request failed");
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -379,8 +379,8 @@ fn import_commit_result_to_response(result: ImportCommitResult) -> ImportCommitR
         status: "committed".into(),
         products_created: result.products_created,
         products_updated: result.products_updated,
-        nutrients_inserted: result.nutrients_inserted,
-        servings_inserted: result.servings_inserted,
+        nutrients_written: result.nutrients_written,
+        servings_written: result.servings_written,
         errors_logged: result.errors_logged,
     }
 }

@@ -63,6 +63,26 @@ pub trait CatalogReadPort: Send + Sync {
     ) -> Result<Vec<(ProductId, Product)>, NutritionError>;
 }
 
+/// Application-level write access for replacing external catalog aggregates.
+///
+/// This boundary owns the invariants that must hold before persistence receives
+/// a batch, allowing callers outside the catalog context to avoid depending on a
+/// repository directly.
+#[async_trait]
+pub trait ExternalProductWritePort: Send + Sync {
+    async fn upsert_external_many(
+        &self,
+        products: Vec<Product>,
+    ) -> Result<ProductUpsertResult, NutritionError>;
+}
+
+/// Application-level access to the nutrient definitions used to construct
+/// validated product aggregates outside the catalog context.
+#[async_trait]
+pub trait NutrientCatalogReadPort: Send + Sync {
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError>;
+}
+
 #[derive(Clone)]
 pub struct CatalogService {
     product_repo: Arc<dyn ProductRepository>,
@@ -165,7 +185,7 @@ impl CatalogService {
         let product = Product::new_external(
             Source::Off,
             input.source_id,
-            input.barcode,
+            Some(input.barcode),
             input.name,
             input.brand,
             input.categories,
@@ -327,6 +347,24 @@ impl CatalogService {
     }
 }
 
+#[async_trait]
+impl ExternalProductWritePort for CatalogService {
+    async fn upsert_external_many(
+        &self,
+        products: Vec<Product>,
+    ) -> Result<ProductUpsertResult, NutritionError> {
+        let batch = ExternalProductBatch::new(products)?;
+        self.product_repo.upsert_external_many(&batch).await
+    }
+}
+
+#[async_trait]
+impl NutrientCatalogReadPort for CatalogService {
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+        self.load_nutrient_catalog().await
+    }
+}
+
 fn validate_external_barcode(barcode: &str) -> Result<(), NutritionError> {
     if !(4..=24).contains(&barcode.len()) || !barcode.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(NutritionError::Validation(
@@ -362,6 +400,7 @@ mod tests {
     struct MockProductRepository {
         found: Option<Product>,
         created: Mutex<Vec<Product>>,
+        upserted: Mutex<Vec<Product>>,
     }
 
     #[async_trait]
@@ -410,6 +449,20 @@ mod tests {
         async fn create(&self, product: &Product) -> Result<(), NutritionError> {
             self.created.lock().unwrap().push(product.clone());
             Ok(())
+        }
+
+        async fn upsert_external_many(
+            &self,
+            batch: &ExternalProductBatch,
+        ) -> Result<ProductUpsertResult, NutritionError> {
+            self.upserted
+                .lock()
+                .unwrap()
+                .extend(batch.products().iter().cloned());
+            Ok(ProductUpsertResult {
+                created: batch.products().len() as i64,
+                ..ProductUpsertResult::default()
+            })
         }
 
         async fn update(&self, _product: &Product) -> Result<(), NutritionError> {
@@ -472,7 +525,7 @@ mod tests {
         Product::new_external(
             Source::Off,
             barcode.into(),
-            barcode.into(),
+            Some(barcode.into()),
             "Stored food".into(),
             None,
             vec![],
@@ -522,6 +575,7 @@ mod tests {
         let repo = Arc::new(MockProductRepository {
             found: Some(local_product("3017620422003")),
             created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
         });
         let external = Arc::new(MockExternalCatalog {
             product: Some(external_input("3017620422003")),
@@ -545,6 +599,7 @@ mod tests {
         let repo = Arc::new(MockProductRepository {
             found: None,
             created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
         });
         let external = Arc::new(MockExternalCatalog {
             product: Some(external_input("3017620422003")),
@@ -569,6 +624,7 @@ mod tests {
         let repo = Arc::new(MockProductRepository {
             found: None,
             created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
         });
         let external = Arc::new(MockExternalCatalog {
             product: None,
@@ -590,6 +646,7 @@ mod tests {
         let repo = Arc::new(MockProductRepository {
             found: None,
             created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
         });
         let external = Arc::new(MockExternalCatalog {
             product: None,
@@ -602,5 +659,109 @@ mod tests {
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
         assert_eq!(external.calls.load(Ordering::Relaxed), 0);
+    }
+
+    fn external_product_for_write() -> Product {
+        Product::new_external(
+            Source::Off,
+            "catalog-product".into(),
+            None,
+            "Catalog product".into(),
+            None,
+            vec![],
+            None,
+            None,
+            vec![ProductNutrientInput {
+                code: "PROTEIN_G".into(),
+                amount_per_100g: Decimal::from(7),
+                source: None,
+                confidence: None,
+            }],
+            vec![ProductServingInput {
+                unit: "piece".into(),
+                grams_per_unit: Decimal::from(25),
+            }],
+            &vec![Nutrient {
+                code: NutrientCode("PROTEIN_G".into()),
+                name: "Protein".into(),
+                unit: UnitCode("g".into()),
+                category: "macro".into(),
+            }]
+            .into_iter()
+            .collect(),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn external_product_write_validates_the_complete_batch_before_persistence() {
+        let repo = Arc::new(MockProductRepository {
+            found: None,
+            created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
+        });
+        let external = Arc::new(MockExternalCatalog {
+            product: None,
+            calls: AtomicUsize::new(0),
+        });
+        let service = service(repo.clone(), external);
+        let product = external_product_for_write();
+
+        let mut user_source = product.clone();
+        user_source.source = Source::User;
+        let mut owned = product.clone();
+        owned.user_id = Some(Uuid::new_v4());
+        let mut absent_source_id = product.clone();
+        absent_source_id.source_id = None;
+        let mut blank_source_id = product.clone();
+        blank_source_id.source_id = Some("   ".into());
+        let mut duplicate_nutrient = product.clone();
+        duplicate_nutrient
+            .nutrients
+            .push(duplicate_nutrient.nutrients[0].clone());
+        let mut duplicate_serving = product.clone();
+        duplicate_serving
+            .servings
+            .push(duplicate_serving.servings[0].clone());
+        let mut duplicate_identity = product.clone();
+        duplicate_identity.source_id = Some(" catalog-product ".into());
+
+        let invalid_batches = [
+            vec![user_source],
+            vec![owned],
+            vec![absent_source_id],
+            vec![blank_source_id],
+            vec![product.clone(), duplicate_identity],
+            vec![duplicate_nutrient],
+            vec![duplicate_serving],
+        ];
+
+        for products in invalid_batches {
+            assert!(matches!(
+                service.upsert_external_many(products).await,
+                Err(NutritionError::Validation(_))
+            ));
+        }
+        assert!(repo.upserted.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn external_product_write_delegates_a_valid_batch_to_persistence() {
+        let repo = Arc::new(MockProductRepository {
+            found: None,
+            created: Mutex::new(vec![]),
+            upserted: Mutex::new(vec![]),
+        });
+        let external = Arc::new(MockExternalCatalog {
+            product: None,
+            calls: AtomicUsize::new(0),
+        });
+        let service = service(repo.clone(), external);
+        let product = external_product_for_write();
+
+        let result = service.upsert_external_many(vec![product]).await.unwrap();
+
+        assert_eq!(result.created, 1);
+        assert_eq!(repo.upserted.lock().unwrap().len(), 1);
     }
 }
