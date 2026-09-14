@@ -151,6 +151,9 @@ fn latest_slots_from_logs(logs: Vec<FoodLog>) -> Vec<LatestSlotLogs> {
     let mut by_slot = BTreeMap::<MealSlot, LatestSlotLogs>::new();
 
     for log in logs {
+        if matches!(log.item(), FoodLogItemSnapshot::AdHoc { .. }) {
+            continue;
+        }
         let Some(meal_slot) = log.meal_slot() else {
             continue;
         };
@@ -226,6 +229,9 @@ fn recent_items_from_logs(
 
     let mut items: Vec<RecentFoodLogItem> = Vec::new();
     for log in logs {
+        if matches!(log.item(), FoodLogItemSnapshot::AdHoc { .. }) {
+            continue;
+        }
         let weight = recency_weight(log.log_date(), reference_date);
         let usage = QuantityUsage {
             amount: log.quantity_amount().normalize(),
@@ -330,6 +336,7 @@ fn item_name(item: &FoodLogItemSnapshot) -> &str {
     match item {
         FoodLogItemSnapshot::Product { name, .. } => name,
         FoodLogItemSnapshot::Meal { name, .. } => name,
+        FoodLogItemSnapshot::AdHoc { name, .. } => name,
     }
 }
 
