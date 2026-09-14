@@ -2630,8 +2630,9 @@ applyCustomFoodCreateOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        CustomFoodCreate.RequestFoodDraft conversation photos ->
-            ( Api.FoodAssistant.requestDraft conversation
+        CustomFoodCreate.RequestFoodDraft purpose conversation photos ->
+            ( Api.FoodAssistant.requestDraft purpose
+                conversation
                 photos
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
