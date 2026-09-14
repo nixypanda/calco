@@ -37,7 +37,7 @@ impl FoodDraftModel for FoodDraftLlmAdapter {
     ) -> Result<FoodDraftResult, AssistantError> {
         let mut messages = vec![ChatMessage {
             role: ChatRole::System,
-            content: prompt::build(vocabulary),
+            content: prompt::build(request.purpose, vocabulary),
             images: vec![],
         }];
         messages.extend(request.turns.iter().map(|turn| {
@@ -63,13 +63,13 @@ impl FoodDraftModel for FoodDraftLlmAdapter {
                 messages,
                 response_format: ResponseFormat::JsonSchema {
                     name: "food_draft_response".into(),
-                    schema: schema::build(vocabulary),
+                    schema: schema::build(request.purpose, vocabulary),
                 },
                 max_output_tokens: MAX_OUTPUT_TOKENS,
             })
             .await
             .map_err(map_chat_error)?;
-        let turn = response::parse(&response.content).inspect_err(|_| {
+        let turn = response::parse(request.purpose, &response.content).inspect_err(|_| {
             tracing::error!(
                 provider_response = %response.content,
                 "provider response failed food draft validation"
@@ -133,6 +133,7 @@ mod tests {
         });
         let model = FoodDraftLlmAdapter::new(chat.clone());
         let request = FoodDraftModelRequest {
+            purpose: crate::assistant::domain::FoodDraftPurpose::CustomFood,
             turns: vec![FoodDraftModelTurn {
                 role: ConversationRole::User,
                 text: "one bowl of dal".into(),
@@ -181,6 +182,7 @@ mod tests {
             bytes: vec![1, 2, 3],
         };
         let request = FoodDraftModelRequest {
+            purpose: crate::assistant::domain::FoodDraftPurpose::CustomFood,
             turns: vec![
                 FoodDraftModelTurn {
                     role: ConversationRole::User,

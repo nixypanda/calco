@@ -2,12 +2,12 @@ use serde_json::{Value, json};
 
 use crate::assistant::application::FoodVocabulary;
 use crate::assistant::domain::{
-    MAX_ASSISTANT_MESSAGE_CHARS, MAX_DRAFT_CATEGORIES, MAX_DRAFT_CATEGORY_CHARS,
+    FoodDraftPurpose, MAX_ASSISTANT_MESSAGE_CHARS, MAX_DRAFT_CATEGORIES, MAX_DRAFT_CATEGORY_CHARS,
     MAX_DRAFT_CODE_CHARS, MAX_DRAFT_NAME_CHARS, MAX_DRAFT_NUTRIENTS, MAX_DRAFT_SERVINGS,
     MAX_DRAFT_UNIT_CHARS, MAX_DRAFT_WARNING_CHARS, MAX_DRAFT_WARNINGS,
 };
 
-pub(super) fn build(vocabulary: &FoodVocabulary) -> Value {
+pub(super) fn build(purpose: FoodDraftPurpose, vocabulary: &FoodVocabulary) -> Value {
     let default_units = vocabulary
         .default_units
         .iter()
@@ -18,7 +18,7 @@ pub(super) fn build(vocabulary: &FoodVocabulary) -> Value {
         .iter()
         .map(|unit| unit.code.as_str())
         .collect::<Vec<_>>();
-    json!({
+    let mut schema = json!({
         "type": "object",
         "additionalProperties": false,
         "required": ["assistant_message", "status", "draft", "warnings"],
@@ -59,7 +59,29 @@ pub(super) fn build(vocabulary: &FoodVocabulary) -> Value {
             },
             "warnings": { "type": "array", "maxItems": MAX_DRAFT_WARNINGS, "items": { "type": "string", "maxLength": MAX_DRAFT_WARNING_CHARS } }
         }
-    })
+    });
+    if purpose == FoodDraftPurpose::AdHocLog {
+        schema["required"]
+            .as_array_mut()
+            .expect("schema required fields are an array")
+            .push(json!("suggested_log"));
+        schema["properties"]["suggested_log"] = json!({
+            "oneOf": [
+                { "type": "null" },
+                {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["amount", "unit", "total_weight_grams"],
+                    "properties": {
+                        "amount": { "type": "number", "exclusiveMinimum": 0 },
+                        "unit": { "type": "string", "maxLength": MAX_DRAFT_UNIT_CHARS },
+                        "total_weight_grams": { "type": "number", "exclusiveMinimum": 0 }
+                    }
+                }
+            ]
+        });
+    }
+    schema
 }
 
 #[cfg(test)]
@@ -92,7 +114,7 @@ mod tests {
 
     #[test]
     fn schema_rejects_unknown_fields_at_each_object_level() {
-        let value = build(&vocabulary());
+        let value = build(FoodDraftPurpose::CustomFood, &vocabulary());
         assert_eq!(value["additionalProperties"], false);
         assert_eq!(
             value["properties"]["draft"]["oneOf"][1]["additionalProperties"],
@@ -122,6 +144,21 @@ mod tests {
         assert_eq!(
             value["properties"]["warnings"]["items"]["maxLength"],
             MAX_DRAFT_WARNING_CHARS
+        );
+    }
+
+    #[test]
+    fn ad_hoc_schema_requires_a_suggested_log() {
+        let value = build(FoodDraftPurpose::AdHocLog, &vocabulary());
+        assert!(
+            value["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("suggested_log"))
+        );
+        assert_eq!(
+            value["properties"]["suggested_log"]["oneOf"][1]["additionalProperties"],
+            false
         );
     }
 }
