@@ -18,7 +18,7 @@ import Api.Client as Client
 import Api.Foods as Foods
 import Api.Logs as Logs
 import Data.BarcodeScan exposing (ScannerEvent)
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot as MealSlot exposing (MealSlot)
@@ -176,6 +176,7 @@ type Msg
     | ClearRecentAdded String Ticket
     | ResultClicked String
     | CreateCustomFoodClicked
+    | CreateAdHocLogClicked
 
 
 type alias RecentItemsResult =
@@ -537,15 +538,18 @@ update msg model =
                 ( model, Cmd.none, NoOp )
 
         RecentItemClicked item ->
-            case item.item.itemType of
-                ItemRef.Product ->
+            case item.item of
+                FoodLog.ProductLogItem product ->
                     ( model
                     , Cmd.none
-                    , Navigate (FoodShow item.item.id model.date model.mealSlot Nothing)
+                    , Navigate (FoodShow product.id model.date model.mealSlot Nothing)
                     )
 
-                ItemRef.Meal ->
-                    ( model, Cmd.none, Navigate (MealShow item.item.id) )
+                FoodLog.MealLogItem meal ->
+                    ( model, Cmd.none, Navigate (MealShow meal.id) )
+
+                FoodLog.AdHocLogItem _ ->
+                    ( model, Cmd.none, NoOp )
 
         LocalContextReceived context ->
             case model.quickAdd of
@@ -643,6 +647,12 @@ update msg model =
         CreateCustomFoodClicked ->
             ( model, Cmd.none, Navigate CustomFoodCreate )
 
+        CreateAdHocLogClicked ->
+            ( model
+            , Cmd.none
+            , Navigate (AdHocLogCreate model.date model.mealSlot)
+            )
+
 
 applyBarcodeScannerEvent :
     { event : String, barcode : Maybe String, message : Maybe String }
@@ -703,26 +713,28 @@ quickAddRequest context model target =
     LocalDate.fromString rawDate
         |> Maybe.map
             (\logDate ->
-                { logDate = logDate
-                , deviceTimezone = Just context.timezone
-                , mealSlot = Maybe.map MealSlot.toString model.mealSlot
-                , item =
-                    { itemType = target.item.item.itemType
-                    , id = target.item.item.id
-                    }
-                , quantity = target.quantity
-                , notes = Nothing
-                }
+                FoodLog.itemRef target.item.item
+                    |> Maybe.map
+                        (\item ->
+                            { logDate = logDate
+                            , deviceTimezone = Just context.timezone
+                            , mealSlot = Maybe.map MealSlot.toString model.mealSlot
+                            , item = item
+                            , quantity = target.quantity
+                            , notes = Nothing
+                            }
+                        )
             )
+        |> Maybe.andThen identity
 
 
 recentItemKey : Logs.RecentItem -> Nutrition.Quantity -> String
 recentItemKey item quantity =
-    ItemRef.itemTypeToString item.item.itemType
-        ++ ":"
-        ++ item.item.id
-        ++ ":"
-        ++ Nutrition.quantityText quantity
+    FoodLog.itemRef item.item
+        |> Maybe.map
+            (\ref -> ItemRef.itemTypeToString ref.itemType ++ ":" ++ ref.id)
+        |> Maybe.withDefault "ad-hoc"
+        |> (\key -> key ++ ":" ++ Nutrition.quantityText quantity)
 
 
 quickAddTargetKey : QuickAddTarget -> String
@@ -796,7 +808,25 @@ contentView { model, device, theme } =
         , Element.spacing DesignTokens.space16
         ]
         [ searchInputView theme device model
+        , adHocLogView theme device
         , searchContentView theme device model
+        ]
+
+
+adHocLogView : Theme -> Device -> Element Msg
+adHocLogView theme device =
+    Ui.card theme
+        [ Typography.sectionTitle theme "Create an ad-hoc food log"
+        , Ui.textButton device
+            theme
+            { tone = Ui.GhostFilled
+            , width = Ui.FullWidth
+            , label = "Manually"
+            , onPress = CreateAdHocLogClicked
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
         ]
 
 
@@ -1316,11 +1346,11 @@ recentItemRow device theme model item =
         [ Ui.listRow
             { onSelect = RecentItemClicked item
             , leading = [ View.Product.macroDotGhost ]
-            , title = Typography.wrappedListItemTitle theme item.item.name
+            , title = Typography.wrappedListItemTitle theme (FoodLog.itemName item.item)
             , subtitle =
                 [ Typography.mutedCaptionParagraph theme
                     (Ui.dotSeparated
-                        [ item.item.brand
+                        [ FoodLog.itemBrand item.item
                         , Nutrition.servingCaloriesText item
                         ]
                     )

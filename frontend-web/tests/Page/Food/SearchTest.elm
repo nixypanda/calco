@@ -3,7 +3,7 @@ module Page.Food.SearchTest exposing (tests)
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, SearchResult)
 import Api.Logs as Logs
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
@@ -21,7 +21,16 @@ import Time
 tests : Test
 tests =
     describe "Page.Food.Search"
-        [ test "empty query clears results, loading, and error" <|
+        [ test "manual ad-hoc navigation keeps date and meal slot" <|
+            \_ ->
+                FoodSearch.update FoodSearch.CreateAdHocLogClicked
+                    (FoodSearch.init (Just "2026-06-01") (Just Lunch))
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.Navigate
+                            (AdHocLogCreate (Just "2026-06-01") (Just Lunch))
+                        )
+        , test "empty query clears results, loading, and error" <|
             \_ ->
                 FoodSearch.update
                     (FoodSearch.QueryChanged "   ")
@@ -965,11 +974,8 @@ appleDetail =
 recentProduct : Logs.RecentItem
 recentProduct =
     { item =
-        { itemType = ItemRef.Product
-        , id = "food-1"
-        , name = "Apple"
-        , brand = Just "Local"
-        }
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Just "Local" }
     , lastUsedDate = date "2026-05-28"
     , mealSlot = Just "lunch"
     , quantity = { amount = "2", unit = "serving" }
@@ -1003,11 +1009,7 @@ recentMeal : Logs.RecentItem
 recentMeal =
     { recentProduct
         | item =
-            { itemType = ItemRef.Meal
-            , id = "meal-1"
-            , name = "Lunch meal"
-            , brand = Nothing
-            }
+            FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
     }
 
 

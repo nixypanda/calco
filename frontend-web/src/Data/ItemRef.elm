@@ -3,7 +3,6 @@ module Data.ItemRef exposing
     , ItemType(..)
     , decoder
     , encoder
-    , itemTypeDecoder
     , itemTypeToString
     )
 

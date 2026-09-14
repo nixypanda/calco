@@ -341,6 +341,11 @@ screenMeta device session route =
             , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
             }
 
+        AdHocLogCreate maybeDate maybeSlot ->
+            { title = "Manual Food Log"
+            , leading = GoBack (FoodSearch maybeDate maybeSlot)
+            }
+
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }
 

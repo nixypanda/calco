@@ -28,6 +28,8 @@ tests =
             (FoodLogEntry "abc" (Just "2026-06-04") Nothing)
         , parses "/logs/abc?date=2026-06-04&calendar_month=2026-06"
             (FoodLogEntry "abc" (Just "2026-06-04") (Just "2026-06"))
+        , parses "/logs/new/ad-hoc?date=2026-06-04&meal_slot=lunch"
+            (AdHocLogCreate (Just "2026-06-04") (Just Lunch))
         , parses "/search" (FoodSearch Nothing Nothing)
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
         , parses "/search?date=2026-06-04&meal_slot=breakfast"
@@ -86,6 +88,7 @@ routeFuzzer =
         , Fuzz.map NutritionDetails maybeDateFuzzer
         , Fuzz.constant GoalSettings
         , Fuzz.map3 FoodLogEntry safeSegmentFuzzer maybeDateFuzzer maybeMonthFuzzer
+        , Fuzz.map2 AdHocLogCreate maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.map2 FoodSearch maybeDateFuzzer maybeMealSlotFuzzer
         , Fuzz.map4
             FoodShow

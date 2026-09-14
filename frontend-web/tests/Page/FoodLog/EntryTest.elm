@@ -2,8 +2,7 @@ module Page.FoodLog.EntryTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
-import Data.FoodLog exposing (FoodLog)
-import Data.ItemRef as ItemRef
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -18,7 +17,14 @@ import View.DeleteModal exposing (DeleteState(..))
 tests : Test
 tests =
     describe "Page.FoodLog.Entry"
-        [ test "init requests log and units" <|
+        [ test "an ad-hoc log does not request product details" <|
+            \_ ->
+                FoodLogEntry.update
+                    (FoodLogEntry.LogLoaded (Ok adHocLog))
+                    awaitingLogModel
+                    |> third
+                    |> Expect.equal FoodLogEntry.NoOp
+        , test "init requests log and units" <|
             \_ ->
                 FoodLogEntry.init "log-1"
                     |> Tuple.second
@@ -378,11 +384,8 @@ productLog =
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
     , item =
-        { itemType = ItemRef.Product
-        , id = "food-1"
-        , name = "Apple"
-        , brand = Just "Local"
-        }
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Just "Good"
@@ -419,11 +422,19 @@ mealLog : FoodLog
 mealLog =
     { productLog
         | item =
-            { itemType = ItemRef.Meal
-            , id = "meal-1"
-            , name = "Lunch meal"
-            , brand = Nothing
-            }
+            FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
+    }
+
+
+adHocLog : FoodLog
+adHocLog =
+    { productLog
+        | item =
+            FoodLog.AdHocLogItem
+                { name = "Paneer wrap", brand = Just "Cafe" }
+        , quantity = { amount = "1", unit = "serving" }
+        , nutrients =
+            [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" } ]
     }
 
 
@@ -534,7 +545,7 @@ loadedItemTitle model =
         FoodLogEntry.Loaded loaded ->
             case loaded.item of
                 FoodLogEntry.MealItem meal ->
-                    meal.name
+                    FoodLog.itemName meal
 
                 _ ->
                     "Loading..."

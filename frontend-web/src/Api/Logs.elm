@@ -1,5 +1,6 @@
 module Api.Logs exposing
     ( BatchLogResponse
+    , CreateAdHocLogRequest
     , CreateLogRequest
     , LastUsedItemsRequest
     , LatestSlotResponse
@@ -10,6 +11,7 @@ module Api.Logs exposing
     , RecentItemsResponse
     , SummaryRequest
     , UpdateLogRequest
+    , createAdHocLog
     , createLog
     , createLogRequestEncoder
     , createLogsBatch
@@ -44,6 +46,18 @@ type alias CreateLogRequest =
     , mealSlot : Maybe String
     , item : ItemRef
     , quantity : Nutrition.Quantity
+    , notes : Maybe String
+    }
+
+
+type alias CreateAdHocLogRequest =
+    { logDate : LocalDate
+    , deviceTimezone : Maybe String
+    , mealSlot : Maybe String
+    , name : String
+    , brand : Maybe String
+    , quantity : Nutrition.Quantity
+    , nutrients : List Nutrition.NutrientAmount
     , notes : Maybe String
     }
 
@@ -119,6 +133,18 @@ createLog request toMsg =
     Client.post
         (Builder.absolute [ "api", "logs" ] [])
         (createLogRequestEncoder request)
+        FoodLog.decoder
+        toMsg
+
+
+createAdHocLog :
+    CreateAdHocLogRequest
+    -> (Result Client.ApiError FoodLog -> msg)
+    -> Cmd msg
+createAdHocLog request toMsg =
+    Client.post
+        (Builder.absolute [ "api", "logs", "ad-hoc" ] [])
+        (createAdHocLogRequestEncoder request)
         FoodLog.decoder
         toMsg
 
@@ -249,6 +275,30 @@ createLogRequestEncoder request =
             ++ mealSlotField request.mealSlot
             ++ deviceTimezoneField request.deviceTimezone
         )
+
+
+createAdHocLogRequestEncoder : CreateAdHocLogRequest -> Encode.Value
+createAdHocLogRequestEncoder request =
+    Encode.object
+        ([ ( "log_date", Encode.string (LocalDate.format request.logDate) )
+         , ( "name", Encode.string request.name )
+         , ( "brand", Json.maybe Encode.string request.brand )
+         , ( "quantity", Nutrition.quantityEncoder request.quantity )
+         , ( "nutrients", Encode.list nutrientSnapshotEncoder request.nutrients )
+         , ( "notes", Json.maybe Encode.string request.notes )
+         ]
+            ++ mealSlotField request.mealSlot
+            ++ deviceTimezoneField request.deviceTimezone
+        )
+
+
+nutrientSnapshotEncoder : Nutrition.NutrientAmount -> Encode.Value
+nutrientSnapshotEncoder nutrient =
+    Encode.object
+        [ ( "code", Encode.string nutrient.code )
+        , ( "amount", Encode.string nutrient.amount )
+        , ( "unit", Encode.string nutrient.unit )
+        ]
 
 
 updateLogRequestEncoder : UpdateLogRequest -> Encode.Value

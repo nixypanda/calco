@@ -1,7 +1,6 @@
 module Data.FoodLogTest exposing (tests)
 
 import Data.FoodLog as FoodLog exposing (FoodLog)
-import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Expect
 import Json.Decode as Decode
@@ -38,6 +37,17 @@ tests =
                 \_ ->
                     decodeSlot "\"brunch\""
                         |> Expect.equal (Ok Nothing)
+            , test "decodes an ad-hoc item without an id" <|
+                \_ ->
+                    Decode.decodeString FoodLog.decoder adHocLogJson
+                        |> Result.map
+                            (\decoded ->
+                                ( FoodLog.itemName decoded.item
+                                , FoodLog.itemBrand decoded.item
+                                , FoodLog.itemRef decoded.item
+                                )
+                            )
+                        |> Expect.equal (Ok ( "Paneer wrap", Just "Cafe", Nothing ))
             ]
         ]
 
@@ -65,6 +75,21 @@ logJson rawSlot =
     """
 
 
+adHocLogJson : String
+adHocLogJson =
+    """
+    { "id": "log-ad-hoc"
+    , "log_date": "2026-05-30"
+    , "device_timezone": null
+    , "meal_slot": "lunch"
+    , "item": { "type": "ad_hoc", "name": "Paneer wrap", "brand": "Cafe" }
+    , "quantity": { "amount": "1", "unit": "serving" }
+    , "nutrients": []
+    , "notes": null
+    }
+    """
+
+
 allLogs : List FoodLog
 allLogs =
     [ log "lunch-1" (Just Lunch)
@@ -80,11 +105,8 @@ log id mealSlot =
     , deviceTimezone = Nothing
     , mealSlot = mealSlot
     , item =
-        { itemType = ItemRef.Product
-        , id = "food-1"
-        , name = "Apple"
-        , brand = Nothing
-        }
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Nothing }
     , quantity = { amount = "100", unit = "g" }
     , nutrients = []
     , notes = Nothing

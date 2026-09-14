@@ -24,6 +24,7 @@ type Route
     | GoalSettings
     | DiarySettings
     | FoodLogEntry String (Maybe String) (Maybe String)
+    | AdHocLogCreate (Maybe String) (Maybe MealSlot)
     | FoodSearch (Maybe String) (Maybe MealSlot)
     | FoodShow String (Maybe String) (Maybe MealSlot) (Maybe String)
     | CustomFoodList
@@ -59,6 +60,13 @@ routeParser =
         , Parser.map NutritionDetails (s "details" <?> Query.string "date")
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
+        , Parser.map AdHocLogCreate
+            (s "logs"
+                </> s "new"
+                </> s "ad-hoc"
+                <?> Query.string "date"
+                <?> mealSlotQuery
+            )
         , Parser.map FoodLogEntry
             (s "logs"
                 </> string
@@ -128,6 +136,9 @@ primaryRoute route =
         FoodLogEntry _ _ _ ->
             DiaryDay Nothing Nothing
 
+        AdHocLogCreate maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
+
         DiaryDay _ _ ->
             DiaryDay Nothing Nothing
 
@@ -194,6 +205,9 @@ routeToPath route =
                     (\month -> "calendar_month=" ++ Url.percentEncode month)
                     maybeCalendarMonth
                 ]
+
+        AdHocLogCreate maybeDate maybeSlot ->
+            withFoodContext "/logs/new/ad-hoc" maybeDate maybeSlot
 
         FoodSearch maybeDate maybeSlot ->
             withFoodContext "/search" maybeDate maybeSlot

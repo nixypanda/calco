@@ -259,7 +259,7 @@ update msg model =
             ( { model | copyState = Copying source.slot }
             , Cmd.none
             , source.logs
-                |> List.map (copyRequestFromLog model.currentDate source.slot)
+                |> List.filterMap (copyRequestFromLog model.currentDate source.slot)
                 |> RequestCopyLatestSlot model.currentDate
             )
 
@@ -439,18 +439,19 @@ latestSlotSourceFor currentDate slot state =
             Nothing
 
 
-copyRequestFromLog : LocalDate -> MealSlot -> FoodLog -> CreateLogRequest
+copyRequestFromLog : LocalDate -> MealSlot -> FoodLog -> Maybe CreateLogRequest
 copyRequestFromLog targetDate slot log =
-    { logDate = targetDate
-    , deviceTimezone = log.deviceTimezone
-    , mealSlot = Just (MealSlot.toString slot)
-    , item =
-        { itemType = log.item.itemType
-        , id = log.item.id
-        }
-    , quantity = log.quantity
-    , notes = log.notes
-    }
+    FoodLog.itemRef log.item
+        |> Maybe.map
+            (\item ->
+                { logDate = targetDate
+                , deviceTimezone = log.deviceTimezone
+                , mealSlot = Just (MealSlot.toString slot)
+                , item = item
+                , quantity = log.quantity
+                , notes = log.notes
+                }
+            )
 
 
 copiedSlotFromState : CopyState -> Maybe MealSlot
@@ -707,7 +708,14 @@ detailsAction device theme =
         , onPress = DetailsClicked
         , submitState = Nothing
         , submittingLabel = Nothing
-        , trailing = Just (Icon.view { icon = Icon.ChevronRight, size = 18, color = theme.brandBlue })
+        , trailing =
+            Just
+                (Icon.view
+                    { icon = Icon.ChevronRight
+                    , size = 18
+                    , color = theme.brandBlue
+                    }
+                )
         }
 
 
@@ -1463,7 +1471,7 @@ logRow theme log =
                     [ Element.width Element.fill
                     , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
                     ]
-                    (Typography.wrappedListItemTitle theme log.item.name)
+                    (Typography.wrappedListItemTitle theme (FoodLog.itemName log.item))
                 , Element.row
                     [ Element.alignRight, Element.spacing DesignTokens.space12 ]
                     [ Typography.mutedCaption theme

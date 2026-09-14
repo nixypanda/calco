@@ -3,7 +3,7 @@ module Page.Food.ShowTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs as Logs
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
@@ -457,7 +457,9 @@ ounce =
 
 recentItem : Logs.RecentItem
 recentItem =
-    { item = { itemType = ItemRef.Product, id = "food-1", name = "Apple", brand = Nothing }
+    { item =
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Nothing }
     , lastUsedDate = sampleDate
     , mealSlot = Just "lunch"
     , quantity = { amount = "5", unit = "g" }
@@ -472,7 +474,9 @@ log =
     , logDate = sampleDate
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
-    , item = { itemType = ItemRef.Product, id = "food-1", name = "Apple", brand = Just "Local" }
+    , item =
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Nothing
