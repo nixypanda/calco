@@ -565,17 +565,32 @@ fn validate_ad_hoc_nutrients(snapshots: &[FoodLogNutrientSnapshot]) -> Result<()
         ("FAT_G", "g"),
     ];
 
-    for snapshot in snapshots {
-        let Some((_, expected_unit)) = REQUIRED
-            .iter()
-            .find(|(code, _)| *code == snapshot.nutrient_code.0)
-        else {
+    for (index, snapshot) in snapshots.iter().enumerate() {
+        if snapshot.nutrient_code.0.trim().is_empty() {
+            return Err(NutritionError::Validation(
+                "ad-hoc nutrient code must not be blank".into(),
+            ));
+        }
+        if snapshot.unit.0.trim().is_empty() {
             return Err(NutritionError::Validation(format!(
-                "unknown ad-hoc nutrient code: {}",
+                "{} unit must not be blank",
                 snapshot.nutrient_code.0
             )));
-        };
-        if snapshot.unit.0 != *expected_unit {
+        }
+        if snapshots[..index]
+            .iter()
+            .any(|other| other.nutrient_code == snapshot.nutrient_code)
+        {
+            return Err(NutritionError::Validation(format!(
+                "duplicate ad-hoc nutrient: {}",
+                snapshot.nutrient_code.0
+            )));
+        }
+        if let Some((_, expected_unit)) = REQUIRED
+            .iter()
+            .find(|(code, _)| *code == snapshot.nutrient_code.0)
+            && snapshot.unit.0 != *expected_unit
+        {
             return Err(NutritionError::Validation(format!(
                 "{} must use unit {}",
                 snapshot.nutrient_code.0, expected_unit
@@ -601,11 +616,7 @@ fn validate_ad_hoc_nutrients(snapshots: &[FoodLogNutrientSnapshot]) -> Result<()
                 )));
             }
             1 => {}
-            _ => {
-                return Err(NutritionError::Validation(format!(
-                    "duplicate ad-hoc nutrient: {code}"
-                )));
-            }
+            _ => unreachable!("duplicates are rejected above"),
         }
     }
 

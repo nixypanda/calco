@@ -1,20 +1,23 @@
 module Page.FoodLog.AdHocForm exposing
     ( Model
+    , NutrientRow
     , Validated
     , empty
     , toAdHocRequest
     , toCustomFoodRequest
     , toProductLogRequest
     , validate
+    , withNutrientCatalog
     )
 
-import Api.Foods exposing (CreateFoodRequest)
+import Api.Foods exposing (CreateFoodRequest, NutrientItem)
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
 import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Lib.Date exposing (LocalDate)
 import Lib.Text as Text
+import View.Nutrients
 
 
 type alias Model =
@@ -24,13 +27,17 @@ type alias Model =
     , brand : String
     , amount : String
     , unit : String
-    , calories : String
-    , protein : String
-    , carbohydrates : String
-    , fat : String
+    , nutrients : List NutrientRow
     , notes : String
     , saveToMyFoods : Bool
     , portionWeight : String
+    }
+
+
+type alias NutrientRow =
+    { code : String
+    , amount : String
+    , unit : String
     }
 
 
@@ -55,13 +62,31 @@ empty date mealSlot =
     , brand = ""
     , amount = "1"
     , unit = "serving"
-    , calories = ""
-    , protein = ""
-    , carbohydrates = ""
-    , fat = ""
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "", unit = "kcal" }
+        , { code = "PROTEIN_G", amount = "", unit = "g" }
+        , { code = "CARBS_G", amount = "", unit = "g" }
+        , { code = "FAT_G", amount = "", unit = "g" }
+        ]
     , notes = ""
     , saveToMyFoods = False
     , portionWeight = ""
+    }
+
+
+withNutrientCatalog : List NutrientItem -> Model -> Model
+withNutrientCatalog catalog form =
+    { form
+        | nutrients =
+            List.map
+                (\row ->
+                    catalog
+                        |> List.filter (\item -> item.code == row.code)
+                        |> List.head
+                        |> Maybe.map (\item -> { row | unit = item.unit })
+                        |> Maybe.withDefault row
+                )
+                form.nutrients
     }
 
 
@@ -72,20 +97,51 @@ validate form =
         name =
             String.trim form.name
 
-        nutrients : List ( String, String, String )
-        nutrients =
-            [ ( "ENERGY_KCAL", form.calories, "kcal" )
-            , ( "PROTEIN_G", form.protein, "g" )
-            , ( "CARBS_G", form.carbohydrates, "g" )
-            , ( "FAT_G", form.fat, "g" )
-            ]
+        nutrientRows : List NutrientRow
+        nutrientRows =
+            List.filter hasNutrientInput form.nutrients
+
+        duplicate : Maybe String
+        duplicate =
+            firstDuplicate (List.map (.code >> String.trim) nutrientRows)
+
+        missingRequired : Maybe String
+        missingRequired =
+            [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
+                |> List.filter (\code -> not (List.any (\row -> row.code == code) nutrientRows))
+                |> List.head
+
+        parsedNutrients : Result String (List ( NutrientRow, Float ))
+        parsedNutrients =
+            nutrientRows
+                |> List.map
+                    (\row ->
+                        if String.isEmpty (String.trim row.code) then
+                            Err "Select a nutrient for every entered amount."
+
+                        else
+                            nonNegative (View.Nutrients.nutrientLabel row.code) row.amount
+                                |> Result.map (Tuple.pair row)
+                    )
+                |> combine
     in
     if String.isEmpty name then
         Err "Food name is required."
 
+    else if duplicate /= Nothing then
+        Err "Each nutrient can only be added once."
+
+    else if missingRequired /= Nothing then
+        Err
+            (missingRequired
+                |> Maybe.map View.Nutrients.nutrientLabel
+                |> Maybe.withDefault "Required nutrient"
+                |> (\label -> label ++ " is required.")
+            )
+
     else
         Result.map3
-            (\quantityAmount parsedNutrients portionWeight ->
+            (\quantityAmount parsed portionWeight ->
                 { name = name
                 , brand = Text.blankToMaybe form.brand
                 , quantity =
@@ -96,24 +152,21 @@ validate form =
                 , mealSlot = form.mealSlot
                 , nutrients =
                     List.map
-                        (\( code, raw, unit ) ->
-                            { code = code, amount = String.trim raw, unit = unit }
+                        (\( row, _ ) ->
+                            { code = String.trim row.code
+                            , amount = String.trim row.amount
+                            , unit = row.unit
+                            }
                         )
-                        nutrients
+                        parsed
                 , nutrientTotals =
-                    List.map2
-                        (\( code, _, _ ) value -> ( code, value ))
-                        nutrients
-                        parsedNutrients
+                    List.map (\( row, value ) -> ( String.trim row.code, value )) parsed
                 , notes = Text.blankToMaybe form.notes
                 , portionWeight = portionWeight
                 }
             )
             (positive "Amount" form.amount)
-            (nutrients
-                |> List.map (\( code, raw, _ ) -> nonNegative (nutrientLabel code) raw)
-                |> combine
-            )
+            parsedNutrients
             (if form.saveToMyFoods then
                 positive "Weight of this logged portion" form.portionWeight
                     |> Result.map Just
@@ -232,20 +285,24 @@ combine results =
     List.foldr (Result.map2 (::)) (Ok []) results
 
 
-nutrientLabel : String -> String
-nutrientLabel code =
-    case code of
-        "ENERGY_KCAL" ->
-            "Calories"
+hasNutrientInput : NutrientRow -> Bool
+hasNutrientInput row =
+    not (String.isEmpty (String.trim row.code))
+        || not (String.isEmpty (String.trim row.amount))
 
-        "PROTEIN_G" ->
-            "Protein"
 
-        "CARBS_G" ->
-            "Carbohydrates"
+firstDuplicate : List String -> Maybe String
+firstDuplicate values =
+    case values of
+        [] ->
+            Nothing
 
-        _ ->
-            "Fat"
+        value :: rest ->
+            if List.member value rest then
+                Just value
+
+            else
+                firstDuplicate rest
 
 
 isMassUnit : String -> Bool

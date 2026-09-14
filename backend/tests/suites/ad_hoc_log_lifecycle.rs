@@ -208,7 +208,11 @@ async fn ad_hoc_log_validates_identity_quantity_and_core_nutrients(pool: PgPool)
     );
 
     let mut unknown = valid_payload();
-    unknown["nutrients"][0]["code"] = json!("FIBER_G");
+    unknown["nutrients"].as_array_mut().unwrap().push(json!({
+        "code": "NOT_A_NUTRIENT",
+        "amount": 1,
+        "unit": "g"
+    }));
     assert_eq!(
         post_status(&router, &user, &unknown).await,
         StatusCode::BAD_REQUEST
@@ -226,6 +230,16 @@ async fn ad_hoc_log_validates_identity_quantity_and_core_nutrients(pool: PgPool)
     assert_eq!(
         post_status(&router, &user, &negative).await,
         StatusCode::BAD_REQUEST
+    );
+
+    let mut with_optional_nutrient = valid_payload();
+    with_optional_nutrient["nutrients"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "code": "FIBER_G", "amount": 7, "unit": "g" }));
+    assert_eq!(
+        post_status(&router, &user, &with_optional_nutrient).await,
+        StatusCode::CREATED
     );
 
     let mut zero = valid_payload();

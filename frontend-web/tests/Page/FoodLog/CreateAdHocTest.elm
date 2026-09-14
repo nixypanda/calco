@@ -107,10 +107,12 @@ validModel =
         | form =
             { form
                 | name = "Paneer wrap"
-                , calories = "520"
-                , protein = "24"
-                , carbohydrates = "48"
-                , fat = "25"
+                , nutrients =
+                    [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
+                    , { code = "PROTEIN_G", amount = "24", unit = "g" }
+                    , { code = "CARBS_G", amount = "48", unit = "g" }
+                    , { code = "FAT_G", amount = "25", unit = "g" }
+                    ]
             }
     }
 

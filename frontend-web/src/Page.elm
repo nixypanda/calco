@@ -524,6 +524,10 @@ hydrateUnits result pane =
 hydrateNutrients : NutrientsResult -> Pane -> Pane
 hydrateNutrients result pane =
     case pane of
+        CreateAdHocLogPane model ->
+            CreateAdHocLogPane
+                (modelOnly (CreateAdHocLog.update (CreateAdHocLog.NutrientsLoaded result) model))
+
         CustomFoodCreatePane model ->
             CustomFoodCreatePane
                 (modelOnly

@@ -12,10 +12,7 @@ tests =
             \_ ->
                 Form.validate
                     { validForm
-                        | calories = "0"
-                        , protein = "0"
-                        , carbohydrates = "0"
-                        , fat = "0"
+                        | nutrients = List.map (\row -> { row | amount = "0" }) validForm.nutrients
                     }
                     |> Result.map .nutrientTotals
                     |> Expect.equal
@@ -28,8 +25,31 @@ tests =
                         )
         , test "rejects a negative nutrient" <|
             \_ ->
-                Form.validate { validForm | protein = "-1" }
+                Form.validate
+                    { validForm
+                        | nutrients = setAmount "PROTEIN_G" "-1" validForm.nutrients
+                    }
                     |> Expect.equal (Err "Protein must be zero or greater.")
+        , test "accepts optional catalog nutrients" <|
+            \_ ->
+                Form.validate
+                    { validForm
+                        | nutrients =
+                            validForm.nutrients
+                                ++ [ { code = "FIBER_G", amount = "7", unit = "g" } ]
+                    }
+                    |> Result.map (List.map .code << .nutrients)
+                    |> Expect.equal
+                        (Ok [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G" ])
+        , test "rejects duplicate nutrients" <|
+            \_ ->
+                Form.validate
+                    { validForm
+                        | nutrients =
+                            validForm.nutrients
+                                ++ [ { code = "FAT_G", amount = "1", unit = "g" } ]
+                    }
+                    |> Expect.equal (Err "Each nutrient can only be added once.")
         , test "does not require weight when saving is off" <|
             \_ ->
                 Form.validate { validForm | portionWeight = "" }
@@ -50,7 +70,7 @@ tests =
                     { validForm
                         | amount = "2"
                         , unit = "piece"
-                        , calories = "400"
+                        , nutrients = setAmount "ENERGY_KCAL" "400" validForm.nutrients
                         , portionWeight = "160"
                         , saveToMyFoods = True
                     }
@@ -84,11 +104,25 @@ validForm =
     , brand = ""
     , amount = "1"
     , unit = "serving"
-    , calories = "520"
-    , protein = "24"
-    , carbohydrates = "48"
-    , fat = "25"
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" }
+        , { code = "PROTEIN_G", amount = "24", unit = "g" }
+        , { code = "CARBS_G", amount = "48", unit = "g" }
+        , { code = "FAT_G", amount = "25", unit = "g" }
+        ]
     , notes = ""
     , saveToMyFoods = False
     , portionWeight = ""
     }
+
+
+setAmount : String -> String -> List Form.NutrientRow -> List Form.NutrientRow
+setAmount code value =
+    List.map
+        (\row ->
+            if row.code == code then
+                { row | amount = value }
+
+            else
+                row
+        )

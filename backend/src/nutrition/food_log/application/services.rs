@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::application::CatalogReadPort;
+use crate::nutrition::catalog::application::{CatalogReadPort, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::food_log::domain::*;
@@ -42,6 +42,7 @@ pub struct UpdateFoodInput {
 pub struct FoodLogService {
     food_log_repo: Arc<dyn FoodLogRepository>,
     catalog: Arc<dyn CatalogReadPort>,
+    nutrient_catalog: Arc<dyn NutrientCatalogReadPort>,
     unit_converter: Arc<UnitConverter>,
     meals: Arc<dyn MealReadPort>,
     policy: FoodLogPolicy,
@@ -51,12 +52,14 @@ impl FoodLogService {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
         catalog: Arc<dyn CatalogReadPort>,
+        nutrient_catalog: Arc<dyn NutrientCatalogReadPort>,
         unit_converter: Arc<UnitConverter>,
         meals: Arc<dyn MealReadPort>,
     ) -> Self {
         Self {
             food_log_repo,
             catalog,
+            nutrient_catalog,
             unit_converter,
             meals,
             policy: FoodLogPolicy,
@@ -78,6 +81,23 @@ impl FoodLogService {
         actor_id: Uuid,
         input: LogAdHocFoodInput,
     ) -> Result<FoodLog, NutritionError> {
+        let nutrient_catalog = self.nutrient_catalog.nutrient_catalog().await?;
+        for snapshot in &input.nutrients {
+            let nutrient = nutrient_catalog
+                .get(&snapshot.nutrient_code.0)
+                .ok_or_else(|| {
+                    NutritionError::Validation(format!(
+                        "unknown ad-hoc nutrient code: {}",
+                        snapshot.nutrient_code.0
+                    ))
+                })?;
+            if snapshot.unit != nutrient.unit {
+                return Err(NutritionError::Validation(format!(
+                    "{} must use unit {}",
+                    snapshot.nutrient_code.0, nutrient.unit.0
+                )));
+            }
+        }
         let log = FoodLogBuilder::new_ad_hoc(
             actor_id,
             input.log_date,
