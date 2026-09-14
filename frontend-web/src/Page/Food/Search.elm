@@ -177,6 +177,7 @@ type Msg
     | ResultClicked String
     | CreateCustomFoodClicked
     | CreateAdHocLogClicked
+    | CreateAiLogClicked
 
 
 type alias RecentItemsResult =
@@ -653,6 +654,12 @@ update msg model =
             , Navigate (AdHocLogCreate model.date model.mealSlot)
             )
 
+        CreateAiLogClicked ->
+            ( model
+            , Cmd.none
+            , Navigate (AiLogCreate model.date model.mealSlot)
+            )
+
 
 applyBarcodeScannerEvent :
     { event : String, barcode : Maybe String, message : Maybe String }
@@ -817,17 +824,42 @@ adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
     Ui.card theme
         [ Typography.sectionTitle theme "Create an ad-hoc food log"
-        , Ui.textButton device
-            theme
-            { tone = Ui.GhostFilled
-            , width = Ui.FullWidth
-            , label = "Manually"
-            , onPress = CreateAdHocLogClicked
-            , submitState = Nothing
-            , submittingLabel = Nothing
-            , trailing = Nothing
-            }
+        , responsiveActions device
+            [ Ui.textButton device
+                theme
+                { tone = Ui.GhostFilled
+                , width = Ui.ResponsiveWidth
+                , label = "Manually"
+                , onPress = CreateAdHocLogClicked
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
+            , Ui.textButton device
+                theme
+                { tone = Ui.Primary
+                , width = Ui.ResponsiveWidth
+                , label = "With AI"
+                , onPress = CreateAiLogClicked
+                , submitState = Nothing
+                , submittingLabel = Nothing
+                , trailing = Nothing
+                }
+            ]
         ]
+
+
+responsiveActions : Device -> List (Element msg) -> Element msg
+responsiveActions device actions =
+    if Ui.isSmall device then
+        Element.column
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            actions
+
+    else
+        Element.row
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            actions
 
 
 searchInputView : Theme -> Device -> Model -> Element Msg

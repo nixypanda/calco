@@ -96,6 +96,9 @@ resolveKnownSession session adminExists route =
             AdHocLogCreate _ _ ->
                 Render route
 
+            AiLogCreate _ _ ->
+                Render route
+
             FoodSearch _ _ ->
                 Render route
 
