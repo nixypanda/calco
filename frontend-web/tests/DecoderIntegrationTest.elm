@@ -155,8 +155,20 @@ tests =
         , test "decodes food log item identity" <|
             \_ ->
                 Decode.decodeString FoodLog.decoder foodLogJson
-                    |> Result.map (\log -> ( log.item.itemType, log.item.name, log.item.brand ))
-                    |> Expect.equal (Ok ( ItemRef.Product, "Apple", Just "Local" ))
+                    |> Result.map
+                        (\log ->
+                            ( FoodLog.itemRef log.item
+                            , FoodLog.itemName log.item
+                            , FoodLog.itemBrand log.item
+                            )
+                        )
+                    |> Expect.equal
+                        (Ok
+                            ( Just { itemType = ItemRef.Product, id = "food-1" }
+                            , "Apple"
+                            , Just "Local"
+                            )
+                        )
         , test "decodes recent items with serving nutrition" <|
             \_ ->
                 Decode.decodeString Logs.recentItemsResponseDecoder recentItemsJson

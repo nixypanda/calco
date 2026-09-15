@@ -1,5 +1,5 @@
 use super::*;
-use crate::nutrition::catalog::application::CatalogReadPort;
+use crate::nutrition::catalog::application::{CatalogReadPort, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::*;
 use crate::nutrition::food_log::domain::*;
@@ -168,6 +168,29 @@ struct MockMealReadPort {
     meal: Option<Meal>,
 }
 
+struct MockNutrientCatalogReadPort;
+
+#[async_trait]
+impl NutrientCatalogReadPort for MockNutrientCatalogReadPort {
+    async fn nutrient_catalog(&self) -> Result<NutrientCatalog, NutritionError> {
+        Ok([
+            ("ENERGY_KCAL", "kcal"),
+            ("PROTEIN_G", "g"),
+            ("CARBS_G", "g"),
+            ("FAT_G", "g"),
+            ("FIBER_G", "g"),
+        ]
+        .into_iter()
+        .map(|(code, unit)| Nutrient {
+            code: NutrientCode(code.into()),
+            name: code.into(),
+            unit: UnitCode(unit.into()),
+            category: "test".into(),
+        })
+        .collect())
+    }
+}
+
 impl MockMealReadPort {
     fn with_meal(meal: Meal) -> Self {
         Self {
@@ -315,6 +338,7 @@ fn build_services_with_repo(
         FoodLogService::new(
             food_log_repo.clone(),
             product_repo,
+            Arc::new(MockNutrientCatalogReadPort),
             sample_unit_converter(),
             meal_repo,
         ),

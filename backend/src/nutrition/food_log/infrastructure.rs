@@ -185,23 +185,25 @@ fn food_log_row_to_food_log(
     row: FoodLogRow,
     snapshots: Vec<FoodLogNutrientSnapshot>,
 ) -> Result<FoodLog, NutritionError> {
-    let item = if let Some(pid) = row.item_product_id {
-        let product_id = ProductId(pid);
-        FoodLogItemSnapshot::Product {
-            id: product_id,
+    let item = match (row.item_product_id, row.item_meal_id) {
+        (Some(_), Some(_)) => {
+            return Err(NutritionError::Internal(
+                "food log has both item references".into(),
+            ));
+        }
+        (Some(pid), None) => FoodLogItemSnapshot::Product {
+            id: ProductId(pid),
             name: row.item_name,
             brand: row.item_brand,
-        }
-    } else if let Some(mid) = row.item_meal_id {
-        let meal_id = MealId(mid);
-        FoodLogItemSnapshot::Meal {
-            id: meal_id,
+        },
+        (None, Some(mid)) => FoodLogItemSnapshot::Meal {
+            id: MealId(mid),
             name: row.item_name,
-        }
-    } else {
-        return Err(NutritionError::Internal(
-            "food log has no item reference".into(),
-        ));
+        },
+        (None, None) => FoodLogItemSnapshot::AdHoc {
+            name: row.item_name,
+            brand: row.item_brand,
+        },
     };
 
     Ok(FoodLog::restore(
@@ -411,6 +413,7 @@ fn item_to_columns(item: &FoodLogItemSnapshot) -> (Option<Uuid>, Option<Uuid>, &
             (Some(id.0), None, name.as_str(), brand.as_deref())
         }
         FoodLogItemSnapshot::Meal { id, name } => (None, Some(id.0), name.as_str(), None),
+        FoodLogItemSnapshot::AdHoc { name, brand } => (None, None, name.as_str(), brand.as_deref()),
     }
 }
 

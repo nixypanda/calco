@@ -19,8 +19,7 @@ module Page.FoodLog.Entry exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
-import Data.FoodLog exposing (FoodLog)
-import Data.ItemRef exposing (ItemType(..))
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
@@ -65,13 +64,14 @@ type alias LoadedModel =
 
 type LoadedItem
     = ProductItem ProductState
-    | MealItem Data.FoodLog.LogItem
+    | MealItem FoodLog.LogItem
+    | AdHocItem FoodLog.LogItem
 
 
 type ItemDetail a
-    = DetailLoading Data.FoodLog.LogItem
+    = DetailLoading FoodLog.LogItem
     | DetailLoaded a
-    | DetailUnavailable Data.FoodLog.LogItem
+    | DetailUnavailable FoodLog.LogItem
 
 
 type alias ProductState =
@@ -390,19 +390,22 @@ nextLoadedItem loaded log =
         initialLoadedItem log
 
 
-sameLogItem : Data.FoodLog.LogItem -> Data.FoodLog.LogItem -> Bool
+sameLogItem : FoodLog.LogItem -> FoodLog.LogItem -> Bool
 sameLogItem left right =
-    left.itemType == right.itemType && left.id == right.id
+    left == right
 
 
 initialLoadedItem : FoodLog -> LoadedItem
 initialLoadedItem log =
-    case log.item.itemType of
-        Product ->
+    case log.item of
+        FoodLog.ProductLogItem _ ->
             ProductItem (DetailLoading log.item)
 
-        Meal ->
+        FoodLog.MealLogItem _ ->
             MealItem log.item
+
+        FoodLog.AdHocLogItem _ ->
+            AdHocItem log.item
 
 
 updateLoadedItem : (LoadedItem -> LoadedItem) -> Model -> Model
@@ -439,21 +442,21 @@ applyProductDetail result item =
 
 productStateId : ProductState -> String
 productStateId state =
-    (productStateItem state).id
+    productStateItem state
+        |> FoodLog.itemRef
+        |> Maybe.map .id
+        |> Maybe.withDefault ""
 
 
-productStateItem : ProductState -> Data.FoodLog.LogItem
+productStateItem : ProductState -> FoodLog.LogItem
 productStateItem state =
     case state of
         DetailLoading item ->
             item
 
         DetailLoaded food ->
-            { itemType = Product
-            , id = food.id
-            , name = food.name
-            , brand = food.brand
-            }
+            FoodLog.ProductLogItem
+                { id = food.id, name = food.name, brand = food.brand }
 
         DetailUnavailable item ->
             item
@@ -501,13 +504,16 @@ applyLoadedDeleteError message model =
 
 itemResolutionOutMsg : FoodLog -> OutMsg
 itemResolutionOutMsg log =
-    case log.item.itemType of
-        Product ->
-            RequestProductDetail log.item.id
+    case log.item of
+        FoodLog.ProductLogItem product ->
+            RequestProductDetail product.id
 
         -- Products need servings, nutrients and allowed units the log lacks. A
         -- meal log already carries everything its view renders.
-        Meal ->
+        FoodLog.MealLogItem _ ->
+            NoOp
+
+        FoodLog.AdHocLogItem _ ->
             NoOp
 
 
@@ -603,7 +609,13 @@ loadedView theme device model =
         ]
         [ itemHeader theme device model
         , Element.map FormMsg
-            (FoodLogForm.view theme device (productDetail model.item) model.units model.form)
+            (FoodLogForm.view
+                theme
+                device
+                (productDetail model.item)
+                (unitsForItem model)
+                model.form
+            )
         , detailActionsView theme device model
         , View.Nutrients.responsiveNutritionCard device theme nutrients
         ]
@@ -705,10 +717,13 @@ itemTitle theme item =
                     Typography.truncatedHeader theme food.name
 
                 DetailUnavailable fallback ->
-                    Element.text fallback.name
+                    Element.text (FoodLog.itemName fallback)
 
         MealItem meal ->
-            Typography.truncatedHeader theme meal.name
+            Typography.truncatedHeader theme (FoodLog.itemName meal)
+
+        AdHocItem adHoc ->
+            Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
 metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
@@ -740,7 +755,22 @@ metaSubtitle device maybeFood log =
                     }
 
         Nothing ->
-            Ui.SubtitleText ("Logged " ++ LocalDate.display log.logDate)
+            Ui.SubtitleText
+                (Ui.dotSeparated
+                    [ FoodLog.itemBrand log.item
+                    , Just ("Logged " ++ LocalDate.display log.logDate)
+                    ]
+                )
+
+
+unitsForItem : LoadedModel -> List UnitItem
+unitsForItem model =
+    case model.log.item of
+        FoodLog.AdHocLogItem _ ->
+            List.filter (\unit -> unit.code == model.log.quantity.unit) model.units
+
+        _ ->
+            model.units
 
 
 detailActionsView : Theme -> Device -> LoadedModel -> Element Msg

@@ -3,7 +3,7 @@ use chrono::NaiveDate;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::nutrition::catalog::application::CatalogReadPort;
+use crate::nutrition::catalog::application::{CatalogReadPort, NutrientCatalogReadPort};
 use crate::nutrition::catalog::domain::calculation::Quantity;
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::food_log::domain::*;
@@ -15,6 +15,17 @@ pub struct LogFoodInput {
     pub device_timezone: Option<String>,
     pub item: FoodLogItemRef,
     pub quantity: Quantity,
+    pub notes: Option<String>,
+}
+
+pub struct LogAdHocFoodInput {
+    pub log_date: NaiveDate,
+    pub meal_slot: Option<MealSlot>,
+    pub device_timezone: Option<String>,
+    pub name: String,
+    pub brand: Option<String>,
+    pub quantity: Quantity,
+    pub nutrients: Vec<FoodLogNutrientSnapshot>,
     pub notes: Option<String>,
 }
 
@@ -31,6 +42,7 @@ pub struct UpdateFoodInput {
 pub struct FoodLogService {
     food_log_repo: Arc<dyn FoodLogRepository>,
     catalog: Arc<dyn CatalogReadPort>,
+    nutrient_catalog: Arc<dyn NutrientCatalogReadPort>,
     unit_converter: Arc<UnitConverter>,
     meals: Arc<dyn MealReadPort>,
     policy: FoodLogPolicy,
@@ -40,12 +52,14 @@ impl FoodLogService {
     pub fn new(
         food_log_repo: Arc<dyn FoodLogRepository>,
         catalog: Arc<dyn CatalogReadPort>,
+        nutrient_catalog: Arc<dyn NutrientCatalogReadPort>,
         unit_converter: Arc<UnitConverter>,
         meals: Arc<dyn MealReadPort>,
     ) -> Self {
         Self {
             food_log_repo,
             catalog,
+            nutrient_catalog,
             unit_converter,
             meals,
             policy: FoodLogPolicy,
@@ -58,6 +72,44 @@ impl FoodLogService {
         input: LogFoodInput,
     ) -> Result<FoodLog, NutritionError> {
         let log = self.build_log(actor_id, input).await?;
+        self.food_log_repo.create(&log).await?;
+        Ok(log)
+    }
+
+    pub async fn log_ad_hoc_food(
+        &self,
+        actor_id: Uuid,
+        input: LogAdHocFoodInput,
+    ) -> Result<FoodLog, NutritionError> {
+        let nutrient_catalog = self.nutrient_catalog.nutrient_catalog().await?;
+        for snapshot in &input.nutrients {
+            let nutrient = nutrient_catalog
+                .get(&snapshot.nutrient_code.0)
+                .ok_or_else(|| {
+                    NutritionError::Validation(format!(
+                        "unknown ad-hoc nutrient code: {}",
+                        snapshot.nutrient_code.0
+                    ))
+                })?;
+            if snapshot.unit != nutrient.unit {
+                return Err(NutritionError::Validation(format!(
+                    "{} must use unit {}",
+                    snapshot.nutrient_code.0, nutrient.unit.0
+                )));
+            }
+        }
+        let log = FoodLogBuilder::new_ad_hoc(
+            actor_id,
+            input.log_date,
+            input.name,
+            input.brand,
+            input.quantity,
+            input.nutrients,
+        )?
+        .meal_slot(input.meal_slot)
+        .device_timezone(input.device_timezone)
+        .notes(input.notes)
+        .build();
         self.food_log_repo.create(&log).await?;
         Ok(log)
     }
@@ -134,7 +186,7 @@ impl FoodLogService {
     ) -> Result<FoodLog, NutritionError> {
         let existing = self.get_food_log(id, actor_id).await?;
 
-        let item = input.item.unwrap_or_else(|| existing.item().as_ref());
+        let item = input.item;
         let quantity = input.quantity.unwrap_or_else(|| {
             Quantity::new(existing.quantity_amount(), existing.quantity_unit().clone())
                 .expect("existing food log quantity must be valid")
@@ -152,38 +204,49 @@ impl FoodLogService {
             .notes
             .unwrap_or_else(|| existing.notes().map(str::to_owned));
 
-        let updated = match item {
-            FoodLogItemRef::Product(product_id) => {
-                let product = self
-                    .catalog
-                    .resolve_products(actor_id, &[product_id])
-                    .await?
-                    .into_iter()
-                    .find_map(|(id, product)| (id == product_id).then_some(product))
-                    .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
-                existing.update_product_log(
-                    log_date,
-                    meal_slot,
-                    device_timezone,
-                    &product,
-                    quantity,
-                    &self.unit_converter,
-                    notes,
-                )?
+        let updated = match existing.item() {
+            FoodLogItemSnapshot::AdHoc { .. } => {
+                if item.is_some() {
+                    return Err(NutritionError::Validation(
+                        "the item of an ad-hoc food log cannot be changed".into(),
+                    ));
+                }
+                existing.update_ad_hoc_log(log_date, meal_slot, device_timezone, quantity, notes)?
             }
-            FoodLogItemRef::Meal(meal_id) => {
-                let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
-                existing.update_meal_log(
-                    log_date,
-                    meal_slot,
-                    device_timezone,
-                    &resolved.meal,
-                    quantity,
-                    &resolved.products,
-                    &self.unit_converter,
-                    notes,
-                )?
-            }
+            _ => match item.or_else(|| existing.item().as_ref()) {
+                Some(FoodLogItemRef::Product(product_id)) => {
+                    let product = self
+                        .catalog
+                        .resolve_products(actor_id, &[product_id])
+                        .await?
+                        .into_iter()
+                        .find_map(|(id, product)| (id == product_id).then_some(product))
+                        .ok_or_else(|| NutritionError::NotFound("product not found".into()))?;
+                    existing.update_product_log(
+                        log_date,
+                        meal_slot,
+                        device_timezone,
+                        &product,
+                        quantity,
+                        &self.unit_converter,
+                        notes,
+                    )?
+                }
+                Some(FoodLogItemRef::Meal(meal_id)) => {
+                    let resolved = self.meals.resolve_loggable_meal(actor_id, meal_id).await?;
+                    existing.update_meal_log(
+                        log_date,
+                        meal_slot,
+                        device_timezone,
+                        &resolved.meal,
+                        quantity,
+                        &resolved.products,
+                        &self.unit_converter,
+                        notes,
+                    )?
+                }
+                None => unreachable!("product and meal snapshots always have references"),
+            },
         };
 
         self.food_log_repo.update(&updated).await?;

@@ -59,6 +59,7 @@ import Page.Diary.Day as DiaryDay
 import Page.Diary.Settings as DiarySettings
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
+import Page.FoodLog.CreateAdHoc as CreateAdHocLog
 import Page.FoodLog.Entry as FoodLogEntry
 import Page.Goals.Settings as GoalsSettings
 import Page.Meal.Create as MealCreate
@@ -105,6 +106,7 @@ type Pane
     | FoodSearchPane FoodSearch.Model
     | FoodDetailPane String FoodShow.Model
     | FoodLogDetailPane String FoodLogEntry.Model
+    | CreateAdHocLogPane CreateAdHocLog.Model
     | CustomFoodListPane CustomFoodList.Model
     | CustomFoodCreatePane CustomFoodCreate.Model
     | CustomFoodEditPane String CustomFoodEdit.Model
@@ -229,6 +231,9 @@ paneKey pane =
 
         FoodLogDetailPane logId _ ->
             "log-detail:" ++ logId
+
+        CreateAdHocLogPane _ ->
+            "create-ad-hoc-log"
 
         CustomFoodListPane _ ->
             "custom-food-list"
@@ -492,6 +497,10 @@ hydrateUnits result pane =
             FoodLogDetailPane key
                 (modelOnly (FoodLogEntry.update (FoodLogEntry.UnitsLoaded result) model))
 
+        CreateAdHocLogPane model ->
+            CreateAdHocLogPane
+                (modelOnly (CreateAdHocLog.update (CreateAdHocLog.UnitsLoaded result) model))
+
         CustomFoodCreatePane model ->
             CustomFoodCreatePane
                 (modelOnly (CustomFoodCreate.update (CustomFoodCreate.UnitsLoaded result) model))
@@ -515,6 +524,10 @@ hydrateUnits result pane =
 hydrateNutrients : NutrientsResult -> Pane -> Pane
 hydrateNutrients result pane =
     case pane of
+        CreateAdHocLogPane model ->
+            CreateAdHocLogPane
+                (modelOnly (CreateAdHocLog.update (CreateAdHocLog.NutrientsLoaded result) model))
+
         CustomFoodCreatePane model ->
             CustomFoodCreatePane
                 (modelOnly
@@ -759,6 +772,9 @@ needsSessionData pane =
         FoodLogDetailPane _ _ ->
             True
 
+        CreateAdHocLogPane _ ->
+            True
+
         CustomFoodListPane _ ->
             True
 
@@ -900,6 +916,9 @@ panesForRoute context existing =
 
         FoodLogEntry logId _ _ ->
             Just [ foodLogDetailDesired context logId ]
+
+        AdHocLogCreate dateParam mealSlot ->
+            Just [ createAdHocLogDesired context dateParam mealSlot ]
 
         CustomFoodCreate ->
             Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
@@ -1162,6 +1181,13 @@ foodLogDetailDesired context logId =
         (\_ -> FoodLogEntry.init logId)
 
 
+createAdHocLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
+createAdHocLogDesired _ dateParam mealSlot =
+    simpleDesired
+        "create-ad-hoc-log"
+        (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
+
+
 preservePane : Pane -> DesiredPane
 preservePane pane =
     simpleDesired (paneKey pane) pane
@@ -1342,6 +1368,7 @@ type Msg
     | GotFoodSearchMsg FoodSearch.Msg
     | GotFoodDetailMsg FoodShow.Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
+    | GotCreateAdHocLogMsg CreateAdHocLog.Msg
     | GotCustomFoodCreateMsg CustomFoodCreate.Msg
     | GotCustomFoodEditMsg CustomFoodEdit.Msg
     | GotCustomFoodShowMsg CustomFoodShow.Msg
@@ -1774,6 +1801,28 @@ updatePane allPanes context msg pane =
                 mutation
                 result
 
+        ( GotCreateAdHocLogMsg subMsg, CreateAdHocLogPane sub ) ->
+            let
+                result : ( CreateAdHocLog.Model, Cmd CreateAdHocLog.Msg, CreateAdHocLog.OutMsg )
+                result =
+                    CreateAdHocLog.update subMsg sub
+
+                mutation : Mutation
+                mutation =
+                    case third result of
+                        CreateAdHocLog.LogCreated log ->
+                            RefreshDiaryAndCalendar log.logDate
+
+                        _ ->
+                            NoMutation
+            in
+            stepPane context
+                CreateAdHocLogPane
+                GotCreateAdHocLogMsg
+                applyCreateAdHocLogOutMsg
+                mutation
+                result
+
         ( GotCustomFoodCreateMsg subMsg, CustomFoodCreatePane sub ) ->
             stepPane context
                 CustomFoodCreatePane
@@ -1998,6 +2047,12 @@ localContextReceived pageContext context model =
                     updatePane model.panes
                         pageContext
                         (GotFoodSearchMsg (FoodSearch.LocalContextReceived context))
+                        pane
+
+                CreateAdHocLogPane _ ->
+                    updatePane model.panes
+                        pageContext
+                        (GotCreateAdHocLogMsg (CreateAdHocLog.LocalContextReceived context))
                         pane
 
                 GoalsSettingsPane _ _ ->
@@ -2444,6 +2499,45 @@ applyFoodDetailOutMsg context outMsg =
             ( Cmd.none, Navigate route )
 
         FoodShow.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
+applyCreateAdHocLogOutMsg :
+    InitContext
+    -> CreateAdHocLog.OutMsg
+    -> ( Cmd Msg, OutMsg )
+applyCreateAdHocLogOutMsg _ outMsg =
+    case outMsg of
+        CreateAdHocLog.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        CreateAdHocLog.RequestLocalContext ->
+            ( Cmd.none, RequestLocalContext )
+
+        CreateAdHocLog.RequestAdHocLog request ->
+            ( Api.Logs.createAdHocLog request
+                (GotCreateAdHocLogMsg << CreateAdHocLog.AdHocLogCompleted)
+            , NoOutMsg
+            )
+
+        CreateAdHocLog.RequestCreateFood request ->
+            ( Api.Foods.createCustomFood request
+                (GotCreateAdHocLogMsg << CreateAdHocLog.CustomFoodCompleted)
+            , NoOutMsg
+            )
+
+        CreateAdHocLog.RequestProductLog request ->
+            ( Api.Logs.createLog request
+                (GotCreateAdHocLogMsg << CreateAdHocLog.ProductLogCompleted)
+            , NoOutMsg
+            )
+
+        CreateAdHocLog.LogCreated log ->
+            ( Cmd.none
+            , Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing)
+            )
+
+        CreateAdHocLog.SessionExpired ->
             ( Cmd.none, SessionExpired )
 
 
@@ -2908,6 +3002,9 @@ paneView props selectedDate pane =
 
         FoodLogDetailPane _ sub ->
             Element.map GotFoodLogDetailMsg (FoodLogEntry.contentView (pageProps props sub))
+
+        CreateAdHocLogPane sub ->
+            Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view (pageProps props sub))
 
         CustomFoodListPane sub ->
             Element.map GotCustomFoodsMsg (CustomFoodList.contentView (pageProps props sub))

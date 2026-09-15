@@ -1,7 +1,7 @@
 module Page.FoodLog.FormTest exposing (tests)
 
 import Api.Foods exposing (ProductDetail)
-import Data.FoodLog exposing (FoodLog)
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
@@ -303,7 +303,9 @@ log =
     , logDate = sampleDate
     , deviceTimezone = deviceTimezone
     , mealSlot = Just Lunch
-    , item = { itemType = ItemRef.Product, id = "food-1", name = "Apple", brand = Just "Local" }
+    , item =
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Just "Local" }
     , quantity = { amount = "2", unit = "serving" }
     , nutrients = []
     , notes = Just "Good"

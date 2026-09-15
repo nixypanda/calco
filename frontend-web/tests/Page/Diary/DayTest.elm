@@ -2,7 +2,7 @@ module Page.Diary.DayTest exposing (tests)
 
 import Api.Client as Client
 import Api.Logs
-import Data.FoodLog exposing (FoodLog, LogItem)
+import Data.FoodLog as FoodLog exposing (FoodLog, LogItem)
 import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
@@ -293,8 +293,8 @@ tests =
                                   , deviceTimezone = yesterdayDinnerLog.deviceTimezone
                                   , mealSlot = Just "dinner"
                                   , item =
-                                        { itemType = yesterdayDinnerLog.item.itemType
-                                        , id = yesterdayDinnerLog.item.id
+                                        { itemType = ItemRef.Product
+                                        , id = "food-1"
                                         }
                                   , quantity = yesterdayDinnerLog.quantity
                                   , notes = yesterdayDinnerLog.notes
@@ -612,7 +612,8 @@ date raw =
 
 productRef : LogItem
 productRef =
-    { itemType = ItemRef.Product, id = "food-1", name = "Chicken", brand = Nothing }
+    FoodLog.ProductLogItem
+        { id = "food-1", name = "Chicken", brand = Nothing }
 
 
 lunchLog : FoodLog

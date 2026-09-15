@@ -93,6 +93,9 @@ resolveKnownSession session adminExists route =
             FoodLogEntry _ _ _ ->
                 Render route
 
+            AdHocLogCreate _ _ ->
+                Render route
+
             FoodSearch _ _ ->
                 Render route
 

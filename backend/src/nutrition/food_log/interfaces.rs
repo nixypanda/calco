@@ -26,6 +26,7 @@ use crate::nutrition::module::FoodLogModule;
 pub fn food_log_routes(state: AppState) -> Router {
     Router::new()
         .route("/logs", post(create_log_handler).get(list_logs_handler))
+        .route("/logs/ad-hoc", post(create_ad_hoc_log_handler))
         .route("/logs/batch", post(create_logs_batch_handler))
         .route("/logs/last-used", post(last_used_items_handler))
         .route("/logs/recent-items", get(recent_items_handler))
@@ -53,6 +54,25 @@ pub struct CreateLogRequest {
 #[derive(Deserialize)]
 pub struct CreateLogsBatchRequest {
     pub items: Vec<CreateLogRequest>,
+}
+
+#[derive(Deserialize)]
+pub struct CreateAdHocLogRequest {
+    pub log_date: String,
+    pub meal_slot: Option<String>,
+    pub device_timezone: Option<String>,
+    pub name: String,
+    pub brand: Option<String>,
+    pub quantity: QuantityDto,
+    pub nutrients: Vec<NutrientSnapshotRequest>,
+    pub notes: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct NutrientSnapshotRequest {
+    pub code: String,
+    pub amount: Decimal,
+    pub unit: String,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +135,10 @@ pub enum ItemDto {
     Meal {
         id: Uuid,
         name: String,
+    },
+    AdHoc {
+        name: String,
+        brand: Option<String>,
     },
 }
 
@@ -251,6 +275,26 @@ async fn create_log_handler(
             (StatusCode::CREATED, Json(resp)).into_response()
         }
         Err(e) => e.into_response(),
+    }
+}
+
+async fn create_ad_hoc_log_handler(
+    auth: AuthUser,
+    State(state): State<FoodLogModule>,
+    Json(req): Json<CreateAdHocLogRequest>,
+) -> impl IntoResponse {
+    let input = match ad_hoc_log_create_request_to_input(req) {
+        Ok(input) => input,
+        Err(err) => return err.into_response(),
+    };
+
+    match state
+        .food_log_services
+        .log_ad_hoc_food(auth.0.id, input)
+        .await
+    {
+        Ok(log) => (StatusCode::CREATED, Json(food_log_to_response(&log))).into_response(),
+        Err(err) => err.into_response(),
     }
 }
 
@@ -574,6 +618,29 @@ fn food_log_create_request_to_input(req: CreateLogRequest) -> Result<LogFoodInpu
     })
 }
 
+fn ad_hoc_log_create_request_to_input(
+    req: CreateAdHocLogRequest,
+) -> Result<LogAdHocFoodInput, NutritionError> {
+    Ok(LogAdHocFoodInput {
+        log_date: parse_log_date(&req.log_date)?,
+        meal_slot: req.meal_slot.as_deref().map(parse_meal_slot).transpose()?,
+        device_timezone: normalize_device_timezone(req.device_timezone)?,
+        name: req.name,
+        brand: req.brand,
+        quantity: parse_quantity(&req.quantity)?,
+        nutrients: req
+            .nutrients
+            .into_iter()
+            .map(|nutrient| FoodLogNutrientSnapshot {
+                nutrient_code: crate::nutrition::catalog::domain::NutrientCode(nutrient.code),
+                amount: nutrient.amount,
+                unit: UnitCode(nutrient.unit),
+            })
+            .collect(),
+        notes: req.notes,
+    })
+}
+
 fn food_log_update_request_to_input(
     req: UpdateLogRequest,
 ) -> Result<UpdateFoodInput, NutritionError> {
@@ -683,6 +750,10 @@ fn item_to_dto(item: &FoodLogItemSnapshot) -> ItemDto {
         FoodLogItemSnapshot::Meal { id, name } => ItemDto::Meal {
             id: id.0,
             name: name.clone(),
+        },
+        FoodLogItemSnapshot::AdHoc { name, brand } => ItemDto::AdHoc {
+            name: name.clone(),
+            brand: brand.clone(),
         },
     }
 }

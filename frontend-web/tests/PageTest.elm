@@ -1,7 +1,6 @@
 module PageTest exposing (tests)
 
-import Data.FoodLog exposing (FoodLog)
-import Data.ItemRef as ItemRef
+import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
@@ -507,11 +506,8 @@ productLog =
     , deviceTimezone = Just "Asia/Kolkata"
     , mealSlot = Just Lunch
     , item =
-        { itemType = ItemRef.Product
-        , id = "food-1"
-        , name = "Apple"
-        , brand = Nothing
-        }
+        FoodLog.ProductLogItem
+            { id = "food-1", name = "Apple", brand = Nothing }
     , quantity = { amount = "1", unit = "serving" }
     , nutrients = []
     , notes = Nothing

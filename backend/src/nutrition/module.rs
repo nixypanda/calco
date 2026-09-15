@@ -6,7 +6,9 @@ use sqlx::PgPool;
 use crate::AppState;
 use crate::BoxError;
 use crate::nutrition::catalog::application::ExternalProductCatalog;
-use crate::nutrition::catalog::application::{CatalogReadPort, CatalogService};
+use crate::nutrition::catalog::application::{
+    CatalogReadPort, CatalogService, NutrientCatalogReadPort,
+};
 use crate::nutrition::catalog::domain::units::UnitConverter;
 use crate::nutrition::catalog::domain::{NutrientRepository, ProductRepository, UnitRepository};
 use crate::nutrition::catalog::infrastructure::{
@@ -148,6 +150,7 @@ impl NutritionModule {
             external_catalog,
         ));
         let catalog_reads: Arc<dyn CatalogReadPort> = catalog_services.clone();
+        let nutrient_catalog_reads: Arc<dyn NutrientCatalogReadPort> = catalog_services.clone();
         let meal_services = Arc::new(MealService::new(
             meal_repo,
             catalog_reads.clone(),
@@ -157,6 +160,7 @@ impl NutritionModule {
         let food_log_services = Arc::new(FoodLogService::new(
             food_log_repo.clone(),
             catalog_reads,
+            nutrient_catalog_reads,
             unit_converter,
             meal_reads,
         ));

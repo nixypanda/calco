@@ -92,6 +92,10 @@ pub enum FoodLogItemSnapshot {
         id: MealId,
         name: String,
     },
+    AdHoc {
+        name: String,
+        brand: Option<String>,
+    },
 }
 
 impl FoodLogItemSnapshot {
@@ -110,10 +114,28 @@ impl FoodLogItemSnapshot {
         }
     }
 
-    pub fn as_ref(&self) -> FoodLogItemRef {
+    pub fn ad_hoc(name: String, brand: Option<String>) -> Result<Self, NutritionError> {
+        let name = name.trim().to_string();
+        if name.is_empty() {
+            return Err(NutritionError::Validation(
+                "ad-hoc food name must not be blank".into(),
+            ));
+        }
+
+        Ok(Self::AdHoc {
+            name,
+            brand: brand.and_then(|value| {
+                let trimmed = value.trim().to_string();
+                (!trimmed.is_empty()).then_some(trimmed)
+            }),
+        })
+    }
+
+    pub fn as_ref(&self) -> Option<FoodLogItemRef> {
         match self {
-            Self::Product { id, .. } => FoodLogItemRef::Product(*id),
-            Self::Meal { id, .. } => FoodLogItemRef::Meal(*id),
+            Self::Product { id, .. } => Some(FoodLogItemRef::Product(*id)),
+            Self::Meal { id, .. } => Some(FoodLogItemRef::Meal(*id)),
+            Self::AdHoc { .. } => None,
         }
     }
 }
@@ -171,6 +193,43 @@ impl FoodLogBuilder {
             device_timezone: None,
             notes: None,
         }
+    }
+
+    pub fn new_ad_hoc(
+        user_id: Uuid,
+        log_date: NaiveDate,
+        name: String,
+        brand: Option<String>,
+        quantity: Quantity,
+        nutrient_snapshots: Vec<FoodLogNutrientSnapshot>,
+    ) -> Result<Self, NutritionError> {
+        if quantity.unit().0.trim().is_empty() {
+            return Err(NutritionError::Validation(
+                "ad-hoc quantity unit must not be blank".into(),
+            ));
+        }
+        validate_ad_hoc_nutrients(&nutrient_snapshots)?;
+        Ok(Self {
+            user_id,
+            log_date,
+            item: FoodLogItemSnapshot::ad_hoc(name, brand)?,
+            quantity,
+            nutrition: CalculatedNutrition {
+                amounts: nutrient_snapshots
+                    .into_iter()
+                    .map(|snapshot| {
+                        crate::nutrition::catalog::domain::calculation::NutrientAmount {
+                            nutrient_code: snapshot.nutrient_code,
+                            amount: snapshot.amount,
+                            unit: snapshot.unit,
+                        }
+                    })
+                    .collect(),
+            },
+            meal_slot: None,
+            device_timezone: None,
+            notes: None,
+        })
     }
 
     pub fn meal_slot(mut self, meal_slot: Option<MealSlot>) -> Self {
@@ -376,6 +435,52 @@ impl FoodLog {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_ad_hoc_log(
+        &self,
+        log_date: NaiveDate,
+        meal_slot: Option<MealSlot>,
+        device_timezone: Option<String>,
+        quantity: Quantity,
+        notes: Option<String>,
+    ) -> Result<Self, NutritionError> {
+        if !matches!(self.item, FoodLogItemSnapshot::AdHoc { .. }) {
+            return Err(NutritionError::Validation(
+                "food log is not an ad-hoc log".into(),
+            ));
+        }
+        if quantity.unit() != &self.quantity_unit {
+            return Err(NutritionError::Validation(
+                "the unit of an ad-hoc food log cannot be changed".into(),
+            ));
+        }
+
+        let scale = quantity.amount() / self.quantity_amount;
+        let (quantity_amount, quantity_unit) = quantity.into_parts();
+        Ok(Self {
+            id: self.id,
+            user_id: self.user_id,
+            log_date,
+            meal_slot,
+            device_timezone,
+            item: self.item.clone(),
+            quantity_amount,
+            quantity_unit,
+            nutrient_snapshots: self
+                .nutrient_snapshots
+                .iter()
+                .cloned()
+                .map(|mut snapshot| {
+                    snapshot.amount *= scale;
+                    snapshot
+                })
+                .collect(),
+            notes,
+            created_at: self.created_at,
+            updated_at: Utc::now(),
+        })
+    }
+
     pub fn is_owned_by(&self, user_id: Uuid) -> bool {
         self.user_id == user_id
     }
@@ -450,6 +555,72 @@ fn snapshots_from_calculated(nutrition: CalculatedNutrition) -> Vec<FoodLogNutri
             unit: amount.unit,
         })
         .collect()
+}
+
+fn validate_ad_hoc_nutrients(snapshots: &[FoodLogNutrientSnapshot]) -> Result<(), NutritionError> {
+    const REQUIRED: [(&str, &str); 4] = [
+        ("ENERGY_KCAL", "kcal"),
+        ("PROTEIN_G", "g"),
+        ("CARBS_G", "g"),
+        ("FAT_G", "g"),
+    ];
+
+    for (index, snapshot) in snapshots.iter().enumerate() {
+        if snapshot.nutrient_code.0.trim().is_empty() {
+            return Err(NutritionError::Validation(
+                "ad-hoc nutrient code must not be blank".into(),
+            ));
+        }
+        if snapshot.unit.0.trim().is_empty() {
+            return Err(NutritionError::Validation(format!(
+                "{} unit must not be blank",
+                snapshot.nutrient_code.0
+            )));
+        }
+        if snapshots[..index]
+            .iter()
+            .any(|other| other.nutrient_code == snapshot.nutrient_code)
+        {
+            return Err(NutritionError::Validation(format!(
+                "duplicate ad-hoc nutrient: {}",
+                snapshot.nutrient_code.0
+            )));
+        }
+        if let Some((_, expected_unit)) = REQUIRED
+            .iter()
+            .find(|(code, _)| *code == snapshot.nutrient_code.0)
+            && snapshot.unit.0 != *expected_unit
+        {
+            return Err(NutritionError::Validation(format!(
+                "{} must use unit {}",
+                snapshot.nutrient_code.0, expected_unit
+            )));
+        }
+        if snapshot.amount < Decimal::ZERO {
+            return Err(NutritionError::Validation(format!(
+                "{} amount must not be negative",
+                snapshot.nutrient_code.0
+            )));
+        }
+    }
+
+    for (code, _) in REQUIRED {
+        let count = snapshots
+            .iter()
+            .filter(|snapshot| snapshot.nutrient_code.0 == code)
+            .count();
+        match count {
+            0 => {
+                return Err(NutritionError::Validation(format!(
+                    "missing required ad-hoc nutrient: {code}"
+                )));
+            }
+            1 => {}
+            _ => unreachable!("duplicates are rejected above"),
+        }
+    }
+
+    Ok(())
 }
 
 pub use crate::nutrition::error::NutritionError;
