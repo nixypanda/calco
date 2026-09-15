@@ -1,4 +1,4 @@
-module Ui.Calendar.Month exposing (view)
+module Ui.MonthCalendar exposing (view)
 
 import Data.Calendar as Calendar
 import Element exposing (Element)

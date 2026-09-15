@@ -23,9 +23,9 @@ import Html.Attributes as Attr
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
-import Ui.Calendar.Month as MonthCalendar
-import Ui.Chart.Ring as Ring
 import Ui.DesignTokens as DesignTokens
+import Ui.MonthCalendar as MonthCalendar
+import Ui.RingChart as Ring
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 

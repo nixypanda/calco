@@ -1,4 +1,4 @@
-module Ui.Chart.Ring exposing
+module Ui.RingChart exposing
     ( Segment
     , view
     )
