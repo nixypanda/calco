@@ -49,7 +49,6 @@ import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.CustomFood.Assistant as CustomFoodAssistant
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
 import Page.CustomFood.List as CustomFoodList
@@ -57,6 +56,7 @@ import Page.CustomFood.Show as CustomFoodShow
 import Page.Diary.Calendar as DiaryCalendar
 import Page.Diary.Day as DiaryDay
 import Page.Diary.Settings as DiarySettings
+import Page.Food.Assistant as FoodAssistantUi
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
 import Page.FoodLog.CreateAdHoc as CreateAdHocLog
@@ -2594,6 +2594,14 @@ applyCreateAdHocLogOutMsg _ outMsg =
             , NoOutMsg
             )
 
+        CreateAdHocLog.RequestCategorySuggestions token request ->
+            ( Api.Foods.listCategorySuggestions request
+                (GotCreateAdHocLogMsg
+                    << CreateAdHocLog.CategorySuggestionsLoaded token
+                )
+            , NoOutMsg
+            )
+
         CreateAdHocLog.RequestProductLog request ->
             ( Api.Logs.createLog request
                 (GotCreateAdHocLogMsg << CreateAdHocLog.ProductLogCompleted)
@@ -2622,7 +2630,7 @@ applyCreateWithAiLogOutMsg _ outMsg =
             ( Api.FoodAssistant.getStatus
                 (GotCreateWithAiLogMsg
                     << CreateWithAiLog.AssistantMsg
-                    << CustomFoodAssistant.StatusLoaded
+                    << FoodAssistantUi.StatusLoaded
                 )
             , NoOutMsg
             )
@@ -2633,7 +2641,7 @@ applyCreateWithAiLogOutMsg _ outMsg =
                 photos
                 (GotCreateWithAiLogMsg
                     << CreateWithAiLog.AssistantMsg
-                    << CustomFoodAssistant.DraftCompleted
+                    << FoodAssistantUi.DraftCompleted
                 )
             , NoOutMsg
             )
@@ -2658,6 +2666,15 @@ applyCreateWithAiLogOutMsg _ outMsg =
                 (GotCreateWithAiLogMsg
                     << CreateWithAiLog.ReviewMsg
                     << CreateAdHocLog.CustomFoodCompleted
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.RequestCategorySuggestions token request ->
+            ( Api.Foods.listCategorySuggestions request
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.ReviewMsg
+                    << CreateAdHocLog.CategorySuggestionsLoaded token
                 )
             , NoOutMsg
             )
@@ -2743,7 +2760,7 @@ applyCustomFoodCreateOutMsg _ outMsg =
             ( Api.FoodAssistant.getStatus
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
-                    << CustomFoodAssistant.StatusLoaded
+                    << FoodAssistantUi.StatusLoaded
                 )
             , NoOutMsg
             )
@@ -2764,7 +2781,7 @@ applyCustomFoodCreateOutMsg _ outMsg =
             ( Api.FoodAssistant.getStatus
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
-                    << CustomFoodAssistant.StatusLoaded
+                    << FoodAssistantUi.StatusLoaded
                 )
             , NoOutMsg
             )
@@ -2775,7 +2792,7 @@ applyCustomFoodCreateOutMsg _ outMsg =
                 photos
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
-                    << CustomFoodAssistant.DraftCompleted
+                    << FoodAssistantUi.DraftCompleted
                 )
             , NoOutMsg
             )

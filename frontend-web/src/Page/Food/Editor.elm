@@ -1,25 +1,44 @@
-module Page.CustomFood.Form exposing
+module Page.Food.Editor exposing
     ( CategoryInput
+    , Context(..)
     , FormModel
+    , LogFields
+    , LogPersistence(..)
     , Msg(..)
+    , NutrientBasis(..)
     , NutrientRow
+    , NutrientVisibility(..)
     , OpenDropdown
     , OutMsg(..)
+    , PortionNutrition(..)
     , ServingRow
     , SubmitState(..)
+    , ValidatedLog
     , ValidationError(..)
     , addCategoryTag
+    , allowedLogUnitCodes
     , applyAiDraft
+    , applyAiLogDraft
+    , changeLogQuantity
+    , changeLogUnit
     , emptyForm
+    , emptyLogForm
+    , foodLogFields
     , fromProductDetail
     , hasManualInput
     , isSubmitting
+    , logPortionWeight
+    , toAdHocLogRequest
     , toCreateFoodRequest
+    , toCustomFoodFromLogRequest
     , toInitialCreateFoodRequest
+    , toProductLogRequest
     , unitGhostText
     , update
+    , validateLog
     , view
     , viewForCreate
+    , viewForLog
     , withNutrientCatalog
     )
 
@@ -33,9 +52,14 @@ import Api.Foods
         , ProductDetail
         , UnitItem
         )
+import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
 import Data.FoodAssistant exposing (FoodDraft)
+import Data.ItemRef exposing (ItemType(..))
+import Data.MealSlot as MealSlot exposing (MealSlot(..))
+import Data.Nutrition as Nutrition
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.ListExtra as ListExtra
 import Lib.Number as Number
 import Lib.Text as Text
@@ -45,6 +69,7 @@ import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
+import View.Nutrients
 import View.QuantityInput
 
 
@@ -63,7 +88,33 @@ type alias FormModel =
     , servings : List ServingRow
     , submit : SubmitState
     , openDropdown : OpenDropdown
+    , context : Context
     }
+
+
+type Context
+    = CustomFoodContext
+    | FoodLogContext LogFields LogPersistence
+
+
+type alias LogFields =
+    { date : String
+    , mealSlot : Maybe MealSlot
+    , quantity : String
+    , unit : String
+    , notes : String
+    , nutrition : PortionNutrition
+    }
+
+
+type PortionNutrition
+    = IndependentPortion
+    | DerivedPortion { weightGrams : String }
+
+
+type LogPersistence
+    = LogAdHocOnly
+    | SaveCustomFoodThenLog { portionWeight : String }
 
 
 type OpenDropdown
@@ -72,6 +123,8 @@ type OpenDropdown
     | DefaultUnitOpen
     | NutrientCodeOpen Int
     | ServingUnitOpen Int
+    | LogUnitOpen
+    | MealSlotOpen
 
 
 type SubmitState
@@ -110,9 +163,19 @@ type alias CategoryInput =
 
 type alias NutrientRow =
     { code : String
-    , amountPer100g : String
+    , amount : String
     , unit : String
     }
+
+
+type NutrientBasis
+    = Per100Grams
+    | PerLoggedPortion
+
+
+type NutrientVisibility
+    = AllNutrients
+    | CoreNutrientsOnly
 
 
 type alias ServingRow =
@@ -127,6 +190,18 @@ type ValidationError
     | InvalidServingGrams String
     | DuplicateServingUnit String
     | InvalidDefaultPortion
+
+
+type alias ValidatedLog =
+    { date : LocalDate
+    , mealSlot : Maybe MealSlot
+    , quantity : Nutrition.Quantity
+    , quantityAmount : Float
+    , nutrients : List Nutrition.NutrientAmount
+    , nutrientTotals : List ( String, Float )
+    , notes : Maybe String
+    , portionWeight : Maybe Float
+    }
 
 
 type OutMsg
@@ -146,6 +221,29 @@ emptyForm =
     , servings = []
     , submit = Idle
     , openDropdown = NoneOpen
+    , context = CustomFoodContext
+    }
+
+
+emptyLogForm : Maybe String -> Maybe MealSlot -> FormModel
+emptyLogForm maybeDate maybeMealSlot =
+    { emptyForm
+        | nutrients =
+            [ { code = "ENERGY_KCAL", amount = "", unit = "kcal" }
+            , { code = "PROTEIN_G", amount = "", unit = "g" }
+            , { code = "CARBS_G", amount = "", unit = "g" }
+            , { code = "FAT_G", amount = "", unit = "g" }
+            ]
+        , context =
+            FoodLogContext
+                { date = Maybe.withDefault "" maybeDate
+                , mealSlot = maybeMealSlot
+                , quantity = "1"
+                , unit = "serving"
+                , notes = ""
+                , nutrition = IndependentPortion
+                }
+                LogAdHocOnly
     }
 
 
@@ -161,7 +259,7 @@ emptyCategoryInput =
 emptyNutrientRow : NutrientRow
 emptyNutrientRow =
     { code = ""
-    , amountPer100g = ""
+    , amount = ""
     , unit = ""
     }
 
@@ -198,7 +296,7 @@ applyAiDraft draft form =
             List.map
                 (\nutrient ->
                     { code = nutrient.code
-                    , amountPer100g = nutrient.amountPer100g
+                    , amount = nutrient.amountPer100g
                     , unit =
                         Dict.get nutrient.code form.nutrientCatalog
                             |> Maybe.withDefault ""
@@ -218,6 +316,293 @@ applyAiDraft draft form =
     }
 
 
+applyAiLogDraft :
+    List NutrientItem
+    -> FoodDraft
+    -> Data.FoodAssistant.SuggestedLog
+    -> FormModel
+    -> Result String FormModel
+applyAiLogDraft catalog draft suggested form =
+    Result.map2
+        (\_ rows ->
+            let
+                categoryInput : CategoryInput
+                categoryInput =
+                    form.categoryInput
+
+                context : Context
+                context =
+                    case form.context of
+                        FoodLogContext logFields persistence ->
+                            FoodLogContext
+                                { logFields
+                                    | quantity = suggested.amount
+                                    , unit = suggested.unit
+                                    , nutrition =
+                                        DerivedPortion
+                                            { weightGrams = suggested.totalWeightGrams }
+                                }
+                                persistence
+
+                        CustomFoodContext ->
+                            CustomFoodContext
+            in
+            { form
+                | name = draft.name
+                , brand = Maybe.withDefault "" draft.brand
+                , categoryInput =
+                    { categoryInput
+                        | selected = List.map String.toLower draft.categories
+                        , query = ""
+                        , suggestions = []
+                    }
+                , defaultQuantity = Maybe.withDefault "" draft.defaultQuantity
+                , defaultUnit = Maybe.withDefault "" draft.defaultUnit
+                , nutrients = rows
+                , servings =
+                    List.map
+                        (\serving ->
+                            { unit = serving.unit
+                            , gramsPerUnit = serving.gramsPerUnit
+                            }
+                        )
+                        draft.servings
+                , context = context
+            }
+        )
+        (positiveNumber "Suggested portion weight" suggested.totalWeightGrams)
+        (draft.nutrients
+            |> List.map (aiLogNutrientRow catalog suggested.totalWeightGrams)
+            |> ListExtra.combineErrors
+            |> Result.andThen requireCoreNutrients
+        )
+
+
+aiLogNutrientRow :
+    List NutrientItem
+    -> String
+    -> Data.FoodAssistant.DraftNutrient
+    -> Result String NutrientRow
+aiLogNutrientRow catalog rawWeight nutrient =
+    case List.filter (\item -> item.code == nutrient.code) catalog |> List.head of
+        Nothing ->
+            Err ("The estimate contains an unsupported nutrient: " ++ nutrient.code)
+
+        Just item ->
+            Result.map2
+                (\weight amountPer100g ->
+                    { code = nutrient.code
+                    , amount = String.fromFloat (amountPer100g * weight / 100)
+                    , unit = item.unit
+                    }
+                )
+                (positiveNumber "Suggested portion weight" rawWeight)
+                (nonNegativeNumber "Estimated nutrient" nutrient.amountPer100g)
+
+
+requireCoreNutrients : List NutrientRow -> Result String (List NutrientRow)
+requireCoreNutrients rows =
+    case
+        coreNutrientCodes
+            |> List.filter (\code -> not (List.any (\row -> row.code == code) rows))
+            |> List.head
+    of
+        Just _ ->
+            Err "The estimate is missing calories or a required macronutrient."
+
+        Nothing ->
+            Ok rows
+
+
+changeLogQuantity : String -> FormModel -> FormModel
+changeLogQuantity rawQuantity form =
+    case form.context of
+        FoodLogContext logFields persistence ->
+            case ( String.toFloat logFields.quantity, String.toFloat rawQuantity ) of
+                ( Just oldQuantity, Just newQuantity ) ->
+                    if oldQuantity > 0 && newQuantity > 0 then
+                        scaleLogPortion (newQuantity / oldQuantity)
+                            { form
+                                | context =
+                                    FoodLogContext
+                                        { logFields | quantity = rawQuantity }
+                                        persistence
+                            }
+
+                    else
+                        { form
+                            | context =
+                                FoodLogContext
+                                    { logFields | quantity = rawQuantity }
+                                    persistence
+                        }
+
+                _ ->
+                    { form
+                        | context =
+                            FoodLogContext { logFields | quantity = rawQuantity } persistence
+                    }
+
+        CustomFoodContext ->
+            form
+
+
+changeLogUnit : FoodDraft -> String -> FormModel -> FormModel
+changeLogUnit draft unit form =
+    case form.context of
+        FoodLogContext logFields persistence ->
+            case
+                ( String.toFloat logFields.quantity
+                , gramsPerLogUnit draft unit
+                , effectivePortionWeight logFields persistence
+                )
+            of
+                ( Just quantity, Just grams, Just oldWeight ) ->
+                    let
+                        changed : FormModel
+                        changed =
+                            { form
+                                | context =
+                                    FoodLogContext { logFields | unit = unit } persistence
+                            }
+                    in
+                    if quantity > 0 && grams > 0 && oldWeight > 0 then
+                        scaleLogPortion (quantity * grams / oldWeight) changed
+
+                    else
+                        changed
+
+                _ ->
+                    { form
+                        | context = FoodLogContext { logFields | unit = unit } persistence
+                    }
+
+        CustomFoodContext ->
+            form
+
+
+scaleLogPortion : Float -> FormModel -> FormModel
+scaleLogPortion ratio form =
+    { form
+        | nutrients =
+            List.map
+                (\row -> { row | amount = scaleNumberString ratio row.amount })
+                form.nutrients
+        , context =
+            case form.context of
+                FoodLogContext logFields persistence ->
+                    FoodLogContext
+                        { logFields
+                            | nutrition = scalePortionNutrition ratio logFields.nutrition
+                        }
+                        (scalePersistenceWeight ratio persistence)
+
+                other ->
+                    other
+    }
+
+
+scaleNumberString : Float -> String -> String
+scaleNumberString ratio raw =
+    String.toFloat raw
+        |> Maybe.map ((*) ratio >> String.fromFloat)
+        |> Maybe.withDefault raw
+
+
+effectivePortionWeight : LogFields -> LogPersistence -> Maybe Float
+effectivePortionWeight logFields persistence =
+    case logFields.nutrition of
+        DerivedPortion details ->
+            String.toFloat details.weightGrams
+
+        IndependentPortion ->
+            case persistence of
+                SaveCustomFoodThenLog details ->
+                    String.toFloat details.portionWeight
+
+                LogAdHocOnly ->
+                    Nothing
+
+
+portionWeightFromNutrition : PortionNutrition -> String
+portionWeightFromNutrition nutrition =
+    case nutrition of
+        DerivedPortion details ->
+            details.weightGrams
+
+        IndependentPortion ->
+            ""
+
+
+scalePortionNutrition : Float -> PortionNutrition -> PortionNutrition
+scalePortionNutrition ratio nutrition =
+    case nutrition of
+        DerivedPortion details ->
+            DerivedPortion
+                { details | weightGrams = scaleNumberString ratio details.weightGrams }
+
+        IndependentPortion ->
+            IndependentPortion
+
+
+scalePersistenceWeight : Float -> LogPersistence -> LogPersistence
+scalePersistenceWeight ratio persistence =
+    case persistence of
+        SaveCustomFoodThenLog details ->
+            SaveCustomFoodThenLog
+                { details | portionWeight = scaleNumberString ratio details.portionWeight }
+
+        LogAdHocOnly ->
+            LogAdHocOnly
+
+
+gramsPerLogUnit : FoodDraft -> String -> Maybe Float
+gramsPerLogUnit draft unit =
+    if unit == "g" then
+        Just 1
+
+    else
+        draft.servings
+            |> List.filter (\serving -> serving.unit == unit)
+            |> List.head
+            |> Maybe.andThen (.gramsPerUnit >> String.toFloat)
+
+
+allowedLogUnitCodes : FoodDraft -> List String
+allowedLogUnitCodes draft =
+    "g" :: List.map .unit draft.servings
+
+
+foodLogFields : FormModel -> Maybe LogFields
+foodLogFields form =
+    case form.context of
+        FoodLogContext fields _ ->
+            Just fields
+
+        CustomFoodContext ->
+            Nothing
+
+
+logPortionWeight : FormModel -> Maybe String
+logPortionWeight form =
+    case form.context of
+        FoodLogContext fields persistence ->
+            case fields.nutrition of
+                DerivedPortion details ->
+                    Just details.weightGrams
+
+                IndependentPortion ->
+                    case persistence of
+                        SaveCustomFoodThenLog details ->
+                            Just details.portionWeight
+
+                        LogAdHocOnly ->
+                            Nothing
+
+        CustomFoodContext ->
+            Nothing
+
+
 hasManualInput : FormModel -> Bool
 hasManualInput form =
     List.any (not << String.isEmpty << String.trim)
@@ -231,7 +616,7 @@ hasManualInput form =
         || List.any
             (\row ->
                 not (String.isEmpty (String.trim row.code))
-                    || not (String.isEmpty (String.trim row.amountPer100g))
+                    || not (String.isEmpty (String.trim row.amount))
             )
             form.nutrients
         || List.any
@@ -268,6 +653,15 @@ type Msg
     | ServingGramsPerUnitChanged Int String
     | AddServingRow
     | RemoveServingRow Int
+    | LogQuantityChanged String
+    | LogUnitChanged String
+    | ToggleLogUnitDropdown
+    | LogDateChanged String
+    | LogMealSlotChanged (Maybe MealSlot)
+    | ToggleMealSlotDropdown
+    | LogNotesChanged String
+    | LogPersistenceToggled
+    | PortionWeightChanged String
 
 
 fromProductDetail : ProductDetail -> FormModel
@@ -284,7 +678,7 @@ fromProductDetail food =
                 List.map
                     (\n ->
                         { code = n.code
-                        , amountPer100g = n.amountPer100g
+                        , amount = n.amountPer100g
                         , unit = n.unit
                         }
                     )
@@ -387,6 +781,210 @@ toInitialCreateFoodRequest form =
         }
 
 
+validateLog : FormModel -> Result String ValidatedLog
+validateLog form =
+    case form.context of
+        CustomFoodContext ->
+            Err "This editor is not configured for food logging."
+
+        FoodLogContext logFields persistence ->
+            let
+                enteredRows : List NutrientRow
+                enteredRows =
+                    List.filter hasNutrientInput form.nutrients
+
+                duplicate : Maybe String
+                duplicate =
+                    firstDuplicate (List.map (.code >> String.trim) enteredRows)
+
+                missingRequired : Maybe String
+                missingRequired =
+                    coreNutrientCodes
+                        |> List.filter
+                            (\code -> not (List.any (\row -> row.code == code) enteredRows))
+                        |> List.head
+
+                parsedNutrients : Result String (List ( NutrientRow, Float ))
+                parsedNutrients =
+                    enteredRows
+                        |> List.map
+                            (\row ->
+                                if String.isEmpty (String.trim row.code) then
+                                    Err "Select a nutrient for every entered amount."
+
+                                else
+                                    nonNegativeNumber
+                                        (View.Nutrients.nutrientLabel row.code)
+                                        row.amount
+                                        |> Result.map (Tuple.pair row)
+                            )
+                        |> ListExtra.combineErrors
+
+                portionWeight : Result String (Maybe Float)
+                portionWeight =
+                    case persistence of
+                        LogAdHocOnly ->
+                            Ok Nothing
+
+                        SaveCustomFoodThenLog details ->
+                            positiveNumber "Weight of this logged portion" details.portionWeight
+                                |> Result.map Just
+            in
+            case LocalDate.fromString logFields.date of
+                Nothing ->
+                    Err "Enter a valid date in YYYY-MM-DD format."
+
+                Just date ->
+                    if String.isEmpty (String.trim form.name) then
+                        Err "Food name is required."
+
+                    else if duplicate /= Nothing then
+                        Err "Each nutrient can only be added once."
+
+                    else
+                        case missingRequired of
+                            Just code ->
+                                Err (View.Nutrients.nutrientLabel code ++ " is required.")
+
+                            Nothing ->
+                                Result.map3
+                                    (\quantityAmount parsed weight ->
+                                        { date = date
+                                        , mealSlot = logFields.mealSlot
+                                        , quantity =
+                                            { amount = String.trim logFields.quantity
+                                            , unit = String.trim logFields.unit
+                                            }
+                                        , quantityAmount = quantityAmount
+                                        , nutrients =
+                                            List.map
+                                                (\( row, _ ) ->
+                                                    { code = String.trim row.code
+                                                    , amount = String.trim row.amount
+                                                    , unit = row.unit
+                                                    }
+                                                )
+                                                parsed
+                                        , nutrientTotals =
+                                            List.map
+                                                (\( row, amount ) ->
+                                                    ( String.trim row.code, amount )
+                                                )
+                                                parsed
+                                        , notes = Text.blankToMaybe logFields.notes
+                                        , portionWeight = weight
+                                        }
+                                    )
+                                    (positiveNumber "Amount" logFields.quantity)
+                                    parsedNutrients
+                                    portionWeight
+
+
+toAdHocLogRequest : Maybe String -> FormModel -> Result String CreateAdHocLogRequest
+toAdHocLogRequest timezone form =
+    validateLog form
+        |> Result.map
+            (\validated ->
+                { logDate = validated.date
+                , deviceTimezone = timezone
+                , mealSlot = Maybe.map MealSlot.toString validated.mealSlot
+                , name = String.trim form.name
+                , brand = Text.blankToMaybe form.brand
+                , quantity = validated.quantity
+                , nutrients = validated.nutrients
+                , notes = validated.notes
+                }
+            )
+
+
+toCustomFoodFromLogRequest : FormModel -> Result String CreateFoodRequest
+toCustomFoodFromLogRequest form =
+    validateLog form
+        |> Result.andThen
+            (\validated ->
+                case validated.portionWeight of
+                    Nothing ->
+                        Err "Weight of this logged portion is required."
+
+                    Just weight ->
+                        let
+                            per100g : List Api.Foods.CreateFoodNutrientRequest
+                            per100g =
+                                List.map
+                                    (\( code, amount ) ->
+                                        { code = code, amountPer100g = amount * 100 / weight }
+                                    )
+                                    validated.nutrientTotals
+
+                            gramsPerUnit : Float
+                            gramsPerUnit =
+                                weight / validated.quantityAmount
+
+                            derivedServing : List Api.Foods.CreateFoodServingRequest
+                            derivedServing =
+                                if isMassUnit validated.quantity.unit then
+                                    []
+
+                                else
+                                    [ { unit = validated.quantity.unit
+                                      , gramsPerUnit = gramsPerUnit
+                                      }
+                                    ]
+
+                            suppliedServings :
+                                Result
+                                    ValidationError
+                                    (List Api.Foods.CreateFoodServingRequest)
+                            suppliedServings =
+                                form.servings
+                                    |> List.filter hasServingInput
+                                    |> List.map toServingRequest
+                                    |> ListExtra.combineErrors
+                                    |> Result.andThen uniqueServingUnits
+                        in
+                        if
+                            not (List.all (.amountPer100g >> finite) per100g)
+                                || not (finite gramsPerUnit)
+                        then
+                            Err "The portion values are too large to calculate safely."
+
+                        else
+                            suppliedServings
+                                |> Result.mapError validationErrorMessage
+                                |> Result.map
+                                    (\servings ->
+                                        { name = String.trim form.name
+                                        , brand = Text.blankToMaybe form.brand
+                                        , categories = form.categoryInput.selected
+                                        , defaultQuantity = Just validated.quantity.amount
+                                        , defaultUnit = Just validated.quantity.unit
+                                        , nutrients = per100g
+                                        , servings =
+                                            if List.isEmpty servings then
+                                                derivedServing
+
+                                            else
+                                                servings
+                                        }
+                                    )
+            )
+
+
+toProductLogRequest : Maybe String -> String -> FormModel -> Result String CreateLogRequest
+toProductLogRequest timezone productId form =
+    validateLog form
+        |> Result.map
+            (\validated ->
+                { logDate = validated.date
+                , deviceTimezone = timezone
+                , mealSlot = Maybe.map MealSlot.toString validated.mealSlot
+                , item = { itemType = Product, id = productId }
+                , quantity = validated.quantity
+                , notes = validated.notes
+                }
+            )
+
+
 uniqueServingUnits :
     List Api.Foods.CreateFoodServingRequest
     -> Result ValidationError (List Api.Foods.CreateFoodServingRequest)
@@ -449,7 +1047,7 @@ toDefaultPortion form =
 hasNutrientInput : NutrientRow -> Bool
 hasNutrientInput row =
     not (String.isEmpty (String.trim row.code))
-        && not (String.isEmpty (String.trim row.amountPer100g))
+        && not (String.isEmpty (String.trim row.amount))
 
 
 hasServingInput : ServingRow -> Bool
@@ -460,10 +1058,10 @@ hasServingInput row =
 
 toNutrientRequest : NutrientRow -> Result ValidationError Api.Foods.CreateFoodNutrientRequest
 toNutrientRequest row =
-    case String.toFloat (String.trim row.amountPer100g) of
+    case String.toFloat (String.trim row.amount) of
         Just amount ->
             if amount < 0 then
-                Err (InvalidNutrientAmount row.amountPer100g)
+                Err (InvalidNutrientAmount row.amount)
 
             else
                 Ok
@@ -472,7 +1070,7 @@ toNutrientRequest row =
                     }
 
         Nothing ->
-            Err (InvalidNutrientAmount row.amountPer100g)
+            Err (InvalidNutrientAmount row.amount)
 
 
 toServingRequest : ServingRow -> Result ValidationError Api.Foods.CreateFoodServingRequest
@@ -727,7 +1325,7 @@ update msg formIn =
                 | nutrients =
                     ListExtra.updateAt
                         index
-                        (\row -> { row | amountPer100g = value })
+                        (\row -> { row | amount = value })
                         form.nutrients
               }
             , Cmd.none
@@ -830,6 +1428,111 @@ update msg formIn =
             , NoOutMsg
             )
 
+        LogQuantityChanged value ->
+            ( mapLogFields (\logFields -> { logFields | quantity = value }) form
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        LogUnitChanged value ->
+            ( mapLogFields (\logFields -> { logFields | unit = value })
+                { form | openDropdown = NoneOpen }
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        ToggleLogUnitDropdown ->
+            ( { form | openDropdown = toggleDropdown LogUnitOpen form.openDropdown }
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        LogDateChanged value ->
+            ( mapLogFields (\logFields -> { logFields | date = value }) form
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        LogMealSlotChanged value ->
+            ( mapLogFields (\logFields -> { logFields | mealSlot = value })
+                { form | openDropdown = NoneOpen }
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        ToggleMealSlotDropdown ->
+            ( { form | openDropdown = toggleDropdown MealSlotOpen form.openDropdown }
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        LogNotesChanged value ->
+            ( mapLogFields (\logFields -> { logFields | notes = value }) form
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        LogPersistenceToggled ->
+            ( { form
+                | context =
+                    case form.context of
+                        FoodLogContext logFields LogAdHocOnly ->
+                            FoodLogContext logFields
+                                (SaveCustomFoodThenLog
+                                    { portionWeight =
+                                        portionWeightFromNutrition logFields.nutrition
+                                    }
+                                )
+
+                        FoodLogContext logFields (SaveCustomFoodThenLog _) ->
+                            FoodLogContext logFields LogAdHocOnly
+
+                        CustomFoodContext ->
+                            CustomFoodContext
+              }
+            , Cmd.none
+            , NoOutMsg
+            )
+
+        PortionWeightChanged value ->
+            ( setPortionWeight value form
+            , Cmd.none
+            , NoOutMsg
+            )
+
+
+mapLogFields : (LogFields -> LogFields) -> FormModel -> FormModel
+mapLogFields transform form =
+    case form.context of
+        FoodLogContext logFields persistence ->
+            { form | context = FoodLogContext (transform logFields) persistence }
+
+        CustomFoodContext ->
+            form
+
+
+setPortionWeight : String -> FormModel -> FormModel
+setPortionWeight value form =
+    case form.context of
+        FoodLogContext logFields (SaveCustomFoodThenLog details) ->
+            { form
+                | context =
+                    FoodLogContext
+                        { logFields
+                            | nutrition =
+                                case logFields.nutrition of
+                                    DerivedPortion _ ->
+                                        DerivedPortion { weightGrams = value }
+
+                                    IndependentPortion ->
+                                        IndependentPortion
+                        }
+                        (SaveCustomFoodThenLog { details | portionWeight = value })
+            }
+
+        _ ->
+            form
+
 
 servingAt : Int -> List ServingRow -> Maybe ServingRow
 servingAt index servings =
@@ -866,6 +1569,87 @@ addCategoryTag raw selected =
             selected
 
 
+coreNutrientCodes : List String
+coreNutrientCodes =
+    [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
+
+
+positiveNumber : String -> String -> Result String Float
+positiveNumber label raw =
+    case String.toFloat (String.trim raw) of
+        Just value ->
+            if value > 0 && finite value then
+                Ok value
+
+            else
+                Err (label ++ " must be greater than zero.")
+
+        Nothing ->
+            Err (label ++ " must be a number greater than zero.")
+
+
+nonNegativeNumber : String -> String -> Result String Float
+nonNegativeNumber label raw =
+    case String.toFloat (String.trim raw) of
+        Just value ->
+            if value >= 0 && finite value then
+                Ok value
+
+            else
+                Err (label ++ " must be zero or greater.")
+
+        Nothing ->
+            Err (label ++ " is required and must be a number.")
+
+
+finite : Float -> Bool
+finite value =
+    not (isNaN value) && not (isInfinite value)
+
+
+firstDuplicate : List String -> Maybe String
+firstDuplicate values =
+    values
+        |> List.foldl
+            (\value ( seen, duplicate ) ->
+                if duplicate /= Nothing then
+                    ( seen, duplicate )
+
+                else if List.member value seen then
+                    ( seen, Just value )
+
+                else
+                    ( value :: seen, Nothing )
+            )
+            ( [], Nothing )
+        |> Tuple.second
+
+
+isMassUnit : String -> Bool
+isMassUnit raw =
+    List.member (String.toLower (String.trim raw))
+        [ "g", "gram", "grams", "kg", "kilogram", "kilograms", "mg" ]
+
+
+validationErrorMessage : ValidationError -> String
+validationErrorMessage error =
+    case error of
+        NameRequired ->
+            "Name is required"
+
+        InvalidNutrientAmount value ->
+            "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
+
+        InvalidServingGrams value ->
+            "Grams per serving unit must be a positive number (got: " ++ value ++ ")"
+
+        DuplicateServingUnit unit ->
+            "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"
+
+        InvalidDefaultPortion ->
+            "Default portion must be grams or use a configured serving unit"
+
+
 
 -- VIEW
 
@@ -874,8 +1658,8 @@ view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Ele
 view theme device nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
-        , basicInfoCard theme device form
-        , nutrientsCard theme device form nutrients
+        , basicInfoCard True theme device form
+        , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         , servingsCard theme device form units
         , defaultPortionCard theme device units form
         ]
@@ -885,19 +1669,154 @@ viewForCreate : Theme -> Device -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate theme device nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
-        , basicInfoCard theme device form
-        , nutrientsCard theme device form nutrients
+        , basicInfoCard True theme device form
+        , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         ]
 
 
-basicInfoCard : Theme -> Device -> FormModel -> Element Msg
-basicInfoCard theme device form =
+viewForLog :
+    NutrientVisibility
+    -> Theme
+    -> Device
+    -> List NutrientItem
+    -> List UnitItem
+    -> FormModel
+    -> Element Msg
+viewForLog visibility theme device nutrients units form =
+    case form.context of
+        CustomFoodContext ->
+            Element.none
+
+        FoodLogContext logFields persistence ->
+            let
+                saving : Bool
+                saving =
+                    case persistence of
+                        LogAdHocOnly ->
+                            False
+
+                        SaveCustomFoodThenLog _ ->
+                            True
+            in
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                ([ basicInfoCard saving theme device form
+                 , loggedPortionCard theme device units form logFields
+                 , nutrientsCard PerLoggedPortion visibility theme device form nutrients
+                 , logDetailsCard theme device form logFields
+                 , saveToFoodsCard theme device persistence
+                 ]
+                    ++ (if saving then
+                            [ servingsCard theme device form units ]
+
+                        else
+                            []
+                       )
+                )
+
+
+basicInfoCard : Bool -> Theme -> Device -> FormModel -> Element Msg
+basicInfoCard showCategories theme device form =
     Ui.formSection theme
         "Basic Info"
         [ Ui.input theme { label = "Name", value = form.name, onChange = NameChanged }
         , Ui.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
-        , categoryInputView theme device (form.openDropdown == CategoryOpen) form.categoryInput
+        , if showCategories then
+            categoryInputView theme device (form.openDropdown == CategoryOpen) form.categoryInput
+
+          else
+            Element.none
         ]
+
+
+loggedPortionCard : Theme -> Device -> List UnitItem -> FormModel -> LogFields -> Element Msg
+loggedPortionCard theme device units form logFields =
+    Ui.formSection theme
+        "Logged Portion"
+        [ Typography.mutedParagraph theme "Describe the entire amount you are logging."
+        , Ui.decimalInput theme
+            { label = "Amount"
+            , value = logFields.quantity
+            , onChange = LogQuantityChanged
+            }
+        , Ui.selectDropdown device
+            theme
+            { label = "Portion unit"
+            , selected = logFields.unit
+            , options = List.map (\unit -> ( unit.code, unit.name )) units
+            , onChange = LogUnitChanged
+            , isOpen = form.openDropdown == LogUnitOpen
+            , onToggle = ToggleLogUnitDropdown
+            }
+        ]
+
+
+logDetailsCard : Theme -> Device -> FormModel -> LogFields -> Element Msg
+logDetailsCard theme device form logFields =
+    Ui.formSection theme
+        "Log Details"
+        [ Ui.input theme
+            { label = "Date (YYYY-MM-DD)"
+            , value = logFields.date
+            , onChange = LogDateChanged
+            }
+        , Ui.selectDropdown device
+            theme
+            { label = "Meal"
+            , selected = logFields.mealSlot
+            , options =
+                [ ( Nothing, "None" )
+                , ( Just Breakfast, MealSlot.label Breakfast )
+                , ( Just Lunch, MealSlot.label Lunch )
+                , ( Just Dinner, MealSlot.label Dinner )
+                , ( Just Snack, MealSlot.label Snack )
+                , ( Just LateNightSnack, MealSlot.label LateNightSnack )
+                ]
+            , onChange = LogMealSlotChanged
+            , isOpen = form.openDropdown == MealSlotOpen
+            , onToggle = ToggleMealSlotDropdown
+            }
+        , Ui.input theme
+            { label = "Notes (optional)"
+            , value = logFields.notes
+            , onChange = LogNotesChanged
+            }
+        ]
+
+
+saveToFoodsCard : Theme -> Device -> LogPersistence -> Element Msg
+saveToFoodsCard theme _ persistence =
+    Ui.card theme
+        ([ Element.row
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Element.el [ Element.width Element.fill ]
+                (Typography.sectionTitle theme "Save to My Foods")
+            , Ui.toggleSwitch theme
+                { isActive =
+                    case persistence of
+                        LogAdHocOnly ->
+                            False
+
+                        SaveCustomFoodThenLog _ ->
+                            True
+                , onToggle = LogPersistenceToggled
+                }
+            ]
+         , Typography.mutedParagraph theme
+            "Save this as a reusable custom food before logging it."
+         ]
+            ++ (case persistence of
+                    LogAdHocOnly ->
+                        []
+
+                    SaveCustomFoodThenLog details ->
+                        [ Ui.decimalInput theme
+                            { label = "Weight of this logged portion (g)"
+                            , value = details.portionWeight
+                            , onChange = PortionWeightChanged
+                            }
+                        ]
+               )
+        )
 
 
 defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
@@ -989,22 +1908,56 @@ servingUnitLabel units code =
             code
 
 
-nutrientsCard : Theme -> Device -> FormModel -> List NutrientItem -> Element Msg
-nutrientsCard theme device form nutrients =
+nutrientsCard :
+    NutrientBasis
+    -> NutrientVisibility
+    -> Theme
+    -> Device
+    -> FormModel
+    -> List NutrientItem
+    -> Element Msg
+nutrientsCard basis visibility theme device form nutrients =
     Ui.section theme
         { header =
             Just
                 (Element.column [ Element.spacing DesignTokens.space8 ]
-                    [ Typography.subsectionTitle theme "Nutrients", addRowHint theme ]
+                    [ Typography.subsectionTitle theme
+                        (case basis of
+                            Per100Grams ->
+                                "Nutrients"
+
+                            PerLoggedPortion ->
+                                "Portion Nutrition"
+                        )
+                    , nutrientHint basis theme
+                    ]
                 )
         , body =
             [ Element.column
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                (List.indexedMap
-                    (nutrientRowView theme device nutrients form.openDropdown)
-                    form.nutrients
+                (form.nutrients
+                    |> List.indexedMap Tuple.pair
+                    |> List.filter
+                        (\( _, row ) ->
+                            case visibility of
+                                AllNutrients ->
+                                    True
+
+                                CoreNutrientsOnly ->
+                                    List.member row.code coreNutrientCodes
+                        )
+                    |> List.map
+                        (\( index, row ) ->
+                            nutrientRowView basis
+                                theme
+                                device
+                                nutrients
+                                form.openDropdown
+                                index
+                                row
+                        )
                 )
             ]
         , footer =
@@ -1159,14 +2112,15 @@ suggestionRow theme s =
 
 
 nutrientRowView :
-    Theme
+    NutrientBasis
+    -> Theme
     -> Device
     -> List NutrientItem
     -> OpenDropdown
     -> Int
     -> NutrientRow
     -> Element Msg
-nutrientRowView theme device nutrients openDropdown index row =
+nutrientRowView basis theme device nutrients openDropdown index row =
     let
         selector : Element Msg
         selector =
@@ -1201,7 +2155,7 @@ nutrientRowView theme device nutrients openDropdown index row =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ amountInputWithUnit theme index row
+                [ amountInputWithUnit basis theme index row
                 , removeButton
                 ]
             ]
@@ -1212,16 +2166,22 @@ nutrientRowView theme device nutrients openDropdown index row =
             , Element.spacing DesignTokens.space8
             ]
             [ selector
-            , amountInputWithUnit theme index row
+            , amountInputWithUnit basis theme index row
             , removeButton
             ]
 
 
-amountInputWithUnit : Theme -> Int -> NutrientRow -> Element Msg
-amountInputWithUnit theme index row =
+amountInputWithUnit : NutrientBasis -> Theme -> Int -> NutrientRow -> Element Msg
+amountInputWithUnit basis theme index row =
     Ui.decimalInputWithSuffix theme
-        { label = "Amount"
-        , text = row.amountPer100g
+        { label =
+            case basis of
+                Per100Grams ->
+                    "Amount per 100 g"
+
+                PerLoggedPortion ->
+                    "Amount for this portion"
+        , text = row.amount
         , suffix = unitGhostText row.unit
         , onChange = NutrientAmountChanged index
         }
@@ -1324,3 +2284,16 @@ rowActionButton theme device config =
 addRowHint : Theme -> Element msg
 addRowHint theme =
     Typography.mutedCaption theme "Enter calories and macros (per 100g) to save."
+
+
+nutrientHint : NutrientBasis -> Theme -> Element msg
+nutrientHint basis theme =
+    case basis of
+        Per100Grams ->
+            addRowHint theme
+
+        PerLoggedPortion ->
+            Typography.mutedCaption theme
+                ("Enter totals for the entire logged portion. Calories, protein, "
+                    ++ "carbohydrates, and fat are required."
+                )
