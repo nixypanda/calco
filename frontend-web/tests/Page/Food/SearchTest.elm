@@ -43,7 +43,7 @@ tests =
                         (FoodSearch.Navigate
                             (AiLogCreate (Just "2026-06-01") (Just Lunch))
                         )
-        , test "ad-hoc actions show manual and AI choices" <|
+        , test "ad-hoc actions follow the standard AI and manual choices" <|
             \_ ->
                 FoodSearch.contentView
                     { model = FoodSearch.init Nothing Nothing
@@ -53,8 +53,8 @@ tests =
                     |> Element.layout []
                     |> Query.fromHtml
                     |> Query.has
-                        [ Selector.text "Manually"
-                        , Selector.text "With AI"
+                        [ Selector.text "Create with AI"
+                        , Selector.text "Enter manually"
                         ]
         , test "empty query clears results, loading, and error" <|
             \_ ->
@@ -638,6 +638,18 @@ tests =
                     |> first
                     |> .recentItems
                     |> Expect.equal (Success [ recentProduct ])
+        , test "recent items are limited to ten" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentItemsLoaded
+                        Nothing
+                        Nothing
+                        (Ok { items = List.repeat 11 recentProduct })
+                    )
+                    emptyModel
+                    |> first
+                    |> .recentItems
+                    |> Expect.equal (Success (List.repeat 10 recentProduct))
         , test "recent items failure stores error" <|
             \_ ->
                 FoodSearch.update

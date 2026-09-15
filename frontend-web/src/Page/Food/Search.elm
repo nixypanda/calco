@@ -519,7 +519,10 @@ update msg model =
             else
                 case result of
                     Ok response ->
-                        ( { model | recentItems = Success response.items }, Cmd.none, NoOp )
+                        ( { model | recentItems = Success (List.take 10 response.items) }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     Err error ->
                         if Client.isUnauthorized error then
@@ -821,51 +824,45 @@ contentView { model, device, theme } =
         , Element.spacing DesignTokens.space16
         ]
         [ searchInputView theme device model
-        , adHocLogView theme device
         , searchContentView theme device model
+        , adHocLogView theme device
         ]
 
 
 adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
-    Surface.card theme
-        [ Typography.sectionTitle theme "Create an ad-hoc food log"
-        , responsiveActions device
-            [ Button.textButton device
-                theme
-                { tone = Button.GhostFilled
-                , width = Button.ResponsiveWidth
-                , label = "Manually"
-                , onPress = CreateAdHocLogClicked
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
-            , Button.textButton device
-                theme
-                { tone = Button.Primary
-                , width = Button.ResponsiveWidth
-                , label = "With AI"
-                , onPress = CreateAiLogClicked
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
+    Surface.formSection theme
+        "Create an ad-hoc food log"
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spacing DesignTokens.space12
+            ]
+            [ Element.el [ Element.width Element.fill ]
+                (Button.textButton device
+                    theme
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
+                    , label = "Create with AI"
+                    , onPress = CreateAiLogClicked
+                    , submitState = Just Button.Idle
+                    , submittingLabel = Just "Create with AI"
+                    , trailing = Nothing
+                    }
+                )
+            , Element.el [ Element.width Element.fill ]
+                (Button.textButton device
+                    theme
+                    { tone = Button.PrimaryOutline
+                    , width = Button.FullWidth
+                    , label = "Enter manually"
+                    , onPress = CreateAdHocLogClicked
+                    , submitState = Just Button.Idle
+                    , submittingLabel = Just "Enter manually"
+                    , trailing = Nothing
+                    }
+                )
             ]
         ]
-
-
-responsiveActions : Device -> List (Element msg) -> Element msg
-responsiveActions device actions =
-    if UiCommon.isSmall device then
-        Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            actions
-
-    else
-        Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            actions
 
 
 searchInputView : Theme -> Device -> Model -> Element Msg
