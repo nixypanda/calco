@@ -22,12 +22,13 @@ import Html
 import Html.Attributes as Attr
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.MonthCalendar as MonthCalendar
 import Ui.RingChart as Ring
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -281,7 +282,7 @@ contentViewWithSelection selectedDate { model, device, theme } =
                 [ Skeleton.card theme { rows = 3 } ]
 
             Failed message ->
-                [ Ui.errorBanner theme message ]
+                [ Feedback.errorBanner theme message ]
 
             Ready ->
                 monthsView device theme model selectedDate False
@@ -309,7 +310,7 @@ monthRange newest oldest =
 
 monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
 monthView theme model selectedDate month =
-    Ui.card theme
+    Surface.card theme
         [ Typography.sectionTitle theme (Calendar.monthLabel month)
         , MonthCalendar.view
             { period = month

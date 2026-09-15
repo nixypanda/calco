@@ -4,8 +4,8 @@ module View.DeleteModal exposing
     )
 
 import Element exposing (Device, Element)
-import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -46,11 +46,11 @@ deleteModalContent :
     -> Bool
     -> Element msg
 deleteModalContent theme device config maybeError deleting =
-    Ui.modalOverlay theme
+    Feedback.modalOverlay theme
         { title = config.title
         , body =
             [ Typography.mutedParagraph theme config.description
-            , Ui.maybeErrorBanner theme maybeError
+            , Feedback.maybeErrorBanner theme maybeError
             ]
         , actions =
             Button.bottomActionButtons device

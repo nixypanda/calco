@@ -16,7 +16,9 @@ import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 
 
@@ -190,7 +192,7 @@ view { model, device, theme } =
     in
     Ui.pageContainer device
         (errorView theme model
-            ++ [ Ui.card theme
+            ++ [ Surface.card theme
                     [ UiInput.input theme
                         { label = "Username"
                         , value = form.username
@@ -235,10 +237,10 @@ errorView : Theme -> Model -> List (Element msg)
 errorView theme model =
     case model of
         Invalid _ problem ->
-            [ Ui.errorBanner theme (problemMessage problem) ]
+            [ Feedback.errorBanner theme (problemMessage problem) ]
 
         Failed _ message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         _ ->
             []

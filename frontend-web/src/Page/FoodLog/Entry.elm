@@ -29,7 +29,9 @@ import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -555,7 +557,7 @@ contentView { model, device, theme } =
         ]
         [ case pageError model of
             Just message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Nothing ->
                 Element.none
@@ -687,7 +689,7 @@ itemHeader theme device model =
         maybeFood =
             productDetail model.item
     in
-    Ui.card theme
+    Surface.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme model.item

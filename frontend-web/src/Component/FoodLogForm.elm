@@ -25,9 +25,10 @@ import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
-import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -272,8 +273,8 @@ view theme device food units model =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.maybeErrorBanner theme (submitError model.submitState)
-        , Ui.card theme
+        [ Feedback.maybeErrorBanner theme (submitError model.submitState)
+        , Surface.card theme
             [ mealSlotDropdown theme device model
             , View.QuantityInput.dropdown theme
                 device

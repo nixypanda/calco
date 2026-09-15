@@ -19,8 +19,10 @@ import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -276,7 +278,7 @@ userInfoView theme model =
             [ editUserSkeleton theme ]
 
         LoadFailed error ->
-            [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
+            [ Feedback.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Loaded loadedUser _ ->
             [ userSummaryCard theme loadedUser.user ]
@@ -284,7 +286,7 @@ userInfoView theme model =
 
 resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
 resetPasswordView device theme model =
-    [ Ui.card theme
+    [ Surface.card theme
         [ Element.el [ Font.medium, Typography.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
             [ UiInput.passwordInput theme
@@ -390,10 +392,10 @@ errorView : Theme -> Status -> List (Element msg)
 errorView theme status =
     case status of
         Loaded _ (Invalid problem) ->
-            [ Ui.errorBanner theme (problemMessage problem) ]
+            [ Feedback.errorBanner theme (problemMessage problem) ]
 
         Loaded _ (ActionFailed message) ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         _ ->
             []
@@ -408,14 +410,14 @@ problemMessage problem =
 
 userSummaryCard : Theme -> User -> Element msg
 userSummaryCard theme user =
-    Ui.card theme
+    Surface.card theme
         [ Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
             [ Typography.wrappedListItemTitle theme user.username
-            , Ui.detailRow theme
+            , Surface.detailRow theme
                 "Display Name"
                 (Typography.mutedCaptionParagraph theme user.displayName)
-            , Ui.detailRow theme "Status" (Chip.statusBadge theme user.status)
-            , Ui.detailRow theme
+            , Surface.detailRow theme "Status" (Chip.statusBadge theme user.status)
+            , Surface.detailRow theme
                 "Created"
                 (Element.el [ Typography.caption ] (Element.text user.createdAt))
             ]

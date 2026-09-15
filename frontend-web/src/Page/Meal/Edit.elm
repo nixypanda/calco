@@ -19,6 +19,7 @@ import Element exposing (Device, Element)
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
@@ -391,11 +392,11 @@ view { model, device, theme } =
             Ui.pageContainer device [ mealEditSkeleton theme ]
 
         EditLoadFailed message ->
-            Ui.pageContainer device [ Ui.errorBanner theme message ]
+            Ui.pageContainer device [ Feedback.errorBanner theme message ]
 
         Editing loaded ->
             Ui.pageContainer device
-                [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
+                [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme loaded
                 , Button.textButton device

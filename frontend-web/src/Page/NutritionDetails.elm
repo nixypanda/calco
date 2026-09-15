@@ -20,8 +20,10 @@ import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -161,7 +163,7 @@ view { model, device, theme } =
                 reportView theme report
 
             Failed _ message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
         ]
 
 
@@ -172,7 +174,7 @@ dateHeader theme device model =
         canGoNext =
             LocalDate.compare (currentDate model) (today model) == LT
     in
-    Ui.card theme
+    Surface.card theme
         [ Ui.pageHeader theme
             { leading =
                 Just
@@ -214,7 +216,7 @@ loadingView theme =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
-        , Ui.card theme
+        , Surface.card theme
             [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
             , Element.row
                 [ Element.width Element.fill
@@ -227,7 +229,7 @@ loadingView theme =
             ]
         , Skeleton.card theme { rows = 3 }
         , Skeleton.card theme { rows = 3 }
-        , Ui.card theme
+        , Surface.card theme
             [ Skeleton.bar theme
             , Skeleton.bar theme
             ]
@@ -255,11 +257,11 @@ overviewSection theme nutrients =
         overview =
             inSection Details.Overview nutrients
     in
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Overview")
         , body =
             if List.isEmpty overview then
-                [ Ui.loading theme "No overview data is available." ]
+                [ Feedback.loading theme "No overview data is available." ]
 
             else
                 [ Element.wrappedRow
@@ -298,16 +300,16 @@ nutrientSection theme title section nutrients =
         selected =
             inSection section nutrients
     in
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme title)
         , body =
             if List.isEmpty selected then
-                [ Ui.loading theme "No nutrient data is available for this group." ]
+                [ Feedback.loading theme "No nutrient data is available for this group." ]
 
             else
                 selected
                     |> List.map (nutrientRow theme)
-                    |> List.intersperse (Ui.hairline theme)
+                    |> List.intersperse (Surface.hairline theme)
         , footer = Nothing
         }
 
@@ -446,7 +448,7 @@ progressView : Theme -> Nutrient -> Element msg
 progressView theme nutrient =
     case Details.progressPercent nutrient of
         Just percent ->
-            Ui.linearProgress theme
+            Feedback.linearProgress theme
                 { value = percent
                 , max = 100
                 , color = progressColor theme nutrient
@@ -663,7 +665,7 @@ formatAmount amount unit =
 
 referenceCard : Theme -> NutritionDetails -> Element msg
 referenceCard theme report =
-    Ui.card theme
+    Surface.card theme
         [ Typography.subsectionTitle theme "About these references"
         , Element.paragraph [ Font.color theme.textMuted, Typography.body ]
             [ Element.text

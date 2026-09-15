@@ -22,6 +22,8 @@ import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
 import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -313,7 +315,7 @@ view { model, device, theme } =
     case model.review of
         Nothing ->
             Ui.pageContainer device
-                [ Ui.maybeErrorBanner theme model.error
+                [ Feedback.maybeErrorBanner theme model.error
                 , Element.map AssistantMsg
                     (Assistant.viewFor AdHocLog theme device False model.assistant)
                 ]
@@ -376,7 +378,7 @@ warningView theme warnings =
         Element.none
 
     else
-        Ui.card theme
+        Surface.card theme
             (List.map
                 (\warning -> Typography.mutedParagraph theme ("Estimate: " ++ warning))
                 warnings

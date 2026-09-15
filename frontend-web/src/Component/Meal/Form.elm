@@ -40,8 +40,10 @@ import Set exposing (Set)
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Search as SearchView
@@ -355,7 +357,7 @@ viewFormFields :
     -> Element msg
 viewFormFields theme device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.section theme
+        [ Surface.section theme
             { header = Nothing
             , body =
                 [ UiInput.input theme
@@ -380,10 +382,10 @@ viewFormFields theme device toMsg form =
                 ]
             , footer = Nothing
             }
-        , Ui.section theme
+        , Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
             , body =
-                List.intersperse (Ui.hairline theme)
+                List.intersperse (Surface.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
             , footer =
                 Just
@@ -655,7 +657,7 @@ componentRowView theme device toMsg row =
             }
         , case row.searchResults of
             Loading ->
-                Ui.loading theme "Searching foods..."
+                Feedback.loading theme "Searching foods..."
 
             Success results ->
                 if List.isEmpty results then

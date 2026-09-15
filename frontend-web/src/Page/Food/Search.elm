@@ -42,8 +42,10 @@ import Task
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Product
@@ -825,7 +827,7 @@ contentView { model, device, theme } =
 
 adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
-    Ui.card theme
+    Surface.card theme
         [ Typography.sectionTitle theme "Create an ad-hoc food log"
         , responsiveActions device
             [ Button.textButton device
@@ -996,7 +998,7 @@ barcodeScannerStateView theme scanner =
             []
 
         ScannerFailed message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         ScannerStarting ->
             [ barcodeScannerPreview theme "Starting camera..." ]
@@ -1141,10 +1143,10 @@ bodyView : Theme -> Model -> Device -> Element Msg
 bodyView theme model device =
     case model.results of
         NotAsked ->
-            Ui.emptyState theme "Search for a food to get started."
+            Feedback.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Ui.listCard theme
+            Surface.listCard theme
                 { rows =
                     List.map (\_ -> Skeleton.listRow theme)
                         (List.range 1 3)
@@ -1153,8 +1155,8 @@ bodyView theme model device =
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Ui.errorBanner theme (Client.displayError error)
-                , Ui.emptyState theme "No foods found. Try a different search."
+                [ Feedback.errorBanner theme (Client.displayError error)
+                , Feedback.emptyState theme "No foods found. Try a different search."
                 ]
 
         Success items ->
@@ -1162,7 +1164,7 @@ bodyView theme model device =
                 textEmptyState theme device model.scope
 
             else
-                Ui.listCard theme
+                Surface.listCard theme
                     { rows =
                         List.map
                             (\item ->
@@ -1198,15 +1200,15 @@ barcodeBodyView : Theme -> Device -> Model -> Element Msg
 barcodeBodyView theme device model =
     case model.barcodeLookup of
         NotAsked ->
-            Ui.emptyState theme "Enter a barcode to look up a food."
+            Feedback.emptyState theme "Enter a barcode to look up a food."
 
         Loading ->
             Skeleton.card theme { rows = 3 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Ui.errorBanner theme (barcodeErrorMessage error)
-                , Ui.emptyState theme "No food found for that barcode."
+                [ Feedback.errorBanner theme (barcodeErrorMessage error)
+                , Feedback.emptyState theme "No food found for that barcode."
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
@@ -1220,7 +1222,7 @@ barcodeBodyView theme device model =
                 ]
 
         Success _ ->
-            Ui.emptyState theme "Opening food."
+            Feedback.emptyState theme "Opening food."
 
 
 textEmptyState : Theme -> Device -> SearchScope -> Element Msg
@@ -1243,7 +1245,7 @@ textEmptyState theme device scope =
             scope /= History
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        (Ui.emptyState theme message
+        (Feedback.emptyState theme message
             :: (if canCreate then
                     [ Button.textButton device
                         theme
@@ -1348,7 +1350,7 @@ onEnterSubmit submitMsg =
 recentsView : Device -> Theme -> Model -> Element Msg
 recentsView device theme model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Ui.maybeErrorBanner theme (quickAddError model.quickAdd)
+        [ Feedback.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
                 Element.none
@@ -1367,7 +1369,7 @@ recentsView device theme model =
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Typography.sectionTitle theme "Recent"
-                        , Ui.listCard theme
+                        , Surface.listCard theme
                             { rows = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
@@ -1378,7 +1380,7 @@ recentsView device theme model =
 recentItemRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
 recentItemRow device theme model item =
     Element.column [ Element.width Element.fill ]
-        [ Ui.listRow
+        [ Surface.listRow
             { onSelect = RecentItemClicked item
             , leading = [ View.Product.macroDotGhost ]
             , title = Typography.wrappedListItemTitle theme (FoodLog.itemName item.item)
@@ -1393,7 +1395,7 @@ recentItemRow device theme model item =
             , trailing = []
             }
 
-        -- Quick-add chips sit outside `Ui.listRow`, whose subtitle slot is
+        -- Quick-add chips sit outside `Surface.listRow`, whose subtitle slot is
         -- inside the row-select button and cannot hold nested buttons.
         , quickAddChipRow device theme model item
         ]

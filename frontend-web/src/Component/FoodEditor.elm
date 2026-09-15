@@ -68,8 +68,10 @@ import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -1660,7 +1662,7 @@ validationErrorMessage error =
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view theme device nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         , servingsCard theme device form units
@@ -1671,7 +1673,7 @@ view theme device nutrients units form =
 viewForCreate : Theme -> Device -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate theme device nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         ]
@@ -1719,7 +1721,7 @@ viewForLog visibility theme device nutrients units form =
 
 basicInfoCard : Bool -> Theme -> Device -> FormModel -> Element Msg
 basicInfoCard showCategories theme device form =
-    Ui.formSection theme
+    Surface.formSection theme
         "Basic Info"
         [ UiInput.input theme { label = "Name", value = form.name, onChange = NameChanged }
         , UiInput.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
@@ -1733,7 +1735,7 @@ basicInfoCard showCategories theme device form =
 
 loggedPortionCard : Theme -> Device -> List UnitItem -> FormModel -> LogFields -> Element Msg
 loggedPortionCard theme device units form logFields =
-    Ui.formSection theme
+    Surface.formSection theme
         "Logged Portion"
         [ Typography.mutedParagraph theme "Describe the entire amount you are logging."
         , UiInput.decimalInput theme
@@ -1755,7 +1757,7 @@ loggedPortionCard theme device units form logFields =
 
 logDetailsCard : Theme -> Device -> FormModel -> LogFields -> Element Msg
 logDetailsCard theme device form logFields =
-    Ui.formSection theme
+    Surface.formSection theme
         "Log Details"
         [ UiInput.input theme
             { label = "Date (YYYY-MM-DD)"
@@ -1788,7 +1790,7 @@ logDetailsCard theme device form logFields =
 
 saveToFoodsCard : Theme -> Device -> LogPersistence -> Element Msg
 saveToFoodsCard theme _ persistence =
-    Ui.card theme
+    Surface.card theme
         ([ Element.row
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
@@ -1824,7 +1826,7 @@ saveToFoodsCard theme _ persistence =
 
 defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
 defaultPortionCard theme device units form =
-    Ui.formSection theme
+    Surface.formSection theme
         "Default Portion"
         [ defaultPortionFields theme device units form
         , Typography.mutedCaption theme
@@ -1920,7 +1922,7 @@ nutrientsCard :
     -> List NutrientItem
     -> Element Msg
 nutrientsCard basis visibility theme device form nutrients =
-    Ui.section theme
+    Surface.section theme
         { header =
             Just
                 (Element.column [ Element.spacing DesignTokens.space8 ]
@@ -1981,7 +1983,7 @@ nutrientsCard basis visibility theme device form nutrients =
 
 servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 servingsCard theme device form units =
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Servings")
         , body =
             [ Element.column

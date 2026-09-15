@@ -16,7 +16,9 @@ import Element exposing (Device, Element)
 import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -104,7 +106,7 @@ contentView { model, device, theme } =
                 Element.none
 
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loading ->
                 Element.none
@@ -116,7 +118,7 @@ bodyView : Theme -> Device -> Model -> Element Msg
 bodyView theme device model =
     case model of
         Loaded foods ->
-            Ui.section theme
+            Surface.section theme
                 { header =
                     Just
                         (createActions device theme)
@@ -125,7 +127,7 @@ bodyView theme device model =
                         [ Typography.mutedBodyParagraph theme "No items yet." ]
 
                     else
-                        List.intersperse (Ui.hairline theme)
+                        List.intersperse (Surface.hairline theme)
                             (List.map (foodRow theme device) foods)
                 , footer = Nothing
                 }
@@ -178,7 +180,7 @@ foodRow theme _ food =
             View.Nutrients.macroDot theme
                 (food.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
     in
-    Ui.listRow
+    Surface.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
         , title = Typography.wrappedListItemTitle theme food.name
@@ -205,7 +207,7 @@ foodSummaryText food =
 
 customFoodListSkeleton : Theme -> Element msg
 customFoodListSkeleton theme =
-    Ui.section theme
+    Surface.section theme
         { header =
             Just
                 (Element.row
@@ -219,7 +221,7 @@ customFoodListSkeleton theme =
                     ]
                 )
         , body =
-            List.intersperse (Ui.hairline theme)
+            List.intersperse (Surface.hairline theme)
                 (List.map (\_ -> Skeleton.listRow theme)
                     (List.range 1 3)
                 )

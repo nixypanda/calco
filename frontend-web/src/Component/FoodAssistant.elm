@@ -45,8 +45,10 @@ import Task
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients as Nutrients
@@ -694,7 +696,7 @@ viewFor : FoodDraftPurpose -> Theme -> Device -> Bool -> Model -> Element Msg
 viewFor purpose theme device formHasManualInput model =
     case model of
         LoadingStatus ->
-            Ui.card theme
+            Surface.card theme
                 [ Skeleton.barCustom theme
                     { width = Element.fillPortion 1, height = 16 }
                 , Skeleton.bar theme
@@ -704,16 +706,16 @@ viewFor purpose theme device formHasManualInput model =
                 ]
 
         Disabled ->
-            Ui.card theme
+            Surface.card theme
                 [ Typography.subsectionTitle theme "Create with AI"
                 , Typography.mutedParagraph theme
                     "Food assistance is unavailable on this deployment."
                 ]
 
         StatusFailed ->
-            Ui.card theme
+            Surface.card theme
                 [ Typography.subsectionTitle theme "Create with AI"
-                , Ui.errorBanner theme
+                , Feedback.errorBanner theme
                     "Food-assistant availability could not be checked."
                 , Button.textButton device
                     theme
@@ -733,7 +735,7 @@ viewFor purpose theme device formHasManualInput model =
 
 enabledView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
 enabledView purpose theme device formHasManualInput chat =
-    Ui.card theme (expandedContent purpose theme device formHasManualInput chat)
+    Surface.card theme (expandedContent purpose theme device formHasManualInput chat)
 
 
 expandedContent : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
@@ -1028,7 +1030,7 @@ photoErrorView : Theme -> Maybe String -> List (Element Msg)
 photoErrorView theme maybeError =
     case maybeError of
         Just message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         Nothing ->
             []
@@ -1118,7 +1120,7 @@ requestErrorView theme device request =
         RequestFailed message ->
             Element.column
                 [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                [ Ui.errorBanner theme message
+                [ Feedback.errorBanner theme message
                 , Button.textButton device
                     theme
                     { tone = Button.Ghost
@@ -1132,7 +1134,7 @@ requestErrorView theme device request =
                 ]
 
         InputFailed message ->
-            Ui.errorBanner theme message
+            Feedback.errorBanner theme message
 
         _ ->
             Element.none

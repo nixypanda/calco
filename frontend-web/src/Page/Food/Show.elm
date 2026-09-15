@@ -21,9 +21,9 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
@@ -426,7 +426,7 @@ contentView { model, device, theme } =
         ]
         [ case model of
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loaded _ ->
                 Element.none
@@ -470,7 +470,7 @@ loadedView theme device loaded =
         , Element.spacing DesignTokens.space16
         ]
         [ Maybe.withDefault Element.none
-            (Maybe.map (Ui.infoBanner theme) loaded.lookupNote)
+            (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
         , View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request

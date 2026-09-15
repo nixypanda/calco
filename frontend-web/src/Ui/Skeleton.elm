@@ -11,7 +11,6 @@ module Ui.Skeleton exposing
 import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui
 import Ui.DesignTokens
     exposing
         ( radiusControl
@@ -22,6 +21,7 @@ import Ui.DesignTokens
         , space2
         , space4
         )
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (uiClass)
 
@@ -148,7 +148,7 @@ listRow theme =
 
 card : Theme -> { rows : Int } -> Element msg
 card theme config =
-    Ui.card theme
+    Surface.card theme
         (List.map (\_ -> bar theme)
             (List.range 1 (max 1 config.rows))
         )

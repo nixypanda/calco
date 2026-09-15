@@ -25,6 +25,7 @@ import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme as Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -608,7 +609,7 @@ drawerView config =
                 }
             , Typography.sectionTitle config.theme "CalCo"
             ]
-            :: Ui.hairline config.theme
+            :: Surface.hairline config.theme
             :: drawerItems itemsConfig
         )
 

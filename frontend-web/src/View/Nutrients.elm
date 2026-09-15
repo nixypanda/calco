@@ -19,7 +19,9 @@ import Element.Font as Font
 import Lib.Number as Number
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -143,10 +145,10 @@ macroDot : Theme -> List NutrientAmount -> Element msg
 macroDot theme nutrients =
     case nutrients |> Nutrition.dominantMacro |> Maybe.map (macroColor theme) of
         Just c ->
-            Ui.accentDot c
+            Surface.accentDot c
 
         Nothing ->
-            Ui.accentDot theme.calorieAccent
+            Surface.accentDot theme.calorieAccent
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.
@@ -233,11 +235,11 @@ titleCase word =
 
 skeletonPreview : Theme -> Element msg
 skeletonPreview theme =
-    Ui.section theme
+    Surface.section theme
         { header = Just (Skeleton.bar theme)
         , body =
             [ Skeleton.bar theme
-            , Ui.hairline theme
+            , Surface.hairline theme
             , Skeleton.bar theme
             , Skeleton.bar theme
             , Skeleton.bar theme
@@ -257,10 +259,10 @@ preview theme state =
                 nutritionCard theme nutrients
 
             NutritionFailed _ errMsg ->
-                Ui.errorBanner theme errMsg
+                Feedback.errorBanner theme errMsg
 
             NutritionUnavailable _ ->
-                Ui.errorBanner theme "Unavailable"
+                Feedback.errorBanner theme "Unavailable"
         ]
 
 
@@ -519,11 +521,11 @@ the prior pattern of two stacked cards.
 -}
 nutritionCard : Theme -> List NutrientAmount -> Element msg
 nutritionCard theme nutrients =
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
             [ macroBreakdownView theme nutrients
-            , Ui.hairline theme
+            , Surface.hairline theme
             , nutrientsTableInner theme nutrients
             ]
         , footer = Nothing
@@ -532,11 +534,11 @@ nutritionCard theme nutrients =
 
 responsiveNutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
 responsiveNutritionCard device theme nutrients =
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
             [ responsiveMacroBreakdownView device theme nutrients
-            , Ui.hairline theme
+            , Surface.hairline theme
             , nutrientsTableInner theme nutrients
             ]
         , footer = Nothing

@@ -38,7 +38,9 @@ import Ui
 import Ui.Button as Button
 import Ui.Css as Css
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Surface as Surface
 import Ui.Theme exposing (Mode(..), Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -595,7 +597,7 @@ contentView { model, device, theme } =
         (dateCard theme model device
             :: (case activeDiaryError model.currentDate model.diary of
                     Just message ->
-                        [ Ui.errorBanner theme message ]
+                        [ Feedback.errorBanner theme message ]
 
                     Nothing ->
                         copyErrorView theme model.copyState
@@ -615,7 +617,7 @@ dateCard theme model device =
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Ui.card theme
+    Surface.card theme
         [ Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
@@ -650,7 +652,7 @@ dateCard theme model device =
                     , tone = Button.Primary
                     }
             ]
-        , Ui.hairline theme
+        , Surface.hairline theme
         , Element.column
             [ Element.width Element.fill
             , Element.paddingEach { top = DesignTokens.space8, right = 0, bottom = 0, left = 0 }
@@ -674,7 +676,7 @@ totalsView device theme targets summary =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ calorieHero theme calories targets.calorieTarget
-        , Ui.hairline theme
+        , Surface.hairline theme
         , macroSummaryRow theme
             [ { label = "Protein"
               , value = summaryAmount "PROTEIN_G" summary
@@ -1132,7 +1134,7 @@ copyErrorView : Theme -> CopyState -> List (Element Msg)
 copyErrorView theme copyState =
     case copyState of
         CopyFailed message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         _ ->
             []
@@ -1195,7 +1197,7 @@ slotView theme device model section =
                      else
                         List.map (logRow theme) section.logs
                     )
-                        ++ [ Ui.hairline theme
+                        ++ [ Surface.hairline theme
                            , Button.textButton device
                                 theme
                                 { tone = Button.Ghost
@@ -1215,7 +1217,7 @@ slotView theme device model section =
         device
         section.slot
         (mealSlotHeader theme model.macroMode section totals)
-        (Ui.hairline theme :: body)
+        (Surface.hairline theme :: body)
 
 
 emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
@@ -1360,10 +1362,10 @@ mealSlotCard :
 mealSlotCard theme device maybeSlot header bodyChildren =
     case maybeSlot of
         Nothing ->
-            Ui.card theme (header :: bodyChildren)
+            Surface.card theme (header :: bodyChildren)
 
         Just slot ->
-            Ui.heroCard theme
+            Surface.heroCard theme
                 { header = header
                 , body = bodyChildren
                 , mediaHeader =

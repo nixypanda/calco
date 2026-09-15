@@ -10,6 +10,7 @@ import Element exposing (Element)
 import Ui
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -24,7 +25,7 @@ foodHeader theme food extraMeta =
                 |> List.map
                     (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
     in
-    Ui.card theme
+    Surface.card theme
         [ Ui.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
             , title = Typography.truncatedHeader theme food.name

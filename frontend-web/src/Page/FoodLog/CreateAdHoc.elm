@@ -27,6 +27,7 @@ import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
 import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
 import Ui.Theme exposing (Theme)
 
 
@@ -335,7 +336,7 @@ viewForAi showOptional { model, device, theme } =
                 Editor.CoreNutrientsOnly
     in
     Ui.pageContainer device
-        [ Ui.maybeErrorBanner theme (submitError model.submit)
+        [ Feedback.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog visibility theme device model.nutrients model.units model.form)
         , Button.textButton device

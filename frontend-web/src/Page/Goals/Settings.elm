@@ -19,8 +19,10 @@ import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -328,11 +330,11 @@ view { model, device, theme } =
                 [ goalsSettingsSkeleton theme ]
 
             Failed message ->
-                [ Ui.errorBanner theme message ]
+                [ Feedback.errorBanner theme message ]
 
             Ready ready ->
-                [ Ui.maybeErrorBanner theme (requestError ready.save)
-                , Ui.card theme
+                [ Feedback.maybeErrorBanner theme (requestError ready.save)
+                , Surface.card theme
                     [ Typography.sectionTitle theme "Daily Targets"
                     , Typography.mutedParagraph theme (statusMessage ready.status)
                     , UiInput.decimalInput theme
@@ -355,7 +357,7 @@ view { model, device, theme } =
                         , value = ready.form.fatTargetG
                         , onChange = FatTargetChanged
                         }
-                    , Ui.maybeErrorBanner theme (formError ready.save)
+                    , Feedback.maybeErrorBanner theme (formError ready.save)
                     ]
                 , Button.textButton device
                     theme
@@ -422,7 +424,7 @@ requestError save =
 
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
-    Ui.card theme
+    Surface.card theme
         [ Skeleton.input theme
         , Skeleton.input theme
         , Skeleton.input theme

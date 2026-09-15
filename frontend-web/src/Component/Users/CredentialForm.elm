@@ -11,10 +11,11 @@ module Component.Users.CredentialForm exposing
     )
 
 import Element exposing (Device, Element)
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -138,7 +139,7 @@ view config { model, device, theme } =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space16
             ]
-            [ Ui.card theme
+            [ Surface.card theme
                 [ Typography.subsectionTitle theme config.title
                 , Typography.maybeMutedParagraph theme config.description
                 , UiInput.input theme
@@ -151,7 +152,7 @@ view config { model, device, theme } =
                     , value = form.password
                     , onChange = PasswordChanged
                     }
-                , Ui.maybeErrorBanner theme (errorMessage model)
+                , Feedback.maybeErrorBanner theme (errorMessage model)
                 ]
             , Button.textButton device
                 theme

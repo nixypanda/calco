@@ -27,6 +27,7 @@ import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Ui
 import Ui.Button as Button
+import Ui.Feedback as Feedback
 import Ui.Theme exposing (Theme)
 
 
@@ -307,4 +308,4 @@ view { model, device, theme } =
                     }
                 ]
     in
-    Ui.pageContainer device (Ui.maybeErrorBanner theme model.error :: content)
+    Ui.pageContainer device (Feedback.maybeErrorBanner theme model.error :: content)

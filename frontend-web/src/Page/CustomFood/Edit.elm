@@ -26,6 +26,7 @@ import Lib.Ticket exposing (Ticket)
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 
@@ -375,7 +376,7 @@ bodyView { model, device, theme } =
                 ]
 
         LoadFailed message ->
-            Ui.errorBanner theme message
+            Feedback.errorBanner theme message
 
         Loading _ ->
             customFoodFormSkeleton theme

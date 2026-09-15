@@ -23,7 +23,9 @@ import Element.Font as Font
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -495,7 +497,7 @@ failure =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     Ui.pageContainer device
-        [ Ui.section theme
+        [ Surface.section theme
             { header = Just (headerView theme model)
             , body =
                 [ case model of
@@ -508,7 +510,7 @@ view { model, device, theme } =
                                 Element.none
 
                     LoadFailed message ->
-                        Ui.errorBanner theme message
+                        Feedback.errorBanner theme message
 
                     Loading _ ->
                         mealShowSkeleton theme
@@ -520,7 +522,7 @@ view { model, device, theme } =
                 loadedView theme device loaded
 
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loading _ ->
                 mealShowSkeleton theme
@@ -558,7 +560,7 @@ headerView theme model =
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.section theme
+        [ Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
             , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
@@ -629,7 +631,7 @@ nutritionView theme device loaded =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.card theme
+        [ Surface.card theme
             [ View.QuantityInput.dropdown theme
                 device
                 { amountLabel = "Amount"
@@ -672,7 +674,7 @@ mealShowSkeleton : Theme -> Element msg
 mealShowSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.card theme { rows = 2 }
-        , Ui.section theme
+        , Surface.section theme
             { header =
                 Just
                     (Skeleton.barCustom theme

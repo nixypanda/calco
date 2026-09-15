@@ -16,7 +16,9 @@ import Element.Input as Input
 import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -160,16 +162,16 @@ view { model, device, theme } =
                 [ diarySettingsSkeleton theme ]
 
             Failed message ->
-                [ Ui.errorBanner theme message ]
+                [ Feedback.errorBanner theme message ]
 
             Ready loaded ->
-                [ Ui.card theme
+                [ Surface.card theme
                     (Typography.sectionTitle theme "Meal slots"
                         :: Typography.mutedParagraph theme
                             "Choose the fixed meal slots shown in your diary."
                         :: List.map (slotCheckbox loaded.selected) MealSlot.all
                     )
-                , Ui.maybeErrorBanner theme (saveError loaded.saveState)
+                , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
@@ -219,7 +221,7 @@ saveError state =
 
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
-    Ui.card theme
+    Surface.card theme
         [ Skeleton.bar theme
         , Skeleton.bar theme
         , Skeleton.bar theme

@@ -14,6 +14,7 @@ import Ui
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -112,7 +113,7 @@ resultRow theme device config =
         hasCategories =
             not (List.isEmpty (visibleCategories config.item.categories))
     in
-    Ui.listRow
+    Surface.listRow
         { onSelect = config.onSelect config.item.id
         , leading = [ macroDot ]
         , title = searchItem
