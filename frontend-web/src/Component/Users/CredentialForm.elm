@@ -139,21 +139,24 @@ view config { model, device, theme } =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space16
             ]
-            [ Surface.card theme
-                [ Typography.subsectionTitle theme config.title
-                , Typography.maybeMutedParagraph theme config.description
-                , UiInput.input theme
-                    { label = "Username"
-                    , value = form.username
-                    , onChange = UsernameChanged
-                    }
-                , UiInput.passwordInput theme
-                    { label = "Password"
-                    , value = form.password
-                    , onChange = PasswordChanged
-                    }
-                , Feedback.maybeErrorBanner theme (errorMessage model)
-                ]
+            [ Surface.section theme
+                { header = Just (Typography.subsectionTitle theme config.title)
+                , body =
+                    [ Typography.maybeMutedParagraph theme config.description
+                    , UiInput.input theme
+                        { label = "Username"
+                        , value = form.username
+                        , onChange = UsernameChanged
+                        }
+                    , UiInput.passwordInput theme
+                        { label = "Password"
+                        , value = form.password
+                        , onChange = PasswordChanged
+                        }
+                    , Feedback.maybeErrorBanner theme (errorMessage model)
+                    ]
+                , footer = Nothing
+                }
             , Button.textButton device
                 theme
                 { tone = Button.Primary

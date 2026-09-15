@@ -1790,38 +1790,45 @@ logDetailsCard theme device form logFields =
 
 saveToFoodsCard : Theme -> Device -> LogPersistence -> Element Msg
 saveToFoodsCard theme _ persistence =
-    Surface.card theme
-        ([ Element.row
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ Element.el [ Element.width Element.fill ]
-                (Typography.sectionTitle theme "Save to My Foods")
-            , UiInput.toggleSwitch theme
-                { isActive =
-                    case persistence of
-                        LogAdHocOnly ->
-                            False
+    Surface.section theme
+        { header =
+            Just
+                (Surface.sectionHeader
+                    { title = Typography.sectionTitle theme "Save to My Foods"
+                    , description =
+                        Just
+                            (Typography.mutedParagraph theme
+                                "Save this as a reusable custom food before logging it."
+                            )
+                    , trailing =
+                        Just
+                            (UiInput.toggleSwitch theme
+                                { isActive =
+                                    case persistence of
+                                        LogAdHocOnly ->
+                                            False
 
-                        SaveCustomFoodThenLog _ ->
-                            True
-                , onToggle = LogPersistenceToggled
-                }
-            ]
-         , Typography.mutedParagraph theme
-            "Save this as a reusable custom food before logging it."
-         ]
-            ++ (case persistence of
-                    LogAdHocOnly ->
-                        []
+                                        SaveCustomFoodThenLog _ ->
+                                            True
+                                , onToggle = LogPersistenceToggled
+                                }
+                            )
+                    }
+                )
+        , body =
+            case persistence of
+                LogAdHocOnly ->
+                    []
 
-                    SaveCustomFoodThenLog details ->
-                        [ UiInput.decimalInput theme
-                            { label = "Weight of this logged portion (g)"
-                            , value = details.portionWeight
-                            , onChange = PortionWeightChanged
-                            }
-                        ]
-               )
-        )
+                SaveCustomFoodThenLog details ->
+                    [ UiInput.decimalInput theme
+                        { label = "Weight of this logged portion (g)"
+                        , value = details.portionWeight
+                        , onChange = PortionWeightChanged
+                        }
+                    ]
+        , footer = Nothing
+        }
 
 
 defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg

@@ -698,24 +698,27 @@ formatAmount amount unit =
 
 referenceCard : Theme -> NutritionDetails -> Element msg
 referenceCard theme report =
-    Surface.card theme
-        [ Typography.subsectionTitle theme "About these references"
-        , Element.paragraph [ Font.color theme.textMuted, Typography.body ]
-            [ Element.text
-                ("These comparisons use "
-                    ++ report.reference.name
-                    ++ " from "
-                    ++ report.reference.authority
-                    ++ " ("
-                    ++ report.reference.jurisdiction
-                    ++ ") for "
-                    ++ report.reference.populationLabel
-                    ++ ". They are informational daily comparisons, not medical diagnoses."
-                )
+    Surface.section theme
+        { header = Just (Typography.subsectionTitle theme "About these references")
+        , body =
+            [ Element.paragraph [ Font.color theme.textMuted, Typography.body ]
+                [ Element.text
+                    ("These comparisons use "
+                        ++ report.reference.name
+                        ++ " from "
+                        ++ report.reference.authority
+                        ++ " ("
+                        ++ report.reference.jurisdiction
+                        ++ ") for "
+                        ++ report.reference.populationLabel
+                        ++ ". They are informational daily comparisons, not medical diagnoses."
+                    )
+                ]
+            , Element.newTabLink
+                [ Font.color theme.brandBlue, Font.underline, Typography.body ]
+                { url = report.reference.sourceUrl
+                , label = Element.text "View reference source"
+                }
             ]
-        , Element.newTabLink
-            [ Font.color theme.brandBlue, Font.underline, Typography.body ]
-            { url = report.reference.sourceUrl
-            , label = Element.text "View reference source"
-            }
-        ]
+        , footer = Nothing
+        }

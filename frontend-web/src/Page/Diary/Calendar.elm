@@ -310,16 +310,19 @@ monthRange newest oldest =
 
 monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
 monthView theme model selectedDate month =
-    Surface.card theme
-        [ Typography.sectionTitle theme (Calendar.monthLabel month)
-        , MonthCalendar.view
-            { period = month
-            , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
-            , weekdayColor = theme.textMuted
-            , cellHeight = 68
-            , viewDay = dayView theme model selectedDate month
-            }
-        ]
+    Surface.section theme
+        { header = Just (Typography.sectionTitle theme (Calendar.monthLabel month))
+        , body =
+            [ MonthCalendar.view
+                { period = month
+                , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
+                , weekdayColor = theme.textMuted
+                , cellHeight = 68
+                , viewDay = dayView theme model selectedDate month
+                }
+            ]
+        , footer = Nothing
+        }
 
 
 dayView :

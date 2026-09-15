@@ -707,28 +707,36 @@ viewFor purpose theme device formHasManualInput model =
                 ]
 
         Disabled ->
-            Surface.card theme
-                [ Typography.subsectionTitle theme "Create with AI"
-                , Typography.mutedParagraph theme
-                    "Food assistance is unavailable on this deployment."
-                ]
+            Surface.section theme
+                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                , body =
+                    [ Typography.mutedParagraph theme
+                        "Food assistance is unavailable on this deployment."
+                    ]
+                , footer = Nothing
+                }
 
         StatusFailed ->
-            Surface.card theme
-                [ Typography.subsectionTitle theme "Create with AI"
-                , Feedback.errorBanner theme
-                    "Food-assistant availability could not be checked."
-                , Button.textButton device
-                    theme
-                    { tone = Button.Ghost
-                    , width = Button.FullWidth
-                    , label = "Retry availability check"
-                    , onPress = RetryStatusClicked
-                    , submitState = Nothing
-                    , submittingLabel = Nothing
-                    , trailing = Nothing
-                    }
-                ]
+            Surface.section theme
+                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                , body =
+                    [ Feedback.errorBanner theme
+                        "Food-assistant availability could not be checked."
+                    ]
+                , footer =
+                    Just
+                        (Button.textButton device
+                            theme
+                            { tone = Button.Ghost
+                            , width = Button.FullWidth
+                            , label = "Retry availability check"
+                            , onPress = RetryStatusClicked
+                            , submitState = Nothing
+                            , submittingLabel = Nothing
+                            , trailing = Nothing
+                            }
+                        )
+                }
 
         Enabled chat ->
             enabledView purpose theme device formHasManualInput chat

@@ -88,11 +88,11 @@ modalOverlay theme config =
                 , Element.padding 16
                 , uiClass "ui-modal-card"
                 ]
-                (Surface.card theme
-                    (sectionTitle theme config.title
-                        :: config.body
-                        ++ [ config.actions ]
-                    )
+                (Surface.section theme
+                    { header = Just (sectionTitle theme config.title)
+                    , body = config.body
+                    , footer = Just config.actions
+                    }
                 )
     in
     Element.el
