@@ -364,22 +364,25 @@ tests =
                     |> first
                     |> Assistant.update Assistant.NewSessionClicked
                     |> first
-                    |> Assistant.view
+                    |> Assistant.modalView
                         Theme.light
                         { class = Phone, orientation = Portrait }
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text
-                            (String.concat
-                                [ "Start a new session? The current conversation and draft "
-                                , "will be discarded. Your food form will not be changed."
+                    |> Maybe.map
+                        (Element.layout []
+                            >> Query.fromHtml
+                            >> Query.has
+                                [ Selector.text "Start new session?"
+                                , Selector.text
+                                    (String.concat
+                                        [ "The current conversation and draft will be "
+                                        , "discarded. Your food form will not be changed."
+                                        ]
+                                    )
+                                , Selector.text "Cancel"
+                                , Selector.text "Start new session"
                                 ]
-                            )
-                        , Selector.text "Cancel"
-                        , Selector.text "Start new session"
-                        ]
+                        )
+                    |> Maybe.withDefault (Expect.fail "expected new-session modal")
         , test "overwrite confirmation uses explicit draft actions" <|
             \_ ->
                 sent

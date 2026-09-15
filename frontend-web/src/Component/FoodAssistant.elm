@@ -9,6 +9,7 @@ module Component.FoodAssistant exposing
     , RequestState(..)
     , draftPreviewData
     , init
+    , modalView
     , previewUrls
     , removeAt
     , update
@@ -745,11 +746,6 @@ expandedContent purpose theme device formHasManualInput chat =
             [ draftPreviewView purpose theme device formHasManualInput chat
             , warningView theme chat.warnings
             , requestErrorView theme device chat.request
-            , if chat.awaitingNewSessionConfirmation then
-                newSessionConfirmation theme device
-
-              else
-                Element.none
             ]
                 ++ (if chat.askingForChanges then
                         [ conversationView theme device chat
@@ -780,7 +776,7 @@ conversationView theme device chat =
     else
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            ([ Element.row [ Element.width Element.fill ]
+            [ Element.row [ Element.width Element.fill ]
                 [ Element.el [ Font.bold ] (Element.text "Conversation")
                 , if chat.request == Sending then
                     Element.none
@@ -799,61 +795,51 @@ conversationView theme device chat =
                             }
                         )
                 ]
-             , Element.column
+            , Element.column
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
                 (List.map (turnView theme) chat.transcript)
-             ]
-                ++ (if
-                        chat.awaitingNewSessionConfirmation
-                            && chat.request
-                            /= Sending
-                            && chat.draft
-                            == Nothing
-                    then
-                        [ newSessionConfirmation theme device ]
-
-                    else
-                        []
-                   )
-            )
-
-
-newSessionConfirmation : Theme -> Device -> Element Msg
-newSessionConfirmation theme device =
-    confirmationSurface theme
-        [ Element.paragraph [ Element.width Element.fill ]
-            [ Element.text
-                (String.concat
-                    [ "Start a new session? The current conversation and draft "
-                    , "will be discarded. Your food form will not be changed."
-                    ]
-                )
             ]
-        , compactActionRow device
-            [ Button.textButton device
-                theme
-                { tone = Button.Ghost
-                , width = Button.ResponsiveWidth
-                , label = "Cancel"
-                , onPress = CancelNewSessionClicked
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
-            , Button.textButton device
-                theme
-                { tone = Button.DangerOutline
-                , width = Button.ResponsiveWidth
-                , label = "Start new session"
-                , onPress = ConfirmNewSessionClicked
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
-            ]
-        ]
+
+
+modalView : Theme -> Device -> Model -> Maybe (Element Msg)
+modalView theme device model =
+    case model of
+        Enabled chat ->
+            if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
+                Just
+                    (Feedback.modalOverlay theme
+                        { title = "Start new session?"
+                        , body =
+                            [ Typography.mutedParagraph theme
+                                (String.concat
+                                    [ "The current conversation and draft will be "
+                                    , "discarded. Your food form will not be changed."
+                                    ]
+                                )
+                            ]
+                        , actions =
+                            Button.bottomActionButtons device
+                                theme
+                                [ { label = "Cancel"
+                                  , onPress = CancelNewSessionClicked
+                                  , tone = Button.Primary
+                                  }
+                                , { label = "Start new session"
+                                  , onPress = ConfirmNewSessionClicked
+                                  , tone = Button.Danger
+                                  }
+                                ]
+                        , onBackgroundPress = Just CancelNewSessionClicked
+                        }
+                    )
+
+            else
+                Nothing
+
+        _ ->
+            Nothing
 
 
 turnView : Theme -> ConversationTurn -> Element Msg

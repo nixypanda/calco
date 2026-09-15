@@ -3216,6 +3216,14 @@ paneModalView props pane =
             CustomFoodShow.modalView (pageProps props sub)
                 |> Maybe.map (Element.map GotCustomFoodShowMsg)
 
+        CustomFoodCreatePane sub ->
+            CustomFoodCreate.modalView (pageProps props sub)
+                |> Maybe.map (Element.map GotCustomFoodCreateMsg)
+
+        CreateWithAiLogPane sub ->
+            CreateWithAiLog.modalView (pageProps props sub)
+                |> Maybe.map (Element.map GotCreateWithAiLogMsg)
+
         MealDetailPane _ sub ->
             MealShow.modalView (pageProps props sub)
                 |> Maybe.map (Element.map GotMealDetailMsg)

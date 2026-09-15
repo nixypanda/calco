@@ -4,6 +4,7 @@ module Page.CustomFood.Create exposing
     , OutMsg(..)
     , init
     , initWithAssistant
+    , modalView
     , photoPreviewUrls
     , update
     , view
@@ -309,3 +310,9 @@ view { model, device, theme } =
                 ]
     in
     UiPage.pageContainer device (Feedback.maybeErrorBanner theme model.error :: content)
+
+
+modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView { model, device, theme } =
+    Assistant.modalView theme device model.assistant
+        |> Maybe.map (Element.map AssistantMsg)
