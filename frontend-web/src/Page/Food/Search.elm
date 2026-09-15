@@ -36,11 +36,17 @@ import Html.Events
 import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
-import Ui
+import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Input as UiInput
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Product
@@ -822,23 +828,23 @@ contentView { model, device, theme } =
 
 adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
-    Ui.card theme
+    Surface.card theme
         [ Typography.sectionTitle theme "Create an ad-hoc food log"
         , responsiveActions device
-            [ Ui.textButton device
+            [ Button.textButton device
                 theme
-                { tone = Ui.GhostFilled
-                , width = Ui.ResponsiveWidth
+                { tone = Button.GhostFilled
+                , width = Button.ResponsiveWidth
                 , label = "Manually"
                 , onPress = CreateAdHocLogClicked
                 , submitState = Nothing
                 , submittingLabel = Nothing
                 , trailing = Nothing
                 }
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Primary
-                , width = Ui.ResponsiveWidth
+                { tone = Button.Primary
+                , width = Button.ResponsiveWidth
                 , label = "With AI"
                 , onPress = CreateAiLogClicked
                 , submitState = Nothing
@@ -851,7 +857,7 @@ adHocLogView theme device =
 
 responsiveActions : Device -> List (Element msg) -> Element msg
 responsiveActions device actions =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             actions
@@ -898,31 +904,31 @@ barcodeInputView theme device model =
     let
         input : Element Msg
         input =
-            Ui.searchInput theme
+            UiInput.searchInput theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
                 , label = "Enter barcode"
-                , extraAttrs = [ onEnterSubmit BarcodeSubmitted, Ui.numericInputMode ]
+                , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
         searchButton : Element Msg
         searchButton =
-            Ui.textButton device
+            Button.textButton device
                 theme
-                { tone = Ui.PrimaryOutline
-                , width = Ui.FullWidth
+                { tone = Button.PrimaryOutline
+                , width = Button.FullWidth
                 , label = "Search"
                 , onPress = BarcodeSubmitted
                 , submitState =
                     Just
                         (if model.barcodeLookup == Loading then
-                            Ui.Submitting
+                            Button.Submitting
 
                          else if String.isEmpty (String.trim model.barcodeQuery) then
-                            Ui.Disabled
+                            Button.Disabled
 
                          else
-                            Ui.Idle
+                            Button.Idle
                         )
                 , submittingLabel = Just "Searching"
                 , trailing = Nothing
@@ -932,22 +938,22 @@ barcodeInputView theme device model =
         scanButton =
             case model.barcodeScanner of
                 ScannerStarting ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Scan"
                         , onPress = BarcodeScanClicked
-                        , submitState = Just Ui.Submitting
+                        , submitState = Just Button.Submitting
                         , submittingLabel = Just "Starting"
                         , trailing = Nothing
                         }
 
                 ScannerActive ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Danger
-                        , width = Ui.FullWidth
+                        { tone = Button.Danger
+                        , width = Button.FullWidth
                         , label = "Cancel"
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
@@ -956,13 +962,13 @@ barcodeInputView theme device model =
                         }
 
                 _ ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Scan"
                         , onPress = BarcodeScanClicked
-                        , submitState = Just Ui.Idle
+                        , submitState = Just Button.Idle
                         , submittingLabel = Just "Starting"
                         , trailing = Nothing
                         }
@@ -993,7 +999,7 @@ barcodeScannerStateView theme scanner =
             []
 
         ScannerFailed message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         ScannerStarting ->
             [ barcodeScannerPreview theme "Starting camera..." ]
@@ -1115,7 +1121,7 @@ scopeSegment theme selectedScope scope =
         , Font.color foreground
         , Font.medium
         , Font.size 14
-        , Typography.uiClass "ui-motion ui-pressable"
+        , UiCommon.uiClass "ui-motion ui-pressable"
         , if selected then
             Element.mouseOver []
 
@@ -1128,7 +1134,7 @@ scopeSegment theme selectedScope scope =
                 [ Element.centerX
                 , Element.centerY
                 , Element.clip
-                , Typography.uiClass "ui-text-ellipsis"
+                , UiCommon.uiClass "ui-text-ellipsis"
                 ]
                 (Element.text (scopeLabel scope))
         }
@@ -1138,20 +1144,20 @@ bodyView : Theme -> Model -> Device -> Element Msg
 bodyView theme model device =
     case model.results of
         NotAsked ->
-            Ui.emptyState theme "Search for a food to get started."
+            Feedback.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Ui.listCard theme
+            Surface.listCard theme
                 { rows =
-                    List.map (\_ -> Ui.skeletonListRow theme)
+                    List.map (\_ -> Skeleton.listRow theme)
                         (List.range 1 3)
                 , footer = Nothing
                 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Ui.errorBanner theme (Client.displayError error)
-                , Ui.emptyState theme "No foods found. Try a different search."
+                [ Feedback.errorBanner theme (Client.displayError error)
+                , Feedback.emptyState theme "No foods found. Try a different search."
                 ]
 
         Success items ->
@@ -1159,7 +1165,7 @@ bodyView theme model device =
                 textEmptyState theme device model.scope
 
             else
-                Ui.listCard theme
+                Surface.listCard theme
                     { rows =
                         List.map
                             (\item ->
@@ -1195,29 +1201,29 @@ barcodeBodyView : Theme -> Device -> Model -> Element Msg
 barcodeBodyView theme device model =
     case model.barcodeLookup of
         NotAsked ->
-            Ui.emptyState theme "Enter a barcode to look up a food."
+            Feedback.emptyState theme "Enter a barcode to look up a food."
 
         Loading ->
-            Ui.skeletonCard theme { rows = 3 }
+            Skeleton.card theme { rows = 3 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Ui.errorBanner theme (barcodeErrorMessage error)
-                , Ui.emptyState theme "No food found for that barcode."
-                , Ui.textButton device
+                [ Feedback.errorBanner theme (barcodeErrorMessage error)
+                , Feedback.emptyState theme "No food found for that barcode."
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Create Custom Food"
                     , onPress = CreateCustomFoodClicked
-                    , submitState = Just Ui.Idle
+                    , submitState = Just Button.Idle
                     , submittingLabel = Just "Create Custom Food"
                     , trailing = Nothing
                     }
                 ]
 
         Success _ ->
-            Ui.emptyState theme "Opening food."
+            Feedback.emptyState theme "Opening food."
 
 
 textEmptyState : Theme -> Device -> SearchScope -> Element Msg
@@ -1240,15 +1246,15 @@ textEmptyState theme device scope =
             scope /= History
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        (Ui.emptyState theme message
+        (Feedback.emptyState theme message
             :: (if canCreate then
-                    [ Ui.textButton device
+                    [ Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Create Custom Food"
                         , onPress = CreateCustomFoodClicked
-                        , submitState = Just Ui.Idle
+                        , submitState = Just Button.Idle
                         , submittingLabel = Just "Create Custom Food"
                         , trailing = Nothing
                         }
@@ -1345,13 +1351,13 @@ onEnterSubmit submitMsg =
 recentsView : Device -> Theme -> Model -> Element Msg
 recentsView device theme model =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Ui.maybeErrorBanner theme (quickAddError model.quickAdd)
+        [ Feedback.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
                 Element.none
 
             Loading ->
-                Ui.skeletonCard theme { rows = 2 }
+                Skeleton.card theme { rows = 2 }
 
             Failure _ ->
                 Element.none
@@ -1364,7 +1370,7 @@ recentsView device theme model =
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Typography.sectionTitle theme "Recent"
-                        , Ui.listCard theme
+                        , Surface.listCard theme
                             { rows = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
@@ -1375,13 +1381,13 @@ recentsView device theme model =
 recentItemRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
 recentItemRow device theme model item =
     Element.column [ Element.width Element.fill ]
-        [ Ui.listRow
+        [ Surface.listRow
             { onSelect = RecentItemClicked item
             , leading = [ View.Product.macroDotGhost ]
             , title = Typography.wrappedListItemTitle theme (FoodLog.itemName item.item)
             , subtitle =
                 [ Typography.mutedCaptionParagraph theme
-                    (Ui.dotSeparated
+                    (Text.dotSeparated
                         [ FoodLog.itemBrand item.item
                         , Nutrition.servingCaloriesText item
                         ]
@@ -1390,7 +1396,7 @@ recentItemRow device theme model item =
             , trailing = []
             }
 
-        -- Quick-add chips sit outside `Ui.listRow`, whose subtitle slot is
+        -- Quick-add chips sit outside `Surface.listRow`, whose subtitle slot is
         -- inside the row-select button and cannot hold nested buttons.
         , quickAddChipRow device theme model item
         ]
@@ -1457,21 +1463,21 @@ quickAddChip device theme model item quantity =
         ( tone, submitState, submittingLabel ) =
             case state of
                 QuickAddCanAdd ->
-                    ( Ui.GhostFilled, Nothing, Nothing )
+                    ( Button.GhostFilled, Nothing, Nothing )
 
                 QuickAddAdding ->
-                    ( Ui.GhostFilled, Just Ui.Submitting, Just "Adding..." )
+                    ( Button.GhostFilled, Just Button.Submitting, Just "Adding..." )
 
                 QuickAddAdded ->
-                    ( Ui.Primary, Just Ui.Submitted, Nothing )
+                    ( Button.Primary, Just Button.Submitted, Nothing )
 
                 QuickAddBlocked ->
-                    ( Ui.GhostFilled, Just Ui.Disabled, Nothing )
+                    ( Button.GhostFilled, Just Button.Disabled, Nothing )
     in
-    Ui.textButton device
+    Button.textButton device
         theme
         { tone = tone
-        , width = Ui.ContentWidth
+        , width = Button.ContentWidth
         , label = label
         , onPress = RecentQuickAddClicked item quantity
         , submitState = submitState

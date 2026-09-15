@@ -1,19 +1,19 @@
-module Page.FoodLog.FormTest exposing (tests)
+module Component.FoodLogFormTest exposing (tests)
 
 import Api.Foods exposing (ProductDetail)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.FoodLog.Form as FoodLogForm
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.FoodLog.Form"
+    describe "Component.FoodLogForm"
         [ test "default amount uses default_quantity" <|
             \_ ->
                 FoodLogForm.initLogFormFromFood Nothing { food | defaultQuantity = Just "2.5" }

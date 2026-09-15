@@ -20,8 +20,12 @@ import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -315,7 +319,7 @@ componentNameView theme loaded id =
             )
 
     else
-        Ui.skeletonBar theme
+        Skeleton.bar theme
 
 
 requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
@@ -492,8 +496,8 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ Ui.section theme
+    UiPage.pageContainer device
+        [ Surface.section theme
             { header = Just (headerView theme model)
             , body =
                 [ case model of
@@ -506,7 +510,7 @@ view { model, device, theme } =
                                 Element.none
 
                     LoadFailed message ->
-                        Ui.errorBanner theme message
+                        Feedback.errorBanner theme message
 
                     Loading _ ->
                         mealShowSkeleton theme
@@ -518,7 +522,7 @@ view { model, device, theme } =
                 loadedView theme device loaded
 
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loading _ ->
                 mealShowSkeleton theme
@@ -539,7 +543,7 @@ headerView : Theme -> Model -> Element Msg
 headerView theme model =
     case model of
         Loaded loaded ->
-            Ui.pageHeader theme
+            UiPage.pageHeader theme
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
@@ -556,7 +560,7 @@ headerView theme model =
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.section theme
+        [ Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
             , body = List.map (componentView theme loaded) loaded.meal.components
             , footer = Nothing
@@ -627,7 +631,7 @@ nutritionView theme device loaded =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.card theme
+        [ Surface.card theme
             [ View.QuantityInput.dropdown theme
                 device
                 { amountLabel = "Amount"
@@ -647,10 +651,10 @@ nutritionView theme device loaded =
 
 bottomActionsView : Theme -> Device -> Element Msg
 bottomActionsView theme device =
-    Ui.bottomActionButtons device
+    Button.bottomActionButtons device
         theme
-        [ { label = "Edit Meal", onPress = EditClicked, tone = Ui.Primary }
-        , { label = "Delete Meal", onPress = DeleteClicked, tone = Ui.Danger }
+        [ { label = "Edit Meal", onPress = EditClicked, tone = Button.Primary }
+        , { label = "Delete Meal", onPress = DeleteClicked, tone = Button.Danger }
         ]
 
 
@@ -669,20 +673,20 @@ deleteModalView theme device loaded =
 mealShowSkeleton : Theme -> Element msg
 mealShowSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonCard theme { rows = 2 }
-        , Ui.section theme
+        [ Skeleton.card theme { rows = 2 }
+        , Surface.section theme
             { header =
                 Just
-                    (Ui.skeletonBarCustom theme
+                    (Skeleton.barCustom theme
                         { width = Element.fillPortion 1, height = 16 }
                     )
-            , body = List.map (\_ -> Ui.skeletonListRow theme) (List.range 1 3)
+            , body = List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
             , footer = Nothing
             }
-        , Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.card theme { rows = 2 }
+        , Skeleton.card theme { rows = 3 }
         , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
-            , Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
+            [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+            , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
             ]
         ]

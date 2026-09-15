@@ -16,9 +16,14 @@ import Element.Background as Background
 import Element.Font as Font
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
-import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -148,7 +153,7 @@ today =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ dateHeader theme device model
         , case model of
             Loading _ ->
@@ -158,7 +163,7 @@ view { model, device, theme } =
                 reportView theme report
 
             Failed _ message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
         ]
 
 
@@ -169,37 +174,37 @@ dateHeader theme device model =
         canGoNext =
             LocalDate.compare (currentDate model) (today model) == LT
     in
-    Ui.card theme
-        [ Ui.pageHeader theme
+    Surface.card theme
+        [ UiPage.pageHeader theme
             { leading =
                 Just
-                    (Ui.iconButton device
+                    (Button.iconButton device
                         theme
                         { icon = Icon.ChevronLeft
                         , title = "Previous day"
                         , onPress = Just PreviousDayClicked
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
                     )
             , title = Typography.sectionTitle theme "Nutrition details"
-            , subtitle = Just (Ui.SubtitleText (LocalDate.display (currentDate model)))
+            , subtitle = Just (UiPage.SubtitleText (LocalDate.display (currentDate model)))
             , actions =
                 [ if canGoNext then
-                    Ui.iconButton device
+                    Button.iconButton device
                         theme
                         { icon = Icon.ChevronRight
                         , title = "Next day"
                         , onPress = Just NextDayClicked
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
 
                   else
-                    Ui.iconButton device
+                    Button.iconButton device
                         theme
                         { icon = Icon.ChevronRight
                         , title = ""
                         , onPress = Nothing
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
                 ]
             }
@@ -210,23 +215,23 @@ loadingView : Theme -> Element msg
 loadingView theme =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
-        , Ui.card theme
-            [ Ui.skeletonBarCustom theme { width = Element.fillPortion 2, height = 16 }
+        [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
+        , Surface.card theme
+            [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
             , Element.row
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
-                , Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
-                , Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
+                [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
+                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
+                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 ]
             ]
-        , Ui.skeletonCard theme { rows = 3 }
-        , Ui.skeletonCard theme { rows = 3 }
-        , Ui.card theme
-            [ Ui.skeletonBar theme
-            , Ui.skeletonBar theme
+        , Skeleton.card theme { rows = 3 }
+        , Skeleton.card theme { rows = 3 }
+        , Surface.card theme
+            [ Skeleton.bar theme
+            , Skeleton.bar theme
             ]
         ]
 
@@ -252,11 +257,11 @@ overviewSection theme nutrients =
         overview =
             inSection Details.Overview nutrients
     in
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Overview")
         , body =
             if List.isEmpty overview then
-                [ Ui.loading theme "No overview data is available." ]
+                [ Feedback.loading theme "No overview data is available." ]
 
             else
                 [ Element.wrappedRow
@@ -295,16 +300,16 @@ nutrientSection theme title section nutrients =
         selected =
             inSection section nutrients
     in
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme title)
         , body =
             if List.isEmpty selected then
-                [ Ui.loading theme "No nutrient data is available for this group." ]
+                [ Feedback.loading theme "No nutrient data is available for this group." ]
 
             else
                 selected
                     |> List.map (nutrientRow theme)
-                    |> List.intersperse (Ui.hairline theme)
+                    |> List.intersperse (Surface.hairline theme)
         , footer = Nothing
         }
 
@@ -443,7 +448,7 @@ progressView : Theme -> Nutrient -> Element msg
 progressView theme nutrient =
     case Details.progressPercent nutrient of
         Just percent ->
-            Ui.linearProgress theme
+            Feedback.linearProgress theme
                 { value = percent
                 , max = 100
                 , color = progressColor theme nutrient
@@ -485,7 +490,7 @@ statusPill theme nutrient =
             positive =
                 nutrient.status == Details.MetReference || nutrient.status == Details.WithinLimit
         in
-        Ui.coloredPill
+        Chip.coloredPill
             { label = statusLabel nutrient.status
             , bg =
                 if dangerous then
@@ -660,7 +665,7 @@ formatAmount amount unit =
 
 referenceCard : Theme -> NutritionDetails -> Element msg
 referenceCard theme report =
-    Ui.card theme
+    Surface.card theme
         [ Typography.subsectionTitle theme "About these references"
         , Element.paragraph [ Font.color theme.textMuted, Typography.body ]
             [ Element.text

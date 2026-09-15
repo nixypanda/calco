@@ -3,6 +3,7 @@ module Page.Food.ShowTest exposing (tests)
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
 import Api.Logs as Logs
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
@@ -11,7 +12,6 @@ import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.Food.Show as FoodShow
-import Page.FoodLog.Form as FoodLogForm
 import Test exposing (Test, describe, test)
 
 

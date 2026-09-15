@@ -22,11 +22,14 @@ import Data.BarcodeScan exposing (ScannerEvent)
 import Data.LocalContext exposing (LocalContext)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
+import Element.Background as Background
+import Element.Font as Font
 import Html
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
-import Ui
+import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
+import Ui.Skeleton as Skeleton
 import Ui.Theme as Theme exposing (Theme)
 import Url exposing (Url)
 import Version
@@ -526,9 +529,9 @@ view model =
             []
             [ Html.text
                 ("html, body { background: "
-                    ++ Css.toCssColor model.theme.pageBg
+                    ++ UiCommon.toCssColor model.theme.pageBg
                     ++ "; } :root { background: "
-                    ++ Css.toCssColor model.theme.pageBg
+                    ++ UiCommon.toCssColor model.theme.pageBg
                     ++ "; "
                     ++ Css.themeCssVariables model.theme
                     ++ "; }"
@@ -555,7 +558,7 @@ view model =
                     }
             )
           <|
-            Ui.layout model.theme <|
+            uiLayout model.theme <|
                 Chrome.viewFrame
                     { model = model.chrome
                     , device = model.device
@@ -580,6 +583,20 @@ view model =
     }
 
 
+uiLayout : Theme -> Element msg -> Element msg
+uiLayout theme content =
+    Element.column
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Background.color theme.pageBg
+        , Font.family [ Font.typeface "Inter", Font.sansSerif ]
+        , Font.color theme.textPrimary
+        , Font.size 16
+        , uiClass "ui-theme-root"
+        ]
+        [ content ]
+
+
 layoutAttrs : Model -> List (Element.Attribute Msg)
 layoutAttrs model =
     case Page.modalView (pageProps model) of
@@ -593,7 +610,7 @@ layoutAttrs model =
 pageView : Model -> Element Msg
 pageView model =
     if not (isBootstrapped model.bootstrap) then
-        Ui.skeletonLoading model.theme
+        Skeleton.loading model.theme
 
     else
         Element.map GotPageMsg (Page.view (pageProps model))

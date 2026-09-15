@@ -19,14 +19,21 @@ module Page.FoodLog.Entry exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.FoodLog.Form as FoodLogForm
-import Ui
+import Lib.Text as Text
+import Ui.Button as Button
+import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -552,7 +559,7 @@ contentView { model, device, theme } =
         ]
         [ case pageError model of
             Just message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Nothing ->
                 Element.none
@@ -621,16 +628,16 @@ loadedView theme device model =
         ]
 
 
-submitState : LoadedModel -> Ui.SubmitState
+submitState : LoadedModel -> Button.SubmitState
 submitState model =
     if model.request == Saving then
-        Ui.Submitting
+        Button.Submitting
 
     else if formHasChanges model.log model.form then
-        Ui.Idle
+        Button.Idle
 
     else
-        Ui.Disabled
+        Button.Disabled
 
 
 formHasChanges : FoodLog -> FoodLogForm.Model -> Bool
@@ -684,8 +691,8 @@ itemHeader theme device model =
         maybeFood =
             productDetail model.item
     in
-    Ui.card theme
-        [ Ui.pageHeader theme
+    Surface.card theme
+        [ UiPage.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme model.item
             , subtitle = Just (metaSubtitle device maybeFood model.log)
@@ -698,7 +705,7 @@ itemHeader theme device model =
 
                 else
                     Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ View.Product.macroDotGhost, Ui.chips theme food.categories ]
+                        [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
 
             Nothing ->
                 Element.none
@@ -711,7 +718,7 @@ itemTitle theme item =
         ProductItem productState ->
             case productState of
                 DetailLoading _ ->
-                    Ui.skeletonBar theme
+                    Skeleton.bar theme
 
                 DetailLoaded food ->
                     Typography.truncatedHeader theme food.name
@@ -726,7 +733,7 @@ itemTitle theme item =
             Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
-metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
+metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> UiPage.PageHeaderSubtitle
 metaSubtitle device maybeFood log =
     case maybeFood of
         Just food ->
@@ -740,8 +747,8 @@ metaSubtitle device maybeFood log =
                 loggedMeta =
                     "Logged " ++ LocalDate.display log.logDate
             in
-            if Ui.isSmall device then
-                Ui.SubtitleMetaLines
+            if UiCommon.isSmall device then
+                UiPage.SubtitleMetaLines
                     { lines =
                         [ productMeta, [ loggedMeta ] ]
                             |> List.filter (not << List.isEmpty)
@@ -749,14 +756,14 @@ metaSubtitle device maybeFood log =
                     }
 
             else
-                Ui.SubtitleMeta
+                UiPage.SubtitleMeta
                     { items = productMeta ++ [ loggedMeta ]
                     , separator = " ⋅ "
                     }
 
         Nothing ->
-            Ui.SubtitleText
-                (Ui.dotSeparated
+            UiPage.SubtitleText
+                (Text.dotSeparated
                     [ FoodLog.itemBrand log.item
                     , Just ("Logged " ++ LocalDate.display log.logDate)
                     ]
@@ -784,10 +791,10 @@ detailActionsView theme device model =
             , Element.spacing DesignTokens.space12
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save"
                     , onPress = SubmitClicked
                     , submitState = Just (submitState model)
@@ -796,11 +803,11 @@ detailActionsView theme device model =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.bottomActionButtons device
+                (Button.bottomActionButtons device
                     theme
                     [ { label = "Delete Log"
                       , onPress = DeleteClicked
-                      , tone = Ui.Danger
+                      , tone = Button.Danger
                       }
                     ]
                 )
@@ -826,10 +833,10 @@ foodLogEntrySkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
-        , Ui.skeletonCard theme { rows = 3 }
+        [ Skeleton.card theme { rows = 2 }
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
+        , Skeleton.card theme { rows = 3 }
         ]

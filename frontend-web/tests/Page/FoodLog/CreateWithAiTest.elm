@@ -2,10 +2,10 @@ module Page.FoodLog.CreateWithAiTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (NutrientItem)
+import Component.FoodAssistant as Assistant
+import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraftTurn(..))
 import Expect
-import Page.Food.Assistant as Assistant
-import Page.Food.Editor as Editor
 import Page.FoodLog.CreateAdHoc as Review
 import Page.FoodLog.CreateWithAi as CreateWithAi
 import Test exposing (Test, describe, test)

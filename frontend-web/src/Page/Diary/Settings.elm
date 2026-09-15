@@ -13,8 +13,12 @@ import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Element.Input as Input
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -152,26 +156,26 @@ canonical selected =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (case model of
             Loading ->
                 [ diarySettingsSkeleton theme ]
 
             Failed message ->
-                [ Ui.errorBanner theme message ]
+                [ Feedback.errorBanner theme message ]
 
             Ready loaded ->
-                [ Ui.card theme
+                [ Surface.card theme
                     (Typography.sectionTitle theme "Meal slots"
                         :: Typography.mutedParagraph theme
                             "Choose the fixed meal slots shown in your diary."
                         :: List.map (slotCheckbox loaded.selected) MealSlot.all
                     )
-                , Ui.maybeErrorBanner theme (saveError loaded.saveState)
-                , Ui.textButton device
+                , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label =
                         if loaded.saveState == Saved then
                             "Saved"
@@ -179,7 +183,7 @@ view { model, device, theme } =
                         else
                             "Save meal slots"
                     , onPress = SaveClicked
-                    , submitState = Just (Ui.submittingOrIdle (loaded.saveState == Saving))
+                    , submitState = Just (Button.submittingOrIdle (loaded.saveState == Saving))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }
@@ -217,10 +221,10 @@ saveError state =
 
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
-    Ui.card theme
-        [ Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonButton theme
+    Surface.card theme
+        [ Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.button theme
         ]

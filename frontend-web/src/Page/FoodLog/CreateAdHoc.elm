@@ -19,13 +19,15 @@ import Api.Foods
         , UnitItem
         )
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
+import Component.FoodEditor as Editor
 import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Editor as Editor
-import Ui
+import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Theme exposing (Theme)
 
 
@@ -333,14 +335,14 @@ viewForAi showOptional { model, device, theme } =
             else
                 Editor.CoreNutrientsOnly
     in
-    Ui.pageContainer device
-        [ Ui.maybeErrorBanner theme (submitError model.submit)
+    UiPage.pageContainer device
+        [ Feedback.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog visibility theme device model.nutrients model.units model.form)
-        , Ui.textButton device
+        , Button.textButton device
             theme
-            { tone = Ui.Primary
-            , width = Ui.FullWidth
+            { tone = Button.Primary
+            , width = Button.FullWidth
             , label =
                 case model.submit of
                     LogFailedAfterFoodSaved _ ->
@@ -349,7 +351,7 @@ viewForAi showOptional { model, device, theme } =
                     _ ->
                         "Log Food"
             , onPress = SubmitClicked
-            , submitState = Just (Ui.submittingOrIdle (isSubmitting model.submit))
+            , submitState = Just (Button.submittingOrIdle (isSubmitting model.submit))
             , submittingLabel = Just "Logging..."
             , trailing = Nothing
             }

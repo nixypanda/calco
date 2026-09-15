@@ -10,8 +10,12 @@ import Element exposing (Device, Element)
 import Html
 import Html.Events
 import Json.Decode as Decode
-import Ui
+import Lib.Text as Text
+import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -28,7 +32,7 @@ completionDropdown theme device config options =
         Element.none
 
     else
-        Ui.completionDropdown theme
+        UiInput.completionDropdown theme
             { height = completionDropdownHeight device options
             , rows = List.map (completionRow theme config.onSelect) options
             }
@@ -48,7 +52,7 @@ searchInput :
     -> Element msg
 searchInput theme device config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-        [ Ui.searchInput theme
+        [ UiInput.searchInput theme
             { onChange = config.onChange
             , text = config.text
             , label = config.label
@@ -94,7 +98,7 @@ resultRow theme device config =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space4
                 ]
-                [ if Ui.isSmall device then
+                [ if UiCommon.isSmall device then
                     Typography.wrappedListItemTitle theme config.item.name
 
                   else
@@ -110,18 +114,18 @@ resultRow theme device config =
         hasCategories =
             not (List.isEmpty (visibleCategories config.item.categories))
     in
-    Ui.listRow
+    Surface.listRow
         { onSelect = config.onSelect config.item.id
         , leading = [ macroDot ]
         , title = searchItem
         , subtitle =
-            if Ui.isSmall device && hasCategories then
+            if UiCommon.isSmall device && hasCategories then
                 [ categoryTags ]
 
             else
                 []
         , trailing =
-            if Ui.isSmall device || not hasCategories then
+            if UiCommon.isSmall device || not hasCategories then
                 []
 
             else
@@ -131,7 +135,7 @@ resultRow theme device config =
 
 completionDropdownHeight : Device -> List Completion -> Int
 completionDropdownHeight device options =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         min 264 (8 + List.length options * 44)
 
     else
@@ -140,12 +144,12 @@ completionDropdownHeight device options =
 
 completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
 completionRow theme onSelect completion =
-    Ui.completionRow theme
+    UiInput.completionRow theme
         { label = Search.completionLabel completion
         , trailing =
             case completion of
                 CategoryCompletion _ count ->
-                    Just (Ui.badge theme (String.fromInt count))
+                    Just (Chip.badge theme (String.fromInt count))
 
                 OperatorCompletion _ ->
                     Nothing
@@ -163,7 +167,7 @@ metaText query item =
         Nothing
     , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.nutritionSummary.per100g.energyKcal
     ]
-        |> Ui.dotSeparated
+        |> Text.dotSeparated
 
 
 isBarcodeVisible : String -> SearchResult -> Bool
@@ -187,7 +191,7 @@ categoryPills theme device categories =
     if List.isEmpty pills then
         Element.none
 
-    else if Ui.isSmall device then
+    else if UiCommon.isSmall device then
         Element.wrappedRow
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space4
@@ -240,7 +244,7 @@ pillRow theme pills =
 
 categoryPill : Theme -> String -> Element msg
 categoryPill theme label =
-    Ui.chip theme
+    Chip.chip theme
         { label = truncatePillLabel label
         , selected = False
         , onClick = Nothing

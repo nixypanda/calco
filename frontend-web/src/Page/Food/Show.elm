@@ -14,15 +14,17 @@ module Page.Food.Show exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, RecentItemsResponse)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.FoodLog.Form as FoodLogForm
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
 import View.Product
@@ -424,7 +426,7 @@ contentView { model, device, theme } =
         ]
         [ case model of
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loaded _ ->
                 Element.none
@@ -468,7 +470,7 @@ loadedView theme device loaded =
         , Element.spacing DesignTokens.space16
         ]
         [ Maybe.withDefault Element.none
-            (Maybe.map (Ui.infoBanner theme) loaded.lookupNote)
+            (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
         , View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
         , submitActionView theme device loaded.request
@@ -478,13 +480,13 @@ loadedView theme device loaded =
 
 submitActionView : Theme -> Device -> RequestState -> Element Msg
 submitActionView theme device requestState =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.Primary
-        , width = Ui.FullWidth
+        { tone = Button.Primary
+        , width = Button.FullWidth
         , label = "Log Food"
         , onPress = SubmitClicked
-        , submitState = Just (Ui.submittingOrIdle (requestState == Saving))
+        , submitState = Just (Button.submittingOrIdle (requestState == Saving))
         , submittingLabel = Just "Logging..."
         , trailing = Nothing
         }
@@ -505,13 +507,13 @@ foodShowSkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonBarCustom theme
+        [ Skeleton.barCustom theme
             { width = Element.fill, height = 120 }
-        , Ui.skeletonBarCustom theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 2, height = 16 }
-        , Ui.skeletonBarCustom theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 3, height = 12 }
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.input theme
+        , Skeleton.button theme
+        , Skeleton.card theme { rows = 3 }
         ]

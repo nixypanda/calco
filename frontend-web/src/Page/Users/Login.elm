@@ -9,10 +9,10 @@ module Page.Users.Login exposing
     )
 
 import Api.Client as Client
+import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Element exposing (Device, Element)
 import Lib.Text as Text
-import Page.Users.CredentialForm as CredentialForm
 import Ui.Theme exposing (Theme)
 
 

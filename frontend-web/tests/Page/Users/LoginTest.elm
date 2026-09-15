@@ -1,9 +1,9 @@
 module Page.Users.LoginTest exposing (tests)
 
 import Api.Client as Client
+import Component.Users.CredentialForm as CredentialForm
 import Expect
 import Page.Users.BootstrapSetup as BootstrapSetup
-import Page.Users.CredentialForm as CredentialForm
 import Page.Users.Login as AuthLogin
 import Test exposing (Test, describe, test)
 

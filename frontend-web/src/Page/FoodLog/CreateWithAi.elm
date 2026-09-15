@@ -11,17 +11,19 @@ module Page.FoodLog.CreateWithAi exposing
 import Api.Client as Client
 import Api.Foods exposing (CategorySuggestionRequest, CreateFoodRequest, NutrientItem, UnitItem)
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
+import Component.FoodAssistant as Assistant
+import Component.FoodEditor as Editor
 import Data.FoodAssistant as FoodAssistant exposing (Conversation, FoodDraftPurpose(..))
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import File exposing (File)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Assistant as Assistant
-import Page.Food.Editor as Editor
-import Page.FoodLog.AiReview as AiReview
 import Page.FoodLog.CreateAdHoc as Review
-import Ui
+import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -110,10 +112,10 @@ update msg model =
                         adjusted =
                             case ( subMsg, model.draft ) of
                                 ( Review.FormMsg (Editor.LogQuantityChanged amount), _ ) ->
-                                    { review | form = AiReview.changeAmount amount review.form }
+                                    { review | form = Editor.changeLogQuantity amount review.form }
 
                                 ( Review.FormMsg (Editor.LogUnitChanged unit), Just draft ) ->
-                                    { review | form = AiReview.changeUnit draft unit review.form }
+                                    { review | form = Editor.changeLogUnit draft unit review.form }
 
                                 _ ->
                                     review
@@ -236,7 +238,13 @@ buildReview model =
                 base =
                     Review.init model.dateParam model.mealSlot
             in
-            case AiReview.fromDraft model.nutrients result.draft result.suggestedLog base.form of
+            case
+                Editor.applyAiLogDraft
+                    model.nutrients
+                    result.draft
+                    result.suggestedLog
+                    base.form
+            of
                 Ok form ->
                     ( { model
                         | review =
@@ -290,7 +298,7 @@ mapReviewOutMsg outMsg =
 
 filterUnits : FoodAssistant.FoodDraft -> List UnitItem -> List UnitItem
 filterUnits draft =
-    List.filter (\unit -> List.member unit.code (AiReview.allowedUnitCodes draft))
+    List.filter (\unit -> List.member unit.code (Editor.allowedLogUnitCodes draft))
 
 
 sessionOutMsg : Client.ApiError -> OutMsg
@@ -306,22 +314,22 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model.review of
         Nothing ->
-            Ui.pageContainer device
-                [ Ui.maybeErrorBanner theme model.error
+            UiPage.pageContainer device
+                [ Feedback.maybeErrorBanner theme model.error
                 , Element.map AssistantMsg
                     (Assistant.viewFor AdHocLog theme device False model.assistant)
                 ]
 
         Just review ->
-            Ui.pageContainer device
+            UiPage.pageContainer device
                 [ Typography.sectionTitle theme "Review food estimate"
                 , Typography.mutedParagraph theme
                     "Nutrition values are totals for the entire portion you are logging."
                 , warningView theme model.warnings
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.PrimaryOutline
-                    , width = Ui.FullWidth
+                    { tone = Button.PrimaryOutline
+                    , width = Button.FullWidth
                     , label = "Ask for changes"
                     , onPress = AskForChangesClicked
                     , submitState = Nothing
@@ -339,10 +347,10 @@ view { model, device, theme } =
 additionalNutrientsToggle : Device -> Theme -> Model -> Review.Model -> Element Msg
 additionalNutrientsToggle device theme model review =
     if List.any (not << isCoreNutrient << .code) review.form.nutrients then
-        Ui.textButton device
+        Button.textButton device
             theme
-            { tone = Ui.Ghost
-            , width = Ui.FullWidth
+            { tone = Button.Ghost
+            , width = Button.FullWidth
             , label =
                 if model.showAdditionalNutrients then
                     "Hide additional nutrients"
@@ -370,7 +378,7 @@ warningView theme warnings =
         Element.none
 
     else
-        Ui.card theme
+        Surface.card theme
             (List.map
                 (\warning -> Typography.mutedParagraph theme ("Estimate: " ++ warning))
                 warnings

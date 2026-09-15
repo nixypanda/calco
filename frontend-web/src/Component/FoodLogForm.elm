@@ -1,4 +1,4 @@
-module Page.FoodLog.Form exposing
+module Component.FoodLogForm exposing
     ( Model
     , Msg(..)
     , OpenDropdown(..)
@@ -25,8 +25,10 @@ import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
-import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -271,8 +273,8 @@ view theme device food units model =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.maybeErrorBanner theme (submitError model.submitState)
-        , Ui.card theme
+        [ Feedback.maybeErrorBanner theme (submitError model.submitState)
+        , Surface.card theme
             [ mealSlotDropdown theme device model
             , View.QuantityInput.dropdown theme
                 device
@@ -286,7 +288,7 @@ view theme device food units model =
                 , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-            , Ui.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
+            , UiInput.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
             ]
         ]
 
@@ -303,7 +305,7 @@ submitError submitState =
 
 mealSlotDropdown : Theme -> Device -> Model -> Element Msg
 mealSlotDropdown theme device model =
-    Ui.selectDropdown device
+    UiInput.selectDropdown device
         theme
         { label = "Meal"
         , selected = model.mealSlot

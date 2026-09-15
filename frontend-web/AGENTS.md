@@ -12,6 +12,7 @@ This directory contains the active frontend. Also read the repository root
 
 ```text
 src/Api/
+src/Component/
 src/Data/
 src/Lib/
 src/Page/
@@ -25,6 +26,9 @@ tests/
 
 - Page modules should follow TEA with `Model`, `Msg`, `init`, `update`, `view`,
   and `subscriptions`.
+- Reusable nested TEA modules and stateful forms live in `src/Component/`;
+  modules shared across page categories live at the `Component` root, while
+  category-specific components remain nested.
 - `Main.elm` owns global routing/session/bootstrap state and wraps page
   messages with `PageMsg`.
 - Pages that need global effects should return an `OutMsg` such as

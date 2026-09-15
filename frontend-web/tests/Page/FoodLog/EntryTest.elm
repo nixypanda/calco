@@ -2,6 +2,7 @@ module Page.FoodLog.EntryTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (ProductDetail, UnitItem)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
@@ -9,7 +10,6 @@ import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.FoodLog.Entry as FoodLogEntry
-import Page.FoodLog.Form as FoodLogForm
 import Test exposing (Test, describe, test)
 import View.DeleteModal exposing (DeleteState(..))
 

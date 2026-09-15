@@ -15,8 +15,14 @@ import Api.Client as Client
 import Data.User as User exposing (User)
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Input as UiInput
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -257,7 +263,7 @@ completePendingAction pendingAction result model successStatus =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (errorView theme model.status
             ++ userInfoView theme model
             ++ resetPasswordView device theme model
@@ -272,7 +278,7 @@ userInfoView theme model =
             [ editUserSkeleton theme ]
 
         LoadFailed error ->
-            [ Ui.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
+            [ Feedback.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Loaded loadedUser _ ->
             [ userSummaryCard theme loadedUser.user ]
@@ -280,18 +286,18 @@ userInfoView theme model =
 
 resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
 resetPasswordView device theme model =
-    [ Ui.card theme
+    [ Surface.card theme
         [ Element.el [ Font.medium, Typography.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-            [ Ui.passwordInput theme
+            [ UiInput.passwordInput theme
                 { label = "New password"
                 , value = currentPassword model.status
                 , onChange = PasswordChanged
                 }
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Ghost
-                , width = Ui.FullWidth
+                { tone = Button.Ghost
+                , width = Button.FullWidth
                 , label =
                     if isResetPending model.status then
                         "Resetting..."
@@ -312,7 +318,7 @@ accountActionView : Device -> Theme -> Model -> List (Element Msg)
 accountActionView device theme model =
     case model.status of
         Loaded loadedUser _ ->
-            [ Ui.bottomActionButtons device
+            [ Button.bottomActionButtons device
                 theme
                 [ if loadedUser.user.status == "active" then
                     { label =
@@ -322,7 +328,7 @@ accountActionView device theme model =
                         else
                             "Disable User"
                     , onPress = DisableClicked
-                    , tone = Ui.Danger
+                    , tone = Button.Danger
                     }
 
                   else
@@ -333,7 +339,7 @@ accountActionView device theme model =
                         else
                             "Enable User"
                     , onPress = EnableClicked
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
                 ]
             ]
@@ -386,10 +392,10 @@ errorView : Theme -> Status -> List (Element msg)
 errorView theme status =
     case status of
         Loaded _ (Invalid problem) ->
-            [ Ui.errorBanner theme (problemMessage problem) ]
+            [ Feedback.errorBanner theme (problemMessage problem) ]
 
         Loaded _ (ActionFailed message) ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         _ ->
             []
@@ -404,14 +410,14 @@ problemMessage problem =
 
 userSummaryCard : Theme -> User -> Element msg
 userSummaryCard theme user =
-    Ui.card theme
+    Surface.card theme
         [ Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
             [ Typography.wrappedListItemTitle theme user.username
-            , Ui.detailRow theme
+            , Surface.detailRow theme
                 "Display Name"
                 (Typography.mutedCaptionParagraph theme user.displayName)
-            , Ui.detailRow theme "Status" (Ui.statusBadge theme user.status)
-            , Ui.detailRow theme
+            , Surface.detailRow theme "Status" (Chip.statusBadge theme user.status)
+            , Surface.detailRow theme
                 "Created"
                 (Element.el [ Typography.caption ] (Element.text user.createdAt))
             ]
@@ -424,7 +430,7 @@ editUserSkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonCard theme { rows = 3 }
-        , Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonButton theme
+        [ Skeleton.card theme { rows = 3 }
+        , Skeleton.card theme { rows = 2 }
+        , Skeleton.button theme
         ]

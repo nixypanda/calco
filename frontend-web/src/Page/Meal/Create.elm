@@ -9,10 +9,12 @@ module Page.Meal.Create exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal)
+import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form as Common
-import Ui
+import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Theme exposing (Theme)
 
 
@@ -132,16 +134,16 @@ mapFormOutMsg maybeOutMsg =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
-        [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
+    UiPage.pageContainer device
+        [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
-        , Ui.textButton device
+        , Button.textButton device
             theme
-            { tone = Ui.Primary
-            , width = Ui.FullWidth
+            { tone = Button.Primary
+            , width = Button.FullWidth
             , label = "Create Meal"
             , onPress = SubmitClicked
-            , submitState = Just (Ui.submittingOrIdle (Common.isSubmitting model.submit))
+            , submitState = Just (Button.submittingOrIdle (Common.isSubmitting model.submit))
             , submittingLabel = Just "Saving..."
             , trailing = Nothing
             }

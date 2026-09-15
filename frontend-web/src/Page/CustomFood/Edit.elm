@@ -19,12 +19,15 @@ import Api.Foods as Foods
         , ProductDetail
         , UnitItem
         )
+import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Editor as Form
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 
 
@@ -348,7 +351,7 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view config =
-    Ui.pageContainer config.device
+    UiPage.pageContainer config.device
         [ bodyView config ]
 
 
@@ -359,21 +362,21 @@ bodyView { model, device, theme } =
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
                     (Form.view theme device loaded.nutrients loaded.units loaded.form)
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save Food"
                     , onPress = SubmitClicked
                     , submitState =
-                        Just (Ui.submittingOrIdle (Form.isSubmitting loaded.form.submit))
+                        Just (Button.submittingOrIdle (Form.isSubmitting loaded.form.submit))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }
                 ]
 
         LoadFailed message ->
-            Ui.errorBanner theme message
+            Feedback.errorBanner theme message
 
         Loading _ ->
             customFoodFormSkeleton theme
@@ -382,9 +385,9 @@ bodyView { model, device, theme } =
 customFoodFormSkeleton : Theme -> Element msg
 customFoodFormSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
+        [ Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
         ]

@@ -11,13 +11,16 @@ module Page.Meal.Edit exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
+import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form as Common
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
     exposing
@@ -386,24 +389,24 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ mealEditSkeleton theme ]
+            UiPage.pageContainer device [ mealEditSkeleton theme ]
 
         EditLoadFailed message ->
-            Ui.pageContainer device [ Ui.errorBanner theme message ]
+            UiPage.pageContainer device [ Feedback.errorBanner theme message ]
 
         Editing loaded ->
-            Ui.pageContainer device
-                [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
+            UiPage.pageContainer device
+                [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme loaded
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Update Meal"
                     , onPress = SubmitClicked
                     , submitState =
-                        Just (Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
+                        Just (Button.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }
@@ -420,10 +423,10 @@ nutritionView theme loaded =
 mealEditSkeleton : Theme -> Element msg
 mealEditSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonCard theme { rows = 3 }
-        , Ui.skeletonButton theme
+        [ Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.card theme { rows = 3 }
+        , Skeleton.button theme
         ]

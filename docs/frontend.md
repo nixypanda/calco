@@ -8,6 +8,7 @@ The active frontend is the Elm app in `frontend-web/`.
 frontend-web/
   src/
     Api/
+    Component/
     Data/
     Lib/
     Page/
@@ -39,7 +40,8 @@ The frontend follows a strict ownership model:
 ```text
 Main -> Access / Chrome / Data.Route / Page
 Chrome -> View.Chrome / Data / Ui
-Page -> Store / Data / Api / Ui / View / Lib
+Page -> Store / Component / Data / Api / Ui / View / Lib
+Component -> Data / Api types / Ui / View / Lib
 Store -> Api.Client / Data / Lib
 View -> Ui / Data / Lib
 Api -> Api.Client / Data decoders / Lib.Json
@@ -50,6 +52,7 @@ Ui -> Ui.Theme / Data / Lib
 Disallowed dependency directions:
 
 - `Data` importing `Page`, `Main`, or `Api`.
+- `Component` owning routes, page orchestration, or HTTP execution.
 - `Ui` importing page-specific modules.
 - `Api` owning page state, navigation decisions, or view formatting.
 - `View` triggering HTTP or owning page orchestration.
@@ -77,6 +80,12 @@ serialization. Query-param-backed navigation state belongs here.
 
 `Page.*` modules own page-local TEA, page-local loading/submitting/deleting
 state, and page-specific composition of shared UI and API calls.
+
+`Component.*` modules own reusable nested TEA state and stateful forms. A
+component used by multiple page categories lives directly under `Component`;
+components reused only within one category remain in a matching subdirectory.
+Components may use API request and response types, but pages retain ownership
+of executing HTTP commands and interpreting navigation or session effects.
 
 `Store.elm` owns session-scoped server data and date-keyed diary data. It lives
 at the top level because cached failures use `Api.Client.ApiError`; putting that

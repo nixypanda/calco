@@ -2,19 +2,19 @@ module Page.Meal.EditTest exposing (tests)
 
 import Api.Client as Client
 import Api.Meals exposing (Meal, MealNutritionResponse)
+import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Edit as MealEdit
-import Page.Meal.Form as Common
 import Test exposing (Test, describe, test)
 import View.Nutrients exposing (NutritionState(..))
 
 
 tests : Test
 tests =
-    describe "Page.Meal.Form.Edit"
+    describe "Page.Meal.Edit"
         [ test "init is loading and requests meal" <|
             \_ ->
                 MealEdit.init "meal-1"

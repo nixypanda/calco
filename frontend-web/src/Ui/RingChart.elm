@@ -1,4 +1,4 @@
-module Ui.Chart.Ring exposing
+module Ui.RingChart exposing
     ( Segment
     , view
     )
@@ -6,7 +6,7 @@ module Ui.Chart.Ring exposing
 import Element exposing (Element)
 import Html exposing (Html)
 import Html.Attributes as Attr
-import Ui.Css as Css
+import Ui.Common as UiCommon
 
 
 type alias Segment =
@@ -50,7 +50,7 @@ view config =
                         ++ "px)"
                     )
                 , Attr.style "border-radius" "50%"
-                , Attr.style "background" (Css.toCssColor config.centerColor)
+                , Attr.style "background" (UiCommon.toCssColor config.centerColor)
                 , Attr.style "display" "grid"
                 , Attr.style "place-items" "center"
                 ]
@@ -102,7 +102,7 @@ gradient config =
 
                 color : String
                 color =
-                    Css.toCssColor segment.color
+                    UiCommon.toCssColor segment.color
             in
             ( next
             , if finish > start then
@@ -124,7 +124,7 @@ gradient config =
                 |> Tuple.second
     in
     if total <= 0 || List.isEmpty stops then
-        Css.toCssColor config.emptyColor
+        UiCommon.toCssColor config.emptyColor
 
     else
         "conic-gradient(" ++ String.join ", " stops ++ ")"

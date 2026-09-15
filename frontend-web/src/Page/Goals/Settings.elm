@@ -17,7 +17,12 @@ import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, G
 import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
-import Ui
+import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Input as UiInput
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -319,48 +324,48 @@ formFor targets =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (case model of
             Loading ->
                 [ goalsSettingsSkeleton theme ]
 
             Failed message ->
-                [ Ui.errorBanner theme message ]
+                [ Feedback.errorBanner theme message ]
 
             Ready ready ->
-                [ Ui.maybeErrorBanner theme (requestError ready.save)
-                , Ui.card theme
+                [ Feedback.maybeErrorBanner theme (requestError ready.save)
+                , Surface.card theme
                     [ Typography.sectionTitle theme "Daily Targets"
                     , Typography.mutedParagraph theme (statusMessage ready.status)
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Calories"
                         , value = ready.form.calorieTarget
                         , onChange = CalorieTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Protein (g)"
                         , value = ready.form.proteinTargetG
                         , onChange = ProteinTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Carbs (g)"
                         , value = ready.form.carbsTargetG
                         , onChange = CarbsTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Fat (g)"
                         , value = ready.form.fatTargetG
                         , onChange = FatTargetChanged
                         }
-                    , Ui.maybeErrorBanner theme (formError ready.save)
+                    , Feedback.maybeErrorBanner theme (formError ready.save)
                     ]
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save Goals"
                     , onPress = SaveClicked
-                    , submitState = Just (Ui.submittingOrIdle (isSaving ready.save))
+                    , submitState = Just (Button.submittingOrIdle (isSaving ready.save))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }
@@ -419,10 +424,10 @@ requestError save =
 
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
-    Ui.card theme
-        [ Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
+    Surface.card theme
+        [ Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
         ]

@@ -13,7 +13,11 @@ import Api.Meals as MealsApi exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
+import Lib.Text as Text
+import Ui.Button as Button
+import Ui.Feedback as Feedback
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -97,7 +101,7 @@ contentView { model, device, theme } =
                 Element.none
 
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             Loading ->
                 Element.none
@@ -109,13 +113,13 @@ bodyView : Theme -> Device -> Model -> Element Msg
 bodyView theme device model =
     case model of
         Loaded meals ->
-            Ui.section theme
+            Surface.section theme
                 { header =
                     Just
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Ghost
-                            , width = Ui.FullWidth
+                            { tone = Button.Ghost
+                            , width = Button.FullWidth
                             , label = "+ Create Meal"
                             , onPress = CreateMealClicked
                             , submitState = Nothing
@@ -128,7 +132,7 @@ bodyView theme device model =
                         [ Typography.mutedBodyParagraph theme "No items yet." ]
 
                     else
-                        List.intersperse (Ui.hairline theme)
+                        List.intersperse (Surface.hairline theme)
                             (List.map (mealRow theme device) meals)
                 , footer = Nothing
                 }
@@ -154,7 +158,7 @@ mealRow theme _ meal =
                     meal.nutritionSummary
                 )
     in
-    Ui.listRow
+    Surface.listRow
         { onSelect = OpenMealClicked meal.id
         , leading = macroDot
         , title = Typography.wrappedListItemTitle theme meal.name
@@ -175,17 +179,17 @@ mealSummaryText meal =
         meal.nutritionSummary
     , Just (String.fromInt (List.length meal.components) ++ " components")
     ]
-        |> Ui.dotSeparated
+        |> Text.dotSeparated
 
 
 mealListSkeleton : Theme -> Element msg
 mealListSkeleton theme =
-    Ui.section theme
+    Surface.section theme
         { header =
-            Just (Ui.skeletonButton theme)
+            Just (Skeleton.button theme)
         , body =
-            List.intersperse (Ui.hairline theme)
-                (List.map (\_ -> Ui.skeletonListRow theme)
+            List.intersperse (Surface.hairline theme)
+                (List.map (\_ -> Skeleton.listRow theme)
                     (List.range 1 3)
                 )
         , footer = Nothing

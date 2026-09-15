@@ -17,10 +17,13 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui
+import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Page as UiPage
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
-import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
 import View.Product
@@ -246,10 +249,10 @@ applyDeleteError message model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ case model of
             LoadFailed message ->
-                Ui.errorBanner theme message
+                Feedback.errorBanner theme message
 
             _ ->
                 Element.none
@@ -304,18 +307,18 @@ loadedView theme device loaded =
 bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
 bottomActionsView theme device food =
     let
-        actions : List { label : String, onPress : Msg, tone : Ui.ButtonTone }
+        actions : List { label : String, onPress : Msg, tone : Button.ButtonTone }
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = "Edit Food", onPress = EditClicked, tone = Ui.Primary }
-                    , { label = "Delete Food", onPress = DeleteClicked, tone = Ui.Danger }
+                    [ { label = "Edit Food", onPress = EditClicked, tone = Button.Primary }
+                    , { label = "Delete Food", onPress = DeleteClicked, tone = Button.Danger }
                     ]
 
                 Nothing ->
                     []
     in
-    Ui.bottomActionButtons device theme actions
+    Button.bottomActionButtons device theme actions
 
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
@@ -350,18 +353,18 @@ customFoodShowSkeleton theme =
             , Element.height (Element.px 120)
             , Background.color theme.inputFill
             , Border.rounded DesignTokens.radiusCard
-            , Typography.uiClass "ui-skeleton"
+            , UiCommon.uiClass "ui-skeleton"
             ]
             Element.none
-        , Ui.skeletonBar theme
-        , Ui.skeletonBarCustom theme
+        , Skeleton.bar theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 2, height = 12 }
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.card theme { rows = 3 }
         , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
-            [ Ui.skeletonButton theme
-            , Ui.skeletonButton theme
+            [ Skeleton.button theme
+            , Skeleton.button theme
             ]
         ]

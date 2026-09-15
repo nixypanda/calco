@@ -1,4 +1,4 @@
-module Page.Meal.Form exposing
+module Component.Meal.Form exposing
     ( CategorySuggestionResult
     , ComponentRow
     , FormFieldMsg(..)
@@ -37,9 +37,13 @@ import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
-import Ui
+import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Search as SearchView
@@ -353,15 +357,15 @@ viewFormFields :
     -> Element msg
 viewFormFields theme device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.section theme
+        [ Surface.section theme
             { header = Nothing
             , body =
-                [ Ui.input theme
+                [ UiInput.input theme
                     { label = "Name"
                     , value = form.name
                     , onChange = toMsg << NameChanged
                     }
-                , Ui.input theme
+                , UiInput.input theme
                     { label = "Notes"
                     , value = form.notes
                     , onChange = toMsg << NotesChanged
@@ -378,17 +382,17 @@ viewFormFields theme device toMsg form =
                 ]
             , footer = Nothing
             }
-        , Ui.section theme
+        , Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
             , body =
-                List.intersperse (Ui.hairline theme)
+                List.intersperse (Surface.hairline theme)
                     (List.map (componentRowView theme device toMsg) form.components)
             , footer =
                 Just
-                    (Ui.textButton device
+                    (Button.textButton device
                         theme
-                        { tone = Ui.Ghost
-                        , width = Ui.FullWidth
+                        { tone = Button.Ghost
+                        , width = Button.FullWidth
                         , label = "+ Add Component"
                         , onPress = toMsg AddComponentClicked
                         , submitState = Nothing
@@ -653,7 +657,7 @@ componentRowView theme device toMsg row =
             }
         , case row.searchResults of
             Loading ->
-                Ui.loading theme "Searching foods..."
+                Feedback.loading theme "Searching foods..."
 
             Success results ->
                 if List.isEmpty results then
@@ -690,12 +694,12 @@ componentRowView theme device toMsg row =
                 , onUnitChange = toMsg << ComponentUnitChanged row.rowId
                 }
             , Element.el [ Element.centerY ]
-                (Ui.iconButton device
+                (Button.iconButton device
                     theme
                     { icon = Icon.Close
                     , title = "Remove"
                     , onPress = Just (toMsg (RemoveComponentClicked row.rowId))
-                    , tone = Ui.Danger
+                    , tone = Button.Danger
                     }
                 )
             ]
@@ -715,19 +719,19 @@ quantityTextInput :
         }
     -> Element msg
 quantityTextInput theme device config =
-    (if Ui.isSmall device then
+    (if UiCommon.isSmall device then
         Element.column
 
      else
         Element.row
     )
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Ui.decimalInput theme
+        [ UiInput.decimalInput theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange
             }
-        , Ui.input theme
+        , UiInput.input theme
             { label = config.unitLabel
             , value = config.unit
             , onChange = config.onUnitChange

@@ -11,7 +11,11 @@ import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Element exposing (Device, Element)
-import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
+import Ui.Feedback as Feedback
+import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -85,7 +89,7 @@ bodyView : Device -> Theme -> Model -> Element Msg
 bodyView device theme model =
     case model of
         Loaded users ->
-            Ui.listCard theme
+            Surface.listCard theme
                 { rows =
                     List.map
                         (\user ->
@@ -96,10 +100,10 @@ bodyView device theme model =
                         users
                 , footer =
                     Just
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Ghost
-                            , width = Ui.FullWidth
+                            { tone = Button.Ghost
+                            , width = Button.FullWidth
                             , label = "+ Create User"
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
@@ -113,25 +117,25 @@ bodyView device theme model =
             adminDashboardSkeleton theme
 
         LoadFailed error ->
-            Ui.errorBanner theme (Client.displayError error)
+            Feedback.errorBanner theme (Client.displayError error)
 
 
 userListRow : Theme -> { user : User, onSelect : String -> msg } -> Element msg
 userListRow theme config =
-    Ui.listRow
+    Surface.listRow
         { onSelect = config.onSelect config.user.id
         , leading = []
         , title = Typography.wrappedListItemTitle theme config.user.username
         , subtitle = [ Typography.mutedBodyParagraph theme config.user.displayName ]
-        , trailing = [ Ui.statusBadge theme config.user.status ]
+        , trailing = [ Chip.statusBadge theme config.user.status ]
         }
 
 
 adminDashboardSkeleton : Theme -> Element msg
 adminDashboardSkeleton theme =
-    Ui.listCard theme
+    Surface.listCard theme
         { rows =
-            List.map (\_ -> Ui.skeletonListRow theme)
+            List.map (\_ -> Skeleton.listRow theme)
                 (List.range 1 3)
-        , footer = Just (Ui.skeletonButton theme)
+        , footer = Just (Skeleton.button theme)
         }

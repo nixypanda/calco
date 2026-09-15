@@ -1,4 +1,4 @@
-module Page.Users.CredentialForm exposing
+module Component.Users.CredentialForm exposing
     ( Config
     , Form
     , Model(..)
@@ -11,8 +11,11 @@ module Page.Users.CredentialForm exposing
     )
 
 import Element exposing (Device, Element)
-import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
+import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -136,28 +139,28 @@ view config { model, device, theme } =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space16
             ]
-            [ Ui.card theme
+            [ Surface.card theme
                 [ Typography.subsectionTitle theme config.title
                 , Typography.maybeMutedParagraph theme config.description
-                , Ui.input theme
+                , UiInput.input theme
                     { label = "Username"
                     , value = form.username
                     , onChange = UsernameChanged
                     }
-                , Ui.passwordInput theme
+                , UiInput.passwordInput theme
                     { label = "Password"
                     , value = form.password
                     , onChange = PasswordChanged
                     }
-                , Ui.maybeErrorBanner theme (errorMessage model)
+                , Feedback.maybeErrorBanner theme (errorMessage model)
                 ]
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Primary
-                , width = Ui.FullWidth
+                { tone = Button.Primary
+                , width = Button.FullWidth
                 , label = config.submitLabel
                 , onPress = Submitted
-                , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
+                , submitState = Just (Button.submittingOrIdle (isSubmitting model))
                 , submittingLabel = Just config.submittingLabel
                 , trailing = Nothing
                 }

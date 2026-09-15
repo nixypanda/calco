@@ -34,10 +34,12 @@ import Element.Input as Input
 import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
-import Ui
-import Ui.Css as Css
+import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Surface as Surface
 import Ui.Theme exposing (Mode(..), Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -594,7 +596,7 @@ contentView { model, device, theme } =
         (dateCard theme model device
             :: (case activeDiaryError model.currentDate model.diary of
                     Just message ->
-                        [ Ui.errorBanner theme message ]
+                        [ Feedback.errorBanner theme message ]
 
                     Nothing ->
                         copyErrorView theme model.copyState
@@ -614,17 +616,17 @@ dateCard theme model device =
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Ui.card theme
+    Surface.card theme
         [ Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
-            [ Ui.iconButton device
+            [ Button.iconButton device
                 theme
                 { icon = Icon.ChevronLeft
                 , title = "Previous Day"
                 , onPress = Just PreviousDayClicked
-                , tone = Ui.Primary
+                , tone = Button.Primary
                 }
             , Element.el
                 [ Element.width Element.fill
@@ -632,24 +634,24 @@ dateCard theme model device =
                 ]
                 (Typography.sectionTitle theme (LocalDate.display model.currentDate))
             , if canGoNext then
-                Ui.iconButton device
+                Button.iconButton device
                     theme
                     { icon = Icon.ChevronRight
                     , title = "Next Day"
                     , onPress = Just NextDayClicked
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
 
               else
-                Ui.iconButton device
+                Button.iconButton device
                     theme
                     { icon = Icon.ChevronRight
                     , title = ""
                     , onPress = Nothing
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
             ]
-        , Ui.hairline theme
+        , Surface.hairline theme
         , Element.column
             [ Element.width Element.fill
             , Element.paddingEach { top = DesignTokens.space8, right = 0, bottom = 0, left = 0 }
@@ -673,7 +675,7 @@ totalsView device theme targets summary =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ calorieHero theme calories targets.calorieTarget
-        , Ui.hairline theme
+        , Surface.hairline theme
         , macroSummaryRow theme
             [ { label = "Protein"
               , value = summaryAmount "PROTEIN_G" summary
@@ -700,10 +702,10 @@ totalsView device theme targets summary =
 
 detailsAction : Device -> Theme -> Element Msg
 detailsAction device theme =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.GhostFilled
-        , width = Ui.FullWidth
+        { tone = Button.GhostFilled
+        , width = Button.FullWidth
         , label = "Details"
         , onPress = DetailsClicked
         , submitState = Nothing
@@ -1131,7 +1133,7 @@ copyErrorView : Theme -> CopyState -> List (Element Msg)
 copyErrorView theme copyState =
     case copyState of
         CopyFailed message ->
-            [ Ui.errorBanner theme message ]
+            [ Feedback.errorBanner theme message ]
 
         _ ->
             []
@@ -1194,11 +1196,11 @@ slotView theme device model section =
                      else
                         List.map (logRow theme) section.logs
                     )
-                        ++ [ Ui.hairline theme
-                           , Ui.textButton device
+                        ++ [ Surface.hairline theme
+                           , Button.textButton device
                                 theme
-                                { tone = Ui.Ghost
-                                , width = Ui.FullWidth
+                                { tone = Button.Ghost
+                                , width = Button.FullWidth
                                 , label = "+ Add Food"
                                 , onPress = AddFoodClicked slot
                                 , submitState = Nothing
@@ -1214,7 +1216,7 @@ slotView theme device model section =
         device
         section.slot
         (mealSlotHeader theme model.macroMode section totals)
-        (Ui.hairline theme :: body)
+        (Surface.hairline theme :: body)
 
 
 emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
@@ -1232,13 +1234,13 @@ emptySlotView theme device model slot =
                             False
             in
             emptySlotBody
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = logLatestLabel source
                     , onPress = CopyLatestClicked source
-                    , submitState = Just (Ui.submittingOrIdle isLogging)
+                    , submitState = Just (Button.submittingOrIdle isLogging)
                     , submittingLabel = Just "Logging..."
                     , trailing = Nothing
                     }
@@ -1246,13 +1248,13 @@ emptySlotView theme device model slot =
 
         Nothing ->
             emptySlotBody
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "No items"
                     , onPress = SlotNoOp
-                    , submitState = Just Ui.Disabled
+                    , submitState = Just Button.Disabled
                     , submittingLabel = Nothing
                     , trailing = Nothing
                     }
@@ -1330,7 +1332,7 @@ mealSlotFade theme =
                         ++ "rgba(255,255,255,0) 0%, "
                         ++ "rgba(255,255,255,0) 25%, "
                         ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ Css.toCssColor theme.cardBg
+                        ++ UiCommon.toCssColor theme.cardBg
                         ++ " 100%)"
 
                 Dark ->
@@ -1338,7 +1340,7 @@ mealSlotFade theme =
                         ++ "rgba(0,0,0,0.25) 0%, "
                         ++ "rgba(0,0,0,0.55) 45%, "
                         ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ Css.toCssColor theme.cardBg
+                        ++ UiCommon.toCssColor theme.cardBg
                         ++ " 100%)"
     in
     Element.el
@@ -1359,10 +1361,10 @@ mealSlotCard :
 mealSlotCard theme device maybeSlot header bodyChildren =
     case maybeSlot of
         Nothing ->
-            Ui.card theme (header :: bodyChildren)
+            Surface.card theme (header :: bodyChildren)
 
         Just slot ->
-            Ui.heroCard theme
+            Surface.heroCard theme
                 { header = header
                 , body = bodyChildren
                 , mediaHeader =
@@ -1382,7 +1384,7 @@ mealSlotCard theme device maybeSlot header bodyChildren =
 
 mealSlotHorizontalPadding : Device -> Int
 mealSlotHorizontalPadding device =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         16
 
     else

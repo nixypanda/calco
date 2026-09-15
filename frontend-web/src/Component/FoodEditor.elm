@@ -1,4 +1,4 @@
-module Page.Food.Editor exposing
+module Component.FoodEditor exposing
     ( CategoryInput
     , Context(..)
     , FormModel
@@ -64,9 +64,14 @@ import Lib.ListExtra as ListExtra
 import Lib.Number as Number
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
-import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
+import Ui.Input as UiInput
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -1657,7 +1662,7 @@ validationErrorMessage error =
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view theme device nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         , servingsCard theme device form units
@@ -1668,7 +1673,7 @@ view theme device nutrients units form =
 viewForCreate : Theme -> Device -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate theme device nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.maybeErrorBanner theme (submitErrorMessage form.submit)
+        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
         ]
@@ -1716,10 +1721,10 @@ viewForLog visibility theme device nutrients units form =
 
 basicInfoCard : Bool -> Theme -> Device -> FormModel -> Element Msg
 basicInfoCard showCategories theme device form =
-    Ui.formSection theme
+    Surface.formSection theme
         "Basic Info"
-        [ Ui.input theme { label = "Name", value = form.name, onChange = NameChanged }
-        , Ui.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
+        [ UiInput.input theme { label = "Name", value = form.name, onChange = NameChanged }
+        , UiInput.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
         , if showCategories then
             categoryInputView theme device (form.openDropdown == CategoryOpen) form.categoryInput
 
@@ -1730,15 +1735,15 @@ basicInfoCard showCategories theme device form =
 
 loggedPortionCard : Theme -> Device -> List UnitItem -> FormModel -> LogFields -> Element Msg
 loggedPortionCard theme device units form logFields =
-    Ui.formSection theme
+    Surface.formSection theme
         "Logged Portion"
         [ Typography.mutedParagraph theme "Describe the entire amount you are logging."
-        , Ui.decimalInput theme
+        , UiInput.decimalInput theme
             { label = "Amount"
             , value = logFields.quantity
             , onChange = LogQuantityChanged
             }
-        , Ui.selectDropdown device
+        , UiInput.selectDropdown device
             theme
             { label = "Portion unit"
             , selected = logFields.unit
@@ -1752,14 +1757,14 @@ loggedPortionCard theme device units form logFields =
 
 logDetailsCard : Theme -> Device -> FormModel -> LogFields -> Element Msg
 logDetailsCard theme device form logFields =
-    Ui.formSection theme
+    Surface.formSection theme
         "Log Details"
-        [ Ui.input theme
+        [ UiInput.input theme
             { label = "Date (YYYY-MM-DD)"
             , value = logFields.date
             , onChange = LogDateChanged
             }
-        , Ui.selectDropdown device
+        , UiInput.selectDropdown device
             theme
             { label = "Meal"
             , selected = logFields.mealSlot
@@ -1775,7 +1780,7 @@ logDetailsCard theme device form logFields =
             , isOpen = form.openDropdown == MealSlotOpen
             , onToggle = ToggleMealSlotDropdown
             }
-        , Ui.input theme
+        , UiInput.input theme
             { label = "Notes (optional)"
             , value = logFields.notes
             , onChange = LogNotesChanged
@@ -1785,12 +1790,12 @@ logDetailsCard theme device form logFields =
 
 saveToFoodsCard : Theme -> Device -> LogPersistence -> Element Msg
 saveToFoodsCard theme _ persistence =
-    Ui.card theme
+    Surface.card theme
         ([ Element.row
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
                 (Typography.sectionTitle theme "Save to My Foods")
-            , Ui.toggleSwitch theme
+            , UiInput.toggleSwitch theme
                 { isActive =
                     case persistence of
                         LogAdHocOnly ->
@@ -1809,7 +1814,7 @@ saveToFoodsCard theme _ persistence =
                         []
 
                     SaveCustomFoodThenLog details ->
-                        [ Ui.decimalInput theme
+                        [ UiInput.decimalInput theme
                             { label = "Weight of this logged portion (g)"
                             , value = details.portionWeight
                             , onChange = PortionWeightChanged
@@ -1821,7 +1826,7 @@ saveToFoodsCard theme _ persistence =
 
 defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
 defaultPortionCard theme device units form =
-    Ui.formSection theme
+    Surface.formSection theme
         "Default Portion"
         [ defaultPortionFields theme device units form
         , Typography.mutedCaption theme
@@ -1846,7 +1851,7 @@ defaultPortionFields theme device units form =
     let
         unitSelector : Element Msg
         unitSelector =
-            Ui.selectDropdown device
+            UiInput.selectDropdown device
                 theme
                 { label = "Default Unit"
                 , selected = form.defaultUnit
@@ -1862,7 +1867,7 @@ defaultPortionFields theme device units form =
                 Element.none
 
             else
-                Ui.decimalInput theme
+                UiInput.decimalInput theme
                     { label = "Default Quantity"
                     , value = form.defaultQuantity
                     , onChange = DefaultQuantityChanged
@@ -1874,7 +1879,7 @@ defaultPortionFields theme device units form =
             , Element.spacing DesignTokens.space8
             ]
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column attributes [ unitSelector, quantityInput ]
 
     else
@@ -1917,7 +1922,7 @@ nutrientsCard :
     -> List NutrientItem
     -> Element Msg
 nutrientsCard basis visibility theme device form nutrients =
-    Ui.section theme
+    Surface.section theme
         { header =
             Just
                 (Element.column [ Element.spacing DesignTokens.space8 ]
@@ -1962,10 +1967,10 @@ nutrientsCard basis visibility theme device form nutrients =
             ]
         , footer =
             Just
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "+ Add Nutrient"
                     , onPress = AddNutrientRow
                     , submitState = Nothing
@@ -1978,7 +1983,7 @@ nutrientsCard basis visibility theme device form nutrients =
 
 servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 servingsCard theme device form units =
-    Ui.section theme
+    Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Servings")
         , body =
             [ Element.column
@@ -1998,10 +2003,10 @@ servingsCard theme device form units =
             ]
         , footer =
             Just
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "+ Add Serving"
                     , onPress = AddServingRow
                     , submitState = Nothing
@@ -2016,12 +2021,12 @@ categoryInputView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
 categoryInputView theme device open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing DesignTokens.space4 ]
-            [ Ui.fieldLabel theme "Categories"
+            [ UiInput.fieldLabel theme "Categories"
             , Typography.mutedCaption theme "Enter (or click Add) to tag this food."
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.input theme
+                (UiInput.input theme
                     { label = ""
                     , value = input.query
                     , onChange = CategoryQueryChanged
@@ -2040,12 +2045,12 @@ categoryInputView theme device open input =
 
 addCategoryButton : Theme -> Device -> CategoryInput -> Element Msg
 addCategoryButton theme device input =
-    Ui.iconButton device
+    Button.iconButton device
         theme
         { icon = Icon.Plus
         , title = "Add category"
         , onPress = Just (AddCategory input.query)
-        , tone = Ui.Primary
+        , tone = Button.Primary
         }
 
 
@@ -2065,7 +2070,7 @@ chipRowView theme device tags =
 
 chipView : Theme -> Device -> String -> Element Msg
 chipView theme device tag =
-    Ui.removableChip device
+    Chip.removableChip device
         theme
         { label = tag
         , onRemove = RemoveCategory tag
@@ -2098,12 +2103,12 @@ suggestionRowView theme open input =
         Element.none
 
     else
-        Ui.suggestionList theme (List.map (suggestionRow theme) matching)
+        UiInput.suggestionList theme (List.map (suggestionRow theme) matching)
 
 
 suggestionRow : Theme -> CategorySuggestion -> Element Msg
 suggestionRow theme s =
-    Ui.optionRow theme
+    UiInput.optionRow theme
         { label = s.value
         , trailing = Just (Typography.mutedCaption theme (String.fromInt s.count ++ " uses"))
         , selected = False
@@ -2124,7 +2129,7 @@ nutrientRowView basis theme device nutrients openDropdown index row =
     let
         selector : Element Msg
         selector =
-            Ui.selectDropdown device
+            UiInput.selectDropdown device
                 theme
                 { label = "Nutrient"
                 , selected = row.code
@@ -2145,7 +2150,7 @@ nutrientRowView basis theme device nutrients openDropdown index row =
                 , onPress = RemoveNutrientRow index
                 }
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
@@ -2173,7 +2178,7 @@ nutrientRowView basis theme device nutrients openDropdown index row =
 
 amountInputWithUnit : NutrientBasis -> Theme -> Int -> NutrientRow -> Element Msg
 amountInputWithUnit basis theme index row =
-    Ui.decimalInputWithSuffix theme
+    UiInput.decimalInputWithSuffix theme
         { label =
             case basis of
                 Per100Grams ->
@@ -2212,7 +2217,7 @@ servingRowView theme device units openDropdown index row =
     let
         selector : Element Msg
         selector =
-            Ui.selectDropdown device
+            UiInput.selectDropdown device
                 theme
                 { label = "Unit"
                 , selected = row.unit
@@ -2224,7 +2229,7 @@ servingRowView theme device units openDropdown index row =
 
         gramsInput : Element Msg
         gramsInput =
-            Ui.decimalInputWithSuffix theme
+            UiInput.decimalInputWithSuffix theme
                 { label = "Grams per unit"
                 , text = row.gramsPerUnit
                 , suffix = "g"
@@ -2240,7 +2245,7 @@ servingRowView theme device units openDropdown index row =
                 , onPress = RemoveServingRow index
                 }
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
@@ -2271,12 +2276,12 @@ rowActionButton theme device config =
         [ Element.width (Element.px 44)
         , Element.paddingEach { top = DesignTokens.space16, right = 0, bottom = 0, left = 0 }
         ]
-        (Ui.iconButton device
+        (Button.iconButton device
             theme
             { icon = config.icon
             , title = config.title
             , onPress = Just config.onPress
-            , tone = Ui.Danger
+            , tone = Button.Danger
             }
         )
 

@@ -1,12 +1,12 @@
-module Page.Food.AssistantTest exposing (tests)
+module Component.FoodAssistantTest exposing (tests)
 
 import Api.Client as Client
+import Component.FoodAssistant as Assistant
 import Data.FoodAssistant as FoodAssistant exposing (ConversationTurn, FoodDraftTurn(..))
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Html.Attributes as HtmlAttributes
 import Json.Encode as Encode
-import Page.Food.Assistant as Assistant
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -15,7 +15,7 @@ import Ui.Theme as Theme
 
 tests : Test
 tests =
-    describe "Page.Food.Assistant"
+    describe "Component.FoodAssistant"
         [ test "disabled status exposes no chat state" <|
             \_ ->
                 Assistant.update
