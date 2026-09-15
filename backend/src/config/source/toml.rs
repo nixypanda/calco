@@ -530,7 +530,7 @@ model = "model"
             (
                 "groq.toml",
                 "https://api.groq.com/openai/v1/chat/completions",
-                "qwen/qwen3.6-27b",
+                "qwen/qwen3.8-27b",
                 "assistant-config/groq-api-key",
             ),
             (
