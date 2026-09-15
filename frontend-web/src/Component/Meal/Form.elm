@@ -38,8 +38,10 @@ import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Search as SearchView
@@ -356,12 +358,12 @@ viewFormFields theme device toMsg form =
         [ Ui.section theme
             { header = Nothing
             , body =
-                [ Ui.input theme
+                [ UiInput.input theme
                     { label = "Name"
                     , value = form.name
                     , onChange = toMsg << NameChanged
                     }
-                , Ui.input theme
+                , UiInput.input theme
                     { label = "Notes"
                     , value = form.notes
                     , onChange = toMsg << NotesChanged
@@ -385,10 +387,10 @@ viewFormFields theme device toMsg form =
                     (List.map (componentRowView theme device toMsg) form.components)
             , footer =
                 Just
-                    (Ui.textButton device
+                    (Button.textButton device
                         theme
-                        { tone = Ui.Ghost
-                        , width = Ui.FullWidth
+                        { tone = Button.Ghost
+                        , width = Button.FullWidth
                         , label = "+ Add Component"
                         , onPress = toMsg AddComponentClicked
                         , submitState = Nothing
@@ -690,12 +692,12 @@ componentRowView theme device toMsg row =
                 , onUnitChange = toMsg << ComponentUnitChanged row.rowId
                 }
             , Element.el [ Element.centerY ]
-                (Ui.iconButton device
+                (Button.iconButton device
                     theme
                     { icon = Icon.Close
                     , title = "Remove"
                     , onPress = Just (toMsg (RemoveComponentClicked row.rowId))
-                    , tone = Ui.Danger
+                    , tone = Button.Danger
                     }
                 )
             ]
@@ -722,12 +724,12 @@ quantityTextInput theme device config =
         Element.row
     )
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Ui.decimalInput theme
+        [ UiInput.decimalInput theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange
             }
-        , Ui.input theme
+        , UiInput.input theme
             { label = config.unitLabel
             , value = config.unit
             , onChange = config.onUnitChange

@@ -26,6 +26,7 @@ import Element exposing (Device, Element)
 import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Ui
+import Ui.Button as Button
 import Ui.Theme exposing (Theme)
 
 
@@ -290,13 +291,17 @@ view { model, device, theme } =
             else
                 [ Element.map FormMsg
                     (Form.viewForCreate theme device model.nutrients model.form)
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Create Food"
                     , onPress = SubmitClicked
-                    , submitState = Just (Ui.submittingOrIdle (Form.isSubmitting model.form.submit))
+                    , submitState =
+                        Just
+                            (Button.submittingOrIdle
+                                (Form.isSubmitting model.form.submit)
+                            )
                     , submittingLabel = Just "Creating..."
                     , trailing = Nothing
                     }

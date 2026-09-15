@@ -11,7 +11,9 @@ import Html
 import Html.Events
 import Json.Decode as Decode
 import Ui
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -28,7 +30,7 @@ completionDropdown theme device config options =
         Element.none
 
     else
-        Ui.completionDropdown theme
+        UiInput.completionDropdown theme
             { height = completionDropdownHeight device options
             , rows = List.map (completionRow theme config.onSelect) options
             }
@@ -48,7 +50,7 @@ searchInput :
     -> Element msg
 searchInput theme device config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-        [ Ui.searchInput theme
+        [ UiInput.searchInput theme
             { onChange = config.onChange
             , text = config.text
             , label = config.label
@@ -140,12 +142,12 @@ completionDropdownHeight device options =
 
 completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
 completionRow theme onSelect completion =
-    Ui.completionRow theme
+    UiInput.completionRow theme
         { label = Search.completionLabel completion
         , trailing =
             case completion of
                 CategoryCompletion _ count ->
-                    Just (Ui.badge theme (String.fromInt count))
+                    Just (Chip.badge theme (String.fromInt count))
 
                 OperatorCompletion _ ->
                     Nothing
@@ -240,7 +242,7 @@ pillRow theme pills =
 
 categoryPill : Theme -> String -> Element msg
 categoryPill theme label =
-    Ui.chip theme
+    Chip.chip theme
         { label = truncatePillLabel label
         , selected = False
         , onClick = Nothing

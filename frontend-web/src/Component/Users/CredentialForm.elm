@@ -12,7 +12,9 @@ module Component.Users.CredentialForm exposing
 
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -139,25 +141,25 @@ view config { model, device, theme } =
             [ Ui.card theme
                 [ Typography.subsectionTitle theme config.title
                 , Typography.maybeMutedParagraph theme config.description
-                , Ui.input theme
+                , UiInput.input theme
                     { label = "Username"
                     , value = form.username
                     , onChange = UsernameChanged
                     }
-                , Ui.passwordInput theme
+                , UiInput.passwordInput theme
                     { label = "Password"
                     , value = form.password
                     , onChange = PasswordChanged
                     }
                 , Ui.maybeErrorBanner theme (errorMessage model)
                 ]
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Primary
-                , width = Ui.FullWidth
+                { tone = Button.Primary
+                , width = Button.FullWidth
                 , label = config.submitLabel
                 , onPress = Submitted
-                , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
+                , submitState = Just (Button.submittingOrIdle (isSubmitting model))
                 , submittingLabel = Just config.submittingLabel
                 , trailing = Nothing
                 }

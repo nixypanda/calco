@@ -14,6 +14,7 @@ import Expect
 import String
 import Test exposing (Test, describe, test)
 import Ui
+import Ui.Chip as Chip
 import Ui.Css as Css
 import Ui.Theme as Theme exposing (Theme)
 
@@ -37,11 +38,11 @@ chipBehavior =
     describe "chip"
         [ test "uses inputFill background when not selected" <|
             \_ ->
-                Ui.chipBackground theme False
+                Chip.chipBackground theme False
                     |> Expect.equal theme.chipBg
         , test "uses theme chip-selected background when selected" <|
             \_ ->
-                Ui.chipBackground theme True
+                Chip.chipBackground theme True
                     |> Expect.equal theme.chipSelectedBg
         ]
 

@@ -16,7 +16,10 @@ import Data.User as User exposing (User)
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -284,15 +287,15 @@ resetPasswordView device theme model =
     [ Ui.card theme
         [ Element.el [ Font.medium, Typography.body ] (Element.text "Reset Password")
         , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-            [ Ui.passwordInput theme
+            [ UiInput.passwordInput theme
                 { label = "New password"
                 , value = currentPassword model.status
                 , onChange = PasswordChanged
                 }
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Ghost
-                , width = Ui.FullWidth
+                { tone = Button.Ghost
+                , width = Button.FullWidth
                 , label =
                     if isResetPending model.status then
                         "Resetting..."
@@ -313,7 +316,7 @@ accountActionView : Device -> Theme -> Model -> List (Element Msg)
 accountActionView device theme model =
     case model.status of
         Loaded loadedUser _ ->
-            [ Ui.bottomActionButtons device
+            [ Button.bottomActionButtons device
                 theme
                 [ if loadedUser.user.status == "active" then
                     { label =
@@ -323,7 +326,7 @@ accountActionView device theme model =
                         else
                             "Disable User"
                     , onPress = DisableClicked
-                    , tone = Ui.Danger
+                    , tone = Button.Danger
                     }
 
                   else
@@ -334,7 +337,7 @@ accountActionView device theme model =
                         else
                             "Enable User"
                     , onPress = EnableClicked
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
                 ]
             ]
@@ -411,7 +414,7 @@ userSummaryCard theme user =
             , Ui.detailRow theme
                 "Display Name"
                 (Typography.mutedCaptionParagraph theme user.displayName)
-            , Ui.detailRow theme "Status" (Ui.statusBadge theme user.status)
+            , Ui.detailRow theme "Status" (Chip.statusBadge theme user.status)
             , Ui.detailRow theme
                 "Created"
                 (Element.el [ Typography.caption ] (Element.text user.createdAt))

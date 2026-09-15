@@ -21,6 +21,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -648,10 +649,10 @@ nutritionView theme device loaded =
 
 bottomActionsView : Theme -> Device -> Element Msg
 bottomActionsView theme device =
-    Ui.bottomActionButtons device
+    Button.bottomActionButtons device
         theme
-        [ { label = "Edit Meal", onPress = EditClicked, tone = Ui.Primary }
-        , { label = "Delete Meal", onPress = DeleteClicked, tone = Ui.Danger }
+        [ { label = "Edit Meal", onPress = EditClicked, tone = Button.Primary }
+        , { label = "Delete Meal", onPress = DeleteClicked, tone = Button.Danger }
         ]
 
 

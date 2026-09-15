@@ -35,6 +35,7 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Button as Button
 import Ui.Css as Css
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
@@ -619,12 +620,12 @@ dateCard theme model device =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
-            [ Ui.iconButton device
+            [ Button.iconButton device
                 theme
                 { icon = Icon.ChevronLeft
                 , title = "Previous Day"
                 , onPress = Just PreviousDayClicked
-                , tone = Ui.Primary
+                , tone = Button.Primary
                 }
             , Element.el
                 [ Element.width Element.fill
@@ -632,21 +633,21 @@ dateCard theme model device =
                 ]
                 (Typography.sectionTitle theme (LocalDate.display model.currentDate))
             , if canGoNext then
-                Ui.iconButton device
+                Button.iconButton device
                     theme
                     { icon = Icon.ChevronRight
                     , title = "Next Day"
                     , onPress = Just NextDayClicked
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
 
               else
-                Ui.iconButton device
+                Button.iconButton device
                     theme
                     { icon = Icon.ChevronRight
                     , title = ""
                     , onPress = Nothing
-                    , tone = Ui.Primary
+                    , tone = Button.Primary
                     }
             ]
         , Ui.hairline theme
@@ -700,10 +701,10 @@ totalsView device theme targets summary =
 
 detailsAction : Device -> Theme -> Element Msg
 detailsAction device theme =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.GhostFilled
-        , width = Ui.FullWidth
+        { tone = Button.GhostFilled
+        , width = Button.FullWidth
         , label = "Details"
         , onPress = DetailsClicked
         , submitState = Nothing
@@ -1195,10 +1196,10 @@ slotView theme device model section =
                         List.map (logRow theme) section.logs
                     )
                         ++ [ Ui.hairline theme
-                           , Ui.textButton device
+                           , Button.textButton device
                                 theme
-                                { tone = Ui.Ghost
-                                , width = Ui.FullWidth
+                                { tone = Button.Ghost
+                                , width = Button.FullWidth
                                 , label = "+ Add Food"
                                 , onPress = AddFoodClicked slot
                                 , submitState = Nothing
@@ -1232,13 +1233,13 @@ emptySlotView theme device model slot =
                             False
             in
             emptySlotBody
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = logLatestLabel source
                     , onPress = CopyLatestClicked source
-                    , submitState = Just (Ui.submittingOrIdle isLogging)
+                    , submitState = Just (Button.submittingOrIdle isLogging)
                     , submittingLabel = Just "Logging..."
                     , trailing = Nothing
                     }
@@ -1246,13 +1247,13 @@ emptySlotView theme device model slot =
 
         Nothing ->
             emptySlotBody
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "No items"
                     , onPress = SlotNoOp
-                    , submitState = Just Ui.Disabled
+                    , submitState = Just Button.Disabled
                     , submittingLabel = Nothing
                     , trailing = Nothing
                     }

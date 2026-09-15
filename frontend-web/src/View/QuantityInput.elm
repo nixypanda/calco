@@ -3,8 +3,8 @@ module View.QuantityInput exposing (dropdown, unitOptions)
 import Api.Foods exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Device, Element)
-import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 
 
@@ -25,12 +25,12 @@ dropdown :
     -> Element msg
 dropdown theme device config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Ui.decimalInput theme
+        [ UiInput.decimalInput theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange
             }
-        , Ui.selectDropdown device
+        , UiInput.selectDropdown device
             theme
             { label = config.unitLabel
             , selected = config.unit

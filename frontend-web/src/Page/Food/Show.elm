@@ -22,6 +22,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -479,13 +480,13 @@ loadedView theme device loaded =
 
 submitActionView : Theme -> Device -> RequestState -> Element Msg
 submitActionView theme device requestState =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.Primary
-        , width = Ui.FullWidth
+        { tone = Button.Primary
+        , width = Button.FullWidth
         , label = "Log Food"
         , onPress = SubmitClicked
-        , submitState = Just (Ui.submittingOrIdle (requestState == Saving))
+        , submitState = Just (Button.submittingOrIdle (requestState == Saving))
         , submittingLabel = Just "Logging..."
         , trailing = Nothing
         }

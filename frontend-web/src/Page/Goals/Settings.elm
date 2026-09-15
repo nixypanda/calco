@@ -18,6 +18,8 @@ import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Ui
+import Ui.Button as Button
+import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -333,35 +335,35 @@ view { model, device, theme } =
                 , Ui.card theme
                     [ Typography.sectionTitle theme "Daily Targets"
                     , Typography.mutedParagraph theme (statusMessage ready.status)
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Calories"
                         , value = ready.form.calorieTarget
                         , onChange = CalorieTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Protein (g)"
                         , value = ready.form.proteinTargetG
                         , onChange = ProteinTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Carbs (g)"
                         , value = ready.form.carbsTargetG
                         , onChange = CarbsTargetChanged
                         }
-                    , Ui.decimalInput theme
+                    , UiInput.decimalInput theme
                         { label = "Fat (g)"
                         , value = ready.form.fatTargetG
                         , onChange = FatTargetChanged
                         }
                     , Ui.maybeErrorBanner theme (formError ready.save)
                     ]
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save Goals"
                     , onPress = SaveClicked
-                    , submitState = Just (Ui.submittingOrIdle (isSaving ready.save))
+                    , submitState = Just (Button.submittingOrIdle (isSaving ready.save))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }

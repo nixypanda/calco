@@ -43,7 +43,9 @@ import Html.Events as HtmlEvents
 import Json.Decode as Decode
 import Task
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -713,10 +715,10 @@ viewFor purpose theme device formHasManualInput model =
                 [ Typography.subsectionTitle theme "Create with AI"
                 , Ui.errorBanner theme
                     "Food-assistant availability could not be checked."
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "Retry availability check"
                     , onPress = RetryStatusClicked
                     , submitState = Nothing
@@ -783,10 +785,10 @@ conversationView theme device chat =
 
                   else
                     Element.el [ Element.alignRight ]
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Primary
-                            , width = Ui.ContentWidth
+                            { tone = Button.Primary
+                            , width = Button.ContentWidth
                             , label = "New session"
                             , onPress = NewSessionClicked
                             , submitState = Nothing
@@ -828,20 +830,20 @@ newSessionConfirmation theme device =
                 )
             ]
         , compactActionRow device
-            [ Ui.textButton device
+            [ Button.textButton device
                 theme
-                { tone = Ui.Ghost
-                , width = Ui.ResponsiveWidth
+                { tone = Button.Ghost
+                , width = Button.ResponsiveWidth
                 , label = "Cancel"
                 , onPress = CancelNewSessionClicked
                 , submitState = Nothing
                 , submittingLabel = Nothing
                 , trailing = Nothing
                 }
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.DangerOutline
-                , width = Ui.ResponsiveWidth
+                { tone = Button.DangerOutline
+                , width = Button.ResponsiveWidth
                 , label = "Start new session"
                 , onPress = ConfirmNewSessionClicked
                 , submitState = Nothing
@@ -901,7 +903,7 @@ descriptionInput theme chat =
                 )
         , label =
             Input.labelAbove []
-                (Ui.fieldLabel theme
+                (UiInput.fieldLabel theme
                     (if chat.draft == Nothing then
                         "Food description or answer"
 
@@ -974,19 +976,19 @@ choosePhotosButton theme device chat =
             else
                 "Choose more photos"
     in
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.PrimaryOutline
-        , width = Ui.FullWidth
+        { tone = Button.PrimaryOutline
+        , width = Button.FullWidth
         , label = label
         , onPress = ChoosePhotos
         , submitState =
             Just
                 (if chat.request == Sending then
-                    Ui.Disabled
+                    Button.Disabled
 
                  else
-                    Ui.Idle
+                    Button.Idle
                 )
         , submittingLabel = Just label
         , trailing = Nothing
@@ -1060,10 +1062,10 @@ photoPreview theme device index photo maybeUrl =
             [ Element.paragraph [ Element.width Element.fill ]
                 [ Element.text (File.name photo) ]
             , Typography.mutedParagraph theme (formatPhotoSize (File.size photo))
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.DangerOutline
-                , width = Ui.ContentWidth
+                { tone = Button.DangerOutline
+                , width = Button.ContentWidth
                 , label = "Remove photo"
                 , onPress = RemovePhoto index
                 , submitState = Nothing
@@ -1085,10 +1087,10 @@ formatPhotoSize bytes =
 
 sendButton : FoodDraftPurpose -> Theme -> Device -> RequestState -> Element Msg
 sendButton purpose theme device request =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.Primary
-        , width = Ui.FullWidth
+        { tone = Button.Primary
+        , width = Button.FullWidth
         , label =
             case purpose of
                 CustomFood ->
@@ -1100,10 +1102,10 @@ sendButton purpose theme device request =
         , submitState =
             Just
                 (if request == Sending then
-                    Ui.Submitting
+                    Button.Submitting
 
                  else
-                    Ui.Idle
+                    Button.Idle
                 )
         , submittingLabel = Just "Generating draft…"
         , trailing = Nothing
@@ -1117,10 +1119,10 @@ requestErrorView theme device request =
             Element.column
                 [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Ui.errorBanner theme message
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Ghost
-                    , width = Ui.FullWidth
+                    { tone = Button.Ghost
+                    , width = Button.FullWidth
                     , label = "Retry last request"
                     , onPress = RetryClicked
                     , submitState = Nothing
@@ -1185,10 +1187,10 @@ draftPreviewView purpose theme device formHasManualInput chat =
 
                       else
                         Element.el [ Element.alignRight ]
-                            (Ui.textButton device
+                            (Button.textButton device
                                 theme
-                                { tone = Ui.DangerOutline
-                                , width = Ui.ContentWidth
+                                { tone = Button.DangerOutline
+                                , width = Button.ContentWidth
                                 , label = "New session"
                                 , onPress = NewSessionClicked
                                 , submitState = Nothing
@@ -1312,20 +1314,20 @@ draftActionView purpose theme device formHasManualInput chat =
                             "Applying this draft will replace the values already in the form."
                         ]
                     , compactActionRow device
-                        [ Ui.textButton device
+                        [ Button.textButton device
                             theme
-                            { tone = Ui.Ghost
-                            , width = Ui.ResponsiveWidth
+                            { tone = Button.Ghost
+                            , width = Button.ResponsiveWidth
                             , label = "Cancel"
                             , onPress = CancelOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
                             , trailing = Nothing
                             }
-                        , Ui.textButton device
+                        , Button.textButton device
                             theme
-                            { tone = Ui.Danger
-                            , width = Ui.ResponsiveWidth
+                            { tone = Button.Danger
+                            , width = Button.ResponsiveWidth
                             , label = "Replace form values"
                             , onPress = ConfirmOverwriteClicked
                             , submitState = Nothing
@@ -1341,10 +1343,10 @@ draftActionView purpose theme device formHasManualInput chat =
                     , Element.spacing DesignTokens.space8
                     ]
                     [ Element.el [ Element.width Element.fill ]
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.PrimaryOutline
-                            , width = Ui.FullWidth
+                            { tone = Button.PrimaryOutline
+                            , width = Button.FullWidth
                             , label =
                                 if chat.askingForChanges then
                                     "Cancel changes"
@@ -1357,16 +1359,16 @@ draftActionView purpose theme device formHasManualInput chat =
 
                                 else
                                     AskForChangesClicked
-                            , submitState = Just Ui.Idle
+                            , submitState = Just Button.Idle
                             , submittingLabel = Just "Ask for changes"
                             , trailing = Nothing
                             }
                         )
                     , Element.el [ Element.width Element.fill ]
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Primary
-                            , width = Ui.FullWidth
+                            { tone = Button.Primary
+                            , width = Button.FullWidth
                             , label =
                                 case purpose of
                                     CustomFood ->
@@ -1375,7 +1377,7 @@ draftActionView purpose theme device formHasManualInput chat =
                                     AdHocLog ->
                                         "Review estimate"
                             , onPress = ApplyDraftClicked formHasManualInput
-                            , submitState = Just Ui.Idle
+                            , submitState = Just Button.Idle
                             , submittingLabel = Just "Applying…"
                             , trailing = Nothing
                             }

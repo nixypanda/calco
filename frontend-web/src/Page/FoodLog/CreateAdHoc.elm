@@ -26,6 +26,7 @@ import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
 import Ui
+import Ui.Button as Button
 import Ui.Theme exposing (Theme)
 
 
@@ -337,10 +338,10 @@ viewForAi showOptional { model, device, theme } =
         [ Ui.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog visibility theme device model.nutrients model.units model.form)
-        , Ui.textButton device
+        , Button.textButton device
             theme
-            { tone = Ui.Primary
-            , width = Ui.FullWidth
+            { tone = Button.Primary
+            , width = Button.FullWidth
             , label =
                 case model.submit of
                     LogFailedAfterFoodSaved _ ->
@@ -349,7 +350,7 @@ viewForAi showOptional { model, device, theme } =
                     _ ->
                         "Log Food"
             , onPress = SubmitClicked
-            , submitState = Just (Ui.submittingOrIdle (isSubmitting model.submit))
+            , submitState = Just (Button.submittingOrIdle (isSubmitting model.submit))
             , submittingLabel = Just "Logging..."
             , trailing = Nothing
             }

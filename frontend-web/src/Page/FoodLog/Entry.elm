@@ -26,6 +26,8 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -622,16 +624,16 @@ loadedView theme device model =
         ]
 
 
-submitState : LoadedModel -> Ui.SubmitState
+submitState : LoadedModel -> Button.SubmitState
 submitState model =
     if model.request == Saving then
-        Ui.Submitting
+        Button.Submitting
 
     else if formHasChanges model.log model.form then
-        Ui.Idle
+        Button.Idle
 
     else
-        Ui.Disabled
+        Button.Disabled
 
 
 formHasChanges : FoodLog -> FoodLogForm.Model -> Bool
@@ -699,7 +701,7 @@ itemHeader theme device model =
 
                 else
                     Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ View.Product.macroDotGhost, Ui.chips theme food.categories ]
+                        [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
 
             Nothing ->
                 Element.none
@@ -785,10 +787,10 @@ detailActionsView theme device model =
             , Element.spacing DesignTokens.space12
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Ui.textButton device
+                (Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save"
                     , onPress = SubmitClicked
                     , submitState = Just (submitState model)
@@ -797,11 +799,11 @@ detailActionsView theme device model =
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Ui.bottomActionButtons device
+                (Button.bottomActionButtons device
                     theme
                     [ { label = "Delete Log"
                       , onPress = DeleteClicked
-                      , tone = Ui.Danger
+                      , tone = Button.Danger
                       }
                     ]
                 )

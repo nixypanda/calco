@@ -13,6 +13,7 @@ import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.Theme exposing (Theme)
 
 
@@ -135,13 +136,13 @@ view { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
-        , Ui.textButton device
+        , Button.textButton device
             theme
-            { tone = Ui.Primary
-            , width = Ui.FullWidth
+            { tone = Button.Primary
+            , width = Button.FullWidth
             , label = "Create Meal"
             , onPress = SubmitClicked
-            , submitState = Just (Ui.submittingOrIdle (Common.isSubmitting model.submit))
+            , submitState = Just (Button.submittingOrIdle (Common.isSubmitting model.submit))
             , submittingLabel = Just "Saving..."
             , trailing = Nothing
             }

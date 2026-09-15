@@ -17,6 +17,7 @@ import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -397,14 +398,14 @@ view { model, device, theme } =
                 [ Ui.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme loaded
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Update Meal"
                     , onPress = SubmitClicked
                     , submitState =
-                        Just (Ui.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
+                        Just (Button.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }

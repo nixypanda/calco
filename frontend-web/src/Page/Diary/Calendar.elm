@@ -23,6 +23,7 @@ import Html.Attributes as Attr
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.MonthCalendar as MonthCalendar
 import Ui.RingChart as Ring
@@ -510,10 +511,10 @@ dayAriaLabel date maybeSummary =
 
 loadEarlierButton : Device -> Theme -> Bool -> Element Msg
 loadEarlierButton device theme loading =
-    Ui.textButton device
+    Button.textButton device
         theme
-        { tone = Ui.GhostFilled
-        , width = Ui.FullWidth
+        { tone = Button.GhostFilled
+        , width = Button.FullWidth
         , label =
             if loading then
                 "Loading..."

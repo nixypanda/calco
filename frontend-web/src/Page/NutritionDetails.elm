@@ -17,6 +17,8 @@ import Element.Font as Font
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
 import Ui.Skeleton as Skeleton
@@ -174,33 +176,33 @@ dateHeader theme device model =
         [ Ui.pageHeader theme
             { leading =
                 Just
-                    (Ui.iconButton device
+                    (Button.iconButton device
                         theme
                         { icon = Icon.ChevronLeft
                         , title = "Previous day"
                         , onPress = Just PreviousDayClicked
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
                     )
             , title = Typography.sectionTitle theme "Nutrition details"
             , subtitle = Just (Ui.SubtitleText (LocalDate.display (currentDate model)))
             , actions =
                 [ if canGoNext then
-                    Ui.iconButton device
+                    Button.iconButton device
                         theme
                         { icon = Icon.ChevronRight
                         , title = "Next day"
                         , onPress = Just NextDayClicked
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
 
                   else
-                    Ui.iconButton device
+                    Button.iconButton device
                         theme
                         { icon = Icon.ChevronRight
                         , title = ""
                         , onPress = Nothing
-                        , tone = Ui.Primary
+                        , tone = Button.Primary
                         }
                 ]
             }
@@ -486,7 +488,7 @@ statusPill theme nutrient =
             positive =
                 nutrient.status == Details.MetReference || nutrient.status == Details.WithinLimit
         in
-        Ui.coloredPill
+        Chip.coloredPill
             { label = statusLabel nutrient.status
             , bg =
                 if dangerous then

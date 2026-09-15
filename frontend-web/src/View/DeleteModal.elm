@@ -5,6 +5,7 @@ module View.DeleteModal exposing
 
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -52,9 +53,9 @@ deleteModalContent theme device config maybeError deleting =
             , Ui.maybeErrorBanner theme maybeError
             ]
         , actions =
-            Ui.bottomActionButtons device
+            Button.bottomActionButtons device
                 theme
-                [ { label = "Cancel", onPress = config.onCancel, tone = Ui.Primary }
+                [ { label = "Cancel", onPress = config.onCancel, tone = Button.Primary }
                 , { label =
                         if deleting then
                             "Deleting..."
@@ -62,7 +63,7 @@ deleteModalContent theme device config maybeError deleting =
                         else
                             "Confirm Delete"
                   , onPress = config.onConfirm
-                  , tone = Ui.Danger
+                  , tone = Button.Danger
                   }
                 ]
         , onBackgroundPress = Just config.onCancel

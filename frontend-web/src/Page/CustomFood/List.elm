@@ -14,6 +14,8 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -142,25 +144,25 @@ createActions device theme =
         , Element.spacing 12
         ]
         [ Element.el [ Element.width Element.fill ]
-            (Ui.textButton device
+            (Button.textButton device
                 theme
-                { tone = Ui.Primary
-                , width = Ui.FullWidth
+                { tone = Button.Primary
+                , width = Button.FullWidth
                 , label = "Create with AI"
                 , onPress = CreateWithAiClicked
-                , submitState = Just Ui.Idle
+                , submitState = Just Button.Idle
                 , submittingLabel = Just "Create with AI"
                 , trailing = Nothing
                 }
             )
         , Element.el [ Element.width Element.fill ]
-            (Ui.textButton device
+            (Button.textButton device
                 theme
-                { tone = Ui.PrimaryOutline
-                , width = Ui.FullWidth
+                { tone = Button.PrimaryOutline
+                , width = Button.FullWidth
                 , label = "Enter manually"
                 , onPress = CreateManuallyClicked
-                , submitState = Just Ui.Idle
+                , submitState = Just Button.Idle
                 , submittingLabel = Just "Enter manually"
                 , trailing = Nothing
                 }
@@ -182,7 +184,7 @@ foodRow theme _ food =
         , title = Typography.wrappedListItemTitle theme food.name
         , subtitle =
             [ Typography.mutedBodyParagraph theme (foodSummaryText food)
-            , Ui.chips theme food.categories
+            , Chip.chips theme food.categories
             ]
         , trailing = []
         }

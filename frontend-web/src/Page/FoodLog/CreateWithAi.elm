@@ -21,6 +21,7 @@ import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
 import Ui
+import Ui.Button as Button
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -323,10 +324,10 @@ view { model, device, theme } =
                 , Typography.mutedParagraph theme
                     "Nutrition values are totals for the entire portion you are logging."
                 , warningView theme model.warnings
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.PrimaryOutline
-                    , width = Ui.FullWidth
+                    { tone = Button.PrimaryOutline
+                    , width = Button.FullWidth
                     , label = "Ask for changes"
                     , onPress = AskForChangesClicked
                     , submitState = Nothing
@@ -344,10 +345,10 @@ view { model, device, theme } =
 additionalNutrientsToggle : Device -> Theme -> Model -> Review.Model -> Element Msg
 additionalNutrientsToggle device theme model review =
     if List.any (not << isCoreNutrient << .code) review.form.nutrients then
-        Ui.textButton device
+        Button.textButton device
             theme
-            { tone = Ui.Ghost
-            , width = Ui.FullWidth
+            { tone = Button.Ghost
+            , width = Button.FullWidth
             , label =
                 if model.showAdditionalNutrients then
                     "Hide additional nutrients"

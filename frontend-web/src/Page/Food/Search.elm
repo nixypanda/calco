@@ -40,7 +40,9 @@ import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -826,20 +828,20 @@ adHocLogView theme device =
     Ui.card theme
         [ Typography.sectionTitle theme "Create an ad-hoc food log"
         , responsiveActions device
-            [ Ui.textButton device
+            [ Button.textButton device
                 theme
-                { tone = Ui.GhostFilled
-                , width = Ui.ResponsiveWidth
+                { tone = Button.GhostFilled
+                , width = Button.ResponsiveWidth
                 , label = "Manually"
                 , onPress = CreateAdHocLogClicked
                 , submitState = Nothing
                 , submittingLabel = Nothing
                 , trailing = Nothing
                 }
-            , Ui.textButton device
+            , Button.textButton device
                 theme
-                { tone = Ui.Primary
-                , width = Ui.ResponsiveWidth
+                { tone = Button.Primary
+                , width = Button.ResponsiveWidth
                 , label = "With AI"
                 , onPress = CreateAiLogClicked
                 , submitState = Nothing
@@ -899,31 +901,31 @@ barcodeInputView theme device model =
     let
         input : Element Msg
         input =
-            Ui.searchInput theme
+            UiInput.searchInput theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
                 , label = "Enter barcode"
-                , extraAttrs = [ onEnterSubmit BarcodeSubmitted, Ui.numericInputMode ]
+                , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
         searchButton : Element Msg
         searchButton =
-            Ui.textButton device
+            Button.textButton device
                 theme
-                { tone = Ui.PrimaryOutline
-                , width = Ui.FullWidth
+                { tone = Button.PrimaryOutline
+                , width = Button.FullWidth
                 , label = "Search"
                 , onPress = BarcodeSubmitted
                 , submitState =
                     Just
                         (if model.barcodeLookup == Loading then
-                            Ui.Submitting
+                            Button.Submitting
 
                          else if String.isEmpty (String.trim model.barcodeQuery) then
-                            Ui.Disabled
+                            Button.Disabled
 
                          else
-                            Ui.Idle
+                            Button.Idle
                         )
                 , submittingLabel = Just "Searching"
                 , trailing = Nothing
@@ -933,22 +935,22 @@ barcodeInputView theme device model =
         scanButton =
             case model.barcodeScanner of
                 ScannerStarting ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Scan"
                         , onPress = BarcodeScanClicked
-                        , submitState = Just Ui.Submitting
+                        , submitState = Just Button.Submitting
                         , submittingLabel = Just "Starting"
                         , trailing = Nothing
                         }
 
                 ScannerActive ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Danger
-                        , width = Ui.FullWidth
+                        { tone = Button.Danger
+                        , width = Button.FullWidth
                         , label = "Cancel"
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
@@ -957,13 +959,13 @@ barcodeInputView theme device model =
                         }
 
                 _ ->
-                    Ui.textButton device
+                    Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Scan"
                         , onPress = BarcodeScanClicked
-                        , submitState = Just Ui.Idle
+                        , submitState = Just Button.Idle
                         , submittingLabel = Just "Starting"
                         , trailing = Nothing
                         }
@@ -1205,13 +1207,13 @@ barcodeBodyView theme device model =
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Ui.errorBanner theme (barcodeErrorMessage error)
                 , Ui.emptyState theme "No food found for that barcode."
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Create Custom Food"
                     , onPress = CreateCustomFoodClicked
-                    , submitState = Just Ui.Idle
+                    , submitState = Just Button.Idle
                     , submittingLabel = Just "Create Custom Food"
                     , trailing = Nothing
                     }
@@ -1243,13 +1245,13 @@ textEmptyState theme device scope =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         (Ui.emptyState theme message
             :: (if canCreate then
-                    [ Ui.textButton device
+                    [ Button.textButton device
                         theme
-                        { tone = Ui.Primary
-                        , width = Ui.FullWidth
+                        { tone = Button.Primary
+                        , width = Button.FullWidth
                         , label = "Create Custom Food"
                         , onPress = CreateCustomFoodClicked
-                        , submitState = Just Ui.Idle
+                        , submitState = Just Button.Idle
                         , submittingLabel = Just "Create Custom Food"
                         , trailing = Nothing
                         }
@@ -1458,21 +1460,21 @@ quickAddChip device theme model item quantity =
         ( tone, submitState, submittingLabel ) =
             case state of
                 QuickAddCanAdd ->
-                    ( Ui.GhostFilled, Nothing, Nothing )
+                    ( Button.GhostFilled, Nothing, Nothing )
 
                 QuickAddAdding ->
-                    ( Ui.GhostFilled, Just Ui.Submitting, Just "Adding..." )
+                    ( Button.GhostFilled, Just Button.Submitting, Just "Adding..." )
 
                 QuickAddAdded ->
-                    ( Ui.Primary, Just Ui.Submitted, Nothing )
+                    ( Button.Primary, Just Button.Submitted, Nothing )
 
                 QuickAddBlocked ->
-                    ( Ui.GhostFilled, Just Ui.Disabled, Nothing )
+                    ( Button.GhostFilled, Just Button.Disabled, Nothing )
     in
-    Ui.textButton device
+    Button.textButton device
         theme
         { tone = tone
-        , width = Ui.ContentWidth
+        , width = Button.ContentWidth
         , label = label
         , onPress = RecentQuickAddClicked item quantity
         , submitState = submitState

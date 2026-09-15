@@ -12,6 +12,8 @@ import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
+import Ui.Chip as Chip
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -97,10 +99,10 @@ bodyView device theme model =
                         users
                 , footer =
                     Just
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Ghost
-                            , width = Ui.FullWidth
+                            { tone = Button.Ghost
+                            , width = Button.FullWidth
                             , label = "+ Create User"
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
@@ -124,7 +126,7 @@ userListRow theme config =
         , leading = []
         , title = Typography.wrappedListItemTitle theme config.user.username
         , subtitle = [ Typography.mutedBodyParagraph theme config.user.displayName ]
-        , trailing = [ Ui.statusBadge theme config.user.status ]
+        , trailing = [ Chip.statusBadge theme config.user.status ]
         }
 
 

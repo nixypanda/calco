@@ -27,6 +27,7 @@ import Lib.Date as LocalDate
 import Lib.Text as Text
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -286,7 +287,7 @@ view theme device food units model =
                 , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-            , Ui.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
+            , UiInput.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
             ]
         ]
 
@@ -303,7 +304,7 @@ submitError submitState =
 
 mealSlotDropdown : Theme -> Device -> Model -> Element Msg
 mealSlotDropdown theme device model =
-    Ui.selectDropdown device
+    UiInput.selectDropdown device
         theme
         { label = "Meal"
         , selected = model.mealSlot

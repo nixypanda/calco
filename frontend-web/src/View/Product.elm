@@ -8,6 +8,7 @@ import Api.Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Ui
+import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -41,7 +42,7 @@ foodHeader theme food extraMeta =
 
           else
             Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ macroDotGhost, Ui.chips theme food.categories ]
+                [ macroDotGhost, Chip.chips theme food.categories ]
         ]
 
 

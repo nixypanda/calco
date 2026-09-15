@@ -21,8 +21,10 @@ import Element.Input as Input
 import Element.Region as Region
 import Html.Attributes
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
+import Ui.Input as UiInput
 import Ui.Theme as Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -152,7 +154,7 @@ topBarView config profile =
 
 themeToggle : Theme -> msg -> Element msg
 themeToggle theme onToggle =
-    Ui.toggleSwitch theme
+    UiInput.toggleSwitch theme
         { isActive = theme.mode == Theme.Dark
         , onToggle = onToggle
         }
@@ -162,21 +164,21 @@ leadingButton : Device -> Theme -> LeadingAction -> msg -> (Route -> msg) -> Ele
 leadingButton device theme leading onMenuClick onNavigate =
     case leading of
         OpenMenu ->
-            Ui.iconButton device
+            Button.iconButton device
                 theme
                 { icon = Icon.Menu
                 , title = "Menu"
                 , onPress = Just onMenuClick
-                , tone = Ui.Primary
+                , tone = Button.Primary
                 }
 
         GoBack route ->
-            Ui.iconButton device
+            Button.iconButton device
                 theme
                 { icon = Icon.ChevronLeft
                 , title = "Back"
                 , onPress = Just (onNavigate route)
-                , tone = Ui.Primary
+                , tone = Button.Primary
                 }
 
         NoLeadingAction ->
@@ -597,12 +599,12 @@ drawerView config =
     in
     drawerPanel config.theme
         (Element.row [ Element.spacing DesignTokens.space8 ]
-            [ Ui.iconButton config.device
+            [ Button.iconButton config.device
                 config.theme
                 { icon = Icon.Menu
                 , title = "Close"
                 , onPress = Just config.onClose
-                , tone = Ui.Primary
+                , tone = Button.Primary
                 }
             , Typography.sectionTitle config.theme "CalCo"
             ]
@@ -798,40 +800,40 @@ profileMenuContent config =
             _ ->
                 "Signed in"
         )
-    , Ui.textButton config.device
+    , Button.textButton config.device
         config.theme
-        { tone = Ui.Ghost
-        , width = Ui.FullWidth
+        { tone = Button.Ghost
+        , width = Button.FullWidth
         , label = "Calendar"
         , onPress = config.onNavigate (DiaryCalendar Nothing)
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Ui.textButton config.device
+    , Button.textButton config.device
         config.theme
-        { tone = Ui.Ghost
-        , width = Ui.FullWidth
+        { tone = Button.Ghost
+        , width = Button.FullWidth
         , label = "Goals"
         , onPress = config.onNavigate GoalSettings
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Ui.textButton config.device
+    , Button.textButton config.device
         config.theme
-        { tone = Ui.Ghost
-        , width = Ui.FullWidth
+        { tone = Button.Ghost
+        , width = Button.FullWidth
         , label = "Meal slots"
         , onPress = config.onNavigate DiarySettings
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Ui.textButton config.device
+    , Button.textButton config.device
         config.theme
-        { tone = Ui.Danger
-        , width = Ui.FullWidth
+        { tone = Button.Danger
+        , width = Button.FullWidth
         , label = "Logout"
         , onPress = config.onLogout
         , submitState = Nothing

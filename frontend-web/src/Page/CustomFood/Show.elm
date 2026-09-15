@@ -18,6 +18,7 @@ import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -305,18 +306,18 @@ loadedView theme device loaded =
 bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
 bottomActionsView theme device food =
     let
-        actions : List { label : String, onPress : Msg, tone : Ui.ButtonTone }
+        actions : List { label : String, onPress : Msg, tone : Button.ButtonTone }
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = "Edit Food", onPress = EditClicked, tone = Ui.Primary }
-                    , { label = "Delete Food", onPress = DeleteClicked, tone = Ui.Danger }
+                    [ { label = "Edit Food", onPress = EditClicked, tone = Button.Primary }
+                    , { label = "Delete Food", onPress = DeleteClicked, tone = Button.Danger }
                     ]
 
                 Nothing ->
                     []
     in
-    Ui.bottomActionButtons device theme actions
+    Button.bottomActionButtons device theme actions
 
 
 deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)

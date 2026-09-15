@@ -15,6 +15,8 @@ import Data.User as User
 import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui
+import Ui.Button as Button
+import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
 
 
@@ -189,29 +191,29 @@ view { model, device, theme } =
     Ui.pageContainer device
         (errorView theme model
             ++ [ Ui.card theme
-                    [ Ui.input theme
+                    [ UiInput.input theme
                         { label = "Username"
                         , value = form.username
                         , onChange = UsernameChanged
                         }
-                    , Ui.input theme
+                    , UiInput.input theme
                         { label = "Display Name"
                         , value = form.displayName
                         , onChange = DisplayNameChanged
                         }
-                    , Ui.passwordInput theme
+                    , UiInput.passwordInput theme
                         { label = "Initial Password"
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
                     ]
-               , Ui.textButton device
+               , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label = "Save"
                     , onPress = Submitted
-                    , submitState = Just (Ui.submittingOrIdle (isSubmitting model))
+                    , submitState = Just (Button.submittingOrIdle (isSubmitting model))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }

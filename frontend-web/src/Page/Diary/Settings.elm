@@ -14,6 +14,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Element.Input as Input
 import Ui
+import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -169,10 +170,10 @@ view { model, device, theme } =
                         :: List.map (slotCheckbox loaded.selected) MealSlot.all
                     )
                 , Ui.maybeErrorBanner theme (saveError loaded.saveState)
-                , Ui.textButton device
+                , Button.textButton device
                     theme
-                    { tone = Ui.Primary
-                    , width = Ui.FullWidth
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
                     , label =
                         if loaded.saveState == Saved then
                             "Saved"
@@ -180,7 +181,7 @@ view { model, device, theme } =
                         else
                             "Save meal slots"
                     , onPress = SaveClicked
-                    , submitState = Just (Ui.submittingOrIdle (loaded.saveState == Saving))
+                    , submitState = Just (Button.submittingOrIdle (loaded.saveState == Saving))
                     , submittingLabel = Just "Saving..."
                     , trailing = Nothing
                     }

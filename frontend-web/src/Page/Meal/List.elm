@@ -14,6 +14,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Button as Button
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -113,10 +114,10 @@ bodyView theme device model =
             Ui.section theme
                 { header =
                     Just
-                        (Ui.textButton device
+                        (Button.textButton device
                             theme
-                            { tone = Ui.Ghost
-                            , width = Ui.FullWidth
+                            { tone = Button.Ghost
+                            , width = Button.FullWidth
                             , label = "+ Create Meal"
                             , onPress = CreateMealClicked
                             , submitState = Nothing
