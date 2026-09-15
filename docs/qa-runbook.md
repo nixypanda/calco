@@ -30,8 +30,8 @@ Start or verify the services without changing database contents:
 
 ```bash
 docker compose ps
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-dev
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just dev-backend
 API_TARGET=http://127.0.0.1:3001 nix develop -c npm --prefix frontend-web run dev -- --host 127.0.0.1 --port 5174
 ```
 

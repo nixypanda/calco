@@ -675,7 +675,7 @@ frontend-web/tests
 Run:
 
 ```bash
-nix develop -c just frontend-web-test
+just test-frontend
 ```
 
 Or directly:
@@ -688,17 +688,17 @@ elm-test
 Useful frontend-web checks:
 
 ```bash
-nix develop -c just frontend-web-line-length
-nix develop -c just frontend-web-review
-nix develop -c just frontend-web-test
-nix develop -c just frontend-web-format
-nix develop -c just frontend-web-build
+just check-frontend-line-length
+just check-frontend-review
+just test-frontend
+just format-frontend
+just build-frontend
 ```
 
 Build:
 
 ```bash
-nix develop -c just frontend-web-build
+just build-frontend
 ```
 
 Or directly:

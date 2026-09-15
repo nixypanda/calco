@@ -89,9 +89,9 @@
               fi
               echo ""
               echo "  Commands:"
-              echo "    just up         — start PostgreSQL"
-              echo "    just backend-dev — run backend"
-              echo "    just frontend-web-dev — run frontend"
+              echo "    just db-up        — start PostgreSQL"
+              echo "    just dev-backend  — run backend"
+              echo "    just dev-frontend — run frontend"
             '';
           };
         }

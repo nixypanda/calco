@@ -49,7 +49,7 @@ Not the goal right now:
 This is a Nix-based project. Run repository `just` recipes through the dev shell:
 
 ```bash
-nix develop -c just <recipe>
+just <recipe>
 ```
 
 ## Quick Start
@@ -57,21 +57,22 @@ nix develop -c just <recipe>
 Start PostgreSQL:
 
 ```bash
-nix develop -c just up
-nix develop -c just db-wait
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
+nix develop
+just db-up
+just db-wait
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
 ```
 
 Run the backend:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-dev
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just dev-backend
 ```
 
 Run the frontend:
 
 ```bash
-nix develop -c just frontend-web-dev
+just dev-frontend
 ```
 
 The backend listens on port `3001` by default. The Elm frontend dev server listens on port `1234`.
@@ -81,10 +82,10 @@ The backend listens on port `3001` by default. The Elm frontend dev server liste
 Reliable current checks:
 
 ```bash
-nix develop -c just test
-nix develop -c just backend-test
-nix develop -c just frontend-web-test
-nix develop -c just frontend-web-build
+just test
+just test-backend
+just test-frontend
+just build-frontend
 ```
 
 ## Documentation

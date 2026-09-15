@@ -1,33 +1,33 @@
 # Operations
 
 This is a Nix-based project. Run repository `just` recipes through the dev
-shell with `nix develop -c just ...`.
+shell with `just ...`.
 
 ## Local Services
 
 Start PostgreSQL:
 
 ```bash
-nix develop -c just up
-nix develop -c just db-wait
+just db-up
+just db-wait
 ```
 
 Stop PostgreSQL:
 
 ```bash
-nix develop -c just down
+just db-down
 ```
 
 Reset PostgreSQL data:
 
 ```bash
-nix develop -c just db-reset
+just db-reset
 ```
 
 Open psql:
 
 ```bash
-nix develop -c just db-shell
+just db-shell
 ```
 
 ## Backend
@@ -58,20 +58,20 @@ most a 1 MiB response. Local barcode hits do not make an OFF request.
 Run:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-dev
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just dev-backend
 ```
 
 Build:
 
 ```bash
-nix develop -c just backend-build
+just build-backend
 ```
 
 Test:
 
 ```bash
-nix develop -c just backend-test
+just test-backend
 ```
 
 See [testing.md](testing.md) for integration tests and coverage.
@@ -83,7 +83,7 @@ The active frontend is the Elm app in `frontend-web/`.
 Run:
 
 ```bash
-nix develop -c just frontend-web-dev
+just dev-frontend
 ```
 
 By default this serves `http://localhost:1234` and proxies `/api/*` to `http://localhost:3001`.
@@ -91,30 +91,30 @@ By default this serves `http://localhost:1234` and proxies `/api/*` to `http://l
 Build:
 
 ```bash
-nix develop -c just frontend-web-build
+just build-frontend
 ```
 
 Test:
 
 ```bash
-nix develop -c just frontend-web-test
+just test-frontend
 ```
 
 Format and review:
 
 ```bash
-nix develop -c just frontend-web-format
-nix develop -c just frontend-web-review
-nix develop -c just frontend-web-line-length
+just format-frontend
+just check-frontend-review
+just check-frontend-line-length
 ```
 
 Use these checks:
 
 ```bash
-nix develop -c just test
-nix develop -c just backend-test
-nix develop -c just frontend-web-test
-nix develop -c just frontend-web-build
+just test
+just test-backend
+just test-frontend
+just build-frontend
 ```
 
 ## Database Migrations
@@ -128,10 +128,10 @@ backend/migrations
 Run migrations separately from app startup:
 
 ```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco nix develop -c just backend-migrate
+DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
 ```
 
-The current migration set is a squashed baseline. `nix develop -c just backend-migrate`
+The current migration set is a squashed baseline. `just migrate-backend`
 uses `sqlx migrate run --ignore-missing` and the baseline SQL is written to
 tolerate local databases that already have the previous embedded schema, so
 running it records the new baseline without recreating existing tables.
@@ -149,7 +149,7 @@ Public catalog imports require a running, migrated backend and an admin
 ```bash
 CALCO_API_URL=http://127.0.0.1:3001/api \
 CALCO_SESSION_TOKEN=<admin_session_cookie_value> \
-nix develop -c just -f tools/justfile data-sources-upload merged data
+just -f tools/justfile data-sources-upload merged data
 ```
 
 See [imports.md](imports.md) for full workflows, including raw dataset

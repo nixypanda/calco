@@ -5,8 +5,8 @@
 - Backend: Rust 2024, axum, sqlx, PostgreSQL migrations run with `sqlx-cli`.
 - Frontend: Elm 0.19.1, elm-ui, elm-test.
 - Database: PostgreSQL via `docker-compose.yml`.
-- Test runner commands are defined in `justfile` and should be run with
-  `nix develop -c just ...`.
+- Test runner commands are defined in `justfile`. Enter `nix develop` once and
+  run `just ...` inside that persistent development shell.
 
 ## Backend Rust Tests
 
@@ -24,7 +24,7 @@ cd backend && cargo test nutrition::domain::food_log
 ### Via Nix + just
 
 ```bash
-nix develop -c just backend-test
+just test-backend
 ```
 
 ### Notes
@@ -32,7 +32,7 @@ nix develop -c just backend-test
 - Backend tests are inline under `#[cfg(test)] mod tests { ... }`.
 - Domain and application tests use manual mock repositories.
 - Migrations live in `backend/migrations` and are run explicitly with
-  `nix develop -c just backend-migrate`.
+  `just migrate-backend`.
 
 ## Frontend Unit Tests
 
@@ -43,7 +43,7 @@ cd frontend-web && elm-test
 ### Via Nix + just
 
 ```bash
-nix develop -c just frontend-web-test
+just test-frontend
 ```
 
 ### Notes
@@ -56,16 +56,16 @@ nix develop -c just frontend-web-test
 Run these in order before committing frontend changes:
 
 ```bash
-nix develop -c just frontend-web-line-length
-nix develop -c just frontend-web-review
-nix develop -c just frontend-web-test
-nix develop -c just frontend-web-format
+just check-frontend-line-length
+just check-frontend-review
+just test-frontend
+just format-frontend
 ```
 
 Run all tests:
 
 ```bash
-nix develop -c just test
+just test
 ```
 
 Or run the package commands directly:
@@ -78,18 +78,18 @@ cd frontend-web && elm-test
 ## Build Commands
 
 ```bash
-nix develop -c just backend-build
-nix develop -c just frontend-web-build
-nix develop -c just build
+just build-backend
+just build-frontend
+just build
 ```
 
 ## Development Commands
 
 ```bash
-nix develop -c just up
-nix develop -c just db-wait
-nix develop -c just backend-dev
-nix develop -c just frontend-web-dev
+just db-up
+just db-wait
+just dev-backend
+just dev-frontend
 ```
 
-`backend-dev` runs `cargo run --manifest-path backend/Cargo.toml`. The backend requires `DATABASE_URL` to be set and connects to PostgreSQL before serving.
+`dev-backend` runs `cargo run --manifest-path backend/Cargo.toml`. The backend requires `DATABASE_URL` to be set and connects to PostgreSQL before serving.

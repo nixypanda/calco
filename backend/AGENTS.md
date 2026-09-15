@@ -39,7 +39,7 @@ infrastructure/postgres -> domain ports
 - Run migrations explicitly with:
 
 ```bash
-just backend-migrate
+just migrate-backend
 ```
 
 ## Tests
@@ -50,7 +50,7 @@ Integration tests live in `tests/` and use `#[sqlx::test]`.
 Run from the repository root:
 
 ```bash
-just backend-test
+just test-backend
 ```
 
 Or directly:
@@ -71,7 +71,7 @@ postgres://calco:calco@localhost:5432/calco
 Bring it up with:
 
 ```bash
-just up
+just db-up
 just db-wait
 ```
 
