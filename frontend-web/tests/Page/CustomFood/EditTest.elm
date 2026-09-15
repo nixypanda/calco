@@ -7,7 +7,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Edit as CustomFoodEdit
-import Page.CustomFood.Form as Form
+import Page.Food.Editor as Form
 import Test exposing (Test, describe, test)
 
 
@@ -248,7 +248,7 @@ validLoadedModel =
                 , suggestions = []
                 , token = ticket 0
                 }
-            , nutrients = [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
+            , nutrients = [ { code = "PROTEIN_G", amount = "18", unit = "g" } ]
             , servings = [ { unit = "piece", gramsPerUnit = "50" } ]
         }
 

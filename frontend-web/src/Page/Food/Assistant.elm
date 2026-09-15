@@ -1,4 +1,4 @@
-module Page.CustomFood.Assistant exposing
+module Page.Food.Assistant exposing
     ( ChatModel
     , DraftPreviewData
     , DraftResult

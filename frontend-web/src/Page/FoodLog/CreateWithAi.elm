@@ -9,14 +9,16 @@ module Page.FoodLog.CreateWithAi exposing
     )
 
 import Api.Client as Client
-import Api.Foods exposing (CreateFoodRequest, NutrientItem, UnitItem)
+import Api.Foods exposing (CategorySuggestionRequest, CreateFoodRequest, NutrientItem, UnitItem)
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
 import Data.FoodAssistant as FoodAssistant exposing (Conversation, FoodDraftPurpose(..))
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import File exposing (File)
-import Page.CustomFood.Assistant as Assistant
+import Lib.Ticket exposing (Ticket)
+import Page.Food.Assistant as Assistant
+import Page.Food.Editor as Editor
 import Page.FoodLog.AiReview as AiReview
 import Page.FoodLog.CreateAdHoc as Review
 import Ui
@@ -79,6 +81,7 @@ type OutMsg
     | RequestLocalContext
     | RequestAdHocLog CreateAdHocLogRequest
     | RequestCreateFood CreateFoodRequest
+    | RequestCategorySuggestions Ticket CategorySuggestionRequest
     | RequestProductLog CreateLogRequest
     | LogCreated FoodLog
     | SessionExpired
@@ -106,10 +109,10 @@ update msg model =
                         adjusted : Review.Model
                         adjusted =
                             case ( subMsg, model.draft ) of
-                                ( Review.AmountChanged amount, _ ) ->
+                                ( Review.FormMsg (Editor.LogQuantityChanged amount), _ ) ->
                                     { review | form = AiReview.changeAmount amount review.form }
 
-                                ( Review.UnitChanged unit, Just draft ) ->
+                                ( Review.FormMsg (Editor.LogUnitChanged unit), Just draft ) ->
                                     { review | form = AiReview.changeUnit draft unit review.form }
 
                                 _ ->
@@ -120,7 +123,7 @@ update msg model =
                     in
                     ( { model | review = Just next }
                     , Cmd.map ReviewMsg command
-                    , mapReviewOutMsg model outMsg
+                    , mapReviewOutMsg outMsg
                     )
 
         UnitsLoaded result ->
@@ -185,7 +188,7 @@ hydrateReview msg model =
             in
             ( { model | review = Just next }
             , Cmd.map ReviewMsg command
-            , mapReviewOutMsg model outMsg
+            , mapReviewOutMsg outMsg
             )
 
 
@@ -257,8 +260,8 @@ buildReview model =
             ( model, Cmd.none, NoOp )
 
 
-mapReviewOutMsg : Model -> Review.OutMsg -> OutMsg
-mapReviewOutMsg model outMsg =
+mapReviewOutMsg : Review.OutMsg -> OutMsg
+mapReviewOutMsg outMsg =
     case outMsg of
         Review.NoOp ->
             NoOp
@@ -270,7 +273,10 @@ mapReviewOutMsg model outMsg =
             RequestAdHocLog request
 
         Review.RequestCreateFood request ->
-            RequestCreateFood (preserveDraftDefinition model.draft request)
+            RequestCreateFood request
+
+        Review.RequestCategorySuggestions token request ->
+            RequestCategorySuggestions token request
 
         Review.RequestProductLog request ->
             RequestProductLog request
@@ -280,33 +286,6 @@ mapReviewOutMsg model outMsg =
 
         Review.SessionExpired ->
             SessionExpired
-
-
-preserveDraftDefinition :
-    Maybe FoodAssistant.FoodDraft
-    -> CreateFoodRequest
-    -> CreateFoodRequest
-preserveDraftDefinition maybeDraft request =
-    case maybeDraft of
-        Nothing ->
-            request
-
-        Just draft ->
-            { request
-                | categories = draft.categories
-                , servings =
-                    draft.servings
-                        |> List.filterMap
-                            (\serving ->
-                                String.toFloat serving.gramsPerUnit
-                                    |> Maybe.map
-                                        (\gramsPerUnit ->
-                                            { unit = serving.unit
-                                            , gramsPerUnit = gramsPerUnit
-                                            }
-                                        )
-                            )
-            }
 
 
 filterUnits : FoodAssistant.FoodDraft -> List UnitItem -> List UnitItem

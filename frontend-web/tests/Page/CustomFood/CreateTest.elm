@@ -7,7 +7,7 @@ import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Create as CustomFoodCreate
-import Page.CustomFood.Form as Form
+import Page.Food.Editor as Form
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -195,7 +195,7 @@ validModel =
                     , token = ticket 0
                     }
                 , nutrients =
-                    [ { code = "PROTEIN_G", amountPer100g = "18", unit = "g" } ]
+                    [ { code = "PROTEIN_G", amount = "18", unit = "g" } ]
                 , defaultQuantity = "2"
                 , defaultUnit = "piece"
                 , servings =
