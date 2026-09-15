@@ -16,10 +16,10 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
@@ -389,13 +389,13 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            Ui.pageContainer device [ mealEditSkeleton theme ]
+            UiPage.pageContainer device [ mealEditSkeleton theme ]
 
         EditLoadFailed message ->
-            Ui.pageContainer device [ Feedback.errorBanner theme message ]
+            UiPage.pageContainer device [ Feedback.errorBanner theme message ]
 
         Editing loaded ->
-            Ui.pageContainer device
+            UiPage.pageContainer device
                 [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme loaded

@@ -10,8 +10,9 @@ import Element exposing (Device, Element)
 import Html
 import Html.Events
 import Json.Decode as Decode
-import Ui
+import Lib.Text as Text
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Input as UiInput
 import Ui.Surface as Surface
@@ -97,7 +98,7 @@ resultRow theme device config =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space4
                 ]
-                [ if Ui.isSmall device then
+                [ if UiCommon.isSmall device then
                     Typography.wrappedListItemTitle theme config.item.name
 
                   else
@@ -118,13 +119,13 @@ resultRow theme device config =
         , leading = [ macroDot ]
         , title = searchItem
         , subtitle =
-            if Ui.isSmall device && hasCategories then
+            if UiCommon.isSmall device && hasCategories then
                 [ categoryTags ]
 
             else
                 []
         , trailing =
-            if Ui.isSmall device || not hasCategories then
+            if UiCommon.isSmall device || not hasCategories then
                 []
 
             else
@@ -134,7 +135,7 @@ resultRow theme device config =
 
 completionDropdownHeight : Device -> List Completion -> Int
 completionDropdownHeight device options =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         min 264 (8 + List.length options * 44)
 
     else
@@ -166,7 +167,7 @@ metaText query item =
         Nothing
     , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.nutritionSummary.per100g.energyKcal
     ]
-        |> Ui.dotSeparated
+        |> Text.dotSeparated
 
 
 isBarcodeVisible : String -> SearchResult -> Bool
@@ -190,7 +191,7 @@ categoryPills theme device categories =
     if List.isEmpty pills then
         Element.none
 
-    else if Ui.isSmall device then
+    else if UiCommon.isSmall device then
         Element.wrappedRow
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space4

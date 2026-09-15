@@ -15,12 +15,12 @@ import Api.Client as Client
 import Data.User as User exposing (User)
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -263,7 +263,7 @@ completePendingAction pendingAction result model successStatus =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (errorView theme model.status
             ++ userInfoView theme model
             ++ resetPasswordView device theme model

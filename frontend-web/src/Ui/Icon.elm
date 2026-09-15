@@ -4,6 +4,7 @@ import Element exposing (Element)
 import Html.Attributes
 import Svg exposing (Svg, circle, line, path, polyline, svg)
 import Svg.Attributes as SvgA
+import Ui.Common exposing (toCssColor)
 
 
 type Icon
@@ -104,20 +105,3 @@ shapes icon =
             [ line [ SvgA.x1 "6", SvgA.y1 "6", SvgA.x2 "18", SvgA.y2 "18" ] []
             , line [ SvgA.x1 "18", SvgA.y1 "6", SvgA.x2 "6", SvgA.y2 "18" ] []
             ]
-
-
-toCssColor : Element.Color -> String
-toCssColor color =
-    let
-        { red, green, blue, alpha } =
-            Element.toRgb color
-    in
-    "rgba("
-        ++ String.fromInt (round (red * 255))
-        ++ ", "
-        ++ String.fromInt (round (green * 255))
-        ++ ", "
-        ++ String.fromInt (round (blue * 255))
-        ++ ", "
-        ++ String.fromFloat alpha
-        ++ ")"

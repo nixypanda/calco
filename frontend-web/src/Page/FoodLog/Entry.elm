@@ -25,11 +25,13 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
-import Ui
+import Lib.Text as Text
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -690,7 +692,7 @@ itemHeader theme device model =
             productDetail model.item
     in
     Surface.card theme
-        [ Ui.pageHeader theme
+        [ UiPage.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
             , title = itemTitle theme model.item
             , subtitle = Just (metaSubtitle device maybeFood model.log)
@@ -731,7 +733,7 @@ itemTitle theme item =
             Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
-metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> Ui.PageHeaderSubtitle
+metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> UiPage.PageHeaderSubtitle
 metaSubtitle device maybeFood log =
     case maybeFood of
         Just food ->
@@ -745,8 +747,8 @@ metaSubtitle device maybeFood log =
                 loggedMeta =
                     "Logged " ++ LocalDate.display log.logDate
             in
-            if Ui.isSmall device then
-                Ui.SubtitleMetaLines
+            if UiCommon.isSmall device then
+                UiPage.SubtitleMetaLines
                     { lines =
                         [ productMeta, [ loggedMeta ] ]
                             |> List.filter (not << List.isEmpty)
@@ -754,14 +756,14 @@ metaSubtitle device maybeFood log =
                     }
 
             else
-                Ui.SubtitleMeta
+                UiPage.SubtitleMeta
                     { items = productMeta ++ [ loggedMeta ]
                     , separator = " ⋅ "
                     }
 
         Nothing ->
-            Ui.SubtitleText
-                (Ui.dotSeparated
+            UiPage.SubtitleText
+                (Text.dotSeparated
                     [ FoodLog.itemBrand log.item
                     , Just ("Logged " ++ LocalDate.display log.logDate)
                     ]

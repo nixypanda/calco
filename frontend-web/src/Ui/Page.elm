@@ -1,38 +1,21 @@
-module Ui exposing
+module Ui.Page exposing
     ( PageHeaderSubtitle(..)
-    , dotSeparated
-    , isSmall
-    , layout
     , pageContainer
     , pageHeader
     )
 
 import Element exposing (Device, Element)
-import Element.Background as Background
 import Element.Font as Font
+import Ui.Common exposing (minWidthZero)
 import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (body, minWidthZero, mutedBody, uiClass)
+import Ui.Typography exposing (body, mutedBody)
 
 
 type PageHeaderSubtitle
     = SubtitleText String
     | SubtitleMeta { items : List String, separator : String }
     | SubtitleMetaLines { lines : List (List String), separator : String }
-
-
-layout : Theme -> Element msg -> Element msg
-layout theme content =
-    Element.column
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Background.color theme.pageBg
-        , Font.family [ Font.typeface "Inter", Font.sansSerif ]
-        , Font.color theme.textPrimary
-        , body
-        , uiClass "ui-theme-root"
-        ]
-        [ content ]
 
 
 pageContainer : Device -> List (Element msg) -> Element msg
@@ -49,11 +32,6 @@ pageContainer _ children =
             }
         ]
         children
-
-
-isSmall : Device -> Bool
-isSmall device =
-    device.class == Element.Phone
 
 
 pageHeader :
@@ -151,8 +129,3 @@ separatedInline meta =
     meta.items
         |> List.map Element.text
         |> List.intersperse (Element.text meta.separator)
-
-
-dotSeparated : List (Maybe String) -> String
-dotSeparated strings =
-    strings |> List.filterMap identity |> String.join " ⋅ "

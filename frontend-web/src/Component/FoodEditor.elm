@@ -64,9 +64,9 @@ import Lib.ListExtra as ListExtra
 import Lib.Number as Number
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
-import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
@@ -1879,7 +1879,7 @@ defaultPortionFields theme device units form =
             , Element.spacing DesignTokens.space8
             ]
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column attributes [ unitSelector, quantityInput ]
 
     else
@@ -2150,7 +2150,7 @@ nutrientRowView basis theme device nutrients openDropdown index row =
                 , onPress = RemoveNutrientRow index
                 }
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
@@ -2245,7 +2245,7 @@ servingRowView theme device units openDropdown index row =
                 , onPress = RemoveServingRow index
                 }
     in
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8

@@ -1,6 +1,7 @@
 module Lib.Text exposing
     ( blankToMaybe
     , commaSeparatedUniqueLower
+    , dotSeparated
     , initial
     , isBlank
     , quoteIfWhitespace
@@ -9,6 +10,11 @@ module Lib.Text exposing
     , stripBoundingQuotes
     , trimOrDefault
     )
+
+
+dotSeparated : List (Maybe String) -> String
+dotSeparated strings =
+    strings |> List.filterMap identity |> String.join " ⋅ "
 
 
 isBlank : String -> Bool

@@ -13,7 +13,7 @@ import Api.Foods as Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
+import Lib.Text as Text
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Feedback as Feedback
@@ -202,7 +202,7 @@ foodSummaryText food =
         )
         food.nutritionSummary.per100g.energyKcal
     ]
-        |> Ui.dotSeparated
+        |> Text.dotSeparated
 
 
 customFoodListSkeleton : Theme -> Element msg

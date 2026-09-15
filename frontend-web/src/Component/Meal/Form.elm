@@ -37,8 +37,8 @@ import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
-import Ui
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
@@ -719,7 +719,7 @@ quantityTextInput :
         }
     -> Element msg
 quantityTextInput theme device config =
-    (if Ui.isSmall device then
+    (if UiCommon.isSmall device then
         Element.column
 
      else

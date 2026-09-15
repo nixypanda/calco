@@ -7,9 +7,9 @@ module View.Product exposing
 import Api.Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
-import Ui
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -26,12 +26,12 @@ foodHeader theme food extraMeta =
                     (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
     in
     Surface.card theme
-        [ Ui.pageHeader theme
+        [ UiPage.pageHeader theme
             { leading = Just (View.Nutrients.macroDot theme macroNutrients)
             , title = Typography.truncatedHeader theme food.name
             , subtitle =
                 Just
-                    (Ui.SubtitleMeta
+                    (UiPage.SubtitleMeta
                         { items = metaItems food extraMeta
                         , separator = " ⋅ "
                         }

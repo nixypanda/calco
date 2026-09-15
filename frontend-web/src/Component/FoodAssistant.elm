@@ -42,8 +42,8 @@ import Html.Attributes as HtmlAttributes
 import Html.Events as HtmlEvents
 import Json.Decode as Decode
 import Task
-import Ui
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -1402,7 +1402,7 @@ confirmationSurface theme children =
 
 compactActionRow : Device -> List (Element msg) -> Element msg
 compactActionRow device actions =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8

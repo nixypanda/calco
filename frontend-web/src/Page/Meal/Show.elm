@@ -20,10 +20,10 @@ import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Font as Font
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -496,7 +496,7 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ Surface.section theme
             { header = Just (headerView theme model)
             , body =
@@ -543,7 +543,7 @@ headerView : Theme -> Model -> Element Msg
 headerView theme model =
     case model of
         Loaded loaded ->
-            Ui.pageHeader theme
+            UiPage.pageHeader theme
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map

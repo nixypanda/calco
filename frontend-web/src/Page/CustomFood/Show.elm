@@ -17,13 +17,13 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
-import Ui
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
-import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients
 import View.Product
@@ -249,7 +249,7 @@ applyDeleteError message model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ case model of
             LoadFailed message ->
                 Feedback.errorBanner theme message
@@ -353,7 +353,7 @@ customFoodShowSkeleton theme =
             , Element.height (Element.px 120)
             , Background.color theme.inputFill
             , Border.rounded DesignTokens.radiusCard
-            , Typography.uiClass "ui-skeleton"
+            , UiCommon.uiClass "ui-skeleton"
             ]
             Element.none
         , Skeleton.bar theme

@@ -20,9 +20,9 @@ import Element exposing (Device, Element)
 import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
-import Ui
 import Ui.Button as Button
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
@@ -314,14 +314,14 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model.review of
         Nothing ->
-            Ui.pageContainer device
+            UiPage.pageContainer device
                 [ Feedback.maybeErrorBanner theme model.error
                 , Element.map AssistantMsg
                     (Assistant.viewFor AdHocLog theme device False model.assistant)
                 ]
 
         Just review ->
-            Ui.pageContainer device
+            UiPage.pageContainer device
                 [ Typography.sectionTitle theme "Review food estimate"
                 , Typography.mutedParagraph theme
                     "Nutrition values are totals for the entire portion you are logging."

@@ -16,12 +16,12 @@ import Element.Background as Background
 import Element.Font as Font
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
-import Ui
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -153,7 +153,7 @@ today =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ dateHeader theme device model
         , case model of
             Loading _ ->
@@ -175,7 +175,7 @@ dateHeader theme device model =
             LocalDate.compare (currentDate model) (today model) == LT
     in
     Surface.card theme
-        [ Ui.pageHeader theme
+        [ UiPage.pageHeader theme
             { leading =
                 Just
                     (Button.iconButton device
@@ -187,7 +187,7 @@ dateHeader theme device model =
                         }
                     )
             , title = Typography.sectionTitle theme "Nutrition details"
-            , subtitle = Just (Ui.SubtitleText (LocalDate.display (currentDate model)))
+            , subtitle = Just (UiPage.SubtitleText (LocalDate.display (currentDate model)))
             , actions =
                 [ if canGoNext then
                     Button.iconButton device

@@ -25,9 +25,9 @@ import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Ui
 import Ui.Button as Button
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Theme exposing (Theme)
 
 
@@ -335,7 +335,7 @@ viewForAi showOptional { model, device, theme } =
             else
                 Editor.CoreNutrientsOnly
     in
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ Feedback.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog visibility theme device model.nutrients model.units model.form)

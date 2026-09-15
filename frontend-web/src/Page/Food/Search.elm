@@ -36,11 +36,12 @@ import Html.Events
 import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
+import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
-import Ui
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -856,7 +857,7 @@ adHocLogView theme device =
 
 responsiveActions : Device -> List (Element msg) -> Element msg
 responsiveActions device actions =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             actions
@@ -1120,7 +1121,7 @@ scopeSegment theme selectedScope scope =
         , Font.color foreground
         , Font.medium
         , Font.size 14
-        , Typography.uiClass "ui-motion ui-pressable"
+        , UiCommon.uiClass "ui-motion ui-pressable"
         , if selected then
             Element.mouseOver []
 
@@ -1133,7 +1134,7 @@ scopeSegment theme selectedScope scope =
                 [ Element.centerX
                 , Element.centerY
                 , Element.clip
-                , Typography.uiClass "ui-text-ellipsis"
+                , UiCommon.uiClass "ui-text-ellipsis"
                 ]
                 (Element.text (scopeLabel scope))
         }
@@ -1386,7 +1387,7 @@ recentItemRow device theme model item =
             , title = Typography.wrappedListItemTitle theme (FoodLog.itemName item.item)
             , subtitle =
                 [ Typography.mutedCaptionParagraph theme
-                    (Ui.dotSeparated
+                    (Text.dotSeparated
                         [ FoodLog.itemBrand item.item
                         , Nutrition.servingCaloriesText item
                         ]

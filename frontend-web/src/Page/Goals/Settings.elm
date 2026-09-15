@@ -17,10 +17,10 @@ import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, G
 import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
-import Ui
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -324,7 +324,7 @@ formFor targets =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (case model of
             Loading ->
                 [ goalsSettingsSkeleton theme ]

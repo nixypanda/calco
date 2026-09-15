@@ -34,9 +34,8 @@ import Element.Input as Input
 import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
-import Ui
 import Ui.Button as Button
-import Ui.Css as Css
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
@@ -1333,7 +1332,7 @@ mealSlotFade theme =
                         ++ "rgba(255,255,255,0) 0%, "
                         ++ "rgba(255,255,255,0) 25%, "
                         ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ Css.toCssColor theme.cardBg
+                        ++ UiCommon.toCssColor theme.cardBg
                         ++ " 100%)"
 
                 Dark ->
@@ -1341,7 +1340,7 @@ mealSlotFade theme =
                         ++ "rgba(0,0,0,0.25) 0%, "
                         ++ "rgba(0,0,0,0.55) 45%, "
                         ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ Css.toCssColor theme.cardBg
+                        ++ UiCommon.toCssColor theme.cardBg
                         ++ " 100%)"
     in
     Element.el
@@ -1385,7 +1384,7 @@ mealSlotCard theme device maybeSlot header bodyChildren =
 
 mealSlotHorizontalPadding : Device -> Int
 mealSlotHorizontalPadding device =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         16
 
     else

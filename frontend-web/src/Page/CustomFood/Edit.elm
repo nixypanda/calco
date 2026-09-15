@@ -23,10 +23,10 @@ import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 
@@ -351,7 +351,7 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view config =
-    Ui.pageContainer config.device
+    UiPage.pageContainer config.device
         [ bodyView config ]
 
 

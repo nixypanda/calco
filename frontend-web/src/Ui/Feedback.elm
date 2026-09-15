@@ -13,10 +13,11 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space8)
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (sectionTitle, uiClass)
+import Ui.Typography exposing (sectionTitle)
 
 
 loading : Theme -> String -> Element msg

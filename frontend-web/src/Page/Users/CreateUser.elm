@@ -14,10 +14,10 @@ import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Device, Element)
 import Lib.Text as Text
-import Ui
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
+import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 
@@ -190,7 +190,7 @@ view { model, device, theme } =
         form =
             currentForm model
     in
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (errorView theme model
             ++ [ Surface.card theme
                     [ UiInput.input theme

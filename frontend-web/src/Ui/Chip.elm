@@ -16,6 +16,7 @@ import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import Ui.Common exposing (hoverEffect)
 import Ui.DesignTokens exposing (radiusPill, space8)
 import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
@@ -218,17 +219,3 @@ statusBadge theme status =
             else
                 theme.statusRed
         }
-
-
-isSmall : Device -> Bool
-isSmall device =
-    device.class == Element.Phone
-
-
-hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg
-hoverEffect device attrs =
-    if isSmall device then
-        Element.mouseOver []
-
-    else
-        Element.mouseOver attrs

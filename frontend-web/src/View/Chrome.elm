@@ -20,8 +20,8 @@ import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
 import Html.Attributes
-import Ui
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
@@ -69,7 +69,7 @@ showsAppChrome session isLoadingPage route =
 
 showBottomNav : Device -> Session -> Bool -> Route -> Bool
 showBottomNav device session isLoadingPage route =
-    Ui.isSmall device
+    UiCommon.isSmall device
         && showsAppChrome session isLoadingPage route
         && not (Auth.isAdmin session)
 
@@ -273,7 +273,7 @@ screenMeta device session route =
     let
         phoneNonAdmin : Bool
         phoneNonAdmin =
-            Ui.isSmall device && not (Auth.isAdmin session)
+            UiCommon.isSmall device && not (Auth.isAdmin session)
     in
     case route of
         Root ->
@@ -688,7 +688,7 @@ drawerPanel theme children =
         , Element.paddingXY 16 9
         , Element.spacing DesignTokens.space12
         , Background.color theme.cardBg
-        , Typography.uiClass "ui-card-shadow"
+        , UiCommon.uiClass "ui-card-shadow"
         , Region.navigation
         ]
         children
@@ -779,7 +779,7 @@ menuCard theme config =
         , Element.spacing 10
         , Background.color theme.cardBg
         , Border.rounded DesignTokens.radiusCard
-        , Typography.uiClass "ui-card-shadow"
+        , UiCommon.uiClass "ui-card-shadow"
         ]
         config.children
 

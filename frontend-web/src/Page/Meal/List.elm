@@ -13,7 +13,7 @@ import Api.Meals as MealsApi exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
+import Lib.Text as Text
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
@@ -179,7 +179,7 @@ mealSummaryText meal =
         meal.nutritionSummary
     , Just (String.fromInt (List.length meal.components) ++ " components")
     ]
-        |> Ui.dotSeparated
+        |> Text.dotSeparated
 
 
 mealListSkeleton : Theme -> Element msg

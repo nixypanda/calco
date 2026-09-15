@@ -13,8 +13,8 @@ import Element
 import Expect
 import String
 import Test exposing (Test, describe, test)
-import Ui
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.Css as Css
 import Ui.Theme as Theme exposing (Theme)
 
@@ -60,17 +60,17 @@ cssVariables =
                 Expect.all
                     [ \_ ->
                         String.contains
-                            ("--ui-chip-selected-bg: " ++ Css.toCssColor theme.chipSelectedBg)
+                            ("--ui-chip-selected-bg: " ++ UiCommon.toCssColor theme.chipSelectedBg)
                             cssVars
                             |> Expect.equal True
                     , \_ ->
                         String.contains
-                            ("--ui-chip-selected-fg: " ++ Css.toCssColor theme.chipSelectedFg)
+                            ("--ui-chip-selected-fg: " ++ UiCommon.toCssColor theme.chipSelectedFg)
                             cssVars
                             |> Expect.equal True
                     , \_ ->
                         String.contains
-                            ("--ui-focus-ring: " ++ Css.toCssColor theme.focusRing)
+                            ("--ui-focus-ring: " ++ UiCommon.toCssColor theme.focusRing)
                             cssVars
                             |> Expect.equal True
                     ]
@@ -88,6 +88,6 @@ deviceHelpers =
                 , Element.Device Element.Desktop Element.Landscape
                 , Element.Device Element.BigDesktop Element.Landscape
                 ]
-                    |> List.map Ui.isSmall
+                    |> List.map UiCommon.isSmall
                     |> Expect.equal [ True, False, False, False ]
         ]

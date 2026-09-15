@@ -23,6 +23,7 @@ import Element.Input as Input
 import Html
 import Html.Attributes
 import Lib.Number as Number
+import Ui.Common exposing (hoverEffect, minWidthZero, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusControl
@@ -34,7 +35,7 @@ import Ui.DesignTokens
         )
 import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (body, caption, minWidthZero, uiClass)
+import Ui.Typography exposing (body, caption)
 
 
 type alias InputConfig msg =
@@ -409,20 +410,6 @@ selectDropdown device theme config =
                 }
             )
         ]
-
-
-isSmall : Device -> Bool
-isSmall device =
-    device.class == Element.Phone
-
-
-hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg
-hoverEffect device attrs =
-    if isSmall device then
-        Element.mouseOver []
-
-    else
-        Element.mouseOver attrs
 
 
 

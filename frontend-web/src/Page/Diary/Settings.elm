@@ -13,10 +13,10 @@ import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Element.Input as Input
-import Ui
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -156,7 +156,7 @@ canonical selected =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         (case model of
             Loading ->
                 [ diarySettingsSkeleton theme ]

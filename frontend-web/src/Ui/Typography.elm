@@ -4,7 +4,6 @@ module Ui.Typography exposing
     , heroStat
     , listItemTitle
     , maybeMutedParagraph
-    , minWidthZero
     , mutedBody
     , mutedBodyParagraph
     , mutedCaption
@@ -16,14 +15,13 @@ module Ui.Typography exposing
     , tableHeader
     , truncatedHeader
     , truncatedListItemTitle
-    , uiClass
     , wrappedListItemTitle
     )
 
 import Element exposing (Element)
 import Element.Font as Font
 import Element.Region as Region
-import Html.Attributes
+import Ui.Common exposing (minWidthZero, uiClass)
 import Ui.Theme exposing (Theme)
 
 
@@ -217,17 +215,3 @@ maybeMutedParagraph theme maybeText =
 
         Nothing ->
             Element.none
-
-
-
--- Internal helpers used by truncation functions
-
-
-uiClass : String -> Element.Attribute msg
-uiClass className =
-    Element.htmlAttribute (Html.Attributes.class className)
-
-
-minWidthZero : Element.Attribute msg
-minWidthZero =
-    Element.htmlAttribute (Html.Attributes.style "min-width" "0")

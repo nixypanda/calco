@@ -12,9 +12,9 @@ import Api.Meals exposing (CreateMealRequest, Meal)
 import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Ui
 import Ui.Button as Button
 import Ui.Feedback as Feedback
+import Ui.Page as UiPage
 import Ui.Theme exposing (Theme)
 
 
@@ -134,7 +134,7 @@ mapFormOutMsg maybeOutMsg =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    Ui.pageContainer device
+    UiPage.pageContainer device
         [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
         , Button.textButton device

@@ -15,10 +15,10 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
+import Ui.Common exposing (hoverEffect, isSmall, uiClass)
 import Ui.DesignTokens exposing (radiusPill, space12, space4)
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
-import Ui.Typography exposing (uiClass)
 
 
 type SubmitState
@@ -413,17 +413,3 @@ iconButton device theme config =
                     }
                 )
         }
-
-
-isSmall : Device -> Bool
-isSmall device =
-    device.class == Element.Phone
-
-
-hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg
-hoverEffect device attrs =
-    if isSmall device then
-        Element.mouseOver []
-
-    else
-        Element.mouseOver attrs

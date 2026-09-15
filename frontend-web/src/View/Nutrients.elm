@@ -17,7 +17,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Lib.Number as Number
-import Ui
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
@@ -408,7 +408,7 @@ macroLegend theme portions =
 
 responsiveMacroLegend : Element.Device -> Theme -> MacroPortions -> Element msg
 responsiveMacroLegend device theme portions =
-    if Ui.isSmall device then
+    if UiCommon.isSmall device then
         macroLegendItems theme portions
             |> Element.column
                 [ Element.width Element.fill
