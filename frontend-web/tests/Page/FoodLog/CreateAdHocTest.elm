@@ -1,8 +1,8 @@
 module Page.FoodLog.CreateAdHocTest exposing (tests)
 
 import Api.Client as Client
+import Component.FoodEditor as Editor
 import Expect
-import Page.Food.Editor as Editor
 import Page.FoodLog.CreateAdHoc as CreateAdHoc
 import Test exposing (Test, describe, test)
 

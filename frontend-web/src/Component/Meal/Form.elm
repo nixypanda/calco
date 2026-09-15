@@ -1,4 +1,4 @@
-module Page.Meal.Form exposing
+module Component.Meal.Form exposing
     ( CategorySuggestionResult
     , ComponentRow
     , FormFieldMsg(..)

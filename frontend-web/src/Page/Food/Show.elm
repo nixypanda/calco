@@ -14,13 +14,13 @@ module Page.Food.Show exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (CreateLogRequest, RecentItemsResponse)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)

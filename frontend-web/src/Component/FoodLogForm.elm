@@ -1,4 +1,4 @@
-module Page.FoodLog.Form exposing
+module Component.FoodLogForm exposing
     ( Model
     , Msg(..)
     , OpenDropdown(..)

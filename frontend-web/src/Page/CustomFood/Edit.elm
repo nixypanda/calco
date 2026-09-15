@@ -19,10 +19,10 @@ import Api.Foods as Foods
         , ProductDetail
         , UnitItem
         )
+import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Editor as Form
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)

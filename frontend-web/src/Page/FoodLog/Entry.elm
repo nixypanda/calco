@@ -19,12 +19,12 @@ module Page.FoodLog.Entry exposing
 import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Api.Logs exposing (UpdateLogRequest)
+import Component.FoodLogForm as FoodLogForm
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
-import Page.FoodLog.Form as FoodLogForm
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)

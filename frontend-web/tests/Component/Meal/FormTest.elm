@@ -1,4 +1,4 @@
-module Page.Meal.FormTest exposing (tests)
+module Component.Meal.FormTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods
@@ -9,24 +9,24 @@ import Api.Foods
         , SearchScope(..)
         )
 import Api.Meals as Meals
-import Data.Nutrition as Nutrition
-import Data.Search as Search
-import Expect
-import Lib.Loadable exposing (Loadable(..))
-import Lib.Ticket as Ticket exposing (Ticket)
-import Page.Meal.Form as Form
+import Component.Meal.Form as Form
     exposing
         ( FormFieldMsg(..)
         , FormFieldOutMsg(..)
         , FormFields
         , ValidationError(..)
         )
+import Data.Nutrition as Nutrition
+import Data.Search as Search
+import Expect
+import Lib.Loadable exposing (Loadable(..))
+import Lib.Ticket as Ticket exposing (Ticket)
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Meal.Form"
+    describe "Component.Meal.Form"
         [ describe "ProductNameLoaded"
             [ test "Ok shows the product name in matching rows" <|
                 \_ ->

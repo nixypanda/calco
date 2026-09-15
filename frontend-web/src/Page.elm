@@ -36,6 +36,8 @@ import Api.Goals
 import Api.Logs
 import Api.Meals
 import Api.NutritionDetails
+import Component.FoodAssistant as FoodAssistantUi
+import Component.Meal.Form as MealForm
 import Data.Auth as Auth
 import Data.BarcodeScan exposing (ScannerEvent)
 import Data.DiaryPreferences
@@ -56,7 +58,6 @@ import Page.CustomFood.Show as CustomFoodShow
 import Page.Diary.Calendar as DiaryCalendar
 import Page.Diary.Day as DiaryDay
 import Page.Diary.Settings as DiarySettings
-import Page.Food.Assistant as FoodAssistantUi
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
 import Page.FoodLog.CreateAdHoc as CreateAdHocLog
@@ -65,7 +66,6 @@ import Page.FoodLog.Entry as FoodLogEntry
 import Page.Goals.Settings as GoalsSettings
 import Page.Meal.Create as MealCreate
 import Page.Meal.Edit as MealEdit
-import Page.Meal.Form as MealForm
 import Page.Meal.List as MealList
 import Page.Meal.Show as MealShow
 import Page.NutritionDetails as NutritionDetails

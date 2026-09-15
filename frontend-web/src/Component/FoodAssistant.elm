@@ -1,4 +1,4 @@
-module Page.Food.Assistant exposing
+module Component.FoodAssistant exposing
     ( ChatModel
     , DraftPreviewData
     , DraftResult

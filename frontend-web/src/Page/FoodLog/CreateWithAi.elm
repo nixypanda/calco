@@ -11,14 +11,14 @@ module Page.FoodLog.CreateWithAi exposing
 import Api.Client as Client
 import Api.Foods exposing (CategorySuggestionRequest, CreateFoodRequest, NutrientItem, UnitItem)
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
+import Component.FoodAssistant as Assistant
+import Component.FoodEditor as Editor
 import Data.FoodAssistant as FoodAssistant exposing (Conversation, FoodDraftPurpose(..))
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import File exposing (File)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Assistant as Assistant
-import Page.Food.Editor as Editor
 import Page.FoodLog.CreateAdHoc as Review
 import Ui
 import Ui.Theme exposing (Theme)

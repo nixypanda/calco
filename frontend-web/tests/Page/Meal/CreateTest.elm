@@ -2,6 +2,7 @@ module Page.Meal.CreateTest exposing (tests)
 
 import Api.Foods exposing (SearchResult, SearchScope(..))
 import Api.Meals exposing (Meal)
+import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
@@ -10,13 +11,12 @@ import Expect
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Meal.Create as MealCreate
-import Page.Meal.Form as Common
 import Test exposing (Test, describe, test)
 
 
 tests : Test
 tests =
-    describe "Page.Meal.Form.Create"
+    describe "Page.Meal.Create"
         [ test "new meal form starts with one empty component" <|
             \_ ->
                 MealCreate.init

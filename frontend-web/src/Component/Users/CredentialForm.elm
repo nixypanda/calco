@@ -1,4 +1,4 @@
-module Page.Users.CredentialForm exposing
+module Component.Users.CredentialForm exposing
     ( Config
     , Form
     , Model(..)

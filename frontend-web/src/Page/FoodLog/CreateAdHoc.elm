@@ -19,12 +19,12 @@ import Api.Foods
         , UnitItem
         )
 import Api.Logs exposing (CreateAdHocLogRequest, CreateLogRequest)
+import Component.FoodEditor as Editor
 import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
-import Page.Food.Editor as Editor
 import Ui
 import Ui.Theme exposing (Theme)
 

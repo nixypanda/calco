@@ -2,12 +2,12 @@ module Page.CustomFood.EditTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (CreateFoodRequest, NutrientItem, ProductDetail, UnitItem)
+import Component.FoodEditor as Form
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Edit as CustomFoodEdit
-import Page.Food.Editor as Form
 import Test exposing (Test, describe, test)
 
 

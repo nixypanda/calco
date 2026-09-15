@@ -11,11 +11,11 @@ module Page.Meal.Edit exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
+import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form as Common
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Theme exposing (Theme)

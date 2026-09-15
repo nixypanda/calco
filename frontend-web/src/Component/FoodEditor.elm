@@ -1,4 +1,4 @@
-module Page.Food.Editor exposing
+module Component.FoodEditor exposing
     ( CategoryInput
     , Context(..)
     , FormModel

@@ -1,13 +1,13 @@
-module Page.Food.EditorTest exposing (tests)
+module Component.FoodEditorTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
+import Component.FoodEditor as Form
 import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition as Nutrition
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
-import Page.Food.Editor as Form
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -16,7 +16,7 @@ import Ui.Theme as Theme
 
 tests : Test
 tests =
-    describe "Page.Food.Editor custom-food mode"
+    describe "Component.FoodEditor custom-food mode"
         [ test "empty form has one nutrient row" <|
             \_ ->
                 Form.emptyForm.nutrients

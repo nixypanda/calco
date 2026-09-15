@@ -9,9 +9,9 @@ module Page.Meal.Create exposing
 
 import Api.Client as Client
 import Api.Meals exposing (CreateMealRequest, Meal)
+import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
-import Page.Meal.Form as Common
 import Ui
 import Ui.Theme exposing (Theme)
 

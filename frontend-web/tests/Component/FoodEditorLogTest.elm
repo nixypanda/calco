@@ -1,10 +1,10 @@
-module Page.Food.EditorLogTest exposing (tests)
+module Component.FoodEditorLogTest exposing (tests)
 
 import Api.Foods exposing (NutrientItem)
+import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
-import Page.Food.Editor as Editor
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -13,7 +13,7 @@ import Ui.Theme as Theme
 
 tests : Test
 tests =
-    describe "Page.Food.Editor food-log mode"
+    describe "Component.FoodEditor food-log mode"
         [ test "accepts zero values for all required nutrients" <|
             \_ ->
                 Editor.validateLog
