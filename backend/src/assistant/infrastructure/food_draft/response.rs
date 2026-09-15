@@ -3,7 +3,8 @@ use serde::Deserialize;
 
 use crate::assistant::application::AssistantError;
 use crate::assistant::domain::{
-    DraftNutrient, DraftServing, DraftValidationError, FoodDraft, FoodDraftBuilder, FoodDraftTurn,
+    DraftNutrient, DraftServing, DraftValidationError, FoodDraft, FoodDraftBuilder,
+    FoodDraftPurpose, FoodDraftTurn, SuggestedLog,
 };
 
 #[derive(Deserialize)]
@@ -12,6 +13,8 @@ struct WireTurn {
     assistant_message: String,
     status: WireStatus,
     draft: Option<WireDraft>,
+    #[serde(default)]
+    suggested_log: Option<WireSuggestedLog>,
     warnings: Vec<String>,
 }
 
@@ -48,19 +51,45 @@ struct WireServing {
     grams_per_unit: Decimal,
 }
 
-pub(super) fn parse(content: &str) -> Result<FoodDraftTurn, AssistantError> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WireSuggestedLog {
+    amount: Decimal,
+    unit: String,
+    total_weight_grams: Decimal,
+}
+
+pub(super) fn parse(
+    purpose: FoodDraftPurpose,
+    content: &str,
+) -> Result<FoodDraftTurn, AssistantError> {
     let wire: WireTurn = serde_json::from_str(content).map_err(|error| {
         tracing::error!(content = %content, error = %error, "failed to parse model response");
         AssistantError::InvalidModelResponse
     })?;
     match wire.status {
-        WireStatus::NeedsClarification if wire.draft.is_none() && wire.warnings.is_empty() => {
+        WireStatus::NeedsClarification
+            if wire.draft.is_none() && wire.suggested_log.is_none() && wire.warnings.is_empty() =>
+        {
             FoodDraftTurn::clarification(wire.assistant_message).map_err(invalid_draft)
         }
         WireStatus::DraftReady => {
             let draft = parse_draft(wire.draft.ok_or(AssistantError::InvalidModelResponse)?)?;
-            FoodDraftTurn::ready(wire.assistant_message, draft, wire.warnings)
-                .map_err(invalid_draft)
+            match (purpose, wire.suggested_log) {
+                (FoodDraftPurpose::CustomFood, None) => {
+                    FoodDraftTurn::ready(wire.assistant_message, draft, wire.warnings)
+                        .map_err(invalid_draft)
+                }
+                (FoodDraftPurpose::AdHocLog, Some(value)) => FoodDraftTurn::ready_for_log(
+                    wire.assistant_message,
+                    draft,
+                    SuggestedLog::new(value.amount, value.unit, value.total_weight_grams)
+                        .map_err(invalid_draft)?,
+                    wire.warnings,
+                )
+                .map_err(invalid_draft),
+                _ => Err(AssistantError::InvalidModelResponse),
+            }
         }
         _ => Err(AssistantError::InvalidModelResponse),
     }
@@ -96,15 +125,16 @@ mod tests {
 
     #[test]
     fn parses_clarification_directly_to_final_type() {
-        let value = parse(r#"{"assistant_message":"How many grams?","status":"needs_clarification","draft":null,"warnings":[]}"#).unwrap();
+        let value = parse(FoodDraftPurpose::CustomFood, r#"{"assistant_message":"How many grams?","status":"needs_clarification","draft":null,"warnings":[]}"#).unwrap();
         assert!(matches!(value, FoodDraftTurn::NeedsClarification { .. }));
     }
 
     #[test]
     fn rejects_unknown_fields_and_incomplete_drafts() {
-        assert!(parse(r#"{"assistant_message":"x","status":"needs_clarification","draft":null,"warnings":[],"extra":1}"#).is_err());
+        assert!(parse(FoodDraftPurpose::CustomFood, r#"{"assistant_message":"x","status":"needs_clarification","draft":null,"warnings":[],"extra":1}"#).is_err());
         assert!(
             parse(
+                FoodDraftPurpose::CustomFood,
                 r#"{"assistant_message":"ready","status":"draft_ready","draft":null,"warnings":[]}"#
             )
             .is_err()
@@ -113,7 +143,7 @@ mod tests {
 
     #[test]
     fn parses_complete_draft_directly_to_reviewable_domain_type() {
-        let value = parse(r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#).unwrap();
+        let value = parse(FoodDraftPurpose::CustomFood, r#"{"assistant_message":"Review this estimate","status":"draft_ready","draft":{"name":" Dal ","brand":null,"categories":[" Indian "],"default_quantity":1,"default_unit":"g","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":"120.1234567"}],"servings":[]},"warnings":["Estimated"]}"#).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = value else {
             panic!("expected a complete draft")
         };
@@ -128,14 +158,22 @@ mod tests {
     #[test]
     fn default_unit_must_be_grams_or_use_a_configured_serving_unit() {
         let default_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[]},"warnings":[]}"#;
-        assert!(parse(default_cup).is_err());
+        assert!(parse(FoodDraftPurpose::CustomFood, default_cup).is_err());
         let serving_cup = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":2,"default_unit":"cup","nutrients":[{"code":"ENERGY_KCAL","amount_per_100g":120}],"servings":[{"unit":"cup","grams_per_unit":240}]},"warnings":[]}"#;
-        let turn = parse(serving_cup).unwrap();
+        let turn = parse(FoodDraftPurpose::CustomFood, serving_cup).unwrap();
         let FoodDraftTurn::DraftReady { draft, .. } = turn else {
             panic!("expected ready draft")
         };
         assert_eq!(draft.servings()[0].unit(), "cup");
         assert_eq!(draft.default_quantity(), Some(Decimal::new(2, 0)));
         assert_eq!(draft.default_unit(), Some("cup"));
+    }
+
+    #[test]
+    fn ad_hoc_draft_requires_a_suggested_log() {
+        let without = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"g","nutrients":[],"servings":[]},"warnings":[]}"#;
+        assert!(parse(FoodDraftPurpose::AdHocLog, without).is_err());
+        let with = r#"{"assistant_message":"ready","status":"draft_ready","draft":{"name":"Dal","brand":null,"categories":[],"default_quantity":1,"default_unit":"bowl","nutrients":[],"servings":[{"unit":"bowl","grams_per_unit":250}]},"suggested_log":{"amount":1,"unit":"bowl","total_weight_grams":250},"warnings":[]}"#;
+        assert!(parse(FoodDraftPurpose::AdHocLog, with).is_ok());
     }
 }

@@ -18,7 +18,7 @@ import Api.Foods as Foods
         , NutrientItem
         , UnitItem
         )
-import Data.FoodAssistant
+import Data.FoodAssistant exposing (Conversation, FoodDraftPurpose)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import File exposing (File)
@@ -94,7 +94,7 @@ type OutMsg
     | RequestCreateFood CreateFoodRequest
     | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
     | RequestAssistantStatus
-    | RequestFoodDraft Data.FoodAssistant.Conversation (List File)
+    | RequestFoodDraft FoodDraftPurpose Conversation (List File)
     | RevokePhotoPreviewUrls (List String)
     | Navigate Route
     | SessionExpired
@@ -251,8 +251,8 @@ applyAssistantOutMsg assistantOut model command =
         Assistant.RequestStatus ->
             ( model, command, RequestAssistantStatus )
 
-        Assistant.RequestDraft conversation photos ->
-            ( model, command, RequestFoodDraft conversation photos )
+        Assistant.RequestDraft purpose conversation photos ->
+            ( model, command, RequestFoodDraft purpose conversation photos )
 
         Assistant.RevokePhotoPreviewUrls urls ->
             ( model, command, RevokePhotoPreviewUrls urls )
@@ -265,6 +265,9 @@ applyAssistantOutMsg assistantOut model command =
             , command
             , NoOp
             )
+
+        Assistant.CompleteDraft _ ->
+            ( model, command, NoOp )
 
         Assistant.SessionExpired ->
             ( model, command, SessionExpired )

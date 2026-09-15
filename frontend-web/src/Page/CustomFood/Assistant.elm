@@ -1,6 +1,7 @@
 module Page.CustomFood.Assistant exposing
     ( ChatModel
     , DraftPreviewData
+    , DraftResult
     , Model(..)
     , Msg(..)
     , OutMsg(..)
@@ -11,8 +12,10 @@ module Page.CustomFood.Assistant exposing
     , previewUrls
     , removeAt
     , update
+    , updateFor
     , validatePhotoMetadata
     , view
+    , viewFor
     )
 
 import Api.Client as Client
@@ -23,7 +26,9 @@ import Data.FoodAssistant as FoodAssistant
         , ConversationRole(..)
         , ConversationTurn
         , FoodDraft
+        , FoodDraftPurpose(..)
         , FoodDraftTurn(..)
+        , SuggestedLog
         )
 import Element exposing (Device, Element)
 import Element.Background as Background
@@ -56,6 +61,7 @@ type alias ChatModel =
     , description : String
     , request : RequestState
     , draft : Maybe FoodDraft
+    , suggestedLog : Maybe SuggestedLog
     , warnings : List String
     , askingForChanges : Bool
     , awaitingOverwriteConfirmation : Bool
@@ -77,6 +83,13 @@ type alias DraftPreviewData =
     { details : List ( String, String )
     , nutrients : List ( String, String )
     , servings : List ( String, String )
+    }
+
+
+type alias DraftResult =
+    { draft : FoodDraft
+    , suggestedLog : SuggestedLog
+    , warnings : List String
     }
 
 
@@ -112,9 +125,10 @@ type Msg
 type OutMsg
     = NoOutMsg
     | RequestStatus
-    | RequestDraft Conversation (List File)
+    | RequestDraft FoodDraftPurpose Conversation (List File)
     | RevokePhotoPreviewUrls (List String)
     | ApplyDraft FoodDraft
+    | CompleteDraft DraftResult
     | SessionExpired
 
 
@@ -139,6 +153,7 @@ emptyChat =
     , description = ""
     , request = Ready
     , draft = Nothing
+    , suggestedLog = Nothing
     , warnings = []
     , askingForChanges = False
     , awaitingOverwriteConfirmation = False
@@ -151,7 +166,12 @@ emptyChat =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
-update msg model =
+update =
+    updateFor CustomFood
+
+
+updateFor : FoodDraftPurpose -> Msg -> Model -> ( Model, Cmd Msg, OutMsg )
+updateFor purpose msg model =
     case msg of
         StatusLoaded result ->
             case result of
@@ -226,7 +246,7 @@ update msg model =
                 model
 
         SendClicked ->
-            updateChat sendDescription model
+            updateChat (sendDescription purpose) model
 
         DraftCompleted result ->
             case result of
@@ -243,7 +263,7 @@ update msg model =
                         model
 
         RetryClicked ->
-            updateChat retryDraft model
+            updateChat (retryDraft purpose) model
 
         NewSessionClicked ->
             updateChat requestNewSession model
@@ -269,7 +289,7 @@ update msg model =
                 model
 
         ApplyDraftClicked formHasManualInput ->
-            updateChat (requestApply formHasManualInput) model
+            updateChat (requestApply purpose formHasManualInput) model
 
         ConfirmOverwriteClicked ->
             updateChat confirmOverwrite model
@@ -301,8 +321,8 @@ updateChat transform model =
             ( model, Cmd.none, NoOutMsg )
 
 
-sendDescription : ChatModel -> ( ChatModel, OutMsg )
-sendDescription chat =
+sendDescription : FoodDraftPurpose -> ChatModel -> ( ChatModel, OutMsg )
+sendDescription purpose chat =
     if chat.request == Sending then
         ( chat, NoOutMsg )
 
@@ -312,11 +332,11 @@ sendDescription chat =
                 ( { chat | request = InputFailed message }, NoOutMsg )
 
             Ok turn ->
-                sendTranscript (chat.transcript ++ [ turn ]) chat
+                sendTranscript purpose (chat.transcript ++ [ turn ]) chat
 
 
-sendTranscript : List ConversationTurn -> ChatModel -> ( ChatModel, OutMsg )
-sendTranscript transcript chat =
+sendTranscript : FoodDraftPurpose -> List ConversationTurn -> ChatModel -> ( ChatModel, OutMsg )
+sendTranscript purpose transcript chat =
     case FoodAssistant.conversation transcript of
         Err message ->
             ( { chat | request = InputFailed message }, NoOutMsg )
@@ -327,11 +347,12 @@ sendTranscript transcript chat =
                 , description = ""
                 , request = Sending
                 , draft = Nothing
+                , suggestedLog = Nothing
                 , warnings = []
                 , awaitingOverwriteConfirmation = False
                 , awaitingNewSessionConfirmation = False
               }
-            , RequestDraft boundedConversation chat.photos
+            , RequestDraft purpose boundedConversation chat.photos
             )
 
 
@@ -353,6 +374,7 @@ completeDraft turn chat =
                 | transcript = transcript
                 , request = Ready
                 , draft = Nothing
+                , suggestedLog = Nothing
                 , warnings = []
                 , awaitingOverwriteConfirmation = False
               }
@@ -364,6 +386,7 @@ completeDraft turn chat =
                 | transcript = transcript
                 , request = Ready
                 , draft = Just readyDraft.draft
+                , suggestedLog = readyDraft.suggestedLog
                 , warnings = readyDraft.warnings
                 , askingForChanges = False
                 , awaitingOverwriteConfirmation = False
@@ -375,15 +398,15 @@ completeDraft turn chat =
             )
 
 
-retryDraft : ChatModel -> ( ChatModel, OutMsg )
-retryDraft chat =
+retryDraft : FoodDraftPurpose -> ChatModel -> ( ChatModel, OutMsg )
+retryDraft purpose chat =
     case ( chat.request, FoodAssistant.conversation chat.transcript ) of
         ( RequestFailed _, Ok boundedConversation ) ->
             ( { chat
                 | request = Sending
                 , awaitingNewSessionConfirmation = False
               }
-            , RequestDraft boundedConversation chat.photos
+            , RequestDraft purpose boundedConversation chat.photos
             )
 
         _ ->
@@ -435,14 +458,28 @@ hasSession chat =
         || not (List.isEmpty chat.photos)
 
 
-requestApply : Bool -> ChatModel -> ( ChatModel, OutMsg )
-requestApply formHasManualInput chat =
+requestApply : FoodDraftPurpose -> Bool -> ChatModel -> ( ChatModel, OutMsg )
+requestApply purpose formHasManualInput chat =
     case chat.draft of
         Nothing ->
             ( chat, NoOutMsg )
 
         Just draft ->
-            if formHasManualInput then
+            if purpose == AdHocLog then
+                case chat.suggestedLog of
+                    Just suggestedLog ->
+                        ( chat
+                        , CompleteDraft
+                            { draft = draft
+                            , suggestedLog = suggestedLog
+                            , warnings = chat.warnings
+                            }
+                        )
+
+                    Nothing ->
+                        ( chat, NoOutMsg )
+
+            else if formHasManualInput then
                 ( { chat | awaitingOverwriteConfirmation = True }, NoOutMsg )
 
             else
@@ -646,7 +683,12 @@ valueAt index values =
 
 
 view : Theme -> Device -> Bool -> Model -> Element Msg
-view theme device formHasManualInput model =
+view =
+    viewFor CustomFood
+
+
+viewFor : FoodDraftPurpose -> Theme -> Device -> Bool -> Model -> Element Msg
+viewFor purpose theme device formHasManualInput model =
     case model of
         LoadingStatus ->
             Ui.card theme
@@ -683,19 +725,19 @@ view theme device formHasManualInput model =
                 ]
 
         Enabled chat ->
-            enabledView theme device formHasManualInput chat
+            enabledView purpose theme device formHasManualInput chat
 
 
-enabledView : Theme -> Device -> Bool -> ChatModel -> Element Msg
-enabledView theme device formHasManualInput chat =
-    Ui.card theme (expandedContent theme device formHasManualInput chat)
+enabledView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
+enabledView purpose theme device formHasManualInput chat =
+    Ui.card theme (expandedContent purpose theme device formHasManualInput chat)
 
 
-expandedContent : Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
-expandedContent theme device formHasManualInput chat =
+expandedContent : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
+expandedContent purpose theme device formHasManualInput chat =
     case chat.draft of
         Just _ ->
-            [ draftPreviewView theme device formHasManualInput chat
+            [ draftPreviewView purpose theme device formHasManualInput chat
             , warningView theme chat.warnings
             , requestErrorView theme device chat.request
             , if chat.awaitingNewSessionConfirmation then
@@ -708,7 +750,7 @@ expandedContent theme device formHasManualInput chat =
                         [ conversationView theme device chat
                         , descriptionInput theme chat
                         , photoPicker theme device chat
-                        , sendButton theme device chat.request
+                        , sendButton purpose theme device chat.request
                         ]
 
                     else
@@ -721,7 +763,7 @@ expandedContent theme device formHasManualInput chat =
             , requestErrorView theme device chat.request
             , descriptionInput theme chat
             , photoPicker theme device chat
-            , sendButton theme device chat.request
+            , sendButton purpose theme device chat.request
             ]
 
 
@@ -1040,13 +1082,19 @@ formatPhotoSize bytes =
         String.fromInt ((bytes + 1023) // 1024) ++ " KiB"
 
 
-sendButton : Theme -> Device -> RequestState -> Element Msg
-sendButton theme device request =
+sendButton : FoodDraftPurpose -> Theme -> Device -> RequestState -> Element Msg
+sendButton purpose theme device request =
     Ui.textButton device
         theme
         { tone = Ui.Primary
         , width = Ui.FullWidth
-        , label = "Send"
+        , label =
+            case purpose of
+                CustomFood ->
+                    "Send"
+
+                AdHocLog ->
+                    "Estimate Food"
         , onPress = SendClicked
         , submitState =
             Just
@@ -1109,8 +1157,8 @@ warningView theme warnings =
             )
 
 
-draftPreviewView : Theme -> Device -> Bool -> ChatModel -> Element Msg
-draftPreviewView theme device formHasManualInput chat =
+draftPreviewView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
+draftPreviewView purpose theme device formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
@@ -1151,7 +1199,7 @@ draftPreviewView theme device formHasManualInput chat =
                 , previewRows theme preview.details
                 , previewSection theme "Nutrition per 100 g" preview.nutrients
                 , previewSection theme "Servings" preview.servings
-                , draftActionView theme device formHasManualInput chat
+                , draftActionView purpose theme device formHasManualInput chat
                 ]
 
 
@@ -1249,8 +1297,8 @@ defaultText fallback value =
         value
 
 
-draftActionView : Theme -> Device -> Bool -> ChatModel -> Element Msg
-draftActionView theme device formHasManualInput chat =
+draftActionView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
+draftActionView purpose theme device formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
@@ -1318,7 +1366,13 @@ draftActionView theme device formHasManualInput chat =
                             theme
                             { tone = Ui.Primary
                             , width = Ui.FullWidth
-                            , label = "Apply to form"
+                            , label =
+                                case purpose of
+                                    CustomFood ->
+                                        "Apply to form"
+
+                                    AdHocLog ->
+                                        "Review estimate"
                             , onPress = ApplyDraftClicked formHasManualInput
                             , submitState = Just Ui.Idle
                             , submittingLabel = Just "Applying…"

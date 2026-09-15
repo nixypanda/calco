@@ -346,6 +346,11 @@ screenMeta device session route =
             , leading = GoBack (FoodSearch maybeDate maybeSlot)
             }
 
+        AiLogCreate maybeDate maybeSlot ->
+            { title = "Log with AI"
+            , leading = GoBack (FoodSearch maybeDate maybeSlot)
+            }
+
         CustomFoodCreate ->
             { title = "Create Food", leading = GoBack CustomFoodList }
 

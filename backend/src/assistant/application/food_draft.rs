@@ -3,7 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::assistant::domain::{
-    Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftTurn,
+    Conversation, ConversationRole, FoodDraft, FoodDraftPolicy, FoodDraftPurpose, FoodDraftTurn,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -20,12 +20,14 @@ pub enum AssistantError {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftRequest {
+    pub purpose: FoodDraftPurpose,
     pub conversation: Conversation,
     pub photos: Vec<SanitizedFoodPhoto>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FoodDraftModelRequest {
+    pub purpose: FoodDraftPurpose,
     pub turns: Vec<FoodDraftModelTurn>,
 }
 
@@ -203,7 +205,7 @@ impl FoodDraftService {
         let result = self.model.generate(&request, &vocabulary).await?;
         vocabulary
             .draft_policy()
-            .validate(&result.turn)
+            .validate(request.purpose, &result.turn)
             .map_err(|_| AssistantError::InvalidModelResponse)?;
         if let FoodDraftTurn::DraftReady { draft, .. } = &result.turn {
             self.acceptance.validate_draft(draft).await?;
@@ -215,6 +217,7 @@ impl FoodDraftService {
 fn prepare_model_request(
     request: FoodDraftRequest,
 ) -> Result<FoodDraftModelRequest, AssistantError> {
+    let purpose = request.purpose;
     let mut turns = request
         .conversation
         .turns()
@@ -232,7 +235,7 @@ fn prepare_model_request(
             .ok_or(AssistantError::InvalidInput)?;
         latest_user.photos = request.photos;
     }
-    Ok(FoodDraftModelRequest { turns })
+    Ok(FoodDraftModelRequest { purpose, turns })
 }
 
 #[cfg(test)]
@@ -279,6 +282,7 @@ mod tests {
 
     fn request() -> FoodDraftRequest {
         FoodDraftRequest {
+            purpose: FoodDraftPurpose::CustomFood,
             conversation: Conversation::new(vec![
                 crate::assistant::domain::ConversationTurn::new(
                     crate::assistant::domain::ConversationRole::User,
@@ -325,6 +329,42 @@ mod tests {
         ));
     }
 
+    #[tokio::test]
+    async fn ad_hoc_service_rejects_a_draft_without_a_suggested_portion() {
+        let draft = FoodDraftBuilder::new("Dal")
+            .nutrients([DraftNutrient::new("ENERGY_KCAL".into(), Decimal::ONE).unwrap()])
+            .build()
+            .unwrap();
+        let service = FoodDraftService::new(
+            Arc::new(StubModel {
+                result: FoodDraftResult {
+                    turn: FoodDraftTurn::ready("Review", draft, vec![]).unwrap(),
+                    usage: None,
+                },
+            }),
+            Arc::new(StubVocabulary {
+                value: FoodVocabulary {
+                    nutrients: vec![SupportedNutrient {
+                        code: "ENERGY_KCAL".into(),
+                        name: "Energy".into(),
+                        unit: "kcal".into(),
+                    }],
+                    required_nutrient_codes: vec!["ENERGY_KCAL".into()],
+                    ..FoodVocabulary::default()
+                },
+            }),
+            Arc::new(AcceptAllDrafts),
+            None,
+        );
+        let mut request = request();
+        request.purpose = FoodDraftPurpose::AdHocLog;
+
+        assert!(matches!(
+            service.draft(request).await,
+            Err(AssistantError::InvalidModelResponse)
+        ));
+    }
+
     #[test]
     fn model_request_attaches_photos_to_the_latest_user_turn() {
         let conversation = Conversation::new(vec![
@@ -345,6 +385,7 @@ mod tests {
         };
 
         let prepared = prepare_model_request(FoodDraftRequest {
+            purpose: FoodDraftPurpose::CustomFood,
             conversation,
             photos: vec![photo.clone()],
         })
