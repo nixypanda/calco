@@ -219,12 +219,18 @@ tests =
                         False
                     |> Element.layout []
                     |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text "Conversation"
-                        , Selector.text "What should change?"
-                        , Selector.text "Cancel changes"
-                        , Selector.text "New session"
-                        , Selector.text "Send"
+                    |> Expect.all
+                        [ Query.has
+                            [ Selector.text "Conversation"
+                            , Selector.text "What should change?"
+                            , Selector.text "Cancel changes"
+                            , Selector.text "New session"
+                            , Selector.text "Send"
+                            ]
+                        , \query ->
+                            query
+                                |> Query.findAll [ Selector.text "New session" ]
+                                |> Query.count (Expect.equal 1)
                         ]
         , test "a revised draft hides the conversation again" <|
             \_ ->

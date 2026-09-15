@@ -778,7 +778,7 @@ conversationView theme device chat =
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.row [ Element.width Element.fill ]
                 [ Element.el [ Font.bold ] (Element.text "Conversation")
-                , if chat.request == Sending then
+                , if chat.request == Sending || chat.draft /= Nothing then
                     Element.none
 
                   else
