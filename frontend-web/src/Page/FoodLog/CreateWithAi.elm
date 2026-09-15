@@ -19,7 +19,6 @@ import File exposing (File)
 import Lib.Ticket exposing (Ticket)
 import Page.Food.Assistant as Assistant
 import Page.Food.Editor as Editor
-import Page.FoodLog.AiReview as AiReview
 import Page.FoodLog.CreateAdHoc as Review
 import Ui
 import Ui.Theme exposing (Theme)
@@ -110,10 +109,10 @@ update msg model =
                         adjusted =
                             case ( subMsg, model.draft ) of
                                 ( Review.FormMsg (Editor.LogQuantityChanged amount), _ ) ->
-                                    { review | form = AiReview.changeAmount amount review.form }
+                                    { review | form = Editor.changeLogQuantity amount review.form }
 
                                 ( Review.FormMsg (Editor.LogUnitChanged unit), Just draft ) ->
-                                    { review | form = AiReview.changeUnit draft unit review.form }
+                                    { review | form = Editor.changeLogUnit draft unit review.form }
 
                                 _ ->
                                     review
@@ -236,7 +235,13 @@ buildReview model =
                 base =
                     Review.init model.dateParam model.mealSlot
             in
-            case AiReview.fromDraft model.nutrients result.draft result.suggestedLog base.form of
+            case
+                Editor.applyAiLogDraft
+                    model.nutrients
+                    result.draft
+                    result.suggestedLog
+                    base.form
+            of
                 Ok form ->
                     ( { model
                         | review =
@@ -290,7 +295,7 @@ mapReviewOutMsg outMsg =
 
 filterUnits : FoodAssistant.FoodDraft -> List UnitItem -> List UnitItem
 filterUnits draft =
-    List.filter (\unit -> List.member unit.code (AiReview.allowedUnitCodes draft))
+    List.filter (\unit -> List.member unit.code (Editor.allowedLogUnitCodes draft))
 
 
 sessionOutMsg : Client.ApiError -> OutMsg

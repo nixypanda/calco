@@ -1,5 +1,7 @@
 module Page.Food.EditorLogTest exposing (tests)
 
+import Api.Foods exposing (NutrientItem)
+import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Page.Food.Editor as Editor
@@ -146,6 +148,52 @@ tests =
                         , Query.has
                             [ Selector.text "Weight of this logged portion (g)" ]
                         ]
+        , test "converts per-100-g nutrition into logged-portion totals" <|
+            \_ ->
+                Editor.applyAiLogDraft catalog
+                    draft
+                    suggested
+                    (Editor.emptyLogForm Nothing Nothing)
+                    |> Result.map
+                        (\form ->
+                            ( Editor.foodLogFields form |> Maybe.map .quantity
+                            , Editor.logPortionWeight form
+                            , List.map .amount form.nutrients
+                            )
+                        )
+                    |> Expect.equal
+                        (Ok ( Just "1", Just "250", [ "500", "25", "50", "30" ] ))
+        , test "AI log quantity edits scale weight and every nutrient total" <|
+            \_ ->
+                Editor.applyAiLogDraft catalog
+                    draft
+                    suggested
+                    (Editor.emptyLogForm Nothing Nothing)
+                    |> Result.map (Editor.changeLogQuantity "2")
+                    |> Result.map
+                        (\form ->
+                            ( Editor.logPortionWeight form
+                            , List.map .amount form.nutrients
+                            )
+                        )
+                    |> Expect.equal
+                        (Ok ( Just "500", [ "1000", "50", "100", "60" ] ))
+        , test "AI log serving changes use their gram conversion" <|
+            \_ ->
+                Editor.applyAiLogDraft catalog
+                    draft
+                    suggested
+                    (Editor.emptyLogForm Nothing Nothing)
+                    |> Result.map (Editor.changeLogUnit draft "piece")
+                    |> Result.map
+                        (\form ->
+                            ( Editor.foodLogFields form |> Maybe.map .unit
+                            , Editor.logPortionWeight form
+                            , List.map .amount form.nutrients
+                            )
+                        )
+                    |> Expect.equal
+                        (Ok ( Just "piece", Just "125", [ "250", "12.5", "25", "15" ] ))
         ]
 
 
@@ -192,3 +240,42 @@ first ( value, _, _ ) =
 phone : Element.Device
 phone =
     { class = Phone, orientation = Portrait }
+
+
+catalog : List NutrientItem
+catalog =
+    [ nutrient "ENERGY_KCAL" "Calories" "kcal"
+    , nutrient "PROTEIN_G" "Protein" "g"
+    , nutrient "CARBS_G" "Carbohydrates" "g"
+    , nutrient "FAT_G" "Fat" "g"
+    ]
+
+
+nutrient : String -> String -> String -> NutrientItem
+nutrient code name unit =
+    { code = code, name = name, unit = unit, category = "Core" }
+
+
+draft : FoodDraft
+draft =
+    { name = "Paneer wrap"
+    , brand = Nothing
+    , categories = [ "wrap" ]
+    , defaultQuantity = Just "1"
+    , defaultUnit = Just "serving"
+    , nutrients =
+        [ { code = "ENERGY_KCAL", amountPer100g = "200" }
+        , { code = "PROTEIN_G", amountPer100g = "10" }
+        , { code = "CARBS_G", amountPer100g = "20" }
+        , { code = "FAT_G", amountPer100g = "12" }
+        ]
+    , servings =
+        [ { unit = "serving", gramsPerUnit = "250" }
+        , { unit = "piece", gramsPerUnit = "125" }
+        ]
+    }
+
+
+suggested : SuggestedLog
+suggested =
+    { amount = "1", unit = "serving", totalWeightGrams = "250" }
