@@ -14,7 +14,6 @@ module Page.Users.EditUser exposing
 import Api.Client as Client
 import Data.User as User exposing (User)
 import Element exposing (Device, Element)
-import Element.Font as Font
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -265,14 +264,13 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
         (errorView theme model.status
-            ++ userInfoView theme model
-            ++ resetPasswordView device theme model
+            ++ userDetailsView device theme model
             ++ accountActionView device theme model
         )
 
 
-userInfoView : Theme -> Model -> List (Element Msg)
-userInfoView theme model =
+userDetailsView : Device -> Theme -> Model -> List (Element Msg)
+userDetailsView device theme model =
     case model.status of
         Loading ->
             [ editUserSkeleton theme ]
@@ -281,37 +279,54 @@ userInfoView theme model =
             [ Feedback.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
 
         Loaded loadedUser _ ->
-            [ userSummaryCard theme loadedUser.user ]
+            [ userCard device theme model.status loadedUser ]
 
 
-resetPasswordView : Device -> Theme -> Model -> List (Element Msg)
-resetPasswordView device theme model =
-    [ Surface.card theme
-        [ Element.el [ Font.medium, Typography.body ] (Element.text "Reset Password")
-        , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-            [ UiInput.passwordInput theme
-                { label = "New password"
-                , value = currentPassword model.status
-                , onChange = PasswordChanged
-                }
-            , Button.textButton device
-                theme
-                { tone = Button.Ghost
-                , width = Button.FullWidth
-                , label =
-                    if isResetPending model.status then
-                        "Resetting..."
+userCard : Device -> Theme -> Status -> LoadedUser -> Element Msg
+userCard device theme status loadedUser =
+    Surface.section theme
+        { header =
+            Just
+                (Element.column
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space4
+                    ]
+                    [ Typography.sectionTitle theme loadedUser.user.displayName
+                    , Typography.mutedParagraph theme loadedUser.user.username
+                    ]
+                )
+        , body =
+            [ Surface.detailRow theme "Status" (Chip.statusBadge theme loadedUser.user.status)
+            , Surface.detailRow theme
+                "Created"
+                (Element.el [ Typography.caption ] (Element.text loadedUser.user.createdAt))
+            , Surface.hairline theme
+            , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
+                [ Typography.wrappedListItemTitle theme "Reset Password"
+                , UiInput.passwordInput theme
+                    { label = "New password"
+                    , value = loadedUser.password
+                    , onChange = PasswordChanged
+                    }
+                , Button.textButton device
+                    theme
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
+                    , label =
+                        if isResetPending status then
+                            "Resetting..."
 
-                    else
-                        "Reset Password"
-                , onPress = ResetSubmitted
-                , submitState = Nothing
-                , submittingLabel = Nothing
-                , trailing = Nothing
-                }
+                        else
+                            "Reset Password"
+                    , onPress = ResetSubmitted
+                    , submitState = Nothing
+                    , submittingLabel = Nothing
+                    , trailing = Nothing
+                    }
+                ]
             ]
-        ]
-    ]
+        , footer = Nothing
+        }
 
 
 accountActionView : Device -> Theme -> Model -> List (Element Msg)
@@ -346,16 +361,6 @@ accountActionView device theme model =
 
         _ ->
             []
-
-
-currentPassword : Status -> String
-currentPassword status =
-    case status of
-        Loaded loadedUser _ ->
-            loadedUser.password
-
-        _ ->
-            ""
 
 
 isResetPending : Status -> Bool
@@ -408,29 +413,12 @@ problemMessage problem =
             "New password is required"
 
 
-userSummaryCard : Theme -> User -> Element msg
-userSummaryCard theme user =
-    Surface.card theme
-        [ Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-            [ Typography.wrappedListItemTitle theme user.username
-            , Surface.detailRow theme
-                "Display Name"
-                (Typography.mutedCaptionParagraph theme user.displayName)
-            , Surface.detailRow theme "Status" (Chip.statusBadge theme user.status)
-            , Surface.detailRow theme
-                "Created"
-                (Element.el [ Typography.caption ] (Element.text user.createdAt))
-            ]
-        ]
-
-
 editUserSkeleton : Theme -> Element msg
 editUserSkeleton theme =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Skeleton.card theme { rows = 3 }
-        , Skeleton.card theme { rows = 2 }
+        [ Skeleton.card theme { rows = 5 }
         , Skeleton.button theme
         ]
