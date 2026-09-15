@@ -14,8 +14,10 @@ import Data.Route as Route exposing (Route)
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Font as Font
+import Element.Input as Input
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
+import Set exposing (Set)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -30,7 +32,7 @@ import Ui.Typography as Typography
 
 type Model
     = Loading DateContext
-    | Loaded DateContext NutritionDetails
+    | Loaded DateContext NutritionDetails (Set String)
     | Failed DateContext String
 
 
@@ -59,6 +61,7 @@ type Msg
     | PreviousDayClicked
     | NextDayClicked
     | TodayChanged LocalDate
+    | NutrientAdviceToggled String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -71,7 +74,7 @@ update msg model =
             else
                 case result of
                     Ok report ->
-                        ( Loaded (dateContext model) report, Cmd.none, NoOp )
+                        ( Loaded (dateContext model) report Set.empty, Cmd.none, NoOp )
 
                     Err error ->
                         Client.failure
@@ -96,6 +99,26 @@ update msg model =
         TodayChanged changed ->
             ( withToday changed model, Cmd.none, NoOp )
 
+        NutrientAdviceToggled code ->
+            case model of
+                Loaded context report expandedAdvice ->
+                    ( Loaded context report (toggleSetMember code expandedAdvice)
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+
+toggleSetMember : comparable -> Set comparable -> Set comparable
+toggleSetMember value values =
+    if Set.member value values then
+        Set.remove value values
+
+    else
+        Set.insert value values
+
 
 withToday : LocalDate -> Model -> Model
 withToday changed model =
@@ -108,8 +131,8 @@ withToday changed model =
         Loading _ ->
             Loading context
 
-        Loaded _ report ->
-            Loaded context report
+        Loaded _ report expandedAdvice ->
+            Loaded context report expandedAdvice
 
         Failed _ message ->
             Failed context message
@@ -134,7 +157,7 @@ dateContext model =
         Loading context ->
             context
 
-        Loaded context _ ->
+        Loaded context _ _ ->
             context
 
         Failed context _ ->
@@ -159,8 +182,8 @@ view { model, device, theme } =
             Loading _ ->
                 loadingView theme
 
-            Loaded _ report ->
-                reportView theme report
+            Loaded _ report expandedAdvice ->
+                reportView theme report expandedAdvice
 
             Failed _ message ->
                 Feedback.errorBanner theme message
@@ -236,16 +259,26 @@ loadingView theme =
         ]
 
 
-reportView : Theme -> NutritionDetails -> Element Msg
-reportView theme report =
+reportView : Theme -> NutritionDetails -> Set String -> Element Msg
+reportView theme report expandedAdvice =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ coverageNotice theme report
         , overviewSection theme report.nutrients
-        , nutrientSection theme "Carbohydrates" Details.Carbohydrates report.nutrients
-        , nutrientSection theme "Fats" Details.Fats report.nutrients
-        , nutrientSection theme "Nutrients to limit" Details.Limits report.nutrients
-        , nutrientSection theme "Vitamins & minerals" Details.VitaminsMinerals report.nutrients
+        , nutrientSection
+            theme
+            expandedAdvice
+            "Carbohydrates"
+            Details.Carbohydrates
+            report.nutrients
+        , nutrientSection theme expandedAdvice "Fats" Details.Fats report.nutrients
+        , nutrientSection theme expandedAdvice "Nutrients to limit" Details.Limits report.nutrients
+        , nutrientSection
+            theme
+            expandedAdvice
+            "Vitamins & minerals"
+            Details.VitaminsMinerals
+            report.nutrients
         , referenceCard theme report
         ]
 
@@ -293,8 +326,27 @@ overviewItem theme nutrient =
         ]
 
 
-nutrientSection : Theme -> String -> Details.NutrientSection -> List Nutrient -> Element Msg
-nutrientSection theme title section nutrients =
+coverageLabel : Nutrient -> String
+coverageLabel nutrient =
+    case nutrient.coverage of
+        Details.NoCoverage ->
+            "No data"
+
+        Details.PartialCoverage ->
+            "Known minimum"
+
+        Details.CompleteCoverage ->
+            ""
+
+
+nutrientSection :
+    Theme
+    -> Set String
+    -> String
+    -> Details.NutrientSection
+    -> List Nutrient
+    -> Element Msg
+nutrientSection theme expandedAdvice title section nutrients =
     let
         selected : List Nutrient
         selected =
@@ -308,8 +360,7 @@ nutrientSection theme title section nutrients =
 
             else
                 selected
-                    |> List.map (nutrientRow theme)
-                    |> List.intersperse (Surface.hairline theme)
+                    |> List.map (nutrientRow theme expandedAdvice)
         , footer = Nothing
         }
 
@@ -377,41 +428,87 @@ includedVerb count =
         "are"
 
 
-nutrientRow : Theme -> Nutrient -> Element msg
-nutrientRow theme nutrient =
+nutrientRow : Theme -> Set String -> Nutrient -> Element Msg
+nutrientRow theme expandedAdvice nutrient =
+    let
+        adviceIsExpanded : Bool
+        adviceIsExpanded =
+            Set.member nutrient.code expandedAdvice
+    in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ Element.wrappedRow
-            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
-                [ Element.paragraph [ Font.bold, Typography.body ] [ Element.text nutrient.name ]
-                , referenceLabel theme nutrient
+        [ Input.button
+            [ Element.width Element.fill ]
+            { onPress = Just (NutrientAdviceToggled nutrient.code)
+            , label =
+                Element.column
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                    [ Element.row
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                        [ Element.paragraph
+                            [ Element.width Element.fill, Font.bold, Typography.body ]
+                            [ Element.text nutrient.name ]
+                        , Element.el
+                            [ Element.alignRight
+                            , Font.color theme.textMedium
+                            , Typography.body
+                            ]
+                            (Element.text (amountLabel nutrient))
+                        ]
+                    , progressView theme nutrient
+                    , Element.row
+                        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                        [ guidanceView theme nutrient
+                        , Icon.view
+                            { icon =
+                                if adviceIsExpanded then
+                                    Icon.ChevronUp
+
+                                else
+                                    Icon.ChevronDown
+                            , size = 16
+                            , color = theme.textMuted
+                            }
+                        ]
+                    ]
+            }
+        , if adviceIsExpanded then
+            Element.paragraph
+                [ Element.width Element.fill
+                , Background.color theme.inputFill
+                , Font.color theme.textMuted
+                , Element.padding DesignTokens.space12
+                , Typography.caption
                 ]
-            , statusPill theme nutrient
-            ]
-        , Element.paragraph [ Font.color theme.textMedium, Typography.body ]
-            [ Element.text (amountLabel nutrient) ]
-        , progressView theme nutrient
-        , Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-            [ Element.text (coverageAndStatusMessage nutrient) ]
-        , Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-            [ Element.text (dailyAdvice nutrient.code) ]
+                [ Element.text (dailyAdvice nutrient.code) ]
+
+          else
+            Element.none
         ]
 
 
-referenceLabel : Theme -> Nutrient -> Element msg
-referenceLabel theme nutrient =
-    case nutrient.guidanceKind of
-        Details.Informational ->
-            Element.none
+guidanceView : Theme -> Nutrient -> Element msg
+guidanceView theme nutrient =
+    if nutrient.coverage == Details.PartialCoverage then
+        Element.wrappedRow
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ Chip.coloredPill
+                { label = "Partial data"
+                , bg = theme.brandBlueSoft
+                , fg = theme.brandBlue
+                }
+            , Element.paragraph
+                [ Font.color theme.textPrimary, Typography.caption ]
+                [ Element.text (guidanceSummary nutrient) ]
+            ]
 
-        Details.Maximum ->
-            Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-                [ Element.text "Daily limit" ]
-
-        Details.Adequacy ->
-            Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-                [ Element.text "Daily reference" ]
+    else
+        Element.paragraph
+            [ Element.width Element.fill
+            , Font.color (guidanceColor theme nutrient)
+            , Typography.caption
+            ]
+            [ Element.text (guidanceSummary nutrient) ]
 
 
 amountLabel : Nutrient -> String
@@ -423,8 +520,8 @@ amountLabel nutrient =
         _ ->
             case ( nutrient.knownAmount, nutrient.referenceAmount ) of
                 ( Just amount, Just referenceAmount ) ->
-                    formatAmount amount nutrient.unit
-                        ++ " of "
+                    Number.toFixedTrimmed 1 amount
+                        ++ " / "
                         ++ formatAmount referenceAmount nutrient.unit
 
                 ( Nothing, Just referenceAmount ) ->
@@ -475,129 +572,65 @@ progressColor theme nutrient =
                 theme.brandBlue
 
 
-statusPill : Theme -> Nutrient -> Element msg
-statusPill theme nutrient =
-    if nutrient.guidanceKind == Details.Informational && nutrient.status == Details.Available then
-        Element.none
-
-    else
-        let
-            dangerous : Bool
-            dangerous =
-                Details.isDangerous nutrient
-
-            positive : Bool
-            positive =
-                nutrient.status == Details.MetReference || nutrient.status == Details.WithinLimit
-        in
-        Chip.coloredPill
-            { label = statusLabel nutrient.status
-            , bg =
-                if dangerous then
-                    theme.dangerBg
-
-                else if positive then
-                    theme.statusActiveBg
-
-                else
-                    theme.chipBg
-            , fg =
-                if dangerous then
-                    theme.dangerFg
-
-                else if positive then
-                    theme.statusGreen
-
-                else
-                    theme.textMedium
-            }
-
-
-statusLabel : Details.NutrientStatus -> String
-statusLabel status =
-    case status of
-        Details.NoData ->
-            "No data"
-
-        Details.PartialData ->
-            "Partial data"
-
-        Details.Available ->
-            "Available"
-
-        Details.BelowReference ->
-            "Below reference"
-
-        Details.MetReference ->
-            "Reference met"
-
-        Details.WithinLimit ->
-            "Within limit"
-
-        Details.OverLimit ->
-            "Over limit"
-
-
-coverageAndStatusMessage : Nutrient -> String
-coverageAndStatusMessage nutrient =
+guidanceSummary : Nutrient -> String
+guidanceSummary nutrient =
     case nutrient.coverage of
         Details.NoCoverage ->
-            "No logged items report " ++ String.toLower nutrient.name ++ "."
+            "No data"
 
         Details.PartialCoverage ->
             case nutrient.knownAmount of
                 Just amount ->
-                    "Some logged items don’t report "
-                        ++ String.toLower nutrient.name
-                        ++ ". "
-                        ++ formatAmount amount nutrient.unit
-                        ++ " is a known minimum."
+                    formatAmount amount nutrient.unit ++ " is a known minimum"
 
                 Nothing ->
-                    "Some logged items don’t report "
-                        ++ String.toLower nutrient.name
-                        ++ "; no known amount is available."
+                    "No known amount"
 
         Details.CompleteCoverage ->
-            completeCoverageMessage nutrient
+            completeGuidanceSummary nutrient
 
 
-coverageLabel : Nutrient -> String
-coverageLabel nutrient =
-    case nutrient.coverage of
-        Details.NoCoverage ->
-            "No data"
+completeGuidanceSummary : Nutrient -> String
+completeGuidanceSummary nutrient =
+    case ( nutrient.guidanceKind, nutrient.knownAmount, nutrient.referenceAmount ) of
+        ( Details.Informational, _, _ ) ->
+            "No daily reference"
 
-        Details.PartialCoverage ->
-            "Known minimum"
+        ( Details.Adequacy, Just amount, Just referenceAmount ) ->
+            if amount >= referenceAmount then
+                "Daily reference reached"
 
-        Details.CompleteCoverage ->
-            ""
+            else
+                formatAmount (referenceAmount - amount) nutrient.unit
+                    ++ " to daily reference"
+
+        ( Details.Maximum, Just amount, Just referenceAmount ) ->
+            if amount > referenceAmount then
+                formatAmount (amount - referenceAmount) nutrient.unit
+                    ++ " over daily limit"
+
+            else
+                formatAmount (referenceAmount - amount) nutrient.unit ++ " remaining"
+
+        _ ->
+            "No daily reference"
 
 
-completeCoverageMessage : Nutrient -> String
-completeCoverageMessage nutrient =
-    case nutrient.status of
-        Details.NoData ->
-            "No amount is available for this day."
+guidanceColor : Theme -> Nutrient -> Element.Color
+guidanceColor theme nutrient =
+    if Details.isDangerous nutrient then
+        theme.dangerFg
 
-        Details.PartialData ->
-            "This total is incomplete."
+    else
+        case ( nutrient.coverage, nutrient.status ) of
+            ( Details.CompleteCoverage, Details.MetReference ) ->
+                theme.statusGreen
 
-        Details.Available ->
-            "This reflects the items logged for this day."
+            ( Details.CompleteCoverage, Details.WithinLimit ) ->
+                theme.statusGreen
 
-        Details.BelowReference ->
-            "This is one day’s total, not a diagnosis of deficiency."
-
-        Details.MetReference ->
-            "You reached this daily reference."
-
-        Details.WithinLimit ->
-            "This is within the daily limit."
-
-        Details.OverLimit ->
-            "This is above the daily limit for this day."
+            _ ->
+                theme.textMuted
 
 
 dailyAdvice : String -> String
@@ -665,24 +698,27 @@ formatAmount amount unit =
 
 referenceCard : Theme -> NutritionDetails -> Element msg
 referenceCard theme report =
-    Surface.card theme
-        [ Typography.subsectionTitle theme "About these references"
-        , Element.paragraph [ Font.color theme.textMuted, Typography.body ]
-            [ Element.text
-                ("These comparisons use "
-                    ++ report.reference.name
-                    ++ " from "
-                    ++ report.reference.authority
-                    ++ " ("
-                    ++ report.reference.jurisdiction
-                    ++ ") for "
-                    ++ report.reference.populationLabel
-                    ++ ". They are informational daily comparisons, not medical diagnoses."
-                )
+    Surface.section theme
+        { header = Just (Typography.subsectionTitle theme "About these references")
+        , body =
+            [ Element.paragraph [ Font.color theme.textMuted, Typography.body ]
+                [ Element.text
+                    ("These comparisons use "
+                        ++ report.reference.name
+                        ++ " from "
+                        ++ report.reference.authority
+                        ++ " ("
+                        ++ report.reference.jurisdiction
+                        ++ ") for "
+                        ++ report.reference.populationLabel
+                        ++ ". They are informational daily comparisons, not medical diagnoses."
+                    )
+                ]
+            , Element.newTabLink
+                [ Font.color theme.brandBlue, Font.underline, Typography.body ]
+                { url = report.reference.sourceUrl
+                , label = Element.text "View reference source"
+                }
             ]
-        , Element.newTabLink
-            [ Font.color theme.brandBlue, Font.underline, Typography.body ]
-            { url = report.reference.sourceUrl
-            , label = Element.text "View reference source"
-            }
-        ]
+        , footer = Nothing
+        }

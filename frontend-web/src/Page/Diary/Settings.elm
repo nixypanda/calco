@@ -165,12 +165,22 @@ view { model, device, theme } =
                 [ Feedback.errorBanner theme message ]
 
             Ready loaded ->
-                [ Surface.card theme
-                    (Typography.sectionTitle theme "Meal slots"
-                        :: Typography.mutedParagraph theme
-                            "Choose the fixed meal slots shown in your diary."
-                        :: List.map (slotCheckbox loaded.selected) MealSlot.all
-                    )
+                [ Surface.section theme
+                    { header =
+                        Just
+                            (Surface.sectionHeader
+                                { title = Typography.sectionTitle theme "Meal slots"
+                                , description =
+                                    Just
+                                        (Typography.mutedParagraph theme
+                                            "Choose the fixed meal slots shown in your diary."
+                                        )
+                                , trailing = Nothing
+                                }
+                            )
+                    , body = List.map (slotCheckbox loaded.selected) MealSlot.all
+                    , footer = Nothing
+                    }
                 , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
                 , Button.textButton device
                     theme

@@ -3,6 +3,7 @@ module Page.FoodLog.CreateWithAi exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , modalView
     , photoPreviewUrls
     , update
     , view
@@ -342,6 +343,12 @@ view { model, device, theme } =
                         { model = review, device = device, theme = theme }
                     )
                 ]
+
+
+modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView { model, device, theme } =
+    Assistant.modalView theme device model.assistant
+        |> Maybe.map (Element.map AssistantMsg)
 
 
 additionalNutrientsToggle : Device -> Theme -> Model -> Review.Model -> Element Msg

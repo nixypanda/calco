@@ -1361,7 +1361,11 @@ mealSlotCard :
 mealSlotCard theme device maybeSlot header bodyChildren =
     case maybeSlot of
         Nothing ->
-            Surface.card theme (header :: bodyChildren)
+            Surface.section theme
+                { header = Just header
+                , body = bodyChildren
+                , footer = Nothing
+                }
 
         Just slot ->
             Surface.heroCard theme

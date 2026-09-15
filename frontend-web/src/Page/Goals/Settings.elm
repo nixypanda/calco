@@ -334,31 +334,44 @@ view { model, device, theme } =
 
             Ready ready ->
                 [ Feedback.maybeErrorBanner theme (requestError ready.save)
-                , Surface.card theme
-                    [ Typography.sectionTitle theme "Daily Targets"
-                    , Typography.mutedParagraph theme (statusMessage ready.status)
-                    , UiInput.decimalInput theme
-                        { label = "Calories"
-                        , value = ready.form.calorieTarget
-                        , onChange = CalorieTargetChanged
-                        }
-                    , UiInput.decimalInput theme
-                        { label = "Protein (g)"
-                        , value = ready.form.proteinTargetG
-                        , onChange = ProteinTargetChanged
-                        }
-                    , UiInput.decimalInput theme
-                        { label = "Carbs (g)"
-                        , value = ready.form.carbsTargetG
-                        , onChange = CarbsTargetChanged
-                        }
-                    , UiInput.decimalInput theme
-                        { label = "Fat (g)"
-                        , value = ready.form.fatTargetG
-                        , onChange = FatTargetChanged
-                        }
-                    , Feedback.maybeErrorBanner theme (formError ready.save)
-                    ]
+                , Surface.section theme
+                    { header =
+                        Just
+                            (Surface.sectionHeader
+                                { title = Typography.sectionTitle theme "Daily Targets"
+                                , description =
+                                    Just
+                                        (Typography.mutedParagraph theme
+                                            (statusMessage ready.status)
+                                        )
+                                , trailing = Nothing
+                                }
+                            )
+                    , body =
+                        [ UiInput.decimalInput theme
+                            { label = "Calories"
+                            , value = ready.form.calorieTarget
+                            , onChange = CalorieTargetChanged
+                            }
+                        , UiInput.decimalInput theme
+                            { label = "Protein (g)"
+                            , value = ready.form.proteinTargetG
+                            , onChange = ProteinTargetChanged
+                            }
+                        , UiInput.decimalInput theme
+                            { label = "Carbs (g)"
+                            , value = ready.form.carbsTargetG
+                            , onChange = CarbsTargetChanged
+                            }
+                        , UiInput.decimalInput theme
+                            { label = "Fat (g)"
+                            , value = ready.form.fatTargetG
+                            , onChange = FatTargetChanged
+                            }
+                        , Feedback.maybeErrorBanner theme (formError ready.save)
+                        ]
+                    , footer = Nothing
+                    }
                 , Button.textButton device
                     theme
                     { tone = Button.Primary

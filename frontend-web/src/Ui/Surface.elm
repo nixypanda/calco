@@ -8,6 +8,7 @@ module Ui.Surface exposing
     , listCard
     , listRow
     , section
+    , sectionHeader
     )
 
 import Element exposing (Element)
@@ -165,6 +166,34 @@ section theme config =
                     []
     in
     card theme (headerSlot ++ config.body ++ footerSlot)
+
+
+sectionHeader :
+    { title : Element msg
+    , description : Maybe (Element msg)
+    , trailing : Maybe (Element msg)
+    }
+    -> Element msg
+sectionHeader config =
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        ]
+        (Element.row
+            [ Element.width Element.fill
+            , Element.spacing space12
+            ]
+            (Element.el [ Element.width Element.fill ] config.title
+                :: (config.trailing
+                        |> Maybe.map List.singleton
+                        |> Maybe.withDefault []
+                   )
+            )
+            :: (config.description
+                    |> Maybe.map List.singleton
+                    |> Maybe.withDefault []
+               )
+        )
 
 
 formSection : Theme -> String -> List (Element msg) -> Element msg
