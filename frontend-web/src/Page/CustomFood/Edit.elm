@@ -25,6 +25,7 @@ import Element exposing (Device, Element)
 import Lib.Ticket exposing (Ticket)
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 
 
@@ -382,9 +383,9 @@ bodyView { model, device, theme } =
 customFoodFormSkeleton : Theme -> Element msg
 customFoodFormSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
+        [ Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
         ]

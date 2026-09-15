@@ -26,6 +26,7 @@ import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.MonthCalendar as MonthCalendar
 import Ui.RingChart as Ring
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -276,7 +277,7 @@ contentViewWithSelection selectedDate { model, device, theme } =
         ]
         (case model.status of
             Loading ->
-                [ Ui.skeletonCard theme { rows = 3 } ]
+                [ Skeleton.card theme { rows = 3 } ]
 
             Failed message ->
                 [ Ui.errorBanner theme message ]

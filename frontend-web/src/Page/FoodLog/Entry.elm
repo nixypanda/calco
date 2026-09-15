@@ -27,6 +27,7 @@ import Element exposing (Device, Element)
 import Lib.Date as LocalDate exposing (LocalDate)
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -711,7 +712,7 @@ itemTitle theme item =
         ProductItem productState ->
             case productState of
                 DetailLoading _ ->
-                    Ui.skeletonBar theme
+                    Skeleton.bar theme
 
                 DetailLoaded food ->
                     Typography.truncatedHeader theme food.name
@@ -826,10 +827,10 @@ foodLogEntrySkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
-        , Ui.skeletonCard theme { rows = 3 }
+        [ Skeleton.card theme { rows = 2 }
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
+        , Skeleton.card theme { rows = 3 }
         ]

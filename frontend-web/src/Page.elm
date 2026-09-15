@@ -76,8 +76,8 @@ import Page.Users.EditUser as AdminEditUser
 import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
-import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Workspace as Workspace
 
@@ -3090,7 +3090,7 @@ applyMealDetailOutMsg _ outMsg =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view props =
     if props.model.waitingForToday then
-        Ui.skeletonLoading props.theme
+        Skeleton.loading props.theme
 
     else
         Workspace.view props.device

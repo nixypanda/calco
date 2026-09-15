@@ -19,6 +19,7 @@ import Element.Background as Background
 import Element.Border as Border
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -353,15 +354,15 @@ customFoodShowSkeleton theme =
             , Typography.uiClass "ui-skeleton"
             ]
             Element.none
-        , Ui.skeletonBar theme
-        , Ui.skeletonBarCustom theme
+        , Skeleton.bar theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 2, height = 12 }
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.card theme { rows = 3 }
         , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
-            [ Ui.skeletonButton theme
-            , Ui.skeletonButton theme
+            [ Skeleton.button theme
+            , Skeleton.button theme
             ]
         ]

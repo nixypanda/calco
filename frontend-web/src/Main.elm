@@ -27,6 +27,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 import Page
 import Ui
 import Ui.Css as Css
+import Ui.Skeleton as Skeleton
 import Ui.Theme as Theme exposing (Theme)
 import Url exposing (Url)
 import Version
@@ -593,7 +594,7 @@ layoutAttrs model =
 pageView : Model -> Element Msg
 pageView model =
     if not (isBootstrapped model.bootstrap) then
-        Ui.skeletonLoading model.theme
+        Skeleton.loading model.theme
 
     else
         Element.map GotPageMsg (Page.view (pageProps model))

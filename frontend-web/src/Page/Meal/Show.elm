@@ -22,6 +22,7 @@ import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.DeleteModal exposing (DeleteState(..))
@@ -315,7 +316,7 @@ componentNameView theme loaded id =
             )
 
     else
-        Ui.skeletonBar theme
+        Skeleton.bar theme
 
 
 requestNutritionFor : LoadedModel -> ( Model, Cmd Msg, OutMsg )
@@ -669,20 +670,20 @@ deleteModalView theme device loaded =
 mealShowSkeleton : Theme -> Element msg
 mealShowSkeleton theme =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonCard theme { rows = 2 }
+        [ Skeleton.card theme { rows = 2 }
         , Ui.section theme
             { header =
                 Just
-                    (Ui.skeletonBarCustom theme
+                    (Skeleton.barCustom theme
                         { width = Element.fillPortion 1, height = 16 }
                     )
-            , body = List.map (\_ -> Ui.skeletonListRow theme) (List.range 1 3)
+            , body = List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
             , footer = Nothing
             }
-        , Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.card theme { rows = 2 }
+        , Skeleton.card theme { rows = 3 }
         , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-            [ Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
-            , Element.el [ Element.width Element.fill ] (Ui.skeletonButton theme)
+            [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
+            , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
             ]
         ]

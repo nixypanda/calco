@@ -51,13 +51,6 @@ module Ui exposing
     , searchInput
     , section
     , selectDropdown
-    , skeletonBar
-    , skeletonBarCustom
-    , skeletonButton
-    , skeletonCard
-    , skeletonInput
-    , skeletonListRow
-    , skeletonLoading
     , statusBadge
     , submittingOrIdle
     , suggestionList
@@ -81,7 +74,6 @@ import Ui.DesignTokens
         , radiusControl
         , radiusHairline
         , radiusPill
-        , radiusSmall
         , space12
         , space16
         , space2
@@ -1464,134 +1456,6 @@ selectDropdown device theme config =
                 }
             )
         ]
-
-
-skeletonLoading : Theme -> Element msg
-skeletonLoading theme =
-    Element.column [ Element.width Element.fill, Element.spacing space12 ]
-        [ skeletonBar theme
-        , skeletonBar theme
-        , skeletonBar theme
-        ]
-
-
-skeletonBar : Theme -> Element msg
-skeletonBar theme =
-    Element.el
-        [ Element.width Element.fill
-        , Element.height (Element.px 16)
-        , Background.color theme.inputFill
-        , Border.rounded radiusSmall
-        , uiClass "ui-skeleton"
-        ]
-        Element.none
-
-
-skeletonBarCustom : Theme -> { width : Element.Length, height : Int } -> Element msg
-skeletonBarCustom theme config =
-    Element.el
-        [ Element.width config.width
-        , Element.height (Element.px config.height)
-        , Background.color theme.inputFill
-        , Border.rounded radiusSmall
-        , uiClass "ui-skeleton"
-        ]
-        Element.none
-
-
-skeletonCircle : Theme -> Element msg
-skeletonCircle theme =
-    Element.el
-        [ Element.width (Element.px 12)
-        , Element.height (Element.px 12)
-        , Background.color theme.inputFill
-        , Border.rounded 999
-        , uiClass "ui-skeleton"
-        ]
-        Element.none
-
-
-skeletonInput : Theme -> Element msg
-skeletonInput theme =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing space4
-        ]
-        [ Element.el
-            [ Element.width (Element.px 80)
-            , Element.height (Element.px 12)
-            , Background.color theme.inputFill
-            , Border.rounded radiusSmall
-            , uiClass "ui-skeleton"
-            ]
-            Element.none
-        , Element.el
-            [ Element.width Element.fill
-            , Element.height (Element.px 48)
-            , Background.color theme.inputFill
-            , Border.rounded radiusControl
-            , uiClass "ui-skeleton"
-            ]
-            Element.none
-        ]
-
-
-skeletonButton : Theme -> Element msg
-skeletonButton theme =
-    Element.el
-        [ Element.width Element.fill
-        , Element.height (Element.px 48)
-        , Background.color theme.inputFill
-        , Border.rounded radiusPill
-        , uiClass "ui-skeleton"
-        ]
-        Element.none
-
-
-skeletonListRow : Theme -> Element msg
-skeletonListRow theme =
-    Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.padding space16
-        , Element.spacing space12
-        ]
-        [ Element.el
-            [ Element.width (Element.px 12)
-            , Element.alignTop
-            , Element.paddingEach { top = space2, right = 0, bottom = 0, left = 0 }
-            ]
-            (skeletonCircle theme)
-        , Element.column
-            [ Element.width Element.fill
-            , Element.spacing space4
-            , Element.alignTop
-            ]
-            [ Element.el
-                [ Element.width (Element.fillPortion 2)
-                , Element.height (Element.px 16)
-                , Background.color theme.inputFill
-                , Border.rounded radiusSmall
-                , uiClass "ui-skeleton"
-                ]
-                Element.none
-            , Element.el
-                [ Element.width (Element.fillPortion 3)
-                , Element.height (Element.px 12)
-                , Background.color theme.inputFill
-                , Border.rounded radiusSmall
-                , uiClass "ui-skeleton"
-                ]
-                Element.none
-            ]
-        ]
-
-
-skeletonCard : Theme -> { rows : Int } -> Element msg
-skeletonCard theme config =
-    card theme
-        (List.map (\_ -> skeletonBar theme)
-            (List.range 1 (max 1 config.rows))
-        )
 
 
 iconButton :

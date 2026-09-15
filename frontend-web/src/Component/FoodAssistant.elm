@@ -44,6 +44,7 @@ import Json.Decode as Decode
 import Task
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients as Nutrients
@@ -692,12 +693,12 @@ viewFor purpose theme device formHasManualInput model =
     case model of
         LoadingStatus ->
             Ui.card theme
-                [ Ui.skeletonBarCustom theme
+                [ Skeleton.barCustom theme
                     { width = Element.fillPortion 1, height = 16 }
-                , Ui.skeletonBar theme
-                , Ui.skeletonBar theme
-                , Ui.skeletonInput theme
-                , Ui.skeletonButton theme
+                , Skeleton.bar theme
+                , Skeleton.bar theme
+                , Skeleton.input theme
+                , Skeleton.button theme
                 ]
 
         Disabled ->

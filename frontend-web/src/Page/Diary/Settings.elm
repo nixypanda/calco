@@ -15,6 +15,7 @@ import Element exposing (Device, Element)
 import Element.Input as Input
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -218,9 +219,9 @@ saveError state =
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
     Ui.card theme
-        [ Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonBar theme
-        , Ui.skeletonButton theme
+        [ Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.bar theme
+        , Skeleton.button theme
         ]

@@ -12,6 +12,7 @@ import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Element exposing (Device, Element)
 import Ui
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -131,7 +132,7 @@ adminDashboardSkeleton : Theme -> Element msg
 adminDashboardSkeleton theme =
     Ui.listCard theme
         { rows =
-            List.map (\_ -> Ui.skeletonListRow theme)
+            List.map (\_ -> Skeleton.listRow theme)
                 (List.range 1 3)
-        , footer = Just (Ui.skeletonButton theme)
+        , footer = Just (Skeleton.button theme)
         }

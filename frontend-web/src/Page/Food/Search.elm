@@ -41,6 +41,7 @@ import Process
 import Task
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Product
@@ -1143,7 +1144,7 @@ bodyView theme model device =
         Loading ->
             Ui.listCard theme
                 { rows =
-                    List.map (\_ -> Ui.skeletonListRow theme)
+                    List.map (\_ -> Skeleton.listRow theme)
                         (List.range 1 3)
                 , footer = Nothing
                 }
@@ -1198,7 +1199,7 @@ barcodeBodyView theme device model =
             Ui.emptyState theme "Enter a barcode to look up a food."
 
         Loading ->
-            Ui.skeletonCard theme { rows = 3 }
+            Skeleton.card theme { rows = 3 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
@@ -1351,7 +1352,7 @@ recentsView device theme model =
                 Element.none
 
             Loading ->
-                Ui.skeletonCard theme { rows = 2 }
+                Skeleton.card theme { rows = 2 }
 
             Failure _ ->
                 Element.none

@@ -23,6 +23,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import View.Nutrients
 import View.Product
@@ -505,13 +506,13 @@ foodShowSkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonBarCustom theme
+        [ Skeleton.barCustom theme
             { width = Element.fill, height = 120 }
-        , Ui.skeletonBarCustom theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 2, height = 16 }
-        , Ui.skeletonBarCustom theme
+        , Skeleton.barCustom theme
             { width = Element.fillPortion 3, height = 12 }
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.input theme
+        , Skeleton.button theme
+        , Skeleton.card theme { rows = 3 }
         ]

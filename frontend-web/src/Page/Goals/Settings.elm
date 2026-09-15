@@ -18,6 +18,7 @@ import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Ui
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -420,9 +421,9 @@ requestError save =
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
     Ui.card theme
-        [ Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonInput theme
-        , Ui.skeletonButton theme
+        [ Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.input theme
+        , Skeleton.button theme
         ]

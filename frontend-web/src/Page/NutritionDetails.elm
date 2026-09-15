@@ -19,6 +19,7 @@ import Lib.Number as Number
 import Ui
 import Ui.DesignTokens as DesignTokens
 import Ui.Icon as Icon
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -210,23 +211,23 @@ loadingView : Theme -> Element msg
 loadingView theme =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
+        [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
         , Ui.card theme
-            [ Ui.skeletonBarCustom theme { width = Element.fillPortion 2, height = 16 }
+            [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
             , Element.row
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
-                , Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
-                , Ui.skeletonBarCustom theme { width = Element.fill, height = 40 }
+                [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
+                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
+                , Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 ]
             ]
-        , Ui.skeletonCard theme { rows = 3 }
-        , Ui.skeletonCard theme { rows = 3 }
+        , Skeleton.card theme { rows = 3 }
+        , Skeleton.card theme { rows = 3 }
         , Ui.card theme
-            [ Ui.skeletonBar theme
-            , Ui.skeletonBar theme
+            [ Skeleton.bar theme
+            , Skeleton.bar theme
             ]
         ]
 

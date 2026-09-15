@@ -14,6 +14,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Ui
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
@@ -182,10 +183,10 @@ mealListSkeleton : Theme -> Element msg
 mealListSkeleton theme =
     Ui.section theme
         { header =
-            Just (Ui.skeletonButton theme)
+            Just (Skeleton.button theme)
         , body =
             List.intersperse (Ui.hairline theme)
-                (List.map (\_ -> Ui.skeletonListRow theme)
+                (List.map (\_ -> Skeleton.listRow theme)
                     (List.range 1 3)
                 )
         , footer = Nothing

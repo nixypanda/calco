@@ -17,6 +17,7 @@ import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -424,7 +425,7 @@ editUserSkeleton theme =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ Ui.skeletonCard theme { rows = 3 }
-        , Ui.skeletonCard theme { rows = 2 }
-        , Ui.skeletonButton theme
+        [ Skeleton.card theme { rows = 3 }
+        , Skeleton.card theme { rows = 2 }
+        , Skeleton.button theme
         ]

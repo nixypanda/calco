@@ -19,6 +19,7 @@ import Element.Font as Font
 import Lib.Number as Number
 import Ui
 import Ui.DesignTokens as DesignTokens
+import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
@@ -233,13 +234,13 @@ titleCase word =
 skeletonPreview : Theme -> Element msg
 skeletonPreview theme =
     Ui.section theme
-        { header = Just (Ui.skeletonBar theme)
+        { header = Just (Skeleton.bar theme)
         , body =
-            [ Ui.skeletonBar theme
+            [ Skeleton.bar theme
             , Ui.hairline theme
-            , Ui.skeletonBar theme
-            , Ui.skeletonBar theme
-            , Ui.skeletonBar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
             ]
         , footer = Nothing
         }
