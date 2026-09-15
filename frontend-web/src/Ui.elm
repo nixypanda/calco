@@ -8,8 +8,6 @@ module Ui exposing
     , accentDot
     , badge
     , bottomActionButtons
-    , bottomNavBar
-    , bottomNavTab
     , card
     , chip
     , chipBackground
@@ -21,8 +19,6 @@ module Ui exposing
     , decimalInputWithSuffix
     , detailRow
     , dotSeparated
-    , drawerItem
-    , drawerPanel
     , emptyState
     , errorBanner
     , fieldLabel
@@ -39,7 +35,6 @@ module Ui exposing
     , listRow
     , loading
     , maybeErrorBanner
-    , menuCard
     , modalOverlay
     , numericInputMode
     , optionRow
@@ -47,7 +42,6 @@ module Ui exposing
     , pageHeader
     , passwordInput
     , removableChip
-    , scrimOverlay
     , searchInput
     , section
     , selectDropdown
@@ -63,7 +57,6 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Element.Region as Region
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
@@ -836,83 +829,6 @@ bottomActionButtons device theme buttons =
                 buttonElements
 
 
-bottomNavBar : Theme -> List (Element msg) -> Element msg
-bottomNavBar theme items =
-    Element.row
-        [ Element.width Element.fill
-        , Element.height (Element.px 56)
-        , Background.color theme.cardBg
-        , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
-        , Border.color theme.divider
-        , Region.navigation
-
-        -- Keep viewport positioning inline.
-        -- elm-ui's generated position rules can override class-based CSS here.
-        , Element.htmlAttribute (Html.Attributes.style "position" "fixed")
-        , Element.htmlAttribute (Html.Attributes.style "right" "0")
-        , Element.htmlAttribute (Html.Attributes.style "bottom" "0")
-        , Element.htmlAttribute (Html.Attributes.style "left" "0")
-        , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
-        ]
-        items
-
-
-bottomNavTab :
-    Theme
-    -> { icon : Icon, label : String, active : Bool, onPress : msg }
-    -> Element msg
-bottomNavTab theme config =
-    let
-        iconColor : Element.Color
-        iconColor =
-            if config.active then
-                theme.brandBlue
-
-            else
-                theme.textMuted
-    in
-    Input.button
-        [ Element.width (Element.fillPortion 1)
-        , Element.height Element.fill
-        , Element.paddingEach { top = 6, right = 0, bottom = 4, left = 0 }
-        , Font.color
-            iconColor
-        , Border.widthEach
-            { top =
-                if config.active then
-                    2
-
-                else
-                    0
-            , bottom = 0
-            , left = 0
-            , right = 0
-            }
-        , Border.color theme.brandBlue
-        ]
-        { onPress = Just config.onPress
-        , label =
-            Element.column
-                [ Element.centerX
-                , Element.centerY
-                , Element.spacing 2
-                ]
-                [ Element.el [ Element.centerX ]
-                    (Icon.view
-                        { icon = config.icon
-                        , size = 22
-                        , color = iconColor
-                        }
-                    )
-                , Element.el
-                    [ Element.centerX
-                    , Font.size 12
-                    ]
-                    (Element.text config.label)
-                ]
-        }
-
-
 
 -- Inputs
 
@@ -1113,18 +1029,6 @@ modalOverlay theme config =
         )
 
 
-scrimOverlay : Maybe msg -> Element msg
-scrimOverlay onPress =
-    Input.button
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Background.color (Element.rgba255 0 0 0 0.28)
-        ]
-        { onPress = onPress
-        , label = Element.none
-        }
-
-
 detailRow : Theme -> String -> Element msg -> Element msg
 detailRow theme label value =
     Element.row
@@ -1149,91 +1053,6 @@ badge theme label =
         , Font.medium
         ]
         (Element.text label)
-
-
-menuCard :
-    Theme
-    -> { width : Int, children : List (Element msg) }
-    -> Element msg
-menuCard theme config =
-    Element.column
-        [ Element.alignRight
-        , Element.moveDown 4
-        , Element.width (Element.px config.width)
-        , Element.padding space12
-        , Element.spacing 10
-        , Background.color theme.cardBg
-        , Border.rounded radiusCard
-        , cardShadow theme
-        ]
-        config.children
-
-
-drawerPanel : Theme -> List (Element msg) -> Element msg
-drawerPanel theme children =
-    Element.column
-        [ Element.width (Element.fill |> Element.maximum 320)
-        , Element.height Element.fill
-        , Element.paddingXY 16 9
-        , Element.spacing space12
-        , Background.color theme.cardBg
-        , cardShadow theme
-        , Region.navigation
-        ]
-        children
-
-
-drawerItem :
-    Theme
-    -> { icon : Maybe Icon, label : String, selected : Bool, onPress : msg }
-    -> Element msg
-drawerItem theme config =
-    let
-        itemColor : Element.Color
-        itemColor =
-            if config.selected then
-                theme.brandBlue
-
-            else
-                theme.textPrimary
-
-        iconEl : Element msg
-        iconEl =
-            case config.icon of
-                Just icon ->
-                    Icon.view
-                        { icon = icon
-                        , size = 20
-                        , color = itemColor
-                        }
-
-                Nothing ->
-                    Element.none
-    in
-    Input.button
-        [ Element.width Element.fill
-        , Element.paddingXY 16 14
-        , Border.rounded radiusControl
-        , Background.color
-            (if config.selected then
-                theme.drawerSelectionBg
-
-             else
-                theme.cardBg
-            )
-        , Font.color itemColor
-        , Font.medium
-        ]
-        { onPress = Just config.onPress
-        , label =
-            Element.row
-                [ Element.spacing 12
-                , Element.centerY
-                ]
-                [ iconEl
-                , Element.text config.label
-                ]
-        }
 
 
 completionDropdown :
