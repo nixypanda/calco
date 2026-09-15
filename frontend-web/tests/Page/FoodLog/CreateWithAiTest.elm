@@ -4,7 +4,8 @@ import Api.Client as Client
 import Api.Foods exposing (NutrientItem)
 import Data.FoodAssistant exposing (FoodDraftTurn(..))
 import Expect
-import Page.CustomFood.Assistant as Assistant
+import Page.Food.Assistant as Assistant
+import Page.Food.Editor as Editor
 import Page.FoodLog.CreateAdHoc as Review
 import Page.FoodLog.CreateWithAi as CreateWithAi
 import Test exposing (Test, describe, test)
@@ -20,12 +21,17 @@ tests =
                     |> Maybe.map
                         (\review ->
                             ( review.form.name
-                            , review.form.portionWeight
+                            , Editor.logPortionWeight review.form
                             , List.map .amount review.form.nutrients
                             )
                         )
                     |> Expect.equal
-                        (Just ( "Paneer wrap", "250", [ "500", "25", "50", "30", "12.5" ] ))
+                        (Just
+                            ( "Paneer wrap"
+                            , Just "250"
+                            , [ "500", "25", "50", "30", "12.5" ]
+                            )
+                        )
         , test "save-off review submits only an ad-hoc log" <|
             \_ ->
                 reviewedModel
@@ -45,7 +51,9 @@ tests =
             \_ ->
                 reviewedModel
                     |> CreateWithAi.update
-                        (CreateWithAi.ReviewMsg Review.SaveToMyFoodsToggled)
+                        (CreateWithAi.ReviewMsg
+                            (Review.FormMsg Editor.LogPersistenceToggled)
+                        )
                     |> first
                     |> CreateWithAi.update (CreateWithAi.ReviewMsg Review.SubmitClicked)
                     |> third
@@ -70,7 +78,9 @@ tests =
                     saving =
                         reviewedModel
                             |> CreateWithAi.update
-                                (CreateWithAi.ReviewMsg Review.SaveToMyFoodsToggled)
+                                (CreateWithAi.ReviewMsg
+                                    (Review.FormMsg Editor.LogPersistenceToggled)
+                                )
                             |> first
                             |> CreateWithAi.update
                                 (CreateWithAi.ReviewMsg Review.SubmitClicked)

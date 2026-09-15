@@ -3,7 +3,7 @@ module Page.FoodLog.AiReviewTest exposing (tests)
 import Api.Foods exposing (NutrientItem)
 import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
 import Expect
-import Page.FoodLog.AdHocForm as AdHocForm
+import Page.Food.Editor as Editor
 import Page.FoodLog.AiReview as AiReview
 import Test exposing (Test, describe, test)
 
@@ -13,36 +13,41 @@ tests =
     describe "Page.FoodLog.AiReview"
         [ test "converts per-100-g nutrition into logged-portion totals" <|
             \_ ->
-                AiReview.fromDraft catalog draft suggested (AdHocForm.empty Nothing Nothing)
+                AiReview.fromDraft catalog draft suggested (Editor.emptyLogForm Nothing Nothing)
                     |> Result.map
                         (\form ->
-                            ( form.amount
-                            , form.portionWeight
+                            ( Editor.foodLogFields form |> Maybe.map .quantity
+                            , Editor.logPortionWeight form
                             , List.map .amount form.nutrients
                             )
                         )
                     |> Expect.equal
-                        (Ok ( "1", "250", [ "500", "25", "50", "30" ] ))
+                        (Ok ( Just "1", Just "250", [ "500", "25", "50", "30" ] ))
         , test "quantity edits scale weight and every nutrient total" <|
             \_ ->
-                AiReview.fromDraft catalog draft suggested (AdHocForm.empty Nothing Nothing)
+                AiReview.fromDraft catalog draft suggested (Editor.emptyLogForm Nothing Nothing)
                     |> Result.map (AiReview.changeAmount "2")
                     |> Result.map
                         (\form ->
-                            ( form.portionWeight, List.map .amount form.nutrients )
+                            ( Editor.logPortionWeight form
+                            , List.map .amount form.nutrients
+                            )
                         )
                     |> Expect.equal
-                        (Ok ( "500", [ "1000", "50", "100", "60" ] ))
+                        (Ok ( Just "500", [ "1000", "50", "100", "60" ] ))
         , test "known serving changes use their gram conversion" <|
             \_ ->
-                AiReview.fromDraft catalog draft suggested (AdHocForm.empty Nothing Nothing)
+                AiReview.fromDraft catalog draft suggested (Editor.emptyLogForm Nothing Nothing)
                     |> Result.map (AiReview.changeUnit draft "piece")
                     |> Result.map
                         (\form ->
-                            ( form.unit, form.portionWeight, List.map .amount form.nutrients )
+                            ( Editor.foodLogFields form |> Maybe.map .unit
+                            , Editor.logPortionWeight form
+                            , List.map .amount form.nutrients
+                            )
                         )
                     |> Expect.equal
-                        (Ok ( "piece", "125", [ "250", "12.5", "25", "15" ] ))
+                        (Ok ( Just "piece", Just "125", [ "250", "12.5", "25", "15" ] ))
         ]
 
 

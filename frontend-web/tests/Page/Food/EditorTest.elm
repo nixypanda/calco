@@ -1,4 +1,4 @@
-module Page.CustomFood.FormTest exposing (tests)
+module Page.Food.EditorTest exposing (tests)
 
 import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
@@ -7,7 +7,7 @@ import Data.Nutrition as Nutrition
 import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
-import Page.CustomFood.Form as Form
+import Page.Food.Editor as Form
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
@@ -16,7 +16,7 @@ import Ui.Theme as Theme
 
 tests : Test
 tests =
-    describe "Page.CustomFood.Form"
+    describe "Page.Food.Editor custom-food mode"
         [ test "empty form has one nutrient row" <|
             \_ ->
                 Form.emptyForm.nutrients
@@ -38,7 +38,7 @@ tests =
                         | name = "Paneer"
                         , nutrients =
                             [ { code = "ENERGY_KCAL"
-                              , amountPer100g = "abc"
+                              , amount = "abc"
                               , unit = "kcal"
                               }
                             ]
@@ -78,7 +78,7 @@ tests =
                         | name = "Paneer"
                         , nutrients =
                             [ { code = "ENERGY_KCAL"
-                              , amountPer100g = "-1"
+                              , amount = "-1"
                               , unit = "kcal"
                               }
                             ]
@@ -140,11 +140,11 @@ tests =
                             }
                         , nutrients =
                             [ { code = "PROTEIN_G"
-                              , amountPer100g = "18"
+                              , amount = "18"
                               , unit = "g"
                               }
                             , { code = ""
-                              , amountPer100g = "4"
+                              , amount = "4"
                               , unit = "g"
                               }
                             ]
@@ -199,7 +199,7 @@ tests =
                         , categories = [ "dairy" ]
                         , nutrients =
                             [ { code = "PROTEIN_G"
-                              , amountPer100g = "3.5"
+                              , amount = "3.5"
                               , unit = "g"
                               }
                             ]
@@ -273,7 +273,7 @@ tests =
                         { base
                             | nutrients =
                                 [ { code = "PROTEIN_G"
-                                  , amountPer100g = "18"
+                                  , amount = "18"
                                   , unit = ""
                                   }
                                 ]
@@ -298,7 +298,7 @@ tests =
                         { base
                             | nutrients =
                                 [ { code = "PROTEIN_G"
-                                  , amountPer100g = "18"
+                                  , amount = "18"
                                   , unit = "custom"
                                   }
                                 ]
@@ -494,7 +494,7 @@ tests =
                     |> updateForm (Form.NutrientAmountChanged 1 "12")
                     |> updateForm (Form.RemoveNutrientRow 0)
                     |> .nutrients
-                    |> List.map .amountPer100g
+                    |> List.map .amount
                     |> Expect.equal [ "12" ]
         , test "serving row messages update and remove rows" <|
             \_ ->
@@ -596,7 +596,7 @@ tests =
                         , defaultUnit = "bowl"
                         , nutrients =
                             [ { code = "ENERGY_KCAL"
-                              , amountPer100g = "120.125000"
+                              , amount = "120.125000"
                               , unit = "kcal"
                               }
                             ]

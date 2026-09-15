@@ -23,8 +23,8 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import File exposing (File)
 import Lib.Ticket exposing (Ticket)
-import Page.CustomFood.Assistant as Assistant
-import Page.CustomFood.Form as Form
+import Page.Food.Assistant as Assistant
+import Page.Food.Editor as Form
 import Ui
 import Ui.Theme exposing (Theme)
 

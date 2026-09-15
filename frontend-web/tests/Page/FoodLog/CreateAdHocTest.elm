@@ -2,7 +2,7 @@ module Page.FoodLog.CreateAdHocTest exposing (tests)
 
 import Api.Client as Client
 import Expect
-import Page.FoodLog.AdHocForm as AdHocForm
+import Page.Food.Editor as Editor
 import Page.FoodLog.CreateAdHoc as CreateAdHoc
 import Test exposing (Test, describe, test)
 
@@ -80,15 +80,28 @@ tests =
                        )
         , test "missing route date requests local context" <|
             \_ ->
-                let
-                    form : AdHocForm.Model
-                    form =
-                        validModel.form
-                in
                 CreateAdHoc.update CreateAdHoc.SubmitClicked
-                    { validModel | form = { form | date = "" } }
+                    (validModel
+                        |> CreateAdHoc.update
+                            (CreateAdHoc.FormMsg (Editor.LogDateChanged ""))
+                        |> first
+                    )
                     |> third
                     |> Expect.equal CreateAdHoc.RequestLocalContext
+        , test "save-and-log category queries request suggestions" <|
+            \_ ->
+                CreateAdHoc.update
+                    (CreateAdHoc.FormMsg (Editor.CategoryQueryChanged "dai"))
+                    saveModel
+                    |> third
+                    |> (\outMsg ->
+                            case outMsg of
+                                CreateAdHoc.RequestCategorySuggestions _ request ->
+                                    Expect.equal request.query "dai"
+
+                                _ ->
+                                    Expect.fail "expected a category suggestion request"
+                       )
         ]
 
 
@@ -99,7 +112,7 @@ validModel =
         model =
             CreateAdHoc.init (Just "2026-09-14") Nothing
 
-        form : AdHocForm.Model
+        form : Editor.FormModel
         form =
             model.form
     in
@@ -119,14 +132,13 @@ validModel =
 
 saveModel : CreateAdHoc.Model
 saveModel =
-    let
-        form : AdHocForm.Model
-        form =
-            validModel.form
-    in
-    { validModel
-        | form = { form | saveToMyFoods = True, portionWeight = "160" }
-    }
+    validModel
+        |> CreateAdHoc.update
+            (CreateAdHoc.FormMsg Editor.LogPersistenceToggled)
+        |> first
+        |> CreateAdHoc.update
+            (CreateAdHoc.FormMsg (Editor.PortionWeightChanged "160"))
+        |> first
 
 
 first : ( a, b, c ) -> a
