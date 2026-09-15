@@ -161,6 +161,11 @@ workspaceTests =
                     |> first
                     |> Page.paneKeys
                     |> Expect.equal [ "custom-food-create" ]
+        , test "AI ad-hoc logging is standalone" <|
+            \_ ->
+                expectPaneKeys
+                    (AiLogCreate (Just date) (Just Lunch))
+                    [ "create-ai-log" ]
         , test "calendar-aware log editing is standalone" <|
             \_ ->
                 expectPaneKeys

@@ -1,6 +1,7 @@
 use crate::assistant::application::FoodVocabulary;
+use crate::assistant::domain::FoodDraftPurpose;
 
-pub(super) fn build(vocabulary: &FoodVocabulary) -> String {
+pub(super) fn build(purpose: FoodDraftPurpose, vocabulary: &FoodVocabulary) -> String {
     let nutrients = vocabulary
         .nutrients
         .iter()
@@ -21,10 +22,20 @@ pub(super) fn build(vocabulary: &FoodVocabulary) -> String {
         .join("\n");
     let required = vocabulary.required_nutrient_codes.join("\n- ");
 
-    format!(
-        r#"You are CalCo's custom-food drafting assistant.
+    let purpose_instructions = match purpose {
+        FoodDraftPurpose::CustomFood => {
+            "Help the user complete a reusable CalCo custom-food form. The response must not include suggested_log."
+        }
+        FoodDraftPurpose::AdHocLog => {
+            "Help the user estimate the food portion they are logging now. A completed response must include suggested_log with a positive amount, a unit convertible through grams or the draft's serving definitions, and the corresponding positive total_weight_grams. A clarification response uses null suggested_log."
+        }
+    };
 
-Help the user complete a CalCo custom-food form. Never save a food; return a draft for review.
+    format!(
+        r#"You are CalCo's food drafting assistant.
+
+{purpose_instructions}
+Never save or log a food; return a draft for review.
 The supported fields are name, brand, categories, default_quantity,
 default_unit, nutrients per 100 grams, and serving definitions. Do not return recipes,
 ingredients, preparation steps, allergens, health advice, confidence scores, or extra fields.
@@ -58,29 +69,39 @@ mod tests {
 
     #[test]
     fn prompt_uses_bounded_catalog_vocabulary() {
-        let prompt = build(&FoodVocabulary {
-            nutrients: vec![SupportedNutrient {
-                code: "ENERGY_KCAL".into(),
-                name: "Energy".into(),
-                unit: "kcal".into(),
-            }],
-            default_units: vec![SupportedUnit {
-                code: "g".into(),
-                name: "Gram".into(),
-                kind: "mass".into(),
-            }],
-            serving_units: vec![SupportedUnit {
-                code: "cup".into(),
-                name: "Cup".into(),
-                kind: "volume".into(),
-            }],
-            required_nutrient_codes: vec!["ENERGY_KCAL".into()],
-        });
+        let prompt = build(
+            FoodDraftPurpose::CustomFood,
+            &FoodVocabulary {
+                nutrients: vec![SupportedNutrient {
+                    code: "ENERGY_KCAL".into(),
+                    name: "Energy".into(),
+                    unit: "kcal".into(),
+                }],
+                default_units: vec![SupportedUnit {
+                    code: "g".into(),
+                    name: "Gram".into(),
+                    kind: "mass".into(),
+                }],
+                serving_units: vec![SupportedUnit {
+                    code: "cup".into(),
+                    name: "Cup".into(),
+                    kind: "volume".into(),
+                }],
+                required_nutrient_codes: vec!["ENERGY_KCAL".into()],
+            },
+        );
         assert!(prompt.contains("ENERGY_KCAL | Energy | kcal"));
         assert!(prompt.contains("g | Gram | mass"));
         assert!(prompt.contains("cup | Cup | volume"));
         assert!(prompt.contains("configured serving unit"));
         assert!(prompt.contains("does not need to equal one serving unit"));
-        assert!(prompt.contains("Never save a food"));
+        assert!(prompt.contains("Never save or log a food"));
+    }
+
+    #[test]
+    fn ad_hoc_prompt_requires_a_logged_portion() {
+        let prompt = build(FoodDraftPurpose::AdHocLog, &FoodVocabulary::default());
+        assert!(prompt.contains("portion they are logging now"));
+        assert!(prompt.contains("total_weight_grams"));
     }
 }

@@ -25,6 +25,7 @@ type Route
     | DiarySettings
     | FoodLogEntry String (Maybe String) (Maybe String)
     | AdHocLogCreate (Maybe String) (Maybe MealSlot)
+    | AiLogCreate (Maybe String) (Maybe MealSlot)
     | FoodSearch (Maybe String) (Maybe MealSlot)
     | FoodShow String (Maybe String) (Maybe MealSlot) (Maybe String)
     | CustomFoodList
@@ -64,6 +65,13 @@ routeParser =
             (s "logs"
                 </> s "new"
                 </> s "ad-hoc"
+                <?> Query.string "date"
+                <?> mealSlotQuery
+            )
+        , Parser.map AiLogCreate
+            (s "logs"
+                </> s "new"
+                </> s "ai"
                 <?> Query.string "date"
                 <?> mealSlotQuery
             )
@@ -139,6 +147,9 @@ primaryRoute route =
         AdHocLogCreate maybeDate maybeSlot ->
             FoodSearch maybeDate maybeSlot
 
+        AiLogCreate maybeDate maybeSlot ->
+            FoodSearch maybeDate maybeSlot
+
         DiaryDay _ _ ->
             DiaryDay Nothing Nothing
 
@@ -208,6 +219,9 @@ routeToPath route =
 
         AdHocLogCreate maybeDate maybeSlot ->
             withFoodContext "/logs/new/ad-hoc" maybeDate maybeSlot
+
+        AiLogCreate maybeDate maybeSlot ->
+            withFoodContext "/logs/new/ai" maybeDate maybeSlot
 
         FoodSearch maybeDate maybeSlot ->
             withFoodContext "/search" maybeDate maybeSlot

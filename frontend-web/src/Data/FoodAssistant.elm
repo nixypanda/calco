@@ -6,12 +6,15 @@ module Data.FoodAssistant exposing
     , DraftNutrient
     , DraftServing
     , FoodDraft
+    , FoodDraftPurpose(..)
     , FoodDraftTurn(..)
+    , SuggestedLog
     , assistantMessage
     , assistantStatusDecoder
     , assistantTurn
     , conversation
     , conversationEncoder
+    , conversationEncoderFor
     , foodDraftTurnDecoder
     , turnRole
     , turnText
@@ -41,11 +44,17 @@ type Conversation
     = Conversation (List ConversationTurn)
 
 
+type FoodDraftPurpose
+    = CustomFood
+    | AdHocLog
+
+
 type FoodDraftTurn
     = NeedsClarification { assistantMessage : String }
     | DraftReady
         { assistantMessage : String
         , draft : FoodDraft
+        , suggestedLog : Maybe SuggestedLog
         , warnings : List String
         }
 
@@ -73,6 +82,13 @@ type alias DraftServing =
     }
 
 
+type alias SuggestedLog =
+    { amount : String
+    , unit : String
+    , totalWeightGrams : String
+    }
+
+
 assistantStatusDecoder : Decoder AssistantStatus
 assistantStatusDecoder =
     strictObject [ "enabled", "supports_images" ] <|
@@ -81,26 +97,56 @@ assistantStatusDecoder =
             (Decode.field "supports_images" Decode.bool)
 
 
-foodDraftTurnDecoder : Decoder FoodDraftTurn
-foodDraftTurnDecoder =
-    strictObject [ "assistant_message", "status", "draft", "warnings" ] <|
-        (Decode.field "status" Decode.string
-            |> Decode.andThen draftTurnForStatus
-        )
+foodDraftTurnDecoder : FoodDraftPurpose -> Decoder FoodDraftTurn
+foodDraftTurnDecoder purpose =
+    Decode.keyValuePairs Decode.value
+        |> Decode.andThen
+            (\entries ->
+                let
+                    keys : List String
+                    keys =
+                        List.map Tuple.first entries
+
+                    allowed : List String
+                    allowed =
+                        [ "assistant_message", "status", "draft", "warnings" ]
+                            ++ (case purpose of
+                                    CustomFood ->
+                                        []
+
+                                    AdHocLog ->
+                                        [ "suggested_log" ]
+                               )
+                in
+                if
+                    List.length keys
+                        >= 4
+                        && List.length keys
+                        <= List.length allowed
+                        && List.all (\key -> List.member key allowed) keys
+                then
+                    Decode.field "status" Decode.string
+                        |> Decode.andThen (draftTurnForStatus purpose)
+
+                else
+                    Decode.fail "Unexpected or missing food-assistant response fields"
+            )
 
 
-draftTurnForStatus : String -> Decoder FoodDraftTurn
-draftTurnForStatus status =
+draftTurnForStatus : FoodDraftPurpose -> String -> Decoder FoodDraftTurn
+draftTurnForStatus purpose status =
     case status of
         "needs_clarification" ->
-            Decode.map3
-                (\message draft warnings -> ( message, draft, warnings ))
-                (Decode.field "assistant_message" Decode.string)
-                (Decode.field "draft" (Decode.nullable foodDraftDecoder))
-                (Decode.field "warnings" (Decode.list Decode.string))
+            Decode.map2 Tuple.pair
+                (Decode.map3 (\message draft warnings -> ( message, draft, warnings ))
+                    (Decode.field "assistant_message" Decode.string)
+                    (Decode.field "draft" (Decode.nullable foodDraftDecoder))
+                    (Decode.field "warnings" (Decode.list Decode.string))
+                )
+                (optionalSuggestedLogDecoder purpose)
                 |> Decode.andThen
-                    (\( message, draft, warnings ) ->
-                        if draft == Nothing && List.isEmpty warnings then
+                    (\( ( message, draft, warnings ), suggested ) ->
+                        if draft == Nothing && suggested == Nothing && List.isEmpty warnings then
                             Decode.succeed (NeedsClarification { assistantMessage = message })
 
                         else
@@ -108,17 +154,28 @@ draftTurnForStatus status =
                     )
 
         "draft_ready" ->
-            Decode.map3
-                (\message draft warnings ->
-                    DraftReady
-                        { assistantMessage = message
-                        , draft = draft
-                        , warnings = warnings
-                        }
+            Decode.map2 Tuple.pair
+                (Decode.map3 (\message draft warnings -> ( message, draft, warnings ))
+                    (Decode.field "assistant_message" Decode.string)
+                    (Decode.field "draft" foodDraftDecoder)
+                    (Decode.field "warnings" (Decode.list Decode.string))
                 )
-                (Decode.field "assistant_message" Decode.string)
-                (Decode.field "draft" foodDraftDecoder)
-                (Decode.field "warnings" (Decode.list Decode.string))
+                (optionalSuggestedLogDecoder purpose)
+                |> Decode.andThen
+                    (\( ( message, draft, warnings ), suggested ) ->
+                        if purpose == AdHocLog && suggested == Nothing then
+                            Decode.fail "An ad-hoc draft requires a suggested log"
+
+                        else
+                            Decode.succeed
+                                (DraftReady
+                                    { assistantMessage = message
+                                    , draft = draft
+                                    , suggestedLog = suggested
+                                    , warnings = warnings
+                                    }
+                                )
+                    )
 
         _ ->
             Decode.fail "Unsupported food-assistant draft status"
@@ -160,6 +217,28 @@ draftServingDecoder =
         Decode.map2 DraftServing
             (Decode.field "unit" Decode.string)
             (Decode.field "grams_per_unit" Decode.string)
+
+
+optionalSuggestedLogDecoder : FoodDraftPurpose -> Decoder (Maybe SuggestedLog)
+optionalSuggestedLogDecoder purpose =
+    case purpose of
+        CustomFood ->
+            Decode.succeed Nothing
+
+        AdHocLog ->
+            Decode.oneOf
+                [ Decode.field "suggested_log" (Decode.nullable suggestedLogDecoder)
+                , Decode.succeed Nothing
+                ]
+
+
+suggestedLogDecoder : Decoder SuggestedLog
+suggestedLogDecoder =
+    strictObject [ "amount", "unit", "total_weight_grams" ] <|
+        Decode.map3 SuggestedLog
+            (Decode.field "amount" Decode.string)
+            (Decode.field "unit" Decode.string)
+            (Decode.field "total_weight_grams" Decode.string)
 
 
 strictObject : List String -> Decoder a -> Decoder a
@@ -244,9 +323,25 @@ assistantMessage turn =
 
 
 conversationEncoder : Conversation -> Encode.Value
-conversationEncoder (Conversation turns) =
+conversationEncoder =
+    conversationEncoderFor CustomFood
+
+
+conversationEncoderFor : FoodDraftPurpose -> Conversation -> Encode.Value
+conversationEncoderFor purpose (Conversation turns) =
     Encode.object
-        [ ( "turns", Encode.list conversationTurnEncoder turns ) ]
+        [ ( "purpose"
+          , Encode.string
+                (case purpose of
+                    CustomFood ->
+                        "custom_food"
+
+                    AdHocLog ->
+                        "ad_hoc_log"
+                )
+          )
+        , ( "turns", Encode.list conversationTurnEncoder turns )
+        ]
 
 
 conversationTurnEncoder : ConversationTurn -> Encode.Value

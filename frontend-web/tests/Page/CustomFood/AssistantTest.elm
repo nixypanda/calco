@@ -44,7 +44,11 @@ tests =
                     |> requestJson
                     |> Expect.equal
                         (Just
-                            "{\"turns\":[{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
+                            (String.concat
+                                [ "{\"purpose\":\"custom_food\",\"turns\":["
+                                , "{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
+                                ]
+                            )
                         )
         , test "clarification appends transcript and allows a follow-up" <|
             \_ ->
@@ -66,7 +70,7 @@ tests =
                     |> Expect.equal
                         (Just
                             (String.concat
-                                [ "{\"turns\":[{\"role\":\"user\","
+                                [ "{\"purpose\":\"custom_food\",\"turns\":[{\"role\":\"user\","
                                 , "\"text\":\"one bowl of dal\"},{\"role\":\"assistant\","
                                 , "\"text\":\"How many grams?\"},{\"role\":\"user\","
                                 , "\"text\":\"300 grams\"}]}"
@@ -83,7 +87,11 @@ tests =
                     |> requestJson
                     |> Expect.equal
                         (Just
-                            "{\"turns\":[{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
+                            (String.concat
+                                [ "{\"purpose\":\"custom_food\",\"turns\":["
+                                , "{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
+                                ]
+                            )
                         )
         , test "rate limits expose a retryable friendly failure" <|
             \_ ->
@@ -132,6 +140,39 @@ tests =
                        )
                     |> Expect.equal
                         ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
+        , test "ad-hoc completion returns the draft and suggested portion to its parent" <|
+            \_ ->
+                let
+                    suggestedLog : FoodAssistant.SuggestedLog
+                    suggestedLog =
+                        { amount = "1"
+                        , unit = "bowl"
+                        , totalWeightGrams = "300"
+                        }
+
+                    logTurn : FoodDraftTurn
+                    logTurn =
+                        DraftReady
+                            { assistantMessage = "Review this estimate."
+                            , draft = draft
+                            , suggestedLog = Just suggestedLog
+                            , warnings = [ "Estimated" ]
+                            }
+                in
+                enabled
+                    |> Assistant.updateFor FoodAssistant.AdHocLog
+                        (Assistant.DraftCompleted (Ok logTurn))
+                    |> first
+                    |> Assistant.updateFor FoodAssistant.AdHocLog
+                        (Assistant.ApplyDraftClicked False)
+                    |> third
+                    |> Expect.equal
+                        (Assistant.CompleteDraft
+                            { draft = draft
+                            , suggestedLog = suggestedLog
+                            , warnings = [ "Estimated" ]
+                            }
+                        )
         , test "ready draft hides the conversation behind ask for changes" <|
             \_ ->
                 enabled
@@ -560,6 +601,7 @@ emptyExpandedChat =
     , description = ""
     , request = Assistant.Ready
     , draft = Nothing
+    , suggestedLog = Nothing
     , warnings = []
     , askingForChanges = False
     , awaitingOverwriteConfirmation = False
@@ -610,6 +652,7 @@ readyTurn =
     DraftReady
         { assistantMessage = "Review this estimate."
         , draft = draft
+        , suggestedLog = Nothing
         , warnings = []
         }
 
@@ -617,7 +660,7 @@ readyTurn =
 requestJson : Assistant.OutMsg -> Maybe String
 requestJson outMsg =
     case outMsg of
-        Assistant.RequestDraft conversation _ ->
+        Assistant.RequestDraft _ conversation _ ->
             Just (Encode.encode 0 (FoodAssistant.conversationEncoder conversation))
 
         _ ->

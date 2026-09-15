@@ -9,13 +9,17 @@ import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Data.Search as Search
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.Food.Search as FoodSearch
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
 import Time
+import Ui.Theme as Theme
 
 
 tests : Test
@@ -30,6 +34,28 @@ tests =
                         (FoodSearch.Navigate
                             (AdHocLogCreate (Just "2026-06-01") (Just Lunch))
                         )
+        , test "AI ad-hoc navigation keeps date and meal slot" <|
+            \_ ->
+                FoodSearch.update FoodSearch.CreateAiLogClicked
+                    (FoodSearch.init (Just "2026-06-01") (Just Lunch))
+                    |> third
+                    |> Expect.equal
+                        (FoodSearch.Navigate
+                            (AiLogCreate (Just "2026-06-01") (Just Lunch))
+                        )
+        , test "ad-hoc actions show manual and AI choices" <|
+            \_ ->
+                FoodSearch.contentView
+                    { model = FoodSearch.init Nothing Nothing
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Manually"
+                        , Selector.text "With AI"
+                        ]
         , test "empty query clears results, loading, and error" <|
             \_ ->
                 FoodSearch.update

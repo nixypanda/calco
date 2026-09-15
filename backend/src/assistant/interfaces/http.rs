@@ -18,7 +18,7 @@ use crate::assistant::application::{
 use crate::assistant::composition::AssistantComponents;
 use crate::assistant::domain::{
     Conversation, ConversationRole, ConversationTurn, ConversationValidationError, FoodDraft,
-    FoodDraftTurn,
+    FoodDraftPurpose, FoodDraftTurn, SuggestedLog,
 };
 use crate::assistant::infrastructure::AdmissionRejection;
 use crate::auth::interfaces::http::AuthUser;
@@ -44,7 +44,17 @@ struct AssistantStatusResponse {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ConversationRequest {
+    #[serde(default)]
+    purpose: FoodDraftPurposeRequest,
     turns: Vec<ConversationTurnRequest>,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum FoodDraftPurposeRequest {
+    #[default]
+    CustomFood,
+    AdHocLog,
 }
 
 #[derive(Deserialize)]
@@ -66,7 +76,26 @@ struct AssistantDraftResponse {
     assistant_message: String,
     status: DraftStatusResponse,
     draft: Option<FoodDraftResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggested_log: Option<SuggestedLogResponse>,
     warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct SuggestedLogResponse {
+    amount: Decimal,
+    unit: String,
+    total_weight_grams: Decimal,
+}
+
+impl From<SuggestedLog> for SuggestedLogResponse {
+    fn from(value: SuggestedLog) -> Self {
+        Self {
+            amount: value.amount(),
+            unit: value.unit().to_owned(),
+            total_weight_grams: value.total_weight_grams(),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -380,6 +409,10 @@ async fn parse_multipart(
         .collect::<Result<Vec<_>, _>>()
         .map_err(conversation_failure)?;
     Ok(FoodDraftRequest {
+        purpose: match wire.purpose {
+            FoodDraftPurposeRequest::CustomFood => FoodDraftPurpose::CustomFood,
+            FoodDraftPurposeRequest::AdHocLog => FoodDraftPurpose::AdHocLog,
+        },
         conversation: Conversation::new(turns).map_err(conversation_failure)?,
         photos,
     })
@@ -613,16 +646,19 @@ fn turn_to_response(turn: FoodDraftTurn) -> AssistantDraftResponse {
             assistant_message,
             status: DraftStatusResponse::NeedsClarification,
             draft: None,
+            suggested_log: None,
             warnings: Vec::new(),
         },
         FoodDraftTurn::DraftReady {
             assistant_message,
             draft,
+            suggested_log,
             warnings,
         } => AssistantDraftResponse {
             assistant_message,
             status: DraftStatusResponse::DraftReady,
             draft: Some(draft.into()),
+            suggested_log: suggested_log.map(Into::into),
             warnings,
         },
     }
@@ -698,11 +734,54 @@ mod tests {
     }
 
     #[test]
+    fn response_contract_includes_a_suggested_logged_portion() {
+        let draft = FoodDraftBuilder::new("Dal")
+            .nutrients([crate::assistant::domain::DraftNutrient::new(
+                "ENERGY_KCAL".into(),
+                Decimal::from(100),
+            )
+            .unwrap()])
+            .servings([crate::assistant::domain::DraftServing::new(
+                "bowl".into(),
+                Decimal::from(250),
+            )
+            .unwrap()])
+            .build()
+            .unwrap();
+        let suggested = SuggestedLog::new(Decimal::ONE, "bowl".into(), Decimal::from(250)).unwrap();
+        let value = serde_json::to_value(turn_to_response(
+            FoodDraftTurn::ready_for_log("Review", draft, suggested, vec![]).unwrap(),
+        ))
+        .unwrap();
+
+        assert_eq!(
+            value["suggested_log"],
+            serde_json::json!({
+                "amount": "1",
+                "unit": "bowl",
+                "total_weight_grams": "250"
+            })
+        );
+    }
+
+    #[test]
     fn conversation_wire_rejects_unknown_photo_data() {
         let value = serde_json::json!({
             "turns": [{"role": "user", "text": "dal", "photo": "bytes"}]
         });
         assert!(serde_json::from_value::<ConversationRequest>(value).is_err());
+    }
+
+    #[test]
+    fn missing_purpose_defaults_to_custom_food() {
+        let value = serde_json::json!({
+            "turns": [{"role": "user", "text": "dal"}]
+        });
+        let request = serde_json::from_value::<ConversationRequest>(value).unwrap();
+        assert!(matches!(
+            request.purpose,
+            FoodDraftPurposeRequest::CustomFood
+        ));
     }
 
     #[test]

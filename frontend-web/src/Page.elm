@@ -60,6 +60,7 @@ import Page.Diary.Settings as DiarySettings
 import Page.Food.Search as FoodSearch
 import Page.Food.Show as FoodShow
 import Page.FoodLog.CreateAdHoc as CreateAdHocLog
+import Page.FoodLog.CreateWithAi as CreateWithAiLog
 import Page.FoodLog.Entry as FoodLogEntry
 import Page.Goals.Settings as GoalsSettings
 import Page.Meal.Create as MealCreate
@@ -107,6 +108,7 @@ type Pane
     | FoodDetailPane String FoodShow.Model
     | FoodLogDetailPane String FoodLogEntry.Model
     | CreateAdHocLogPane CreateAdHocLog.Model
+    | CreateWithAiLogPane CreateWithAiLog.Model
     | CustomFoodListPane CustomFoodList.Model
     | CustomFoodCreatePane CustomFoodCreate.Model
     | CustomFoodEditPane String CustomFoodEdit.Model
@@ -185,6 +187,9 @@ photoPreviewUrls model =
                     CustomFoodCreatePane createModel ->
                         CustomFoodCreate.photoPreviewUrls createModel
 
+                    CreateWithAiLogPane createModel ->
+                        CreateWithAiLog.photoPreviewUrls createModel
+
                     _ ->
                         []
             )
@@ -234,6 +239,9 @@ paneKey pane =
 
         CreateAdHocLogPane _ ->
             "create-ad-hoc-log"
+
+        CreateWithAiLogPane _ ->
+            "create-ai-log"
 
         CustomFoodListPane _ ->
             "custom-food-list"
@@ -501,6 +509,10 @@ hydrateUnits result pane =
             CreateAdHocLogPane
                 (modelOnly (CreateAdHocLog.update (CreateAdHocLog.UnitsLoaded result) model))
 
+        CreateWithAiLogPane model ->
+            CreateWithAiLogPane
+                (modelOnly (CreateWithAiLog.update (CreateWithAiLog.UnitsLoaded result) model))
+
         CustomFoodCreatePane model ->
             CustomFoodCreatePane
                 (modelOnly (CustomFoodCreate.update (CustomFoodCreate.UnitsLoaded result) model))
@@ -527,6 +539,10 @@ hydrateNutrients result pane =
         CreateAdHocLogPane model ->
             CreateAdHocLogPane
                 (modelOnly (CreateAdHocLog.update (CreateAdHocLog.NutrientsLoaded result) model))
+
+        CreateWithAiLogPane model ->
+            CreateWithAiLogPane
+                (modelOnly (CreateWithAiLog.update (CreateWithAiLog.NutrientsLoaded result) model))
 
         CustomFoodCreatePane model ->
             CustomFoodCreatePane
@@ -775,6 +791,9 @@ needsSessionData pane =
         CreateAdHocLogPane _ ->
             True
 
+        CreateWithAiLogPane _ ->
+            True
+
         CustomFoodListPane _ ->
             True
 
@@ -919,6 +938,9 @@ panesForRoute context existing =
 
         AdHocLogCreate dateParam mealSlot ->
             Just [ createAdHocLogDesired context dateParam mealSlot ]
+
+        AiLogCreate dateParam mealSlot ->
+            Just [ createWithAiLogDesired context dateParam mealSlot ]
 
         CustomFoodCreate ->
             Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
@@ -1188,6 +1210,15 @@ createAdHocLogDesired _ dateParam mealSlot =
         (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
 
 
+createWithAiLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
+createWithAiLogDesired context dateParam mealSlot =
+    fromInit context
+        "create-ai-log"
+        CreateWithAiLogPane
+        applyCreateWithAiLogOutMsg
+        (\_ -> CreateWithAiLog.init dateParam mealSlot)
+
+
 preservePane : Pane -> DesiredPane
 preservePane pane =
     simpleDesired (paneKey pane) pane
@@ -1369,6 +1400,7 @@ type Msg
     | GotFoodDetailMsg FoodShow.Msg
     | GotFoodLogDetailMsg FoodLogEntry.Msg
     | GotCreateAdHocLogMsg CreateAdHocLog.Msg
+    | GotCreateWithAiLogMsg CreateWithAiLog.Msg
     | GotCustomFoodCreateMsg CustomFoodCreate.Msg
     | GotCustomFoodEditMsg CustomFoodEdit.Msg
     | GotCustomFoodShowMsg CustomFoodShow.Msg
@@ -1823,6 +1855,32 @@ updatePane allPanes context msg pane =
                 mutation
                 result
 
+        ( GotCreateWithAiLogMsg subMsg, CreateWithAiLogPane sub ) ->
+            let
+                result :
+                    ( CreateWithAiLog.Model
+                    , Cmd CreateWithAiLog.Msg
+                    , CreateWithAiLog.OutMsg
+                    )
+                result =
+                    CreateWithAiLog.update subMsg sub
+
+                mutation : Mutation
+                mutation =
+                    case third result of
+                        CreateWithAiLog.LogCreated log ->
+                            RefreshDiaryAndCalendar log.logDate
+
+                        _ ->
+                            NoMutation
+            in
+            stepPane context
+                CreateWithAiLogPane
+                GotCreateWithAiLogMsg
+                applyCreateWithAiLogOutMsg
+                mutation
+                result
+
         ( GotCustomFoodCreateMsg subMsg, CustomFoodCreatePane sub ) ->
             stepPane context
                 CustomFoodCreatePane
@@ -2053,6 +2111,16 @@ localContextReceived pageContext context model =
                     updatePane model.panes
                         pageContext
                         (GotCreateAdHocLogMsg (CreateAdHocLog.LocalContextReceived context))
+                        pane
+
+                CreateWithAiLogPane _ ->
+                    updatePane model.panes
+                        pageContext
+                        (GotCreateWithAiLogMsg
+                            (CreateWithAiLog.ReviewMsg
+                                (CreateAdHocLog.LocalContextReceived context)
+                            )
+                        )
                         pane
 
                 GoalsSettingsPane _ _ ->
@@ -2541,6 +2609,77 @@ applyCreateAdHocLogOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
+applyCreateWithAiLogOutMsg :
+    InitContext
+    -> CreateWithAiLog.OutMsg
+    -> ( Cmd Msg, OutMsg )
+applyCreateWithAiLogOutMsg _ outMsg =
+    case outMsg of
+        CreateWithAiLog.NoOp ->
+            ( Cmd.none, NoOutMsg )
+
+        CreateWithAiLog.RequestAssistantStatus ->
+            ( Api.FoodAssistant.getStatus
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.AssistantMsg
+                    << CustomFoodAssistant.StatusLoaded
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.RequestFoodDraft purpose conversation photos ->
+            ( Api.FoodAssistant.requestDraft purpose
+                conversation
+                photos
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.AssistantMsg
+                    << CustomFoodAssistant.DraftCompleted
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.RevokePhotoPreviewUrls urls ->
+            ( Cmd.none, RevokePhotoPreviewUrls urls )
+
+        CreateWithAiLog.RequestLocalContext ->
+            ( Cmd.none, RequestLocalContext )
+
+        CreateWithAiLog.RequestAdHocLog request ->
+            ( Api.Logs.createAdHocLog request
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.ReviewMsg
+                    << CreateAdHocLog.AdHocLogCompleted
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.RequestCreateFood request ->
+            ( Api.Foods.createCustomFood request
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.ReviewMsg
+                    << CreateAdHocLog.CustomFoodCompleted
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.RequestProductLog request ->
+            ( Api.Logs.createLog request
+                (GotCreateWithAiLogMsg
+                    << CreateWithAiLog.ReviewMsg
+                    << CreateAdHocLog.ProductLogCompleted
+                )
+            , NoOutMsg
+            )
+
+        CreateWithAiLog.LogCreated log ->
+            ( Cmd.none
+            , Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing)
+            )
+
+        CreateWithAiLog.SessionExpired ->
+            ( Cmd.none, SessionExpired )
+
+
 applyFoodLogDetailOutMsg : InitContext -> FoodLogEntry.OutMsg -> ( Cmd Msg, OutMsg )
 applyFoodLogDetailOutMsg context outMsg =
     case outMsg of
@@ -2630,8 +2769,9 @@ applyCustomFoodCreateOutMsg _ outMsg =
             , NoOutMsg
             )
 
-        CustomFoodCreate.RequestFoodDraft conversation photos ->
-            ( Api.FoodAssistant.requestDraft conversation
+        CustomFoodCreate.RequestFoodDraft purpose conversation photos ->
+            ( Api.FoodAssistant.requestDraft purpose
+                conversation
                 photos
                 (GotCustomFoodCreateMsg
                     << CustomFoodCreate.AssistantMsg
@@ -3005,6 +3145,9 @@ paneView props selectedDate pane =
 
         CreateAdHocLogPane sub ->
             Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view (pageProps props sub))
+
+        CreateWithAiLogPane sub ->
+            Element.map GotCreateWithAiLogMsg (CreateWithAiLog.view (pageProps props sub))
 
         CustomFoodListPane sub ->
             Element.map GotCustomFoodsMsg (CustomFoodList.contentView (pageProps props sub))

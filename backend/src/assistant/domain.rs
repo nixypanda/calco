@@ -95,6 +95,12 @@ pub enum ConversationRole {
     Assistant,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FoodDraftPurpose {
+    CustomFood,
+    AdHocLog,
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum FoodDraftTurn {
     NeedsClarification {
@@ -103,6 +109,7 @@ pub enum FoodDraftTurn {
     DraftReady {
         assistant_message: String,
         draft: FoodDraft,
+        suggested_log: Option<SuggestedLog>,
         warnings: Vec<String>,
     },
 }
@@ -129,12 +136,31 @@ impl FoodDraftTurn {
         Ok(Self::DraftReady {
             assistant_message: bounded_text(message.into(), MAX_ASSISTANT_MESSAGE_CHARS)?,
             draft,
+            suggested_log: None,
             warnings: warnings
                 .into_iter()
                 .map(|value| value.trim().to_owned())
                 .filter(|value| !value.is_empty())
                 .collect(),
         })
+    }
+
+    pub fn ready_for_log(
+        message: impl Into<String>,
+        draft: FoodDraft,
+        suggested_log: SuggestedLog,
+        warnings: Vec<String>,
+    ) -> Result<Self, DraftValidationError> {
+        let mut turn = Self::ready(message, draft, warnings)?;
+        let Self::DraftReady {
+            suggested_log: value,
+            ..
+        } = &mut turn
+        else {
+            unreachable!();
+        };
+        *value = Some(suggested_log);
+        Ok(turn)
     }
 }
 
@@ -161,8 +187,17 @@ impl FoodDraftPolicy {
         }
     }
 
-    pub fn validate(&self, turn: &FoodDraftTurn) -> Result<(), DraftValidationError> {
-        let FoodDraftTurn::DraftReady { draft, .. } = turn else {
+    pub fn validate(
+        &self,
+        purpose: FoodDraftPurpose,
+        turn: &FoodDraftTurn,
+    ) -> Result<(), DraftValidationError> {
+        let FoodDraftTurn::DraftReady {
+            draft,
+            suggested_log,
+            ..
+        } = turn
+        else {
             return Ok(());
         };
 
@@ -194,7 +229,65 @@ impl FoodDraftPolicy {
         {
             return Err(DraftValidationError);
         }
+        if purpose == FoodDraftPurpose::AdHocLog {
+            let suggested = suggested_log.as_ref().ok_or(DraftValidationError)?;
+            let grams = match suggested.unit.as_str() {
+                "g" => suggested.amount,
+                unit => {
+                    let serving = draft
+                        .servings
+                        .iter()
+                        .find(|serving| serving.unit == unit)
+                        .ok_or(DraftValidationError)?;
+                    suggested.amount * serving.grams_per_unit
+                }
+            };
+            if grams.round_dp(6) != suggested.total_weight_grams {
+                return Err(DraftValidationError);
+            }
+        }
         Ok(())
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct SuggestedLog {
+    amount: Decimal,
+    unit: String,
+    total_weight_grams: Decimal,
+}
+
+impl SuggestedLog {
+    pub fn new(
+        amount: Decimal,
+        unit: String,
+        total_weight_grams: Decimal,
+    ) -> Result<Self, DraftValidationError> {
+        let unit = bounded_text(unit, MAX_DRAFT_UNIT_CHARS)?;
+        if amount <= Decimal::ZERO
+            || total_weight_grams <= Decimal::ZERO
+            || amount > MAX_SERVING_VALUE
+            || total_weight_grams > MAX_SERVING_VALUE
+        {
+            return Err(DraftValidationError);
+        }
+        Ok(Self {
+            amount: amount.round_dp(6),
+            unit,
+            total_weight_grams: total_weight_grams.round_dp(6),
+        })
+    }
+
+    pub fn amount(&self) -> Decimal {
+        self.amount
+    }
+
+    pub fn unit(&self) -> &str {
+        &self.unit
+    }
+
+    pub fn total_weight_grams(&self) -> Decimal {
+        self.total_weight_grams
     }
 }
 
@@ -545,6 +638,28 @@ mod tests {
             .unwrap();
         let turn = FoodDraftTurn::ready("Review", draft, vec![]).unwrap();
 
-        assert!(matches!(policy.validate(&turn), Err(DraftValidationError)));
+        assert!(matches!(
+            policy.validate(FoodDraftPurpose::CustomFood, &turn),
+            Err(DraftValidationError)
+        ));
+    }
+
+    #[test]
+    fn ad_hoc_log_policy_requires_a_convertible_consistent_portion() {
+        let policy = FoodDraftPolicy::new(
+            [("ENERGY_KCAL".into(), "kcal".into())],
+            ["bowl".into()],
+            ["ENERGY_KCAL".into()],
+        );
+        let draft = FoodDraftBuilder::new("Dal")
+            .nutrients([DraftNutrient::new("ENERGY_KCAL".into(), Decimal::ONE).unwrap()])
+            .servings([DraftServing::new("bowl".into(), Decimal::from(250)).unwrap()])
+            .build()
+            .unwrap();
+        let suggested =
+            SuggestedLog::new(Decimal::from(2), "bowl".into(), Decimal::from(500)).unwrap();
+        let turn = FoodDraftTurn::ready_for_log("Review", draft, suggested, vec![]).unwrap();
+
+        assert_eq!(policy.validate(FoodDraftPurpose::AdHocLog, &turn), Ok(()));
     }
 }

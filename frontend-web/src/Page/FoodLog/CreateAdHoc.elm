@@ -6,6 +6,7 @@ module Page.FoodLog.CreateAdHoc exposing
     , init
     , update
     , view
+    , viewForAi
     )
 
 import Api.Client as Client
@@ -412,7 +413,20 @@ failure error model =
 
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view =
+    viewWithOptionalNutrients True
+
+
+viewForAi : Bool -> { model : Model, device : Device, theme : Theme } -> Element Msg
+viewForAi =
+    viewWithOptionalNutrients
+
+
+viewWithOptionalNutrients :
+    Bool
+    -> { model : Model, device : Device, theme : Theme }
+    -> Element Msg
+viewWithOptionalNutrients showOptional { model, device, theme } =
     Ui.pageContainer device
         [ Ui.maybeErrorBanner theme (submitError model.submit)
         , Ui.formSection theme
@@ -439,7 +453,7 @@ view { model, device, theme } =
                 }
             , unitDropdown theme device model
             ]
-        , nutrientsSection theme device model
+        , nutrientsSection showOptional theme device model
         , Ui.formSection theme
             "Log Details"
             [ Ui.input theme
@@ -498,8 +512,8 @@ view { model, device, theme } =
         ]
 
 
-nutrientsSection : Theme -> Device -> Model -> Element Msg
-nutrientsSection theme device model =
+nutrientsSection : Bool -> Theme -> Device -> Model -> Element Msg
+nutrientsSection showOptional theme device model =
     Ui.section theme
         { header =
             Just
@@ -516,7 +530,13 @@ nutrientsSection theme device model =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                (List.indexedMap (nutrientRow theme device model) model.form.nutrients)
+                (model.form.nutrients
+                    |> List.indexedMap Tuple.pair
+                    |> List.filter
+                        (\( _, row ) -> showOptional || isCoreNutrient row.code)
+                    |> List.map
+                        (\( index, row ) -> nutrientRow theme device model index row)
+                )
             ]
         , footer =
             Just
@@ -532,6 +552,11 @@ nutrientsSection theme device model =
                     }
                 )
         }
+
+
+isCoreNutrient : String -> Bool
+isCoreNutrient code =
+    List.member code [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
 
 
 nutrientRow : Theme -> Device -> Model -> Int -> Form.NutrientRow -> Element Msg
