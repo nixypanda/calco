@@ -43,7 +43,8 @@ module Api.Foods exposing
     )
 
 import Api.Client as Client
-import Data.Nutrition as Nutrition exposing (NutritionSummary)
+import Data.Food as Food
+import Data.Nutrition as Nutrition
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 import Lib.Json as Json
@@ -52,21 +53,7 @@ import Url.Builder as Builder
 
 
 type alias ProductDetail =
-    { id : String
-    , source : String
-    , sourceId : Maybe String
-    , visibility : String
-    , barcode : Maybe String
-    , name : String
-    , brand : Maybe String
-    , categories : List String
-    , defaultQuantity : Maybe String
-    , defaultUnit : Maybe String
-    , nutritionSummary : ProductNutritionSummary
-    , nutrients : List NutrientEntry
-    , servings : List ServingEntry
-    , allowedUnits : List UnitItem
-    }
+    Food.ProductDetail
 
 
 type alias BarcodeLookupResponse =
@@ -87,30 +74,19 @@ type BarcodeLookupOrigin
 
 
 type alias ProductNutritionSummary =
-    { per100g : NutritionSummary
-    }
+    Food.ProductNutritionSummary
 
 
 type alias NutrientEntry =
-    { code : String
-    , amountPer100g : String
-    , unit : String
-    , source : Maybe String
-    , confidence : Maybe String
-    }
+    Food.NutrientEntry
 
 
 type alias ServingEntry =
-    { unit : String
-    , gramsPerUnit : String
-    }
+    Food.ServingEntry
 
 
 type alias UnitItem =
-    { code : String
-    , name : String
-    , kind : String
-    }
+    Food.UnitItem
 
 
 type alias UnitListResponse =
@@ -199,15 +175,7 @@ type alias CategorySuggestion =
 
 
 type alias SearchResult =
-    { id : String
-    , source : String
-    , sourceId : Maybe String
-    , barcode : Maybe String
-    , name : String
-    , brand : Maybe String
-    , categories : List String
-    , nutritionSummary : ProductNutritionSummary
-    }
+    Food.SearchResult
 
 
 getFoodDetail : String -> (Result Client.ApiError ProductDetail -> msg) -> Cmd msg
@@ -380,7 +348,7 @@ categorySuggestionResponseDecoder =
 
 productDetailDecoder : Decoder ProductDetail
 productDetailDecoder =
-    Decode.map8 ProductDetail
+    Decode.map8 Food.ProductDetail
         (Decode.field "id" Decode.string)
         (Decode.field "source" Decode.string)
         (Decode.field "source_id" (Decode.nullable Decode.string))
@@ -430,13 +398,13 @@ barcodeLookupOriginDecoder =
 
 productNutritionSummaryDecoder : Decoder ProductNutritionSummary
 productNutritionSummaryDecoder =
-    Decode.map ProductNutritionSummary
+    Decode.map Food.ProductNutritionSummary
         (Decode.field "per_100g" Nutrition.summaryDecoder)
 
 
 nutrientEntryDecoder : Decoder NutrientEntry
 nutrientEntryDecoder =
-    Decode.map5 NutrientEntry
+    Decode.map5 Food.NutrientEntry
         (Decode.field "code" Decode.string)
         (Decode.field "amount_per_100g" Decode.string)
         (Decode.field "unit" Decode.string)
@@ -446,7 +414,7 @@ nutrientEntryDecoder =
 
 servingEntryDecoder : Decoder ServingEntry
 servingEntryDecoder =
-    Decode.map2 ServingEntry
+    Decode.map2 Food.ServingEntry
         (Decode.field "unit" Decode.string)
         (Decode.field "grams_per_unit" Decode.string)
 
@@ -486,7 +454,7 @@ customFoodListDecoder =
 
 unitItemDecoder : Decoder UnitItem
 unitItemDecoder =
-    Decode.map3 UnitItem
+    Decode.map3 Food.UnitItem
         (Decode.field "code" Decode.string)
         (Decode.field "name" Decode.string)
         (Decode.field "kind" Decode.string)
@@ -494,7 +462,7 @@ unitItemDecoder =
 
 searchResultDecoder : Decoder SearchResult
 searchResultDecoder =
-    Decode.map7 SearchResult
+    Decode.map7 Food.SearchResult
         (Decode.field "id" Decode.string)
         (Decode.field "source" Decode.string)
         (Decode.field "source_id" (Decode.nullable Decode.string))

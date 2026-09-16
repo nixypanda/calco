@@ -17,7 +17,6 @@ module Data.Auth exposing
     , loginSessionDecoder
     )
 
-import Api.Client exposing (ApiError)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
 
@@ -131,7 +130,7 @@ initSession =
     Loading
 
 
-applyAuthResult : Result ApiError LoginSession -> Session -> Session
+applyAuthResult : Result error LoginSession -> Session -> Session
 applyAuthResult result _ =
     case result of
         Ok loginSession ->

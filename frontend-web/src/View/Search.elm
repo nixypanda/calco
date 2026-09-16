@@ -3,7 +3,7 @@ module View.Search exposing
     , searchInput
     )
 
-import Api.Foods exposing (SearchResult)
+import Data.Food exposing (SearchResult)
 import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
 import Element exposing (Device, Element)
