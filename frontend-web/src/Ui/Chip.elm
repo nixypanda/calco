@@ -84,9 +84,9 @@ removableChip device theme config =
             , Border.width 1
             , Border.color theme.dangerFg
             , hoverEffect device
-                [ Background.color theme.dangerSolid
-                , Font.color (Element.rgb255 255 255 255)
-                , Border.color theme.dangerSolid
+                [ Background.color theme.dangerBg
+                , Font.color theme.dangerFg
+                , Border.color theme.dangerFg
                 ]
             ]
             { onPress = Just config.onRemove

@@ -264,7 +264,7 @@ optionRow theme config =
         itemColor : Element.Color
         itemColor =
             if config.selected then
-                Element.rgb255 255 255 255
+                theme.solidControlFg
 
             else
                 theme.textPrimary
