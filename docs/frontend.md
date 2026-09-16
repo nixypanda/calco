@@ -18,7 +18,6 @@ frontend-web/
     Chrome.elm
     Main.elm
     Page.elm
-    Ui.elm
     barcodeScanner.js
     index.js
   tests/
@@ -28,7 +27,8 @@ frontend-web/
 
 It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend
 through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout
-and styling, with shared UI primitives centralized in `frontend-web/src/Ui.elm`.
+and styling, with shared UI primitives centralized in the
+`frontend-web/src/Ui/` module family.
 
 The legacy React frontend has been removed. All active frontend work lives in
 `frontend-web/`.
@@ -126,9 +126,9 @@ errors. They do not own business interpretation beyond transport concerns.
 `Data.*` modules own domain-facing frontend types and pure helpers. They should
 be safe to test in isolation without HTTP or page wiring.
 
-`Ui.elm`, the focused `Ui.*` modules, and `View.*` own shared presentation
-primitives. Pages compose them, but should not copy their look-and-feel logic
-locally unless the pattern is truly one-off.
+The `Ui.*` module family and `View.*` own shared presentation primitives. Pages
+compose them, but should not copy their look-and-feel logic locally unless the
+pattern is truly one-off.
 
 ## Page Structure
 
@@ -621,8 +621,8 @@ needed.
 
 ## Design System
 
-Shared primitives live in `frontend-web/src/Ui.elm`. Prefer extending these
-helpers before styling one-off page elements.
+Shared primitives live in the `frontend-web/src/Ui/` module family. Prefer
+extending these helpers before styling one-off page elements.
 
 Current visual language:
 
