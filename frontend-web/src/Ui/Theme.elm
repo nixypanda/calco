@@ -8,7 +8,7 @@ module Ui.Theme exposing
     , toggle
     )
 
-import Element exposing (Color, rgb255)
+import Element exposing (Color, rgb255, rgba255)
 
 
 type Mode
@@ -44,6 +44,8 @@ type alias Theme =
     , statusActiveBg : Color
     , statusDisabledBg : Color
     , focusRing : Color
+    , scrim : Color
+    , goalUnder : Color
     , calorieAccent : Color
     , proteinAccent : Color
     , carbsAccent : Color
@@ -81,6 +83,8 @@ light =
     , statusActiveBg = rgb255 200 235 200
     , statusDisabledBg = rgb255 255 200 210
     , focusRing = rgb255 0 143 135
+    , scrim = rgba255 0 0 0 0.28
+    , goalUnder = rgb255 0 135 145
     , calorieAccent = rgb255 94 224 213
     , proteinAccent = rgb255 255 138 170
     , carbsAccent = rgb255 200 235 200
@@ -118,6 +122,8 @@ dark =
     , statusActiveBg = rgb255 60 110 70
     , statusDisabledBg = rgb255 110 50 60
     , focusRing = rgb255 104 226 214
+    , scrim = rgba255 0 0 0 0.28
+    , goalUnder = rgb255 78 208 196
     , calorieAccent = rgb255 78 208 196
     , proteinAccent = rgb255 255 158 188
     , carbsAccent = rgb255 126 192 136

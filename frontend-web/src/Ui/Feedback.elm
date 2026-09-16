@@ -14,7 +14,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Ui.Common exposing (uiClass)
-import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space8)
+import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (sectionTitle)
@@ -85,7 +85,7 @@ modalOverlay theme config =
                 [ Element.centerX
                 , Element.centerY
                 , Element.width (Element.fill |> Element.maximum 480)
-                , Element.padding 16
+                , Element.padding space16
                 , uiClass "ui-modal-card"
                 ]
                 (Surface.section theme
@@ -103,7 +103,7 @@ modalOverlay theme config =
         (Input.button
             [ Element.width Element.fill
             , Element.height Element.fill
-            , Background.color (Element.rgba255 0 0 0 0.28)
+            , Background.color theme.scrim
             , uiClass "ui-modal-backdrop"
             ]
             { onPress = config.onBackgroundPress

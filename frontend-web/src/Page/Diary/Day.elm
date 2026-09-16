@@ -35,6 +35,7 @@ import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui.Button as Button
+import Ui.Color as UiColor
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -804,7 +805,7 @@ calorieBalancePill theme target calories =
                     "Goal met"
         in
         Element.el
-            [ Background.color (withAlpha 0.2 statusColor)
+            [ Background.color (UiColor.withAlpha 0.2 statusColor)
             , Font.color statusColor
             , Border.rounded DesignTokens.radiusPill
             , Element.paddingXY DesignTokens.space16 DesignTokens.space12
@@ -955,16 +956,13 @@ goalScaleColor theme tolerance value target =
             clamp 0 1 ((value - upperBound) / tolerance)
     in
     if value < lowerBound then
-        mixColor (goalUnderColor theme) theme.statusGreen underProgress
+        UiColor.mix theme.goalUnder theme.statusGreen underProgress
 
     else if value <= upperBound then
         theme.statusGreen
 
     else
-        mixColor
-            theme.statusGreen
-            theme.dangerFg
-            overProgress
+        UiColor.mix theme.statusGreen theme.dangerFg overProgress
 
 
 calorieTolerance : Float -> Float
@@ -975,48 +973,6 @@ calorieTolerance target =
 macroTolerance : Float -> Float
 macroTolerance target =
     max 2 (target * 0.05)
-
-
-goalUnderColor : Theme -> Element.Color
-goalUnderColor theme =
-    case theme.mode of
-        Light ->
-            Element.rgb255 0 135 145
-
-        Dark ->
-            theme.calorieAccent
-
-
-mixColor : Element.Color -> Element.Color -> Float -> Element.Color
-mixColor from to amount =
-    let
-        start : { red : Float, green : Float, blue : Float, alpha : Float }
-        start =
-            Element.toRgb from
-
-        finish : { red : Float, green : Float, blue : Float, alpha : Float }
-        finish =
-            Element.toRgb to
-
-        mix : Float -> Float -> Float
-        mix a b =
-            a + (b - a) * amount
-    in
-    Element.rgba
-        (mix start.red finish.red)
-        (mix start.green finish.green)
-        (mix start.blue finish.blue)
-        (mix start.alpha finish.alpha)
-
-
-withAlpha : Float -> Element.Color -> Element.Color
-withAlpha alpha color =
-    let
-        rgb : { red : Float, green : Float, blue : Float, alpha : Float }
-        rgb =
-            Element.toRgb color
-    in
-    Element.rgba rgb.red rgb.green rgb.blue alpha
 
 
 formatWhole : Float -> String
@@ -1475,7 +1431,7 @@ logRow theme log =
                 [ View.Nutrients.macroDot theme log.nutrients
                 , Element.el
                     [ Element.width Element.fill
-                    , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
+                    , UiCommon.minWidthZero
                     ]
                     (Typography.wrappedListItemTitle theme (FoodLog.itemName log.item))
                 , Element.row

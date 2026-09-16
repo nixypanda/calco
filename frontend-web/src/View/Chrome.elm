@@ -246,7 +246,7 @@ updateBanner theme onPress =
         , Element.paddingXY DesignTokens.space16 DesignTokens.space12
         , Background.color theme.brandBlueSoft
         , Font.color theme.brandBlue
-        , Font.size 18
+        , Typography.body
         ]
         { onPress = Just onPress
         , label =
@@ -489,7 +489,12 @@ bottomNavTab theme config =
     Input.button
         [ Element.width (Element.fillPortion 1)
         , Element.height Element.fill
-        , Element.paddingEach { top = 6, right = 0, bottom = 4, left = 0 }
+        , Element.paddingEach
+            { top = DesignTokens.space8
+            , right = 0
+            , bottom = DesignTokens.space4
+            , left = 0
+            }
         , Font.color iconColor
         , Border.widthEach
             { top =
@@ -509,7 +514,7 @@ bottomNavTab theme config =
             Element.column
                 [ Element.centerX
                 , Element.centerY
-                , Element.spacing 2
+                , Element.spacing DesignTokens.space2
                 ]
                 [ Element.el [ Element.centerX ]
                     (Icon.view
@@ -520,7 +525,7 @@ bottomNavTab theme config =
                     )
                 , Element.el
                     [ Element.centerX
-                    , Font.size 12
+                    , Typography.caption
                     ]
                     (Element.text config.label)
                 ]
@@ -571,7 +576,7 @@ drawerOverlay config =
                 , Element.height Element.fill
                 ]
                 [ drawerView viewConfig
-                , scrimOverlay (Just config.onClose)
+                , scrimOverlay config.theme (Just config.onClose)
                 ]
             )
         ]
@@ -669,12 +674,12 @@ drawerItem theme current onNavigate icon label target =
         }
 
 
-scrimOverlay : Maybe msg -> Element msg
-scrimOverlay onPress =
+scrimOverlay : Theme -> Maybe msg -> Element msg
+scrimOverlay theme onPress =
     Input.button
         [ Element.width Element.fill
         , Element.height Element.fill
-        , Background.color (Element.rgba255 0 0 0 0.28)
+        , Background.color theme.scrim
         ]
         { onPress = onPress
         , label = Element.none
@@ -686,7 +691,7 @@ drawerPanel theme children =
     Element.column
         [ Element.width (Element.fill |> Element.maximum 320)
         , Element.height Element.fill
-        , Element.paddingXY 16 9
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space8
         , Element.spacing DesignTokens.space12
         , Background.color theme.cardBg
         , UiCommon.uiClass "ui-card-shadow"
@@ -724,7 +729,7 @@ drawerItemButton theme config =
     in
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY 16 14
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
         , Border.rounded DesignTokens.radiusControl
         , Background.color
             (if config.selected then
@@ -739,7 +744,7 @@ drawerItemButton theme config =
         { onPress = Just config.onPress
         , label =
             Element.row
-                [ Element.spacing 12
+                [ Element.spacing DesignTokens.space12
                 , Element.centerY
                 ]
                 [ iconEl
@@ -774,10 +779,10 @@ menuCard :
 menuCard theme config =
     Element.column
         [ Element.alignRight
-        , Element.moveDown 4
+        , Element.moveDown (toFloat DesignTokens.space4)
         , Element.width (Element.px config.width)
         , Element.padding DesignTokens.space12
-        , Element.spacing 10
+        , Element.spacing DesignTokens.space12
         , Background.color theme.cardBg
         , Border.rounded DesignTokens.radiusCard
         , UiCommon.uiClass "ui-card-shadow"

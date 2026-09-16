@@ -432,8 +432,8 @@ dayLabel theme today day date maybeSummary =
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.centerX
-        , Element.spacing 4
-        , Element.paddingXY 1 3
+        , Element.spacing DesignTokens.space4
+        , Element.paddingXY DesignTokens.space2 DesignTokens.space4
         ]
         [ Element.el [ Element.centerX ]
             (case maybeSummary of
@@ -466,7 +466,7 @@ dayLabel theme today day date maybeSummary =
             Just summary ->
                 Element.el
                     [ Element.centerX
-                    , Font.size 11
+                    , Typography.caption
                     , Font.semiBold
                     , Font.color theme.textMedium
                     ]
