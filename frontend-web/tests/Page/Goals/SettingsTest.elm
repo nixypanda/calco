@@ -8,6 +8,11 @@ import Page.Goals.Settings as GoalsSettings
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Goals.Settings"
@@ -210,7 +215,7 @@ tests =
                     savingModel
                     |> first
                     |> saveState
-                    |> Expect.equal (Just (GoalsSettings.SaveFailed "Network error"))
+                    |> Expect.equal (Just (GoalsSettings.SaveFailed networkErrorMessage))
         , test "stale save completion is ignored outside saving state" <|
             \_ ->
                 GoalsSettings.update
@@ -225,7 +230,7 @@ tests =
                     failedModel =
                         GoalsSettings.Ready
                             { editingModel
-                                | save = GoalsSettings.SaveFailed "Network error"
+                                | save = GoalsSettings.SaveFailed networkErrorMessage
                             }
                 in
                 GoalsSettings.update
@@ -248,7 +253,7 @@ tests =
                     (GoalsSettings.GoalLoaded (Err Client.NetworkError))
                     GoalsSettings.Loading
                     |> first
-                    |> Expect.equal (GoalsSettings.Failed "Network error")
+                    |> Expect.equal (GoalsSettings.Failed networkErrorMessage)
         , test "a failed refresh leaves a loaded page untouched" <|
             \_ ->
                 GoalsSettings.update

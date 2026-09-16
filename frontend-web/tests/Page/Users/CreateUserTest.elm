@@ -121,7 +121,7 @@ tests =
                             (Err (Client.BadStatus 400 "bad" "Bad request"))
                         )
                     |> firstOfThree
-                    |> Expect.equal (CreateUser.Failed emptyForm "bad: Bad request")
+                    |> Expect.equal (CreateUser.Failed emptyForm "Bad request")
         ]
 
 

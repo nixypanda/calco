@@ -14,6 +14,11 @@ import Page.Diary.Day as DiaryDay
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Diary.Day"
@@ -144,7 +149,7 @@ tests =
                         }
                         |> first
                         |> .diary
-                        |> Expect.equal (DiaryDay.Failed today "Network error")
+                        |> Expect.equal (DiaryDay.Failed today networkErrorMessage)
             , test "stale load failure is ignored" <|
                 \_ ->
                     DiaryDay.update
@@ -166,7 +171,7 @@ tests =
                         emptyModel
                         |> first
                         |> .diary
-                        |> Expect.equal (DiaryDay.Failed today "Network error")
+                        |> Expect.equal (DiaryDay.Failed today networkErrorMessage)
             , test "goal unauthorized expires session" <|
                 \_ ->
                     DiaryDay.update
@@ -424,7 +429,7 @@ tests =
                         { emptyModel | copyState = DiaryDay.Copying Dinner }
                         |> first
                         |> .copyState
-                        |> Expect.equal (DiaryDay.CopyFailed "Network error")
+                        |> Expect.equal (DiaryDay.CopyFailed networkErrorMessage)
             , test "copy unauthorized resets copy state and expires session" <|
                 \_ ->
                     DiaryDay.update

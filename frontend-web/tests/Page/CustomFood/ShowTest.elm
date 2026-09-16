@@ -10,6 +10,11 @@ import Test exposing (Test, describe, test)
 import View.DeleteModal exposing (DeleteState(..))
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.CustomFood.Show"
@@ -64,7 +69,7 @@ tests =
                     (CustomFoodShow.FoodLoaded (Err Client.NetworkError))
                     (Tuple.first (CustomFoodShow.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed "Network error")
+                    |> Expect.equal (CustomFoodShow.LoadFailed networkErrorMessage)
         , test "load unauthorized expires session" <|
             \_ ->
                 CustomFoodShow.update
@@ -146,7 +151,7 @@ tests =
                     deletingModel
                     |> first
                     |> deleteStateOf
-                    |> Expect.equal (Just (DeleteFailed "Network error"))
+                    |> Expect.equal (Just (DeleteFailed networkErrorMessage))
         , test "delete unauthorized expires session" <|
             \_ ->
                 CustomFoodShow.update

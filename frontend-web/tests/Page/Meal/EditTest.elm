@@ -12,6 +12,11 @@ import Test exposing (Test, describe, test)
 import View.Nutrients exposing (NutritionState(..))
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Meal.Edit"
@@ -59,7 +64,7 @@ tests =
                                 _ ->
                                     Nothing
                        )
-                    |> Expect.equal (Just "Network error")
+                    |> Expect.equal (Just networkErrorMessage)
         , test "nutrient preview response stores nutrients" <|
             \_ ->
                 MealEdit.update

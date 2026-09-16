@@ -14,6 +14,11 @@ import Test exposing (Test, describe, test)
 import View.DeleteModal exposing (DeleteState(..))
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.FoodLog.Entry"
@@ -154,7 +159,7 @@ tests =
                             , request = FoodLogEntry.Idle
                             , submitState =
                                 FoodLogForm.SubmitFailed
-                                    (FoodLogForm.RequestFailed "Network error")
+                                    (FoodLogForm.RequestFailed networkErrorMessage)
                             }
                         )
         , test "delete click opens confirmation state" <|
@@ -192,7 +197,7 @@ tests =
                         (Just
                             { logId = "log-1"
                             , request = FoodLogEntry.Idle
-                            , delete = DeleteFailed "Network error"
+                            , delete = DeleteFailed networkErrorMessage
                             }
                         )
         , test "units loaded success stores units and stays Loading if log missing" <|
@@ -230,7 +235,7 @@ tests =
                     |> Expect.equal
                         (FoodLogEntry.LoadFailed
                             { logId = "log-1"
-                            , error = "Network error"
+                            , error = networkErrorMessage
                             }
                         )
         , test "cancel delete clicked when Loaded resets to DeleteIdle" <|
@@ -248,7 +253,7 @@ tests =
                     |> Expect.equal
                         (FoodLogEntry.LoadFailed
                             { logId = "log-1"
-                            , error = "Network error"
+                            , error = networkErrorMessage
                             }
                         )
         , test "submit clicked when request is not Idle is a no-op" <|
@@ -359,7 +364,7 @@ deleteFailedModel =
         , units = [ gram ]
         , form = form
         , request = FoodLogEntry.Idle
-        , delete = DeleteFailed "Network error"
+        , delete = DeleteFailed networkErrorMessage
         }
 
 

@@ -8,6 +8,11 @@ import Page.Meal.List as MealList
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Meal.List"
@@ -31,7 +36,7 @@ tests =
                     (Tuple.first MealList.init)
                     |> first
                     |> errorOf
-                    |> Expect.equal (Just "Network error")
+                    |> Expect.equal (Just networkErrorMessage)
         , test "meal summary joins calories and component count" <|
             \_ ->
                 MealList.mealSummaryText mealWithNotes

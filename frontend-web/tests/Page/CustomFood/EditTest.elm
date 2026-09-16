@@ -11,6 +11,11 @@ import Page.CustomFood.Edit as CustomFoodEdit
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.CustomFood.Edit"
@@ -61,7 +66,7 @@ tests =
                     (CustomFoodEdit.FoodLoaded (Err Client.NetworkError))
                     (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodEdit.LoadFailed "Network error")
+                    |> Expect.equal (CustomFoodEdit.LoadFailed networkErrorMessage)
         , test "load failure unauthorized expires session" <|
             \_ ->
                 CustomFoodEdit.update
@@ -152,7 +157,7 @@ tests =
                     submittingModel
                     |> first
                     |> submitStateOf
-                    |> Expect.equal (Just (Form.SubmitFailed "Network error"))
+                    |> Expect.equal (Just (Form.SubmitFailed networkErrorMessage))
         , test "save unauthorized while submitting expires session" <|
             \_ ->
                 CustomFoodEdit.update
