@@ -156,7 +156,8 @@ topBarView config profile =
 themeToggle : Theme -> msg -> Element msg
 themeToggle theme onToggle =
     UiInput.toggleSwitch theme
-        { isActive = theme.mode == Theme.Dark
+        { label = "Use dark theme"
+        , isActive = theme.mode == Theme.Dark
         , onToggle = onToggle
         }
 

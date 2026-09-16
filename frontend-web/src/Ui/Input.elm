@@ -26,7 +26,8 @@ import Lib.Number as Number
 import Ui.Common exposing (hoverEffect, minWidthZero, uiClass)
 import Ui.DesignTokens
     exposing
-        ( radiusControl
+        ( minimumTargetSize
+        , radiusControl
         , radiusPill
         , space12
         , space2
@@ -416,29 +417,44 @@ selectDropdown device theme config =
 -- Boolean inputs
 
 
-toggleSwitch : Theme -> { isActive : Bool, onToggle : msg } -> Element msg
+toggleSwitch : Theme -> { label : String, isActive : Bool, onToggle : msg } -> Element msg
 toggleSwitch theme config =
     Input.button
-        [ Element.width (Element.px 44)
-        , Element.height (Element.px 24)
+        [ Element.width (Element.px minimumTargetSize)
+        , Element.height (Element.px minimumTargetSize)
         , Border.rounded radiusPill
-        , Background.color theme.inputFill
-        , Element.padding space2
-        , uiClass
-            ("ui-toggle-track ui-motion ui-pressable"
-                ++ (if config.isActive then
-                        " ui-toggle-on"
+        , uiClass "ui-pressable"
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Element.htmlAttribute
+            (Html.Attributes.attribute
+                "aria-pressed"
+                (if config.isActive then
+                    "true"
 
-                    else
-                        ""
-                   )
+                 else
+                    "false"
+                )
             )
         ]
         { onPress = Just config.onToggle
         , label =
             Element.el
-                [ Element.width Element.fill
-                , Element.height Element.fill
+                [ Element.width (Element.px minimumTargetSize)
+                , Element.height (Element.px 24)
+                , Element.centerX
+                , Element.centerY
+                , Border.rounded radiusPill
+                , Background.color theme.inputFill
+                , Element.padding space2
+                , uiClass
+                    ("ui-toggle-track ui-motion"
+                        ++ (if config.isActive then
+                                " ui-toggle-on"
+
+                            else
+                                ""
+                           )
+                    )
                 ]
                 (Element.html (Html.span [ Html.Attributes.class "ui-toggle-thumb" ] []))
         }

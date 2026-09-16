@@ -247,7 +247,6 @@ categoryPill theme label =
     Chip.chip theme
         { label = truncatePillLabel label
         , selected = False
-        , onClick = Nothing
         }
 
 

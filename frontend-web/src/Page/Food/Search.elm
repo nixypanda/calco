@@ -1112,7 +1112,7 @@ scopeSegment theme selectedScope scope =
     in
     Input.button
         [ Element.width (Element.fillPortion 1)
-        , Element.height (Element.px 40)
+        , Element.height (Element.px DesignTokens.minimumTargetSize)
         , Background.color background
         , Border.rounded DesignTokens.radiusControl
         , Font.color foreground

@@ -8,16 +8,15 @@ module Ui.Chip exposing
     , statusBadge
     )
 
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes
-import Html.Events
-import Ui.Common exposing (hoverEffect)
-import Ui.DesignTokens exposing (radiusPill, space8)
+import Ui.Common exposing (uiClass)
+import Ui.DesignTokens exposing (minimumTargetSize, radiusPill, space8)
 import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (caption)
@@ -46,7 +45,6 @@ chip :
     ->
         { label : String
         , selected : Bool
-        , onClick : Maybe msg
         }
     -> Element msg
 chip theme config =
@@ -54,11 +52,10 @@ chip theme config =
 
 
 removableChip :
-    Device
-    -> Theme
+    Theme
     -> { label : String, onRemove : msg }
     -> Element msg
-removableChip device theme config =
+removableChip theme config =
     let
         removeSize : Int
         removeSize =
@@ -68,30 +65,35 @@ removableChip device theme config =
         [ Background.color (chipBackground theme False)
         , Font.color (chipForeground theme False)
         , Border.rounded radiusPill
-        , Element.paddingEach { top = 4, right = 4, bottom = 4, left = 10 }
+        , Element.paddingEach { top = 0, right = 4, bottom = 0, left = 10 }
         , Element.spacing space8
         , caption
         , Font.medium
         ]
         [ Element.text config.label
         , Input.button
-            [ Element.width (Element.px removeSize)
-            , Element.height (Element.px removeSize)
-            , Background.color theme.cardBg
+            [ Element.width (Element.px minimumTargetSize)
+            , Element.height (Element.px minimumTargetSize)
             , Font.color theme.dangerFg
             , Font.center
             , Border.rounded radiusPill
-            , Border.width 1
-            , Border.color theme.dangerFg
-            , hoverEffect device
-                [ Background.color theme.dangerBg
-                , Font.color theme.dangerFg
-                , Border.color theme.dangerFg
-                ]
+            , uiClass "ui-chip-remove-target ui-pressable"
+            , Element.htmlAttribute
+                (Html.Attributes.attribute "aria-label" ("Remove " ++ config.label))
             ]
             { onPress = Just config.onRemove
             , label =
-                Element.el [ Element.centerX, Element.centerY ]
+                Element.el
+                    [ Element.width (Element.px removeSize)
+                    , Element.height (Element.px removeSize)
+                    , Element.centerX
+                    , Element.centerY
+                    , Background.color theme.cardBg
+                    , Border.rounded radiusPill
+                    , Border.width 1
+                    , Border.color theme.dangerFg
+                    , uiClass "ui-chip-remove-visual ui-motion"
+                    ]
                     (Icon.view
                         { icon = Icon.Close
                         , size = 16
@@ -107,37 +109,23 @@ chipHtml :
     ->
         { label : String
         , selected : Bool
-        , onClick : Maybe msg
         }
     -> Html msg
 chipHtml _ config =
     let
         chipClass : String
         chipClass =
-            "ui-chip ui-motion ui-pressable"
+            "ui-chip"
                 ++ (if config.selected then
                         " ui-chip-selected"
 
                     else
                         ""
                    )
-
-        baseStyles : List (Html.Attribute msg)
-        baseStyles =
-            [ Html.Attributes.class chipClass ]
     in
-    case config.onClick of
-        Just msg ->
-            Html.button
-                [ Html.Attributes.class (chipClass ++ " ui-chip-button ui-hover-brighten")
-                , Html.Events.onClick msg
-                ]
-                [ Html.text config.label ]
-
-        Nothing ->
-            Html.span
-                baseStyles
-                [ Html.text config.label ]
+    Html.span
+        [ Html.Attributes.class chipClass ]
+        [ Html.text config.label ]
 
 
 chips : Theme -> List String -> Element msg
@@ -151,7 +139,7 @@ chips theme strings =
                 [ Html.Attributes.class "ui-chip-group" ]
                 (List.map
                     (\c ->
-                        chipHtml theme { label = c, selected = False, onClick = Nothing }
+                        chipHtml theme { label = c, selected = False }
                     )
                     strings
                 )
