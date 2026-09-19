@@ -14,6 +14,11 @@ import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients exposing (NutritionState(..))
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Meal.Show"
@@ -45,7 +50,7 @@ tests =
                     (MealShow.MealLoaded (Err Client.NetworkError))
                     (Tuple.first (MealShow.init "meal-1"))
                     |> first
-                    |> Expect.equal (MealShow.LoadFailed "Network error")
+                    |> Expect.equal (MealShow.LoadFailed networkErrorMessage)
         , test "meal load unauthorized expires session" <|
             \_ ->
                 MealShow.update
@@ -151,7 +156,7 @@ tests =
                     loadedModel
                     |> first
                     |> nutritionErrorOf
-                    |> Expect.equal (Just "Network error")
+                    |> Expect.equal (Just networkErrorMessage)
         , test "nutrient preview unauthorized expires session" <|
             \_ ->
                 MealShow.update
@@ -243,7 +248,7 @@ tests =
                     (loadedWithDelete Deleting)
                     |> first
                     |> deleteOf
-                    |> Expect.equal (Just (DeleteFailed "Network error"))
+                    |> Expect.equal (Just (DeleteFailed networkErrorMessage))
         , test "delete unauthorized expires session" <|
             \_ ->
                 MealShow.update

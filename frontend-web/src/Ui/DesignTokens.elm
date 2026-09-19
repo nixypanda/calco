@@ -1,5 +1,6 @@
 module Ui.DesignTokens exposing
-    ( radiusCard
+    ( minimumTargetSize
+    , radiusCard
     , radiusControl
     , radiusHairline
     , radiusPill
@@ -12,6 +13,15 @@ module Ui.DesignTokens exposing
     , space4
     , space8
     )
+
+-- Interaction scale
+
+
+minimumTargetSize : Int
+minimumTargetSize =
+    44
+
+
 
 -- Spacing scale
 

@@ -22,14 +22,18 @@ tests =
             \_ ->
                 Client.failure config Client.NetworkError emptyModel
                     |> resultSummary
-                    |> Expect.equal ( Just "Network error", NoOp )
+                    |> Expect.equal
+                        ( Just
+                            "Could not reach the server. Check your connection and try again."
+                        , NoOp
+                        )
         , test "unauthorized failures apply display error and return SessionExpired" <|
             \_ ->
                 Client.failure config
                     (Client.BadStatus 401 "unauthorized" "Sign in again")
                     emptyModel
                     |> resultSummary
-                    |> Expect.equal ( Just "unauthorized: Sign in again", SessionExpired )
+                    |> Expect.equal ( Just "Sign in again", SessionExpired )
         ]
 
 

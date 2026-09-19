@@ -1,6 +1,6 @@
 module View.QuantityInput exposing (dropdown, unitOptions)
 
-import Api.Foods exposing (UnitItem)
+import Data.Food exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Device, Element)
 import Ui.DesignTokens as DesignTokens

@@ -4,7 +4,7 @@ module View.Product exposing
     , macroDotGhost
     )
 
-import Api.Foods exposing (ProductDetail)
+import Data.Food exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Ui.Chip as Chip

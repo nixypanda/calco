@@ -29,7 +29,7 @@ body {
 
 *:focus-visible {
   /* Consistent keyboard focus belongs in one global rule. */
-  outline: 2px solid var(--ui-focus-ring, #5ee0d5);
+  outline: 2px solid var(--ui-focus-ring, #008f87);
   outline-offset: 2px;
   border-radius: 6px;
 }
@@ -188,10 +188,10 @@ body {
   color: var(--ui-chip-selected-fg);
 }
 
-.ui-chip-button {
-  cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
+@media (hover: hover) and (pointer: fine) {
+  .ui-chip-remove-target:hover .ui-chip-remove-visual {
+    background-color: var(--ui-danger-bg);
+  }
 }
 
 .ui-text-ellipsis {

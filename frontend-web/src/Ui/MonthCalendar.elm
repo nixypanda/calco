@@ -4,6 +4,8 @@ import Data.Calendar as Calendar
 import Element exposing (Element)
 import Element.Font as Font
 import Html.Attributes as Attr
+import Ui.DesignTokens as DesignTokens
+import Ui.Typography as Typography
 
 
 view :
@@ -41,7 +43,7 @@ view config =
                         >> Element.row [ Element.width Element.fill ]
                     )
     in
-    Element.column [ Element.width Element.fill, Element.spacing 8 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.row [ Element.width Element.fill ]
             (List.map
                 (\label ->
@@ -49,7 +51,7 @@ view config =
                         [ Element.width (Element.fillPortion 1)
                         , equalColumn
                         , Font.center
-                        , Font.size 12
+                        , Typography.caption
                         , Font.color config.weekdayColor
                         ]
                         (Element.text label)

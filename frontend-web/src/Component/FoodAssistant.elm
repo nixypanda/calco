@@ -881,7 +881,7 @@ descriptionInput theme chat =
         , Element.height (Element.px 120)
         , Border.rounded DesignTokens.radiusControl
         , Background.color theme.inputFill
-        , Element.padding 10
+        , Element.padding DesignTokens.space12
         ]
         { onChange = DescriptionChanged
         , text = chat.description

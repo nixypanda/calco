@@ -16,6 +16,7 @@ import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -99,7 +100,7 @@ contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
 contentView { model, device, theme } =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 16
+        , Element.spacing DesignTokens.space16
         ]
         [ case model of
             Loaded _ ->
@@ -143,7 +144,7 @@ createActions : Device -> Theme -> Element Msg
 createActions device theme =
     Element.row
         [ Element.width Element.fill
-        , Element.spacing 12
+        , Element.spacing DesignTokens.space12
         ]
         [ Element.el [ Element.width Element.fill ]
             (Button.textButton device
@@ -212,7 +213,7 @@ customFoodListSkeleton theme =
             Just
                 (Element.row
                     [ Element.width Element.fill
-                    , Element.spacing 12
+                    , Element.spacing DesignTokens.space12
                     ]
                     [ Element.el [ Element.width Element.fill ]
                         (Skeleton.button theme)

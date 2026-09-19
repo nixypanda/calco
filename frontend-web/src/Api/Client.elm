@@ -19,12 +19,12 @@ import Json.Encode as Encode
 
 
 type ApiError
-    = BadUrl String
+    = BadUrl
     | Timeout
     | NetworkError
     | BadStatus Int String String
     | RateLimited (Maybe Int)
-    | BadBody String
+    | BadBody
 
 
 get : String -> Decoder value -> (Result ApiError value -> msg) -> Cmd msg
@@ -91,8 +91,8 @@ expectJson decoder toMsg =
     Http.expectStringResponse toMsg <|
         \response ->
             case response of
-                Http.BadUrl_ url ->
-                    Err (BadUrl url)
+                Http.BadUrl_ _ ->
+                    Err BadUrl
 
                 Http.Timeout_ ->
                     Err Timeout
@@ -116,13 +116,11 @@ expectJson decoder toMsg =
                 Http.GoodStatus_ _ body ->
                     if String.isEmpty body then
                         Decode.decodeString decoder "null"
-                            |> Result.mapError Decode.errorToString
-                            |> Result.mapError BadBody
+                            |> Result.mapError (always BadBody)
 
                     else
                         Decode.decodeString decoder body
-                            |> Result.mapError Decode.errorToString
-                            |> Result.mapError BadBody
+                            |> Result.mapError (always BadBody)
 
 
 decodeBackendError : Int -> String -> ApiError
@@ -155,21 +153,21 @@ isUnauthorized error =
 displayError : ApiError -> String
 displayError error =
     case error of
-        BadUrl url ->
-            "Bad URL: " ++ url
+        BadUrl ->
+            "Could not connect to the server. Refresh the page and try again."
 
         Timeout ->
-            "Request timed out"
+            "The server took too long to respond. Try again."
 
         NetworkError ->
-            "Network error"
+            "Could not reach the server. Check your connection and try again."
 
         BadStatus _ code message ->
             if String.isEmpty code || code == "unknown" then
-                message
+                "The server could not complete the request. Try again."
 
             else
-                code ++ ": " ++ message
+                message
 
         RateLimited maybeSeconds ->
             case maybeSeconds of
@@ -179,8 +177,8 @@ displayError error =
                 Nothing ->
                     "Too many requests. Please wait before trying again."
 
-        BadBody message ->
-            "Unexpected response: " ++ message
+        BadBody ->
+            "The server returned an unexpected response. Refresh the page and try again."
 
 
 failure :

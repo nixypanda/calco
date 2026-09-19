@@ -9,6 +9,11 @@ import Page.CustomFood.List as CustomFoodList
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.CustomFood.List"
@@ -32,7 +37,7 @@ tests =
                     (Tuple.first CustomFoodList.init)
                     |> first
                     |> errorOf
-                    |> Expect.equal (Just "Network error")
+                    |> Expect.equal (Just networkErrorMessage)
         , test "open food navigates to food detail" <|
             \_ ->
                 CustomFoodList.update

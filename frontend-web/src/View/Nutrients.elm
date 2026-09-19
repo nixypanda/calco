@@ -483,8 +483,7 @@ nutrientsTableInner theme nutrients =
               , view =
                     \n ->
                         Element.el
-                            [ Typography.body
-                            , Font.alignRight
+                            [ Font.alignRight
                             , Element.paddingEach
                                 { top = DesignTokens.space8
                                 , bottom = DesignTokens.space8
@@ -492,7 +491,7 @@ nutrientsTableInner theme nutrients =
                                 , right = DesignTokens.space8
                                 }
                             ]
-                            (Element.text (formatAmount n.amount))
+                            (Typography.decimalNumber (formatAmount n.amount))
               }
             , { header =
                     Element.el
@@ -562,7 +561,7 @@ formatAmount : String -> String
 formatAmount raw =
     case String.toFloat raw of
         Just value ->
-            Number.toFixedTrimmed 3 value
+            Number.toFixed 3 value
 
         Nothing ->
             raw

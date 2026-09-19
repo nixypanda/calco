@@ -1,6 +1,7 @@
 module Ui.Typography exposing
     ( body
     , caption
+    , decimalNumber
     , heroStat
     , listItemTitle
     , maybeMutedParagraph
@@ -33,6 +34,16 @@ body =
 caption : Element.Attribute msg
 caption =
     Font.size 13
+
+
+decimalNumber : String -> Element msg
+decimalNumber value =
+    Element.el
+        [ body
+        , Font.alignRight
+        , Font.variant Font.tabularNumbers
+        ]
+        (Element.text value)
 
 
 sizePageTitle : Element.Attribute msg

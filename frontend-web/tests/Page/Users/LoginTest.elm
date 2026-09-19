@@ -8,6 +8,11 @@ import Page.Users.Login as AuthLogin
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Auth pages"
@@ -81,7 +86,7 @@ tests =
                     |> Expect.equal
                         (CredentialForm.Failed
                             { username = "alice", password = "wrong" }
-                            "unauthorized: Unauthorized"
+                            "Unauthorized"
                         )
         , test "login completion is ignored when not submitting" <|
             \_ ->
@@ -144,7 +149,7 @@ tests =
                     |> Expect.equal
                         (CredentialForm.Failed
                             { username = "admin", password = "long-enough" }
-                            "Network error"
+                            networkErrorMessage
                         )
         , test "setup completion is ignored when not submitting" <|
             \_ ->

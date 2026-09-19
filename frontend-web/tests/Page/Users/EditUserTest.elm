@@ -7,6 +7,11 @@ import Page.Users.EditUser as EditUser
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Users.EditUser"
@@ -200,14 +205,14 @@ tests =
                     |> EditUser.update (EditUser.DisableCompleted (Err Client.NetworkError))
                     |> firstOfThree
                     |> actionStateFromState
-                    |> Expect.equal (Just (EditUser.ActionFailed "Network error"))
+                    |> Expect.equal (Just (EditUser.ActionFailed networkErrorMessage))
         , test "EnableCompleted failure stores ActionFailed" <|
             \_ ->
                 enablingModel
                     |> EditUser.update (EditUser.EnableCompleted (Err Client.NetworkError))
                     |> firstOfThree
                     |> actionStateFromState
-                    |> Expect.equal (Just (EditUser.ActionFailed "Network error"))
+                    |> Expect.equal (Just (EditUser.ActionFailed networkErrorMessage))
         ]
 
 

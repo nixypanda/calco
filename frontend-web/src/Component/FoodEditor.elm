@@ -1803,7 +1803,8 @@ saveToFoodsCard theme _ persistence =
                     , trailing =
                         Just
                             (UiInput.toggleSwitch theme
-                                { isActive =
+                                { label = "Save to My Foods"
+                                , isActive =
                                     case persistence of
                                         LogAdHocOnly ->
                                             False
@@ -2046,7 +2047,7 @@ categoryInputView theme device open input =
                 (addCategoryButton theme device input)
             ]
         , suggestionRowView theme open input
-        , chipRowView theme device input.selected
+        , chipRowView theme input.selected
         ]
 
 
@@ -2061,8 +2062,8 @@ addCategoryButton theme device input =
         }
 
 
-chipRowView : Theme -> Device -> List String -> Element Msg
-chipRowView theme device tags =
+chipRowView : Theme -> List String -> Element Msg
+chipRowView theme tags =
     if List.isEmpty tags then
         Typography.mutedCaption theme "No categories yet"
 
@@ -2072,13 +2073,12 @@ chipRowView theme device tags =
             , Element.paddingXY 0 DesignTokens.space4
             , Element.spacing DesignTokens.space8
             ]
-            (List.map (chipView theme device) tags)
+            (List.map (chipView theme) tags)
 
 
-chipView : Theme -> Device -> String -> Element Msg
-chipView theme device tag =
-    Chip.removableChip device
-        theme
+chipView : Theme -> String -> Element Msg
+chipView theme tag =
+    Chip.removableChip theme
         { label = tag
         , onRemove = RemoveCategory tag
         }

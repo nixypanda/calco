@@ -15,6 +15,11 @@ import Page.Food.Show as FoodShow
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.Food.Show"
@@ -48,7 +53,7 @@ tests =
                     (FoodShow.FoodLoaded (Err Client.NetworkError))
                     emptyModel
                     |> first
-                    |> Expect.equal (FoodShow.LoadFailed "Network error")
+                    |> Expect.equal (FoodShow.LoadFailed networkErrorMessage)
         , test "units load unauthorized expires session" <|
             \_ ->
                 FoodShow.update
@@ -251,7 +256,7 @@ tests =
                         (Just
                             ( "2"
                             , FoodLogForm.SubmitFailed
-                                (FoodLogForm.RequestFailed "Network error")
+                                (FoodLogForm.RequestFailed networkErrorMessage)
                             )
                         )
         , test "log unauthorized expires session" <|

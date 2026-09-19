@@ -14,6 +14,11 @@ import Test.Html.Selector as Selector
 import Ui.Theme as Theme
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
 tests : Test
 tests =
     describe "Page.CustomFood.Create"
@@ -55,7 +60,7 @@ tests =
                     initialModel
                     |> first
                     |> .error
-                    |> Expect.equal (Just "Network error")
+                    |> Expect.equal (Just networkErrorMessage)
         , test "load unauthorized emits session expired" <|
             \_ ->
                 CustomFoodCreate.update
@@ -158,7 +163,7 @@ tests =
                     |> first
                     |> .form
                     |> .submit
-                    |> Expect.equal (Form.SubmitFailed "Network error")
+                    |> Expect.equal (Form.SubmitFailed networkErrorMessage)
         , test "save unauthorized emits session expired" <|
             \_ ->
                 CustomFoodCreate.update

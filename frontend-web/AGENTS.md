@@ -6,7 +6,8 @@ This directory contains the active frontend. Also read the repository root
 ## Shape
 
 - Elm 0.19.1 `Browser.application`.
-- Uses `mdgriffith/elm-ui`; shared UI primitives live in `src/Ui.elm`.
+- Uses `mdgriffith/elm-ui`; shared UI primitives live in the `src/Ui/` module
+  family.
 - Talks to the Rust backend through HTTP JSON under `/api`.
 - Main areas:
 
@@ -18,7 +19,6 @@ src/Lib/
 src/Page/
 src/View/
 src/Main.elm
-src/Ui.elm
 tests/
 ```
 
