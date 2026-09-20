@@ -66,6 +66,7 @@ type alias ComponentRow =
     , unitOpen : Bool
     , search : QueryState
     , searchResults : Loadable () (List SearchResult)
+    , completionIndex : Int
     }
 
 
@@ -159,6 +160,7 @@ emptyComponentRow rowId =
     , unitOpen = False
     , search = Search.empty
     , searchResults = NotAsked
+    , completionIndex = -1
     }
 
 
@@ -176,6 +178,7 @@ type FormFieldMsg
     | ComponentCategoriesCompleted RowId Ticket CategorySuggestionResult
     | CompleteFirstComponentSuggestion RowId
     | ComponentCompletionClicked RowId Completion
+    | ComponentCompletionActiveChanged RowId Int
     | SelectProduct RowId SearchResult
     | ComponentQuantityChanged RowId String
     | ComponentUnitChanged RowId String
@@ -314,6 +317,12 @@ updateFormField msg form =
 
                 Nothing ->
                     ( form, Cmd.none, Nothing )
+
+        ComponentCompletionActiveChanged rowId index ->
+            ( updateComponent rowId (SetCompletionIndex index) form
+            , Cmd.none
+            , Nothing
+            )
 
         SelectProduct rowId result ->
             ( updateComponent rowId
@@ -599,6 +608,7 @@ type ComponentPatch
     | SetSearchResults Ticket (List SearchResult)
     | SetSearchLoading
     | SetSearchFailed
+    | SetCompletionIndex Int
 
 
 patchRow : RowId -> ComponentPatch -> ComponentRow -> ComponentRow
@@ -613,6 +623,7 @@ patchRow rowId patch row =
                     | productId = id
                     , search = Search.withQuery name Search.empty
                     , searchResults = NotAsked
+                    , completionIndex = -1
                 }
 
             SetQuantity value ->
@@ -622,7 +633,7 @@ patchRow rowId patch row =
                 { row | unit = value, unitOpen = False }
 
             SetSearch queryState ->
-                { row | search = queryState }
+                { row | search = queryState, completionIndex = -1 }
 
             SetSearchResults token results ->
                 if row.search.searchToken == token then
@@ -636,6 +647,9 @@ patchRow rowId patch row =
 
             SetSearchFailed ->
                 { row | searchResults = Failure () }
+
+            SetCompletionIndex index ->
+                { row | completionIndex = index }
 
 
 findRow : RowId -> List ComponentRow -> Maybe ComponentRow
@@ -669,10 +683,13 @@ componentRowView theme device toMsg units row =
         [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ SearchView.searchInput theme
             device
-            { onChange = toMsg << ComponentSearchChanged row.rowId
+            { id = "meal-component-completions-" ++ String.fromInt row.rowId
+            , onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query
             , label = "Search Product"
             , completions = Search.completions row.search.query row.search.categorySuggestions
+            , activeIndex = row.completionIndex
+            , onActiveChanged = toMsg << ComponentCompletionActiveChanged row.rowId
             , onTabComplete = toMsg (CompleteFirstComponentSuggestion row.rowId)
             , onCompletionClick = toMsg << ComponentCompletionClicked row.rowId
             }

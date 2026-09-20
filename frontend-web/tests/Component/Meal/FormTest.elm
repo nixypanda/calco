@@ -413,6 +413,37 @@ tests =
                         |> Maybe.map (\row -> ( row.unit, row.unitOpen ))
                         |> Expect.equal (Just ( "oz", False ))
             ]
+        , describe "component search completions"
+            [ test "stores the active completion index" <|
+                \_ ->
+                    let
+                        ( form, _, _ ) =
+                            Form.updateFormField (ComponentCompletionActiveChanged 1 2) emptyForm
+                    in
+                    form.components
+                        |> List.head
+                        |> Maybe.map .completionIndex
+                        |> Expect.equal (Just 2)
+            , test "changing the search query resets the active index" <|
+                \_ ->
+                    let
+                        base : FormFields
+                        base =
+                            { emptyForm
+                                | components =
+                                    List.map
+                                        (\row -> { row | completionIndex = 2 })
+                                        emptyForm.components
+                            }
+
+                        ( form, _, _ ) =
+                            Form.updateFormField (ComponentSearchChanged 1 "milk") base
+                    in
+                    form.components
+                        |> List.head
+                        |> Maybe.map .completionIndex
+                        |> Expect.equal (Just -1)
+            ]
         , describe "toMealRequest"
             [ test "empty name returns MealNameRequired" <|
                 \_ ->

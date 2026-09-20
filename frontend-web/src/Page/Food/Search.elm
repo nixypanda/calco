@@ -71,6 +71,7 @@ type alias Model =
     , quickAdd : QuickAddState
     , addedItems : List { key : String, token : Ticket }
     , addedToken : Ticket
+    , completionIndex : Int
     }
 
 
@@ -129,6 +130,7 @@ init date mealSlot =
     , quickAdd = QuickAddIdle
     , addedItems = []
     , addedToken = Ticket.initial
+    , completionIndex = -1
     }
 
 
@@ -171,6 +173,7 @@ type Msg
     | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
+    | CompletionActiveChanged Int
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
@@ -232,7 +235,7 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model | search = search, results = results }
+    ( { model | search = search, results = results, completionIndex = -1 }
     , debounceCmd
     , NoOp
     )
@@ -338,6 +341,9 @@ update msg model =
     case msg of
         QueryChanged rawQuery ->
             applyQueryChange rawQuery model
+
+        CompletionActiveChanged index ->
+            ( { model | completionIndex = index }, Cmd.none, NoOp )
 
         ScopeSelected scope ->
             applyScopeChange scope model
@@ -887,10 +893,13 @@ textSearchInputView theme device model =
     in
     SearchView.searchInput theme
         device
-        { onChange = QueryChanged
+        { id = "food-search-completions"
+        , onChange = QueryChanged
         , text = model.search.query
         , label = searchLabel model.scope
         , completions = options
+        , activeIndex = model.completionIndex
+        , onActiveChanged = CompletionActiveChanged
         , onTabComplete = CompleteFirstSuggestion
         , onCompletionClick = CompletionClicked
         }
