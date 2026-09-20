@@ -27,6 +27,7 @@ import I18n
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
@@ -249,10 +250,10 @@ submitFailureMessage : SubmitFailure -> String
 submitFailureMessage failure =
     case failure of
         AmountRequiredMessage ->
-            I18n.t TidFoodLogAmountRequired
+            I18n.en TidFoodLogAmountRequired
 
         InvalidDateMessage ->
-            I18n.t TidFoodLogInvalidDeviceDate
+            I18n.en TidFoodLogInvalidDeviceDate
 
         RequestFailed message ->
             message
@@ -270,8 +271,15 @@ setSubmitState submitState model =
 {-| The form controls as a flat list, so a page can place them inside its own
 panel section instead of a standalone card.
 -}
-fields : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
-fields theme device food units model =
+fields :
+    Theme
+    -> Language
+    -> Device
+    -> Maybe ProductDetail
+    -> List UnitItem
+    -> Model
+    -> List (Element Msg)
+fields theme language device food units model =
     (case submitError model.submitState of
         Just message ->
             [ Feedback.errorBanner theme message ]
@@ -279,13 +287,14 @@ fields theme device food units model =
         Nothing ->
             []
     )
-        ++ [ mealSlotDropdown theme device model
+        ++ [ mealSlotDropdown theme language device model
            , View.QuantityInput.dropdown theme
+                language
                 device
-                { amountLabel = I18n.t TidNutrientTableAmount
+                { amountLabel = I18n.t language TidNutrientTableAmount
                 , amount = model.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = I18n.t TidNutrientTableUnit
+                , unitLabel = I18n.t language TidNutrientTableUnit
                 , unit = model.unit
                 , units = sourceForFood food units
                 , onUnitChange = UnitChanged
@@ -293,7 +302,7 @@ fields theme device food units model =
                 , onUnitToggle = ToggleUnitDropdown
                 }
            , UiInput.input theme
-                { label = I18n.t TidFoodLogNotes
+                { label = I18n.t language TidFoodLogNotes
                 , value = model.notes
                 , onChange = NotesChanged
                 }
@@ -310,19 +319,20 @@ submitError submitState =
             Nothing
 
 
-mealSlotDropdown : Theme -> Device -> Model -> Element Msg
-mealSlotDropdown theme device model =
+mealSlotDropdown : Theme -> Language -> Device -> Model -> Element Msg
+mealSlotDropdown theme language device model =
     UiInput.selectDropdown device
         theme
-        { label = I18n.t TidTitleMeal
+        language
+        { label = I18n.t language TidTitleMeal
         , selected = model.mealSlot
         , options =
-            [ ( Nothing, I18n.t TidFoodEditorMealNone )
-            , ( Just Breakfast, MealSlot.label Breakfast )
-            , ( Just Lunch, MealSlot.label Lunch )
-            , ( Just Dinner, MealSlot.label Dinner )
-            , ( Just Snack, MealSlot.label Snack )
-            , ( Just LateNightSnack, MealSlot.label LateNightSnack )
+            [ ( Nothing, I18n.t language TidFoodEditorMealNone )
+            , ( Just Breakfast, MealSlot.label language Breakfast )
+            , ( Just Lunch, MealSlot.label language Lunch )
+            , ( Just Dinner, MealSlot.label language Dinner )
+            , ( Just Snack, MealSlot.label language Snack )
+            , ( Just LateNightSnack, MealSlot.label language LateNightSnack )
             ]
         , onChange = MealSlotChanged
         , isOpen = model.openDropdown == MealSlotDropdownOpen

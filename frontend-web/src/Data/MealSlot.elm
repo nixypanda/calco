@@ -8,6 +8,7 @@ module Data.MealSlot exposing
 
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 
 
 type MealSlot
@@ -64,20 +65,20 @@ toString slot =
             "late_night_snack"
 
 
-label : MealSlot -> String
-label slot =
+label : Language -> MealSlot -> String
+label language slot =
     case slot of
         Breakfast ->
-            I18n.t TidMealSlotBreakfast
+            I18n.t language TidMealSlotBreakfast
 
         Lunch ->
-            I18n.t TidMealSlotLunch
+            I18n.t language TidMealSlotLunch
 
         Dinner ->
-            I18n.t TidMealSlotDinner
+            I18n.t language TidMealSlotDinner
 
         Snack ->
-            I18n.t TidMealSlotSnack
+            I18n.t language TidMealSlotSnack
 
         LateNightSnack ->
-            I18n.t TidMealSlotLateNightSnack
+            I18n.t language TidMealSlotLateNightSnack

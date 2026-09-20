@@ -22,6 +22,7 @@ import Element.Region as Region
 import Html.Attributes
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language(..))
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -83,6 +84,7 @@ showBottomNav device session isLoadingPage route =
 topBarView :
     { device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , profileOpen : Bool
@@ -102,7 +104,7 @@ topBarView config profile =
 
         meta : ScreenMeta
         meta =
-            screenMeta config.device config.session config.route
+            screenMeta config.language config.device config.session config.route
     in
     Element.row
         [ Element.width Element.fill
@@ -113,7 +115,8 @@ topBarView config profile =
         , Font.color config.theme.textPrimary
         ]
         (if chromeShown then
-            [ leadingButton config.device
+            [ leadingButton config.language
+                config.device
                 config.theme
                 meta.leading
                 config.onMenuClick
@@ -131,8 +134,11 @@ topBarView config profile =
                     , left = 0
                     }
                 ]
-                (themeToggle config.theme config.onThemeToggle)
-            , profileButton config.onProfileClick config.theme profile
+                (themeToggle config.language config.theme config.onThemeToggle)
+            , profileButton config.language
+                config.onProfileClick
+                config.theme
+                profile
             ]
 
          else
@@ -150,28 +156,28 @@ topBarView config profile =
                 , Typography.pageTitle config.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle config.theme config.onThemeToggle
+            , themeToggle config.language config.theme config.onThemeToggle
             ]
         )
 
 
-themeToggle : Theme -> msg -> Element msg
-themeToggle theme onToggle =
+themeToggle : Language -> Theme -> msg -> Element msg
+themeToggle language theme onToggle =
     UiInput.toggleSwitch theme
-        { label = I18n.t TidCommonUseDarkTheme
+        { label = I18n.t language TidCommonUseDarkTheme
         , isActive = theme.mode == Theme.Dark
         , onToggle = onToggle
         }
 
 
-leadingButton : Device -> Theme -> LeadingAction -> msg -> (Route -> msg) -> Element msg
-leadingButton device theme leading onMenuClick onNavigate =
+leadingButton : Language -> Device -> Theme -> LeadingAction -> msg -> (Route -> msg) -> Element msg
+leadingButton language device theme leading onMenuClick onNavigate =
     case leading of
         OpenMenu ->
             Button.iconButton device
                 theme
                 { icon = Icon.Menu
-                , title = I18n.t TidNavMenu
+                , title = I18n.t language TidNavMenu
                 , onPress = Just onMenuClick
                 , tone = Button.Primary
                 }
@@ -180,7 +186,7 @@ leadingButton device theme leading onMenuClick onNavigate =
             Button.iconButton device
                 theme
                 { icon = Icon.ChevronLeft
-                , title = I18n.t TidNavBack
+                , title = I18n.t language TidNavBack
                 , onPress = Just (onNavigate route)
                 , tone = Button.Primary
                 }
@@ -199,11 +205,12 @@ leadingButton device theme leading onMenuClick onNavigate =
 
 
 profileButton :
-    msg
+    Language
+    -> msg
     -> Theme
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-profileButton onPress theme profile =
+profileButton language onPress theme profile =
     let
         anchor : List (Element.Attribute msg)
         anchor =
@@ -215,11 +222,11 @@ profileButton onPress theme profile =
                     []
     in
     Element.el anchor
-        (profileInitialButton onPress theme profile.profileLabel)
+        (profileInitialButton language onPress theme profile.profileLabel)
 
 
-profileInitialButton : msg -> Theme -> String -> Element msg
-profileInitialButton onPress theme label =
+profileInitialButton : Language -> msg -> Theme -> String -> Element msg
+profileInitialButton language onPress theme label =
     Input.button
         [ Element.width (Element.px 44)
         , Element.height (Element.px 44)
@@ -229,8 +236,9 @@ profileInitialButton onPress theme label =
         , Border.rounded DesignTokens.radiusPill
         , Border.width 1
         , Border.color theme.divider
-        , Element.htmlAttribute (Html.Attributes.title (I18n.t TidCommonProfile))
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" (I18n.t TidCommonProfile))
+        , Element.htmlAttribute (Html.Attributes.title (I18n.t language TidCommonProfile))
+        , Element.htmlAttribute
+            (Html.Attributes.attribute "aria-label" (I18n.t language TidCommonProfile))
         ]
         { onPress = Just onPress
         , label = Element.text label
@@ -241,8 +249,8 @@ profileInitialButton onPress theme label =
 -- UPDATE BANNER
 
 
-updateBanner : Theme -> msg -> Element msg
-updateBanner theme onPress =
+updateBanner : Language -> Theme -> msg -> Element msg
+updateBanner language theme onPress =
     Input.button
         [ Element.width Element.fill
         , Element.paddingXY DesignTokens.space16 DesignTokens.space12
@@ -257,13 +265,13 @@ updateBanner theme onPress =
                 , Element.spacing DesignTokens.space8
                 ]
                 [ Element.el [ Element.centerY ]
-                    (Element.text (I18n.t TidCommonNewVersionAvailable))
+                    (Element.text (I18n.t language TidCommonNewVersionAvailable))
                 , Element.el
                     [ Element.alignRight
                     , Element.centerY
                     , Font.bold
                     ]
-                    (Element.text (I18n.t TidCommonTapToRefresh))
+                    (Element.text (I18n.t language TidCommonTapToRefresh))
                 ]
         }
 
@@ -272,8 +280,8 @@ updateBanner theme onPress =
 -- HELPERS
 
 
-screenMeta : Device -> Session -> Route -> ScreenMeta
-screenMeta device session route =
+screenMeta : Language -> Device -> Session -> Route -> ScreenMeta
+screenMeta language device session route =
     let
         phoneNonAdmin : Bool
         phoneNonAdmin =
@@ -281,7 +289,7 @@ screenMeta device session route =
     in
     case route of
         Root ->
-            { title = I18n.t TidTitleDiary
+            { title = I18n.t language TidTitleDiary
             , leading =
                 if phoneNonAdmin then
                     ShowAppIcon
@@ -291,7 +299,7 @@ screenMeta device session route =
             }
 
         DiaryDay _ maybeCalendarMonth ->
-            { title = I18n.t TidTitleDiary
+            { title = I18n.t language TidTitleDiary
             , leading =
                 case maybeCalendarMonth of
                     Just month ->
@@ -306,73 +314,77 @@ screenMeta device session route =
             }
 
         DiaryCalendar _ ->
-            { title = I18n.t TidTitleCalendar
+            { title = I18n.t language TidTitleCalendar
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
         NutritionDetails maybeDate ->
-            { title = I18n.t TidTitleNutritionDetails
+            { title = I18n.t language TidTitleNutritionDetails
             , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
         AdminDashboard ->
-            { title = I18n.t TidTitleAdmin, leading = OpenMenu }
+            { title = I18n.t language TidTitleAdmin, leading = OpenMenu }
 
         AdminCreateUser ->
-            { title = I18n.t TidTitleCreateUser, leading = GoBack AdminDashboard }
+            { title = I18n.t language TidTitleCreateUser, leading = GoBack AdminDashboard }
 
         AdminEditUser _ ->
-            { title = I18n.t TidTitleEditUser, leading = GoBack AdminDashboard }
+            { title = I18n.t language TidTitleEditUser, leading = GoBack AdminDashboard }
 
         GoalSettings ->
-            { title = I18n.t TidTitleGoals, leading = GoBack (DiaryDay Nothing Nothing) }
+            { title = I18n.t language TidTitleGoals, leading = GoBack (DiaryDay Nothing Nothing) }
 
         DiarySettings ->
-            { title = I18n.t TidTitleDiarySettings, leading = GoBack (DiaryDay Nothing Nothing) }
+            { title = I18n.t language TidTitleDiarySettings
+            , leading = GoBack (DiaryDay Nothing Nothing)
+            }
 
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
                     Just slot ->
-                        I18n.t (TidTitleAddToMealSlot (MealSlot.label slot))
+                        I18n.t language (TidTitleAddToMealSlot (MealSlot.label language slot))
 
                     Nothing ->
-                        I18n.t TidTitleSearchFoods
+                        I18n.t language TidTitleSearchFoods
             , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
         FoodShow _ maybeDate maybeSlot _ ->
-            { title = I18n.t TidTitleLogFood, leading = GoBack (FoodSearch maybeDate maybeSlot) }
+            { title = I18n.t language TidTitleLogFood
+            , leading = GoBack (FoodSearch maybeDate maybeSlot)
+            }
 
         FoodLogEntry _ maybeDate maybeCalendarMonth ->
-            { title = I18n.t TidTitleEditLog
+            { title = I18n.t language TidTitleEditLog
             , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
             }
 
         AdHocLogCreate maybeDate maybeSlot ->
-            { title = I18n.t TidTitleManualFoodLog
+            { title = I18n.t language TidTitleManualFoodLog
             , leading = GoBack (FoodSearch maybeDate maybeSlot)
             }
 
         AiLogCreate maybeDate maybeSlot ->
-            { title = I18n.t TidTitleLogWithAi
+            { title = I18n.t language TidTitleLogWithAi
             , leading = GoBack (FoodSearch maybeDate maybeSlot)
             }
 
         CustomFoodCreate ->
-            { title = I18n.t TidTitleCreateFood, leading = GoBack CustomFoodList }
+            { title = I18n.t language TidTitleCreateFood, leading = GoBack CustomFoodList }
 
         CustomFoodCreateWithAi ->
-            { title = I18n.t TidTitleCreateWithAi, leading = GoBack CustomFoodList }
+            { title = I18n.t language TidTitleCreateWithAi, leading = GoBack CustomFoodList }
 
         CustomFoodEdit _ ->
-            { title = I18n.t TidTitleEditFood, leading = GoBack CustomFoodList }
+            { title = I18n.t language TidTitleEditFood, leading = GoBack CustomFoodList }
 
         CustomFoodShow _ ->
-            { title = I18n.t TidTitleFood, leading = GoBack CustomFoodList }
+            { title = I18n.t language TidTitleFood, leading = GoBack CustomFoodList }
 
         CustomFoodList ->
-            { title = I18n.t TidTitleMyFoods
+            { title = I18n.t language TidTitleMyFoods
             , leading =
                 if phoneNonAdmin then
                     NoLeadingAction
@@ -382,7 +394,7 @@ screenMeta device session route =
             }
 
         MealList ->
-            { title = I18n.t TidTitleMyMeals
+            { title = I18n.t language TidTitleMyMeals
             , leading =
                 if phoneNonAdmin then
                     NoLeadingAction
@@ -392,22 +404,22 @@ screenMeta device session route =
             }
 
         MealCreate ->
-            { title = I18n.t TidTitleCreateMeal, leading = GoBack MealList }
+            { title = I18n.t language TidTitleCreateMeal, leading = GoBack MealList }
 
         MealShow _ ->
-            { title = I18n.t TidTitleMeal, leading = GoBack MealList }
+            { title = I18n.t language TidTitleMeal, leading = GoBack MealList }
 
         MealEdit _ ->
-            { title = I18n.t TidTitleEditMeal, leading = GoBack MealList }
+            { title = I18n.t language TidTitleEditMeal, leading = GoBack MealList }
 
         AuthLogin ->
-            { title = I18n.t TidTitleLogin, leading = NoLeadingAction }
+            { title = I18n.t language TidTitleLogin, leading = NoLeadingAction }
 
         BootstrapSetup ->
-            { title = I18n.t TidTitleSetup, leading = NoLeadingAction }
+            { title = I18n.t language TidTitleSetup, leading = NoLeadingAction }
 
         NotFound ->
-            { title = I18n.t TidTitleDiary, leading = OpenMenu }
+            { title = I18n.t language TidTitleDiary, leading = OpenMenu }
 
 
 
@@ -416,6 +428,7 @@ screenMeta device session route =
 
 bottomNavBar :
     { theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , onNavigate : Route -> msg
@@ -423,15 +436,19 @@ bottomNavBar :
     -> Element msg
 bottomNavBar config =
     bottomNavContainer config.theme
-        [ tabButton config (I18n.t TidNavDiary) (DiaryDay Nothing Nothing) Icon.Home
-        , tabButton config (I18n.t TidNavSearch) (FoodSearch Nothing Nothing) Icon.Search
-        , tabButton config (I18n.t TidNavFoods) CustomFoodList Icon.Box
-        , tabButton config (I18n.t TidNavMeals) MealList Icon.Utensils
+        [ tabButton config (I18n.t config.language TidNavDiary) (DiaryDay Nothing Nothing) Icon.Home
+        , tabButton config
+            (I18n.t config.language TidNavSearch)
+            (FoodSearch Nothing Nothing)
+            Icon.Search
+        , tabButton config (I18n.t config.language TidNavFoods) CustomFoodList Icon.Box
+        , tabButton config (I18n.t config.language TidNavMeals) MealList Icon.Utensils
         ]
 
 
 tabButton :
     { theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , onNavigate : Route -> msg
@@ -542,6 +559,7 @@ bottomNavTab theme config =
 drawerOverlay :
     { device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , drawerOpen : Bool
@@ -558,6 +576,7 @@ drawerOverlay config =
         viewConfig :
             { device : Device
             , theme : Theme
+            , language : Language
             , session : Session
             , route : Route
             , onClose : msg
@@ -566,6 +585,7 @@ drawerOverlay config =
         viewConfig =
             { device = config.device
             , theme = config.theme
+            , language = config.language
             , session = config.session
             , route = config.route
             , onClose = config.onClose
@@ -591,6 +611,7 @@ drawerOverlay config =
 drawerView :
     { device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , onClose : msg
@@ -612,32 +633,29 @@ drawerView config =
             [ Button.iconButton config.device
                 config.theme
                 { icon = Icon.Menu
-                , title = I18n.t TidCommonClose
+                , title = I18n.t config.language TidCommonClose
                 , onPress = Just config.onClose
                 , tone = Button.Primary
                 }
             , Typography.sectionTitle config.theme "CalCo"
             ]
             :: Surface.hairline config.theme
-            :: drawerItems itemsConfig
+            :: drawerItems config.language itemsConfig
         )
 
 
 drawerItems :
-    { theme : Theme
-    , session : Session
-    , route : Route
-    , onNavigate : Route -> msg
-    }
+    Language
+    -> { theme : Theme, session : Session, route : Route, onNavigate : Route -> msg }
     -> List (Element msg)
-drawerItems config =
+drawerItems language config =
     if Auth.isAdmin config.session then
         [ drawerItem
             config.theme
             config.route
             config.onNavigate
             Nothing
-            (I18n.t TidNavAdmin)
+            (I18n.t language TidNavAdmin)
             AdminDashboard
         ]
 
@@ -646,25 +664,25 @@ drawerItems config =
             config.route
             config.onNavigate
             (Just Icon.Home)
-            (I18n.t TidNavDiary)
+            (I18n.t language TidNavDiary)
             (DiaryDay Nothing Nothing)
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Search)
-            (I18n.t TidNavSearchFoods)
+            (I18n.t language TidNavSearchFoods)
             (FoodSearch Nothing Nothing)
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Box)
-            (I18n.t TidNavMyFoods)
+            (I18n.t language TidNavMyFoods)
             CustomFoodList
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Utensils)
-            (I18n.t TidNavMyMeals)
+            (I18n.t language TidNavMyMeals)
             MealList
         ]
 
@@ -770,9 +788,11 @@ drawerItemButton theme config =
 profileMenu :
     { device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , onNavigate : Route -> msg
     , onLogout : msg
+    , onSetLanguage : Language -> msg
     }
     -> Element msg
 profileMenu config =
@@ -803,25 +823,27 @@ menuCard theme config =
 profileMenuContent :
     { device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , onNavigate : Route -> msg
     , onLogout : msg
+    , onSetLanguage : Language -> msg
     }
     -> List (Element msg)
 profileMenuContent config =
     [ Typography.mutedCaption config.theme
         (case config.session of
             Auth.Authenticated identity ->
-                I18n.t (TidCommonSignedInAs identity.username)
+                I18n.t config.language (TidCommonSignedInAs identity.username)
 
             _ ->
-                I18n.t TidCommonSignedIn
+                I18n.t config.language TidCommonSignedIn
         )
     , Button.textButton config.device
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t TidNavCalendar
+        , label = I18n.t config.language TidNavCalendar
         , onPress = config.onNavigate (DiaryCalendar Nothing)
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -831,7 +853,7 @@ profileMenuContent config =
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t TidNavGoals
+        , label = I18n.t config.language TidNavGoals
         , onPress = config.onNavigate GoalSettings
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -841,17 +863,52 @@ profileMenuContent config =
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t TidNavMealSlots
+        , label = I18n.t config.language TidNavMealSlots
         , onPress = config.onNavigate DiarySettings
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
+    , Element.row
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space8
+        ]
+        [ Button.textButton config.device
+            config.theme
+            { tone =
+                if config.language == EN_US then
+                    Button.Primary
+
+                else
+                    Button.Ghost
+            , width = Button.FullWidth
+            , label = "English"
+            , onPress = config.onSetLanguage EN_US
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        , Button.textButton config.device
+            config.theme
+            { tone =
+                if config.language == HI_IN then
+                    Button.Primary
+
+                else
+                    Button.Ghost
+            , width = Button.FullWidth
+            , label = "हिन्दी"
+            , onPress = config.onSetLanguage HI_IN
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        ]
     , Button.textButton config.device
         config.theme
         { tone = Button.Danger
         , width = Button.FullWidth
-        , label = I18n.t TidNavLogout
+        , label = I18n.t config.language TidNavLogout
         , onPress = config.onLogout
         , submitState = Nothing
         , submittingLabel = Nothing

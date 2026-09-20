@@ -36,6 +36,7 @@ import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Color as UiColor
 import Ui.Common as UiCommon
@@ -585,8 +586,8 @@ slotCalories slot logs =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+contentView { model, device, theme, language } =
     let
         logs : List FoodLog
         logs =
@@ -596,20 +597,20 @@ contentView { model, device, theme } =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        (dateCard theme model device
+        (dateCard theme language model device
             :: (case activeDiaryError model.currentDate model.diary of
                     Just message ->
                         [ Feedback.errorBanner theme message ]
 
                     Nothing ->
                         copyErrorView theme model.copyState
-                            ++ [ logGroupsView theme device model logs ]
+                            ++ [ logGroupsView theme language device model logs ]
                )
         )
 
 
-dateCard : Theme -> Model -> Device -> Element Msg
-dateCard theme model device =
+dateCard : Theme -> Language -> Model -> Device -> Element Msg
+dateCard theme language model device =
     let
         canGoNext : Bool
         canGoNext =
@@ -629,7 +630,7 @@ dateCard theme model device =
                     [ Button.iconButton device
                         theme
                         { icon = Icon.ChevronLeft
-                        , title = I18n.t TidDiaryPreviousDay
+                        , title = I18n.t language TidDiaryPreviousDay
                         , onPress = Just PreviousDayClicked
                         , tone = Button.Primary
                         }
@@ -637,12 +638,14 @@ dateCard theme model device =
                         [ Element.width Element.fill
                         , Font.center
                         ]
-                        (Typography.sectionTitle theme (LocalDate.display model.currentDate))
+                        (Typography.sectionTitle theme
+                            (LocalDate.display language model.currentDate)
+                        )
                     , if canGoNext then
                         Button.iconButton device
                             theme
                             { icon = Icon.ChevronRight
-                            , title = I18n.t TidDiaryNextDay
+                            , title = I18n.t language TidDiaryNextDay
                             , onPress = Just NextDayClicked
                             , tone = Button.Primary
                             }
@@ -660,56 +663,62 @@ dateCard theme model device =
         , body =
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
-                    totalsView device theme targets (Nutrition.totalsFromLogs logs)
+                    totalsView device theme language targets (Nutrition.totalsFromLogs logs)
 
                 Nothing ->
-                    totalsView device theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
+                    totalsView
+                        device
+                        theme
+                        language
+                        loadingGoalTargets
+                        (Nutrition.totalsFromLogs logs)
             ]
         , footer = Nothing
         }
 
 
-totalsView : Device -> Theme -> GoalTargets -> List NutrientAmount -> Element Msg
-totalsView device theme targets summary =
+totalsView : Device -> Theme -> Language -> GoalTargets -> List NutrientAmount -> Element Msg
+totalsView device theme language targets summary =
     let
         calories : Float
         calories =
             Nutrition.caloriesFrom summary
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ calorieHero theme calories targets.calorieTarget
+        [ calorieHero theme language calories targets.calorieTarget
         , Surface.hairline theme
         , macroSummaryRow theme
-            [ { label = I18n.t TidNutrientProtein
+            language
+            [ { label = I18n.t language TidNutrientProtein
               , value = summaryAmount "PROTEIN_G" summary
               , color = theme.proteinAccent
               , target = targets.proteinTargetG
               , tolerance = macroTolerance targets.proteinTargetG
               }
-            , { label = I18n.t TidDiaryCarbs
+            , { label = I18n.t language TidDiaryCarbs
               , value = summaryAmount "CARBS_G" summary
               , color = theme.carbsAccent
               , target = targets.carbsTargetG
               , tolerance = macroTolerance targets.carbsTargetG
               }
-            , { label = I18n.t TidNutrientFat
+            , { label = I18n.t language TidNutrientFat
               , value = summaryAmount "FAT_G" summary
               , color = theme.fatAccent
               , target = targets.fatTargetG
               , tolerance = macroTolerance targets.fatTargetG
               }
             ]
-        , detailsAction device theme
+        , detailsAction device theme language
         ]
 
 
-detailsAction : Device -> Theme -> Element Msg
-detailsAction device theme =
+detailsAction : Device -> Theme -> Language -> Element Msg
+detailsAction device theme language =
     Button.textButton device
         theme
         { tone = Button.GhostFilled
         , width = Button.FullWidth
-        , label = I18n.t TidDiaryDetails
+        , label = I18n.t language TidDiaryDetails
         , onPress = DetailsClicked
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -724,8 +733,8 @@ detailsAction device theme =
         }
 
 
-calorieHero : Theme -> Float -> Float -> Element msg
-calorieHero theme calories target =
+calorieHero : Theme -> Language -> Float -> Float -> Element msg
+calorieHero theme language calories target =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space12
@@ -744,13 +753,13 @@ calorieHero theme calories target =
                     , Font.color theme.textMedium
                     , Typography.caption
                     ]
-                    (Element.text (I18n.t TidDiaryCalories))
+                    (Element.text (I18n.t language TidDiaryCalories))
                 , Typography.heroStat theme (formatWhole calories)
                 , Element.el
                     [ Typography.body, Font.color theme.textMuted ]
-                    (Element.text (I18n.t TidDiaryKcalEaten))
+                    (Element.text (I18n.t language TidDiaryKcalEaten))
                 ]
-            , calorieBalancePill theme target calories
+            , calorieBalancePill theme language target calories
             ]
         , progressBar
             theme
@@ -769,15 +778,15 @@ calorieHero theme calories target =
                 , Font.color theme.textMuted
                 , Element.alignRight
                 ]
-                (Element.text (I18n.t (TidDiaryOfKcal (formatWhole target))))
+                (Element.text (I18n.t language (TidDiaryOfKcal (formatWhole target))))
 
           else
             Element.none
         ]
 
 
-calorieBalancePill : Theme -> Float -> Float -> Element msg
-calorieBalancePill theme target calories =
+calorieBalancePill : Theme -> Language -> Float -> Float -> Element msg
+calorieBalancePill theme language target calories =
     if target <= 0 then
         Element.none
 
@@ -798,13 +807,13 @@ calorieBalancePill theme target calories =
             label : String
             label =
                 if difference > 0 then
-                    I18n.t (TidDiaryKcalLeft (formatWhole (toFloat difference)))
+                    I18n.t language (TidDiaryKcalLeft (formatWhole (toFloat difference)))
 
                 else if difference < 0 then
-                    I18n.t (TidDiaryKcalOver (formatWhole (toFloat (abs difference))))
+                    I18n.t language (TidDiaryKcalOver (formatWhole (toFloat (abs difference))))
 
                 else
-                    I18n.t TidDiaryGoalMet
+                    I18n.t language TidDiaryGoalMet
         in
         Element.el
             [ Background.color (UiColor.withAlpha 0.2 statusColor)
@@ -827,8 +836,8 @@ type alias MacroSummary =
     }
 
 
-macroSummaryRow : Theme -> List MacroSummary -> Element msg
-macroSummaryRow theme macros =
+macroSummaryRow : Theme -> Language -> List MacroSummary -> Element msg
+macroSummaryRow theme language macros =
     let
         divider : Element msg
         divider =
@@ -840,7 +849,7 @@ macroSummaryRow theme macros =
                 Element.none
     in
     macros
-        |> List.map (macroSummaryItem theme)
+        |> List.map (macroSummaryItem theme language)
         |> List.intersperse divider
         |> Element.row
             [ Element.width Element.fill
@@ -848,8 +857,8 @@ macroSummaryRow theme macros =
             ]
 
 
-macroSummaryItem : Theme -> MacroSummary -> Element msg
-macroSummaryItem theme macro =
+macroSummaryItem : Theme -> Language -> MacroSummary -> Element msg
+macroSummaryItem theme language macro =
     Element.column
         [ Element.width (Element.fillPortion 1)
         , Element.spacing DesignTokens.space8
@@ -878,7 +887,7 @@ macroSummaryItem theme macro =
                         [ Font.color theme.textMuted ]
                    )
             )
-            (Element.text (macroAmountLabel macro))
+            (Element.text (macroAmountLabel language macro))
         , progressBar
             theme
             macro.color
@@ -888,13 +897,14 @@ macroSummaryItem theme macro =
         ]
 
 
-macroAmountLabel : MacroSummary -> String
-macroAmountLabel macro =
+macroAmountLabel : Language -> MacroSummary -> String
+macroAmountLabel language macro =
     if macro.target > 0 then
-        I18n.t (TidDiaryMacroGramsWithTarget (formatWhole macro.value) (formatWhole macro.target))
+        I18n.t language
+            (TidDiaryMacroGramsWithTarget (formatWhole macro.value) (formatWhole macro.target))
 
     else
-        I18n.t (TidDiaryMacroGrams (formatWhole macro.value))
+        I18n.t language (TidDiaryMacroGrams (formatWhole macro.value))
 
 
 progressBar : Theme -> Element.Color -> Int -> Float -> Float -> Element msg
@@ -1103,8 +1113,8 @@ type alias SlotSection =
     }
 
 
-logGroupsView : Theme -> Device -> Model -> List FoodLog -> Element Msg
-logGroupsView theme device model logs =
+logGroupsView : Theme -> Language -> Device -> Model -> List FoodLog -> Element Msg
+logGroupsView theme language device model logs =
     let
         section : Maybe MealSlot -> SlotSection
         section slot =
@@ -1125,7 +1135,7 @@ logGroupsView theme device model logs =
                 else
                     [ unslotted ]
                )
-            |> List.map (slotView theme device model)
+            |> List.map (slotView theme language device model)
         )
 
 
@@ -1137,8 +1147,8 @@ shouldShowSection maybePreferences section =
            )
 
 
-slotView : Theme -> Device -> Model -> SlotSection -> Element Msg
-slotView theme device model section =
+slotView : Theme -> Language -> Device -> Model -> SlotSection -> Element Msg
+slotView theme language device model section =
     let
         totals : MacroTotals
         totals =
@@ -1149,17 +1159,17 @@ slotView theme device model section =
             case section.slot of
                 Just slot ->
                     (if List.isEmpty section.logs then
-                        [ emptySlotView theme device model slot ]
+                        [ emptySlotView theme language device model slot ]
 
                      else
-                        List.map (logRow theme) section.logs
+                        List.map (logRow theme language) section.logs
                     )
                         ++ [ Surface.hairline theme
                            , Button.textButton device
                                 theme
                                 { tone = Button.Ghost
                                 , width = Button.FullWidth
-                                , label = I18n.t TidDiaryAddFood
+                                , label = I18n.t language TidDiaryAddFood
                                 , onPress = AddFoodClicked slot
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
@@ -1168,17 +1178,17 @@ slotView theme device model section =
                            ]
 
                 Nothing ->
-                    List.map (logRow theme) section.logs
+                    List.map (logRow theme language) section.logs
     in
     mealSlotCard theme
         device
         section.slot
-        (mealSlotHeader theme model.macroMode section totals)
+        (mealSlotHeader theme language model.macroMode section totals)
         (Surface.hairline theme :: body)
 
 
-emptySlotView : Theme -> Device -> Model -> MealSlot -> Element Msg
-emptySlotView theme device model slot =
+emptySlotView : Theme -> Language -> Device -> Model -> MealSlot -> Element Msg
+emptySlotView theme language device model slot =
     case latestSlotSourceFor model.currentDate slot model.latestSlots of
         Just source ->
             let
@@ -1196,10 +1206,10 @@ emptySlotView theme device model slot =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = logLatestLabel source
+                    , label = logLatestLabel language source
                     , onPress = CopyLatestClicked source
                     , submitState = Just (Button.submittingOrIdle isLogging)
-                    , submittingLabel = Just (I18n.t TidDiaryLogging)
+                    , submittingLabel = Just (I18n.t language TidDiaryLogging)
                     , trailing = Nothing
                     }
                 )
@@ -1210,7 +1220,7 @@ emptySlotView theme device model slot =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = I18n.t TidDiaryNoItems
+                    , label = I18n.t language TidDiaryNoItems
                     , onPress = SlotNoOp
                     , submitState = Just Button.Disabled
                     , submittingLabel = Nothing
@@ -1228,18 +1238,19 @@ emptySlotBody content =
         content
 
 
-logLatestLabel : LatestSlotSource -> String
-logLatestLabel source =
-    I18n.t (TidDiaryLogLatestFrom (LocalDate.display source.sourceDate))
+logLatestLabel : Language -> LatestSlotSource -> String
+logLatestLabel language source =
+    I18n.t language (TidDiaryLogLatestFrom (LocalDate.display language source.sourceDate))
 
 
 mealSlotHeader :
     Theme
+    -> Language
     -> MacroMode
     -> SlotSection
     -> MacroTotals
     -> Element Msg
-mealSlotHeader theme macroMode section totals =
+mealSlotHeader theme language macroMode section totals =
     let
         sectionKcal : Float
         sectionKcal =
@@ -1253,25 +1264,25 @@ mealSlotHeader theme macroMode section totals =
         , Element.spacing DesignTokens.space12
         ]
         [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-            [ Typography.sectionTitle theme (sectionTitle section.slot)
+            [ Typography.sectionTitle theme (sectionTitle language section.slot)
             , Input.button []
                 { onPress = Just MacroModeToggled
-                , label = Typography.mutedCaption theme (macroSummary macroMode totals)
+                , label = Typography.mutedCaption theme (macroSummary language macroMode totals)
                 }
             ]
         , Typography.mutedCaption theme
-            (I18n.t (TidDiaryKcal (String.fromInt (round sectionKcal))))
+            (I18n.t language (TidDiaryKcal (String.fromInt (round sectionKcal))))
         ]
 
 
-sectionTitle : Maybe MealSlot -> String
-sectionTitle maybeSlot =
+sectionTitle : Language -> Maybe MealSlot -> String
+sectionTitle language maybeSlot =
     case maybeSlot of
         Just slot ->
-            MealSlot.label slot
+            MealSlot.label language slot
 
         Nothing ->
-            I18n.t TidDiaryOther
+            I18n.t language TidDiaryOther
 
 
 mealSlotCard :
@@ -1364,11 +1375,11 @@ mealSlotImage slot =
             { url = "/assets/late-night-snack.png", focusX = "73%" }
 
 
-macroSummary : MacroMode -> MacroTotals -> String
-macroSummary mode totals =
+macroSummary : Language -> MacroMode -> MacroTotals -> String
+macroSummary language mode totals =
     case mode of
         Grams ->
-            I18n.t
+            I18n.t language
                 (TidDiaryMacroSummaryGrams
                     (Number.toFixedOne totals.carbs)
                     (Number.toFixedOne totals.protein)
@@ -1376,7 +1387,7 @@ macroSummary mode totals =
                 )
 
         Percent ->
-            I18n.t
+            I18n.t language
                 (TidDiaryMacroSummaryPercent
                     (String.fromInt (round totals.carbsPct))
                     (String.fromInt (round totals.proteinPct))
@@ -1384,8 +1395,8 @@ macroSummary mode totals =
                 )
 
 
-logRow : Theme -> FoodLog -> Element Msg
-logRow theme log =
+logRow : Theme -> Language -> FoodLog -> Element Msg
+logRow theme language log =
     Input.button
         [ Element.width Element.fill
         , Element.padding DesignTokens.space12
@@ -1393,7 +1404,7 @@ logRow theme log =
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ View.Nutrients.macroDot theme log.nutrients
+                [ View.Nutrients.macroDot theme language log.nutrients
                 , Element.el
                     [ Element.width Element.fill
                     , UiCommon.minWidthZero
@@ -1404,7 +1415,7 @@ logRow theme log =
                     [ Typography.mutedCaption theme
                         (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Typography.mutedCaption theme
-                        (I18n.t
+                        (I18n.t language
                             (TidDiaryKcal
                                 (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)))
                             )

@@ -27,6 +27,7 @@ import Element exposing (Device, Element)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -270,19 +271,19 @@ validationMessage : Form.ValidationError -> String
 validationMessage err =
     case err of
         Form.NameRequired ->
-            I18n.t TidCustomFoodNameRequired
+            I18n.en TidCustomFoodNameRequired
 
         Form.InvalidNutrientAmount value ->
-            I18n.t (TidCustomFoodInvalidNutrientAmount value)
+            I18n.en (TidCustomFoodInvalidNutrientAmount value)
 
         Form.InvalidServingGrams value ->
-            I18n.t (TidCustomFoodInvalidServingGrams value)
+            I18n.en (TidCustomFoodInvalidServingGrams value)
 
         Form.DuplicateServingUnit unit ->
-            I18n.t (TidCustomFoodDuplicateServingUnit unit)
+            I18n.en (TidCustomFoodDuplicateServingUnit unit)
 
         Form.InvalidDefaultPortion ->
-            I18n.t TidCustomFoodInvalidDefaultPortion
+            I18n.en TidCustomFoodInvalidDefaultPortion
 
 
 completeSave :
@@ -413,34 +414,39 @@ failure =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
 view config =
     UiPage.pageContainer
         [ bodyView config ]
 
 
-bodyView : { model : Model, device : Device, theme : Theme } -> Element Msg
-bodyView { model, device, theme } =
+bodyView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+bodyView { model, device, theme, language } =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
-                    (Form.view theme device loaded.nutrients loaded.units loaded.form)
+                    (Form.view theme language device loaded.nutrients loaded.units loaded.form)
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t TidCustomFoodSave
+                    , label = I18n.t language TidCustomFoodSave
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Form.isSubmitting loaded.form.submit))
-                    , submittingLabel = Just (I18n.t TidCommonSaving)
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
 
         LoadFailed failed ->
             Feedback.errorRetry theme
+                language
                 device
                 { message = failed.message, onRetry = RetryClicked }
 

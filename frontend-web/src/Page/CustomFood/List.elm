@@ -16,6 +16,7 @@ import Element exposing (Device, Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -98,8 +99,10 @@ failure =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+contentView { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -113,25 +116,28 @@ contentView { model, device, theme } =
 
             Loading ->
                 Element.none
-        , bodyView theme device model
+        , bodyView theme device language model
         ]
 
 
-bodyView : Theme -> Device -> Model -> Element Msg
-bodyView theme device model =
+bodyView : Theme -> Device -> Language -> Model -> Element Msg
+bodyView theme device language model =
     case model of
         Loaded foods ->
             Surface.section theme
                 { header =
                     Just
-                        (createActions device theme)
+                        (createActions device theme language)
                 , body =
                     if List.isEmpty foods then
-                        [ Typography.mutedBodyParagraph theme (I18n.t TidCustomFoodListEmpty) ]
+                        [ Typography.mutedBodyParagraph
+                            theme
+                            (I18n.t language TidCustomFoodListEmpty)
+                        ]
 
                     else
                         List.intersperse (Surface.hairline theme)
-                            (List.map (foodRow theme device) foods)
+                            (List.map (foodRow theme device language) foods)
                 , footer = Nothing
                 }
 
@@ -142,8 +148,8 @@ bodyView theme device model =
             customFoodListSkeleton theme
 
 
-createActions : Device -> Theme -> Element Msg
-createActions device theme =
+createActions : Device -> Theme -> Language -> Element Msg
+createActions device theme language =
     Element.row
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space12
@@ -153,10 +159,10 @@ createActions device theme =
                 theme
                 { tone = Button.Primary
                 , width = Button.FullWidth
-                , label = I18n.t TidTitleCreateWithAi
+                , label = I18n.t language TidTitleCreateWithAi
                 , onPress = CreateWithAiClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just (I18n.t TidTitleCreateWithAi)
+                , submittingLabel = Just (I18n.t language TidTitleCreateWithAi)
                 , trailing = Nothing
                 }
             )
@@ -165,22 +171,23 @@ createActions device theme =
                 theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = I18n.t TidCustomFoodEnterManually
+                , label = I18n.t language TidCustomFoodEnterManually
                 , onPress = CreateManuallyClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just (I18n.t TidCustomFoodEnterManually)
+                , submittingLabel = Just (I18n.t language TidCustomFoodEnterManually)
                 , trailing = Nothing
                 }
             )
         ]
 
 
-foodRow : Theme -> Device -> ProductDetail -> Element Msg
-foodRow theme _ food =
+foodRow : Theme -> Device -> Language -> ProductDetail -> Element Msg
+foodRow theme _ language food =
     let
         macroDot : Element Msg
         macroDot =
             View.Nutrients.macroDot theme
+                language
                 (food.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
     in
     Surface.listRow
@@ -188,19 +195,20 @@ foodRow theme _ food =
         , leading = [ macroDot ]
         , title = Typography.wrappedListItemTitle theme food.name
         , subtitle =
-            [ Typography.mutedBodyParagraph theme (foodSummaryText food)
+            [ Typography.mutedBodyParagraph theme (foodSummaryText language food)
             , Chip.chips theme food.categories
             ]
         , trailing = []
         }
 
 
-foodSummaryText : ProductDetail -> String
-foodSummaryText food =
+foodSummaryText : Language -> ProductDetail -> String
+foodSummaryText language food =
     [ food.brand
     , Maybe.map
         (\kcal ->
-            I18n.t (TidSearchKcalPer100g (String.fromInt (round (Nutrition.safeAmount kcal))))
+            I18n.t language
+                (TidSearchKcalPer100g (String.fromInt (round (Nutrition.safeAmount kcal))))
         )
         food.nutritionSummary.per100g.energyKcal
     ]

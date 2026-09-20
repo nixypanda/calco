@@ -8,6 +8,7 @@ import Expect
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.Theme as Theme
 
 
@@ -117,6 +118,7 @@ tests =
                 Editor.viewForLog
                     Editor.AllNutrients
                     Theme.light
+                    Util.EN_US
                     phone
                     []
                     []
@@ -137,6 +139,7 @@ tests =
                     |> Editor.viewForLog
                         Editor.AllNutrients
                         Theme.light
+                        Util.EN_US
                         phone
                         []
                         []

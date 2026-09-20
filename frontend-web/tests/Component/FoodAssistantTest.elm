@@ -10,6 +10,7 @@ import Json.Encode as Encode
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.Theme as Theme
 
 
@@ -180,6 +181,7 @@ tests =
                     |> first
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -197,6 +199,7 @@ tests =
                     |> first
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -215,6 +218,7 @@ tests =
                     |> first
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -266,7 +270,7 @@ tests =
                         ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
         , test "preview includes details nutrients and servings" <|
             \_ ->
-                Assistant.draftPreviewData draft
+                Assistant.draftPreviewData Util.EN_US draft
                     |> Expect.equal
                         { details =
                             [ ( "Name", "Dal" )
@@ -354,6 +358,7 @@ tests =
                     |> first
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -372,6 +377,7 @@ tests =
                     |> first
                     |> Assistant.modalView
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                     |> Maybe.map
                         (Element.layout []
@@ -398,6 +404,7 @@ tests =
                     |> first
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         True
                     |> Element.layout []
@@ -411,6 +418,7 @@ tests =
                 enabled
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -424,6 +432,7 @@ tests =
                 enabled
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []
@@ -437,6 +446,7 @@ tests =
                 imageEnabled
                     |> Assistant.view
                         Theme.light
+                        Util.EN_US
                         { class = Phone, orientation = Portrait }
                         False
                     |> Element.layout []

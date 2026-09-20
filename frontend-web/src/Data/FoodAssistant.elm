@@ -283,10 +283,10 @@ boundedTurn role raw =
             String.trim raw
     in
     if String.isEmpty value then
-        Err (I18n.t TidAssistantConversationMessageRequired)
+        Err (I18n.en TidAssistantConversationMessageRequired)
 
     else if String.length value > 4000 then
-        Err (I18n.t TidAssistantConversationMessageTooLong)
+        Err (I18n.en TidAssistantConversationMessageTooLong)
 
     else
         Ok (ConversationTurn role value)
@@ -295,10 +295,10 @@ boundedTurn role raw =
 conversation : List ConversationTurn -> Result String Conversation
 conversation turns =
     if List.isEmpty turns then
-        Err (I18n.t TidAssistantConversationEmpty)
+        Err (I18n.en TidAssistantConversationEmpty)
 
     else if List.length turns > 20 then
-        Err (I18n.t TidAssistantConversationFull)
+        Err (I18n.en TidAssistantConversationFull)
 
     else
         Ok (Conversation turns)

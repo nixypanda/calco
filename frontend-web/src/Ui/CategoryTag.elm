@@ -7,6 +7,7 @@ module Ui.CategoryTag exposing
 import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
 import Ui.DesignTokens exposing (space4)
@@ -49,30 +50,30 @@ rows categories =
             ]
 
 
-view : Theme -> List (List CategoryTag) -> Element msg
-view theme tagRows =
+view : Theme -> Language -> List (List CategoryTag) -> Element msg
+view theme language tagRows =
     Element.column
         [ Element.spacing space4 ]
-        (List.map (tagRow theme) tagRows)
+        (List.map (tagRow theme language) tagRows)
 
 
-tagRow : Theme -> List CategoryTag -> Element msg
-tagRow theme cells =
+tagRow : Theme -> Language -> List CategoryTag -> Element msg
+tagRow theme language cells =
     Element.row
         [ Element.spacing space4
         , Element.alignRight
         ]
-        (List.map (tagCell theme) cells)
+        (List.map (tagCell theme language) cells)
 
 
-tagCell : Theme -> CategoryTag -> Element msg
-tagCell theme tag =
+tagCell : Theme -> Language -> CategoryTag -> Element msg
+tagCell theme language tag =
     Element.el
         [ Element.width (Element.px cellWidth)
         , Element.clip
         , UiCommon.uiClass "ui-text-ellipsis"
         ]
-        (Chip.chip theme { label = label tag, selected = False })
+        (Chip.chip theme { label = label language tag, selected = False })
 
 
 {-| Fixed cell width, so two chips per row form a stable right-aligned grid and
@@ -83,11 +84,11 @@ cellWidth =
     140
 
 
-label : CategoryTag -> String
-label tag =
+label : Language -> CategoryTag -> String
+label language tag =
     case tag of
         CategoryTag name ->
             name
 
         CategoryOverflowTag count ->
-            I18n.t (TidUiCategoryOverflowMore (String.fromInt count))
+            I18n.t language (TidUiCategoryOverflowMore (String.fromInt count))

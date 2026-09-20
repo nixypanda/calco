@@ -12,6 +12,7 @@ module Data.Calendar exposing
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 
 
 monthKey : LocalDate -> String
@@ -88,11 +89,11 @@ dayKey period day =
     period ++ "-" ++ String.padLeft 2 '0' (String.fromInt day)
 
 
-monthLabel : String -> String
-monthLabel period =
+monthLabel : Language -> String -> String
+monthLabel language period =
     case parseMonth period of
         Just ( year, month ) ->
-            I18n.t (TidCalendarMonthYear (monthName month) (String.fromInt year))
+            I18n.t language (TidCalendarMonthYear (monthName language month) (String.fromInt year))
 
         Nothing ->
             period
@@ -180,44 +181,44 @@ dayOfWeek year month day =
     modBy 7 (zeroSunday + 6)
 
 
-monthName : Int -> String
-monthName month =
+monthName : Language -> Int -> String
+monthName language month =
     case month of
         1 ->
-            I18n.t TidCalendarMonthJanuary
+            I18n.t language TidCalendarMonthJanuary
 
         2 ->
-            I18n.t TidCalendarMonthFebruary
+            I18n.t language TidCalendarMonthFebruary
 
         3 ->
-            I18n.t TidCalendarMonthMarch
+            I18n.t language TidCalendarMonthMarch
 
         4 ->
-            I18n.t TidCalendarMonthApril
+            I18n.t language TidCalendarMonthApril
 
         5 ->
-            I18n.t TidCalendarMonthMay
+            I18n.t language TidCalendarMonthMay
 
         6 ->
-            I18n.t TidCalendarMonthJune
+            I18n.t language TidCalendarMonthJune
 
         7 ->
-            I18n.t TidCalendarMonthJuly
+            I18n.t language TidCalendarMonthJuly
 
         8 ->
-            I18n.t TidCalendarMonthAugust
+            I18n.t language TidCalendarMonthAugust
 
         9 ->
-            I18n.t TidCalendarMonthSeptember
+            I18n.t language TidCalendarMonthSeptember
 
         10 ->
-            I18n.t TidCalendarMonthOctober
+            I18n.t language TidCalendarMonthOctober
 
         11 ->
-            I18n.t TidCalendarMonthNovember
+            I18n.t language TidCalendarMonthNovember
 
         12 ->
-            I18n.t TidCalendarMonthDecember
+            I18n.t language TidCalendarMonthDecember
 
         _ ->
             ""

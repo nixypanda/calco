@@ -29,6 +29,7 @@ import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
@@ -575,8 +576,10 @@ modelLogId model =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+contentView { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -587,15 +590,17 @@ contentView { model, device, theme } =
 
             Nothing ->
                 Element.none
-        , bodyView theme device model
+        , bodyView theme language device model
         ]
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
-modalView { model, device, theme } =
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
+modalView { model, device, theme, language } =
     case model of
         Loaded loaded ->
-            deleteModalView theme device loaded
+            deleteModalView theme language device loaded
 
         _ ->
             Nothing
@@ -614,11 +619,11 @@ pageError model =
             Just failed.error
 
 
-bodyView : Theme -> Device -> Model -> Element Msg
-bodyView theme device model =
+bodyView : Theme -> Language -> Device -> Model -> Element Msg
+bodyView theme language device model =
     case model of
         Loaded loaded ->
-            loadedView theme device loaded
+            loadedView theme language device loaded
 
         LoadFailed _ ->
             Element.none
@@ -627,8 +632,8 @@ bodyView theme device model =
             foodLogEntrySkeleton theme
 
 
-loadedView : Theme -> Device -> LoadedModel -> Element Msg
-loadedView theme device model =
+loadedView : Theme -> Language -> Device -> LoadedModel -> Element Msg
+loadedView theme language device model =
     let
         nutrients : List Nutrition.NutrientAmount
         nutrients =
@@ -643,7 +648,7 @@ loadedView theme device model =
         , Element.spacing DesignTokens.space16
         ]
         [ Surface.panel theme
-            { header = Just (itemHeaderElement theme device model)
+            { header = Just (itemHeaderElement theme language device model)
             , sections =
                 (if List.isEmpty categories then
                     []
@@ -652,11 +657,16 @@ loadedView theme device model =
                     [ { title = Nothing, body = categories } ]
                 )
                     ++ [ { title =
-                            Just (Typography.subsectionTitle theme (I18n.t TidFoodShowPortion))
+                            Just
+                                (Typography.subsectionTitle
+                                    theme
+                                    (I18n.t language TidFoodShowPortion)
+                                )
                          , body =
                             List.map (Element.map FormMsg)
                                 (FoodLogForm.fields
                                     theme
+                                    language
                                     device
                                     (productDetail model.item)
                                     (unitsForItem model)
@@ -664,9 +674,9 @@ loadedView theme device model =
                                 )
                          }
                        ]
-            , footer = Just (detailActionsView theme device model)
+            , footer = Just (detailActionsView theme language device model)
             }
-        , View.Nutrients.nutritionCard device theme nutrients
+        , View.Nutrients.nutritionCard device theme language nutrients
         ]
 
 
@@ -726,12 +736,13 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeaderElement : Theme -> Device -> LoadedModel -> Element Msg
-itemHeaderElement theme device model =
+itemHeaderElement : Theme -> Language -> Device -> LoadedModel -> Element Msg
+itemHeaderElement theme language device model =
     UiPage.pageHeader theme
-        { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
+        { leading = Just (View.Nutrients.macroDot theme language model.log.nutrients)
         , title = itemTitle theme model.item
-        , subtitle = Just (metaSubtitle device (productDetail model.item) model.log)
+        , subtitle =
+            Just (metaSubtitle language device (productDetail model.item) model.log)
         , actions = []
         }
 
@@ -776,8 +787,8 @@ itemTitle theme item =
             Typography.truncatedHeader theme (FoodLog.itemName adHoc)
 
 
-metaSubtitle : Device -> Maybe ProductDetail -> FoodLog -> UiPage.PageHeaderSubtitle
-metaSubtitle device maybeFood log =
+metaSubtitle : Language -> Device -> Maybe ProductDetail -> FoodLog -> UiPage.PageHeaderSubtitle
+metaSubtitle language device maybeFood log =
     case maybeFood of
         Just food ->
             let
@@ -788,7 +799,8 @@ metaSubtitle device maybeFood log =
 
                 loggedMeta : String
                 loggedMeta =
-                    I18n.t (TidFoodLogLogged (LocalDate.display log.logDate))
+                    I18n.t language
+                        (TidFoodLogLogged (LocalDate.display language log.logDate))
             in
             if UiCommon.isSmall device then
                 UiPage.SubtitleMetaLines
@@ -808,7 +820,10 @@ metaSubtitle device maybeFood log =
             UiPage.SubtitleText
                 (Text.dotSeparated
                     [ FoodLog.itemBrand log.item
-                    , Just (I18n.t (TidFoodLogLogged (LocalDate.display log.logDate)))
+                    , Just
+                        (I18n.t language
+                            (TidFoodLogLogged (LocalDate.display language log.logDate))
+                        )
                     ]
                 )
 
@@ -823,8 +838,8 @@ unitsForItem model =
             model.units
 
 
-detailActionsView : Theme -> Device -> LoadedModel -> Element Msg
-detailActionsView theme device model =
+detailActionsView : Theme -> Language -> Device -> LoadedModel -> Element Msg
+detailActionsView theme language device model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space12
@@ -838,17 +853,17 @@ detailActionsView theme device model =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t TidCommonSave
+                    , label = I18n.t language TidCommonSave
                     , onPress = SubmitClicked
                     , submitState = Just (submitState model)
-                    , submittingLabel = Just (I18n.t TidCommonSaving)
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                 )
             , Element.el [ Element.width Element.fill ]
                 (Button.bottomActionButtons device
                     theme
-                    [ { label = I18n.t TidFoodLogDelete
+                    [ { label = I18n.t language TidFoodLogDelete
                       , onPress = DeleteClicked
                       , tone = Button.Danger
                       }
@@ -858,14 +873,15 @@ detailActionsView theme device model =
         ]
 
 
-deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
-deleteModalView theme device loaded =
+deleteModalView : Theme -> Language -> Device -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme language device loaded =
     View.DeleteModal.deleteModalView theme
+        language
         device
-        { title = I18n.t TidFoodLogDeleteConfirmTitle
-        , description = I18n.t TidFoodLogDeleteConfirmDescription
-        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
-        , pendingLabel = I18n.t TidCustomFoodDeleting
+        { title = I18n.t language TidFoodLogDeleteConfirmTitle
+        , description = I18n.t language TidFoodLogDeleteConfirmDescription
+        , confirmLabel = I18n.t language TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t language TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

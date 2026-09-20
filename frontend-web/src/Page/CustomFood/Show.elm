@@ -21,6 +21,7 @@ import Element.Background as Background
 import Element.Border as Border
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -310,36 +311,41 @@ applyDeleteError message model =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
         [ case model of
             LoadFailed failed ->
                 Feedback.errorRetry theme
+                    language
                     device
                     { message = failed.message, onRetry = RetryClicked }
 
             _ ->
                 Element.none
-        , bodyView theme device model
+        , bodyView theme device language model
         ]
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
-modalView { model, device, theme } =
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
+modalView { model, device, theme, language } =
     case model of
         Loaded loaded ->
-            deleteModalView theme device loaded
+            deleteModalView theme device language loaded
 
         _ ->
             Nothing
 
 
-bodyView : Theme -> Device -> Model -> Element Msg
-bodyView theme device model =
+bodyView : Theme -> Device -> Language -> Model -> Element Msg
+bodyView theme device language model =
     case model of
         Loaded loaded ->
-            loadedView theme device loaded
+            loadedView theme device language loaded
 
         LoadFailed _ ->
             Element.none
@@ -348,8 +354,8 @@ bodyView theme device model =
             customFoodShowSkeleton theme
 
 
-loadedView : Theme -> Device -> LoadedModel -> Element Msg
-loadedView theme device loaded =
+loadedView : Theme -> Device -> Language -> LoadedModel -> Element Msg
+loadedView theme device language loaded =
     let
         food : ProductDetail
         food =
@@ -363,24 +369,24 @@ loadedView theme device loaded =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ View.Product.foodHeader theme food []
-        , View.Nutrients.nutritionCard device theme nutrients
-        , bottomActionsView theme device food
+        [ View.Product.foodHeader theme language food []
+        , View.Nutrients.nutritionCard device theme language nutrients
+        , bottomActionsView theme device language food
         ]
 
 
-bottomActionsView : Theme -> Device -> ProductDetail -> Element Msg
-bottomActionsView theme device food =
+bottomActionsView : Theme -> Device -> Language -> ProductDetail -> Element Msg
+bottomActionsView theme device language food =
     let
         actions : List { label : String, onPress : Msg, tone : Button.ButtonTone }
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = I18n.t TidTitleEditFood
+                    [ { label = I18n.t language TidTitleEditFood
                       , onPress = EditClicked
                       , tone = Button.Primary
                       }
-                    , { label = I18n.t TidCustomFoodDelete
+                    , { label = I18n.t language TidCustomFoodDelete
                       , onPress = DeleteClicked
                       , tone = Button.Danger
                       }
@@ -392,14 +398,15 @@ bottomActionsView theme device food =
     Button.bottomActionButtons device theme actions
 
 
-deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
-deleteModalView theme device loaded =
+deleteModalView : Theme -> Device -> Language -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme device language loaded =
     View.DeleteModal.deleteModalView theme
+        language
         device
-        { title = I18n.t TidCustomFoodDeleteConfirmTitle
-        , description = I18n.t TidCustomFoodDeleteConfirmDescription
-        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
-        , pendingLabel = I18n.t TidCustomFoodDeleting
+        { title = I18n.t language TidCustomFoodDeleteConfirmTitle
+        , description = I18n.t language TidCustomFoodDeleteConfirmDescription
+        , confirmLabel = I18n.t language TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t language TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

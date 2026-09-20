@@ -18,6 +18,7 @@ import I18n
 import Json.Decode as Decode exposing (Decoder)
 import Time
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 
 
 type LocalDate
@@ -80,9 +81,13 @@ format (LocalDate date) =
     pad4 date.year ++ "-" ++ pad2 date.month ++ "-" ++ pad2 date.day
 
 
-display : LocalDate -> String
-display (LocalDate date) =
-    monthName date.month ++ " " ++ String.fromInt date.day ++ ", " ++ String.fromInt date.year
+display : Language -> LocalDate -> String
+display language (LocalDate date) =
+    monthName language date.month
+        ++ " "
+        ++ String.fromInt date.day
+        ++ ", "
+        ++ String.fromInt date.year
 
 
 addDays : Int -> LocalDate -> LocalDate
@@ -255,44 +260,44 @@ monthToInt month =
             12
 
 
-monthName : Int -> String
-monthName month =
+monthName : Language -> Int -> String
+monthName language month =
     case month of
         1 ->
-            I18n.t TidDateMonthJan
+            I18n.t language TidDateMonthJan
 
         2 ->
-            I18n.t TidDateMonthFeb
+            I18n.t language TidDateMonthFeb
 
         3 ->
-            I18n.t TidDateMonthMar
+            I18n.t language TidDateMonthMar
 
         4 ->
-            I18n.t TidDateMonthApr
+            I18n.t language TidDateMonthApr
 
         5 ->
-            I18n.t TidDateMonthMay
+            I18n.t language TidDateMonthMay
 
         6 ->
-            I18n.t TidDateMonthJun
+            I18n.t language TidDateMonthJun
 
         7 ->
-            I18n.t TidDateMonthJul
+            I18n.t language TidDateMonthJul
 
         8 ->
-            I18n.t TidDateMonthAug
+            I18n.t language TidDateMonthAug
 
         9 ->
-            I18n.t TidDateMonthSep
+            I18n.t language TidDateMonthSep
 
         10 ->
-            I18n.t TidDateMonthOct
+            I18n.t language TidDateMonthOct
 
         11 ->
-            I18n.t TidDateMonthNov
+            I18n.t language TidDateMonthNov
 
         12 ->
-            I18n.t TidDateMonthDec
+            I18n.t language TidDateMonthDec
 
         _ ->
             ""

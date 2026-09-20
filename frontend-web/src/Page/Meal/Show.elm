@@ -24,6 +24,7 @@ import Element exposing (Device, Element)
 import Element.Font as Font
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -161,7 +162,7 @@ update msg model =
                                     product.name
 
                                 Err _ ->
-                                    I18n.t TidMealUnknownFood
+                                    I18n.en TidMealUnknownFood
 
                         nextLoaded : LoadedModel
                         nextLoaded =
@@ -535,13 +536,13 @@ failure =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
         (case model of
             Loaded loaded ->
                 [ Surface.section theme
-                    { header = Just (headerView theme model)
+                    { header = Just (headerView theme language model)
                     , body =
                         [ case loaded.meal.notes of
                             Just notes ->
@@ -552,12 +553,12 @@ view { model, device, theme } =
                         ]
                     , footer = Nothing
                     }
-                , loadedView theme device loaded
+                , loadedView theme language device loaded
                 ]
 
             LoadFailed message ->
                 [ Surface.section theme
-                    { header = Just (headerView theme model)
+                    { header = Just (headerView theme language model)
                     , body = [ Feedback.errorBanner theme message ]
                     , footer = Nothing
                     }
@@ -568,51 +569,53 @@ view { model, device, theme } =
         )
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
-modalView { model, device, theme } =
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
+modalView { model, device, theme, language } =
     case model of
         Loaded loaded ->
-            deleteModalView theme device loaded
+            deleteModalView theme language device loaded
 
         _ ->
             Nothing
 
 
-headerView : Theme -> Model -> Element Msg
-headerView theme model =
+headerView : Theme -> Language -> Model -> Element Msg
+headerView theme language model =
     case model of
         Loaded loaded ->
             UiPage.pageHeader theme
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
-                            (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
+                            (View.Nutrients.macroDot theme language << Nutrition.summaryToNutrients)
                 , title = Typography.truncatedHeader theme loaded.meal.name
                 , subtitle = Nothing
                 , actions = []
                 }
 
         _ ->
-            Typography.truncatedHeader theme (I18n.t TidTitleMeal)
+            Typography.truncatedHeader theme (I18n.t language TidTitleMeal)
 
 
-loadedView : Theme -> Device -> LoadedModel -> Element Msg
-loadedView theme device loaded =
+loadedView : Theme -> Language -> Device -> LoadedModel -> Element Msg
+loadedView theme language device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section theme
-            { header = Just (Typography.subsectionTitle theme (I18n.t TidMealComponents))
+            { header = Just (Typography.subsectionTitle theme (I18n.t language TidMealComponents))
             , body =
                 List.intersperse (Surface.hairline theme)
-                    (List.map (componentView theme loaded) loaded.meal.components)
+                    (List.map (componentView theme language loaded) loaded.meal.components)
             , footer = Nothing
             }
-        , nutritionView theme device loaded
-        , bottomActionsView theme device
+        , nutritionView theme language device loaded
+        , bottomActionsView theme language device
         ]
 
 
-componentView : Theme -> LoadedModel -> MealsApi.MealComponent -> Element Msg
-componentView theme loaded component =
+componentView : Theme -> Language -> LoadedModel -> MealsApi.MealComponent -> Element Msg
+componentView theme language loaded component =
     let
         summaryText : String
         summaryText =
@@ -621,7 +624,7 @@ componentView theme loaded component =
                 |> Maybe.map
                     (\kcal ->
                         " ⋅ "
-                            ++ I18n.t
+                            ++ I18n.t language
                                 (TidDiaryKcal
                                     (String.fromInt (round (Nutrition.safeAmount kcal)))
                                 )
@@ -632,7 +635,7 @@ componentView theme loaded component =
         macroDot =
             Maybe.withDefault Element.none
                 (Maybe.map
-                    (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
+                    (View.Nutrients.macroDot theme language << Nutrition.summaryToNutrients)
                     component.nutritionSummary
                 )
 
@@ -666,8 +669,8 @@ componentView theme loaded component =
         ]
 
 
-nutritionView : Theme -> Device -> LoadedModel -> Element Msg
-nutritionView theme device loaded =
+nutritionView : Theme -> Language -> Device -> LoadedModel -> Element Msg
+nutritionView theme language device loaded =
     let
         input : NutritionInput
         input =
@@ -675,13 +678,14 @@ nutritionView theme device loaded =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Surface.formSection theme
-            (I18n.t TidFoodShowPortion)
+            (I18n.t language TidFoodShowPortion)
             [ View.QuantityInput.dropdown theme
+                language
                 device
-                { amountLabel = I18n.t TidNutrientTableAmount
+                { amountLabel = I18n.t language TidNutrientTableAmount
                 , amount = input.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = I18n.t TidNutrientTableUnit
+                , unitLabel = I18n.t language TidNutrientTableUnit
                 , unit = input.unit
                 , units = loaded.units
                 , onUnitChange = UnitChanged
@@ -689,27 +693,28 @@ nutritionView theme device loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.Nutrients.preview device theme loaded.nutrition
+        , View.Nutrients.preview device theme language loaded.nutrition
         ]
 
 
-bottomActionsView : Theme -> Device -> Element Msg
-bottomActionsView theme device =
+bottomActionsView : Theme -> Language -> Device -> Element Msg
+bottomActionsView theme language device =
     Button.bottomActionButtons device
         theme
-        [ { label = I18n.t TidTitleEditMeal, onPress = EditClicked, tone = Button.Primary }
-        , { label = I18n.t TidMealDelete, onPress = DeleteClicked, tone = Button.Danger }
+        [ { label = I18n.t language TidTitleEditMeal, onPress = EditClicked, tone = Button.Primary }
+        , { label = I18n.t language TidMealDelete, onPress = DeleteClicked, tone = Button.Danger }
         ]
 
 
-deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
-deleteModalView theme device loaded =
+deleteModalView : Theme -> Language -> Device -> LoadedModel -> Maybe (Element Msg)
+deleteModalView theme language device loaded =
     View.DeleteModal.deleteModalView theme
+        language
         device
-        { title = I18n.t TidMealDeleteConfirmTitle
-        , description = I18n.t TidMealDeleteConfirmDescription
-        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
-        , pendingLabel = I18n.t TidCustomFoodDeleting
+        { title = I18n.t language TidMealDeleteConfirmTitle
+        , description = I18n.t language TidMealDeleteConfirmDescription
+        , confirmLabel = I18n.t language TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t language TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

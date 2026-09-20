@@ -156,17 +156,17 @@ displayError : ApiError -> String
 displayError error =
     case error of
         BadUrl ->
-            I18n.t TidApiErrorBadUrl
+            I18n.en TidApiErrorBadUrl
 
         Timeout ->
-            I18n.t TidApiErrorTimeout
+            I18n.en TidApiErrorTimeout
 
         NetworkError ->
-            I18n.t TidApiErrorNetwork
+            I18n.en TidApiErrorNetwork
 
         BadStatus _ code message ->
             if String.isEmpty code || code == "unknown" then
-                I18n.t TidApiErrorServer
+                I18n.en TidApiErrorServer
 
             else
                 -- Backend-supplied message is rendered verbatim until the error
@@ -176,13 +176,13 @@ displayError error =
         RateLimited maybeSeconds ->
             case maybeSeconds of
                 Just seconds ->
-                    I18n.t (TidApiErrorRateLimitedSeconds (String.fromInt seconds))
+                    I18n.en (TidApiErrorRateLimitedSeconds (String.fromInt seconds))
 
                 Nothing ->
-                    I18n.t TidApiErrorRateLimited
+                    I18n.en TidApiErrorRateLimited
 
         BadBody ->
-            I18n.t TidApiErrorBadBody
+            I18n.en TidApiErrorBadBody
 
 
 failure :

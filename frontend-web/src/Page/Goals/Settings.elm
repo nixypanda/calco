@@ -19,6 +19,7 @@ import Element exposing (Device, Element)
 import I18n
 import Lib.Date as LocalDate
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -275,7 +276,7 @@ validate form =
     case maybeTargets of
         Just targets ->
             if targets.calorieTarget <= 0 then
-                Err (I18n.t TidGoalSettingsErrorCaloriesPositive)
+                Err (I18n.en TidGoalSettingsErrorCaloriesPositive)
 
             else if
                 targets.proteinTargetG
@@ -285,7 +286,7 @@ validate form =
                     || targets.fatTargetG
                     < 0
             then
-                Err (I18n.t TidGoalSettingsErrorMacrosNonNegative)
+                Err (I18n.en TidGoalSettingsErrorMacrosNonNegative)
 
             else if
                 abs
@@ -297,13 +298,13 @@ validate form =
                     )
                     > 0.0001
             then
-                Err (I18n.t TidGoalSettingsErrorCaloriesMacros)
+                Err (I18n.en TidGoalSettingsErrorCaloriesMacros)
 
             else
                 Ok targets
 
         _ ->
-            Err (I18n.t TidGoalSettingsErrorInvalidNumbers)
+            Err (I18n.en TidGoalSettingsErrorInvalidNumbers)
 
 
 readyModelFor : GoalSnapshot -> ReadyModel
@@ -328,15 +329,19 @@ formFor targets =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
         (case model of
             Loading ->
                 [ goalsSettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
+                [ Feedback.errorRetry theme
+                    language
+                    device
+                    { message = message, onRetry = RetryClicked }
+                ]
 
             Ready ready ->
                 [ Feedback.maybeErrorBanner theme (requestError ready.save)
@@ -346,33 +351,33 @@ view { model, device, theme } =
                             (Surface.sectionHeader
                                 { title =
                                     Typography.sectionTitle theme
-                                        (I18n.t TidGoalSettingsDailyTargetsTitle)
+                                        (I18n.t language TidGoalSettingsDailyTargetsTitle)
                                 , description =
                                     Just
                                         (Typography.mutedParagraph theme
-                                            (statusMessage ready.status)
+                                            (statusMessage language ready.status)
                                         )
                                 , trailing = Nothing
                                 }
                             )
                     , body =
                         [ UiInput.numericInput theme
-                            { label = I18n.t TidGoalSettingsCalories
+                            { label = I18n.t language TidGoalSettingsCalories
                             , value = ready.form.calorieTarget
                             , onChange = CalorieTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = I18n.t TidGoalSettingsProtein
+                            { label = I18n.t language TidGoalSettingsProtein
                             , value = ready.form.proteinTargetG
                             , onChange = ProteinTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = I18n.t TidGoalSettingsCarbs
+                            { label = I18n.t language TidGoalSettingsCarbs
                             , value = ready.form.carbsTargetG
                             , onChange = CarbsTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = I18n.t TidGoalSettingsFat
+                            { label = I18n.t language TidGoalSettingsFat
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged
                             }
@@ -384,30 +389,32 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t TidGoalSettingsSave
+                    , label = I18n.t language TidGoalSettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (isSaving ready.save))
-                    , submittingLabel = Just (I18n.t TidCommonSaving)
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
         )
 
 
-statusMessage : GoalStatus -> String
-statusMessage status =
+statusMessage : Language -> GoalStatus -> String
+statusMessage language status =
     case ( status.source, status.effectiveFrom ) of
         ( Default, Nothing ) ->
-            I18n.t TidGoalSettingsStatusDefaultForDate
+            I18n.t language TidGoalSettingsStatusDefaultForDate
 
         ( Saved, Just effectiveFrom ) ->
-            I18n.t (TidGoalSettingsStatusSavedFrom (LocalDate.display effectiveFrom))
+            I18n.t language
+                (TidGoalSettingsStatusSavedFrom (LocalDate.display language effectiveFrom))
 
         ( Saved, Nothing ) ->
-            I18n.t TidGoalSettingsStatusSavedActive
+            I18n.t language TidGoalSettingsStatusSavedActive
 
         ( Default, Just effectiveFrom ) ->
-            I18n.t (TidGoalSettingsStatusDefaultAfter (LocalDate.display effectiveFrom))
+            I18n.t language
+                (TidGoalSettingsStatusDefaultAfter (LocalDate.display language effectiveFrom))
 
 
 isSaving : SaveState -> Bool

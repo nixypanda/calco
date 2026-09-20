@@ -27,6 +27,7 @@ import Html.Attributes
 import I18n
 import Lib.Number as Number
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Common exposing (hoverEffect, minWidthZero, uiClass)
 import Ui.DesignTokens
     exposing
@@ -425,6 +426,7 @@ suggestionList theme items =
 selectDropdown :
     Device
     -> Theme
+    -> Language
     ->
         { label : String
         , selected : a
@@ -434,7 +436,7 @@ selectDropdown :
         , onToggle : msg
         }
     -> Element msg
-selectDropdown device theme config =
+selectDropdown device theme language config =
     let
         selectedLabel : String
         selectedLabel =
@@ -497,7 +499,7 @@ selectDropdown device theme config =
                     (Element.el [ body, Font.color selectedColor ]
                         (Element.text
                             (if selectedLabel == "" then
-                                I18n.t TidUiSelectPlaceholder
+                                I18n.t language TidUiSelectPlaceholder
 
                              else
                                 selectedLabel

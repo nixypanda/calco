@@ -19,6 +19,7 @@ import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 import Time
+import Translations.Util as Util
 import Ui.Theme as Theme
 
 
@@ -67,6 +68,7 @@ tests =
                     { model = FoodSearch.init Nothing Nothing
                     , device = { class = Phone, orientation = Portrait }
                     , theme = Theme.light
+                    , language = Util.EN_US
                     }
                     |> Element.layout []
                     |> Query.fromHtml
@@ -955,6 +957,7 @@ tests =
                         }
                     , device = { class = Phone, orientation = Portrait }
                     , theme = Theme.light
+                    , language = Util.EN_US
                     }
                     |> Element.layout []
                     |> Query.fromHtml
@@ -1050,6 +1053,7 @@ contentFor model =
         { model = model
         , device = { class = Phone, orientation = Portrait }
         , theme = Theme.light
+        , language = Util.EN_US
         }
         |> Element.layout []
         |> Query.fromHtml

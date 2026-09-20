@@ -16,6 +16,7 @@ import Element exposing (Device, Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -93,8 +94,8 @@ failure =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+contentView { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -108,12 +109,12 @@ contentView { model, device, theme } =
 
             Loading ->
                 Element.none
-        , bodyView theme device model
+        , bodyView theme language device model
         ]
 
 
-bodyView : Theme -> Device -> Model -> Element Msg
-bodyView theme device model =
+bodyView : Theme -> Language -> Device -> Model -> Element Msg
+bodyView theme language device model =
     case model of
         Loaded meals ->
             Surface.section theme
@@ -123,7 +124,7 @@ bodyView theme device model =
                             theme
                             { tone = Button.Primary
                             , width = Button.FullWidth
-                            , label = I18n.t TidMealListCreate
+                            , label = I18n.t language TidMealListCreate
                             , onPress = CreateMealClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -132,11 +133,14 @@ bodyView theme device model =
                         )
                 , body =
                     if List.isEmpty meals then
-                        [ Typography.mutedBodyParagraph theme (I18n.t TidCustomFoodListEmpty) ]
+                        [ Typography.mutedBodyParagraph
+                            theme
+                            (I18n.t language TidCustomFoodListEmpty)
+                        ]
 
                     else
                         List.intersperse (Surface.hairline theme)
-                            (List.map (mealRow theme device) meals)
+                            (List.map (mealRow theme language device) meals)
                 , footer = Nothing
                 }
 
@@ -147,15 +151,15 @@ bodyView theme device model =
             mealListSkeleton theme
 
 
-mealRow : Theme -> Device -> Meal -> Element Msg
-mealRow theme _ meal =
+mealRow : Theme -> Language -> Device -> Meal -> Element Msg
+mealRow theme language _ meal =
     let
         macroDot : List (Element Msg)
         macroDot =
             Maybe.withDefault []
                 (Maybe.map
                     (List.singleton
-                        << View.Nutrients.macroDot theme
+                        << View.Nutrients.macroDot theme language
                         << Nutrition.summaryToNutrients
                     )
                     meal.nutritionSummary
@@ -176,7 +180,7 @@ mealSummaryText : Meal -> String
 mealSummaryText meal =
     [ Maybe.map
         (\summary ->
-            I18n.t
+            I18n.en
                 (TidDiaryKcal
                     (String.fromInt
                         (round (Nutrition.safeAmount (Maybe.withDefault "0" summary.energyKcal)))
@@ -185,7 +189,7 @@ mealSummaryText meal =
         )
         meal.nutritionSummary
     , Just
-        (I18n.t
+        (I18n.en
             (TidMealComponentsCount (String.fromInt (List.length meal.components)))
         )
     ]

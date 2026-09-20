@@ -28,6 +28,7 @@ import File exposing (File)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -214,19 +215,19 @@ validationMessage : Form.ValidationError -> String
 validationMessage err =
     case err of
         Form.NameRequired ->
-            I18n.t TidCustomFoodNameRequired
+            I18n.en TidCustomFoodNameRequired
 
         Form.InvalidNutrientAmount value ->
-            I18n.t (TidCustomFoodInvalidNutrientAmount value)
+            I18n.en (TidCustomFoodInvalidNutrientAmount value)
 
         Form.InvalidServingGrams value ->
-            I18n.t (TidCustomFoodInvalidServingGrams value)
+            I18n.en (TidCustomFoodInvalidServingGrams value)
 
         Form.DuplicateServingUnit unit ->
-            I18n.t (TidCustomFoodDuplicateServingUnit unit)
+            I18n.en (TidCustomFoodDuplicateServingUnit unit)
 
         Form.InvalidDefaultPortion ->
-            I18n.t TidCustomFoodInvalidDefaultPortion
+            I18n.en TidCustomFoodInvalidDefaultPortion
 
 
 withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel
@@ -282,31 +283,33 @@ applyAssistantOutMsg assistantOut model command =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+view { model, device, theme, language } =
     let
         content : List (Element Msg)
         content =
             if model.assistantOnly then
                 [ Element.map AssistantMsg
-                    (Assistant.view theme device False model.assistant)
+                    (Assistant.view theme language device False model.assistant)
                 ]
 
             else
                 [ Element.map FormMsg
-                    (Form.viewForCreate theme device model.nutrients model.form)
+                    (Form.viewForCreate theme language device model.nutrients model.form)
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t TidTitleCreateFood
+                    , label = I18n.t language TidTitleCreateFood
                     , onPress = SubmitClicked
                     , submitState =
                         Just
                             (Button.submittingOrIdle
                                 (Form.isSubmitting model.form.submit)
                             )
-                    , submittingLabel = Just (I18n.t TidCommonCreating)
+                    , submittingLabel = Just (I18n.t language TidCommonCreating)
                     , trailing = Nothing
                     }
                 ]
@@ -314,7 +317,9 @@ view { model, device, theme } =
     UiPage.pageContainer (Feedback.maybeErrorBanner theme model.error :: content)
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
-modalView { model, device, theme } =
-    Assistant.modalView theme device model.assistant
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
+modalView { model, device, theme, language } =
+    Assistant.modalView theme language device model.assistant
         |> Maybe.map (Element.map AssistantMsg)

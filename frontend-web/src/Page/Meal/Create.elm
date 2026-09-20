@@ -15,6 +15,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -75,7 +76,7 @@ update msg fields =
                     )
 
                 Err Common.MealNameRequired ->
-                    ( { fields | submit = Common.SubmitFailed (I18n.t TidCustomFoodNameRequired) }
+                    ( { fields | submit = Common.SubmitFailed (I18n.en TidCustomFoodNameRequired) }
                     , Cmd.none
                     , NoOp
                     )
@@ -84,7 +85,7 @@ update msg fields =
                     ( { fields
                         | submit =
                             Common.SubmitFailed
-                                (I18n.t TidMealComponentRequired)
+                                (I18n.en TidMealComponentRequired)
                       }
                     , Cmd.none
                     , NoOp
@@ -144,19 +145,19 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
         [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
-        , Common.viewFormFields theme device FormMsg model
+        , Common.viewFormFields theme language device FormMsg model
         , Button.textButton device
             theme
             { tone = Button.Primary
             , width = Button.FullWidth
-            , label = I18n.t TidTitleCreateMeal
+            , label = I18n.t language TidTitleCreateMeal
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (Common.isSubmitting model.submit))
-            , submittingLabel = Just (I18n.t TidCommonSaving)
+            , submittingLabel = Just (I18n.t language TidCommonSaving)
             , trailing = Nothing
             }
         ]

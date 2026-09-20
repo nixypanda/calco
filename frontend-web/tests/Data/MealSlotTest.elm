@@ -4,6 +4,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Expect
 import Fuzz exposing (Fuzzer)
 import Test exposing (Test, describe, fuzz, test)
+import Translations.Util as Util
 
 
 tests : Test
@@ -25,7 +26,7 @@ tests =
             \_ ->
                 ( MealSlot.fromString "late_night_snack"
                 , MealSlot.toString LateNightSnack
-                , MealSlot.label LateNightSnack
+                , MealSlot.label Util.EN_US LateNightSnack
                 )
                     |> Expect.equal
                         ( Just LateNightSnack

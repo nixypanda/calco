@@ -27,6 +27,7 @@ import Element.Font as Font
 import Html
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page
+import Translations.Util exposing (Language(..))
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
 import Ui.Skeleton as Skeleton
@@ -56,6 +57,7 @@ type alias Model =
     , chrome : Chrome.Model
     , device : Element.Device
     , theme : Theme
+    , language : Language
     , version : Version.Model
     }
 
@@ -100,6 +102,7 @@ init flags url key =
       , device =
             classifyDevice flags.windowWidth flags.windowHeight
       , theme = Theme.forMode (Theme.modeFromString flags.themeMode)
+      , language = EN_US
       , version = versionModel
       }
     , Cmd.batch
@@ -295,6 +298,9 @@ applyChromeOutMsg outMsg model =
             ( { model | theme = Theme.forMode nextMode }
             , persistThemeMode (Theme.modeToString nextMode)
             )
+
+        Chrome.SetLanguage language ->
+            ( { model | language = language }, Cmd.none )
 
 
 normalizeChromeNavigation : Route -> Route -> Route
@@ -551,6 +557,7 @@ view model =
                     { model = model.chrome
                     , device = model.device
                     , theme = model.theme
+                    , language = model.language
                     , session = session
                     , route = model.route
                     , isLoadingPage = isLoadingPage
@@ -563,6 +570,7 @@ view model =
                     { model = model.chrome
                     , device = model.device
                     , theme = model.theme
+                    , language = model.language
                     , session = session
                     , route = model.route
                     , isLoadingPage = isLoadingPage
@@ -570,6 +578,7 @@ view model =
                         if model.version.updateAvailable then
                             Just
                                 (View.Chrome.updateBanner
+                                    model.language
                                     model.theme
                                     (GotVersionMsg Version.ReloadPageRequested)
                                 )
@@ -616,11 +625,19 @@ pageView model =
         Element.map GotPageMsg (Page.view (pageProps model))
 
 
-pageProps : Model -> { model : Page.Model, device : Element.Device, theme : Theme }
+pageProps :
+    Model
+    ->
+        { model : Page.Model
+        , device : Element.Device
+        , theme : Theme
+        , language : Language
+        }
 pageProps model =
     { model = model.page
     , device = model.device
     , theme = model.theme
+    , language = model.language
     }
 
 

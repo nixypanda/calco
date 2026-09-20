@@ -7,6 +7,7 @@ import Expect
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.Theme as Theme
 import View.Search as SearchView
 
@@ -38,6 +39,7 @@ tests =
 resultRowFor : DeviceClass -> Query.Single String
 resultRowFor deviceClass =
     SearchView.resultRow Theme.light
+        Util.EN_US
         { class = deviceClass, orientation = Portrait }
         { query = "ferr"
         , item = searchResult

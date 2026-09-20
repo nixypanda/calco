@@ -78,6 +78,7 @@ import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -997,7 +998,7 @@ panesForRoute context existing =
             Just
                 [ simpleDesired
                     "placeholder:unmigrated"
-                    (PlaceholderPane (I18n.t TidCommonRouteNotMigrated))
+                    (PlaceholderPane (I18n.en TidCommonRouteNotMigrated))
                 ]
 
 
@@ -3145,7 +3146,7 @@ applyMealDetailOutMsg _ outMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
 view props =
     if props.model.waitingForToday then
         Skeleton.loading props.theme
@@ -3171,7 +3172,7 @@ selectedDiaryDate panes =
 
 
 paneView :
-    { model : Model, device : Device, theme : Theme }
+    { model : Model, device : Device, theme : Theme, language : Language }
     -> Maybe LocalDate
     -> Pane
     -> ( String, Element Msg )
@@ -3253,7 +3254,9 @@ paneView props selectedDate pane =
     )
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
 modalView props =
     props.model.panes
         |> List.filterMap (paneModalView props)
@@ -3261,7 +3264,7 @@ modalView props =
 
 
 paneModalView :
-    { model : Model, device : Device, theme : Theme }
+    { model : Model, device : Device, theme : Theme, language : Language }
     -> Pane
     -> Maybe (Element Msg)
 paneModalView props pane =
@@ -3295,13 +3298,14 @@ paneModalView props pane =
 
 
 pageProps :
-    { props | device : Device, theme : Theme }
+    { props | device : Device, theme : Theme, language : Language }
     -> subModel
-    -> { model : subModel, device : Device, theme : Theme }
+    -> { model : subModel, device : Device, theme : Theme, language : Language }
 pageProps props subModel =
     { model = subModel
     , device = props.device
     , theme = props.theme
+    , language = props.language
     }
 
 
