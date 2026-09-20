@@ -33,6 +33,7 @@ import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import I18n
 import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
@@ -40,6 +41,7 @@ import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -618,7 +620,7 @@ update msg model =
                             ( { model
                                 | quickAdd =
                                     QuickAddFailed
-                                        "Could not read selected date."
+                                        (I18n.t TidFoodSearchErrorCouldNotReadDate)
                               }
                             , Cmd.none
                             , NoOp
@@ -727,7 +729,7 @@ applyBarcodeScannerEvent event model =
                 | barcodeScanner =
                     ScannerFailed
                         (Maybe.withDefault
-                            "Could not start barcode scanner."
+                            (I18n.t TidFoodSearchErrorScannerStart)
                             event.message
                         )
               }
@@ -973,9 +975,9 @@ adHocLogSection theme device model =
 adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
     Surface.formSection theme
-        "Create an ad-hoc food log"
+        (I18n.t TidFoodSearchAdHocTitle)
         [ Typography.mutedParagraph theme
-            "Log a one-off food without saving it to your foods."
+            (I18n.t TidFoodSearchAdHocDescription)
         , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
@@ -985,10 +987,10 @@ adHocLogView theme device =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Create with AI"
+                    , label = I18n.t TidTitleCreateWithAi
                     , onPress = CreateAiLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just "Create with AI"
+                    , submittingLabel = Just (I18n.t TidTitleCreateWithAi)
                     , trailing = Nothing
                     }
                 )
@@ -997,10 +999,10 @@ adHocLogView theme device =
                     theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = "Enter manually"
+                    , label = I18n.t TidFoodSearchEnterManually
                     , onPress = CreateAdHocLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just "Enter manually"
+                    , submittingLabel = Just (I18n.t TidFoodSearchEnterManually)
                     , trailing = Nothing
                     }
                 )
@@ -1050,7 +1052,7 @@ barcodeInputView theme device model =
             UiInput.searchInput theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
-                , label = UiInput.LabelInside "Enter barcode"
+                , label = UiInput.LabelInside (I18n.t TidFoodSearchEnterBarcode)
                 , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
@@ -1060,7 +1062,7 @@ barcodeInputView theme device model =
                 theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = "Search"
+                , label = I18n.t TidNavSearch
                 , onPress = BarcodeSubmitted
                 , submitState =
                     Just
@@ -1073,7 +1075,7 @@ barcodeInputView theme device model =
                          else
                             Button.Idle
                         )
-                , submittingLabel = Just "Searching"
+                , submittingLabel = Just (I18n.t TidFoodSearchSearching)
                 , trailing = Nothing
                 }
 
@@ -1085,10 +1087,10 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = "Scan"
+                        , label = I18n.t TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Submitting
-                        , submittingLabel = Just "Starting"
+                        , submittingLabel = Just (I18n.t TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
@@ -1097,7 +1099,7 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Danger
                         , width = Button.FullWidth
-                        , label = "Cancel"
+                        , label = I18n.t TidCommonCancel
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
@@ -1109,10 +1111,10 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = "Scan"
+                        , label = I18n.t TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Idle
-                        , submittingLabel = Just "Starting"
+                        , submittingLabel = Just (I18n.t TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
@@ -1145,10 +1147,10 @@ barcodeScannerStateView theme scanner =
             [ Feedback.errorBanner theme message ]
 
         ScannerStarting ->
-            [ barcodeScannerPreview theme "Starting camera..." ]
+            [ barcodeScannerPreview theme (I18n.t TidFoodSearchStartingCamera) ]
 
         ScannerActive ->
-            [ barcodeScannerPreview theme "Center the barcode on the guide." ]
+            [ barcodeScannerPreview theme (I18n.t TidFoodSearchCenterBarcode) ]
 
 
 barcodeScannerPreview : Theme -> String -> Element Msg
@@ -1287,7 +1289,7 @@ bodyView : Theme -> Model -> Device -> Element Msg
 bodyView theme model device =
     case model.results of
         NotAsked ->
-            Feedback.emptyState theme "Search for a food to get started."
+            Feedback.emptyState theme (I18n.t TidFoodSearchEmptyPrompt)
 
         Loading ->
             Surface.section theme
@@ -1305,7 +1307,7 @@ bodyView theme model device =
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Feedback.errorBanner theme (Client.displayError error)
-                , Feedback.emptyState theme "No foods found. Try a different search."
+                , Feedback.emptyState theme (I18n.t TidFoodSearchNoFoods)
                 ]
 
         Success items ->
@@ -1314,7 +1316,7 @@ bodyView theme model device =
 
             else
                 Surface.section theme
-                    { header = Just (Typography.subsectionTitle theme "Results")
+                    { header = Just (Typography.subsectionTitle theme (I18n.t TidFoodSearchResults))
                     , body =
                         List.map
                             (\item ->
@@ -1350,7 +1352,7 @@ barcodeBodyView theme body =
             Element.none
 
         BarcodeAwaitingInput ->
-            Feedback.emptyState theme "Enter a barcode to look up a food."
+            Feedback.emptyState theme (I18n.t TidFoodSearchEnterBarcodePrompt)
 
         BarcodeInputPending ->
             Element.none
@@ -1361,14 +1363,14 @@ barcodeBodyView theme body =
         BarcodeNotFound ->
             Feedback.emptyStateWithIcon theme
                 { icon = Icon.SearchX
-                , message = "No food found for that barcode."
+                , message = I18n.t TidFoodSearchBarcodeNotFound
                 }
 
         BarcodeLookupFailed error ->
             Feedback.errorBanner theme (Client.displayError error)
 
         BarcodeOpening ->
-            Feedback.emptyState theme "Opening food."
+            Feedback.emptyState theme (I18n.t TidFoodSearchOpeningFood)
 
 
 textEmptyState : Theme -> SearchScope -> Element Msg
@@ -1378,13 +1380,13 @@ textEmptyState theme scope =
         , message =
             case scope of
                 History ->
-                    "No logged foods found. Try a different search."
+                    I18n.t TidFoodSearchNoLoggedFoods
 
                 Custom ->
-                    "No custom foods found. Try a different search."
+                    I18n.t TidFoodSearchNoCustomFoods
 
                 _ ->
-                    "No foods found. Try a different search."
+                    I18n.t TidFoodSearchNoFoods
         }
 
 
@@ -1397,32 +1399,32 @@ scopeLabel : SearchScope -> String
 scopeLabel scope =
     case scope of
         All ->
-            "All"
+            I18n.t TidFoodSearchScopeAll
 
         History ->
-            "History"
+            I18n.t TidFoodSearchScopeHistory
 
         Custom ->
-            "Custom"
+            I18n.t TidFoodSearchScopeCustom
 
         Barcode ->
-            "Barcode"
+            I18n.t TidFoodSearchScopeBarcode
 
 
 searchLabel : SearchScope -> String
 searchLabel scope =
     case scope of
         All ->
-            "Search for a food"
+            I18n.t TidFoodSearchPromptAll
 
         History ->
-            "Search your logged foods"
+            I18n.t TidFoodSearchPromptHistory
 
         Custom ->
-            "Search your custom foods"
+            I18n.t TidFoodSearchPromptCustom
 
         Barcode ->
-            "Enter barcode"
+            I18n.t TidFoodSearchEnterBarcode
 
 
 isTextScope : SearchScope -> Bool
@@ -1486,7 +1488,12 @@ recentsView device theme model =
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Surface.section theme
-                            { header = Just (Typography.sectionTitle theme "Recent")
+                            { header =
+                                Just
+                                    (Typography.sectionTitle
+                                        theme
+                                        (I18n.t TidFoodSearchRecent)
+                                    )
                             , body = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
@@ -1498,7 +1505,7 @@ noRecentsState : Theme -> Element Msg
 noRecentsState theme =
     Feedback.emptyStateWithIcon theme
         { icon = Icon.Utensils
-        , message = "No recent foods yet. Search for a food to get started."
+        , message = I18n.t TidFoodSearchNoRecents
         }
 
 
@@ -1590,7 +1597,10 @@ quickAddChip device theme model item quantity =
                     ( Button.GhostFilled, Nothing, Nothing )
 
                 QuickAddAdding ->
-                    ( Button.GhostFilled, Just Button.Submitting, Just "Adding..." )
+                    ( Button.GhostFilled
+                    , Just Button.Submitting
+                    , Just (I18n.t TidFoodSearchAdding)
+                    )
 
                 QuickAddAdded ->
                     ( Button.Primary, Just Button.Submitted, Nothing )

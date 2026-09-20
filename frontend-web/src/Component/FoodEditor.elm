@@ -59,11 +59,13 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Dict exposing (Dict)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.ListExtra as ListExtra
 import Lib.Number as Number
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
@@ -375,7 +377,10 @@ applyAiLogDraft catalog draft suggested form =
                 , context = context
             }
         )
-        (positiveNumber "Suggested portion weight" suggested.totalWeightGrams)
+        (positiveNumber
+            (I18n.t TidFoodEditorLabelSuggestedPortionWeight)
+            suggested.totalWeightGrams
+        )
         (draft.nutrients
             |> List.map (aiLogNutrientRow catalog suggested.totalWeightGrams)
             |> ListExtra.combineErrors
@@ -391,7 +396,7 @@ aiLogNutrientRow :
 aiLogNutrientRow catalog rawWeight nutrient =
     case List.filter (\item -> item.code == nutrient.code) catalog |> List.head of
         Nothing ->
-            Err ("The estimate contains an unsupported nutrient: " ++ nutrient.code)
+            Err (I18n.t (TidFoodEditorErrorUnsupportedNutrient nutrient.code))
 
         Just item ->
             Result.map2
@@ -401,8 +406,14 @@ aiLogNutrientRow catalog rawWeight nutrient =
                     , unit = item.unit
                     }
                 )
-                (positiveNumber "Suggested portion weight" rawWeight)
-                (nonNegativeNumber "Estimated nutrient" nutrient.amountPer100g)
+                (positiveNumber
+                    (I18n.t TidFoodEditorLabelSuggestedPortionWeight)
+                    rawWeight
+                )
+                (nonNegativeNumber
+                    (I18n.t TidFoodEditorLabelEstimatedNutrient)
+                    nutrient.amountPer100g
+                )
 
 
 requireCoreNutrients : List NutrientRow -> Result String (List NutrientRow)
@@ -413,7 +424,7 @@ requireCoreNutrients rows =
             |> List.head
     of
         Just _ ->
-            Err "The estimate is missing calories or a required macronutrient."
+            Err (I18n.t TidFoodEditorErrorMissingCoreMacros)
 
         Nothing ->
             Ok rows
@@ -790,7 +801,7 @@ validateLog : FormModel -> Result String ValidatedLog
 validateLog form =
     case form.context of
         CustomFoodContext ->
-            Err "This editor is not configured for food logging."
+            Err (I18n.t TidFoodEditorErrorNotConfigured)
 
         FoodLogContext logFields persistence ->
             let
@@ -815,7 +826,7 @@ validateLog form =
                         |> List.map
                             (\row ->
                                 if String.isEmpty (String.trim row.code) then
-                                    Err "Select a nutrient for every entered amount."
+                                    Err (I18n.t TidFoodEditorErrorSelectNutrient)
 
                                 else
                                     nonNegativeNumber
@@ -832,24 +843,31 @@ validateLog form =
                             Ok Nothing
 
                         SaveCustomFoodThenLog details ->
-                            positiveNumber "Weight of this logged portion" details.portionWeight
+                            positiveNumber
+                                (I18n.t TidFoodEditorLabelPortionWeight)
+                                details.portionWeight
                                 |> Result.map Just
             in
             case LocalDate.fromString logFields.date of
                 Nothing ->
-                    Err "Enter a valid date in YYYY-MM-DD format."
+                    Err (I18n.t TidFoodEditorErrorInvalidDate)
 
                 Just date ->
                     if String.isEmpty (String.trim form.name) then
-                        Err "Food name is required."
+                        Err (I18n.t TidFoodEditorErrorFoodNameRequired)
 
                     else if duplicate /= Nothing then
-                        Err "Each nutrient can only be added once."
+                        Err (I18n.t TidFoodEditorErrorDuplicateNutrient)
 
                     else
                         case missingRequired of
                             Just code ->
-                                Err (View.Nutrients.nutrientLabel code ++ " is required.")
+                                Err
+                                    (I18n.t
+                                        (TidFoodEditorErrorNutrientRequired
+                                            (View.Nutrients.nutrientLabel code)
+                                        )
+                                    )
 
                             Nothing ->
                                 Result.map3
@@ -880,7 +898,10 @@ validateLog form =
                                         , portionWeight = weight
                                         }
                                     )
-                                    (positiveNumber "Amount" logFields.quantity)
+                                    (positiveNumber
+                                        (I18n.t TidNutrientTableAmount)
+                                        logFields.quantity
+                                    )
                                     parsedNutrients
                                     portionWeight
 
@@ -909,7 +930,7 @@ toCustomFoodFromLogRequest form =
             (\validated ->
                 case validated.portionWeight of
                     Nothing ->
-                        Err "Weight of this logged portion is required."
+                        Err (I18n.t TidFoodEditorErrorPortionWeightRequired)
 
                     Just weight ->
                         let
@@ -951,7 +972,7 @@ toCustomFoodFromLogRequest form =
                             not (List.all (.amountPer100g >> finite) per100g)
                                 || not (finite gramsPerUnit)
                         then
-                            Err "The portion values are too large to calculate safely."
+                            Err (I18n.t TidFoodEditorErrorPortionTooLarge)
 
                         else
                             suppliedServings
@@ -1587,10 +1608,10 @@ positiveNumber label raw =
                 Ok value
 
             else
-                Err (label ++ " must be greater than zero.")
+                Err (I18n.t (TidFoodEditorErrorGreaterThanZero label))
 
         Nothing ->
-            Err (label ++ " must be a number greater than zero.")
+            Err (I18n.t (TidFoodEditorErrorNumberGreaterThanZero label))
 
 
 nonNegativeNumber : String -> String -> Result String Float
@@ -1601,10 +1622,10 @@ nonNegativeNumber label raw =
                 Ok value
 
             else
-                Err (label ++ " must be zero or greater.")
+                Err (I18n.t (TidFoodEditorErrorZeroOrGreater label))
 
         Nothing ->
-            Err (label ++ " is required and must be a number.")
+            Err (I18n.t (TidFoodEditorErrorRequiredNumber label))
 
 
 finite : Float -> Bool
@@ -1640,19 +1661,19 @@ validationErrorMessage : ValidationError -> String
 validationErrorMessage error =
     case error of
         NameRequired ->
-            "Name is required"
+            I18n.t TidFoodEditorErrorNameRequired
 
         InvalidNutrientAmount value ->
-            "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
+            I18n.t (TidFoodEditorErrorNutrientAmountNonNegative value)
 
         InvalidServingGrams value ->
-            "Grams per serving unit must be a positive number (got: " ++ value ++ ")"
+            I18n.t (TidFoodEditorErrorServingGramsPositive value)
 
         DuplicateServingUnit unit ->
-            "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"
+            I18n.t (TidFoodEditorErrorDuplicateServingUnit unit)
 
         InvalidDefaultPortion ->
-            "Default portion must be grams or use a configured serving unit"
+            I18n.t TidFoodEditorErrorInvalidDefaultPortion
 
 
 
@@ -1722,9 +1743,17 @@ viewForLog visibility theme device nutrients units form =
 basicInfoCard : Bool -> Theme -> Device -> FormModel -> Element Msg
 basicInfoCard showCategories theme device form =
     Surface.formSection theme
-        "Basic Info"
-        [ UiInput.input theme { label = "Name", value = form.name, onChange = NameChanged }
-        , UiInput.input theme { label = "Brand", value = form.brand, onChange = BrandChanged }
+        (I18n.t TidFoodEditorBasicInfo)
+        [ UiInput.input theme
+            { label = I18n.t TidFoodEditorName
+            , value = form.name
+            , onChange = NameChanged
+            }
+        , UiInput.input theme
+            { label = I18n.t TidFoodEditorBrand
+            , value = form.brand
+            , onChange = BrandChanged
+            }
         , if showCategories then
             categoryInputView theme device (form.openDropdown == CategoryOpen) form.categoryInput
 
@@ -1736,16 +1765,16 @@ basicInfoCard showCategories theme device form =
 loggedPortionCard : Theme -> Device -> List UnitItem -> FormModel -> LogFields -> Element Msg
 loggedPortionCard theme device units form logFields =
     Surface.formSection theme
-        "Logged Portion"
-        [ Typography.mutedParagraph theme "Describe the entire amount you are logging."
+        (I18n.t TidFoodEditorLoggedPortion)
+        [ Typography.mutedParagraph theme (I18n.t TidFoodEditorLoggedPortionHint)
         , UiInput.numericInput theme
-            { label = "Amount"
+            { label = I18n.t TidNutrientTableAmount
             , value = logFields.quantity
             , onChange = LogQuantityChanged
             }
         , UiInput.selectDropdown device
             theme
-            { label = "Portion unit"
+            { label = I18n.t TidFoodEditorPortionUnit
             , selected = logFields.unit
             , options = List.map (\unit -> ( unit.code, unit.name )) units
             , onChange = LogUnitChanged
@@ -1758,18 +1787,18 @@ loggedPortionCard theme device units form logFields =
 logDetailsCard : Theme -> Device -> FormModel -> LogFields -> Element Msg
 logDetailsCard theme device form logFields =
     Surface.formSection theme
-        "Log Details"
+        (I18n.t TidFoodEditorLogDetails)
         [ UiInput.input theme
-            { label = "Date (YYYY-MM-DD)"
+            { label = I18n.t TidFoodEditorDateLabel
             , value = logFields.date
             , onChange = LogDateChanged
             }
         , UiInput.selectDropdown device
             theme
-            { label = "Meal"
+            { label = I18n.t TidTitleMeal
             , selected = logFields.mealSlot
             , options =
-                [ ( Nothing, "None" )
+                [ ( Nothing, I18n.t TidFoodEditorMealNone )
                 , ( Just Breakfast, MealSlot.label Breakfast )
                 , ( Just Lunch, MealSlot.label Lunch )
                 , ( Just Dinner, MealSlot.label Dinner )
@@ -1781,7 +1810,7 @@ logDetailsCard theme device form logFields =
             , onToggle = ToggleMealSlotDropdown
             }
         , UiInput.input theme
-            { label = "Notes (optional)"
+            { label = I18n.t TidFoodEditorNotes
             , value = logFields.notes
             , onChange = LogNotesChanged
             }
@@ -1794,16 +1823,16 @@ saveToFoodsCard theme _ persistence =
         { header =
             Just
                 (Surface.sectionHeader
-                    { title = Typography.sectionTitle theme "Save to My Foods"
+                    { title = Typography.sectionTitle theme (I18n.t TidFoodEditorSaveToFoods)
                     , description =
                         Just
                             (Typography.mutedParagraph theme
-                                "Save this as a reusable custom food before logging it."
+                                (I18n.t TidFoodEditorSaveToFoodsDescription)
                             )
                     , trailing =
                         Just
                             (UiInput.toggleSwitch theme
-                                { label = "Save to My Foods"
+                                { label = I18n.t TidFoodEditorSaveToFoods
                                 , isActive =
                                     case persistence of
                                         LogAdHocOnly ->
@@ -1823,7 +1852,7 @@ saveToFoodsCard theme _ persistence =
 
                 SaveCustomFoodThenLog details ->
                     [ UiInput.numericInput theme
-                        { label = "Weight of this logged portion (g)"
+                        { label = I18n.t TidFoodEditorPortionWeightLabel
                         , value = details.portionWeight
                         , onChange = PortionWeightChanged
                         }
@@ -1835,21 +1864,21 @@ saveToFoodsCard theme _ persistence =
 defaultPortionCard : Theme -> Device -> List UnitItem -> FormModel -> Element Msg
 defaultPortionCard theme device units form =
     Surface.formSection theme
-        "Default Portion"
+        (I18n.t TidFoodEditorDefaultPortion)
         [ defaultPortionFields theme device units form
         , Typography.mutedCaption theme
             (if form.defaultUnit == "" then
                 if List.isEmpty form.servings then
-                    "Optional. Food logging will start at 100 g."
+                    I18n.t TidFoodEditorDefaultPortionHint100g
 
                 else
-                    "Optional. Food logging will start with the first serving."
+                    I18n.t TidFoodEditorDefaultPortionHintServing
 
              else if form.defaultUnit == "g" then
-                "Enter the gram amount to prefill when logging this food."
+                I18n.t TidFoodEditorDefaultPortionHintGrams
 
              else
-                "Enter how many of the selected serving to prefill."
+                I18n.t TidFoodEditorDefaultPortionHintCount
             )
         ]
 
@@ -1861,7 +1890,7 @@ defaultPortionFields theme device units form =
         unitSelector =
             UiInput.selectDropdown device
                 theme
-                { label = "Default Unit"
+                { label = I18n.t TidFoodEditorDefaultUnit
                 , selected = form.defaultUnit
                 , options = defaultPortionOptions units form
                 , onChange = DefaultUnitChanged
@@ -1876,7 +1905,7 @@ defaultPortionFields theme device units form =
 
             else
                 UiInput.numericInput theme
-                    { label = "Default Quantity"
+                    { label = I18n.t TidFoodEditorDefaultQuantity
                     , value = form.defaultQuantity
                     , onChange = DefaultQuantityChanged
                     }
@@ -1896,8 +1925,8 @@ defaultPortionFields theme device units form =
 
 defaultPortionOptions : List UnitItem -> FormModel -> List ( String, String )
 defaultPortionOptions units form =
-    ( noDefaultOption, "No default" )
-        :: ( "g", "Grams" )
+    ( noDefaultOption, I18n.t TidFoodEditorNoDefault )
+        :: ( "g", I18n.t TidFoodEditorGrams )
         :: List.map
             (\serving ->
                 ( serving.unit
@@ -1915,7 +1944,7 @@ servingUnitLabel units code =
                 unit.code
 
             else
-                unit.name ++ " (" ++ unit.code ++ ")"
+                I18n.t (TidUiUnitWithCode unit.name unit.code)
 
         Nothing ->
             code
@@ -1937,10 +1966,10 @@ nutrientsCard basis visibility theme device form nutrients =
                     [ Typography.subsectionTitle theme
                         (case basis of
                             Per100Grams ->
-                                "Nutrients"
+                                I18n.t TidFoodEditorNutrientsTitle
 
                             PerLoggedPortion ->
-                                "Portion Nutrition"
+                                I18n.t TidFoodEditorPortionNutrition
                         )
                     , nutrientHint basis theme
                     ]
@@ -1979,7 +2008,7 @@ nutrientsCard basis visibility theme device form nutrients =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = "+ Add Nutrient"
+                    , label = I18n.t TidFoodEditorAddNutrient
                     , onPress = AddNutrientRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -1992,7 +2021,7 @@ nutrientsCard basis visibility theme device form nutrients =
 servingsCard : Theme -> Device -> FormModel -> List UnitItem -> Element Msg
 servingsCard theme device form units =
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Servings")
+        { header = Just (Typography.subsectionTitle theme (I18n.t TidFoodEditorServings))
         , body =
             [ Element.column
                 [ Element.width Element.fill
@@ -2000,7 +2029,7 @@ servingsCard theme device form units =
                 ]
                 (if List.isEmpty form.servings then
                     [ Typography.mutedParagraph theme
-                        "Add a serving to define portions in cups, pieces, or other units."
+                        (I18n.t TidFoodEditorServingsEmpty)
                     ]
 
                  else
@@ -2015,7 +2044,7 @@ servingsCard theme device form units =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = "+ Add Serving"
+                    , label = I18n.t TidFoodEditorAddServing
                     , onPress = AddServingRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -2029,8 +2058,8 @@ categoryInputView : Theme -> Device -> Bool -> CategoryInput -> Element Msg
 categoryInputView theme device open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing DesignTokens.space4 ]
-            [ UiInput.fieldLabel theme "Categories"
-            , Typography.mutedCaption theme "Enter (or click Add) to tag this food."
+            [ UiInput.fieldLabel theme (I18n.t TidFoodEditorCategories)
+            , Typography.mutedCaption theme (I18n.t TidFoodEditorCategoriesHint)
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
@@ -2056,7 +2085,7 @@ addCategoryButton theme device input =
     Button.iconButton device
         theme
         { icon = Icon.Plus
-        , title = "Add category"
+        , title = I18n.t TidFoodEditorAddCategory
         , onPress = Just (AddCategory input.query)
         , tone = Button.Primary
         }
@@ -2065,7 +2094,7 @@ addCategoryButton theme device input =
 chipRowView : Theme -> List String -> Element Msg
 chipRowView theme tags =
     if List.isEmpty tags then
-        Typography.mutedCaption theme "No categories yet"
+        Typography.mutedCaption theme (I18n.t TidFoodEditorNoCategories)
 
     else
         Element.wrappedRow
@@ -2117,7 +2146,11 @@ suggestionRow : Theme -> CategorySuggestion -> Element Msg
 suggestionRow theme s =
     UiInput.optionRow theme
         { label = s.value
-        , trailing = Just (Typography.mutedCaption theme (String.fromInt s.count ++ " uses"))
+        , trailing =
+            Just
+                (Typography.mutedCaption theme
+                    (I18n.t (TidFoodEditorUses (String.fromInt s.count)))
+                )
         , selected = False
         , onPress = AcceptCategorySuggestion s.value
         }
@@ -2138,10 +2171,10 @@ nutrientRowView basis theme device nutrients openDropdown index row =
         selector =
             UiInput.selectDropdown device
                 theme
-                { label = "Nutrient"
+                { label = I18n.t TidNutrientTableNutrient
                 , selected = row.code
                 , options =
-                    ( "", "Select nutrient..." )
+                    ( "", I18n.t TidFoodEditorSelectNutrient )
                         :: List.map (\n -> ( n.code, n.name )) nutrients
                 , onChange = NutrientCodeChanged index
                 , isOpen = openDropdown == NutrientCodeOpen index
@@ -2153,7 +2186,7 @@ nutrientRowView basis theme device nutrients openDropdown index row =
             rowActionButton theme
                 device
                 { icon = Icon.Close
-                , title = "Remove"
+                , title = I18n.t TidFoodEditorRemove
                 , onPress = RemoveNutrientRow index
                 }
     in
@@ -2189,10 +2222,10 @@ amountInputWithUnit basis theme index row =
         { label =
             case basis of
                 Per100Grams ->
-                    "Amount per 100 g"
+                    I18n.t TidFoodEditorAmountPer100g
 
                 PerLoggedPortion ->
-                    "Amount for this portion"
+                    I18n.t TidFoodEditorAmountForPortion
         , text = row.amount
         , suffix = unitGhostText row.unit
         , onChange = NutrientAmountChanged index
@@ -2206,7 +2239,7 @@ the selected nutrient.
 unitGhostText : String -> String
 unitGhostText unit =
     if String.isEmpty (String.trim unit) then
-        "unit"
+        I18n.t TidFoodEditorUnitPlaceholder
 
     else
         unit
@@ -2226,7 +2259,7 @@ servingRowView theme device units openDropdown index row =
         selector =
             UiInput.selectDropdown device
                 theme
-                { label = "Unit"
+                { label = I18n.t TidNutrientTableUnit
                 , selected = row.unit
                 , options = View.QuantityInput.unitOptions row.unit units
                 , onChange = ServingUnitChanged index
@@ -2237,7 +2270,7 @@ servingRowView theme device units openDropdown index row =
         gramsInput : Element Msg
         gramsInput =
             UiInput.decimalInputWithSuffix theme
-                { label = "Grams per unit"
+                { label = I18n.t TidFoodEditorGramsPerUnit
                 , text = row.gramsPerUnit
                 , suffix = "g"
                 , onChange = ServingGramsPerUnitChanged index
@@ -2248,7 +2281,7 @@ servingRowView theme device units openDropdown index row =
             rowActionButton theme
                 device
                 { icon = Icon.Close
-                , title = "Remove"
+                , title = I18n.t TidFoodEditorRemove
                 , onPress = RemoveServingRow index
                 }
     in
@@ -2295,7 +2328,7 @@ rowActionButton theme device config =
 
 addRowHint : Theme -> Element msg
 addRowHint theme =
-    Typography.mutedCaption theme "Enter calories and macros (per 100g) to save."
+    Typography.mutedCaption theme (I18n.t TidFoodEditorAddRowHint)
 
 
 nutrientHint : NutrientBasis -> Theme -> Element msg
@@ -2305,7 +2338,4 @@ nutrientHint basis theme =
             addRowHint theme
 
         PerLoggedPortion ->
-            Typography.mutedCaption theme
-                ("Enter totals for the entire logged portion. Calories, protein, "
-                    ++ "carbohydrates, and fat are required."
-                )
+            Typography.mutedCaption theme (I18n.t TidFoodEditorPortionHint)

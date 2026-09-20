@@ -19,6 +19,8 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -374,8 +376,14 @@ bottomActionsView theme device food =
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = "Edit Food", onPress = EditClicked, tone = Button.Primary }
-                    , { label = "Delete Food", onPress = DeleteClicked, tone = Button.Danger }
+                    [ { label = I18n.t TidTitleEditFood
+                      , onPress = EditClicked
+                      , tone = Button.Primary
+                      }
+                    , { label = I18n.t TidCustomFoodDelete
+                      , onPress = DeleteClicked
+                      , tone = Button.Danger
+                      }
                     ]
 
                 Nothing ->
@@ -388,10 +396,10 @@ deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
     View.DeleteModal.deleteModalView theme
         device
-        { title = "Delete food?"
-        , description = "This will permanently remove the custom food."
-        , confirmLabel = "Confirm Delete"
-        , pendingLabel = "Deleting..."
+        { title = I18n.t TidCustomFoodDeleteConfirmTitle
+        , description = I18n.t TidCustomFoodDeleteConfirmDescription
+        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

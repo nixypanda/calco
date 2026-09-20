@@ -20,8 +20,10 @@ import Element.Font as Font
 import Element.Input as Input
 import Html
 import Html.Attributes as Attr
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -373,7 +375,15 @@ monthView theme model selectedDate month =
         , body =
             [ MonthCalendar.view
                 { period = month
-                , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
+                , weekdayLabels =
+                    [ I18n.t TidDiaryCalendarWeekdaySun
+                    , I18n.t TidDiaryCalendarWeekdayMon
+                    , I18n.t TidDiaryCalendarWeekdayTue
+                    , I18n.t TidDiaryCalendarWeekdayWed
+                    , I18n.t TidDiaryCalendarWeekdayThu
+                    , I18n.t TidDiaryCalendarWeekdayFri
+                    , I18n.t TidDiaryCalendarWeekdaySat
+                    ]
                 , weekdayColor = theme.textMuted
                 , cellHeight = monthCellHeight
                 , viewDay = dayView theme model selectedDate month
@@ -562,13 +572,10 @@ dayAriaLabel : String -> Maybe DaySummary -> String
 dayAriaLabel date maybeSummary =
     case maybeSummary of
         Just summary ->
-            date
-                ++ ", "
-                ++ String.fromInt (round summary.energyKcal)
-                ++ " kilocalories logged"
+            I18n.t (TidDiaryCalendarDayAriaLogged date (String.fromInt (round summary.energyKcal)))
 
         Nothing ->
-            date ++ ", no food logged"
+            I18n.t (TidDiaryCalendarDayAriaNoFood date)
 
 
 loadEarlierButton : Device -> Theme -> Bool -> Element Msg
@@ -579,10 +586,10 @@ loadEarlierButton device theme loading =
         , width = Button.FullWidth
         , label =
             if loading then
-                "Loading..."
+                I18n.t TidCommonLoading
 
             else
-                "Load earlier"
+                I18n.t TidDiaryCalendarLoadEarlier
         , onPress = LoadEarlierClicked
         , submitState = Nothing
         , submittingLabel = Nothing

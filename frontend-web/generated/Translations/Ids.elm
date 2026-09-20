@@ -25,7 +25,9 @@ type TranslationId
     | TidCommonCancel
     | TidCommonClose
     | TidCommonCreated
+    | TidCommonCreating
     | TidCommonDisplayName
+    | TidCommonLoading
     | TidCommonNewVersionAvailable
     | TidCommonPassword
     | TidCommonProfile
@@ -39,6 +41,19 @@ type TranslationId
     | TidCommonUseDarkTheme
     | TidCommonUsername
     | TidCommonUsernameRequired
+    | TidCustomFoodConfirmDelete
+    | TidCustomFoodDelete
+    | TidCustomFoodDeleteConfirmDescription
+    | TidCustomFoodDeleteConfirmTitle
+    | TidCustomFoodDeleting
+    | TidCustomFoodDuplicateServingUnit String
+    | TidCustomFoodEnterManually
+    | TidCustomFoodInvalidDefaultPortion
+    | TidCustomFoodInvalidNutrientAmount String
+    | TidCustomFoodInvalidServingGrams String
+    | TidCustomFoodListEmpty
+    | TidCustomFoodNameRequired
+    | TidCustomFoodSave
     | TidDateMonthApr
     | TidDateMonthAug
     | TidDateMonthDec
@@ -51,11 +66,136 @@ type TranslationId
     | TidDateMonthNov
     | TidDateMonthOct
     | TidDateMonthSep
+    | TidDiaryAddFood
+    | TidDiaryCalendarCompactThousands
+    | TidDiaryCalendarDayAriaLogged String String
+    | TidDiaryCalendarDayAriaNoFood String
+    | TidDiaryCalendarLoadEarlier
+    | TidDiaryCalendarWeekdayFri
+    | TidDiaryCalendarWeekdayMon
+    | TidDiaryCalendarWeekdaySat
+    | TidDiaryCalendarWeekdaySun
+    | TidDiaryCalendarWeekdayThu
+    | TidDiaryCalendarWeekdayTue
+    | TidDiaryCalendarWeekdayWed
+    | TidDiaryCalories
+    | TidDiaryCarbs
+    | TidDiaryDetails
+    | TidDiaryGoalMet
+    | TidDiaryKcal String
+    | TidDiaryKcalEaten
+    | TidDiaryKcalLeft String
+    | TidDiaryKcalOver String
+    | TidDiaryLogLatestFrom String
+    | TidDiaryLogging
+    | TidDiaryMacroGrams String
+    | TidDiaryMacroGramsWithTarget String String
+    | TidDiaryMacroSummaryGrams String String String
+    | TidDiaryMacroSummaryPercent String String String
+    | TidDiaryNextDay
+    | TidDiaryNoItems
+    | TidDiaryOfKcal String
+    | TidDiaryOther
+    | TidDiaryPreviousDay
     | TidDiarySettingsMealSlotsDescription
     | TidDiarySettingsMealSlotsTitle
     | TidDiarySettingsSave
     | TidDiarySettingsSaved
     | TidDiarySettingsSelectAtLeastOne
+    | TidFoodEditorAddCategory
+    | TidFoodEditorAddNutrient
+    | TidFoodEditorAddRowHint
+    | TidFoodEditorAddServing
+    | TidFoodEditorAmountForPortion
+    | TidFoodEditorAmountPer100g
+    | TidFoodEditorBasicInfo
+    | TidFoodEditorBrand
+    | TidFoodEditorCategories
+    | TidFoodEditorCategoriesHint
+    | TidFoodEditorDateLabel
+    | TidFoodEditorDefaultPortion
+    | TidFoodEditorDefaultPortionHint100g
+    | TidFoodEditorDefaultPortionHintCount
+    | TidFoodEditorDefaultPortionHintGrams
+    | TidFoodEditorDefaultPortionHintServing
+    | TidFoodEditorDefaultQuantity
+    | TidFoodEditorDefaultUnit
+    | TidFoodEditorErrorDuplicateNutrient
+    | TidFoodEditorErrorDuplicateServingUnit String
+    | TidFoodEditorErrorFoodNameRequired
+    | TidFoodEditorErrorGreaterThanZero String
+    | TidFoodEditorErrorInvalidDate
+    | TidFoodEditorErrorInvalidDefaultPortion
+    | TidFoodEditorErrorMissingCoreMacros
+    | TidFoodEditorErrorNameRequired
+    | TidFoodEditorErrorNotConfigured
+    | TidFoodEditorErrorNumberGreaterThanZero String
+    | TidFoodEditorErrorNutrientAmountNonNegative String
+    | TidFoodEditorErrorNutrientRequired String
+    | TidFoodEditorErrorPortionTooLarge
+    | TidFoodEditorErrorPortionWeightRequired
+    | TidFoodEditorErrorRequiredNumber String
+    | TidFoodEditorErrorSelectNutrient
+    | TidFoodEditorErrorServingGramsPositive String
+    | TidFoodEditorErrorUnsupportedNutrient String
+    | TidFoodEditorErrorZeroOrGreater String
+    | TidFoodEditorGrams
+    | TidFoodEditorGramsPerUnit
+    | TidFoodEditorLabelEstimatedNutrient
+    | TidFoodEditorLabelPortionWeight
+    | TidFoodEditorLabelSuggestedPortionWeight
+    | TidFoodEditorLogDetails
+    | TidFoodEditorLoggedPortion
+    | TidFoodEditorLoggedPortionHint
+    | TidFoodEditorMealNone
+    | TidFoodEditorName
+    | TidFoodEditorNoCategories
+    | TidFoodEditorNoDefault
+    | TidFoodEditorNotes
+    | TidFoodEditorNutrientsTitle
+    | TidFoodEditorPortionHint
+    | TidFoodEditorPortionNutrition
+    | TidFoodEditorPortionUnit
+    | TidFoodEditorPortionWeightLabel
+    | TidFoodEditorRemove
+    | TidFoodEditorSaveToFoods
+    | TidFoodEditorSaveToFoodsDescription
+    | TidFoodEditorSelectNutrient
+    | TidFoodEditorServings
+    | TidFoodEditorServingsEmpty
+    | TidFoodEditorUnitPlaceholder
+    | TidFoodEditorUses String
+    | TidFoodSearchAdHocDescription
+    | TidFoodSearchAdHocTitle
+    | TidFoodSearchAdding
+    | TidFoodSearchBarcodeNotFound
+    | TidFoodSearchCenterBarcode
+    | TidFoodSearchEmptyPrompt
+    | TidFoodSearchEnterBarcode
+    | TidFoodSearchEnterBarcodePrompt
+    | TidFoodSearchEnterManually
+    | TidFoodSearchErrorCouldNotReadDate
+    | TidFoodSearchErrorScannerStart
+    | TidFoodSearchNoCustomFoods
+    | TidFoodSearchNoFoods
+    | TidFoodSearchNoLoggedFoods
+    | TidFoodSearchNoRecents
+    | TidFoodSearchOpeningFood
+    | TidFoodSearchPromptAll
+    | TidFoodSearchPromptCustom
+    | TidFoodSearchPromptHistory
+    | TidFoodSearchRecent
+    | TidFoodSearchResults
+    | TidFoodSearchScan
+    | TidFoodSearchScopeAll
+    | TidFoodSearchScopeBarcode
+    | TidFoodSearchScopeCustom
+    | TidFoodSearchScopeHistory
+    | TidFoodSearchSearching
+    | TidFoodSearchStarting
+    | TidFoodSearchStartingCamera
+    | TidFoodShowLogging
+    | TidFoodShowPortion
     | TidGoalSettingsCalories
     | TidGoalSettingsCarbs
     | TidGoalSettingsDailyTargetsTitle

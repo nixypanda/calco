@@ -13,7 +13,9 @@ import Api.Foods as Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -125,7 +127,7 @@ bodyView theme device model =
                         (createActions device theme)
                 , body =
                     if List.isEmpty foods then
-                        [ Typography.mutedBodyParagraph theme "No items yet." ]
+                        [ Typography.mutedBodyParagraph theme (I18n.t TidCustomFoodListEmpty) ]
 
                     else
                         List.intersperse (Surface.hairline theme)
@@ -151,10 +153,10 @@ createActions device theme =
                 theme
                 { tone = Button.Primary
                 , width = Button.FullWidth
-                , label = "Create with AI"
+                , label = I18n.t TidTitleCreateWithAi
                 , onPress = CreateWithAiClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just "Create with AI"
+                , submittingLabel = Just (I18n.t TidTitleCreateWithAi)
                 , trailing = Nothing
                 }
             )
@@ -163,10 +165,10 @@ createActions device theme =
                 theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = "Enter manually"
+                , label = I18n.t TidCustomFoodEnterManually
                 , onPress = CreateManuallyClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just "Enter manually"
+                , submittingLabel = Just (I18n.t TidCustomFoodEnterManually)
                 , trailing = Nothing
                 }
             )
@@ -198,8 +200,7 @@ foodSummaryText food =
     [ food.brand
     , Maybe.map
         (\kcal ->
-            String.fromInt (round (Nutrition.safeAmount kcal))
-                ++ " kcal per 100 g"
+            I18n.t (TidSearchKcalPer100g (String.fromInt (round (Nutrition.safeAmount kcal))))
         )
         food.nutritionSummary.per100g.energyKcal
     ]

@@ -32,8 +32,10 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Color as UiColor
 import Ui.Common as UiCommon
@@ -627,7 +629,7 @@ dateCard theme model device =
                     [ Button.iconButton device
                         theme
                         { icon = Icon.ChevronLeft
-                        , title = "Previous Day"
+                        , title = I18n.t TidDiaryPreviousDay
                         , onPress = Just PreviousDayClicked
                         , tone = Button.Primary
                         }
@@ -640,7 +642,7 @@ dateCard theme model device =
                         Button.iconButton device
                             theme
                             { icon = Icon.ChevronRight
-                            , title = "Next Day"
+                            , title = I18n.t TidDiaryNextDay
                             , onPress = Just NextDayClicked
                             , tone = Button.Primary
                             }
@@ -678,19 +680,19 @@ totalsView device theme targets summary =
         [ calorieHero theme calories targets.calorieTarget
         , Surface.hairline theme
         , macroSummaryRow theme
-            [ { label = "Protein"
+            [ { label = I18n.t TidNutrientProtein
               , value = summaryAmount "PROTEIN_G" summary
               , color = theme.proteinAccent
               , target = targets.proteinTargetG
               , tolerance = macroTolerance targets.proteinTargetG
               }
-            , { label = "Carbs"
+            , { label = I18n.t TidDiaryCarbs
               , value = summaryAmount "CARBS_G" summary
               , color = theme.carbsAccent
               , target = targets.carbsTargetG
               , tolerance = macroTolerance targets.carbsTargetG
               }
-            , { label = "Fat"
+            , { label = I18n.t TidNutrientFat
               , value = summaryAmount "FAT_G" summary
               , color = theme.fatAccent
               , target = targets.fatTargetG
@@ -707,7 +709,7 @@ detailsAction device theme =
         theme
         { tone = Button.GhostFilled
         , width = Button.FullWidth
-        , label = "Details"
+        , label = I18n.t TidDiaryDetails
         , onPress = DetailsClicked
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -742,11 +744,11 @@ calorieHero theme calories target =
                     , Font.color theme.textMedium
                     , Typography.caption
                     ]
-                    (Element.text "CALORIES")
+                    (Element.text (I18n.t TidDiaryCalories))
                 , Typography.heroStat theme (formatWhole calories)
                 , Element.el
                     [ Typography.body, Font.color theme.textMuted ]
-                    (Element.text "kcal eaten")
+                    (Element.text (I18n.t TidDiaryKcalEaten))
                 ]
             , calorieBalancePill theme target calories
             ]
@@ -767,7 +769,7 @@ calorieHero theme calories target =
                 , Font.color theme.textMuted
                 , Element.alignRight
                 ]
-                (Element.text ("of " ++ formatWhole target ++ " kcal"))
+                (Element.text (I18n.t (TidDiaryOfKcal (formatWhole target))))
 
           else
             Element.none
@@ -796,13 +798,13 @@ calorieBalancePill theme target calories =
             label : String
             label =
                 if difference > 0 then
-                    formatWhole (toFloat difference) ++ " kcal left"
+                    I18n.t (TidDiaryKcalLeft (formatWhole (toFloat difference)))
 
                 else if difference < 0 then
-                    formatWhole (toFloat (abs difference)) ++ " kcal over"
+                    I18n.t (TidDiaryKcalOver (formatWhole (toFloat (abs difference))))
 
                 else
-                    "Goal met"
+                    I18n.t TidDiaryGoalMet
         in
         Element.el
             [ Background.color (UiColor.withAlpha 0.2 statusColor)
@@ -889,10 +891,10 @@ macroSummaryItem theme macro =
 macroAmountLabel : MacroSummary -> String
 macroAmountLabel macro =
     if macro.target > 0 then
-        formatWhole macro.value ++ " / " ++ formatWhole macro.target ++ " g"
+        I18n.t (TidDiaryMacroGramsWithTarget (formatWhole macro.value) (formatWhole macro.target))
 
     else
-        formatWhole macro.value ++ " g"
+        I18n.t (TidDiaryMacroGrams (formatWhole macro.value))
 
 
 progressBar : Theme -> Element.Color -> Int -> Float -> Float -> Element msg
@@ -1157,7 +1159,7 @@ slotView theme device model section =
                                 theme
                                 { tone = Button.Ghost
                                 , width = Button.FullWidth
-                                , label = "+ Add Food"
+                                , label = I18n.t TidDiaryAddFood
                                 , onPress = AddFoodClicked slot
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
@@ -1197,7 +1199,7 @@ emptySlotView theme device model slot =
                     , label = logLatestLabel source
                     , onPress = CopyLatestClicked source
                     , submitState = Just (Button.submittingOrIdle isLogging)
-                    , submittingLabel = Just "Logging..."
+                    , submittingLabel = Just (I18n.t TidDiaryLogging)
                     , trailing = Nothing
                     }
                 )
@@ -1208,7 +1210,7 @@ emptySlotView theme device model slot =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = "No items"
+                    , label = I18n.t TidDiaryNoItems
                     , onPress = SlotNoOp
                     , submitState = Just Button.Disabled
                     , submittingLabel = Nothing
@@ -1228,7 +1230,7 @@ emptySlotBody content =
 
 logLatestLabel : LatestSlotSource -> String
 logLatestLabel source =
-    "Log latest from " ++ LocalDate.display source.sourceDate
+    I18n.t (TidDiaryLogLatestFrom (LocalDate.display source.sourceDate))
 
 
 mealSlotHeader :
@@ -1258,7 +1260,7 @@ mealSlotHeader theme macroMode section totals =
                 }
             ]
         , Typography.mutedCaption theme
-            (String.fromInt (round sectionKcal) ++ " kcal")
+            (I18n.t (TidDiaryKcal (String.fromInt (round sectionKcal))))
         ]
 
 
@@ -1269,7 +1271,7 @@ sectionTitle maybeSlot =
             MealSlot.label slot
 
         Nothing ->
-            "Other"
+            I18n.t TidDiaryOther
 
 
 mealSlotCard :
@@ -1366,22 +1368,20 @@ macroSummary : MacroMode -> MacroTotals -> String
 macroSummary mode totals =
     case mode of
         Grams ->
-            "carbs "
-                ++ Number.toFixedOne totals.carbs
-                ++ "g ⋅ protein "
-                ++ Number.toFixedOne totals.protein
-                ++ "g ⋅ fat "
-                ++ Number.toFixedOne totals.fat
-                ++ "g"
+            I18n.t
+                (TidDiaryMacroSummaryGrams
+                    (Number.toFixedOne totals.carbs)
+                    (Number.toFixedOne totals.protein)
+                    (Number.toFixedOne totals.fat)
+                )
 
         Percent ->
-            "carbs "
-                ++ String.fromInt (round totals.carbsPct)
-                ++ "% ⋅ protein "
-                ++ String.fromInt (round totals.proteinPct)
-                ++ "% ⋅ fat "
-                ++ String.fromInt (round totals.fatPct)
-                ++ "%"
+            I18n.t
+                (TidDiaryMacroSummaryPercent
+                    (String.fromInt (round totals.carbsPct))
+                    (String.fromInt (round totals.proteinPct))
+                    (String.fromInt (round totals.fatPct))
+                )
 
 
 logRow : Theme -> FoodLog -> Element Msg
@@ -1404,7 +1404,11 @@ logRow theme log =
                     [ Typography.mutedCaption theme
                         (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Typography.mutedCaption theme
-                        (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)) ++ " kcal")
+                        (I18n.t
+                            (TidDiaryKcal
+                                (String.fromInt (round (Nutrition.caloriesFrom log.nutrients)))
+                            )
+                        )
                     ]
                 ]
         }

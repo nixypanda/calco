@@ -22,6 +22,8 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -516,7 +518,8 @@ loadedView theme device loaded =
                  else
                     [ { title = Nothing, body = categories } ]
                 )
-                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                    ++ [ { title =
+                            Just (Typography.subsectionTitle theme (I18n.t TidFoodShowPortion))
                          , body =
                             List.map (Element.map FormMsg)
                                 (FoodLogForm.fields theme device (Just food) loaded.units form)
@@ -534,10 +537,10 @@ submitActionView theme device form =
         theme
         { tone = Button.Primary
         , width = Button.FullWidth
-        , label = "Log Food"
+        , label = I18n.t TidTitleLogFood
         , onPress = SubmitClicked
         , submitState = Just (Button.submittingOrIdle (isSubmitting form))
-        , submittingLabel = Just "Logging..."
+        , submittingLabel = Just (I18n.t TidFoodShowLogging)
         , trailing = Nothing
         }
 

@@ -25,7 +25,9 @@ import Data.FoodAssistant exposing (Conversation, FoodDraftPurpose)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import File exposing (File)
+import I18n
 import Lib.Ticket exposing (Ticket)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -212,19 +214,19 @@ validationMessage : Form.ValidationError -> String
 validationMessage err =
     case err of
         Form.NameRequired ->
-            "Name is required"
+            I18n.t TidCustomFoodNameRequired
 
         Form.InvalidNutrientAmount value ->
-            "Nutrient amount must be a non-negative number (got: " ++ value ++ ")"
+            I18n.t (TidCustomFoodInvalidNutrientAmount value)
 
         Form.InvalidServingGrams value ->
-            "Grams per serving unit must be a positive number (got: " ++ value ++ ")"
+            I18n.t (TidCustomFoodInvalidServingGrams value)
 
         Form.DuplicateServingUnit unit ->
-            "Each serving must use a unique unit (duplicate: " ++ unit ++ ")"
+            I18n.t (TidCustomFoodDuplicateServingUnit unit)
 
         Form.InvalidDefaultPortion ->
-            "Default portion must be grams or use a configured serving unit"
+            I18n.t TidCustomFoodInvalidDefaultPortion
 
 
 withSubmit : Form.SubmitState -> Form.FormModel -> Form.FormModel
@@ -297,14 +299,14 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Create Food"
+                    , label = I18n.t TidTitleCreateFood
                     , onPress = SubmitClicked
                     , submitState =
                         Just
                             (Button.submittingOrIdle
                                 (Form.isSubmitting model.form.submit)
                             )
-                    , submittingLabel = Just "Creating..."
+                    , submittingLabel = Just (I18n.t TidCommonCreating)
                     , trailing = Nothing
                     }
                 ]
