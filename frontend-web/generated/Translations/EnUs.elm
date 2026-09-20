@@ -384,9 +384,6 @@ enUsTranslations tid =
         TidDiaryAddFood ->
             "+ Add Food"
 
-        TidDiaryCalendarCompactThousands ->
-            "k"
-
         TidDiaryCalendarDayAriaLogged hole0 hole1 ->
             hole0 ++ ", " ++ hole1 ++ " kilocalories logged"
 

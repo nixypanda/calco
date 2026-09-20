@@ -128,7 +128,6 @@ type TranslationId
     | TidDateMonthOct
     | TidDateMonthSep
     | TidDiaryAddFood
-    | TidDiaryCalendarCompactThousands
     | TidDiaryCalendarDayAriaLogged String String
     | TidDiaryCalendarDayAriaNoFood String
     | TidDiaryCalendarLoadEarlier
