@@ -119,7 +119,7 @@ bodyView theme device model =
                     Just
                         (Button.textButton device
                             theme
-                            { tone = Button.Ghost
+                            { tone = Button.Primary
                             , width = Button.FullWidth
                             , label = "+ Create Meal"
                             , onPress = CreateMealClicked
