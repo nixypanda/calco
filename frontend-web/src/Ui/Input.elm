@@ -60,14 +60,14 @@ numericInputMode =
     inputMode "numeric"
 
 
-{-| Amount field: right-aligned tabular figures so stacked values line up,
-with the decimal keypad on mobile.
+{-| Amount field: left-aligned tabular figures, with the decimal keypad on
+mobile.
 -}
 numericInput : Theme -> InputConfig msg -> Element msg
 numericInput theme config =
     textInput theme
         [ inputMode "decimal"
-        , Font.alignRight
+        , Font.alignLeft
         , Font.variant Font.tabularNumbers
         ]
         { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
