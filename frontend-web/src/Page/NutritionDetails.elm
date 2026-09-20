@@ -15,9 +15,11 @@ import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Set exposing (Set)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -206,7 +208,7 @@ dateHeader theme device model =
                             (Button.iconButton device
                                 theme
                                 { icon = Icon.ChevronLeft
-                                , title = "Previous day"
+                                , title = I18n.t TidNutritionDetailsPreviousDay
                                 , onPress = Just PreviousDayClicked
                                 , tone = Button.Primary
                                 }
@@ -220,7 +222,7 @@ dateHeader theme device model =
                             Button.iconButton device
                                 theme
                                 { icon = Icon.ChevronRight
-                                , title = "Next day"
+                                , title = I18n.t TidNutritionDetailsNextDay
                                 , onPress = Just NextDayClicked
                                 , tone = Button.Primary
                                 }
@@ -275,20 +277,25 @@ reportView theme report expandedAdvice =
         , nutrientSection
             theme
             expandedAdvice
-            "Carbohydrates"
+            (I18n.t TidNutrientCarbohydrates)
             Details.Carbohydrates
             report.nutrients
-        , nutrientSection theme expandedAdvice "Fats" Details.Fats report.nutrients
         , nutrientSection
             theme
             expandedAdvice
-            "Nutrients to limit"
+            (I18n.t TidNutritionDetailsFats)
+            Details.Fats
+            report.nutrients
+        , nutrientSection
+            theme
+            expandedAdvice
+            (I18n.t TidNutritionDetailsNutrientsToLimit)
             Details.Limits
             report.nutrients
         , nutrientSection
             theme
             expandedAdvice
-            "Vitamins & minerals"
+            (I18n.t TidNutritionDetailsVitaminsMinerals)
             Details.VitaminsMinerals
             report.nutrients
         , referenceSection theme report
@@ -303,10 +310,10 @@ overviewSection theme nutrients =
             inSection Details.Overview nutrients
     in
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Overview")
+        { header = Just (Typography.subsectionTitle theme (I18n.t TidNutritionDetailsOverview))
         , body =
             if List.isEmpty overview then
-                [ Feedback.loading theme "No overview data is available." ]
+                [ Feedback.loading theme (I18n.t TidNutritionDetailsOverviewEmpty) ]
 
             else
                 [ Element.wrappedRow
@@ -342,10 +349,10 @@ coverageLabel : Nutrient -> String
 coverageLabel nutrient =
     case nutrient.coverage of
         Details.NoCoverage ->
-            "No data"
+            I18n.t TidNutritionDetailsNoData
 
         Details.PartialCoverage ->
-            "Known minimum"
+            I18n.t TidNutritionDetailsKnownMinimum
 
         Details.CompleteCoverage ->
             ""
@@ -368,7 +375,7 @@ nutrientSection theme expandedAdvice title section nutrients =
         { header = Just (Typography.subsectionTitle theme title)
         , body =
             if List.isEmpty selected then
-                [ Feedback.loading theme "No nutrient data is available for this group." ]
+                [ Feedback.loading theme (I18n.t TidNutritionDetailsNoNutrientData) ]
 
             else
                 List.map (nutrientRow theme expandedAdvice) selected
@@ -393,20 +400,25 @@ coverageNotice theme report =
         message : String
         message =
             if report.loggedItems == 0 then
-                "No items were logged for this day, so nutrition details are unavailable."
+                I18n.t TidNutritionDetailsNoItemsLogged
 
             else if hasPartialCoverage report then
-                "Some logged items have incomplete nutrition data. "
-                    ++ "Partial amounts are known minimums."
+                I18n.t TidNutritionDetailsPartialCoverageNotice
 
             else if hasNoCoverage report then
-                "Some logged items do not report every nutrient, so those totals are unavailable."
+                I18n.t TidNutritionDetailsMissingNutrientNotice
+
+            else if report.loggedItems == 1 then
+                I18n.t
+                    (TidNutritionDetailsLoggedItemsIncludedOne
+                        (String.fromInt report.loggedItems)
+                    )
 
             else
-                String.fromInt report.loggedItems
-                    ++ loggedItemLabel report.loggedItems
-                    ++ includedVerb report.loggedItems
-                    ++ " included in these daily totals."
+                I18n.t
+                    (TidNutritionDetailsLoggedItemsIncludedOther
+                        (String.fromInt report.loggedItems)
+                    )
     in
     if hasIncompleteData then
         Feedback.warningBanner theme message
@@ -423,24 +435,6 @@ hasPartialCoverage report =
 hasNoCoverage : NutritionDetails -> Bool
 hasNoCoverage report =
     List.any (\nutrient -> nutrient.coverage == Details.NoCoverage) report.nutrients
-
-
-loggedItemLabel : Int -> String
-loggedItemLabel count =
-    if count == 1 then
-        " logged item "
-
-    else
-        " logged items "
-
-
-includedVerb : Int -> String
-includedVerb count =
-    if count == 1 then
-        "is"
-
-    else
-        "are"
 
 
 nutrientRow : Theme -> Set String -> Nutrient -> Element Msg
@@ -508,7 +502,7 @@ guidanceView theme nutrient =
         Element.wrappedRow
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Chip.coloredPill
-                { label = "Partial data"
+                { label = I18n.t TidNutritionDetailsPartialData
                 , bg = theme.brandBlueSoft
                 , fg = theme.brandBlue
                 }
@@ -540,7 +534,10 @@ amountLabel nutrient =
                         ++ formatAmount referenceAmount nutrient.unit
 
                 ( Nothing, Just referenceAmount ) ->
-                    "— of " ++ formatAmount referenceAmount nutrient.unit
+                    I18n.t
+                        (TidNutritionDetailsUnknownOfAmount
+                            (formatAmount referenceAmount nutrient.unit)
+                        )
 
                 ( Just amount, Nothing ) ->
                     formatAmount amount nutrient.unit
@@ -591,15 +588,18 @@ guidanceSummary : Nutrient -> String
 guidanceSummary nutrient =
     case nutrient.coverage of
         Details.NoCoverage ->
-            "No data"
+            I18n.t TidNutritionDetailsNoData
 
         Details.PartialCoverage ->
             case nutrient.knownAmount of
                 Just amount ->
-                    formatAmount amount nutrient.unit ++ " is a known minimum"
+                    I18n.t
+                        (TidNutritionDetailsKnownMinimumAmount
+                            (formatAmount amount nutrient.unit)
+                        )
 
                 Nothing ->
-                    "No known amount"
+                    I18n.t TidNutritionDetailsNoKnownAmount
 
         Details.CompleteCoverage ->
             completeGuidanceSummary nutrient
@@ -609,26 +609,33 @@ completeGuidanceSummary : Nutrient -> String
 completeGuidanceSummary nutrient =
     case ( nutrient.guidanceKind, nutrient.knownAmount, nutrient.referenceAmount ) of
         ( Details.Informational, _, _ ) ->
-            "No daily reference"
+            I18n.t TidNutritionDetailsNoDailyReference
 
         ( Details.Adequacy, Just amount, Just referenceAmount ) ->
             if amount >= referenceAmount then
-                "Daily reference reached"
+                I18n.t TidNutritionDetailsDailyReferenceReached
 
             else
-                formatAmount (referenceAmount - amount) nutrient.unit
-                    ++ " to daily reference"
+                I18n.t
+                    (TidNutritionDetailsToDailyReference
+                        (formatAmount (referenceAmount - amount) nutrient.unit)
+                    )
 
         ( Details.Maximum, Just amount, Just referenceAmount ) ->
             if amount > referenceAmount then
-                formatAmount (amount - referenceAmount) nutrient.unit
-                    ++ " over daily limit"
+                I18n.t
+                    (TidNutritionDetailsOverDailyLimit
+                        (formatAmount (amount - referenceAmount) nutrient.unit)
+                    )
 
             else
-                formatAmount (referenceAmount - amount) nutrient.unit ++ " remaining"
+                I18n.t
+                    (TidNutritionDetailsRemaining
+                        (formatAmount (referenceAmount - amount) nutrient.unit)
+                    )
 
         _ ->
-            "No daily reference"
+            I18n.t TidNutritionDetailsNoDailyReference
 
 
 guidanceColor : Theme -> Nutrient -> Element.Color
@@ -652,58 +659,52 @@ dailyAdvice : String -> String
 dailyAdvice code =
     case code of
         "FIBER_G" ->
-            "Fiber supports digestive health. One day below the reference "
-                ++ "does not indicate a deficiency."
+            I18n.t TidNutritionDetailsAdviceFiber
 
         "SUGAR_G" ->
-            "Includes naturally occurring and added sugars; "
-                ++ "FDA sets no Daily Value for total sugars."
+            I18n.t TidNutritionDetailsAdviceSugar
 
         "ADDED_SUGAR_G" ->
-            "Added sugars have a daily limit, not a target."
+            I18n.t TidNutritionDetailsAdviceAddedSugar
 
         "SATURATED_FAT_G" ->
-            "This is a daily limit. Replacing some saturated fat with unsaturated fat "
-                ++ "is generally more useful than simply removing fat."
+            I18n.t TidNutritionDetailsAdviceSaturatedFat
 
         "TRANS_FAT_G" ->
-            "No FDA Daily Value; keep intake as low as practical."
+            I18n.t TidNutritionDetailsAdviceTransFat
 
         "MONOUNSATURATED_FAT_G" ->
-            "Unsaturated fats provide context for fat quality; there is no single FDA daily target."
+            I18n.t TidNutritionDetailsAdviceUnsaturatedFats
 
         "POLYUNSATURATED_FAT_G" ->
-            "Unsaturated fats provide context for fat quality; there is no single FDA daily target."
+            I18n.t TidNutritionDetailsAdviceUnsaturatedFats
 
         "SODIUM_MG" ->
-            "Sodium is a daily limit, not a target to chase."
+            I18n.t TidNutritionDetailsAdviceSodium
 
         "CHOLESTEROL_MG" ->
-            "Dietary cholesterol is only one influence on blood cholesterol; "
-                ++ "saturated and trans fats are often more actionable."
+            I18n.t TidNutritionDetailsAdviceCholesterol
 
         "POTASSIUM_MG" ->
-            "Potassium is shown against the FDA daily reference."
+            I18n.t TidNutritionDetailsAdvicePotassium
 
         "CALCIUM_MG" ->
-            "Calcium totals reflect your logged items."
+            I18n.t TidNutritionDetailsAdviceCalcium
 
         "IRON_MG" ->
-            "Iron needs vary by life stage; this is a general reference."
+            I18n.t TidNutritionDetailsAdviceIron
 
         "MAGNESIUM_MG" ->
-            "The FDA Daily Value is 420 mg. For adults, the National Academies’ "
-                ++ "350 mg upper limit applies only to magnesium from supplements and "
-                ++ "medications, not food."
+            I18n.t TidNutritionDetailsAdviceMagnesium
 
         "VITAMIN_D_UG" ->
-            "Vitamin D in logged items is only one part of your overall intake."
+            I18n.t TidNutritionDetailsAdviceVitaminD
 
         "VITAMIN_B12_UG" ->
-            "More than the daily reference is not shown as a warning."
+            I18n.t TidNutritionDetailsAdviceVitaminB12
 
         _ ->
-            "This reflects the items logged for this day."
+            I18n.t TidNutritionDetailsAdviceDefault
 
 
 formatAmount : Float -> String -> String
@@ -714,25 +715,24 @@ formatAmount amount unit =
 referenceSection : Theme -> NutritionDetails -> Element msg
 referenceSection theme report =
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "About these references")
+        { header =
+            Just (Typography.subsectionTitle theme (I18n.t TidNutritionDetailsAboutReferences))
         , body =
             [ Element.paragraph [ Font.color theme.textMuted, Typography.body ]
                 [ Element.text
-                    ("These comparisons use "
-                        ++ report.reference.name
-                        ++ " from "
-                        ++ report.reference.authority
-                        ++ " ("
-                        ++ report.reference.jurisdiction
-                        ++ ") for "
-                        ++ report.reference.populationLabel
-                        ++ ". They are informational daily comparisons, not medical diagnoses."
+                    (I18n.t
+                        (TidNutritionDetailsReferencesDescription
+                            report.reference.name
+                            report.reference.authority
+                            report.reference.jurisdiction
+                            report.reference.populationLabel
+                        )
                     )
                 ]
             , Element.newTabLink
                 [ Font.color theme.brandBlue, Font.underline, Typography.body ]
                 { url = report.reference.sourceUrl
-                , label = Element.text "View reference source"
+                , label = Element.text (I18n.t TidNutritionDetailsViewReferenceSource)
                 }
             ]
         , footer = Nothing

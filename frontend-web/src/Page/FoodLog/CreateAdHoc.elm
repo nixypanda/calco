@@ -24,7 +24,9 @@ import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Ticket exposing (Ticket)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -212,7 +214,7 @@ submitWithContext model =
                 startSubmission model
 
         Editor.CustomFoodContext ->
-            validationFailure "This editor is not configured for food logging." model
+            validationFailure (I18n.t TidFoodEditorErrorNotConfigured) model
 
 
 startSubmission : Model -> ( Model, Cmd Msg, OutMsg )
@@ -235,7 +237,7 @@ startSubmission model =
                     validationFailure message model
 
         Editor.CustomFoodContext ->
-            validationFailure "This editor is not configured for food logging." model
+            validationFailure (I18n.t TidFoodEditorErrorNotConfigured) model
 
 
 requestProductLog : String -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -280,8 +282,7 @@ productLogFailure error model =
                     | submit =
                         LogFailedAfterFoodSaved
                             { productId = productId
-                            , message =
-                                "Food was saved to My Foods, but it could not be logged."
+                            , message = I18n.t TidFoodLogSavedNotLogged
                             }
                   }
                 , Cmd.none
@@ -346,13 +347,13 @@ viewForAi showOptional { model, device, theme } =
             , label =
                 case model.submit of
                     LogFailedAfterFoodSaved _ ->
-                        "Retry logging"
+                        I18n.t TidFoodLogRetryLogging
 
                     _ ->
-                        "Log Food"
+                        I18n.t TidTitleLogFood
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (isSubmitting model.submit))
-            , submittingLabel = Just "Logging..."
+            , submittingLabel = Just (I18n.t TidFoodShowLogging)
             , trailing = Nothing
             }
         ]

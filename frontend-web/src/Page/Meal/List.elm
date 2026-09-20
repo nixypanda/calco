@@ -13,7 +13,9 @@ import Api.Meals as MealsApi exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -121,7 +123,7 @@ bodyView theme device model =
                             theme
                             { tone = Button.Primary
                             , width = Button.FullWidth
-                            , label = "+ Create Meal"
+                            , label = I18n.t TidMealListCreate
                             , onPress = CreateMealClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -130,7 +132,7 @@ bodyView theme device model =
                         )
                 , body =
                     if List.isEmpty meals then
-                        [ Typography.mutedBodyParagraph theme "No items yet." ]
+                        [ Typography.mutedBodyParagraph theme (I18n.t TidCustomFoodListEmpty) ]
 
                     else
                         List.intersperse (Surface.hairline theme)
@@ -174,11 +176,18 @@ mealSummaryText : Meal -> String
 mealSummaryText meal =
     [ Maybe.map
         (\summary ->
-            String.fromInt (round (Nutrition.safeAmount (Maybe.withDefault "0" summary.energyKcal)))
-                ++ " kcal"
+            I18n.t
+                (TidDiaryKcal
+                    (String.fromInt
+                        (round (Nutrition.safeAmount (Maybe.withDefault "0" summary.energyKcal)))
+                    )
+                )
         )
         meal.nutritionSummary
-    , Just (String.fromInt (List.length meal.components) ++ " components")
+    , Just
+        (I18n.t
+            (TidMealComponentsCount (String.fromInt (List.length meal.components)))
+        )
     ]
         |> Text.dotSeparated
 

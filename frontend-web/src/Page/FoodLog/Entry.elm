@@ -25,8 +25,10 @@ import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
@@ -649,7 +651,8 @@ loadedView theme device model =
                  else
                     [ { title = Nothing, body = categories } ]
                 )
-                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                    ++ [ { title =
+                            Just (Typography.subsectionTitle theme (I18n.t TidFoodShowPortion))
                          , body =
                             List.map (Element.map FormMsg)
                                 (FoodLogForm.fields
@@ -785,7 +788,7 @@ metaSubtitle device maybeFood log =
 
                 loggedMeta : String
                 loggedMeta =
-                    "Logged " ++ LocalDate.display log.logDate
+                    I18n.t (TidFoodLogLogged (LocalDate.display log.logDate))
             in
             if UiCommon.isSmall device then
                 UiPage.SubtitleMetaLines
@@ -805,7 +808,7 @@ metaSubtitle device maybeFood log =
             UiPage.SubtitleText
                 (Text.dotSeparated
                     [ FoodLog.itemBrand log.item
-                    , Just ("Logged " ++ LocalDate.display log.logDate)
+                    , Just (I18n.t (TidFoodLogLogged (LocalDate.display log.logDate)))
                     ]
                 )
 
@@ -835,17 +838,17 @@ detailActionsView theme device model =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Save"
+                    , label = I18n.t TidCommonSave
                     , onPress = SubmitClicked
                     , submitState = Just (submitState model)
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t TidCommonSaving)
                     , trailing = Nothing
                     }
                 )
             , Element.el [ Element.width Element.fill ]
                 (Button.bottomActionButtons device
                     theme
-                    [ { label = "Delete Log"
+                    [ { label = I18n.t TidFoodLogDelete
                       , onPress = DeleteClicked
                       , tone = Button.Danger
                       }
@@ -859,10 +862,10 @@ deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
     View.DeleteModal.deleteModalView theme
         device
-        { title = "Delete log?"
-        , description = "This will permanently remove the log entry."
-        , confirmLabel = "Confirm Delete"
-        , pendingLabel = "Deleting..."
+        { title = I18n.t TidFoodLogDeleteConfirmTitle
+        , description = I18n.t TidFoodLogDeleteConfirmDescription
+        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

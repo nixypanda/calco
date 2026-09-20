@@ -19,8 +19,10 @@ import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import File exposing (File)
+import I18n
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -323,15 +325,15 @@ view { model, device, theme } =
 
         Just review ->
             UiPage.pageContainer
-                [ Typography.sectionTitle theme "Review food estimate"
+                [ Typography.sectionTitle theme (I18n.t TidAssistantReviewFoodEstimate)
                 , Typography.mutedParagraph theme
-                    "Nutrition values are totals for the entire portion you are logging."
+                    (I18n.t TidAssistantReviewNutritionTotalsNote)
                 , warningView theme model.warnings
                 , Button.textButton device
                     theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = "Ask for changes"
+                    , label = I18n.t TidAssistantAskForChanges
                     , onPress = AskForChangesClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -360,10 +362,10 @@ additionalNutrientsToggle device theme model review =
             , width = Button.FullWidth
             , label =
                 if model.showAdditionalNutrients then
-                    "Hide additional nutrients"
+                    I18n.t TidAssistantHideAdditionalNutrients
 
                 else
-                    "Show additional nutrients"
+                    I18n.t TidAssistantShowAdditionalNutrients
             , onPress = ToggleAdditionalNutrients
             , submitState = Nothing
             , submittingLabel = Nothing
@@ -386,8 +388,11 @@ warningView theme warnings =
 
     else
         Surface.formSection theme
-            "Estimate notes"
+            (I18n.t TidAssistantEstimateNotes)
             (List.map
-                (\warning -> Typography.mutedParagraph theme ("Estimate: " ++ warning))
+                (\warning ->
+                    Typography.mutedParagraph theme
+                        (I18n.t (TidAssistantEstimatePrefix warning))
+                )
                 warnings
             )

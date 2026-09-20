@@ -33,10 +33,12 @@ import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition exposing (defaultCode)
 import Data.Search as Search exposing (Completion, QueryState)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -220,7 +222,7 @@ updateFormField msg form =
                             product.name
 
                         Err _ ->
-                            "Unknown food"
+                            I18n.t TidMealUnknownFood
 
                 named : Set String
                 named =
@@ -384,28 +386,28 @@ viewFormFields :
 viewFormFields theme device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Surface.formSection theme
-            "Basic Info"
+            (I18n.t TidFoodEditorBasicInfo)
             [ UiInput.input theme
-                { label = "Name"
+                { label = I18n.t TidFoodEditorName
                 , value = form.name
                 , onChange = toMsg << NameChanged
                 }
             , UiInput.input theme
-                { label = "Notes"
+                { label = I18n.t TidMealNotes
                 , value = form.notes
                 , onChange = toMsg << NotesChanged
                 }
             ]
         , Surface.formSection theme
-            "Total"
+            (I18n.t TidMealTotal)
             [ UiInput.numericInput theme
-                { label = "Total Quantity"
+                { label = I18n.t TidMealTotalQuantity
                 , value = form.totalQuantity
                 , onChange = toMsg << TotalQuantityChanged
                 }
             , UiInput.selectDropdown device
                 theme
-                { label = "Total Unit"
+                { label = I18n.t TidMealTotalUnit
                 , selected = form.totalUnit
                 , options = QuantityInput.unitOptions form.totalUnit form.units
                 , onChange = toMsg << TotalUnitChanged
@@ -414,7 +416,7 @@ viewFormFields theme device toMsg form =
                 }
             ]
         , Surface.section theme
-            { header = Just (Typography.subsectionTitle theme "Components")
+            { header = Just (Typography.subsectionTitle theme (I18n.t TidMealComponents))
             , body =
                 List.intersperse (Surface.hairline theme)
                     (List.map (componentRowView theme device toMsg form.units) form.components)
@@ -424,7 +426,7 @@ viewFormFields theme device toMsg form =
                         theme
                         { tone = Button.Ghost
                         , width = Button.FullWidth
-                        , label = "+ Add Component"
+                        , label = I18n.t TidMealAddComponent
                         , onPress = toMsg AddComponentClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
@@ -702,7 +704,7 @@ componentRowView theme device toMsg units row =
             { id = "meal-component-completions-" ++ String.fromInt row.rowId
             , onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query
-            , label = UiInput.LabelAbove "Search Product"
+            , label = UiInput.LabelAbove (I18n.t TidMealSearchProduct)
             , completions = Search.completions row.search.query row.search.categorySuggestions
             , activeIndex = row.completionIndex
             , onActiveChanged = toMsg << ComponentCompletionActiveChanged row.rowId
@@ -711,7 +713,7 @@ componentRowView theme device toMsg units row =
             }
         , case row.searchResults of
             Loading ->
-                Feedback.loading theme "Searching foods..."
+                Feedback.loading theme (I18n.t TidMealSearchingFoods)
 
             Success results ->
                 if List.isEmpty results then
@@ -739,13 +741,13 @@ componentRowView theme device toMsg units row =
                 Element.none
         , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ UiInput.numericInput theme
-                { label = "Qty"
+                { label = I18n.t TidMealQty
                 , value = row.quantity
                 , onChange = toMsg << ComponentQuantityChanged row.rowId
                 }
             , UiInput.selectDropdown device
                 theme
-                { label = "Unit"
+                { label = I18n.t TidNutrientTableUnit
                 , selected = row.unit
                 , options = QuantityInput.unitOptions row.unit units
                 , onChange = toMsg << ComponentUnitChanged row.rowId
@@ -756,7 +758,7 @@ componentRowView theme device toMsg units row =
                 (Button.iconButton device
                     theme
                     { icon = Icon.Close
-                    , title = "Remove"
+                    , title = I18n.t TidFoodEditorRemove
                     , onPress = Just (toMsg (RemoveComponentClicked row.rowId))
                     , tone = Button.Danger
                     }

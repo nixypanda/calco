@@ -21,8 +21,10 @@ module Data.FoodAssistant exposing
     , userTurn
     )
 
+import I18n
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Translations.Ids exposing (TranslationId(..))
 
 
 type alias AssistantStatus =
@@ -281,10 +283,10 @@ boundedTurn role raw =
             String.trim raw
     in
     if String.isEmpty value then
-        Err "A conversation message is required."
+        Err (I18n.t TidAssistantConversationMessageRequired)
 
     else if String.length value > 4000 then
-        Err "Conversation messages must be 4,000 characters or fewer."
+        Err (I18n.t TidAssistantConversationMessageTooLong)
 
     else
         Ok (ConversationTurn role value)
@@ -293,10 +295,10 @@ boundedTurn role raw =
 conversation : List ConversationTurn -> Result String Conversation
 conversation turns =
     if List.isEmpty turns then
-        Err "A conversation must contain a message."
+        Err (I18n.t TidAssistantConversationEmpty)
 
     else if List.length turns > 20 then
-        Err "This conversation is full. Start a new assistant session."
+        Err (I18n.t TidAssistantConversationFull)
 
     else
         Ok (Conversation turns)

@@ -23,8 +23,10 @@ import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Date as LocalDate
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
@@ -247,10 +249,10 @@ submitFailureMessage : SubmitFailure -> String
 submitFailureMessage failure =
     case failure of
         AmountRequiredMessage ->
-            "Amount is required."
+            I18n.t TidFoodLogAmountRequired
 
         InvalidDateMessage ->
-            "Could not read device date."
+            I18n.t TidFoodLogInvalidDeviceDate
 
         RequestFailed message ->
             message
@@ -280,17 +282,21 @@ fields theme device food units model =
         ++ [ mealSlotDropdown theme device model
            , View.QuantityInput.dropdown theme
                 device
-                { amountLabel = "Amount"
+                { amountLabel = I18n.t TidNutrientTableAmount
                 , amount = model.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = "Unit"
+                , unitLabel = I18n.t TidNutrientTableUnit
                 , unit = model.unit
                 , units = sourceForFood food units
                 , onUnitChange = UnitChanged
                 , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-           , UiInput.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
+           , UiInput.input theme
+                { label = I18n.t TidFoodLogNotes
+                , value = model.notes
+                , onChange = NotesChanged
+                }
            ]
 
 
@@ -308,10 +314,10 @@ mealSlotDropdown : Theme -> Device -> Model -> Element Msg
 mealSlotDropdown theme device model =
     UiInput.selectDropdown device
         theme
-        { label = "Meal"
+        { label = I18n.t TidTitleMeal
         , selected = model.mealSlot
         , options =
-            [ ( Nothing, "None" )
+            [ ( Nothing, I18n.t TidFoodEditorMealNone )
             , ( Just Breakfast, MealSlot.label Breakfast )
             , ( Just Lunch, MealSlot.label Lunch )
             , ( Just Dinner, MealSlot.label Dinner )

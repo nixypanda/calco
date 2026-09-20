@@ -19,6 +19,8 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -222,7 +224,7 @@ update msg model =
                                 { loaded
                                     | fields =
                                         withSubmit
-                                            (Common.SubmitFailed "Name is required")
+                                            (Common.SubmitFailed (I18n.t TidCustomFoodNameRequired))
                                             loaded.fields
                                 }
                             , Cmd.none
@@ -333,7 +335,7 @@ withSubmit state fields =
 
 componentRequiredMessage : String
 componentRequiredMessage =
-    "At least one component with a selected product is required"
+    I18n.t TidMealComponentRequired
 
 
 applyNutritionOk : List NutrientAmount -> Model -> Model
@@ -510,11 +512,11 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Update Meal"
+                    , label = I18n.t TidMealUpdate
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]

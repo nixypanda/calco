@@ -13,6 +13,8 @@ import Api.Meals exposing (CreateMealRequest, Meal)
 import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -73,7 +75,7 @@ update msg fields =
                     )
 
                 Err Common.MealNameRequired ->
-                    ( { fields | submit = Common.SubmitFailed "Name is required" }
+                    ( { fields | submit = Common.SubmitFailed (I18n.t TidCustomFoodNameRequired) }
                     , Cmd.none
                     , NoOp
                     )
@@ -82,7 +84,7 @@ update msg fields =
                     ( { fields
                         | submit =
                             Common.SubmitFailed
-                                "At least one component with a selected product is required"
+                                (I18n.t TidMealComponentRequired)
                       }
                     , Cmd.none
                     , NoOp
@@ -151,10 +153,10 @@ view { model, device, theme } =
             theme
             { tone = Button.Primary
             , width = Button.FullWidth
-            , label = "Create Meal"
+            , label = I18n.t TidTitleCreateMeal
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (Common.isSubmitting model.submit))
-            , submittingLabel = Just "Saving..."
+            , submittingLabel = Just (I18n.t TidCommonSaving)
             , trailing = Nothing
             }
         ]

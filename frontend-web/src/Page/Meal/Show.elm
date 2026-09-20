@@ -22,6 +22,8 @@ import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Element.Font as Font
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -159,7 +161,7 @@ update msg model =
                                     product.name
 
                                 Err _ ->
-                                    "Unknown food"
+                                    I18n.t TidMealUnknownFood
 
                         nextLoaded : LoadedModel
                         nextLoaded =
@@ -591,14 +593,14 @@ headerView theme model =
                 }
 
         _ ->
-            Typography.truncatedHeader theme "Meal"
+            Typography.truncatedHeader theme (I18n.t TidTitleMeal)
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
 loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section theme
-            { header = Just (Typography.subsectionTitle theme "Components")
+            { header = Just (Typography.subsectionTitle theme (I18n.t TidMealComponents))
             , body =
                 List.intersperse (Surface.hairline theme)
                     (List.map (componentView theme loaded) loaded.meal.components)
@@ -619,8 +621,10 @@ componentView theme loaded component =
                 |> Maybe.map
                     (\kcal ->
                         " ⋅ "
-                            ++ String.fromInt (round (Nutrition.safeAmount kcal))
-                            ++ " kcal"
+                            ++ I18n.t
+                                (TidDiaryKcal
+                                    (String.fromInt (round (Nutrition.safeAmount kcal)))
+                                )
                     )
                 |> Maybe.withDefault ""
 
@@ -671,13 +675,13 @@ nutritionView theme device loaded =
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Surface.formSection theme
-            "Portion"
+            (I18n.t TidFoodShowPortion)
             [ View.QuantityInput.dropdown theme
                 device
-                { amountLabel = "Amount"
+                { amountLabel = I18n.t TidNutrientTableAmount
                 , amount = input.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = "Unit"
+                , unitLabel = I18n.t TidNutrientTableUnit
                 , unit = input.unit
                 , units = loaded.units
                 , onUnitChange = UnitChanged
@@ -693,8 +697,8 @@ bottomActionsView : Theme -> Device -> Element Msg
 bottomActionsView theme device =
     Button.bottomActionButtons device
         theme
-        [ { label = "Edit Meal", onPress = EditClicked, tone = Button.Primary }
-        , { label = "Delete Meal", onPress = DeleteClicked, tone = Button.Danger }
+        [ { label = I18n.t TidTitleEditMeal, onPress = EditClicked, tone = Button.Primary }
+        , { label = I18n.t TidMealDelete, onPress = DeleteClicked, tone = Button.Danger }
         ]
 
 
@@ -702,10 +706,10 @@ deleteModalView : Theme -> Device -> LoadedModel -> Maybe (Element Msg)
 deleteModalView theme device loaded =
     View.DeleteModal.deleteModalView theme
         device
-        { title = "Delete meal?"
-        , description = "This will permanently remove the meal."
-        , confirmLabel = "Confirm Delete"
-        , pendingLabel = "Deleting..."
+        { title = I18n.t TidMealDeleteConfirmTitle
+        , description = I18n.t TidMealDeleteConfirmDescription
+        , confirmLabel = I18n.t TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

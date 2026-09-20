@@ -41,8 +41,10 @@ import File.Select
 import Html
 import Html.Attributes as HtmlAttributes
 import Html.Events as HtmlEvents
+import I18n
 import Json.Decode as Decode
 import Task
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -517,27 +519,25 @@ draftErrorMessage error =
         Client.RateLimited maybeSeconds ->
             case maybeSeconds of
                 Just seconds ->
-                    "The assistant is busy. Try again in "
-                        ++ String.fromInt seconds
-                        ++ " seconds."
+                    I18n.t (TidAssistantRateLimitedRetry (String.fromInt seconds))
 
                 Nothing ->
-                    "The assistant is busy. Wait a moment, then retry."
+                    I18n.t TidAssistantBusy
 
         Client.Timeout ->
-            "The assistant took too long to respond. Please retry."
+            I18n.t TidAssistantTimeout
 
         Client.NetworkError ->
-            "The assistant could not be reached. Check your connection and retry."
+            I18n.t TidAssistantNetworkError
 
         Client.BadStatus 401 _ _ ->
-            "Your session has expired."
+            I18n.t TidAssistantSessionExpired
 
         Client.BadStatus _ _ message ->
             message
 
         _ ->
-            "The assistant could not create a draft. Please retry."
+            I18n.t TidAssistantDraftFailed
 
 
 addSelectedPhotos : List File -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -615,16 +615,16 @@ validatePhotoMetadata existingPhotos selectedPhotos =
             existingPhotos ++ selectedPhotos
     in
     if List.length photos > maxPhotoCount then
-        Err "Only four photos can be attached."
+        Err (I18n.t TidAssistantPhotoLimit)
 
     else if List.any (not << supportedPhotoMime << .mimeType) photos then
-        Err "Photos must be JPEG, PNG, or WebP."
+        Err (I18n.t TidAssistantPhotoTypes)
 
     else if List.any (\photo -> photo.size > maxPhotoBytes) photos then
-        Err "Each photo must be 15 MiB or smaller."
+        Err (I18n.t TidAssistantPhotoTooLarge)
 
     else if List.sum (List.map .size photos) > maxTotalPhotoBytes then
-        Err "Photos together must be 40 MiB or smaller."
+        Err (I18n.t TidAssistantPhotosTotalTooLarge)
 
     else
         Ok ()
@@ -708,20 +708,22 @@ viewFor purpose theme device formHasManualInput model =
 
         Disabled ->
             Surface.section theme
-                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                { header =
+                    Just (Typography.subsectionTitle theme (I18n.t TidTitleCreateWithAi))
                 , body =
                     [ Typography.mutedParagraph theme
-                        "Food assistance is unavailable on this deployment."
+                        (I18n.t TidAssistantUnavailable)
                     ]
                 , footer = Nothing
                 }
 
         StatusFailed ->
             Surface.section theme
-                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                { header =
+                    Just (Typography.subsectionTitle theme (I18n.t TidTitleCreateWithAi))
                 , body =
                     [ Feedback.errorBanner theme
-                        "Food-assistant availability could not be checked."
+                        (I18n.t TidAssistantStatusCheckFailed)
                     ]
                 , footer =
                     Just
@@ -729,7 +731,7 @@ viewFor purpose theme device formHasManualInput model =
                             theme
                             { tone = Button.Ghost
                             , width = Button.FullWidth
-                            , label = "Retry availability check"
+                            , label = I18n.t TidAssistantRetryStatusCheck
                             , onPress = RetryStatusClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -785,7 +787,7 @@ conversationView theme device chat =
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.row [ Element.width Element.fill ]
-                [ Element.el [ Font.bold ] (Element.text "Conversation")
+                [ Element.el [ Font.bold ] (Element.text (I18n.t TidAssistantConversation))
                 , if chat.request == Sending || chat.draft /= Nothing then
                     Element.none
 
@@ -795,7 +797,7 @@ conversationView theme device chat =
                             theme
                             { tone = Button.Primary
                             , width = Button.ContentWidth
-                            , label = "New session"
+                            , label = I18n.t TidAssistantNewSession
                             , onPress = NewSessionClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -818,23 +820,19 @@ modalView theme device model =
             if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
                 Just
                     (Feedback.modalOverlay theme
-                        { title = "Start new session?"
+                        { title = I18n.t TidAssistantStartNewSessionTitle
                         , body =
                             [ Typography.mutedParagraph theme
-                                (String.concat
-                                    [ "The current conversation and draft will be "
-                                    , "discarded. Your food form will not be changed."
-                                    ]
-                                )
+                                (I18n.t TidAssistantStartNewSessionBody)
                             ]
                         , actions =
                             Button.bottomActionButtons device
                                 theme
-                                [ { label = "Cancel"
+                                [ { label = I18n.t TidCommonCancel
                                   , onPress = CancelNewSessionClicked
                                   , tone = Button.Primary
                                   }
-                                , { label = "Start new session"
+                                , { label = I18n.t TidAssistantStartNewSession
                                   , onPress = ConfirmNewSessionClicked
                                   , tone = Button.Danger
                                   }
@@ -863,10 +861,10 @@ turnView theme turn =
             (Element.text
                 (case FoodAssistant.turnRole turn of
                     User ->
-                        "You"
+                        I18n.t TidAssistantRoleUser
 
                     Assistant ->
-                        "CalCo assistant"
+                        I18n.t TidAssistantRoleAssistant
                 )
             )
         , Element.paragraph [ Element.width Element.fill ]
@@ -890,10 +888,10 @@ descriptionInput theme chat =
                 (Input.placeholder []
                     (Element.text
                         (if chat.draft == Nothing then
-                            "For example: one bowl of dal, about 300 g"
+                            I18n.t TidAssistantDescriptionPlaceholder
 
                          else
-                            "For example: use 250 g and reduce the oil"
+                            I18n.t TidAssistantChangesPlaceholder
                         )
                     )
                 )
@@ -901,10 +899,10 @@ descriptionInput theme chat =
             Input.labelAbove []
                 (UiInput.fieldLabel theme
                     (if chat.draft == Nothing then
-                        "Food description or answer"
+                        I18n.t TidAssistantDescriptionLabel
 
                      else
-                        "What should change?"
+                        I18n.t TidAssistantChangesLabel
                     )
                 )
         , spellcheck = True
@@ -921,7 +919,7 @@ photoPicker theme device chat =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
             ]
-            ([ Element.el [ Font.bold ] (Element.text "Photos (optional)")
+            ([ Element.el [ Font.bold ] (Element.text (I18n.t TidAssistantPhotosOptional))
              , photoActionView theme device chat
              ]
                 ++ photoErrorView theme chat.photoError
@@ -943,7 +941,7 @@ photoPicker theme device chat =
 photoActionView : Theme -> Device -> ChatModel -> Element Msg
 photoActionView theme device chat =
     if List.length chat.photos >= maxPhotoCount then
-        Typography.mutedParagraph theme "Four photos attached (maximum)."
+        Typography.mutedParagraph theme (I18n.t TidAssistantPhotosMax)
 
     else
         Element.column
@@ -967,10 +965,10 @@ choosePhotosButton theme device chat =
         label : String
         label =
             if List.isEmpty chat.photos then
-                "Choose photos"
+                I18n.t TidAssistantChoosePhotos
 
             else
-                "Choose more photos"
+                I18n.t TidAssistantChooseMorePhotos
     in
     Button.textButton device
         theme
@@ -1000,12 +998,13 @@ cameraInput chat =
                 , ( "photo-capture-label--disabled", not (canAddPhotos chat) )
                 ]
             ]
-            [ Html.span [] [ Html.text "Take photo" ]
+            [ Html.span [] [ Html.text (I18n.t TidAssistantTakePhoto) ]
             , Html.input
                 [ HtmlAttributes.type_ "file"
                 , HtmlAttributes.accept "image/*"
                 , HtmlAttributes.attribute "capture" "environment"
-                , HtmlAttributes.attribute "aria-label" "Take a food photo"
+                , HtmlAttributes.attribute "aria-label"
+                    (I18n.t TidAssistantTakePhotoAria)
                 , HtmlAttributes.disabled (not (canAddPhotos chat))
                 , HtmlEvents.on "change" cameraFileDecoder
                 , HtmlAttributes.value ""
@@ -1050,7 +1049,7 @@ photoPreview theme device index photo maybeUrl =
                     [ Element.width (Element.px 72)
                     , Element.height (Element.px 72)
                     ]
-                    (Element.text "Loading preview…")
+                    (Element.text (I18n.t TidAssistantLoadingPreview))
         , Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space4
@@ -1062,7 +1061,7 @@ photoPreview theme device index photo maybeUrl =
                 theme
                 { tone = Button.DangerOutline
                 , width = Button.ContentWidth
-                , label = "Remove photo"
+                , label = I18n.t TidAssistantRemovePhoto
                 , onPress = RemovePhoto index
                 , submitState = Nothing
                 , submittingLabel = Nothing
@@ -1090,10 +1089,10 @@ sendButton purpose theme device request =
         , label =
             case purpose of
                 CustomFood ->
-                    "Send"
+                    I18n.t TidAssistantSend
 
                 AdHocLog ->
-                    "Estimate Food"
+                    I18n.t TidAssistantEstimateFood
         , onPress = SendClicked
         , submitState =
             Just
@@ -1103,7 +1102,7 @@ sendButton purpose theme device request =
                  else
                     Button.Idle
                 )
-        , submittingLabel = Just "Generating draft…"
+        , submittingLabel = Just (I18n.t TidAssistantGeneratingDraft)
         , trailing = Nothing
         }
 
@@ -1119,7 +1118,7 @@ requestErrorView theme device request =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = "Retry last request"
+                    , label = I18n.t TidAssistantRetryLastRequest
                     , onPress = RetryClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -1150,7 +1149,7 @@ warningView theme warnings =
                         , Border.rounded DesignTokens.radiusControl
                         , Background.color theme.brandBlueSoft
                         ]
-                        [ Element.text ("Review estimate: " ++ warning) ]
+                        [ Element.text (I18n.t (TidAssistantReviewEstimatePrefix warning)) ]
                 )
                 warnings
             )
@@ -1177,7 +1176,7 @@ draftPreviewView purpose theme device formHasManualInput chat =
                 , Border.rounded DesignTokens.radiusControl
                 ]
                 [ Element.row [ Element.width Element.fill ]
-                    [ Typography.subsectionTitle theme "Draft preview"
+                    [ Typography.subsectionTitle theme (I18n.t TidAssistantDraftPreview)
                     , if chat.request == Sending then
                         Element.none
 
@@ -1187,7 +1186,7 @@ draftPreviewView purpose theme device formHasManualInput chat =
                                 theme
                                 { tone = Button.DangerOutline
                                 , width = Button.ContentWidth
-                                , label = "New session"
+                                , label = I18n.t TidAssistantNewSession
                                 , onPress = NewSessionClicked
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
@@ -1196,8 +1195,8 @@ draftPreviewView purpose theme device formHasManualInput chat =
                             )
                     ]
                 , previewRows theme preview.details
-                , previewSection theme "Nutrition per 100 g" preview.nutrients
-                , previewSection theme "Servings" preview.servings
+                , previewSection theme (I18n.t TidAssistantNutritionPer100g) preview.nutrients
+                , previewSection theme (I18n.t TidFoodEditorServings) preview.servings
                 , draftActionView purpose theme device formHasManualInput chat
                 ]
 
@@ -1208,7 +1207,7 @@ previewSection theme title rows =
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.el [ Font.bold ] (Element.text title)
         , if List.isEmpty rows then
-            Typography.mutedParagraph theme "None suggested."
+            Typography.mutedParagraph theme (I18n.t TidAssistantNoNutrientsSuggested)
 
           else
             previewRows theme rows
@@ -1234,16 +1233,20 @@ previewRow theme ( label, value ) =
 draftPreviewData : FoodDraft -> DraftPreviewData
 draftPreviewData draft =
     { details =
-        [ ( "Name", draft.name )
-        , ( "Brand", Maybe.withDefault "Not specified" draft.brand )
-        , ( "Categories", defaultText "None suggested" (String.join ", " draft.categories) )
-        , ( "Default quantity"
+        [ ( I18n.t TidFoodEditorName, draft.name )
+        , ( I18n.t TidFoodEditorBrand
+          , Maybe.withDefault (I18n.t TidCommonNotSpecified) draft.brand
+          )
+        , ( I18n.t TidFoodEditorCategories
+          , defaultText (I18n.t TidCommonNoneSuggested) (String.join ", " draft.categories)
+          )
+        , ( I18n.t TidAssistantDefaultQuantity
           , case ( draft.defaultQuantity, draft.defaultUnit ) of
                 ( Just quantity, Just unit ) ->
                     quantity ++ " " ++ unit
 
                 _ ->
-                    "Not specified"
+                    I18n.t TidCommonNotSpecified
           )
         ]
     , nutrients =
@@ -1258,11 +1261,11 @@ draftPreviewData draft =
         List.map
             (\serving ->
                 ( serving.unit
-                , "1 "
-                    ++ serving.unit
-                    ++ " = "
-                    ++ serving.gramsPerUnit
-                    ++ " g"
+                , I18n.t
+                    (TidAssistantServingConversion
+                        serving.unit
+                        serving.gramsPerUnit
+                    )
                 )
             )
             draft.servings
@@ -1306,15 +1309,13 @@ draftActionView purpose theme device formHasManualInput chat =
             if chat.awaitingOverwriteConfirmation then
                 confirmationSurface theme
                     [ Element.paragraph [ Element.width Element.fill ]
-                        [ Element.text
-                            "Applying this draft will replace the values already in the form."
-                        ]
+                        [ Element.text (I18n.t TidAssistantApplyReplacesForm) ]
                     , compactActionRow device
                         [ Button.textButton device
                             theme
                             { tone = Button.Ghost
                             , width = Button.ResponsiveWidth
-                            , label = "Cancel"
+                            , label = I18n.t TidCommonCancel
                             , onPress = CancelOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -1324,7 +1325,7 @@ draftActionView purpose theme device formHasManualInput chat =
                             theme
                             { tone = Button.Danger
                             , width = Button.ResponsiveWidth
-                            , label = "Replace form values"
+                            , label = I18n.t TidAssistantReplaceFormValues
                             , onPress = ConfirmOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -1345,10 +1346,10 @@ draftActionView purpose theme device formHasManualInput chat =
                             , width = Button.FullWidth
                             , label =
                                 if chat.askingForChanges then
-                                    "Cancel changes"
+                                    I18n.t TidAssistantCancelChanges
 
                                 else
-                                    "Ask for changes"
+                                    I18n.t TidAssistantAskForChanges
                             , onPress =
                                 if chat.askingForChanges then
                                     CancelChangesClicked
@@ -1356,7 +1357,7 @@ draftActionView purpose theme device formHasManualInput chat =
                                 else
                                     AskForChangesClicked
                             , submitState = Just Button.Idle
-                            , submittingLabel = Just "Ask for changes"
+                            , submittingLabel = Just (I18n.t TidAssistantAskForChanges)
                             , trailing = Nothing
                             }
                         )
@@ -1368,13 +1369,13 @@ draftActionView purpose theme device formHasManualInput chat =
                             , label =
                                 case purpose of
                                     CustomFood ->
-                                        "Apply to form"
+                                        I18n.t TidAssistantApplyToForm
 
                                     AdHocLog ->
-                                        "Review estimate"
+                                        I18n.t TidAssistantReviewEstimate
                             , onPress = ApplyDraftClicked formHasManualInput
                             , submitState = Just Button.Idle
-                            , submittingLabel = Just "Applying…"
+                            , submittingLabel = Just (I18n.t TidAssistantApplying)
                             , trailing = Nothing
                             }
                         )
