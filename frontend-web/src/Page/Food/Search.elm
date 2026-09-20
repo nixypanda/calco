@@ -174,6 +174,7 @@ type Msg
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
+    | SearchRetryClicked
     | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
@@ -511,6 +512,32 @@ update msg model =
 
                         else
                             ( { model | results = Failure error }, Cmd.none, NoOp )
+
+        SearchRetryClicked ->
+            let
+                query : String
+                query =
+                    String.trim model.search.query
+
+                currentSearch : QueryState
+                currentSearch =
+                    model.search
+
+                nextSearch : QueryState
+                nextSearch =
+                    { currentSearch
+                        | searchToken = Ticket.next currentSearch.searchToken
+                    }
+            in
+            if String.isEmpty query then
+                ( model, Cmd.none, NoOp )
+
+            else
+                ( { model | search = nextSearch, results = Loading }
+                , Cmd.none
+                , RequestSearch nextSearch.searchToken
+                    { query = query, scope = searchRequestScope model.scope }
+                )
 
         RecentItemsLoaded date mealSlot result ->
             if model.date /= date || model.mealSlot /= mealSlot then
@@ -1154,7 +1181,18 @@ bodyView theme model device =
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Feedback.errorBanner theme (Client.displayError error)
-                , Feedback.emptyState theme "No foods found. Try a different search."
+                , Typography.mutedParagraph theme
+                    "Check your connection, then try the search again."
+                , Button.textButton device
+                    theme
+                    { tone = Button.Primary
+                    , width = Button.FullWidth
+                    , label = "Try again"
+                    , onPress = SearchRetryClicked
+                    , submitState = Just Button.Idle
+                    , submittingLabel = Just "Searching"
+                    , trailing = Nothing
+                    }
                 ]
 
         Success items ->

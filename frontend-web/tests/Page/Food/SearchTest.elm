@@ -617,6 +617,60 @@ tests =
                     |> first
                     |> .results
                     |> Expect.equal (Success [ apple ])
+        , test "retry re-runs the current search with a fresh token" <|
+            \_ ->
+                FoodSearch.update FoodSearch.SearchRetryClicked
+                    { loadedModel
+                        | results = Failure Client.NetworkError
+                        , search = Search.withQuery "apple" loadedModel.search
+                    }
+                    |> (\( updated, _, outMsg ) ->
+                            ( updated.results, updated.search.searchToken, outMsg )
+                       )
+                    |> Expect.equal
+                        ( Loading
+                        , ticket 2
+                        , FoodSearch.RequestSearch (ticket 2)
+                            { query = "apple", scope = Foods.SearchHistory }
+                        )
+        , test "retry with a blank query is ignored" <|
+            \_ ->
+                FoodSearch.update FoodSearch.SearchRetryClicked
+                    { loadedModel | results = Failure Client.NetworkError }
+                    |> third
+                    |> Expect.equal FoodSearch.NoOp
+        , test "search failure shows a retry instead of an empty result" <|
+            \_ ->
+                FoodSearch.contentView
+                    { model =
+                        { loadedModel
+                            | results = Failure Client.NetworkError
+                            , search = Search.withQuery "apple" loadedModel.search
+                        }
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.has
+                        [ Selector.text "Try again"
+                        , Selector.text "Check your connection, then try the search again."
+                        ]
+        , test "search failure no longer claims no foods were found" <|
+            \_ ->
+                FoodSearch.contentView
+                    { model =
+                        { loadedModel
+                            | results = Failure Client.NetworkError
+                            , search = Search.withQuery "apple" loadedModel.search
+                        }
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.hasNot
+                        [ Selector.text "No foods found. Try a different search." ]
         , test "search unauthorized expires session" <|
             \_ ->
                 FoodSearch.update
