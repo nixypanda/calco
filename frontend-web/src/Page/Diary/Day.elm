@@ -31,7 +31,6 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Html.Attributes
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui.Button as Button
@@ -39,8 +38,9 @@ import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
+import Ui.Media as Media
 import Ui.Surface as Surface
-import Ui.Theme exposing (Mode(..), Theme)
+import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 
@@ -834,7 +834,7 @@ macroSummaryRow theme macros =
         divider : Element msg
         divider =
             Element.el
-                [ Element.width (Element.px 1)
+                [ Element.width (Element.px DesignTokens.hairlineWidth)
                 , Element.height Element.fill
                 , Background.color theme.divider
                 ]
@@ -1320,36 +1320,6 @@ mealSlotHeaderHeight =
     118
 
 
-mealSlotFade : Theme -> Element msg
-mealSlotFade theme =
-    let
-        gradient : String
-        gradient =
-            case theme.mode of
-                Light ->
-                    "linear-gradient(to bottom, "
-                        ++ "rgba(255,255,255,0) 0%, "
-                        ++ "rgba(255,255,255,0) 25%, "
-                        ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ UiCommon.toCssColor theme.cardBg
-                        ++ " 100%)"
-
-                Dark ->
-                    "linear-gradient(to bottom, "
-                        ++ "rgba(0,0,0,0.25) 0%, "
-                        ++ "rgba(0,0,0,0.55) 45%, "
-                        ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ UiCommon.toCssColor theme.cardBg
-                        ++ " 100%)"
-    in
-    Element.el
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Element.htmlAttribute (Html.Attributes.style "background-image" gradient)
-        ]
-        Element.none
-
-
 mealSlotCard :
     Theme
     -> Device
@@ -1373,8 +1343,8 @@ mealSlotCard theme device maybeSlot header bodyChildren =
                 , mediaHeader =
                     Just
                         { height = mealSlotHeaderHeight
-                        , backgroundAttrs = mealSlotBackground slot
-                        , fade = Just (mealSlotFade theme)
+                        , backgroundAttrs = Media.imageBackground (mealSlotImage slot)
+                        , fade = Just (Media.fadeOverlay theme)
                         , contentPadding =
                             { top = 38
                             , right = mealSlotHorizontalPadding device
@@ -1392,33 +1362,6 @@ mealSlotHorizontalPadding device =
 
     else
         34
-
-
-mealSlotBackground : MealSlot -> List (Element.Attribute msg)
-mealSlotBackground slot =
-    let
-        image : { url : String, focusX : String }
-        image =
-            mealSlotImage slot
-    in
-    [ Element.htmlAttribute
-        (Html.Attributes.style
-            "background-image"
-            ("url(\"" ++ image.url ++ "\")")
-        )
-    , Element.htmlAttribute
-        (Html.Attributes.style
-            "background-size"
-            "max(100%, 1120px) auto"
-        )
-    , Element.htmlAttribute
-        (Html.Attributes.style
-            "background-position"
-            (image.focusX ++ " top")
-        )
-    , Element.htmlAttribute
-        (Html.Attributes.style "background-repeat" "no-repeat")
-    ]
 
 
 mealSlotImage : MealSlot -> { url : String, focusX : String }
@@ -1474,7 +1417,7 @@ logRow theme log =
                 [ View.Nutrients.macroDot theme log.nutrients
                 , Element.el
                     [ Element.width Element.fill
-                    , Element.htmlAttribute (Html.Attributes.style "min-width" "0")
+                    , UiCommon.minWidthZero
                     ]
                     (Typography.wrappedListItemTitle theme (FoodLog.itemName log.item))
                 , Element.row

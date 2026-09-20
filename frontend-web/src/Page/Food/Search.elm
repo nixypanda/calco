@@ -1018,7 +1018,7 @@ barcodeScannerPreview theme caption =
         ]
         [ Element.el
             [ Element.width Element.fill
-            , Element.height (Element.px 380)
+            , Element.height (Element.px DesignTokens.barcodePreviewHeight)
             , Border.rounded DesignTokens.radiusCard
             , Element.clip
             , Background.color theme.videoBackdrop
@@ -1039,7 +1039,7 @@ barcodeScannerGuide theme =
         (Element.el
             [ Element.centerY
             , Element.width Element.fill
-            , Element.height (Element.px 96)
+            , Element.height (Element.px DesignTokens.barcodeGuideHeight)
             , Border.rounded DesignTokens.radiusControl
             , Border.color theme.scannerGuide
             , Border.widthEach
@@ -1112,12 +1112,12 @@ scopeSegment theme selectedScope scope =
     in
     Input.button
         [ Element.width (Element.fillPortion 1)
-        , Element.height (Element.px 40)
+        , Element.height (Element.px DesignTokens.scannerSegmentHeight)
         , Background.color background
         , Border.rounded DesignTokens.radiusControl
         , Font.color foreground
         , Font.medium
-        , Font.size 14
+        , Typography.control
         , UiCommon.uiClass "ui-motion ui-pressable"
         , if selected then
             Element.mouseOver []

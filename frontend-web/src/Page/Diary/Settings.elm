@@ -205,7 +205,7 @@ slotCheckbox : List MealSlot -> MealSlot -> Element Msg
 slotCheckbox selected slot =
     Input.checkbox
         [ Element.width Element.fill
-        , Element.paddingXY 0 DesignTokens.space8
+        , Element.paddingXY DesignTokens.space0 DesignTokens.space8
         ]
         { onChange = SlotToggled slot
         , icon = Input.defaultCheckbox

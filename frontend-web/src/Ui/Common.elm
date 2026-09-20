@@ -3,6 +3,7 @@ module Ui.Common exposing
     , isSmall
     , minWidthZero
     , toCssColor
+    , transparent
     , uiClass
     )
 
@@ -13,6 +14,11 @@ import Html.Attributes
 isSmall : Device -> Bool
 isSmall device =
     device.class == Element.Phone
+
+
+transparent : Element.Color
+transparent =
+    Element.rgba 0 0 0 0
 
 
 hoverEffect : Device -> List Element.Decoration -> Element.Attribute msg

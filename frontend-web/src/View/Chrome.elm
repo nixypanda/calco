@@ -104,7 +104,7 @@ topBarView config profile =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.height (Element.px 58)
+        , Element.height (Element.px DesignTokens.topBarHeight)
         , Element.paddingXY DesignTokens.space16 0
         , Element.spacing DesignTokens.space16
         , Background.color config.theme.cardBg
@@ -139,8 +139,8 @@ topBarView config profile =
                 , Element.centerY
                 ]
                 [ Element.image
-                    [ Element.width (Element.px 28)
-                    , Element.height (Element.px 28)
+                    [ Element.width (Element.px DesignTokens.avatarSize)
+                    , Element.height (Element.px DesignTokens.avatarSize)
                     ]
                     { src = "/android-chrome-192x192.png"
                     , description = "CalCo"
@@ -183,12 +183,12 @@ leadingButton device theme leading onMenuClick onNavigate =
                 }
 
         NoLeadingAction ->
-            Element.el [ Element.width (Element.px 40) ] Element.none
+            Element.el [ Element.width (Element.px DesignTokens.iconPlaceholder) ] Element.none
 
         ShowAppIcon ->
             Element.image
-                [ Element.width (Element.px 28)
-                , Element.height (Element.px 28)
+                [ Element.width (Element.px DesignTokens.avatarSize)
+                , Element.height (Element.px DesignTokens.avatarSize)
                 ]
                 { src = "/android-chrome-192x192.png"
                 , description = "CalCo"
@@ -218,8 +218,8 @@ profileButton onPress theme profile =
 profileInitialButton : msg -> Theme -> String -> Element msg
 profileInitialButton onPress theme label =
     Input.button
-        [ Element.width (Element.px 44)
-        , Element.height (Element.px 44)
+        [ Element.width (Element.px DesignTokens.controlHeight)
+        , Element.height (Element.px DesignTokens.controlHeight)
         , Background.color theme.cardBg
         , Font.color theme.textPrimary
         , Font.center
@@ -245,7 +245,7 @@ updateBanner theme onPress =
         , Element.paddingXY DesignTokens.space16 DesignTokens.space8
         , Background.color theme.brandBlueSoft
         , Font.color theme.brandBlue
-        , Font.size 18
+        , Typography.banner
         ]
         { onPress = Just onPress
         , label =
@@ -454,7 +454,7 @@ bottomNavContainer : Theme -> List (Element msg) -> Element msg
 bottomNavContainer theme items =
     Element.row
         [ Element.width Element.fill
-        , Element.height (Element.px 56)
+        , Element.height (Element.px DesignTokens.bottomNavHeight)
         , Background.color theme.cardBg
         , Border.widthEach { top = 1, bottom = 0, left = 0, right = 0 }
         , Border.color theme.divider
@@ -766,7 +766,7 @@ profileMenu :
     -> Element msg
 profileMenu config =
     menuCard config.theme
-        { width = 240
+        { width = DesignTokens.profileMenuWidth
         , children = profileMenuContent config
         }
 

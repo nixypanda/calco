@@ -350,7 +350,7 @@ customFoodShowSkeleton theme =
         ]
         [ Element.el
             [ Element.width Element.fill
-            , Element.height (Element.px 120)
+            , Element.height (Element.px DesignTokens.mediaHeight)
             , Background.color theme.inputFill
             , Border.rounded DesignTokens.radiusCard
             , UiCommon.uiClass "ui-skeleton"

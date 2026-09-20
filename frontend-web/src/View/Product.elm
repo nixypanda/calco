@@ -8,6 +8,7 @@ import Api.Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
 import Ui.Chip as Chip
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Page as UiPage
 import Ui.Surface as Surface
@@ -67,8 +68,4 @@ foodNutrientsPer100g food =
 
 macroDotGhost : Element msg
 macroDotGhost =
-    Element.el
-        [ Element.width (Element.px 4)
-        , Element.height (Element.px 24)
-        ]
-        Element.none
+    Surface.accentDot UiCommon.transparent

@@ -605,7 +605,7 @@ componentView theme loaded component =
         , Element.spacing DesignTokens.space8
         ]
         [ Element.el
-            [ Element.width (Element.px 12)
+            [ Element.width (Element.px DesignTokens.accentGutter)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
             , Element.alignTop
             ]

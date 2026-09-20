@@ -442,8 +442,8 @@ macroLegendItems theme portions =
 legendDot : Element.Color -> Element msg
 legendDot color =
     Element.el
-        [ Element.width (Element.px 10)
-        , Element.height (Element.px 10)
+        [ Element.width (Element.px DesignTokens.legendDotSize)
+        , Element.height (Element.px DesignTokens.legendDotSize)
         , Background.color color
         , Border.rounded DesignTokens.radiusPill
         ]
@@ -459,13 +459,15 @@ nutrientsTableInner theme nutrients =
         { data = nutrients
         , columns =
             [ { header =
-                    Element.el [ Element.paddingXY 0 DesignTokens.space8 ]
+                    Element.el [ Element.paddingXY DesignTokens.space0 DesignTokens.space8 ]
                         (Typography.tableHeader theme "Nutrient")
               , width = Element.fill
               , view =
                     \n ->
                         Element.el
-                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
+                            [ Typography.body
+                            , Element.paddingXY DesignTokens.space0 DesignTokens.space8
+                            ]
                             (Element.text (nutrientLabel n.code))
               }
             , { header =
@@ -508,7 +510,9 @@ nutrientsTableInner theme nutrients =
               , view =
                     \n ->
                         Element.el
-                            [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
+                            [ Typography.body
+                            , Element.paddingXY DesignTokens.space0 DesignTokens.space8
+                            ]
                             (Element.text n.unit)
               }
             ]

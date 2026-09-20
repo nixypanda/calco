@@ -666,7 +666,7 @@ componentRowView theme device toMsg row =
                 else
                     Element.column
                         [ Element.width Element.fill
-                        , Element.spacing 0
+                        , Element.spacing DesignTokens.space0
                         ]
                         (List.map
                             (\result ->

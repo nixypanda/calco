@@ -2069,7 +2069,7 @@ chipRowView theme device tags =
     else
         Element.wrappedRow
             [ Element.width Element.fill
-            , Element.paddingXY 0 DesignTokens.space4
+            , Element.paddingXY DesignTokens.space0 DesignTokens.space4
             , Element.spacing DesignTokens.space8
             ]
             (List.map (chipView theme device) tags)
@@ -2280,7 +2280,7 @@ rowActionButton :
     -> Element msg
 rowActionButton theme device config =
     Element.el
-        [ Element.width (Element.px 44)
+        [ Element.width (Element.px DesignTokens.controlHeight)
         , Element.paddingEach { top = DesignTokens.space16, right = 0, bottom = 0, left = 0 }
         ]
         (Button.iconButton device

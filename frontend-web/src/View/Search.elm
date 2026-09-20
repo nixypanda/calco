@@ -200,7 +200,7 @@ categoryPills theme device categories =
 
     else
         Element.column
-            [ Element.width (Element.px 160)
+            [ Element.width (Element.px DesignTokens.searchFieldMinWidth)
             , Element.spacing DesignTokens.space4
             , Element.alignRight
             ]

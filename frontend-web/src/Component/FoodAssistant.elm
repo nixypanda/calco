@@ -878,7 +878,7 @@ descriptionInput : Theme -> ChatModel -> Element Msg
 descriptionInput theme chat =
     Input.multiline
         [ Element.width Element.fill
-        , Element.height (Element.px 120)
+        , Element.height (Element.px DesignTokens.mediaHeight)
         , Border.rounded DesignTokens.radiusControl
         , Background.color theme.inputFill
         , Element.padding DesignTokens.space8
@@ -1039,16 +1039,16 @@ photoPreview theme device index photo maybeUrl =
         [ case maybeUrl of
             Just url ->
                 Element.image
-                    [ Element.width (Element.px 72)
-                    , Element.height (Element.px 72)
+                    [ Element.width (Element.px DesignTokens.photoThumbSize)
+                    , Element.height (Element.px DesignTokens.photoThumbSize)
                     , Border.rounded DesignTokens.radiusControl
                     ]
                     { src = url, description = File.name photo }
 
             Nothing ->
                 Element.el
-                    [ Element.width (Element.px 72)
-                    , Element.height (Element.px 72)
+                    [ Element.width (Element.px DesignTokens.photoThumbSize)
+                    , Element.height (Element.px DesignTokens.photoThumbSize)
                     ]
                     (Element.text "Loading preview…")
         , Element.column

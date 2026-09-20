@@ -19,7 +19,8 @@ import Element.Input as Input
 import Ui.Common exposing (minWidthZero, uiClass)
 import Ui.DesignTokens
     exposing
-        ( radiusCard
+        ( hairlineWidth
+        , radiusCard
         , radiusHairline
         , space16
         , space2
@@ -323,7 +324,7 @@ hairline : Theme -> Element msg
 hairline theme =
     Element.el
         [ Element.width Element.fill
-        , Element.height (Element.px 1)
+        , Element.height (Element.px hairlineWidth)
         , Background.color theme.divider
         ]
         Element.none

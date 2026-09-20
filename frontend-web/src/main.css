@@ -211,6 +211,11 @@ body {
   overflow-wrap: anywhere;
 }
 
+.ui-ring-day-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 /* Toggle switch
    The theme switch needs a real thumb element so CSS can animate translation smoothly. */
 .ui-toggle-track {

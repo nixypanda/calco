@@ -1,6 +1,8 @@
 module Ui.Typography exposing
-    ( body
+    ( banner
+    , body
     , caption
+    , control
     , heroStat
     , listItemTitle
     , maybeMutedParagraph
@@ -33,6 +35,16 @@ body =
 caption : Element.Attribute msg
 caption =
     Font.size 13
+
+
+control : Element.Attribute msg
+control =
+    Font.size 14
+
+
+banner : Element.Attribute msg
+banner =
+    Font.size 18
 
 
 sizePageTitle : Element.Attribute msg

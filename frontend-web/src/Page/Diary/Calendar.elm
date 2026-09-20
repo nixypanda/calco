@@ -23,6 +23,7 @@ import Html.Attributes as Attr
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Ui.Button as Button
+import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.MonthCalendar as MonthCalendar
@@ -317,7 +318,7 @@ monthView theme model selectedDate month =
                 { period = month
                 , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
                 , weekdayColor = theme.textMuted
-                , cellHeight = 68
+                , cellHeight = DesignTokens.calendarCellHeight
                 , viewDay = dayView theme model selectedDate month
                 }
             ]
@@ -370,7 +371,7 @@ dayView theme model selectedDate month day attributes =
                         theme.brandBlueSoft
 
                      else
-                        Element.rgba 0 0 0 0
+                        UiCommon.transparent
                     )
                 :: Element.htmlAttribute
                     (Attr.attribute "aria-label" (dayAriaLabel date maybeSummary))
@@ -409,8 +410,8 @@ dayLabel theme today day date maybeSummary =
         number : Element msg
         number =
             Element.el
-                [ Element.width (Element.px 38)
-                , Element.height (Element.px 38)
+                [ Element.width (Element.px DesignTokens.dayRingSize)
+                , Element.height (Element.px DesignTokens.dayRingSize)
                 , Element.centerX
                 , Element.centerY
                 , Border.rounded DesignTokens.radiusPill
@@ -433,13 +434,13 @@ dayLabel theme today day date maybeSummary =
         , Element.height Element.fill
         , Element.centerX
         , Element.spacing DesignTokens.space4
-        , Element.paddingXY 1 3
+        , Element.paddingXY DesignTokens.dayCellPaddingX DesignTokens.dayCellPaddingY
         ]
         [ Element.el [ Element.centerX ]
             (case maybeSummary of
                 Just summary ->
                     Ring.view
-                        { size = 38
+                        { size = DesignTokens.dayRingSize
                         , thickness = 4
                         , gap = 2
                         , segments = macroSegments theme summary
@@ -453,9 +454,7 @@ dayLabel theme today day date maybeSummary =
                         , label = dayAriaLabel date maybeSummary
                         , center =
                             Html.span
-                                [ Attr.style "font-size" "13px"
-                                , Attr.style "font-weight" "600"
-                                ]
+                                [ Attr.class "ui-ring-day-label" ]
                                 [ Html.text (String.fromInt day) ]
                         }
 
@@ -473,7 +472,9 @@ dayLabel theme today day date maybeSummary =
                     (Element.text (compactCalories summary.energyKcal))
 
             Nothing ->
-                Element.el [ Element.height (Element.px 14) ] Element.none
+                Element.el
+                    [ Element.height (Element.px DesignTokens.ringLabelHeight) ]
+                    Element.none
         ]
 
 
