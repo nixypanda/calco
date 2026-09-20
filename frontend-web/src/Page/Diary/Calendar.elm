@@ -279,7 +279,7 @@ contentViewWithSelection selectedDate { model, device, theme } =
         ]
         (case model.status of
             Loading ->
-                [ Skeleton.card theme { rows = 3 } ]
+                calendarSkeleton theme model
 
             Failed message ->
                 [ Feedback.errorBanner theme message ]
@@ -308,6 +308,38 @@ monthRange newest oldest =
         newest :: monthRange (Calendar.shiftMonth -1 newest) oldest
 
 
+monthCellHeight : Int
+monthCellHeight =
+    68
+
+
+calendarSkeleton : Theme -> Model -> List (Element msg)
+calendarSkeleton theme model =
+    monthRange model.newestMonth model.oldestMonth
+        |> List.map (monthSkeleton theme)
+        |> (\months -> months ++ [ Skeleton.button theme ])
+
+
+monthSkeleton : Theme -> String -> Element msg
+monthSkeleton theme month =
+    Surface.section theme
+        { header =
+            Just
+                (Skeleton.barCustom theme
+                    { width = Element.px 140
+                    , height = 24
+                    }
+                )
+        , body =
+            [ MonthCalendar.skeleton theme
+                { period = month
+                , cellHeight = monthCellHeight
+                }
+            ]
+        , footer = Nothing
+        }
+
+
 monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
 monthView theme model selectedDate month =
     Surface.section theme
@@ -317,7 +349,7 @@ monthView theme model selectedDate month =
                 { period = month
                 , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
                 , weekdayColor = theme.textMuted
-                , cellHeight = 68
+                , cellHeight = monthCellHeight
                 , viewDay = dayView theme model selectedDate month
                 }
             ]
