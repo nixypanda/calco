@@ -309,7 +309,7 @@ view { model, device, theme } =
                     }
                 ]
     in
-    UiPage.pageContainer device (Feedback.maybeErrorBanner theme model.error :: content)
+    UiPage.pageContainer (Feedback.maybeErrorBanner theme model.error :: content)
 
 
 modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)

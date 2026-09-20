@@ -289,7 +289,7 @@ completePendingAction pendingAction result model successStatus =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    UiPage.pageContainer device
+    UiPage.pageContainer
         (errorView theme model.status
             ++ userDetailsView device theme model
             ++ accountActionView device theme model

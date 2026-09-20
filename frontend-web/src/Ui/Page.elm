@@ -4,7 +4,7 @@ module Ui.Page exposing
     , pageHeader
     )
 
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Font as Font
 import Ui.Common exposing (minWidthZero)
 import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
@@ -18,18 +18,20 @@ type PageHeaderSubtitle
     | SubtitleMetaLines { lines : List (List String), separator : String }
 
 
-pageContainer : Device -> List (Element msg) -> Element msg
-pageContainer _ children =
+{-| Page content wrapper.
+
+The `Ui.Workspace` shell already centers panes, caps their width, and applies
+the responsive page gutter (16px on phones, 24px above). This only supplies the
+vertical rhythm between blocks, so pages must not add their own padding here or
+the gutter is applied twice.
+
+-}
+pageContainer : List (Element msg) -> Element msg
+pageContainer children =
     Element.column
         [ Element.centerX
         , Element.width (Element.fill |> Element.maximum 960)
         , Element.spacing space16
-        , Element.paddingEach
-            { top = space16
-            , right = space16
-            , bottom = space16
-            , left = space16
-            }
         ]
         children
 

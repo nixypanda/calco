@@ -315,14 +315,14 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model.review of
         Nothing ->
-            UiPage.pageContainer device
+            UiPage.pageContainer
                 [ Feedback.maybeErrorBanner theme model.error
                 , Element.map AssistantMsg
                     (Assistant.viewFor AdHocLog theme device False model.assistant)
                 ]
 
         Just review ->
-            UiPage.pageContainer device
+            UiPage.pageContainer
                 [ Typography.sectionTitle theme "Review food estimate"
                 , Typography.mutedParagraph theme
                     "Nutrition values are totals for the entire portion you are logging."

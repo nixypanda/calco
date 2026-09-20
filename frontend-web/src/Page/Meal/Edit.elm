@@ -492,17 +492,17 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     case model of
         LoadingEdit _ ->
-            UiPage.pageContainer device [ mealEditSkeleton theme ]
+            UiPage.pageContainer [ mealEditSkeleton theme ]
 
         EditLoadFailed failed ->
-            UiPage.pageContainer device
+            UiPage.pageContainer
                 [ Feedback.errorRetry theme
                     device
                     { message = failed.message, onRetry = RetryClicked }
                 ]
 
         Editing loaded ->
-            UiPage.pageContainer device
+            UiPage.pageContainer
                 [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
                 , nutritionView theme device loaded

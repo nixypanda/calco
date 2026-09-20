@@ -176,7 +176,7 @@ today =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    UiPage.pageContainer device
+    UiPage.pageContainer
         [ dateHeader theme device model
         , case model of
             Loading _ ->

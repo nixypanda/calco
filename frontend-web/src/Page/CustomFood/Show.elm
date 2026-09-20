@@ -310,7 +310,7 @@ applyDeleteError message model =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    UiPage.pageContainer device
+    UiPage.pageContainer
         [ case model of
             LoadFailed failed ->
                 Feedback.errorRetry theme

@@ -144,7 +144,7 @@ mapFormOutMsg maybeOutMsg =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
-    UiPage.pageContainer device
+    UiPage.pageContainer
         [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields theme device FormMsg model
         , Button.textButton device

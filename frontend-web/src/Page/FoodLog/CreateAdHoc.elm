@@ -335,7 +335,7 @@ viewForAi showOptional { model, device, theme } =
             else
                 Editor.CoreNutrientsOnly
     in
-    UiPage.pageContainer device
+    UiPage.pageContainer
         [ Feedback.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog visibility theme device model.nutrients model.units model.form)

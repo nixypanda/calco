@@ -190,7 +190,7 @@ view { model, device, theme } =
         form =
             currentForm model
     in
-    UiPage.pageContainer device
+    UiPage.pageContainer
         (errorView theme model
             ++ [ Surface.formSection theme
                     "Credentials"

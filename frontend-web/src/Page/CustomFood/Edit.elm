@@ -413,7 +413,7 @@ failure =
 
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view config =
-    UiPage.pageContainer config.device
+    UiPage.pageContainer
         [ bodyView config ]
 
 
