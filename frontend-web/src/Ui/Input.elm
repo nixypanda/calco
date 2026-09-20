@@ -30,7 +30,6 @@ import Ui.DesignTokens
         ( minimumTargetSize
         , radiusControl
         , radiusPill
-        , radiusSmall
         , space12
         , space2
         , space4
@@ -61,8 +60,8 @@ numericInputMode =
     inputMode "numeric"
 
 
-{-| Amount field matching the nutrient table: right-aligned and tabular so
-stacked values line up, with the decimal keypad on mobile.
+{-| Amount field: right-aligned tabular figures so stacked values line up,
+with the decimal keypad on mobile.
 -}
 numericInput : Theme -> InputConfig msg -> Element msg
 numericInput theme config =
@@ -84,6 +83,7 @@ textInput theme extraAttrs config =
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.inputFill
+         , Element.height (Element.px minimumTargetSize)
          , Element.padding 10
          , uiClass "ui-motion"
          ]
@@ -126,6 +126,7 @@ passwordInput theme config =
     Input.currentPassword
         [ Border.rounded radiusControl
         , Background.color theme.inputFill
+        , Element.height (Element.px minimumTargetSize)
         , Element.padding 10
         , uiClass "ui-motion"
         ]
@@ -434,16 +435,17 @@ checkbox theme config =
     Input.checkbox
         [ Element.width Element.fill
         , Element.height (Element.px minimumTargetSize)
-        , Element.spacing space8
+        , Element.spacing space12
         ]
         { onChange = config.onChange
         , icon = checkboxIcon theme
         , checked = config.checked
         , label =
-            Input.labelRight []
+            Input.labelRight [ Element.height Element.fill ]
                 (Element.el
                     [ body
                     , Font.color theme.textPrimary
+                    , Element.centerY
                     ]
                     (Element.text config.label)
                 )
@@ -453,9 +455,9 @@ checkbox theme config =
 checkboxIcon : Theme -> Bool -> Element msg
 checkboxIcon theme isChecked =
     Element.el
-        [ Element.width (Element.px 22)
-        , Element.height (Element.px 22)
-        , Border.rounded radiusSmall
+        [ Element.width (Element.px 28)
+        , Element.height (Element.px 28)
+        , Border.rounded radiusPill
         , Border.width 1
         , Border.color
             (if isChecked then
@@ -472,11 +474,12 @@ checkboxIcon theme isChecked =
                 theme.cardBg
             )
         , uiClass "ui-motion"
+        , Element.centerY
         ]
         (if isChecked then
             Icon.view
                 { icon = Icon.Check
-                , size = 14
+                , size = 18
                 , color = theme.solidControlFg
                 }
 

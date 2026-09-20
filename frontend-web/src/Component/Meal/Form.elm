@@ -38,7 +38,6 @@ import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
 import Ui.Button as Button
-import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
@@ -88,6 +87,7 @@ type alias FormFields =
     , notes : String
     , totalQuantity : String
     , totalUnit : String
+    , totalUnitOpen : Bool
     , components : List ComponentRow
     , namedProductIds : Set String
     , nextRowId : RowId
@@ -142,6 +142,7 @@ emptyFormFields =
     , notes = ""
     , totalQuantity = ""
     , totalUnit = defaultCode
+    , totalUnitOpen = False
     , components = [ emptyComponentRow 1 ]
     , namedProductIds = Set.empty
     , nextRowId = 2
@@ -173,6 +174,7 @@ type FormFieldMsg
     | NotesChanged String
     | TotalQuantityChanged String
     | TotalUnitChanged String
+    | TotalUnitToggled
     | ComponentSearchChanged RowId String
     | ComponentSearchCompleted RowId Ticket (Result Client.ApiError SearchResponse)
     | ComponentCategoriesCompleted RowId Ticket CategorySuggestionResult
@@ -204,7 +206,10 @@ updateFormField msg form =
             ( { form | totalQuantity = value }, Cmd.none, Nothing )
 
         TotalUnitChanged value ->
-            ( { form | totalUnit = value }, Cmd.none, Nothing )
+            ( { form | totalUnit = value, totalUnitOpen = False }, Cmd.none, Nothing )
+
+        TotalUnitToggled ->
+            ( { form | totalUnitOpen = not form.totalUnitOpen }, Cmd.none, Nothing )
 
         ProductNameLoaded productId result ->
             let
@@ -378,31 +383,36 @@ viewFormFields :
     -> Element msg
 viewFormFields theme device toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Surface.section theme
-            { header = Nothing
-            , body =
-                [ UiInput.input theme
-                    { label = "Name"
-                    , value = form.name
-                    , onChange = toMsg << NameChanged
-                    }
-                , UiInput.input theme
-                    { label = "Notes"
-                    , value = form.notes
-                    , onChange = toMsg << NotesChanged
-                    }
-                , quantityTextInput theme
-                    device
-                    { amountLabel = "Total Quantity"
-                    , amount = form.totalQuantity
-                    , onAmountChange = toMsg << TotalQuantityChanged
-                    , unitLabel = "Total Unit"
-                    , unit = form.totalUnit
-                    , onUnitChange = toMsg << TotalUnitChanged
-                    }
-                ]
-            , footer = Nothing
-            }
+        [ Surface.formSection theme
+            "Basic Info"
+            [ UiInput.input theme
+                { label = "Name"
+                , value = form.name
+                , onChange = toMsg << NameChanged
+                }
+            , UiInput.input theme
+                { label = "Notes"
+                , value = form.notes
+                , onChange = toMsg << NotesChanged
+                }
+            ]
+        , Surface.formSection theme
+            "Total"
+            [ UiInput.numericInput theme
+                { label = "Total Quantity"
+                , value = form.totalQuantity
+                , onChange = toMsg << TotalQuantityChanged
+                }
+            , UiInput.selectDropdown device
+                theme
+                { label = "Total Unit"
+                , selected = form.totalUnit
+                , options = QuantityInput.unitOptions form.totalUnit form.units
+                , onChange = toMsg << TotalUnitChanged
+                , isOpen = form.totalUnitOpen
+                , onToggle = toMsg TotalUnitToggled
+                }
+            ]
         , Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
             , body =
@@ -752,39 +762,6 @@ componentRowView theme device toMsg units row =
                     }
                 )
             ]
-        ]
-
-
-quantityTextInput :
-    Theme
-    -> Device
-    ->
-        { amountLabel : String
-        , amount : String
-        , onAmountChange : String -> msg
-        , unitLabel : String
-        , unit : String
-        , onUnitChange : String -> msg
-        }
-    -> Element msg
-quantityTextInput theme device config =
-    (if UiCommon.isSmall device then
-        Element.column
-
-     else
-        Element.row
-    )
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ UiInput.numericInput theme
-            { label = config.amountLabel
-            , value = config.amount
-            , onChange = config.onAmountChange
-            }
-        , UiInput.input theme
-            { label = config.unitLabel
-            , value = config.unit
-            , onChange = config.onUnitChange
-            }
         ]
 
 

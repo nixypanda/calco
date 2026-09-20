@@ -349,7 +349,10 @@ nextProductNameRequest completedId loaded =
 componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
-        Typography.listItemTitle theme
+        Element.el
+            [ Typography.body
+            , Font.color theme.textPrimary
+            ]
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -596,7 +599,9 @@ loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
-            , body = List.map (componentView theme loaded) loaded.meal.components
+            , body =
+                List.intersperse (Surface.hairline theme)
+                    (List.map (componentView theme loaded) loaded.meal.components)
             , footer = Nothing
             }
         , nutritionView theme device loaded

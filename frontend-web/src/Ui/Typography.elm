@@ -3,7 +3,6 @@ module Ui.Typography exposing
     , caption
     , decimalNumber
     , heroStat
-    , listItemTitle
     , maybeMutedParagraph
     , mutedBody
     , mutedBodyParagraph
