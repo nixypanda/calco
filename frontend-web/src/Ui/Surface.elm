@@ -16,7 +16,8 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Ui.Common exposing (minWidthZero, uiClass)
+import Html.Attributes
+import Ui.Common exposing (minWidthZero, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusCard
@@ -28,7 +29,7 @@ import Ui.DesignTokens
         , space4
         , space8
         )
-import Ui.Theme exposing (Theme)
+import Ui.Theme exposing (Mode(..), Theme)
 import Ui.Typography
     exposing
         ( caption
@@ -65,7 +66,7 @@ heroCard :
             Maybe
                 { height : Int
                 , backgroundAttrs : List (Element.Attribute msg)
-                , fade : Maybe (Element msg)
+                , fade : Bool
                 , contentPadding :
                     { top : Int
                     , right : Int
@@ -92,12 +93,11 @@ heroCard theme config =
                             }
                          , Element.clip
                          ]
-                            ++ (case media.fade of
-                                    Just fade ->
-                                        [ Element.inFront fade ]
+                            ++ (if media.fade then
+                                    [ Element.inFront (headerFade theme) ]
 
-                                    Nothing ->
-                                        []
+                                else
+                                    []
                                )
                             ++ [ Element.inFront
                                     (Element.el
@@ -135,6 +135,40 @@ heroCard theme config =
             ]
             config.body
         ]
+
+
+{-| Media header scrim: fades the background image into the card surface so
+overlaid content stays legible. Mode-aware, with the raw gradient stops kept
+here rather than in page modules.
+-}
+headerFade : Theme -> Element msg
+headerFade theme =
+    let
+        gradient : String
+        gradient =
+            case theme.mode of
+                Light ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(255,255,255,0) 0%, "
+                        ++ "rgba(255,255,255,0) 25%, "
+                        ++ "rgba(255,255,255,0.48) 85%, "
+                        ++ toCssColor theme.cardBg
+                        ++ " 100%)"
+
+                Dark ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(0,0,0,0.25) 0%, "
+                        ++ "rgba(0,0,0,0.55) 45%, "
+                        ++ "rgba(0,0,0,0.85) 75%, "
+                        ++ toCssColor theme.cardBg
+                        ++ " 100%)"
+    in
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.htmlAttribute (Html.Attributes.style "background-image" gradient)
+        ]
+        Element.none
 
 
 section :

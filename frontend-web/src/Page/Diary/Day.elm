@@ -41,7 +41,7 @@ import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Surface as Surface
-import Ui.Theme exposing (Mode(..), Theme)
+import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 
@@ -1272,41 +1272,6 @@ sectionTitle maybeSlot =
             "Other"
 
 
-mealSlotHeaderHeight : Int
-mealSlotHeaderHeight =
-    118
-
-
-mealSlotFade : Theme -> Element msg
-mealSlotFade theme =
-    let
-        gradient : String
-        gradient =
-            case theme.mode of
-                Light ->
-                    "linear-gradient(to bottom, "
-                        ++ "rgba(255,255,255,0) 0%, "
-                        ++ "rgba(255,255,255,0) 25%, "
-                        ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ UiCommon.toCssColor theme.cardBg
-                        ++ " 100%)"
-
-                Dark ->
-                    "linear-gradient(to bottom, "
-                        ++ "rgba(0,0,0,0.25) 0%, "
-                        ++ "rgba(0,0,0,0.55) 45%, "
-                        ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ UiCommon.toCssColor theme.cardBg
-                        ++ " 100%)"
-    in
-    Element.el
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Element.htmlAttribute (Html.Attributes.style "background-image" gradient)
-        ]
-        Element.none
-
-
 mealSlotCard :
     Theme
     -> Device
@@ -1329,13 +1294,13 @@ mealSlotCard theme device maybeSlot header bodyChildren =
                 , body = bodyChildren
                 , mediaHeader =
                     Just
-                        { height = mealSlotHeaderHeight
+                        { height = DesignTokens.heroHeaderHeight
                         , backgroundAttrs = mealSlotBackground slot
-                        , fade = Just (mealSlotFade theme)
+                        , fade = True
                         , contentPadding =
-                            { top = 38
+                            { top = DesignTokens.heroHeaderPaddingTop
                             , right = mealSlotHorizontalPadding device
-                            , bottom = 20
+                            , bottom = DesignTokens.heroHeaderPaddingBottom
                             , left = mealSlotHorizontalPadding device
                             }
                         }
@@ -1345,10 +1310,10 @@ mealSlotCard theme device maybeSlot header bodyChildren =
 mealSlotHorizontalPadding : Device -> Int
 mealSlotHorizontalPadding device =
     if UiCommon.isSmall device then
-        16
+        DesignTokens.heroHeaderPaddingXSmall
 
     else
-        34
+        DesignTokens.heroHeaderPaddingXWide
 
 
 mealSlotBackground : MealSlot -> List (Element.Attribute msg)

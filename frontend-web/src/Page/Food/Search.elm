@@ -1021,7 +1021,7 @@ barcodeScannerPreview theme caption =
             , Element.height (Element.px 380)
             , Border.rounded DesignTokens.radiusCard
             , Element.clip
-            , Background.color (Element.rgb255 0 0 0)
+            , Background.color theme.mediaBackdrop
             , Element.inFront (barcodeScannerGuide theme)
             ]
             (Element.html barcodeScannerVideo)

@@ -45,6 +45,7 @@ type alias Theme =
     , statusDisabledBg : Color
     , focusRing : Color
     , scrim : Color
+    , mediaBackdrop : Color
     , goalUnder : Color
     , calorieAccent : Color
     , proteinAccent : Color
@@ -84,6 +85,7 @@ light =
     , statusDisabledBg = rgb255 255 200 210
     , focusRing = rgb255 0 143 135
     , scrim = rgba255 0 0 0 0.28
+    , mediaBackdrop = rgb255 0 0 0
     , goalUnder = rgb255 0 135 145
     , calorieAccent = rgb255 94 224 213
     , proteinAccent = rgb255 255 138 170
@@ -123,6 +125,7 @@ dark =
     , statusDisabledBg = rgb255 110 50 60
     , focusRing = rgb255 104 226 214
     , scrim = rgba255 0 0 0 0.28
+    , mediaBackdrop = rgb255 0 0 0
     , goalUnder = rgb255 78 208 196
     , calorieAccent = rgb255 78 208 196
     , proteinAccent = rgb255 255 158 188

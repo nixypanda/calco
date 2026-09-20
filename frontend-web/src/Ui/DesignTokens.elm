@@ -1,5 +1,10 @@
 module Ui.DesignTokens exposing
-    ( minimumTargetSize
+    ( heroHeaderHeight
+    , heroHeaderPaddingBottom
+    , heroHeaderPaddingTop
+    , heroHeaderPaddingXSmall
+    , heroHeaderPaddingXWide
+    , minimumTargetSize
     , radiusCard
     , radiusControl
     , radiusHairline
@@ -20,6 +25,35 @@ module Ui.DesignTokens exposing
 minimumTargetSize : Int
 minimumTargetSize =
     44
+
+
+
+-- Hero media header
+
+
+heroHeaderHeight : Int
+heroHeaderHeight =
+    118
+
+
+heroHeaderPaddingTop : Int
+heroHeaderPaddingTop =
+    38
+
+
+heroHeaderPaddingBottom : Int
+heroHeaderPaddingBottom =
+    20
+
+
+heroHeaderPaddingXWide : Int
+heroHeaderPaddingXWide =
+    34
+
+
+heroHeaderPaddingXSmall : Int
+heroHeaderPaddingXSmall =
+    16
 
 
 
