@@ -17,6 +17,7 @@ tests =
                     |> Tuple.second
                     |> Expect.equal
                         (CalendarPage.RequestSummary
+                            0
                             (date "2026-02-01")
                             today
                         )
@@ -57,6 +58,7 @@ tests =
                     |> third
                     |> Expect.equal
                         (CalendarPage.RequestEarlierSummary
+                            1
                             (date "2025-08-01")
                             (date "2026-01-31")
                         )
@@ -129,9 +131,18 @@ tests =
                     |> Expect.equal
                         ( CalendarPage.Loading
                         , CalendarPage.RequestSummary
+                            1
                             (date "2026-02-01")
                             today
                         )
+        , test "a stale summary response is ignored" <|
+            \_ ->
+                CalendarPage.update
+                    (CalendarPage.SummaryLoaded 99 (Ok [ summaryOn "2026-07-20" 500 ]))
+                    (calendarModel [])
+                    |> first
+                    |> .summaries
+                    |> Expect.equal []
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842

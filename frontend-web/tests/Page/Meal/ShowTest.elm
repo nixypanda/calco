@@ -25,7 +25,7 @@ tests =
         [ test "meal load success stores meal" <|
             \_ ->
                 MealShow.update
-                    (MealShow.MealLoaded (Ok meal))
+                    (MealShow.MealLoaded "meal-1" (Ok meal))
                     (Tuple.first (MealShow.init "meal-1"))
                     |> first
                     |> mealIdOf
@@ -33,28 +33,28 @@ tests =
         , test "meal load requests first missing product detail" <|
             \_ ->
                 MealShow.update
-                    (MealShow.MealLoaded (Ok twoProductMeal))
+                    (MealShow.MealLoaded "meal-1" (Ok twoProductMeal))
                     (Tuple.first (MealShow.init "meal-1"))
                     |> third
                     |> Expect.equal (MealShow.RequestProductDetail "food-1")
         , test "meal load with no product components requests no-op" <|
             \_ ->
                 MealShow.update
-                    (MealShow.MealLoaded (Ok mealOnlyMeal))
+                    (MealShow.MealLoaded "meal-1" (Ok mealOnlyMeal))
                     (Tuple.first (MealShow.init "meal-1"))
                     |> third
                     |> Expect.equal MealShow.NoOp
         , test "meal load failure stores error" <|
             \_ ->
                 MealShow.update
-                    (MealShow.MealLoaded (Err Client.NetworkError))
+                    (MealShow.MealLoaded "meal-1" (Err Client.NetworkError))
                     (Tuple.first (MealShow.init "meal-1"))
                     |> first
                     |> Expect.equal (MealShow.LoadFailed networkErrorMessage)
         , test "meal load unauthorized expires session" <|
             \_ ->
                 MealShow.update
-                    (MealShow.MealLoaded
+                    (MealShow.MealLoaded "meal-1"
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     (Tuple.first (MealShow.init "meal-1"))
@@ -127,10 +127,20 @@ tests =
                     |> first
                     |> unitsOf
                     |> Expect.equal (Just [ { code = "g", name = "g", kind = "mass" } ])
+        , test "a load response for another meal is ignored" <|
+            \_ ->
+                let
+                    base : MealShow.Model
+                    base =
+                        Tuple.first (MealShow.init "meal-1")
+                in
+                MealShow.update (MealShow.MealLoaded "other" (Ok meal)) base
+                    |> first
+                    |> Expect.equal base
         , test "nutrient preview response stores nutrients" <|
             \_ ->
                 MealShow.update
-                    (MealShow.NutrientPreviewLoaded (Ok nutrientPreview))
+                    (MealShow.NutrientPreviewLoaded "meal-1" (Ok nutrientPreview))
                     baseModel
                     |> first
                     |> nutrientsOf
@@ -138,7 +148,7 @@ tests =
         , test "stale nutrient preview response is ignored" <|
             \_ ->
                 MealShow.update
-                    (MealShow.NutrientPreviewLoaded
+                    (MealShow.NutrientPreviewLoaded "meal-1"
                         (Ok
                             { nutrientPreview
                                 | quantity = { amount = "200", unit = "g" }
@@ -152,7 +162,7 @@ tests =
         , test "nutrient preview failure stores error" <|
             \_ ->
                 MealShow.update
-                    (MealShow.NutrientPreviewLoaded (Err Client.NetworkError))
+                    (MealShow.NutrientPreviewLoaded "meal-1" (Err Client.NetworkError))
                     loadedModel
                     |> first
                     |> nutritionErrorOf
@@ -160,7 +170,7 @@ tests =
         , test "nutrient preview unauthorized expires session" <|
             \_ ->
                 MealShow.update
-                    (MealShow.NutrientPreviewLoaded
+                    (MealShow.NutrientPreviewLoaded "meal-1"
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     loadedModel

@@ -50,6 +50,7 @@ type alias Model =
     , oldestMonth : String
     , summaries : List DaySummary
     , status : Status
+    , loadToken : Int
     }
 
 
@@ -78,9 +79,10 @@ init args =
             , oldestMonth = oldestMonth
             , summaries = []
             , status = Loading
+            , loadToken = 0
             }
     in
-    ( model, requestForMonths oldestMonth newestMonth args.today )
+    ( model, requestForMonths 0 oldestMonth newestMonth args.today )
 
 
 validMonth : String -> Maybe String
@@ -94,8 +96,8 @@ validMonth period =
 
 
 type Msg
-    = SummaryLoaded (Result Client.ApiError (List DaySummary))
-    | EarlierSummaryLoaded (Result Client.ApiError (List DaySummary))
+    = SummaryLoaded Int (Result Client.ApiError (List DaySummary))
+    | EarlierSummaryLoaded Int (Result Client.ApiError (List DaySummary))
     | DayTotalsKnown LocalDate (Maybe DaySummary)
     | LoadEarlierClicked
     | DayClicked String String
@@ -105,8 +107,8 @@ type Msg
 
 type OutMsg
     = NoOp
-    | RequestSummary LocalDate LocalDate
-    | RequestEarlierSummary LocalDate LocalDate
+    | RequestSummary Int LocalDate LocalDate
+    | RequestEarlierSummary Int LocalDate LocalDate
     | Navigate Route
     | SessionExpired
 
@@ -114,11 +116,19 @@ type OutMsg
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        SummaryLoaded result ->
-            applySummaryResult False result model
+        SummaryLoaded token result ->
+            if token /= model.loadToken then
+                ( model, Cmd.none, NoOp )
 
-        EarlierSummaryLoaded result ->
-            applySummaryResult True result model
+            else
+                applySummaryResult False result model
+
+        EarlierSummaryLoaded token result ->
+            if token /= model.loadToken then
+                ( model, Cmd.none, NoOp )
+
+            else
+                applySummaryResult True result model
 
         DayTotalsKnown date summary ->
             if dateIsLoaded date model then
@@ -148,9 +158,14 @@ update msg model =
             ( { model | today = today }, Cmd.none, NoOp )
 
         RetryClicked ->
-            ( { model | status = Loading }
+            let
+                token : Int
+                token =
+                    model.loadToken + 1
+            in
+            ( { model | status = Loading, loadToken = token }
             , Cmd.none
-            , requestForMonths model.oldestMonth model.newestMonth model.today
+            , requestForMonths token model.oldestMonth model.newestMonth model.today
             )
 
 
@@ -189,6 +204,10 @@ dateIsLoaded date model =
 loadEarlier : Model -> ( Model, Cmd Msg, OutMsg )
 loadEarlier model =
     let
+        token : Int
+        token =
+            model.loadToken + 1
+
         nextOldest : String
         nextOldest =
             Calendar.shiftMonth -6 model.oldestMonth
@@ -200,9 +219,9 @@ loadEarlier model =
     in
     case ( Calendar.monthStart nextOldest, previousDay ) of
         ( Just fromDate, Just toDate ) ->
-            ( { model | oldestMonth = nextOldest, status = LoadingEarlier }
+            ( { model | oldestMonth = nextOldest, status = LoadingEarlier, loadToken = token }
             , Cmd.none
-            , RequestEarlierSummary fromDate toDate
+            , RequestEarlierSummary token fromDate toDate
             )
 
         _ ->
@@ -261,11 +280,11 @@ mergeSummaries existing incoming =
         |> List.sortBy (.date >> LocalDate.format)
 
 
-requestForMonths : String -> String -> LocalDate -> OutMsg
-requestForMonths oldest newest today =
+requestForMonths : Int -> String -> String -> LocalDate -> OutMsg
+requestForMonths token oldest newest today =
     case ( Calendar.monthStart oldest, Calendar.monthEnd newest ) of
         ( Just fromDate, Just monthEnd ) ->
-            RequestSummary fromDate (LocalDate.clampTo today monthEnd)
+            RequestSummary token fromDate (LocalDate.clampTo today monthEnd)
 
         _ ->
             NoOp

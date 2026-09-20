@@ -7,6 +7,8 @@ module Page.Food.Show exposing
     , contentView
     , foodNutrientsForDisplay
     , init
+    , loadId
+    , modelId
     , update
     )
 
@@ -96,25 +98,60 @@ init productId logDate mealSlot lookupNote =
 
 
 type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
+    = FoodLoaded String (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | LastUsedLoaded (Result Client.ApiError RecentItemsResponse)
+    | LastUsedLoaded String (Result Client.ApiError RecentItemsResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
     | LocalContextReceived LocalContext
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.productId
+
+        Loaded loaded ->
+            Just loaded.productId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        FoodLoaded productId _ ->
+            Just productId
+
+        LastUsedLoaded productId _ ->
+            Just productId
+
+        _ ->
+            Nothing
+
+
+isCurrent : String -> Model -> Bool
+isCurrent incomingId model =
+    modelId model == Just incomingId
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        FoodLoaded result ->
-            case result of
-                Ok food ->
-                    ( setLoadedFood food model, Cmd.none, NoOp )
+        FoodLoaded incomingId result ->
+            if not (isCurrent incomingId model) then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok food ->
+                        ( setLoadedFood food model, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure error model
 
         UnitsLoaded result ->
             case result of
@@ -124,22 +161,26 @@ update msg model =
                 Err error ->
                     failure error model
 
-        LastUsedLoaded result ->
-            case result of
-                Ok response ->
-                    ( applyLastUsedDefault
-                        (List.head response.items |> Maybe.map .quantity)
-                        model
-                    , Cmd.none
-                    , NoOp
-                    )
+        LastUsedLoaded incomingId result ->
+            if not (isCurrent incomingId model) then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( model, Cmd.none, SessionExpired )
+            else
+                case result of
+                    Ok response ->
+                        ( applyLastUsedDefault
+                            (List.head response.items |> Maybe.map .quantity)
+                            model
+                        , Cmd.none
+                        , NoOp
+                        )
 
-                    else
-                        ( model, Cmd.none, NoOp )
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( model, Cmd.none, SessionExpired )
+
+                        else
+                            ( model, Cmd.none, NoOp )
 
         FormMsg subMsg ->
             case model of

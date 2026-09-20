@@ -5,6 +5,8 @@ module Page.CustomFood.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
+    , modelId
     , update
     , view
     )
@@ -83,7 +85,7 @@ init productId =
 
 
 type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
+    = FoodLoaded String (Result Client.ApiError ProductDetail)
     | NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
@@ -93,16 +95,43 @@ type Msg
     | RetryClicked
 
 
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.productId
+
+        Loaded loaded ->
+            Just loaded.productId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        FoodLoaded productId _ ->
+            Just productId
+
+        _ ->
+            Nothing
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        FoodLoaded result ->
-            case result of
-                Ok food ->
-                    ( setLoadedFood food model, Cmd.none, NoOp )
+        FoodLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok food ->
+                        ( setLoadedFood food model, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure error model
 
         NutrientsLoaded result ->
             case result of

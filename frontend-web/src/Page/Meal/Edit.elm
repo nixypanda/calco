@@ -5,6 +5,8 @@ module Page.Meal.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
+    , modelId
     , update
     , view
     )
@@ -82,12 +84,38 @@ init mealId =
 
 type Msg
     = FormMsg Common.FormFieldMsg
-    | MealLoaded (Result Client.ApiError Meal)
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | MealLoaded String (Result Client.ApiError Meal)
+    | NutrientPreviewLoaded String (Result Client.ApiError MealNutritionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
     | RetryClicked
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        LoadingEdit loading ->
+            Just loading.mealId
+
+        EditLoadFailed failed ->
+            Just failed.mealId
+
+        Editing loaded ->
+            Just loaded.mealId
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        MealLoaded mealId _ ->
+            Just mealId
+
+        NutrientPreviewLoaded mealId _ ->
+            Just mealId
+
+        _ ->
+            Nothing
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -108,65 +136,73 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        MealLoaded result ->
-            case result of
-                Ok meal ->
-                    let
-                        loaded : LoadedModel
-                        loaded =
-                            case model of
-                                LoadingEdit loading ->
-                                    loadedFromMeal meal loading
+        MealLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                                _ ->
-                                    loadedFromMealFresh meal
-                    in
-                    ( Editing loaded
-                    , Cmd.none
-                    , requestFirstProductName meal
-                    )
-
-                Err error ->
-                    Client.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError =
-                            \message current ->
-                                case current of
+            else
+                case result of
+                    Ok meal ->
+                        let
+                            loaded : LoadedModel
+                            loaded =
+                                case model of
                                     LoadingEdit loading ->
-                                        EditLoadFailed
-                                            { mealId = loading.mealId
-                                            , message = message
-                                            }
+                                        loadedFromMeal meal loading
 
-                                    Editing loaded ->
-                                        EditLoadFailed
-                                            { mealId = loaded.mealId
-                                            , message = message
-                                            }
+                                    _ ->
+                                        loadedFromMealFresh meal
+                        in
+                        ( Editing loaded
+                        , Cmd.none
+                        , requestFirstProductName meal
+                        )
 
-                                    EditLoadFailed _ ->
-                                        current
-                        }
-                        error
-                        model
+                    Err error ->
+                        Client.failure
+                            { noOp = NoOp
+                            , sessionExpired = SessionExpired
+                            , applyError =
+                                \message current ->
+                                    case current of
+                                        LoadingEdit loading ->
+                                            EditLoadFailed
+                                                { mealId = loading.mealId
+                                                , message = message
+                                                }
 
-        NutrientPreviewLoaded result ->
-            case result of
-                Ok response ->
-                    ( applyNutritionOk response.nutrients model
-                    , Cmd.none
-                    , NoOp
-                    )
+                                        Editing loaded ->
+                                            EditLoadFailed
+                                                { mealId = loaded.mealId
+                                                , message = message
+                                                }
 
-                Err error ->
-                    Client.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError = \message current -> applyNutritionError message current
-                        }
-                        error
-                        model
+                                        EditLoadFailed _ ->
+                                            current
+                            }
+                            error
+                            model
+
+        NutrientPreviewLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
+
+            else
+                case result of
+                    Ok response ->
+                        ( applyNutritionOk response.nutrients model
+                        , Cmd.none
+                        , NoOp
+                        )
+
+                    Err error ->
+                        Client.failure
+                            { noOp = NoOp
+                            , sessionExpired = SessionExpired
+                            , applyError = \message current -> applyNutritionError message current
+                            }
+                            error
+                            model
 
         SubmitClicked ->
             case model of

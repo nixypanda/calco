@@ -23,7 +23,7 @@ tests =
             \_ ->
                 CustomFoodEdit.init "food-1"
                     |> Tuple.first
-                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded (Ok food))
+                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
                     |> first
                     |> CustomFoodEdit.update
                         (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
@@ -46,7 +46,7 @@ tests =
                     |> first
                     |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded (Ok food))
+                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
                     |> first
                     |> CustomFoodEdit.update
                         (CustomFoodEdit.FormMsg
@@ -63,10 +63,15 @@ tests =
         , test "food load failure moves to load failed" <|
             \_ ->
                 CustomFoodEdit.update
-                    (CustomFoodEdit.FoodLoaded (Err Client.NetworkError))
+                    (CustomFoodEdit.FoodLoaded "food-1" (Err Client.NetworkError))
                     (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> first
                     |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = networkErrorMessage })
+        , test "a load response for another product is ignored" <|
+            \_ ->
+                CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "other" (Ok food)) loadedModel
+                    |> first
+                    |> Expect.equal loadedModel
         , test "retry from load failed requests initial data again" <|
             \_ ->
                 let
@@ -113,7 +118,7 @@ tests =
         , test "load success is ignored after load failed" <|
             \_ ->
                 CustomFoodEdit.update
-                    (CustomFoodEdit.FoodLoaded (Ok food))
+                    (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
                     (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
                     |> first
                     |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })

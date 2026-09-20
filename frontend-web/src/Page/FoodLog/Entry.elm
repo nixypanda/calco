@@ -10,7 +10,9 @@ module Page.FoodLog.Entry exposing
     , ProductState
     , contentView
     , init
+    , loadId
     , modalView
+    , modelId
     , nutrientsForDisplay
     , update
     )
@@ -110,7 +112,7 @@ init logId =
 
 
 type Msg
-    = LogLoaded (Result Client.ApiError FoodLog)
+    = LogLoaded String (Result Client.ApiError FoodLog)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | ProductDetailLoaded (Result Client.ApiError ProductDetail)
     | FormMsg FoodLogForm.Msg
@@ -120,6 +122,29 @@ type Msg
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.logId
+
+        Loaded loaded ->
+            Just loaded.logId
+
+        LoadFailed failed ->
+            Just failed.logId
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        LogLoaded logId _ ->
+            Just logId
+
+        _ ->
+            Nothing
 
 
 type OutMsg
@@ -136,13 +161,17 @@ type OutMsg
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        LogLoaded result ->
-            case result of
-                Ok log ->
-                    ( setLoadedLog log model, Cmd.none, itemResolutionOutMsg log )
+        LogLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    loadFailure error model
+            else
+                case result of
+                    Ok log ->
+                        ( setLoadedLog log model, Cmd.none, itemResolutionOutMsg log )
+
+                    Err error ->
+                        loadFailure error model
 
         UnitsLoaded result ->
             case result of

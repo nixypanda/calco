@@ -25,7 +25,7 @@ tests =
         [ test "an ad-hoc log does not request product details" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok adHocLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok adHocLog))
                     awaitingLogModel
                     |> third
                     |> Expect.equal FoodLogEntry.NoOp
@@ -50,7 +50,7 @@ tests =
         , test "product log requests product name/detail" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok productLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok productLog))
                     emptyModel
                     |> third
                     |> Expect.equal
@@ -58,7 +58,7 @@ tests =
         , test "meal log requests nothing further" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok mealLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
                     emptyModel
                     |> third
                     |> Expect.equal FoodLogEntry.NoOp
@@ -109,7 +109,7 @@ tests =
         , test "meal title comes from the log itself" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok mealLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
                     awaitingLogModel
                     |> first
                     |> loadedItemTitle
@@ -198,6 +198,16 @@ tests =
                             , delete = DeleteFailed networkErrorMessage
                             }
                         )
+        , test "a load response for another log is ignored" <|
+            \_ ->
+                let
+                    base : FoodLogEntry.Model
+                    base =
+                        Tuple.first (FoodLogEntry.init "log-1")
+                in
+                FoodLogEntry.update (FoodLogEntry.LogLoaded "other" (Ok productLog)) base
+                    |> first
+                    |> Expect.equal base
         , test "units loaded success stores units and stays Loading if log missing" <|
             \_ ->
                 FoodLogEntry.update
@@ -245,7 +255,7 @@ tests =
         , test "log loaded failure stores error" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Err Client.NetworkError))
+                    (FoodLogEntry.LogLoaded "log-1" (Err Client.NetworkError))
                     emptyModel
                     |> first
                     |> Expect.equal

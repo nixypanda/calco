@@ -5,7 +5,9 @@ module Page.Meal.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
     , modalView
+    , modelId
     , uniqueProductIds
     , update
     , view
@@ -86,13 +88,13 @@ init mealId =
 
 
 type Msg
-    = MealLoaded (Result Client.ApiError Meal)
+    = MealLoaded String (Result Client.ApiError Meal)
     | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | AmountChanged String
     | UnitChanged String
     | ToggleUnitDropdown
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | NutrientPreviewLoaded String (Result Client.ApiError MealNutritionResponse)
     | DeleteClicked
     | CancelDeleteClicked
     | ConfirmDeleteClicked
@@ -100,21 +102,51 @@ type Msg
     | EditClicked
 
 
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.mealId
+
+        Loaded loaded ->
+            Just loaded.mealId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        MealLoaded mealId _ ->
+            Just mealId
+
+        NutrientPreviewLoaded mealId _ ->
+            Just mealId
+
+        _ ->
+            Nothing
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        MealLoaded result ->
-            case result of
-                Ok meal ->
-                    let
-                        loaded : LoadedModel
-                        loaded =
-                            loadedFromMeal meal model
-                    in
-                    ( Loaded loaded, Cmd.none, requestProductNames (uniqueProductIds meal) )
+        MealLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok meal ->
+                        let
+                            loaded : LoadedModel
+                            loaded =
+                                loadedFromMeal meal model
+                        in
+                        ( Loaded loaded, Cmd.none, requestProductNames (uniqueProductIds meal) )
+
+                    Err error ->
+                        failure error model
 
         ProductDetailLoaded productId result ->
             case model of
@@ -200,8 +232,12 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        NutrientPreviewLoaded result ->
-            applyNutritionResult result model
+        NutrientPreviewLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
+
+            else
+                applyNutritionResult result model
 
         DeleteClicked ->
             case model of
