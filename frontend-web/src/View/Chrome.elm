@@ -524,7 +524,7 @@ bottomNavTab theme config =
                     )
                 , Element.el
                     [ Element.centerX
-                    , Font.size 12
+                    , Typography.caption
                     ]
                     (Element.text config.label)
                 ]

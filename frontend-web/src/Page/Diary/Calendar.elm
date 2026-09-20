@@ -465,7 +465,7 @@ dayLabel theme today day date maybeSummary =
             Just summary ->
                 Element.el
                     [ Element.centerX
-                    , Font.size 11
+                    , Typography.caption
                     , Font.semiBold
                     , Font.color theme.textMedium
                     ]
