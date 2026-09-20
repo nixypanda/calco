@@ -65,7 +65,12 @@ const barcodeScanner = createBarcodeScanner({
 });
 
 app.ports.requestBarcodeScanStart.subscribe(() => {
-    barcodeScanner.start();
+    barcodeScanner.start().catch(() => {
+        app.ports.barcodeScannerEvent.send({
+            event: "failed",
+            message: "Barcode scanning could not be started. Enter the barcode manually.",
+        });
+    });
 });
 
 app.ports.requestBarcodeScanStop.subscribe(() => {

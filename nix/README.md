@@ -61,10 +61,25 @@ you point your own reverse proxy at both.
     enable = true;
     virtualHosts."calco.example.com".extraConfig = ''
       root * ${calco.frontendPackage}/share/calco/web
-      file_server
-      try_files {path} /index.html
+
       handle /api/* {
         reverse_proxy 127.0.0.1:${toString calco.port}
+      }
+
+      # Hashed bundles are immutable, so cache them hard. Do not let a
+      # missing chunk fall through to index.html: a 200 HTML response for a
+      # .js request surfaces as a module-load error instead of a clean 404.
+      handle /assets/* {
+        header Cache-Control "public, max-age=31536000, immutable"
+        file_server
+      }
+
+      # index.html and version.json must be revalidated so a redeploy can
+      # point clients at the new hashed chunks.
+      handle {
+        header Cache-Control "no-cache"
+        try_files {path} /index.html
+        file_server
       }
     '';
   };
@@ -87,12 +102,43 @@ you point your own reverse proxy at both.
     recommendedProxySettings = true;
     virtualHosts."calco.example.com" = {
       root = "${calco.frontendPackage}/share/calco/web";
+
+      # Hashed bundles are immutable. `tryFiles = "$uri =404"` keeps a
+      # missing chunk a 404 instead of the SPA fallback returning index.html.
+      locations."/assets/" = {
+        tryFiles = "$uri =404";
+        extraConfig = "add_header Cache-Control \"public, max-age=31536000, immutable\";";
+      };
+
+      # Revalidate the entry document and version manifest on every request.
+      locations."= /index.html" = {
+        extraConfig = "add_header Cache-Control \"no-cache\";";
+      };
+
+      locations."= /version.json" = {
+        extraConfig = "add_header Cache-Control \"no-cache\";";
+      };
+
       locations."/".tryFiles = "$uri $uri/ /index.html";
       locations."/api/".proxyPass = "http://127.0.0.1:${toString calco.port}/";
     };
   };
 }
 ```
+
+### Static assets and the SPA fallback
+
+Vite emits content-hashed bundles under `/assets/`. Keep that prefix out of the
+`try_files ... /index.html` fallback so a missing or retired chunk returns a
+404 rather than `index.html`. Otherwise the browser receives HTML with a 200
+status for a `.js` request and reports a module-load error, and a lazily loaded
+chunk from a previous deploy fails in a way that looks like a scanner/code bug.
+
+Because the hashes are immutable, serve `/assets/*` with a long-lived
+`Cache-Control`, and serve `index.html` and `version.json` with `no-cache` so a
+redeploy can point clients at the new hashes. The frontend is shipped as an
+immutable Nix store path, so the entry document and every chunk always come
+from the same build within a deploy.
 
 ### Example: assistant provider
 

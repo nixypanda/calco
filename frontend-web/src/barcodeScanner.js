@@ -1,6 +1,3 @@
-import { BrowserMultiFormatOneDReader } from "@zxing/browser";
-import { BarcodeFormat, DecodeHintType } from "@zxing/library";
-
 // Barcode scanning
 //
 // This stays in JavaScript because it depends on imperative browser resources
@@ -42,21 +39,24 @@ export function createBarcodeScanner({ videoElementId, onEvent }) {
             return;
         }
 
-        const hints = new Map();
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-            BarcodeFormat.EAN_13,
-            BarcodeFormat.EAN_8,
-            BarcodeFormat.UPC_A,
-            BarcodeFormat.UPC_E,
-        ]);
-        hints.set(DecodeHintType.TRY_HARDER, true);
-
-        barcodeReader = new BrowserMultiFormatOneDReader(hints, {
-            delayBetweenScanAttempts: 150,
-            delayBetweenScanSuccess: 120,
-        });
-
         try {
+            const { BrowserMultiFormatOneDReader } = await import("@zxing/browser");
+            const { BarcodeFormat, DecodeHintType } = await import("@zxing/library");
+
+            const hints = new Map();
+            hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+                BarcodeFormat.EAN_13,
+                BarcodeFormat.EAN_8,
+                BarcodeFormat.UPC_A,
+                BarcodeFormat.UPC_E,
+            ]);
+            hints.set(DecodeHintType.TRY_HARDER, true);
+
+            barcodeReader = new BrowserMultiFormatOneDReader(hints, {
+                delayBetweenScanAttempts: 150,
+                delayBetweenScanSuccess: 120,
+            });
+
             const constraints = {
                 audio: false,
                 video: {
@@ -199,6 +199,13 @@ export function createBarcodeScanner({ videoElementId, onEvent }) {
 }
 
 function barcodeScannerErrorMessage(error) {
+    if (isScannerLoadError(error)) {
+        return (
+            "Barcode scanning could not be loaded. " +
+            "Check your connection and try again, or enter the barcode manually."
+        );
+    }
+
     const name = error && error.name;
 
     if (name === "NotAllowedError" || name === "SecurityError") {
@@ -218,4 +225,13 @@ function barcodeScannerErrorMessage(error) {
     }
 
     return "Could not start barcode scanner.";
+}
+
+function isScannerLoadError(error) {
+    if (!(error instanceof TypeError)) {
+        return false;
+    }
+
+    const message = String((error && error.message) || "");
+    return /import|module|mime type|fetch/i.test(message);
 }
