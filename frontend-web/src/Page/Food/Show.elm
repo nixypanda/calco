@@ -4,7 +4,6 @@ module Page.Food.Show exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , RequestState(..)
     , contentView
     , foodNutrientsForDisplay
     , init
@@ -58,16 +57,14 @@ type alias LoadedModel =
     , food : ProductDetail
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , request : RequestState
     , lastUsedDefault : Maybe Nutrition.Quantity
     , lookupNote : Maybe String
     }
 
 
-type RequestState
-    = Idle
-    | RequestingLocalContext
-    | Saving
+isSubmitting : FoodLogForm.Model -> Bool
+isSubmitting form =
+    form.submitState == FoodLogForm.SubmitSubmitting
 
 
 type OutMsg
@@ -158,36 +155,34 @@ update msg model =
         SubmitClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
-                        if String.trim loaded.form.amount == "" then
-                            ( Loaded
-                                { loaded
-                                    | form =
-                                        FoodLogForm.setSubmitState
-                                            (FoodLogForm.SubmitFailed
-                                                FoodLogForm.AmountRequiredMessage
-                                            )
-                                            loaded.form
-                                }
-                            , Cmd.none
-                            , NoOp
-                            )
+                    if isSubmitting loaded.form then
+                        ( model, Cmd.none, NoOp )
 
-                        else
-                            ( Loaded
-                                { loaded
-                                    | form =
-                                        FoodLogForm.setSubmitState
-                                            FoodLogForm.SubmitIdle
-                                            loaded.form
-                                    , request = RequestingLocalContext
-                                }
-                            , Cmd.none
-                            , RequestLocalContext
-                            )
+                    else if String.trim loaded.form.amount == "" then
+                        ( Loaded
+                            { loaded
+                                | form =
+                                    FoodLogForm.setSubmitState
+                                        (FoodLogForm.SubmitFailed
+                                            FoodLogForm.AmountRequiredMessage
+                                        )
+                                        loaded.form
+                            }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     else
-                        ( model, Cmd.none, NoOp )
+                        ( Loaded
+                            { loaded
+                                | form =
+                                    FoodLogForm.setSubmitState
+                                        FoodLogForm.SubmitSubmitting
+                                        loaded.form
+                            }
+                        , Cmd.none
+                        , RequestLocalContext
+                        )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -195,11 +190,11 @@ update msg model =
         LocalContextReceived context ->
             case model of
                 Loaded loaded ->
-                    if loaded.request /= RequestingLocalContext then
-                        ( model, Cmd.none, NoOp )
+                    if isSubmitting loaded.form then
+                        createLogFromLocalContext context loaded
 
                     else
-                        createLogFromLocalContext context loaded
+                        ( model, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -207,7 +202,7 @@ update msg model =
         LogCompleted result ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Saving then
+                    if isSubmitting loaded.form then
                         case result of
                             Ok log ->
                                 ( model
@@ -257,7 +252,6 @@ createLogFromLocalContext context loaded =
                         FoodLogForm.setSubmitState
                             FoodLogForm.SubmitSubmitting
                             loaded.form
-                    , request = Saving
                 }
             , Cmd.none
             , RequestCreateLog request
@@ -272,7 +266,6 @@ createLogFromLocalContext context loaded =
                                 FoodLogForm.AmountRequiredMessage
                             )
                             loaded.form
-                    , request = Idle
                 }
             , Cmd.none
             , NoOp
@@ -287,7 +280,6 @@ createLogFromLocalContext context loaded =
                                 FoodLogForm.InvalidDateMessage
                             )
                             loaded.form
-                    , request = Idle
                 }
             , Cmd.none
             , NoOp
@@ -308,7 +300,6 @@ setLoadedFood food model =
                         formWithLastUsedDefault
                             loaded.lastUsedDefault
                             (FoodLogForm.initLogFormFromFood loaded.mealSlot food)
-                    , request = Idle
                 }
 
         LoadFailed _ ->
@@ -342,7 +333,6 @@ completeLoading loading =
                     formWithLastUsedDefault
                         loading.lastUsedDefault
                         (FoodLogForm.initLogFormFromFood loading.mealSlot food)
-                , request = Idle
                 , lastUsedDefault = loading.lastUsedDefault
                 , lookupNote = loading.lookupNote
                 }
@@ -407,7 +397,6 @@ applyLoadedError message model =
                                 (FoodLogForm.RequestFailed message)
                             )
                             loaded.form
-                    , request = Idle
                 }
 
         _ ->
@@ -473,20 +462,20 @@ loadedView theme device loaded =
             (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
         , View.Product.foodHeader theme food []
         , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
-        , submitActionView theme device loaded.request
+        , submitActionView theme device form
         , View.Nutrients.nutritionCard theme nutrients
         ]
 
 
-submitActionView : Theme -> Device -> RequestState -> Element Msg
-submitActionView theme device requestState =
+submitActionView : Theme -> Device -> FoodLogForm.Model -> Element Msg
+submitActionView theme device form =
     Button.textButton device
         theme
         { tone = Button.Primary
         , width = Button.FullWidth
         , label = "Log Food"
         , onPress = SubmitClicked
-        , submitState = Just (Button.submittingOrIdle (requestState == Saving))
+        , submitState = Just (Button.submittingOrIdle (isSubmitting form))
         , submittingLabel = Just "Logging..."
         , trailing = Nothing
         }

@@ -8,7 +8,6 @@ module Page.FoodLog.Entry exposing
     , Msg(..)
     , OutMsg(..)
     , ProductState
-    , RequestState(..)
     , contentView
     , init
     , modalView
@@ -64,7 +63,6 @@ type alias LoadedModel =
     , item : LoadedItem
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , request : RequestState
     , delete : DeleteState
     }
 
@@ -85,9 +83,9 @@ type alias ProductState =
     ItemDetail ProductDetail
 
 
-type RequestState
-    = Idle
-    | Saving
+isSubmitting : FoodLogForm.Model -> Bool
+isSubmitting form =
+    form.submitState == FoodLogForm.SubmitSubmitting
 
 
 type alias LoadFailedModel =
@@ -171,7 +169,7 @@ update msg model =
         SubmitClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         submitLoaded loaded
 
                     else
@@ -197,7 +195,7 @@ update msg model =
         DeleteClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         ( Loaded { loaded | delete = DeleteConfirming }, Cmd.none, NoOp )
 
                     else
@@ -217,7 +215,7 @@ update msg model =
         ConfirmDeleteClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         case loaded.delete of
                             DeleteConfirming ->
                                 ( Loaded
@@ -285,7 +283,6 @@ submitLoaded loaded =
                         FoodLogForm.setSubmitState
                             FoodLogForm.SubmitSubmitting
                             loaded.form
-                    , request = Saving
                 }
             , Cmd.none
             , RequestUpdateLog loaded.logId request
@@ -332,7 +329,6 @@ setLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -363,7 +359,6 @@ completeLoading loading =
                 , item = initialLoadedItem log
                 , units = units
                 , form = FoodLogForm.initLogFormFromLog log
-                , request = Idle
                 , delete = DeleteIdle
                 }
 
@@ -380,7 +375,6 @@ updateLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -491,7 +485,6 @@ applyLoadedError message model =
                                 (FoodLogForm.RequestFailed message)
                             )
                             loaded.form
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -503,7 +496,7 @@ applyLoadedDeleteError : String -> Model -> Model
 applyLoadedDeleteError message model =
     case model of
         Loaded loaded ->
-            Loaded { loaded | request = Idle, delete = DeleteFailed message }
+            Loaded { loaded | delete = DeleteFailed message }
 
         _ ->
             model
@@ -630,7 +623,7 @@ loadedView theme device model =
 
 submitState : LoadedModel -> Button.SubmitState
 submitState model =
-    if model.request == Saving then
+    if isSubmitting model.form then
         Button.Submitting
 
     else if formHasChanges model.log model.form then

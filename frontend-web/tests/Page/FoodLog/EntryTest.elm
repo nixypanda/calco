@@ -156,7 +156,6 @@ tests =
                         (Just
                             { logId = "log-1"
                             , amount = "4"
-                            , request = FoodLogEntry.Idle
                             , submitState =
                                 FoodLogForm.SubmitFailed
                                     (FoodLogForm.RequestFailed networkErrorMessage)
@@ -196,7 +195,6 @@ tests =
                     |> Expect.equal
                         (Just
                             { logId = "log-1"
-                            , request = FoodLogEntry.Idle
                             , delete = DeleteFailed networkErrorMessage
                             }
                         )
@@ -314,7 +312,6 @@ loadedModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = DeleteIdle
         }
 
@@ -333,7 +330,6 @@ savingModel =
                 | amount = "4"
                 , submitState = FoodLogForm.SubmitSubmitting
             }
-        , request = FoodLogEntry.Saving
         , delete = DeleteIdle
         }
 
@@ -348,7 +344,6 @@ deletingModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = Deleting
         }
 
@@ -363,7 +358,6 @@ deleteFailedModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = DeleteFailed networkErrorMessage
         }
 
@@ -577,7 +571,6 @@ loadedFailureSummary :
         Maybe
             { logId : String
             , amount : String
-            , request : FoodLogEntry.RequestState
             , submitState : FoodLogForm.SubmitState
             }
 loadedFailureSummary model =
@@ -586,7 +579,6 @@ loadedFailureSummary model =
             Just
                 { logId = loaded.log.id
                 , amount = loaded.form.amount
-                , request = loaded.request
                 , submitState = loaded.form.submitState
                 }
 
@@ -599,7 +591,6 @@ loadedDeleteFailureSummary :
     ->
         Maybe
             { logId : String
-            , request : FoodLogEntry.RequestState
             , delete : DeleteState
             }
 loadedDeleteFailureSummary model =
@@ -607,7 +598,6 @@ loadedDeleteFailureSummary model =
         FoodLogEntry.Loaded loaded ->
             Just
                 { logId = loaded.log.id
-                , request = loaded.request
                 , delete = loaded.delete
                 }
 

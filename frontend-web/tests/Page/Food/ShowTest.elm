@@ -76,8 +76,8 @@ tests =
                     (FoodShow.FoodLoaded (Ok { food | defaultQuantity = Just "3" }))
                     savingModel
                     |> first
-                    |> (\model -> ( formOf model |> Maybe.map .amount, requestOf model ))
-                    |> Expect.equal ( Just "3", Just FoodShow.Idle )
+                    |> (\model -> ( formOf model |> Maybe.map .amount, formOf model |> Maybe.map .submitState ))
+                    |> Expect.equal ( Just "3", Just FoodLogForm.SubmitIdle )
         , test "units reload refreshes loaded units" <|
             \_ ->
                 FoodShow.update
@@ -298,7 +298,6 @@ loadedModel =
         , food = food
         , units = [ gram ]
         , form = form
-        , request = FoodShow.Idle
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -312,8 +311,7 @@ contextReadyModel =
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
-        , form = form
-        , request = FoodShow.RequestingLocalContext
+        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -327,8 +325,7 @@ contextReadyWithoutDateModel =
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
-        , form = form
-        , request = FoodShow.RequestingLocalContext
+        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -343,7 +340,6 @@ savingModel =
         , food = food
         , units = [ gram ]
         , form = { form | submitState = FoodLogForm.SubmitSubmitting }
-        , request = FoodShow.Saving
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -358,7 +354,6 @@ loadedWithForm nextForm =
         , food = food
         , units = [ gram ]
         , form = nextForm
-        , request = FoodShow.Idle
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -384,16 +379,6 @@ unitsOf model =
             Just loaded.units
 
         FoodShow.LoadFailed _ ->
-            Nothing
-
-
-requestOf : FoodShow.Model -> Maybe FoodShow.RequestState
-requestOf model =
-    case model of
-        FoodShow.Loaded loaded ->
-            Just loaded.request
-
-        _ ->
             Nothing
 
 
