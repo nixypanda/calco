@@ -1,5 +1,6 @@
 module Ui.Input exposing
     ( InputConfig
+    , checkbox
     , completionDropdown
     , completionRow
     , decimalInput
@@ -29,6 +30,7 @@ import Ui.DesignTokens
         ( minimumTargetSize
         , radiusControl
         , radiusPill
+        , radiusSmall
         , space12
         , space2
         , space4
@@ -415,6 +417,69 @@ selectDropdown device theme config =
 
 
 -- Boolean inputs
+
+
+checkbox :
+    Theme
+    ->
+        { label : String
+        , checked : Bool
+        , onChange : Bool -> msg
+        }
+    -> Element msg
+checkbox theme config =
+    Input.checkbox
+        [ Element.width Element.fill
+        , Element.height (Element.px minimumTargetSize)
+        , Element.spacing space8
+        ]
+        { onChange = config.onChange
+        , icon = checkboxIcon theme
+        , checked = config.checked
+        , label =
+            Input.labelRight []
+                (Element.el
+                    [ body
+                    , Font.color theme.textPrimary
+                    ]
+                    (Element.text config.label)
+                )
+        }
+
+
+checkboxIcon : Theme -> Bool -> Element msg
+checkboxIcon theme isChecked =
+    Element.el
+        [ Element.width (Element.px 22)
+        , Element.height (Element.px 22)
+        , Border.rounded radiusSmall
+        , Border.width 1
+        , Border.color
+            (if isChecked then
+                theme.brandBlue
+
+             else
+                theme.chipBorder
+            )
+        , Background.color
+            (if isChecked then
+                theme.brandBlue
+
+             else
+                theme.cardBg
+            )
+        , uiClass "ui-motion"
+        ]
+        (if isChecked then
+            Icon.view
+                { icon = Icon.Check
+                , size = 14
+                , color = theme.solidControlFg
+                }
+
+         else
+            Element.none
+        )
 
 
 toggleSwitch : Theme -> { label : String, isActive : Bool, onToggle : msg } -> Element msg
