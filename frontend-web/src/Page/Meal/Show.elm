@@ -497,36 +497,34 @@ failure =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
-        [ Surface.section theme
-            { header = Just (headerView theme model)
-            , body =
-                [ case model of
-                    Loaded loaded ->
-                        case loaded.meal.notes of
+        (case model of
+            Loaded loaded ->
+                [ Surface.section theme
+                    { header = Just (headerView theme model)
+                    , body =
+                        [ case loaded.meal.notes of
                             Just notes ->
                                 Typography.mutedParagraph theme notes
 
                             Nothing ->
                                 Element.none
-
-                    LoadFailed message ->
-                        Feedback.errorBanner theme message
-
-                    Loading _ ->
-                        mealShowSkeleton theme
+                        ]
+                    , footer = Nothing
+                    }
+                , loadedView theme device loaded
                 ]
-            , footer = Nothing
-            }
-        , case model of
-            Loaded loaded ->
-                loadedView theme device loaded
 
             LoadFailed message ->
-                Feedback.errorBanner theme message
+                [ Surface.section theme
+                    { header = Just (headerView theme model)
+                    , body = [ Feedback.errorBanner theme message ]
+                    , footer = Nothing
+                    }
+                ]
 
             Loading _ ->
-                mealShowSkeleton theme
-        ]
+                [ mealShowSkeleton theme ]
+        )
 
 
 modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
