@@ -3228,6 +3228,10 @@ paneModalView props pane =
             MealShow.modalView (pageProps props sub)
                 |> Maybe.map (Element.map GotMealDetailMsg)
 
+        AdminEditUserPane _ sub ->
+            AdminEditUser.modalView (pageProps props sub)
+                |> Maybe.map (Element.map GotAdminEditUserMsg)
+
         _ ->
             Nothing
 

@@ -7,6 +7,7 @@ module Page.Users.EditUser exposing
     , Problem(..)
     , Status(..)
     , init
+    , modalView
     , update
     , view
     )
@@ -24,6 +25,7 @@ import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
+import View.DeleteModal
 
 
 
@@ -52,6 +54,7 @@ type ActionState
     = Idle
     | Invalid Problem
     | ResettingPassword
+    | DisableConfirming
     | DisablingUser
     | EnablingUser
     | ActionFailed String
@@ -80,6 +83,8 @@ type Msg
     | ResetSubmitted
     | ResetCompleted (Result Client.ApiError ())
     | DisableClicked
+    | CancelDisableClicked
+    | DisableConfirmClicked
     | DisableCompleted (Result Client.ApiError ())
     | EnableClicked
     | EnableCompleted (Result Client.ApiError ())
@@ -165,10 +170,32 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | status = Loaded loadedUser DisablingUser }
+                        ( { model | status = Loaded loadedUser DisableConfirming }
                         , Cmd.none
-                        , RequestDisableUser model.userId
+                        , NoOp
                         )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        CancelDisableClicked ->
+            case model.status of
+                Loaded loadedUser DisableConfirming ->
+                    ( { model | status = Loaded loadedUser Idle }
+                    , Cmd.none
+                    , NoOp
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        DisableConfirmClicked ->
+            case model.status of
+                Loaded loadedUser DisableConfirming ->
+                    ( { model | status = Loaded loadedUser DisablingUser }
+                    , Cmd.none
+                    , RequestDisableUser model.userId
+                    )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -267,6 +294,33 @@ view { model, device, theme } =
             ++ userDetailsView device theme model
             ++ accountActionView device theme model
         )
+
+
+modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
+modalView { model, device, theme } =
+    case model.status of
+        Loaded _ DisableConfirming ->
+            Just (disableConfirmModal device theme { pending = False })
+
+        Loaded _ DisablingUser ->
+            Just (disableConfirmModal device theme { pending = True })
+
+        _ ->
+            Nothing
+
+
+disableConfirmModal : Device -> Theme -> { pending : Bool } -> Element Msg
+disableConfirmModal device theme state =
+    View.DeleteModal.confirmModalView theme
+        device
+        { title = "Disable user?"
+        , description = "This user will no longer be able to sign in."
+        , confirmLabel = "Disable User"
+        , pendingLabel = "Disabling..."
+        , onCancel = CancelDisableClicked
+        , onConfirm = DisableConfirmClicked
+        }
+        { pending = state.pending, error = Nothing }
 
 
 userDetailsView : Device -> Theme -> Model -> List (Element Msg)

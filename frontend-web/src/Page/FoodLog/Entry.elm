@@ -821,6 +821,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete log?"
         , description = "This will permanently remove the log entry."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

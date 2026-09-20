@@ -1,5 +1,6 @@
 module View.DeleteModal exposing
     ( DeleteState(..)
+    , confirmModalView
     , deleteModalView
     )
 
@@ -20,48 +21,63 @@ type DeleteState
 deleteModalView :
     Theme
     -> Device
-    -> { title : String, description : String, onCancel : msg, onConfirm : msg }
+    ->
+        { title : String
+        , description : String
+        , confirmLabel : String
+        , pendingLabel : String
+        , onCancel : msg
+        , onConfirm : msg
+        }
     -> DeleteState
     -> Maybe (Element msg)
 deleteModalView theme device config deleteState =
     case deleteState of
         DeleteConfirming ->
-            Just (deleteModalContent theme device config Nothing False)
+            Just (confirmModalView theme device config { pending = False, error = Nothing })
 
         Deleting ->
-            Just (deleteModalContent theme device config Nothing True)
+            Just (confirmModalView theme device config { pending = True, error = Nothing })
 
         DeleteFailed message ->
-            Just (deleteModalContent theme device config (Just message) False)
+            Just (confirmModalView theme device config { pending = False, error = Just message })
 
         DeleteIdle ->
             Nothing
 
 
-deleteModalContent :
+{-| Shared confirmation dialog for destructive actions that are not deletes.
+-}
+confirmModalView :
     Theme
     -> Device
-    -> { title : String, description : String, onCancel : msg, onConfirm : msg }
-    -> Maybe String
-    -> Bool
+    ->
+        { title : String
+        , description : String
+        , confirmLabel : String
+        , pendingLabel : String
+        , onCancel : msg
+        , onConfirm : msg
+        }
+    -> { pending : Bool, error : Maybe String }
     -> Element msg
-deleteModalContent theme device config maybeError deleting =
+confirmModalView theme device config state =
     Feedback.modalOverlay theme
         { title = config.title
         , body =
             [ Typography.mutedParagraph theme config.description
-            , Feedback.maybeErrorBanner theme maybeError
+            , Feedback.maybeErrorBanner theme state.error
             ]
         , actions =
             Button.bottomActionButtons device
                 theme
                 [ { label = "Cancel", onPress = config.onCancel, tone = Button.Primary }
                 , { label =
-                        if deleting then
-                            "Deleting..."
+                        if state.pending then
+                            config.pendingLabel
 
                         else
-                            "Confirm Delete"
+                            config.confirmLabel
                   , onPress = config.onConfirm
                   , tone = Button.Danger
                   }

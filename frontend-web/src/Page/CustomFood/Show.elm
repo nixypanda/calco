@@ -327,6 +327,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete food?"
         , description = "This will permanently remove the custom food."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }
