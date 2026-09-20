@@ -529,6 +529,14 @@ hydrateUnits result pane =
             MealDetailPane key
                 (modelOnly (MealShow.update (MealShow.UnitsLoaded result) model))
 
+        MealCreatePane model ->
+            MealCreatePane
+                (modelOnly (MealCreate.update (MealCreate.UnitsLoaded result) model))
+
+        MealEditPane key model ->
+            MealEditPane key
+                (modelOnly (MealEdit.update (MealEdit.UnitsLoaded result) model))
+
         _ ->
             pane
 
@@ -1623,6 +1631,16 @@ type alias PaneUpdate pane =
     }
 
 
+messageMatchesPane : Maybe String -> Maybe String -> Bool
+messageMatchesPane incoming current =
+    case incoming of
+        Nothing ->
+            True
+
+        Just incomingId ->
+            current == Just incomingId
+
+
 updateFirst :
     (pane -> Maybe (PaneUpdate pane))
     -> List pane
@@ -1787,51 +1805,59 @@ updatePane allPanes context msg pane =
             stepPane context FoodSearchPane GotFoodSearchMsg applyFoodSearchOutMsg mutation result
 
         ( GotFoodDetailMsg subMsg, FoodDetailPane key sub ) ->
-            let
-                result : ( FoodShow.Model, Cmd FoodShow.Msg, FoodShow.OutMsg )
-                result =
-                    FoodShow.update subMsg sub
+            if not (messageMatchesPane (FoodShow.loadId subMsg) (FoodShow.modelId sub)) then
+                Nothing
 
-                mutation : Mutation
-                mutation =
-                    case third result of
-                        FoodShow.LogCreated log _ ->
-                            RefreshDiaryAndCalendar log.logDate
+            else
+                let
+                    result : ( FoodShow.Model, Cmd FoodShow.Msg, FoodShow.OutMsg )
+                    result =
+                        FoodShow.update subMsg sub
 
-                        _ ->
-                            NoMutation
-            in
-            stepPane context
-                (FoodDetailPane key)
-                GotFoodDetailMsg
-                applyFoodDetailOutMsg
-                mutation
-                result
+                    mutation : Mutation
+                    mutation =
+                        case third result of
+                            FoodShow.LogCreated log _ ->
+                                RefreshDiaryAndCalendar log.logDate
+
+                            _ ->
+                                NoMutation
+                in
+                stepPane context
+                    (FoodDetailPane key)
+                    GotFoodDetailMsg
+                    applyFoodDetailOutMsg
+                    mutation
+                    result
 
         ( GotFoodLogDetailMsg subMsg, FoodLogDetailPane logId sub ) ->
-            let
-                result : ( FoodLogEntry.Model, Cmd FoodLogEntry.Msg, FoodLogEntry.OutMsg )
-                result =
-                    FoodLogEntry.update subMsg sub
+            if not (messageMatchesPane (FoodLogEntry.loadId subMsg) (FoodLogEntry.modelId sub)) then
+                Nothing
 
-                mutation : Mutation
-                mutation =
-                    case third result of
-                        FoodLogEntry.LogUpdated date ->
-                            RefreshDiaryAndCalendar date
+            else
+                let
+                    result : ( FoodLogEntry.Model, Cmd FoodLogEntry.Msg, FoodLogEntry.OutMsg )
+                    result =
+                        FoodLogEntry.update subMsg sub
 
-                        FoodLogEntry.LogDeleted date _ ->
-                            RefreshDiaryAndCalendar date
+                    mutation : Mutation
+                    mutation =
+                        case third result of
+                            FoodLogEntry.LogUpdated date ->
+                                RefreshDiaryAndCalendar date
 
-                        _ ->
-                            NoMutation
-            in
-            stepPane context
-                (FoodLogDetailPane logId)
-                GotFoodLogDetailMsg
-                applyFoodLogDetailOutMsg
-                mutation
-                result
+                            FoodLogEntry.LogDeleted date _ ->
+                                RefreshDiaryAndCalendar date
+
+                            _ ->
+                                NoMutation
+                in
+                stepPane context
+                    (FoodLogDetailPane logId)
+                    GotFoodLogDetailMsg
+                    applyFoodLogDetailOutMsg
+                    mutation
+                    result
 
         ( GotCreateAdHocLogMsg subMsg, CreateAdHocLogPane sub ) ->
             let
@@ -1890,20 +1916,42 @@ updatePane allPanes context msg pane =
                 (CustomFoodCreate.update subMsg sub)
 
         ( GotCustomFoodEditMsg subMsg, CustomFoodEditPane productId sub ) ->
-            stepPane context
-                (CustomFoodEditPane productId)
-                GotCustomFoodEditMsg
-                applyCustomFoodEditOutMsg
-                NoMutation
-                (CustomFoodEdit.update subMsg sub)
+            let
+                matches : Bool
+                matches =
+                    messageMatchesPane
+                        (CustomFoodEdit.loadId subMsg)
+                        (CustomFoodEdit.modelId sub)
+            in
+            if not matches then
+                Nothing
+
+            else
+                stepPane context
+                    (CustomFoodEditPane productId)
+                    GotCustomFoodEditMsg
+                    applyCustomFoodEditOutMsg
+                    NoMutation
+                    (CustomFoodEdit.update subMsg sub)
 
         ( GotCustomFoodShowMsg subMsg, CustomFoodShowPane productId sub ) ->
-            stepPane context
-                (CustomFoodShowPane productId)
-                GotCustomFoodShowMsg
-                applyCustomFoodShowOutMsg
-                NoMutation
-                (CustomFoodShow.update subMsg sub)
+            let
+                matches : Bool
+                matches =
+                    messageMatchesPane
+                        (CustomFoodShow.loadId subMsg)
+                        (CustomFoodShow.modelId sub)
+            in
+            if not matches then
+                Nothing
+
+            else
+                stepPane context
+                    (CustomFoodShowPane productId)
+                    GotCustomFoodShowMsg
+                    applyCustomFoodShowOutMsg
+                    NoMutation
+                    (CustomFoodShow.update subMsg sub)
 
         ( GotCustomFoodsMsg subMsg, CustomFoodListPane sub ) ->
             stepPane context
@@ -1930,20 +1978,28 @@ updatePane allPanes context msg pane =
                 (MealCreate.update subMsg sub)
 
         ( GotMealEditMsg subMsg, MealEditPane mealId sub ) ->
-            stepPane context
-                (MealEditPane mealId)
-                GotMealEditMsg
-                applyMealEditOutMsg
-                NoMutation
-                (MealEdit.update subMsg sub)
+            if not (messageMatchesPane (MealEdit.loadId subMsg) (MealEdit.modelId sub)) then
+                Nothing
+
+            else
+                stepPane context
+                    (MealEditPane mealId)
+                    GotMealEditMsg
+                    applyMealEditOutMsg
+                    NoMutation
+                    (MealEdit.update subMsg sub)
 
         ( GotMealDetailMsg subMsg, MealDetailPane mealId sub ) ->
-            stepPane context
-                (MealDetailPane mealId)
-                GotMealDetailMsg
-                applyMealDetailOutMsg
-                NoMutation
-                (MealShow.update subMsg sub)
+            if not (messageMatchesPane (MealShow.loadId subMsg) (MealShow.modelId sub)) then
+                Nothing
+
+            else
+                stepPane context
+                    (MealDetailPane mealId)
+                    GotMealDetailMsg
+                    applyMealDetailOutMsg
+                    NoMutation
+                    (MealShow.update subMsg sub)
 
         _ ->
             Nothing
@@ -2399,21 +2455,21 @@ applyDiaryCalendarOutMsg _ outMsg =
         DiaryCalendar.NoOp ->
             ( Cmd.none, NoOutMsg )
 
-        DiaryCalendar.RequestSummary fromDate toDate ->
+        DiaryCalendar.RequestSummary token fromDate toDate ->
             ( Api.Logs.summary
                 { fromDate = fromDate
                 , toDate = toDate
                 }
-                (GotDiaryCalendarMsg << DiaryCalendar.SummaryLoaded)
+                (GotDiaryCalendarMsg << DiaryCalendar.SummaryLoaded token)
             , NoOutMsg
             )
 
-        DiaryCalendar.RequestEarlierSummary fromDate toDate ->
+        DiaryCalendar.RequestEarlierSummary token fromDate toDate ->
             ( Api.Logs.summary
                 { fromDate = fromDate
                 , toDate = toDate
                 }
-                (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded)
+                (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded token)
             , NoOutMsg
             )
 
@@ -2549,7 +2605,7 @@ applyFoodDetailOutMsg context outMsg =
         FoodShow.RequestInitialData productId ->
             ( Cmd.batch
                 (Api.Foods.getFoodDetail productId
-                    (GotFoodDetailMsg << FoodShow.FoodLoaded)
+                    (GotFoodDetailMsg << FoodShow.FoodLoaded productId)
                     :: lastUsedProductDefaultCmd context.route productId
                 )
             , NoOutMsg
@@ -2705,7 +2761,7 @@ applyFoodLogDetailOutMsg context outMsg =
 
         FoodLogEntry.RequestInitialData logId ->
             ( Api.Logs.getLog logId
-                (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded)
+                (GotFoodLogDetailMsg << FoodLogEntry.LogLoaded logId)
             , NoOutMsg
             )
 
@@ -2846,7 +2902,7 @@ applyCustomFoodEditOutMsg _ outMsg =
 
         CustomFoodEdit.RequestInitialData productId ->
             ( Api.Foods.getFoodDetail productId
-                (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded)
+                (GotCustomFoodEditMsg << CustomFoodEdit.FoodLoaded productId)
             , NoOutMsg
             )
 
@@ -2900,7 +2956,7 @@ applyCustomFoodShowOutMsg _ outMsg =
 
         CustomFoodShow.RequestInitialData productId ->
             ( Api.Foods.getFoodDetail productId
-                (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded)
+                (GotCustomFoodShowMsg << CustomFoodShow.FoodLoaded productId)
             , NoOutMsg
             )
 
@@ -2972,10 +3028,10 @@ applyMealEditOutMsg _ outMsg =
 
         MealEdit.RequestMeal mealId ->
             ( Cmd.batch
-                [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded)
+                [ Api.Meals.getMeal mealId (GotMealEditMsg << MealEdit.MealLoaded mealId)
                 , Api.Meals.getMealNutrients
                     { mealId = mealId, amount = "100", unit = defaultCode }
-                    (GotMealEditMsg << MealEdit.NutrientPreviewLoaded)
+                    (GotMealEditMsg << MealEdit.NutrientPreviewLoaded mealId)
                 ]
             , NoOutMsg
             )
@@ -3050,10 +3106,10 @@ applyMealDetailOutMsg _ outMsg =
 
         MealShow.RequestInitialData mealId ->
             ( Cmd.batch
-                [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded)
+                [ Api.Meals.getMeal mealId (GotMealDetailMsg << MealShow.MealLoaded mealId)
                 , Api.Meals.getMealNutrients
                     { mealId = mealId, amount = "100", unit = defaultCode }
-                    (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
+                    (GotMealDetailMsg << MealShow.NutrientPreviewLoaded mealId)
                 ]
             , NoOutMsg
             )
@@ -3061,7 +3117,7 @@ applyMealDetailOutMsg _ outMsg =
         MealShow.RequestNutrientPreview mealId amount unit ->
             ( Api.Meals.getMealNutrients
                 { mealId = mealId, amount = amount, unit = unit }
-                (GotMealDetailMsg << MealShow.NutrientPreviewLoaded)
+                (GotMealDetailMsg << MealShow.NutrientPreviewLoaded mealId)
             , NoOutMsg
             )
 
@@ -3228,6 +3284,10 @@ paneModalView props pane =
             MealShow.modalView (pageProps props sub)
                 |> Maybe.map (Element.map GotMealDetailMsg)
 
+        AdminEditUserPane _ sub ->
+            AdminEditUser.modalView (pageProps props sub)
+                |> Maybe.map (Element.map GotAdminEditUserMsg)
+
         _ ->
             Nothing
 
@@ -3259,7 +3319,7 @@ lastUsedProductDefaultCmd route productId =
                         , mealSlot = request.mealSlot
                         , items = [ { itemType = ItemRef.Product, id = productId } ]
                         }
-                        (GotFoodDetailMsg << FoodShow.LastUsedLoaded)
+                        (GotFoodDetailMsg << FoodShow.LastUsedLoaded productId)
                     ]
 
                 Nothing ->

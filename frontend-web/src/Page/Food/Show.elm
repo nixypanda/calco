@@ -4,10 +4,11 @@ module Page.Food.Show exposing
     , Model(..)
     , Msg(..)
     , OutMsg(..)
-    , RequestState(..)
     , contentView
     , foodNutrientsForDisplay
     , init
+    , loadId
+    , modelId
     , update
     )
 
@@ -25,7 +26,9 @@ import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 import View.Product
 
@@ -58,16 +61,14 @@ type alias LoadedModel =
     , food : ProductDetail
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , request : RequestState
     , lastUsedDefault : Maybe Nutrition.Quantity
     , lookupNote : Maybe String
     }
 
 
-type RequestState
-    = Idle
-    | RequestingLocalContext
-    | Saving
+isSubmitting : FoodLogForm.Model -> Bool
+isSubmitting form =
+    form.submitState == FoodLogForm.SubmitSubmitting
 
 
 type OutMsg
@@ -99,25 +100,60 @@ init productId logDate mealSlot lookupNote =
 
 
 type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
+    = FoodLoaded String (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
-    | LastUsedLoaded (Result Client.ApiError RecentItemsResponse)
+    | LastUsedLoaded String (Result Client.ApiError RecentItemsResponse)
     | FormMsg FoodLogForm.Msg
     | SubmitClicked
     | LocalContextReceived LocalContext
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.productId
+
+        Loaded loaded ->
+            Just loaded.productId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        FoodLoaded productId _ ->
+            Just productId
+
+        LastUsedLoaded productId _ ->
+            Just productId
+
+        _ ->
+            Nothing
+
+
+isCurrent : String -> Model -> Bool
+isCurrent incomingId model =
+    modelId model == Just incomingId
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        FoodLoaded result ->
-            case result of
-                Ok food ->
-                    ( setLoadedFood food model, Cmd.none, NoOp )
+        FoodLoaded incomingId result ->
+            if not (isCurrent incomingId model) then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok food ->
+                        ( setLoadedFood food model, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure error model
 
         UnitsLoaded result ->
             case result of
@@ -127,22 +163,26 @@ update msg model =
                 Err error ->
                     failure error model
 
-        LastUsedLoaded result ->
-            case result of
-                Ok response ->
-                    ( applyLastUsedDefault
-                        (List.head response.items |> Maybe.map .quantity)
-                        model
-                    , Cmd.none
-                    , NoOp
-                    )
+        LastUsedLoaded incomingId result ->
+            if not (isCurrent incomingId model) then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    if Client.isUnauthorized error then
-                        ( model, Cmd.none, SessionExpired )
+            else
+                case result of
+                    Ok response ->
+                        ( applyLastUsedDefault
+                            (List.head response.items |> Maybe.map .quantity)
+                            model
+                        , Cmd.none
+                        , NoOp
+                        )
 
-                    else
-                        ( model, Cmd.none, NoOp )
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( model, Cmd.none, SessionExpired )
+
+                        else
+                            ( model, Cmd.none, NoOp )
 
         FormMsg subMsg ->
             case model of
@@ -158,36 +198,34 @@ update msg model =
         SubmitClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
-                        if String.trim loaded.form.amount == "" then
-                            ( Loaded
-                                { loaded
-                                    | form =
-                                        FoodLogForm.setSubmitState
-                                            (FoodLogForm.SubmitFailed
-                                                FoodLogForm.AmountRequiredMessage
-                                            )
-                                            loaded.form
-                                }
-                            , Cmd.none
-                            , NoOp
-                            )
+                    if isSubmitting loaded.form then
+                        ( model, Cmd.none, NoOp )
 
-                        else
-                            ( Loaded
-                                { loaded
-                                    | form =
-                                        FoodLogForm.setSubmitState
-                                            FoodLogForm.SubmitIdle
-                                            loaded.form
-                                    , request = RequestingLocalContext
-                                }
-                            , Cmd.none
-                            , RequestLocalContext
-                            )
+                    else if String.trim loaded.form.amount == "" then
+                        ( Loaded
+                            { loaded
+                                | form =
+                                    FoodLogForm.setSubmitState
+                                        (FoodLogForm.SubmitFailed
+                                            FoodLogForm.AmountRequiredMessage
+                                        )
+                                        loaded.form
+                            }
+                        , Cmd.none
+                        , NoOp
+                        )
 
                     else
-                        ( model, Cmd.none, NoOp )
+                        ( Loaded
+                            { loaded
+                                | form =
+                                    FoodLogForm.setSubmitState
+                                        FoodLogForm.SubmitSubmitting
+                                        loaded.form
+                            }
+                        , Cmd.none
+                        , RequestLocalContext
+                        )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -195,11 +233,11 @@ update msg model =
         LocalContextReceived context ->
             case model of
                 Loaded loaded ->
-                    if loaded.request /= RequestingLocalContext then
-                        ( model, Cmd.none, NoOp )
+                    if isSubmitting loaded.form then
+                        createLogFromLocalContext context loaded
 
                     else
-                        createLogFromLocalContext context loaded
+                        ( model, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -207,7 +245,7 @@ update msg model =
         LogCompleted result ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Saving then
+                    if isSubmitting loaded.form then
                         case result of
                             Ok log ->
                                 ( model
@@ -257,7 +295,6 @@ createLogFromLocalContext context loaded =
                         FoodLogForm.setSubmitState
                             FoodLogForm.SubmitSubmitting
                             loaded.form
-                    , request = Saving
                 }
             , Cmd.none
             , RequestCreateLog request
@@ -272,7 +309,6 @@ createLogFromLocalContext context loaded =
                                 FoodLogForm.AmountRequiredMessage
                             )
                             loaded.form
-                    , request = Idle
                 }
             , Cmd.none
             , NoOp
@@ -287,7 +323,6 @@ createLogFromLocalContext context loaded =
                                 FoodLogForm.InvalidDateMessage
                             )
                             loaded.form
-                    , request = Idle
                 }
             , Cmd.none
             , NoOp
@@ -308,7 +343,6 @@ setLoadedFood food model =
                         formWithLastUsedDefault
                             loaded.lastUsedDefault
                             (FoodLogForm.initLogFormFromFood loaded.mealSlot food)
-                    , request = Idle
                 }
 
         LoadFailed _ ->
@@ -342,7 +376,6 @@ completeLoading loading =
                     formWithLastUsedDefault
                         loading.lastUsedDefault
                         (FoodLogForm.initLogFormFromFood loading.mealSlot food)
-                , request = Idle
                 , lastUsedDefault = loading.lastUsedDefault
                 , lookupNote = loading.lookupNote
                 }
@@ -407,7 +440,6 @@ applyLoadedError message model =
                                 (FoodLogForm.RequestFailed message)
                             )
                             loaded.form
-                    , request = Idle
                 }
 
         _ ->
@@ -464,6 +496,10 @@ loadedView theme device loaded =
         nutrients : List Nutrition.NutrientAmount
         nutrients =
             foodNutrientsForDisplay food form
+
+        categories : List (Element Msg)
+        categories =
+            View.Product.foodCategories theme food
     in
     Element.column
         [ Element.width Element.fill
@@ -471,22 +507,36 @@ loadedView theme device loaded =
         ]
         [ Maybe.withDefault Element.none
             (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
-        , View.Product.foodHeader theme food []
-        , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
-        , submitActionView theme device loaded.request
+        , Surface.panel theme
+            { header = Just (View.Product.foodHeaderElement theme food [])
+            , sections =
+                (if List.isEmpty categories then
+                    []
+
+                 else
+                    [ { title = Nothing, body = categories } ]
+                )
+                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                         , body =
+                            List.map (Element.map FormMsg)
+                                (FoodLogForm.fields theme device (Just food) loaded.units form)
+                         }
+                       ]
+            , footer = Just (submitActionView theme device form)
+            }
         , View.Nutrients.nutritionCard theme nutrients
         ]
 
 
-submitActionView : Theme -> Device -> RequestState -> Element Msg
-submitActionView theme device requestState =
+submitActionView : Theme -> Device -> FoodLogForm.Model -> Element Msg
+submitActionView theme device form =
     Button.textButton device
         theme
         { tone = Button.Primary
         , width = Button.FullWidth
         , label = "Log Food"
         , onPress = SubmitClicked
-        , submitState = Just (Button.submittingOrIdle (requestState == Saving))
+        , submitState = Just (Button.submittingOrIdle (isSubmitting form))
         , submittingLabel = Just "Logging..."
         , trailing = Nothing
         }

@@ -197,41 +197,48 @@ dateHeader theme device model =
         canGoNext =
             LocalDate.compare (currentDate model) (today model) == LT
     in
-    Surface.card theme
-        [ UiPage.pageHeader theme
-            { leading =
-                Just
-                    (Button.iconButton device
-                        theme
-                        { icon = Icon.ChevronLeft
-                        , title = "Previous day"
-                        , onPress = Just PreviousDayClicked
-                        , tone = Button.Primary
-                        }
-                    )
-            , title = Typography.sectionTitle theme "Nutrition details"
-            , subtitle = Just (UiPage.SubtitleText (LocalDate.display (currentDate model)))
-            , actions =
-                [ if canGoNext then
-                    Button.iconButton device
-                        theme
-                        { icon = Icon.ChevronRight
-                        , title = "Next day"
-                        , onPress = Just NextDayClicked
-                        , tone = Button.Primary
-                        }
+    Surface.section theme
+        { header =
+            Just
+                (UiPage.pageHeader theme
+                    { leading =
+                        Just
+                            (Button.iconButton device
+                                theme
+                                { icon = Icon.ChevronLeft
+                                , title = "Previous day"
+                                , onPress = Just PreviousDayClicked
+                                , tone = Button.Primary
+                                }
+                            )
+                    , title =
+                        Typography.sectionTitle theme
+                            (LocalDate.display (currentDate model))
+                    , subtitle = Nothing
+                    , actions =
+                        [ if canGoNext then
+                            Button.iconButton device
+                                theme
+                                { icon = Icon.ChevronRight
+                                , title = "Next day"
+                                , onPress = Just NextDayClicked
+                                , tone = Button.Primary
+                                }
 
-                  else
-                    Button.iconButton device
-                        theme
-                        { icon = Icon.ChevronRight
-                        , title = ""
-                        , onPress = Nothing
-                        , tone = Button.Primary
-                        }
-                ]
-            }
-        ]
+                          else
+                            Button.iconButton device
+                                theme
+                                { icon = Icon.ChevronRight
+                                , title = ""
+                                , onPress = Nothing
+                                , tone = Button.Primary
+                                }
+                        ]
+                    }
+                )
+        , body = []
+        , footer = Nothing
+        }
 
 
 loadingView : Theme -> Element msg
@@ -272,14 +279,19 @@ reportView theme report expandedAdvice =
             Details.Carbohydrates
             report.nutrients
         , nutrientSection theme expandedAdvice "Fats" Details.Fats report.nutrients
-        , nutrientSection theme expandedAdvice "Nutrients to limit" Details.Limits report.nutrients
+        , nutrientSection
+            theme
+            expandedAdvice
+            "Nutrients to limit"
+            Details.Limits
+            report.nutrients
         , nutrientSection
             theme
             expandedAdvice
             "Vitamins & minerals"
             Details.VitaminsMinerals
             report.nutrients
-        , referenceCard theme report
+        , referenceSection theme report
         ]
 
 
@@ -359,8 +371,7 @@ nutrientSection theme expandedAdvice title section nutrients =
                 [ Feedback.loading theme "No nutrient data is available for this group." ]
 
             else
-                selected
-                    |> List.map (nutrientRow theme expandedAdvice)
+                List.map (nutrientRow theme expandedAdvice) selected
         , footer = Nothing
         }
 
@@ -373,6 +384,12 @@ inSection section =
 coverageNotice : Theme -> NutritionDetails -> Element msg
 coverageNotice theme report =
     let
+        hasIncompleteData : Bool
+        hasIncompleteData =
+            report.loggedItems
+                > 0
+                && (hasPartialCoverage report || hasNoCoverage report)
+
         message : String
         message =
             if report.loggedItems == 0 then
@@ -391,13 +408,11 @@ coverageNotice theme report =
                     ++ includedVerb report.loggedItems
                     ++ " included in these daily totals."
     in
-    Element.paragraph
-        [ Element.width Element.fill
-        , Background.color theme.brandBlueSoft
-        , Font.color theme.textMedium
-        , Element.padding DesignTokens.space16
-        ]
-        [ Element.text message ]
+    if hasIncompleteData then
+        Feedback.warningBanner theme message
+
+    else
+        Feedback.infoBanner theme message
 
 
 hasPartialCoverage : NutritionDetails -> Bool
@@ -563,10 +578,10 @@ progressColor theme nutrient =
     else
         case nutrient.status of
             Details.MetReference ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             Details.WithinLimit ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             _ ->
                 theme.brandBlue
@@ -624,10 +639,10 @@ guidanceColor theme nutrient =
     else
         case ( nutrient.coverage, nutrient.status ) of
             ( Details.CompleteCoverage, Details.MetReference ) ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             ( Details.CompleteCoverage, Details.WithinLimit ) ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             _ ->
                 theme.textMuted
@@ -696,8 +711,8 @@ formatAmount amount unit =
     Number.toFixedTrimmed 1 amount ++ " " ++ unit
 
 
-referenceCard : Theme -> NutritionDetails -> Element msg
-referenceCard theme report =
+referenceSection : Theme -> NutritionDetails -> Element msg
+referenceSection theme report =
     Surface.section theme
         { header = Just (Typography.subsectionTitle theme "About these references")
         , body =

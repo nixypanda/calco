@@ -34,6 +34,24 @@ tests =
                         (FoodSearch.Navigate
                             (AdHocLogCreate (Just "2026-06-01") (Just Lunch))
                         )
+        , test "completion active index is stored" <|
+            \_ ->
+                FoodSearch.update (FoodSearch.CompletionActiveChanged 2)
+                    (FoodSearch.init Nothing Nothing)
+                    |> first
+                    |> .completionIndex
+                    |> Expect.equal 2
+        , test "changing the query resets the completion active index" <|
+            \_ ->
+                let
+                    active : FoodSearch.Model
+                    active =
+                        { initModel | completionIndex = 2 }
+                in
+                FoodSearch.update (FoodSearch.QueryChanged "milk") active
+                    |> first
+                    |> .completionIndex
+                    |> Expect.equal -1
         , test "AI ad-hoc navigation keeps date and meal slot" <|
             \_ ->
                 FoodSearch.update FoodSearch.CreateAiLogClicked
@@ -1077,6 +1095,11 @@ date raw =
 fallbackDate : LocalDate
 fallbackDate =
     LocalDate.fromPosix Time.utc (Time.millisToPosix 0)
+
+
+initModel : FoodSearch.Model
+initModel =
+    FoodSearch.init Nothing Nothing
 
 
 first : ( a, b, c ) -> a

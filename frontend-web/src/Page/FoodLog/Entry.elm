@@ -8,10 +8,11 @@ module Page.FoodLog.Entry exposing
     , Msg(..)
     , OutMsg(..)
     , ProductState
-    , RequestState(..)
     , contentView
     , init
+    , loadId
     , modalView
+    , modelId
     , nutrientsForDisplay
     , update
     )
@@ -64,7 +65,6 @@ type alias LoadedModel =
     , item : LoadedItem
     , units : List UnitItem
     , form : FoodLogForm.Model
-    , request : RequestState
     , delete : DeleteState
     }
 
@@ -85,9 +85,9 @@ type alias ProductState =
     ItemDetail ProductDetail
 
 
-type RequestState
-    = Idle
-    | Saving
+isSubmitting : FoodLogForm.Model -> Bool
+isSubmitting form =
+    form.submitState == FoodLogForm.SubmitSubmitting
 
 
 type alias LoadFailedModel =
@@ -112,7 +112,7 @@ init logId =
 
 
 type Msg
-    = LogLoaded (Result Client.ApiError FoodLog)
+    = LogLoaded String (Result Client.ApiError FoodLog)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | ProductDetailLoaded (Result Client.ApiError ProductDetail)
     | FormMsg FoodLogForm.Msg
@@ -122,6 +122,29 @@ type Msg
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.logId
+
+        Loaded loaded ->
+            Just loaded.logId
+
+        LoadFailed failed ->
+            Just failed.logId
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        LogLoaded logId _ ->
+            Just logId
+
+        _ ->
+            Nothing
 
 
 type OutMsg
@@ -138,13 +161,17 @@ type OutMsg
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        LogLoaded result ->
-            case result of
-                Ok log ->
-                    ( setLoadedLog log model, Cmd.none, itemResolutionOutMsg log )
+        LogLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    loadFailure error model
+            else
+                case result of
+                    Ok log ->
+                        ( setLoadedLog log model, Cmd.none, itemResolutionOutMsg log )
+
+                    Err error ->
+                        loadFailure error model
 
         UnitsLoaded result ->
             case result of
@@ -171,7 +198,7 @@ update msg model =
         SubmitClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         submitLoaded loaded
 
                     else
@@ -197,7 +224,7 @@ update msg model =
         DeleteClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         ( Loaded { loaded | delete = DeleteConfirming }, Cmd.none, NoOp )
 
                     else
@@ -217,7 +244,7 @@ update msg model =
         ConfirmDeleteClicked ->
             case model of
                 Loaded loaded ->
-                    if loaded.request == Idle then
+                    if not (isSubmitting loaded.form) then
                         case loaded.delete of
                             DeleteConfirming ->
                                 ( Loaded
@@ -285,7 +312,6 @@ submitLoaded loaded =
                         FoodLogForm.setSubmitState
                             FoodLogForm.SubmitSubmitting
                             loaded.form
-                    , request = Saving
                 }
             , Cmd.none
             , RequestUpdateLog loaded.logId request
@@ -332,7 +358,6 @@ setLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -363,7 +388,6 @@ completeLoading loading =
                 , item = initialLoadedItem log
                 , units = units
                 , form = FoodLogForm.initLogFormFromLog log
-                , request = Idle
                 , delete = DeleteIdle
                 }
 
@@ -380,7 +404,6 @@ updateLoadedLog log model =
                     | log = log
                     , item = nextLoadedItem loaded log
                     , form = FoodLogForm.initLogFormFromLog log
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -491,7 +514,6 @@ applyLoadedError message model =
                                 (FoodLogForm.RequestFailed message)
                             )
                             loaded.form
-                    , request = Idle
                     , delete = DeleteIdle
                 }
 
@@ -503,7 +525,7 @@ applyLoadedDeleteError : String -> Model -> Model
 applyLoadedDeleteError message model =
     case model of
         Loaded loaded ->
-            Loaded { loaded | request = Idle, delete = DeleteFailed message }
+            Loaded { loaded | delete = DeleteFailed message }
 
         _ ->
             model
@@ -609,28 +631,45 @@ loadedView theme device model =
         nutrients : List Nutrition.NutrientAmount
         nutrients =
             nutrientsForDisplay (productDetail model.item) model.log model.form
+
+        categories : List (Element Msg)
+        categories =
+            itemCategories theme (productDetail model.item)
     in
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ itemHeader theme device model
-        , Element.map FormMsg
-            (FoodLogForm.view
-                theme
-                device
-                (productDetail model.item)
-                (unitsForItem model)
-                model.form
-            )
-        , detailActionsView theme device model
+        [ Surface.panel theme
+            { header = Just (itemHeaderElement theme device model)
+            , sections =
+                (if List.isEmpty categories then
+                    []
+
+                 else
+                    [ { title = Nothing, body = categories } ]
+                )
+                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                         , body =
+                            List.map (Element.map FormMsg)
+                                (FoodLogForm.fields
+                                    theme
+                                    device
+                                    (productDetail model.item)
+                                    (unitsForItem model)
+                                    model.form
+                                )
+                         }
+                       ]
+            , footer = Just (detailActionsView theme device model)
+            }
         , View.Nutrients.responsiveNutritionCard device theme nutrients
         ]
 
 
 submitState : LoadedModel -> Button.SubmitState
 submitState model =
-    if model.request == Saving then
+    if isSubmitting model.form then
         Button.Submitting
 
     else if formHasChanges model.log model.form then
@@ -684,32 +723,33 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Theme -> Device -> LoadedModel -> Element Msg
-itemHeader theme device model =
-    let
-        maybeFood : Maybe ProductDetail
-        maybeFood =
-            productDetail model.item
-    in
-    Surface.card theme
-        [ UiPage.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
-            , title = itemTitle theme model.item
-            , subtitle = Just (metaSubtitle device maybeFood model.log)
-            , actions = []
-            }
-        , case maybeFood of
-            Just food ->
-                if List.isEmpty food.categories then
-                    Element.none
+itemHeaderElement : Theme -> Device -> LoadedModel -> Element Msg
+itemHeaderElement theme device model =
+    UiPage.pageHeader theme
+        { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
+        , title = itemTitle theme model.item
+        , subtitle = Just (metaSubtitle device (productDetail model.item) model.log)
+        , actions = []
+        }
 
-                else
-                    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
 
-            Nothing ->
-                Element.none
-        ]
+itemCategories : Theme -> Maybe ProductDetail -> List (Element Msg)
+itemCategories theme maybeFood =
+    case maybeFood of
+        Just food ->
+            if List.isEmpty food.categories then
+                []
+
+            else
+                [ Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space12
+                    ]
+                    [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
+                ]
+
+        Nothing ->
+            []
 
 
 itemTitle : Theme -> LoadedItem -> Element msg
@@ -821,6 +861,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete log?"
         , description = "This will permanently remove the log entry."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

@@ -12,10 +12,9 @@ import Api.Client as Client
 import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
-import Element.Input as Input
 import Ui.Button as Button
-import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Input as UiInput
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -42,6 +41,7 @@ type Msg
     | SlotToggled MealSlot Bool
     | SaveClicked
     | SaveCompleted (Result Client.ApiError DiaryPreferences)
+    | RetryClicked
 
 
 type OutMsg
@@ -148,6 +148,9 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+        RetryClicked ->
+            ( Loading, Cmd.none, RequestPreferences )
+
 
 canonical : List MealSlot -> List MealSlot
 canonical selected =
@@ -162,7 +165,7 @@ view { model, device, theme } =
                 [ diarySettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorBanner theme message ]
+                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
 
             Ready loaded ->
                 [ Surface.section theme
@@ -178,7 +181,7 @@ view { model, device, theme } =
                                 , trailing = Nothing
                                 }
                             )
-                    , body = List.map (slotCheckbox loaded.selected) MealSlot.all
+                    , body = List.map (slotCheckbox theme loaded.selected) MealSlot.all
                     , footer = Nothing
                     }
                 , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
@@ -201,18 +204,12 @@ view { model, device, theme } =
         )
 
 
-slotCheckbox : List MealSlot -> MealSlot -> Element Msg
-slotCheckbox selected slot =
-    Input.checkbox
-        [ Element.width Element.fill
-        , Element.paddingXY 0 DesignTokens.space8
-        ]
-        { onChange = SlotToggled slot
-        , icon = Input.defaultCheckbox
+slotCheckbox : Theme -> List MealSlot -> MealSlot -> Element Msg
+slotCheckbox theme selected slot =
+    UiInput.checkbox theme
+        { label = MealSlot.label slot
         , checked = List.member slot selected
-        , label =
-            Input.labelRight []
-                (Element.el [ Typography.body ] (Element.text (MealSlot.label slot)))
+        , onChange = SlotToggled slot
         }
 
 
@@ -231,10 +228,18 @@ saveError state =
 
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
-    Surface.card theme
-        [ Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.button theme
-        ]
+    Surface.section theme
+        { header =
+            Just
+                (Skeleton.barCustom theme
+                    { width = Element.px 140, height = 24 }
+                )
+        , body =
+            [ Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.button theme
+            ]
+        , footer = Nothing
+        }

@@ -92,6 +92,7 @@ type Msg
     | SaveClicked
     | LocalContextReceived LocalContext
     | SaveCompleted (Result Client.ApiError GoalSnapshot)
+    | RetryClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -209,6 +210,9 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none, NoOp )
+
+        RetryClicked ->
+            ( Loading, Cmd.none, RequestGoal )
 
 
 updateForm : (Form -> Form) -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -330,7 +334,7 @@ view { model, device, theme } =
                 [ goalsSettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorBanner theme message ]
+                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
 
             Ready ready ->
                 [ Feedback.maybeErrorBanner theme (requestError ready.save)
@@ -348,22 +352,22 @@ view { model, device, theme } =
                                 }
                             )
                     , body =
-                        [ UiInput.decimalInput theme
+                        [ UiInput.numericInput theme
                             { label = "Calories"
                             , value = ready.form.calorieTarget
                             , onChange = CalorieTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Protein (g)"
                             , value = ready.form.proteinTargetG
                             , onChange = ProteinTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Carbs (g)"
                             , value = ready.form.carbsTargetG
                             , onChange = CarbsTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Fat (g)"
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged
@@ -437,10 +441,18 @@ requestError save =
 
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
-    Surface.card theme
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.button theme
-        ]
+    Surface.section theme
+        { header =
+            Just
+                (Skeleton.barCustom theme
+                    { width = Element.px 160, height = 24 }
+                )
+        , body =
+            [ Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.button theme
+            ]
+        , footer = Nothing
+        }

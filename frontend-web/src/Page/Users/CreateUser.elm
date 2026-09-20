@@ -192,7 +192,8 @@ view { model, device, theme } =
     in
     UiPage.pageContainer device
         (errorView theme model
-            ++ [ Surface.card theme
+            ++ [ Surface.formSection theme
+                    "Credentials"
                     [ UiInput.input theme
                         { label = "Username"
                         , value = form.username

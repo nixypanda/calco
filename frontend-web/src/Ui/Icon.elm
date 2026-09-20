@@ -19,6 +19,7 @@ type Icon
     | ChevronDown
     | Plus
     | Close
+    | Check
 
 
 view :
@@ -105,3 +106,6 @@ shapes icon =
             [ line [ SvgA.x1 "6", SvgA.y1 "6", SvgA.x2 "18", SvgA.y2 "18" ] []
             , line [ SvgA.x1 "18", SvgA.y1 "6", SvgA.x2 "6", SvgA.y2 "18" ] []
             ]
+
+        Check ->
+            [ polyline [ SvgA.points "5 13 10 18 19 7" ] [] ]

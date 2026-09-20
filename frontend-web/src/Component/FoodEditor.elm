@@ -1738,7 +1738,7 @@ loggedPortionCard theme device units form logFields =
     Surface.formSection theme
         "Logged Portion"
         [ Typography.mutedParagraph theme "Describe the entire amount you are logging."
-        , UiInput.decimalInput theme
+        , UiInput.numericInput theme
             { label = "Amount"
             , value = logFields.quantity
             , onChange = LogQuantityChanged
@@ -1822,7 +1822,7 @@ saveToFoodsCard theme _ persistence =
                     []
 
                 SaveCustomFoodThenLog details ->
-                    [ UiInput.decimalInput theme
+                    [ UiInput.numericInput theme
                         { label = "Weight of this logged portion (g)"
                         , value = details.portionWeight
                         , onChange = PortionWeightChanged
@@ -1875,7 +1875,7 @@ defaultPortionFields theme device units form =
                 Element.none
 
             else
-                UiInput.decimalInput theme
+                UiInput.numericInput theme
                     { label = "Default Quantity"
                     , value = form.defaultQuantity
                     , onChange = DefaultQuantityChanged

@@ -8,6 +8,7 @@ import Data.Nutrition as Nutrition
 import Data.Search as Search exposing (Completion(..))
 import Element exposing (Device, Element)
 import Html
+import Html.Attributes
 import Html.Events
 import Json.Decode as Decode
 import Lib.Text as Text
@@ -24,7 +25,7 @@ import View.Nutrients
 completionDropdown :
     Theme
     -> Device
-    -> { onSelect : Completion -> msg }
+    -> { id : String, activeIndex : Int, onSelect : Completion -> msg }
     -> List Completion
     -> Element msg
 completionDropdown theme device config options =
@@ -32,52 +33,162 @@ completionDropdown theme device config options =
         Element.none
 
     else
-        UiInput.completionDropdown theme
-            { height = completionDropdownHeight device options
-            , rows = List.map (completionRow theme config.onSelect) options
-            }
+        Element.el
+            [ Element.htmlAttribute (Html.Attributes.attribute "role" "listbox")
+            , Element.htmlAttribute (Html.Attributes.attribute "id" config.id)
+            ]
+            (UiInput.completionDropdown theme
+                { height = completionDropdownHeight device options
+                , rows = List.indexedMap (completionRow theme config) options
+                }
+            )
 
 
 searchInput :
     Theme
     -> Device
     ->
-        { onChange : String -> msg
+        { id : String
+        , onChange : String -> msg
         , text : String
         , label : String
         , completions : List Completion
+        , activeIndex : Int
+        , onActiveChanged : Int -> msg
         , onTabComplete : msg
         , onCompletionClick : Completion -> msg
         }
     -> Element msg
 searchInput theme device config =
+    let
+        hasCompletions : Bool
+        hasCompletions =
+            not (List.isEmpty config.completions)
+
+        ariaAttributes : List (Element.Attribute msg)
+        ariaAttributes =
+            [ Element.htmlAttribute (Html.Attributes.attribute "role" "combobox")
+            , Element.htmlAttribute
+                (Html.Attributes.attribute
+                    "aria-expanded"
+                    (if hasCompletions then
+                        "true"
+
+                     else
+                        "false"
+                    )
+                )
+            , Element.htmlAttribute
+                (Html.Attributes.attribute "aria-controls" config.id)
+            , Element.htmlAttribute (Html.Attributes.attribute "aria-autocomplete" "list")
+            ]
+                ++ (if hasCompletions && config.activeIndex >= 0 then
+                        [ Element.htmlAttribute
+                            (Html.Attributes.attribute
+                                "aria-activedescendant"
+                                (optionId config.id config.activeIndex)
+                            )
+                        ]
+
+                    else
+                        []
+                   )
+    in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
         [ UiInput.searchInput theme
             { onChange = config.onChange
             , text = config.text
             , label = config.label
             , extraAttrs =
-                [ Element.htmlAttribute
-                    (tabCompletionHandler config.onTabComplete config.completions)
-                ]
+                ariaAttributes
+                    ++ [ Element.htmlAttribute
+                            (keydownHandler
+                                { activeIndex = config.activeIndex
+                                , completions = config.completions
+                                , onActiveChanged = config.onActiveChanged
+                                , onTabComplete = config.onTabComplete
+                                , onCompletionClick = config.onCompletionClick
+                                }
+                            )
+                       ]
             }
-        , completionDropdown theme device { onSelect = config.onCompletionClick } config.completions
+        , completionDropdown theme
+            device
+            { id = config.id
+            , activeIndex = config.activeIndex
+            , onSelect = config.onCompletionClick
+            }
+            config.completions
         ]
 
 
-tabCompletionHandler : msg -> List Completion -> Html.Attribute msg
-tabCompletionHandler completeMsg options =
+keydownHandler :
+    { activeIndex : Int
+    , completions : List Completion
+    , onActiveChanged : Int -> msg
+    , onTabComplete : msg
+    , onCompletionClick : Completion -> msg
+    }
+    -> Html.Attribute msg
+keydownHandler config =
     Html.Events.preventDefaultOn "keydown"
         (Decode.field "key" Decode.string
             |> Decode.andThen
                 (\key ->
-                    if key == "Tab" && not (List.isEmpty options) then
-                        Decode.succeed ( completeMsg, True )
+                    if List.isEmpty config.completions then
+                        Decode.fail "no completions"
 
                     else
-                        Decode.fail "not handled"
+                        case key of
+                            "Tab" ->
+                                Decode.succeed ( config.onTabComplete, True )
+
+                            "ArrowDown" ->
+                                let
+                                    nextActive : Int
+                                    nextActive =
+                                        min
+                                            (List.length config.completions - 1)
+                                            (config.activeIndex + 1)
+                                in
+                                Decode.succeed ( config.onActiveChanged nextActive, True )
+
+                            "ArrowUp" ->
+                                Decode.succeed
+                                    ( config.onActiveChanged
+                                        (max 0 (config.activeIndex - 1))
+                                    , True
+                                    )
+
+                            "Enter" ->
+                                case completionAt config.activeIndex config.completions of
+                                    Just completion ->
+                                        Decode.succeed ( config.onCompletionClick completion, True )
+
+                                    Nothing ->
+                                        Decode.fail "no active completion"
+
+                            "Escape" ->
+                                Decode.succeed ( config.onActiveChanged -1, True )
+
+                            _ ->
+                                Decode.fail "unhandled key"
                 )
         )
+
+
+completionAt : Int -> List Completion -> Maybe Completion
+completionAt index completions =
+    if index < 0 then
+        Nothing
+
+    else
+        completions |> List.drop index |> List.head
+
+
+optionId : String -> Int -> String
+optionId listboxId index =
+    listboxId ++ "-option-" ++ String.fromInt index
 
 
 resultRow :
@@ -112,7 +223,7 @@ resultRow theme device config =
 
         hasCategories : Bool
         hasCategories =
-            not (List.isEmpty (visibleCategories config.item.categories))
+            not (List.isEmpty config.item.categories)
     in
     Surface.listRow
         { onSelect = config.onSelect config.item.id
@@ -142,19 +253,39 @@ completionDropdownHeight device options =
         min 224 (8 + List.length options * 38)
 
 
-completionRow : Theme -> (Completion -> msg) -> Completion -> Element msg
-completionRow theme onSelect completion =
-    UiInput.completionRow theme
-        { label = Search.completionLabel completion
-        , trailing =
-            case completion of
-                CategoryCompletion _ count ->
-                    Just (Chip.badge theme (String.fromInt count))
+completionRow :
+    Theme
+    -> { id : String, activeIndex : Int, onSelect : Completion -> msg }
+    -> Int
+    -> Completion
+    -> Element msg
+completionRow theme config index completion =
+    Element.el
+        [ Element.htmlAttribute (Html.Attributes.attribute "role" "option")
+        , Element.htmlAttribute (Html.Attributes.attribute "id" (optionId config.id index))
+        , Element.htmlAttribute
+            (Html.Attributes.attribute
+                "aria-selected"
+                (if index == config.activeIndex then
+                    "true"
 
-                OperatorCompletion _ ->
-                    Nothing
-        , onPress = onSelect completion
-        }
+                 else
+                    "false"
+                )
+            )
+        ]
+        (UiInput.completionRow theme
+            { label = Search.completionLabel completion
+            , trailing =
+                case completion of
+                    CategoryCompletion _ count ->
+                        Just (Chip.badge theme (String.fromInt count))
+
+                    OperatorCompletion _ ->
+                        Nothing
+            , onPress = config.onSelect completion
+            }
+        )
 
 
 metaText : String -> SearchResult -> String
@@ -183,12 +314,7 @@ isNumeric value =
 
 categoryPills : Theme -> Device -> List String -> Element msg
 categoryPills theme device categories =
-    let
-        pills : List String
-        pills =
-            visibleCategories categories
-    in
-    if List.isEmpty pills then
+    if List.isEmpty categories then
         Element.none
 
     else if UiCommon.isSmall device then
@@ -196,64 +322,26 @@ categoryPills theme device categories =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space4
             ]
-            (List.map (categoryPill theme) pills)
+            (List.map (categoryPill theme) categories)
 
     else
-        Element.column
+        Element.wrappedRow
             [ Element.width (Element.px 160)
             , Element.spacing DesignTokens.space4
             , Element.alignRight
             ]
-            (pills
-                |> chunkPairs
-                |> List.map (pillRow theme)
-            )
-
-
-visibleCategories : List String -> List String
-visibleCategories categories =
-    case List.drop 4 categories of
-        [] ->
-            List.take 4 categories
-
-        hidden ->
-            List.take 3 categories ++ [ "+" ++ String.fromInt (List.length hidden + 1) ++ " more" ]
-
-
-chunkPairs : List a -> List (List a)
-chunkPairs items =
-    case items of
-        [] ->
-            []
-
-        first :: second :: rest ->
-            [ first, second ] :: chunkPairs rest
-
-        [ first ] ->
-            [ [ first ] ]
-
-
-pillRow : Theme -> List String -> Element msg
-pillRow theme pills =
-    Element.row
-        [ Element.spacing DesignTokens.space4
-        , Element.alignRight
-        ]
-        (List.map (categoryPill theme) pills)
+            (List.map (categoryPill theme) categories)
 
 
 categoryPill : Theme -> String -> Element msg
 categoryPill theme label =
-    Chip.chip theme
-        { label = truncatePillLabel label
-        , selected = False
-        }
-
-
-truncatePillLabel : String -> String
-truncatePillLabel label =
-    if String.length label > 10 then
-        String.left 9 label ++ "..."
-
-    else
-        label
+    Element.el
+        [ Element.width (Element.maximum 160 Element.fill)
+        , Element.clip
+        , UiCommon.uiClass "ui-text-ellipsis"
+        ]
+        (Chip.chip theme
+            { label = label
+            , selected = False
+            }
+        )

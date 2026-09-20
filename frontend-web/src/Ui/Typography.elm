@@ -3,7 +3,6 @@ module Ui.Typography exposing
     , caption
     , decimalNumber
     , heroStat
-    , listItemTitle
     , maybeMutedParagraph
     , mutedBody
     , mutedBodyParagraph
@@ -11,6 +10,7 @@ module Ui.Typography exposing
     , mutedCaptionParagraph
     , mutedParagraph
     , pageTitle
+    , screenTitle
     , sectionTitle
     , subsectionTitle
     , tableHeader
@@ -83,6 +83,20 @@ heroStat theme text =
         [ sizeHeroStat
         , Font.bold
         , Font.color theme.textPrimary
+        ]
+        (Element.text text)
+
+
+{-| Screen title in the top app bar. Emits the page's h1 while keeping the
+compact bar size.
+-}
+screenTitle : Theme -> String -> Element msg
+screenTitle theme text =
+    Element.el
+        [ sizeSubsectionTitle
+        , Font.bold
+        , Font.color theme.textPrimary
+        , Region.heading 1
         ]
         (Element.text text)
 

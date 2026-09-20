@@ -5,7 +5,9 @@ module Page.Meal.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
     , modalView
+    , modelId
     , uniqueProductIds
     , update
     , view
@@ -86,13 +88,13 @@ init mealId =
 
 
 type Msg
-    = MealLoaded (Result Client.ApiError Meal)
+    = MealLoaded String (Result Client.ApiError Meal)
     | ProductDetailLoaded String (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | AmountChanged String
     | UnitChanged String
     | ToggleUnitDropdown
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | NutrientPreviewLoaded String (Result Client.ApiError MealNutritionResponse)
     | DeleteClicked
     | CancelDeleteClicked
     | ConfirmDeleteClicked
@@ -100,21 +102,51 @@ type Msg
     | EditClicked
 
 
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.mealId
+
+        Loaded loaded ->
+            Just loaded.mealId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        MealLoaded mealId _ ->
+            Just mealId
+
+        NutrientPreviewLoaded mealId _ ->
+            Just mealId
+
+        _ ->
+            Nothing
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        MealLoaded result ->
-            case result of
-                Ok meal ->
-                    let
-                        loaded : LoadedModel
-                        loaded =
-                            loadedFromMeal meal model
-                    in
-                    ( Loaded loaded, Cmd.none, requestProductNames (uniqueProductIds meal) )
+        MealLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok meal ->
+                        let
+                            loaded : LoadedModel
+                            loaded =
+                                loadedFromMeal meal model
+                        in
+                        ( Loaded loaded, Cmd.none, requestProductNames (uniqueProductIds meal) )
+
+                    Err error ->
+                        failure error model
 
         ProductDetailLoaded productId result ->
             case model of
@@ -200,8 +232,12 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        NutrientPreviewLoaded result ->
-            applyNutritionResult result model
+        NutrientPreviewLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
+
+            else
+                applyNutritionResult result model
 
         DeleteClicked ->
             case model of
@@ -313,7 +349,10 @@ nextProductNameRequest completedId loaded =
 componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
-        Typography.listItemTitle theme
+        Element.el
+            [ Typography.body
+            , Font.color theme.textPrimary
+            ]
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -497,36 +536,34 @@ failure =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
-        [ Surface.section theme
-            { header = Just (headerView theme model)
-            , body =
-                [ case model of
-                    Loaded loaded ->
-                        case loaded.meal.notes of
+        (case model of
+            Loaded loaded ->
+                [ Surface.section theme
+                    { header = Just (headerView theme model)
+                    , body =
+                        [ case loaded.meal.notes of
                             Just notes ->
                                 Typography.mutedParagraph theme notes
 
                             Nothing ->
                                 Element.none
-
-                    LoadFailed message ->
-                        Feedback.errorBanner theme message
-
-                    Loading _ ->
-                        mealShowSkeleton theme
+                        ]
+                    , footer = Nothing
+                    }
+                , loadedView theme device loaded
                 ]
-            , footer = Nothing
-            }
-        , case model of
-            Loaded loaded ->
-                loadedView theme device loaded
 
             LoadFailed message ->
-                Feedback.errorBanner theme message
+                [ Surface.section theme
+                    { header = Just (headerView theme model)
+                    , body = [ Feedback.errorBanner theme message ]
+                    , footer = Nothing
+                    }
+                ]
 
             Loading _ ->
-                mealShowSkeleton theme
-        ]
+                [ mealShowSkeleton theme ]
+        )
 
 
 modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
@@ -554,7 +591,7 @@ headerView theme model =
                 }
 
         _ ->
-            Typography.pageTitle theme "Meal"
+            Typography.truncatedHeader theme "Meal"
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -562,7 +599,9 @@ loadedView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section theme
             { header = Just (Typography.subsectionTitle theme "Components")
-            , body = List.map (componentView theme loaded) loaded.meal.components
+            , body =
+                List.intersperse (Surface.hairline theme)
+                    (List.map (componentView theme loaded) loaded.meal.components)
             , footer = Nothing
             }
         , nutritionView theme device loaded
@@ -631,7 +670,8 @@ nutritionView theme device loaded =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Surface.card theme
+        [ Surface.formSection theme
+            "Portion"
             [ View.QuantityInput.dropdown theme
                 device
                 { amountLabel = "Amount"
@@ -664,6 +704,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete meal?"
         , description = "This will permanently remove the meal."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

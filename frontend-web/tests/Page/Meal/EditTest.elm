@@ -34,7 +34,7 @@ tests =
         , test "meal load success stores meal and maps components into rows" <|
             \_ ->
                 MealEdit.update
-                    (MealEdit.MealLoaded (Ok meal))
+                    (MealEdit.MealLoaded "meal-1" (Ok meal))
                     (Tuple.first (MealEdit.init "meal-1"))
                     |> first
                     |> componentsOf
@@ -43,7 +43,7 @@ tests =
         , test "meal load requests the name of its first product component" <|
             \_ ->
                 MealEdit.update
-                    (MealEdit.MealLoaded (Ok meal))
+                    (MealEdit.MealLoaded "meal-1" (Ok meal))
                     (Tuple.first (MealEdit.init "meal-1"))
                     |> third
                     |> Expect.equal
@@ -51,24 +51,52 @@ tests =
         , test "meal load failure transitions to edit load failed" <|
             \_ ->
                 MealEdit.update
-                    (MealEdit.MealLoaded
+                    (MealEdit.MealLoaded "meal-1"
                         (Err Client.NetworkError)
                     )
                     (Tuple.first (MealEdit.init "meal-1"))
                     |> first
                     |> (\model ->
                             case model of
-                                MealEdit.EditLoadFailed message ->
-                                    Just message
+                                MealEdit.EditLoadFailed failed ->
+                                    Just failed.message
 
                                 _ ->
                                     Nothing
                        )
                     |> Expect.equal (Just networkErrorMessage)
+        , test "retry from edit load failed requests the meal again" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        MealEdit.update MealEdit.RetryClicked
+                            (MealEdit.EditLoadFailed
+                                { mealId = "meal-1"
+                                , message = networkErrorMessage
+                                }
+                            )
+                in
+                case model of
+                    MealEdit.LoadingEdit loading ->
+                        ( loading.mealId, outMsg )
+                            |> Expect.equal ( "meal-1", MealEdit.RequestMeal "meal-1" )
+
+                    _ ->
+                        Expect.fail "expected LoadingEdit"
+        , test "a load response for another meal is ignored" <|
+            \_ ->
+                let
+                    base : MealEdit.Model
+                    base =
+                        Tuple.first (MealEdit.init "meal-1")
+                in
+                MealEdit.update (MealEdit.MealLoaded "other" (Ok meal)) base
+                    |> first
+                    |> Expect.equal base
         , test "nutrient preview response stores nutrients" <|
             \_ ->
                 MealEdit.update
-                    (MealEdit.NutrientPreviewLoaded (Ok nutrientPreview))
+                    (MealEdit.NutrientPreviewLoaded "meal-1" (Ok nutrientPreview))
                     (Tuple.first (MealEdit.init "meal-1"))
                     |> first
                     |> nutrientsOf

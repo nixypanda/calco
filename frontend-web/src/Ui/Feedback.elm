@@ -1,18 +1,21 @@
 module Ui.Feedback exposing
     ( emptyState
     , errorBanner
+    , errorRetry
     , infoBanner
     , linearProgress
     , loading
     , maybeErrorBanner
     , modalOverlay
+    , warningBanner
     )
 
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Ui.Button as Button
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
 import Ui.Surface as Surface
@@ -56,11 +59,44 @@ errorBanner theme message =
         [ Element.text message ]
 
 
+{-| Error banner with a retry action, for failed page loads.
+-}
+errorRetry : Theme -> Device -> { message : String, onRetry : msg } -> Element msg
+errorRetry theme device config =
+    Surface.card theme
+        [ errorBanner theme config.message
+        , Button.textButton device
+            theme
+            { tone = Button.Primary
+            , width = Button.FullWidth
+            , label = "Retry"
+            , onPress = config.onRetry
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        ]
+
+
 infoBanner : Theme -> String -> Element msg
 infoBanner theme message =
     Element.paragraph
         [ Background.color theme.brandBlueSoft
         , Font.color theme.textPrimary
+        , Border.rounded radiusControl
+        , Element.padding space12
+        , Element.width Element.fill
+        ]
+        [ Element.text message ]
+
+
+{-| Amber banner for non-blocking warnings, such as incomplete data.
+-}
+warningBanner : Theme -> String -> Element msg
+warningBanner theme message =
+    Element.paragraph
+        [ Background.color theme.warningBg
+        , Font.color theme.warningFg
         , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill

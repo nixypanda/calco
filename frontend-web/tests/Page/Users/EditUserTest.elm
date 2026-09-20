@@ -98,19 +98,33 @@ tests =
                         )
                     |> thirdOfThree
                     |> Expect.equal EditUser.SessionExpired
-        , test "DisableClicked emits RequestDisableUser" <|
-            \_ ->
-                readyModel
-                    |> EditUser.update EditUser.DisableClicked
-                    |> thirdOfThree
-                    |> Expect.equal (EditUser.RequestDisableUser "u1")
-        , test "DisableClicked marks disable pending" <|
+        , test "DisableClicked asks for confirmation" <|
             \_ ->
                 readyModel
                     |> EditUser.update EditUser.DisableClicked
                     |> firstOfThree
                     |> actionStateFromState
+                    |> Expect.equal (Just EditUser.DisableConfirming)
+        , test "DisableConfirmClicked emits RequestDisableUser" <|
+            \_ ->
+                disableConfirmingModel
+                    |> EditUser.update EditUser.DisableConfirmClicked
+                    |> thirdOfThree
+                    |> Expect.equal (EditUser.RequestDisableUser "u1")
+        , test "DisableConfirmClicked marks disable pending" <|
+            \_ ->
+                disableConfirmingModel
+                    |> EditUser.update EditUser.DisableConfirmClicked
+                    |> firstOfThree
+                    |> actionStateFromState
                     |> Expect.equal (Just EditUser.DisablingUser)
+        , test "CancelDisableClicked returns to idle" <|
+            \_ ->
+                disableConfirmingModel
+                    |> EditUser.update EditUser.CancelDisableClicked
+                    |> firstOfThree
+                    |> actionStateFromState
+                    |> Expect.equal (Just EditUser.Idle)
         , test "DisableCompleted success emits UpdateSucceeded" <|
             \_ ->
                 disablingModel
@@ -253,6 +267,16 @@ disablingModel =
             EditUser.Loaded
                 { user = user, password = "" }
                 EditUser.DisablingUser
+    }
+
+
+disableConfirmingModel : EditUser.Model
+disableConfirmingModel =
+    { initialModel
+        | status =
+            EditUser.Loaded
+                { user = user, password = "" }
+                EditUser.DisableConfirming
     }
 
 

@@ -1,12 +1,13 @@
 module Ui.Surface exposing
-    ( accentDot
+    ( PanelSection
+    , accentDotLabeled
     , card
     , detailRow
     , formSection
     , hairline
     , heroCard
-    , listCard
     , listRow
+    , panel
     , section
     , sectionHeader
     )
@@ -16,7 +17,8 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
-import Ui.Common exposing (minWidthZero, uiClass)
+import Html.Attributes
+import Ui.Common exposing (minWidthZero, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
         ( radiusCard
@@ -28,11 +30,10 @@ import Ui.DesignTokens
         , space4
         , space8
         )
-import Ui.Theme exposing (Theme)
+import Ui.Theme exposing (Mode(..), Theme)
 import Ui.Typography
     exposing
         ( caption
-        , mutedParagraph
         , subsectionTitle
         )
 
@@ -42,18 +43,28 @@ cardShadow _ =
     uiClass "ui-card-shadow"
 
 
-card : Theme -> List (Element msg) -> Element msg
-card theme children =
+surfaceShell : Theme -> List (Element msg) -> Element msg
+surfaceShell theme children =
     Element.column
         [ Element.width Element.fill
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , Border.rounded radiusCard
         , cardShadow theme
         , uiClass "ui-surface"
-        , Element.padding space20
-        , Element.spacing space12
         ]
         children
+
+
+card : Theme -> List (Element msg) -> Element msg
+card theme children =
+    surfaceShell theme
+        [ Element.column
+            [ Element.width Element.fill
+            , Element.padding space20
+            , Element.spacing space12
+            ]
+            children
+        ]
 
 
 heroCard :
@@ -65,7 +76,7 @@ heroCard :
             Maybe
                 { height : Int
                 , backgroundAttrs : List (Element.Attribute msg)
-                , fade : Maybe (Element msg)
+                , fade : Bool
                 , contentPadding :
                     { top : Int
                     , right : Int
@@ -92,12 +103,11 @@ heroCard theme config =
                             }
                          , Element.clip
                          ]
-                            ++ (case media.fade of
-                                    Just fade ->
-                                        [ Element.inFront fade ]
+                            ++ (if media.fade then
+                                    [ Element.inFront (headerFade theme) ]
 
-                                    Nothing ->
-                                        []
+                                else
+                                    []
                                )
                             ++ [ Element.inFront
                                     (Element.el
@@ -115,13 +125,7 @@ heroCard theme config =
                 Nothing ->
                     config.header
     in
-    Element.column
-        [ Element.width Element.fill
-        , Background.color theme.cardBg
-        , Border.rounded radiusCard
-        , cardShadow theme
-        , Element.spacing 0
-        ]
+    surfaceShell theme
         [ headerElement
         , Element.column
             [ Element.width Element.fill
@@ -137,6 +141,157 @@ heroCard theme config =
         ]
 
 
+{-| Media header scrim: fades the background image into the card surface so
+overlaid content stays legible. Mode-aware, with the raw gradient stops kept
+here rather than in page modules.
+-}
+headerFade : Theme -> Element msg
+headerFade theme =
+    let
+        gradient : String
+        gradient =
+            case theme.mode of
+                Light ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(255,255,255,0) 0%, "
+                        ++ "rgba(255,255,255,0) 25%, "
+                        ++ "rgba(255,255,255,0.48) 85%, "
+                        ++ toCssColor theme.cardSurfaceBg
+                        ++ " 100%)"
+
+                Dark ->
+                    "linear-gradient(to bottom, "
+                        ++ "rgba(0,0,0,0.25) 0%, "
+                        ++ "rgba(0,0,0,0.55) 45%, "
+                        ++ "rgba(0,0,0,0.85) 75%, "
+                        ++ toCssColor theme.cardSurfaceBg
+                        ++ " 100%)"
+    in
+    Element.el
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.htmlAttribute (Html.Attributes.style "background-image" gradient)
+        ]
+        Element.none
+
+
+{-| One sub-block inside a `panel`: an optional plain-text title followed by
+content. The title is intentionally unbanded so the panel's own header stays the
+only tinted surface.
+-}
+type alias PanelSection msg =
+    { title : Maybe (Element msg)
+    , body : List (Element msg)
+    }
+
+
+{-| A titled region that gathers several sub-blocks under one surface.
+
+Use this instead of stacking several `section` cards or leaving several `card`
+blocks untitled: the panel gives the group one header band, and its sections are
+separated by hairlines so the reader sees one object with parts.
+
+-}
+panel :
+    Theme
+    ->
+        { header : Maybe (Element msg)
+        , sections : List (PanelSection msg)
+        , footer : Maybe (Element msg)
+        }
+    -> Element msg
+panel theme config =
+    let
+        sectionChildren : List (Element msg)
+        sectionChildren =
+            config.sections
+                |> List.indexedMap
+                    (\index sectionConfig ->
+                        (if index == 0 then
+                            []
+
+                         else
+                            [ hairline theme ]
+                        )
+                            ++ (sectionConfig.title
+                                    |> Maybe.map List.singleton
+                                    |> Maybe.withDefault []
+                               )
+                            ++ sectionConfig.body
+                    )
+                |> List.concat
+
+        bodySlot : List (Element msg)
+        bodySlot =
+            sectionChildren
+                ++ (config.footer
+                        |> Maybe.map (\footerEl -> [ hairline theme, footerEl ])
+                        |> Maybe.withDefault []
+                   )
+
+        bodyRegion : List (Element msg)
+        bodyRegion =
+            if List.isEmpty bodySlot then
+                []
+
+            else
+                [ Element.column
+                    [ Element.width Element.fill
+                    , Element.padding space20
+                    , Element.spacing space12
+                    ]
+                    bodySlot
+                ]
+
+        headerRounding :
+            { bottomLeft : Int
+            , bottomRight : Int
+            , topLeft : Int
+            , topRight : Int
+            }
+        headerRounding =
+            if List.isEmpty bodyRegion then
+                { topLeft = radiusCard
+                , topRight = radiusCard
+                , bottomLeft = radiusCard
+                , bottomRight = radiusCard
+                }
+
+            else
+                { topLeft = radiusCard
+                , topRight = radiusCard
+                , bottomLeft = 0
+                , bottomRight = 0
+                }
+
+        headerBand : List (Element msg)
+        headerBand =
+            case config.header of
+                Just el ->
+                    Element.column
+                        [ Element.width Element.fill
+                        , Background.color theme.cardHeaderBg
+                        , Border.roundEach headerRounding
+                        , Element.padding space20
+                        , Element.spacing space12
+                        ]
+                        [ el ]
+                        :: (if List.isEmpty bodyRegion then
+                                []
+
+                            else
+                                [ hairline theme ]
+                           )
+
+                Nothing ->
+                    []
+    in
+    surfaceShell theme (headerBand ++ bodyRegion)
+
+
+{-| A single titled block on its own surface. Equivalent to a `panel` with one
+untitled section, kept as the common case for one-block-per-page layouts.
+-}
 section :
     Theme
     ->
@@ -146,26 +301,16 @@ section :
         }
     -> Element msg
 section theme config =
-    let
-        headerSlot : List (Element msg)
-        headerSlot =
-            case config.header of
-                Just el ->
-                    [ el, hairline theme ]
+    panel theme
+        { header = config.header
+        , sections =
+            if List.isEmpty config.body then
+                []
 
-                Nothing ->
-                    []
-
-        footerSlot : List (Element msg)
-        footerSlot =
-            case config.footer of
-                Just el ->
-                    [ hairline theme, el ]
-
-                Nothing ->
-                    []
-    in
-    card theme (headerSlot ++ config.body ++ footerSlot)
+            else
+                [ { title = Nothing, body = config.body } ]
+        , footer = config.footer
+        }
 
 
 sectionHeader :
@@ -203,29 +348,6 @@ formSection theme title content =
         , body = content
         , footer = Nothing
         }
-
-
-listCard : Theme -> { rows : List (Element msg), footer : Maybe (Element msg) } -> Element msg
-listCard theme config =
-    section theme
-        { header = Nothing
-        , body =
-            if List.isEmpty config.rows then
-                [ emptyListBody theme ]
-
-            else
-                List.intersperse (hairline theme) config.rows
-        , footer = config.footer
-        }
-
-
-emptyListBody : Theme -> Element msg
-emptyListBody theme =
-    Element.el
-        [ Element.width Element.fill
-        , Element.padding space16
-        ]
-        (mutedParagraph theme "No items yet.")
 
 
 listRow :
@@ -310,13 +432,19 @@ detailRow theme label value =
         ]
 
 
-accentDot : Element.Color -> Element msg
-accentDot color =
+{-| Compact color bar that stands in for a macro. It carries an accessible
+label so the meaning is not conveyed by color alone.
+-}
+accentDotLabeled : { color : Element.Color, label : String } -> Element msg
+accentDotLabeled config =
     Element.el
         [ Element.width (Element.px 4)
         , Element.height (Element.px 24)
-        , Background.color color
+        , Background.color config.color
         , Border.rounded radiusHairline
+        , Element.htmlAttribute (Html.Attributes.attribute "role" "img")
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Element.htmlAttribute (Html.Attributes.attribute "title" config.label)
         ]
         Element.none
 

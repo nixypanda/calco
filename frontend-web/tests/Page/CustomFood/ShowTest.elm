@@ -27,7 +27,7 @@ tests =
             \_ ->
                 CustomFoodShow.init "food-1"
                     |> Tuple.first
-                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded (Ok food))
+                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded "food-1" (Ok food))
                     |> first
                     |> CustomFoodShow.update (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
@@ -39,14 +39,14 @@ tests =
                     |> Tuple.first
                     |> CustomFoodShow.update (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
-                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded (Ok food))
+                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded "food-1" (Ok food))
                     |> first
                     |> loadedSummary
                     |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
         , test "food load refreshes loaded food and clears delete state" <|
             \_ ->
                 CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded (Ok { food | name = "Pear" }))
+                    (CustomFoodShow.FoodLoaded "food-1" (Ok { food | name = "Pear" }))
                     (CustomFoodShow.Loaded
                         { loadedModelRecord
                             | delete = DeleteFailed "old"
@@ -66,10 +66,31 @@ tests =
         , test "load failure stores error" <|
             \_ ->
                 CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded (Err Client.NetworkError))
+                    (CustomFoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
                     (Tuple.first (CustomFoodShow.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed networkErrorMessage)
+                    |> Expect.equal
+                        (CustomFoodShow.LoadFailed
+                            { productId = "food-1", message = networkErrorMessage }
+                        )
+        , test "a load response for another product is ignored" <|
+            \_ ->
+                CustomFoodShow.update (CustomFoodShow.FoodLoaded "other" (Ok food)) loadedModel
+                    |> first
+                    |> Expect.equal loadedModel
+        , test "retry from load failed requests initial data again" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        CustomFoodShow.update CustomFoodShow.RetryClicked
+                            (CustomFoodShow.LoadFailed
+                                { productId = "food-1"
+                                , message = networkErrorMessage
+                                }
+                            )
+                in
+                ( isCustomFoodShowLoading model, outMsg )
+                    |> Expect.equal ( True, CustomFoodShow.RequestInitialData "food-1" )
         , test "load unauthorized expires session" <|
             \_ ->
                 CustomFoodShow.update
@@ -82,10 +103,13 @@ tests =
         , test "load success is ignored after load failed" <|
             \_ ->
                 CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded (Ok food))
-                    (CustomFoodShow.LoadFailed "old")
+                    (CustomFoodShow.FoodLoaded "food-1" (Ok food))
+                    (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed "old")
+                    |> Expect.equal
+                        (CustomFoodShow.LoadFailed
+                            { productId = "food-1", message = "old" }
+                        )
         , test "edit action navigates to custom food edit" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.EditClicked loadedModel
@@ -263,3 +287,13 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+isCustomFoodShowLoading : CustomFoodShow.Model -> Bool
+isCustomFoodShowLoading model =
+    case model of
+        CustomFoodShow.Loading _ ->
+            True
+
+        _ ->
+            False

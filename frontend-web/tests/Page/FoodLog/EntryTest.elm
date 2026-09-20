@@ -25,7 +25,7 @@ tests =
         [ test "an ad-hoc log does not request product details" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok adHocLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok adHocLog))
                     awaitingLogModel
                     |> third
                     |> Expect.equal FoodLogEntry.NoOp
@@ -50,7 +50,7 @@ tests =
         , test "product log requests product name/detail" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok productLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok productLog))
                     emptyModel
                     |> third
                     |> Expect.equal
@@ -58,7 +58,7 @@ tests =
         , test "meal log requests nothing further" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok mealLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
                     emptyModel
                     |> third
                     |> Expect.equal FoodLogEntry.NoOp
@@ -109,7 +109,7 @@ tests =
         , test "meal title comes from the log itself" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Ok mealLog))
+                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
                     awaitingLogModel
                     |> first
                     |> loadedItemTitle
@@ -156,7 +156,6 @@ tests =
                         (Just
                             { logId = "log-1"
                             , amount = "4"
-                            , request = FoodLogEntry.Idle
                             , submitState =
                                 FoodLogForm.SubmitFailed
                                     (FoodLogForm.RequestFailed networkErrorMessage)
@@ -196,10 +195,19 @@ tests =
                     |> Expect.equal
                         (Just
                             { logId = "log-1"
-                            , request = FoodLogEntry.Idle
                             , delete = DeleteFailed networkErrorMessage
                             }
                         )
+        , test "a load response for another log is ignored" <|
+            \_ ->
+                let
+                    base : FoodLogEntry.Model
+                    base =
+                        Tuple.first (FoodLogEntry.init "log-1")
+                in
+                FoodLogEntry.update (FoodLogEntry.LogLoaded "other" (Ok productLog)) base
+                    |> first
+                    |> Expect.equal base
         , test "units loaded success stores units and stays Loading if log missing" <|
             \_ ->
                 FoodLogEntry.update
@@ -247,7 +255,7 @@ tests =
         , test "log loaded failure stores error" <|
             \_ ->
                 FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded (Err Client.NetworkError))
+                    (FoodLogEntry.LogLoaded "log-1" (Err Client.NetworkError))
                     emptyModel
                     |> first
                     |> Expect.equal
@@ -314,7 +322,6 @@ loadedModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = DeleteIdle
         }
 
@@ -333,7 +340,6 @@ savingModel =
                 | amount = "4"
                 , submitState = FoodLogForm.SubmitSubmitting
             }
-        , request = FoodLogEntry.Saving
         , delete = DeleteIdle
         }
 
@@ -348,7 +354,6 @@ deletingModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = Deleting
         }
 
@@ -363,7 +368,6 @@ deleteFailedModel =
                 (FoodLogEntry.DetailLoading productLog.item)
         , units = [ gram ]
         , form = form
-        , request = FoodLogEntry.Idle
         , delete = DeleteFailed networkErrorMessage
         }
 
@@ -577,7 +581,6 @@ loadedFailureSummary :
         Maybe
             { logId : String
             , amount : String
-            , request : FoodLogEntry.RequestState
             , submitState : FoodLogForm.SubmitState
             }
 loadedFailureSummary model =
@@ -586,7 +589,6 @@ loadedFailureSummary model =
             Just
                 { logId = loaded.log.id
                 , amount = loaded.form.amount
-                , request = loaded.request
                 , submitState = loaded.form.submitState
                 }
 
@@ -599,7 +601,6 @@ loadedDeleteFailureSummary :
     ->
         Maybe
             { logId : String
-            , request : FoodLogEntry.RequestState
             , delete : DeleteState
             }
 loadedDeleteFailureSummary model =
@@ -607,7 +608,6 @@ loadedDeleteFailureSummary model =
         FoodLogEntry.Loaded loaded ->
             Just
                 { logId = loaded.log.id
-                , request = loaded.request
                 , delete = loaded.delete
                 }
 

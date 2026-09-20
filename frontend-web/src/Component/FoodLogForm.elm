@@ -8,12 +8,12 @@ module Component.FoodLogForm exposing
     , applyQuantityDefault
     , createProductLogRequest
     , createUpdateLogRequest
+    , fields
     , initLogFormFromFood
     , initLogFormFromLog
     , setSubmitState
     , submitFailureMessage
     , update
-    , view
     )
 
 import Api.Foods exposing (ProductDetail, UnitItem)
@@ -25,10 +25,8 @@ import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Device, Element)
 import Lib.Date as LocalDate
 import Lib.Text as Text
-import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
-import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
@@ -267,16 +265,20 @@ setSubmitState submitState model =
 -- VIEW
 
 
-view : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> Element Msg
-view theme device food units model =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
-        [ Feedback.maybeErrorBanner theme (submitError model.submitState)
-        , Surface.card theme
-            [ mealSlotDropdown theme device model
-            , View.QuantityInput.dropdown theme
+{-| The form controls as a flat list, so a page can place them inside its own
+panel section instead of a standalone card.
+-}
+fields : Theme -> Device -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
+fields theme device food units model =
+    (case submitError model.submitState of
+        Just message ->
+            [ Feedback.errorBanner theme message ]
+
+        Nothing ->
+            []
+    )
+        ++ [ mealSlotDropdown theme device model
+           , View.QuantityInput.dropdown theme
                 device
                 { amountLabel = "Amount"
                 , amount = model.amount
@@ -288,9 +290,8 @@ view theme device food units model =
                 , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-            , UiInput.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
-            ]
-        ]
+           , UiInput.input theme { label = "Notes", value = model.notes, onChange = NotesChanged }
+           ]
 
 
 submitError : SubmitState -> Maybe String

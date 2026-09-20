@@ -5,11 +5,14 @@ module Page.Meal.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
+    , modelId
     , update
     , view
     )
 
 import Api.Client as Client
+import Api.Foods as Foods exposing (UnitItem)
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
 import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
@@ -37,6 +40,7 @@ import View.Nutrients
 type alias LoadingModel =
     { mealId : String
     , nutrition : NutritionState
+    , units : List UnitItem
     }
 
 
@@ -50,7 +54,7 @@ type alias LoadedModel =
 
 type Model
     = LoadingEdit LoadingModel
-    | EditLoadFailed String
+    | EditLoadFailed { mealId : String, message : String }
     | Editing LoadedModel
 
 
@@ -68,6 +72,7 @@ init mealId =
     ( LoadingEdit
         { mealId = mealId
         , nutrition = NutritionLoading defaultNutritionInput
+        , units = []
         }
     , RequestMeal mealId
     )
@@ -79,10 +84,38 @@ init mealId =
 
 type Msg
     = FormMsg Common.FormFieldMsg
-    | MealLoaded (Result Client.ApiError Meal)
-    | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
+    | MealLoaded String (Result Client.ApiError Meal)
+    | NutrientPreviewLoaded String (Result Client.ApiError MealNutritionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
+    | RetryClicked
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        LoadingEdit loading ->
+            Just loading.mealId
+
+        EditLoadFailed failed ->
+            Just failed.mealId
+
+        Editing loaded ->
+            Just loaded.mealId
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        MealLoaded mealId _ ->
+            Just mealId
+
+        NutrientPreviewLoaded mealId _ ->
+            Just mealId
+
+        _ ->
+            Nothing
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -103,49 +136,73 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        MealLoaded result ->
-            case result of
-                Ok meal ->
-                    let
-                        loaded : LoadedModel
-                        loaded =
-                            case model of
-                                LoadingEdit loading ->
-                                    loadedFromMeal meal loading
+        MealLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                                _ ->
-                                    loadedFromMealFresh meal
-                    in
-                    ( Editing loaded
-                    , Cmd.none
-                    , requestFirstProductName meal
-                    )
+            else
+                case result of
+                    Ok meal ->
+                        let
+                            loaded : LoadedModel
+                            loaded =
+                                case model of
+                                    LoadingEdit loading ->
+                                        loadedFromMeal meal loading
 
-                Err error ->
-                    Client.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError = \message _ -> EditLoadFailed message
-                        }
-                        error
-                        model
+                                    _ ->
+                                        loadedFromMealFresh meal
+                        in
+                        ( Editing loaded
+                        , Cmd.none
+                        , requestFirstProductName meal
+                        )
 
-        NutrientPreviewLoaded result ->
-            case result of
-                Ok response ->
-                    ( applyNutritionOk response.nutrients model
-                    , Cmd.none
-                    , NoOp
-                    )
+                    Err error ->
+                        Client.failure
+                            { noOp = NoOp
+                            , sessionExpired = SessionExpired
+                            , applyError =
+                                \message current ->
+                                    case current of
+                                        LoadingEdit loading ->
+                                            EditLoadFailed
+                                                { mealId = loading.mealId
+                                                , message = message
+                                                }
 
-                Err error ->
-                    Client.failure
-                        { noOp = NoOp
-                        , sessionExpired = SessionExpired
-                        , applyError = \message current -> applyNutritionError message current
-                        }
-                        error
-                        model
+                                        Editing loaded ->
+                                            EditLoadFailed
+                                                { mealId = loaded.mealId
+                                                , message = message
+                                                }
+
+                                        EditLoadFailed _ ->
+                                            current
+                            }
+                            error
+                            model
+
+        NutrientPreviewLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
+
+            else
+                case result of
+                    Ok response ->
+                        ( applyNutritionOk response.nutrients model
+                        , Cmd.none
+                        , NoOp
+                        )
+
+                    Err error ->
+                        Client.failure
+                            { noOp = NoOp
+                            , sessionExpired = SessionExpired
+                            , applyError = \message current -> applyNutritionError message current
+                            }
+                            error
+                            model
 
         SubmitClicked ->
             case model of
@@ -227,6 +284,47 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+        RetryClicked ->
+            case model of
+                EditLoadFailed failed ->
+                    ( LoadingEdit
+                        { mealId = failed.mealId
+                        , nutrition = NutritionLoading defaultNutritionInput
+                        , units = []
+                        }
+                    , Cmd.none
+                    , RequestMeal failed.mealId
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        UnitsLoaded result ->
+            case result of
+                Ok response ->
+                    ( setUnits response.items model, Cmd.none, NoOp )
+
+                Err _ ->
+                    ( model, Cmd.none, NoOp )
+
+
+setUnits : List UnitItem -> Model -> Model
+setUnits units model =
+    case model of
+        LoadingEdit loading ->
+            LoadingEdit { loading | units = units }
+
+        Editing loaded ->
+            let
+                fields : Common.FormFields
+                fields =
+                    loaded.fields
+            in
+            Editing { loaded | fields = { fields | units = units } }
+
+        EditLoadFailed _ ->
+            model
+
 
 withSubmit : Common.SubmitState -> Common.FormFields -> Common.FormFields
 withSubmit state fields =
@@ -282,9 +380,14 @@ applyNutritionError message model =
 
 loadedFromMeal : Meal -> LoadingModel -> LoadedModel
 loadedFromMeal meal loading =
+    let
+        fields : Common.FormFields
+        fields =
+            editFormFromMeal meal
+    in
     { mealId = loading.mealId
     , meal = meal
-    , fields = editFormFromMeal meal
+    , fields = { fields | units = loading.units }
     , nutrition = loading.nutrition
     }
 
@@ -391,8 +494,12 @@ view { model, device, theme } =
         LoadingEdit _ ->
             UiPage.pageContainer device [ mealEditSkeleton theme ]
 
-        EditLoadFailed message ->
-            UiPage.pageContainer device [ Feedback.errorBanner theme message ]
+        EditLoadFailed failed ->
+            UiPage.pageContainer device
+                [ Feedback.errorRetry theme
+                    device
+                    { message = failed.message, onRetry = RetryClicked }
+                ]
 
         Editing loaded ->
             UiPage.pageContainer device

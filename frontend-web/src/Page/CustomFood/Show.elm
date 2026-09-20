@@ -5,7 +5,9 @@ module Page.CustomFood.Show exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
     , modalView
+    , modelId
     , update
     , view
     )
@@ -36,7 +38,7 @@ import View.Product
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
@@ -78,25 +80,53 @@ init productId =
 
 
 type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
+    = FoodLoaded String (Result Client.ApiError ProductDetail)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | EditClicked
     | DeleteClicked
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
+    | RetryClicked
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.productId
+
+        Loaded loaded ->
+            Just loaded.productId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        FoodLoaded productId _ ->
+            Just productId
+
+        _ ->
+            Nothing
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        FoodLoaded result ->
-            case result of
-                Ok food ->
-                    ( setLoadedFood food model, Cmd.none, NoOp )
+        FoodLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok food ->
+                        ( setLoadedFood food model, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure error model
 
         UnitsLoaded result ->
             case result of
@@ -182,6 +212,21 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+        RetryClicked ->
+            case model of
+                LoadFailed failed ->
+                    ( Loading
+                        { productId = failed.productId
+                        , food = Nothing
+                        , units = Nothing
+                        }
+                    , Cmd.none
+                    , RequestInitialData failed.productId
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
 
 setLoadedFood : ProductDetail -> Model -> Model
 setLoadedFood food model =
@@ -229,7 +274,23 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                case current of
+                    Loading loading ->
+                        LoadFailed
+                            { productId = loading.productId
+                            , message = message
+                            }
+
+                    Loaded loaded ->
+                        LoadFailed
+                            { productId = loaded.productId
+                            , message = message
+                            }
+
+                    LoadFailed _ ->
+                        current
         }
 
 
@@ -251,8 +312,10 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
         [ case model of
-            LoadFailed message ->
-                Feedback.errorBanner theme message
+            LoadFailed failed ->
+                Feedback.errorRetry theme
+                    device
+                    { message = failed.message, onRetry = RetryClicked }
 
             _ ->
                 Element.none
@@ -327,6 +390,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete food?"
         , description = "This will permanently remove the custom food."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

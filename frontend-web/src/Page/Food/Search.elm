@@ -71,6 +71,7 @@ type alias Model =
     , quickAdd : QuickAddState
     , addedItems : List { key : String, token : Ticket }
     , addedToken : Ticket
+    , completionIndex : Int
     }
 
 
@@ -129,6 +130,7 @@ init date mealSlot =
     , quickAdd = QuickAddIdle
     , addedItems = []
     , addedToken = Ticket.initial
+    , completionIndex = -1
     }
 
 
@@ -171,6 +173,7 @@ type Msg
     | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
+    | CompletionActiveChanged Int
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
@@ -232,7 +235,7 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model | search = search, results = results }
+    ( { model | search = search, results = results, completionIndex = -1 }
     , debounceCmd
     , NoOp
     )
@@ -338,6 +341,9 @@ update msg model =
     case msg of
         QueryChanged rawQuery ->
             applyQueryChange rawQuery model
+
+        CompletionActiveChanged index ->
+            ( { model | completionIndex = index }, Cmd.none, NoOp )
 
         ScopeSelected scope ->
             applyScopeChange scope model
@@ -887,10 +893,13 @@ textSearchInputView theme device model =
     in
     SearchView.searchInput theme
         device
-        { onChange = QueryChanged
+        { id = "food-search-completions"
+        , onChange = QueryChanged
         , text = model.search.query
         , label = searchLabel model.scope
         , completions = options
+        , activeIndex = model.completionIndex
+        , onActiveChanged = CompletionActiveChanged
         , onTabComplete = CompleteFirstSuggestion
         , onCompletionClick = CompletionClicked
         }
@@ -1011,7 +1020,7 @@ barcodeScannerPreview theme caption =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
         , Element.padding DesignTokens.space8
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , Border.width 1
         , Border.color theme.chipBorder
         , Border.rounded DesignTokens.radiusCard
@@ -1021,7 +1030,7 @@ barcodeScannerPreview theme caption =
             , Element.height (Element.px 380)
             , Border.rounded DesignTokens.radiusCard
             , Element.clip
-            , Background.color (Element.rgb255 0 0 0)
+            , Background.color theme.mediaBackdrop
             , Element.inFront (barcodeScannerGuide theme)
             ]
             (Element.html barcodeScannerVideo)
@@ -1144,8 +1153,13 @@ bodyView theme model device =
             Feedback.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Surface.listCard theme
-                { rows =
+            Surface.section theme
+                { header =
+                    Just
+                        (Skeleton.barCustom theme
+                            { width = Element.px 120, height = 24 }
+                        )
+                , body =
                     List.map (\_ -> Skeleton.listRow theme)
                         (List.range 1 3)
                 , footer = Nothing
@@ -1162,8 +1176,9 @@ bodyView theme model device =
                 textEmptyState theme device model.scope
 
             else
-                Surface.listCard theme
-                    { rows =
+                Surface.section theme
+                    { header = Just (Typography.subsectionTitle theme "Results")
+                    , body =
                         List.map
                             (\item ->
                                 SearchView.resultRow theme
@@ -1366,9 +1381,9 @@ recentsView device theme model =
                 else
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ Typography.sectionTitle theme "Recent"
-                        , Surface.listCard theme
-                            { rows = List.map (recentItemRow device theme model) items
+                        [ Surface.section theme
+                            { header = Just (Typography.sectionTitle theme "Recent")
+                            , body = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
                         ]

@@ -5,6 +5,8 @@ module Page.CustomFood.Edit exposing
     , Msg(..)
     , OutMsg(..)
     , init
+    , loadId
+    , modelId
     , update
     , view
     )
@@ -38,7 +40,7 @@ import Ui.Theme exposing (Theme)
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
@@ -83,25 +85,53 @@ init productId =
 
 
 type Msg
-    = FoodLoaded (Result Client.ApiError ProductDetail)
+    = FoodLoaded String (Result Client.ApiError ProductDetail)
     | NutrientsLoaded (Result Client.ApiError Foods.NutrientListResponse)
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
     | FormMsg Form.Msg
     | CategorySuggestionsLoaded Ticket (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
+    | RetryClicked
+
+
+modelId : Model -> Maybe String
+modelId model =
+    case model of
+        Loading loading ->
+            Just loading.productId
+
+        Loaded loaded ->
+            Just loaded.productId
+
+        LoadFailed _ ->
+            Nothing
+
+
+loadId : Msg -> Maybe String
+loadId msg =
+    case msg of
+        FoodLoaded productId _ ->
+            Just productId
+
+        _ ->
+            Nothing
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
-        FoodLoaded result ->
-            case result of
-                Ok food ->
-                    ( setLoadedFood food model, Cmd.none, NoOp )
+        FoodLoaded incomingId result ->
+            if modelId model /= Just incomingId then
+                ( model, Cmd.none, NoOp )
 
-                Err error ->
-                    failure error model
+            else
+                case result of
+                    Ok food ->
+                        ( setLoadedFood food model, Cmd.none, NoOp )
+
+                    Err error ->
+                        failure error model
 
         NutrientsLoaded result ->
             case result of
@@ -186,6 +216,22 @@ update msg model =
 
                     else
                         ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        RetryClicked ->
+            case model of
+                LoadFailed failed ->
+                    ( Loading
+                        { productId = failed.productId
+                        , food = Nothing
+                        , nutrients = Nothing
+                        , units = Nothing
+                        }
+                    , Cmd.none
+                    , RequestInitialData failed.productId
+                    )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -341,7 +387,23 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                case current of
+                    Loading loading ->
+                        LoadFailed
+                            { productId = loading.productId
+                            , message = message
+                            }
+
+                    Loaded loaded ->
+                        LoadFailed
+                            { productId = loaded.productId
+                            , message = message
+                            }
+
+                    LoadFailed _ ->
+                        current
         }
 
 
@@ -375,8 +437,10 @@ bodyView { model, device, theme } =
                     }
                 ]
 
-        LoadFailed message ->
-            Feedback.errorBanner theme message
+        LoadFailed failed ->
+            Feedback.errorRetry theme
+                device
+                { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
             customFoodFormSkeleton theme

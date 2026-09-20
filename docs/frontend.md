@@ -629,7 +629,7 @@ Current visual language:
 - `elm-ui` layout primitives, not CSS utility classes.
 - Inter/system sans typography.
 - light theme page background `#f4f6f8`.
-- white cards with 20px radius, 20px padding, and 12px internal spacing.
+- cards with a subtle primary-color tint (`#fafdfe` light, `#1e2630` dark) and a stronger tint on header bands (`#ecf6fc` light, `#212f3b` dark), 20px radius, 20px padding, and 12px internal spacing. The dark header tint is capped so muted header text keeps at least 4.5:1 contrast.
 - primary action color `#4b91cf` in light mode.
 - danger action color `#ff6b7a` in light mode.
 - muted gray text for captions and secondary content.
@@ -653,6 +653,11 @@ Control conventions:
   form fields.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and
   `Ui.skeletonLoading` for common states.
+- use `Ui.panel` when several related blocks belong under one header: the panel
+  owns one tinted header band and its sub-blocks use plain-text titles separated
+  by hairlines. Reserve a headerless `Ui.card` for content inside a panel or a
+  block that genuinely has no heading. Use `Ui.section` for a single titled
+  block on its own surface.
 - use `Ui.badge` for compact metadata.
 - use `Ui.statBlockGroup` and progress helpers for nutrition summaries.
 
@@ -663,6 +668,13 @@ Rules:
 - keep page-specific layout in the owning page module.
 - do not bypass `elm-ui` with ad hoc CSS-heavy page structures unless the
   browser integration genuinely requires it.
+
+Accepted deviations:
+
+- The light-mode macro accent fills (`calorieAccent`, `proteinAccent`,
+  `carbsAccent`, `fatAccent`) sit below the 3:1 non-text contrast target
+  against `cardBg`/`inputFill`. This is a deliberate palette choice and is
+  waived in review; do not darken them without a design decision.
 
 ## Tests
 

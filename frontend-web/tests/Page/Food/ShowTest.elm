@@ -34,7 +34,7 @@ tests =
                     |> Expect.equal (FoodShow.RequestInitialData "food-1")
         , test "food load success initializes the log form" <|
             \_ ->
-                FoodShow.update (FoodShow.FoodLoaded (Ok food)) emptyModel
+                FoodShow.update (FoodShow.FoodLoaded "food-1" (Ok food)) emptyModel
                     |> first
                     |> FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
@@ -50,7 +50,7 @@ tests =
         , test "food load failure stores error" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.FoodLoaded (Err Client.NetworkError))
+                    (FoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
                     emptyModel
                     |> first
                     |> Expect.equal (FoodShow.LoadFailed networkErrorMessage)
@@ -66,18 +66,22 @@ tests =
         , test "load success is ignored after load failed" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.FoodLoaded (Ok food))
+                    (FoodShow.FoodLoaded "food-1" (Ok food))
                     (FoodShow.LoadFailed "old")
                     |> first
                     |> Expect.equal (FoodShow.LoadFailed "old")
         , test "food reload refreshes loaded form and clears request state" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.FoodLoaded (Ok { food | defaultQuantity = Just "3" }))
+                    (FoodShow.FoodLoaded "food-1" (Ok { food | defaultQuantity = Just "3" }))
                     savingModel
                     |> first
-                    |> (\model -> ( formOf model |> Maybe.map .amount, requestOf model ))
-                    |> Expect.equal ( Just "3", Just FoodShow.Idle )
+                    |> (\model ->
+                            ( formOf model |> Maybe.map .amount
+                            , formOf model |> Maybe.map .submitState
+                            )
+                       )
+                    |> Expect.equal ( Just "3", Just FoodLogForm.SubmitIdle )
         , test "units reload refreshes loaded units" <|
             \_ ->
                 FoodShow.update
@@ -89,10 +93,10 @@ tests =
         , test "last used default is stored while loading and applied after load completes" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.LastUsedLoaded (Ok { items = [ recentItem ] }))
+                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [ recentItem ] }))
                     emptyModel
                     |> first
-                    |> FoodShow.update (FoodShow.FoodLoaded (Ok food))
+                    |> FoodShow.update (FoodShow.FoodLoaded "food-1" (Ok food))
                     |> first
                     |> FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                     |> first
@@ -102,7 +106,7 @@ tests =
         , test "last used default updates loaded form" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.LastUsedLoaded (Ok { items = [ recentItem ] }))
+                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [ recentItem ] }))
                     loadedModel
                     |> first
                     |> formOf
@@ -111,7 +115,7 @@ tests =
         , test "empty last used response is no-op" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.LastUsedLoaded (Ok { items = [] }))
+                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [] }))
                     loadedModel
                     |> first
                     |> formOf
@@ -120,19 +124,31 @@ tests =
         , test "last used failure is ignored" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.LastUsedLoaded (Err Client.NetworkError))
+                    (FoodShow.LastUsedLoaded "food-1" (Err Client.NetworkError))
                     loadedModel
                     |> third
                     |> Expect.equal FoodShow.NoOp
         , test "last used unauthorized expires session" <|
             \_ ->
                 FoodShow.update
-                    (FoodShow.LastUsedLoaded
+                    (FoodShow.LastUsedLoaded "food-1"
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
                     loadedModel
                     |> third
                     |> Expect.equal FoodShow.SessionExpired
+        , test "a load response for another product is ignored" <|
+            \_ ->
+                FoodShow.update (FoodShow.FoodLoaded "other" (Ok food)) loadedModel
+                    |> first
+                    |> Expect.equal loadedModel
+        , test "a last-used response for another product is ignored" <|
+            \_ ->
+                FoodShow.update
+                    (FoodShow.LastUsedLoaded "other" (Ok { items = [ recentItem ] }))
+                    loadedModel
+                    |> first
+                    |> Expect.equal loadedModel
         , test "display nutrients follow the current form quantity" <|
             \_ ->
                 FoodShow.foodNutrientsForDisplay foodWithNutrition form
@@ -298,7 +314,6 @@ loadedModel =
         , food = food
         , units = [ gram ]
         , form = form
-        , request = FoodShow.Idle
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -312,8 +327,7 @@ contextReadyModel =
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
-        , form = form
-        , request = FoodShow.RequestingLocalContext
+        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -327,8 +341,7 @@ contextReadyWithoutDateModel =
         , mealSlot = Just Lunch
         , food = food
         , units = [ gram ]
-        , form = form
-        , request = FoodShow.RequestingLocalContext
+        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -343,7 +356,6 @@ savingModel =
         , food = food
         , units = [ gram ]
         , form = { form | submitState = FoodLogForm.SubmitSubmitting }
-        , request = FoodShow.Saving
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -358,7 +370,6 @@ loadedWithForm nextForm =
         , food = food
         , units = [ gram ]
         , form = nextForm
-        , request = FoodShow.Idle
         , lastUsedDefault = Nothing
         , lookupNote = Nothing
         }
@@ -384,16 +395,6 @@ unitsOf model =
             Just loaded.units
 
         FoodShow.LoadFailed _ ->
-            Nothing
-
-
-requestOf : FoodShow.Model -> Maybe FoodShow.RequestState
-requestOf model =
-    case model of
-        FoodShow.Loaded loaded ->
-            Just loaded.request
-
-        _ ->
             Nothing
 
 
