@@ -693,7 +693,7 @@ drawerPanel theme children =
         , Element.height Element.fill
         , Element.paddingXY DesignTokens.space16 DesignTokens.space8
         , Element.spacing DesignTokens.space12
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , UiCommon.uiClass "ui-card-shadow"
         , Region.navigation
         ]
@@ -783,7 +783,7 @@ menuCard theme config =
         , Element.width (Element.px config.width)
         , Element.padding DesignTokens.space12
         , Element.spacing DesignTokens.space12
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , Border.rounded DesignTokens.radiusCard
         , UiCommon.uiClass "ui-card-shadow"
         ]

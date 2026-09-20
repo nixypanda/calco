@@ -629,7 +629,7 @@ Current visual language:
 - `elm-ui` layout primitives, not CSS utility classes.
 - Inter/system sans typography.
 - light theme page background `#f4f6f8`.
-- white cards with 20px radius, 20px padding, and 12px internal spacing.
+- cards with a subtle primary-color tint (`#fafdfe` light, `#1e2630` dark) and a stronger tint on header bands (`#ecf6fc` light, `#212f3b` dark), 20px radius, 20px padding, and 12px internal spacing. The dark header tint is capped so muted header text keeps at least 4.5:1 contrast.
 - primary action color `#4b91cf` in light mode.
 - danger action color `#ff6b7a` in light mode.
 - muted gray text for captions and secondary content.

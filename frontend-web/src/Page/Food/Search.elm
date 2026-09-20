@@ -1020,7 +1020,7 @@ barcodeScannerPreview theme caption =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
         , Element.padding DesignTokens.space8
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , Border.width 1
         , Border.color theme.chipBorder
         , Border.rounded DesignTokens.radiusCard

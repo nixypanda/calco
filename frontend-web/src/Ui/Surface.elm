@@ -43,18 +43,28 @@ cardShadow _ =
     uiClass "ui-card-shadow"
 
 
-card : Theme -> List (Element msg) -> Element msg
-card theme children =
+surfaceShell : Theme -> List (Element msg) -> Element msg
+surfaceShell theme children =
     Element.column
         [ Element.width Element.fill
-        , Background.color theme.cardBg
+        , Background.color theme.cardSurfaceBg
         , Border.rounded radiusCard
         , cardShadow theme
         , uiClass "ui-surface"
-        , Element.padding space20
-        , Element.spacing space12
         ]
         children
+
+
+card : Theme -> List (Element msg) -> Element msg
+card theme children =
+    surfaceShell theme
+        [ Element.column
+            [ Element.width Element.fill
+            , Element.padding space20
+            , Element.spacing space12
+            ]
+            children
+        ]
 
 
 heroCard :
@@ -115,13 +125,7 @@ heroCard theme config =
                 Nothing ->
                     config.header
     in
-    Element.column
-        [ Element.width Element.fill
-        , Background.color theme.cardBg
-        , Border.rounded radiusCard
-        , cardShadow theme
-        , Element.spacing 0
-        ]
+    surfaceShell theme
         [ headerElement
         , Element.column
             [ Element.width Element.fill
@@ -152,7 +156,7 @@ headerFade theme =
                         ++ "rgba(255,255,255,0) 0%, "
                         ++ "rgba(255,255,255,0) 25%, "
                         ++ "rgba(255,255,255,0.48) 85%, "
-                        ++ toCssColor theme.cardBg
+                        ++ toCssColor theme.cardSurfaceBg
                         ++ " 100%)"
 
                 Dark ->
@@ -160,7 +164,7 @@ headerFade theme =
                         ++ "rgba(0,0,0,0.25) 0%, "
                         ++ "rgba(0,0,0,0.55) 45%, "
                         ++ "rgba(0,0,0,0.85) 75%, "
-                        ++ toCssColor theme.cardBg
+                        ++ toCssColor theme.cardSurfaceBg
                         ++ " 100%)"
     in
     Element.el
@@ -181,25 +185,73 @@ section :
     -> Element msg
 section theme config =
     let
-        headerSlot : List (Element msg)
-        headerSlot =
-            case config.header of
-                Just el ->
-                    [ el, hairline theme ]
+        bodySlot : List (Element msg)
+        bodySlot =
+            case config.footer of
+                Just footerEl ->
+                    config.body ++ [ hairline theme, footerEl ]
 
                 Nothing ->
-                    []
+                    config.body
 
-        footerSlot : List (Element msg)
-        footerSlot =
-            case config.footer of
+        bodyRegion : List (Element msg)
+        bodyRegion =
+            if List.isEmpty bodySlot then
+                []
+
+            else
+                [ Element.column
+                    [ Element.width Element.fill
+                    , Element.padding space20
+                    , Element.spacing space12
+                    ]
+                    bodySlot
+                ]
+
+        headerRounding :
+            { bottomLeft : Int
+            , bottomRight : Int
+            , topLeft : Int
+            , topRight : Int
+            }
+        headerRounding =
+            if List.isEmpty bodyRegion then
+                { topLeft = radiusCard
+                , topRight = radiusCard
+                , bottomLeft = radiusCard
+                , bottomRight = radiusCard
+                }
+
+            else
+                { topLeft = radiusCard
+                , topRight = radiusCard
+                , bottomLeft = 0
+                , bottomRight = 0
+                }
+
+        headerBand : List (Element msg)
+        headerBand =
+            case config.header of
                 Just el ->
-                    [ hairline theme, el ]
+                    Element.column
+                        [ Element.width Element.fill
+                        , Background.color theme.cardHeaderBg
+                        , Border.roundEach headerRounding
+                        , Element.padding space20
+                        , Element.spacing space12
+                        ]
+                        [ el ]
+                        :: (if List.isEmpty bodyRegion then
+                                []
+
+                            else
+                                [ hairline theme ]
+                           )
 
                 Nothing ->
                     []
     in
-    card theme (headerSlot ++ config.body ++ footerSlot)
+    surfaceShell theme (headerBand ++ bodyRegion)
 
 
 sectionHeader :
