@@ -87,6 +87,10 @@ light =
     , scrim = rgba255 0 0 0 0.28
     , mediaBackdrop = rgb255 0 0 0
     , goalUnder = rgb255 0 135 145
+
+    -- Accepted deviation: macro accent fills read below the 3:1 non-text
+    -- contrast target in light mode. The palette is intentional; do not
+    -- "fix" this by darkening the accents without a design decision.
     , calorieAccent = rgb255 94 224 213
     , proteinAccent = rgb255 255 138 170
     , carbsAccent = rgb255 200 235 200

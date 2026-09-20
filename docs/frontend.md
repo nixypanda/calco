@@ -664,6 +664,13 @@ Rules:
 - do not bypass `elm-ui` with ad hoc CSS-heavy page structures unless the
   browser integration genuinely requires it.
 
+Accepted deviations:
+
+- The light-mode macro accent fills (`calorieAccent`, `proteinAccent`,
+  `carbsAccent`, `fatAccent`) sit below the 3:1 non-text contrast target
+  against `cardBg`/`inputFill`. This is a deliberate palette choice and is
+  waived in review; do not darken them without a design decision.
+
 ## Tests
 
 Elm frontend tests live in:
