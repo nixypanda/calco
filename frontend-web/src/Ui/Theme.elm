@@ -87,10 +87,10 @@ light =
     , scrim = rgba255 0 0 0 0.28
     , mediaBackdrop = rgb255 0 0 0
     , goalUnder = rgb255 0 135 145
-    , calorieAccent = rgb255 13 148 136
-    , proteinAccent = rgb255 216 72 120
-    , carbsAccent = rgb255 56 142 90
-    , fatAccent = rgb255 176 116 0
+    , calorieAccent = rgb255 94 224 213
+    , proteinAccent = rgb255 255 138 170
+    , carbsAccent = rgb255 200 235 200
+    , fatAccent = rgb255 255 210 80
     , cardShadow = "0 4px 16px rgba(28, 32, 44, 0.06)"
     }
 
