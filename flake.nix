@@ -42,6 +42,7 @@
         {
           packages.backend = pkgs.callPackage ./nix/backend.nix {
             inherit rustPlatform;
+            rustToolchain = toolchain;
           };
 
           packages.frontend = pkgs.callPackage ./nix/frontend.nix {
