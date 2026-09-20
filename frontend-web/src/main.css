@@ -28,10 +28,12 @@ body {
 }
 
 *:focus-visible {
-  /* Consistent keyboard focus belongs in one global rule. */
-  outline: 2px solid var(--ui-focus-ring, #5ee0d5);
+  /* Consistent keyboard focus belongs in one global rule.
+     elm-ui always emits `outline: none` under a `.<hash>.focusable:focus`
+     selector, so `!important` is required to keep the ring keyboard-only
+     instead of showing it on mouse clicks too. */
+  outline: 2px solid var(--ui-focus-ring, #0f766e) !important;
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 .ui-card-shadow {
