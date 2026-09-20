@@ -7,6 +7,7 @@ module Ui.Feedback exposing
     , loading
     , maybeErrorBanner
     , modalOverlay
+    , warningBanner
     )
 
 import Element exposing (Device, Element)
@@ -82,6 +83,20 @@ infoBanner theme message =
     Element.paragraph
         [ Background.color theme.brandBlueSoft
         , Font.color theme.textPrimary
+        , Border.rounded radiusControl
+        , Element.padding space12
+        , Element.width Element.fill
+        ]
+        [ Element.text message ]
+
+
+{-| Amber banner for non-blocking warnings, such as incomplete data.
+-}
+warningBanner : Theme -> String -> Element msg
+warningBanner theme message =
+    Element.paragraph
+        [ Background.color theme.warningBg
+        , Font.color theme.warningFg
         , Border.rounded radiusControl
         , Element.padding space12
         , Element.width Element.fill

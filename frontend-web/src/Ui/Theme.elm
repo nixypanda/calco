@@ -40,6 +40,8 @@ type alias Theme =
     , dangerFg : Color
     , dangerSolid : Color
     , dangerSolidPressed : Color
+    , warningBg : Color
+    , warningFg : Color
     , drawerSelectionBg : Color
     , statusGreen : Color
     , statusGreenSoft : Color
@@ -83,6 +85,11 @@ light =
     , dangerFg = rgb255 214 58 70
     , dangerSolid = rgb255 226 74 84
     , dangerSolidPressed = rgb255 202 55 65
+
+    -- Amber warning tone for non-blocking, incomplete-data notices.
+    -- `warningFg` clears 4.5:1 against `warningBg` in both themes.
+    , warningBg = rgb255 255 246 224
+    , warningFg = rgb255 122 79 0
     , drawerSelectionBg = rgb255 228 243 252
     , statusGreen = rgb255 50 110 60
 
@@ -133,6 +140,8 @@ dark =
     , dangerFg = rgb255 255 138 152
     , dangerSolid = rgb255 240 96 112
     , dangerSolidPressed = rgb255 250 120 135
+    , warningBg = rgb255 60 48 22
+    , warningFg = rgb255 245 200 120
     , drawerSelectionBg = rgb255 20 45 62
     , statusGreen = rgb255 140 220 160
     , statusGreenSoft = rgb255 168 236 184

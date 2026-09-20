@@ -384,6 +384,12 @@ inSection section =
 coverageNotice : Theme -> NutritionDetails -> Element msg
 coverageNotice theme report =
     let
+        hasIncompleteData : Bool
+        hasIncompleteData =
+            report.loggedItems
+                > 0
+                && (hasPartialCoverage report || hasNoCoverage report)
+
         message : String
         message =
             if report.loggedItems == 0 then
@@ -402,7 +408,11 @@ coverageNotice theme report =
                     ++ includedVerb report.loggedItems
                     ++ " included in these daily totals."
     in
-    Feedback.infoBanner theme message
+    if hasIncompleteData then
+        Feedback.warningBanner theme message
+
+    else
+        Feedback.infoBanner theme message
 
 
 hasPartialCoverage : NutritionDetails -> Bool
