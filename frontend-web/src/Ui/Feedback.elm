@@ -1,5 +1,6 @@
 module Ui.Feedback exposing
     ( emptyState
+    , emptyStateWithIcon
     , errorBanner
     , errorRetry
     , infoBanner
@@ -18,6 +19,7 @@ import Element.Input as Input
 import Ui.Button as Button
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
+import Ui.Icon as Icon exposing (Icon)
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (sectionTitle)
@@ -39,6 +41,27 @@ emptyState theme message =
             , Element.padding space8
             ]
             [ Element.text message ]
+        ]
+
+
+{-| Full-area empty state with an icon: fills the height its parent offers and
+centers its content, for a whole result area that came back empty such as a
+search that matched nothing.
+-}
+emptyStateWithIcon : Theme -> { icon : Icon, message : String } -> Element msg
+emptyStateWithIcon theme config =
+    Surface.cardFill theme
+        [ Icon.view
+            { icon = config.icon
+            , size = 40
+            , color = theme.textMuted
+            }
+        , Element.paragraph
+            [ Font.color theme.textMuted
+            , Font.center
+            , Element.width Element.fill
+            ]
+            [ Element.text config.message ]
         ]
 
 

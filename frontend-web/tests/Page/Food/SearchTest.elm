@@ -944,11 +944,78 @@ tests =
                         (FoodSearch.Navigate
                             (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) Nothing)
                         )
-        , test "create custom food navigates to custom food create" <|
+        , test "create custom food is no longer offered from search" <|
             \_ ->
-                FoodSearch.update FoodSearch.CreateCustomFoodClicked emptyModel
-                    |> third
-                    |> Expect.equal (FoodSearch.Navigate CustomFoodCreate)
+                FoodSearch.contentView
+                    { model =
+                        { emptyModel
+                            | scope = FoodSearch.All
+                            , search = Search.withQuery "zzz" emptyModel.search
+                            , results = Success []
+                        }
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.hasNot [ Selector.text "Create Custom Food" ]
+        , test "a search screen with no recents shows the no-recents helper" <|
+            \_ ->
+                contentFor { emptyModel | recentItems = Success [] }
+                    |> Query.has
+                        [ Selector.text
+                            "No recent foods yet. Search for a food to get started."
+                        ]
+        , test "barcode prompt shows when the field is empty" <|
+            \_ ->
+                contentFor { emptyModel | scope = FoodSearch.Barcode }
+                    |> Query.has [ Selector.text "Enter a barcode to look up a food." ]
+        , test "barcode prompt hides once the field has a value" <|
+            \_ ->
+                contentFor
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = "12345"
+                    }
+                    |> Query.hasNot [ Selector.text "Enter a barcode to look up a food." ]
+        , test "a barcode miss renders one not-found message" <|
+            \_ ->
+                contentFor
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = "12345"
+                        , barcodeLookup = Failure barcodeNotFound
+                    }
+                    |> Query.findAll [ Selector.text "No food found for that barcode." ]
+                    |> Query.count (Expect.equal 1)
+        , test "a barcode miss offers the ad-hoc actions" <|
+            \_ ->
+                contentFor
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = "12345"
+                        , barcodeLookup = Failure barcodeNotFound
+                    }
+                    |> Query.has [ Selector.text "Create with AI" ]
+        , test "barcode transport errors do not offer the ad-hoc actions" <|
+            \_ ->
+                contentFor
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = "12345"
+                        , barcodeLookup = Failure Client.NetworkError
+                    }
+                    |> Query.hasNot [ Selector.text "Create with AI" ]
+        , test "a stale barcode miss is hidden while the scanner is active" <|
+            \_ ->
+                contentFor
+                    { emptyModel
+                        | scope = FoodSearch.Barcode
+                        , barcodeQuery = "12345"
+                        , barcodeLookup = Failure barcodeNotFound
+                        , barcodeScanner = FoodSearch.ScannerActive
+                    }
+                    |> Query.hasNot [ Selector.text "No food found for that barcode." ]
         , test "clear recent added removes matching added item" <|
             \_ ->
                 FoodSearch.update
@@ -975,6 +1042,22 @@ tests =
 emptyModel : FoodSearch.Model
 emptyModel =
     FoodSearch.init Nothing Nothing
+
+
+contentFor : FoodSearch.Model -> Query.Single FoodSearch.Msg
+contentFor model =
+    FoodSearch.contentView
+        { model = model
+        , device = { class = Phone, orientation = Portrait }
+        , theme = Theme.light
+        }
+        |> Element.layout []
+        |> Query.fromHtml
+
+
+barcodeNotFound : Client.ApiError
+barcodeNotFound =
+    Client.BadStatus 404 "not_found" "No food matched that barcode."
 
 
 loadedModel : FoodSearch.Model

@@ -44,6 +44,7 @@ import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
+import Ui.Icon as Icon
 import Ui.Input as UiInput
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -87,6 +88,34 @@ type BarcodeScannerState
     | ScannerStarting
     | ScannerActive
     | ScannerFailed String
+
+
+{-| What the barcode pane should render, derived once from the query, lookup,
+and scanner state so the view never reconciles those three fields itself.
+-}
+type BarcodeBody
+    = BarcodeScanInProgress
+    | BarcodeAwaitingInput
+    | BarcodeInputPending
+    | BarcodeLookingUp
+    | BarcodeNotFound
+    | BarcodeLookupFailed Client.ApiError
+    | BarcodeOpening
+
+
+{-| Which body the search pane shows for the current scope.
+-}
+type SearchBody
+    = RecentsBody
+    | ResultsBody
+    | BarcodeResultsBody BarcodeBody
+
+
+{-| Whether the ad-hoc log section belongs on screen for the current state.
+-}
+type AdHocSection
+    = AdHocShown
+    | AdHocHidden
 
 
 type QuickAddState
@@ -184,7 +213,6 @@ type Msg
     | QuickAddCompleted (Result Client.ApiError FoodLog)
     | ClearRecentAdded String Ticket
     | ResultClicked String
-    | CreateCustomFoodClicked
     | CreateAdHocLogClicked
     | CreateAiLogClicked
 
@@ -336,6 +364,21 @@ applyBarcodeSubmit model =
         )
 
 
+{-| Starting a scan clears any previous lookup and invalidates its in-flight
+response, so a stale not-found result cannot resurface behind the camera.
+-}
+startScanner : Model -> ( Model, Cmd Msg, OutMsg )
+startScanner model =
+    ( { model
+        | barcodeScanner = ScannerStarting
+        , barcodeLookup = NotAsked
+        , barcodeToken = Ticket.next model.barcodeToken
+      }
+    , Cmd.none
+    , RequestBarcodeScanStart
+    )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
@@ -374,16 +417,10 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
                 ScannerIdle ->
-                    ( { model | barcodeScanner = ScannerStarting }
-                    , Cmd.none
-                    , RequestBarcodeScanStart
-                    )
+                    startScanner model
 
                 ScannerFailed _ ->
-                    ( { model | barcodeScanner = ScannerStarting }
-                    , Cmd.none
-                    , RequestBarcodeScanStart
-                    )
+                    startScanner model
 
         BarcodeScanCancelClicked ->
             ( { model | barcodeScanner = ScannerIdle }
@@ -660,9 +697,6 @@ update msg model =
         ResultClicked id ->
             ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot Nothing) )
 
-        CreateCustomFoodClicked ->
-            ( model, Cmd.none, Navigate CustomFoodCreate )
-
         CreateAdHocLogClicked ->
             ( model
             , Cmd.none
@@ -827,19 +861,122 @@ contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
 contentView { model, device, theme } =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
+        , Element.height Element.fill
+        , Element.spacing DesignTokens.space24
         ]
-        [ searchInputView theme device model
-        , searchContentView theme device model
-        , adHocLogView theme device
-        ]
+        (searchInputView theme device model
+            :: searchContentView theme device model
+            :: adHocLogSection theme device model
+        )
+
+
+searchBody : Model -> SearchBody
+searchBody model =
+    case model.scope of
+        Barcode ->
+            BarcodeResultsBody (barcodeBody model)
+
+        _ ->
+            textSearchBody model
+
+
+textSearchBody : Model -> SearchBody
+textSearchBody model =
+    if not (String.isEmpty (String.trim model.search.query)) then
+        ResultsBody
+
+    else
+        case model.results of
+            NotAsked ->
+                RecentsBody
+
+            Loading ->
+                ResultsBody
+
+            Failure _ ->
+                ResultsBody
+
+            Success _ ->
+                ResultsBody
+
+
+barcodeBody : Model -> BarcodeBody
+barcodeBody model =
+    case model.barcodeScanner of
+        ScannerStarting ->
+            BarcodeScanInProgress
+
+        ScannerActive ->
+            BarcodeScanInProgress
+
+        ScannerIdle ->
+            barcodeLookupBody model
+
+        ScannerFailed _ ->
+            barcodeLookupBody model
+
+
+barcodeLookupBody : Model -> BarcodeBody
+barcodeLookupBody model =
+    case model.barcodeLookup of
+        Loading ->
+            BarcodeLookingUp
+
+        Success _ ->
+            BarcodeOpening
+
+        Failure error ->
+            case error of
+                Client.BadStatus 404 _ _ ->
+                    BarcodeNotFound
+
+                _ ->
+                    BarcodeLookupFailed error
+
+        NotAsked ->
+            if String.isEmpty (String.trim model.barcodeQuery) then
+                BarcodeAwaitingInput
+
+            else
+                BarcodeInputPending
+
+
+{-| The ad-hoc log actions are always reachable for text scopes, but the
+barcode pane only offers them once a lookup has genuinely found nothing.
+-}
+adHocSection : Model -> AdHocSection
+adHocSection model =
+    case searchBody model of
+        BarcodeResultsBody BarcodeNotFound ->
+            AdHocShown
+
+        BarcodeResultsBody _ ->
+            AdHocHidden
+
+        RecentsBody ->
+            AdHocShown
+
+        ResultsBody ->
+            AdHocShown
+
+
+adHocLogSection : Theme -> Device -> Model -> List (Element Msg)
+adHocLogSection theme device model =
+    case adHocSection model of
+        AdHocShown ->
+            [ adHocLogView theme device ]
+
+        AdHocHidden ->
+            []
 
 
 adHocLogView : Theme -> Device -> Element Msg
 adHocLogView theme device =
     Surface.formSection theme
         "Create an ad-hoc food log"
-        [ Element.row
+        [ Typography.mutedParagraph theme
+            "Log a one-off food without saving it to your foods."
+        , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
@@ -874,7 +1011,7 @@ adHocLogView theme device =
 searchInputView : Theme -> Device -> Model -> Element Msg
 searchInputView theme device model =
     Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
         [ scopeControl theme model.scope
         , if model.scope == Barcode then
             barcodeInputView theme device model
@@ -896,7 +1033,7 @@ textSearchInputView theme device model =
         { id = "food-search-completions"
         , onChange = QueryChanged
         , text = model.search.query
-        , label = searchLabel model.scope
+        , label = UiInput.LabelInside (searchLabel model.scope)
         , completions = options
         , activeIndex = model.completionIndex
         , onActiveChanged = CompletionActiveChanged
@@ -913,7 +1050,7 @@ barcodeInputView theme device model =
             UiInput.searchInput theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
-                , label = "Enter barcode"
+                , label = UiInput.LabelInside "Enter barcode"
                 , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
@@ -1173,7 +1310,7 @@ bodyView theme model device =
 
         Success items ->
             if List.isEmpty items then
-                textEmptyState theme device model.scope
+                textEmptyState theme model.scope
 
             else
                 Surface.section theme
@@ -1195,54 +1332,50 @@ bodyView theme model device =
 
 searchContentView : Theme -> Device -> Model -> Element Msg
 searchContentView theme device model =
-    if model.scope == Barcode then
-        if hasActiveSearch model then
-            barcodeBodyView theme device model
-
-        else
+    case searchBody model of
+        RecentsBody ->
             recentsView device theme model
 
-    else if hasActiveSearch model then
-        bodyView theme model device
+        ResultsBody ->
+            bodyView theme model device
 
-    else
-        recentsView device theme model
+        BarcodeResultsBody body ->
+            barcodeBodyView theme body
 
 
-barcodeBodyView : Theme -> Device -> Model -> Element Msg
-barcodeBodyView theme device model =
-    case model.barcodeLookup of
-        NotAsked ->
+barcodeBodyView : Theme -> BarcodeBody -> Element Msg
+barcodeBodyView theme body =
+    case body of
+        BarcodeScanInProgress ->
+            Element.none
+
+        BarcodeAwaitingInput ->
             Feedback.emptyState theme "Enter a barcode to look up a food."
 
-        Loading ->
+        BarcodeInputPending ->
+            Element.none
+
+        BarcodeLookingUp ->
             Skeleton.card theme { rows = 3 }
 
-        Failure error ->
-            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Feedback.errorBanner theme (barcodeErrorMessage error)
-                , Feedback.emptyState theme "No food found for that barcode."
-                , Button.textButton device
-                    theme
-                    { tone = Button.Primary
-                    , width = Button.FullWidth
-                    , label = "Create Custom Food"
-                    , onPress = CreateCustomFoodClicked
-                    , submitState = Just Button.Idle
-                    , submittingLabel = Just "Create Custom Food"
-                    , trailing = Nothing
-                    }
-                ]
+        BarcodeNotFound ->
+            Feedback.emptyStateWithIcon theme
+                { icon = Icon.SearchX
+                , message = "No food found for that barcode."
+                }
 
-        Success _ ->
+        BarcodeLookupFailed error ->
+            Feedback.errorBanner theme (Client.displayError error)
+
+        BarcodeOpening ->
             Feedback.emptyState theme "Opening food."
 
 
-textEmptyState : Theme -> Device -> SearchScope -> Element Msg
-textEmptyState theme device scope =
-    let
-        message : String
-        message =
+textEmptyState : Theme -> SearchScope -> Element Msg
+textEmptyState theme scope =
+    Feedback.emptyStateWithIcon theme
+        { icon = Icon.SearchX
+        , message =
             case scope of
                 History ->
                     "No logged foods found. Try a different search."
@@ -1252,30 +1385,7 @@ textEmptyState theme device scope =
 
                 _ ->
                     "No foods found. Try a different search."
-
-        canCreate : Bool
-        canCreate =
-            scope /= History
-    in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        (Feedback.emptyState theme message
-            :: (if canCreate then
-                    [ Button.textButton device
-                        theme
-                        { tone = Button.Primary
-                        , width = Button.FullWidth
-                        , label = "Create Custom Food"
-                        , onPress = CreateCustomFoodClicked
-                        , submitState = Just Button.Idle
-                        , submittingLabel = Just "Create Custom Food"
-                        , trailing = Nothing
-                        }
-                    ]
-
-                else
-                    []
-               )
-        )
+        }
 
 
 searchScopes : List SearchScope
@@ -1333,16 +1443,6 @@ searchRequestScope scope =
             Foods.SearchAll
 
 
-barcodeErrorMessage : Client.ApiError -> String
-barcodeErrorMessage error =
-    case error of
-        Client.BadStatus 404 _ _ ->
-            "No food matched that barcode."
-
-        _ ->
-            Client.displayError error
-
-
 onEnterSubmit : msg -> Element.Attribute msg
 onEnterSubmit submitMsg =
     Element.htmlAttribute
@@ -1362,11 +1462,15 @@ onEnterSubmit submitMsg =
 
 recentsView : Device -> Theme -> Model -> Element Msg
 recentsView device theme model =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.height Element.fill
+        , Element.spacing DesignTokens.space8
+        ]
         [ Feedback.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
-                Element.none
+                noRecentsState theme
 
             Loading ->
                 Skeleton.card theme { rows = 2 }
@@ -1376,7 +1480,7 @@ recentsView device theme model =
 
             Success items ->
                 if List.isEmpty items then
-                    Element.none
+                    noRecentsState theme
 
                 else
                     Element.column
@@ -1388,6 +1492,14 @@ recentsView device theme model =
                             }
                         ]
         ]
+
+
+noRecentsState : Theme -> Element Msg
+noRecentsState theme =
+    Feedback.emptyStateWithIcon theme
+        { icon = Icon.Utensils
+        , message = "No recent foods yet. Search for a food to get started."
+        }
 
 
 recentItemRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
@@ -1496,41 +1608,3 @@ quickAddChip device theme model item quantity =
         , submittingLabel = submittingLabel
         , trailing = Nothing
         }
-
-
-hasActiveSearch : Model -> Bool
-hasActiveSearch model =
-    if model.scope == Barcode then
-        if not (String.isEmpty (String.trim model.barcodeQuery)) then
-            True
-
-        else
-            case model.barcodeLookup of
-                NotAsked ->
-                    False
-
-                Loading ->
-                    True
-
-                Failure _ ->
-                    True
-
-                Success _ ->
-                    True
-
-    else if not (String.isEmpty (String.trim model.search.query)) then
-        True
-
-    else
-        case model.results of
-            NotAsked ->
-                False
-
-            Loading ->
-                True
-
-            Failure _ ->
-                True
-
-            Success _ ->
-                True

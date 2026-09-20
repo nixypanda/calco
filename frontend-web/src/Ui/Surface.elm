@@ -2,6 +2,7 @@ module Ui.Surface exposing
     ( PanelSection
     , accentDotLabeled
     , card
+    , cardFill
     , detailRow
     , formSection
     , hairline
@@ -44,14 +45,21 @@ cardShadow _ =
 
 
 surfaceShell : Theme -> List (Element msg) -> Element msg
-surfaceShell theme children =
+surfaceShell theme =
+    surfaceShellWith [] theme
+
+
+surfaceShellWith : List (Element.Attribute msg) -> Theme -> List (Element msg) -> Element msg
+surfaceShellWith extraAttrs theme children =
     Element.column
-        [ Element.width Element.fill
-        , Background.color theme.cardSurfaceBg
-        , Border.rounded radiusCard
-        , cardShadow theme
-        , uiClass "ui-surface"
-        ]
+        ([ Element.width Element.fill
+         , Background.color theme.cardSurfaceBg
+         , Border.rounded radiusCard
+         , cardShadow theme
+         , uiClass "ui-surface"
+         ]
+            ++ extraAttrs
+        )
         children
 
 
@@ -64,6 +72,30 @@ card theme children =
             , Element.spacing space12
             ]
             children
+        ]
+
+
+{-| A card that stretches to the height its parent offers and centers its
+children vertically. Use for a whole area that carries a single empty or
+placeholder message.
+-}
+cardFill : Theme -> List (Element msg) -> Element msg
+cardFill theme children =
+    surfaceShellWith [ Element.height (Element.fill |> Element.minimum 240) ]
+        theme
+        [ Element.el
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            ]
+            (Element.column
+                [ Element.centerX
+                , Element.centerY
+                , Element.width (Element.fill |> Element.maximum 420)
+                , Element.padding space20
+                , Element.spacing space12
+                ]
+                children
+            )
         ]
 
 

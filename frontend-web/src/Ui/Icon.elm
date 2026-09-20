@@ -20,6 +20,7 @@ type Icon
     | Plus
     | Close
     | Check
+    | SearchX
 
 
 view :
@@ -65,6 +66,13 @@ shapes icon =
         Search ->
             [ circle [ SvgA.cx "11", SvgA.cy "11", SvgA.r "6" ] []
             , line [ SvgA.x1 "16", SvgA.y1 "16", SvgA.x2 "20", SvgA.y2 "20" ] []
+            ]
+
+        SearchX ->
+            [ circle [ SvgA.cx "11", SvgA.cy "11", SvgA.r "6" ] []
+            , line [ SvgA.x1 "16", SvgA.y1 "16", SvgA.x2 "20", SvgA.y2 "20" ] []
+            , line [ SvgA.x1 "8", SvgA.y1 "8", SvgA.x2 "14", SvgA.y2 "14" ] []
+            , line [ SvgA.x1 "14", SvgA.y1 "8", SvgA.x2 "8", SvgA.y2 "14" ] []
             ]
 
         Box ->

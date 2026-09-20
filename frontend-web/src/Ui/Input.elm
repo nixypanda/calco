@@ -1,5 +1,6 @@
 module Ui.Input exposing
     ( InputConfig
+    , SearchLabel(..)
     , checkbox
     , completionDropdown
     , completionRow
@@ -46,6 +47,16 @@ type alias InputConfig msg =
     , value : String
     , onChange : String -> msg
     }
+
+
+{-| Where a search field's label lives. `LabelAbove` keeps the label as a
+separate line; `LabelInside` folds it into the field as a placeholder while
+retaining it as the accessible name, so a field can never have a visually
+hidden label with no on-screen hint.
+-}
+type SearchLabel
+    = LabelAbove String
+    | LabelInside String
 
 
 {-| elm-ui moves `Element.padding` on `Input.text` into the inner `<input>` as
@@ -134,13 +145,30 @@ textInput theme extraAttrs config =
 searchInput :
     Theme
     ->
-        { label : String
+        { label : SearchLabel
         , text : String
         , onChange : String -> msg
         , extraAttrs : List (Element.Attribute msg)
         }
     -> Element msg
 searchInput theme config =
+    let
+        ( labelElement, placeholderElement ) =
+            case config.label of
+                LabelAbove label ->
+                    ( Input.labelAbove [ body, Font.medium ] (Element.text label)
+                    , Nothing
+                    )
+
+                LabelInside label ->
+                    ( Input.labelHidden label
+                    , Just
+                        (Input.placeholder
+                            [ Font.color theme.textMuted ]
+                            (Element.text label)
+                        )
+                    )
+    in
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.cardBg
@@ -157,8 +185,8 @@ searchInput theme config =
         )
         { onChange = config.onChange
         , text = config.text
-        , placeholder = Nothing
-        , label = Input.labelAbove [ body, Font.medium ] (Element.text config.label)
+        , placeholder = placeholderElement
+        , label = labelElement
         }
 
 

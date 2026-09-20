@@ -12,6 +12,7 @@ import Html.Attributes
 import Html.Events
 import Json.Decode as Decode
 import Lib.Text as Text
+import Ui.CategoryTag as CategoryTag exposing (CategoryTag)
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -51,7 +52,7 @@ searchInput :
         { id : String
         , onChange : String -> msg
         , text : String
-        , label : String
+        , label : UiInput.SearchLabel
         , completions : List Completion
         , activeIndex : Int
         , onActiveChanged : Int -> msg
@@ -217,30 +218,25 @@ resultRow theme device config =
                 , Typography.mutedCaptionParagraph theme (metaText config.query config.item)
                 ]
 
-        categoryTags : Element msg
-        categoryTags =
-            categoryPills theme device config.item.categories
+        tagRows : List (List CategoryTag)
+        tagRows =
+            if UiCommon.isSmall device then
+                []
 
-        hasCategories : Bool
-        hasCategories =
-            not (List.isEmpty config.item.categories)
+            else
+                CategoryTag.rows config.item.categories
     in
     Surface.listRow
         { onSelect = config.onSelect config.item.id
         , leading = [ macroDot ]
         , title = searchItem
-        , subtitle =
-            if UiCommon.isSmall device && hasCategories then
-                [ categoryTags ]
-
-            else
-                []
+        , subtitle = []
         , trailing =
-            if UiCommon.isSmall device || not hasCategories then
+            if List.isEmpty tagRows then
                 []
 
             else
-                [ categoryTags ]
+                [ CategoryTag.view theme tagRows ]
         }
 
 
@@ -310,38 +306,3 @@ isNumeric : String -> Bool
 isNumeric value =
     not (String.isEmpty value)
         && String.all Char.isDigit value
-
-
-categoryPills : Theme -> Device -> List String -> Element msg
-categoryPills theme device categories =
-    if List.isEmpty categories then
-        Element.none
-
-    else if UiCommon.isSmall device then
-        Element.wrappedRow
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space4
-            ]
-            (List.map (categoryPill theme) categories)
-
-    else
-        Element.wrappedRow
-            [ Element.width (Element.px 160)
-            , Element.spacing DesignTokens.space4
-            , Element.alignRight
-            ]
-            (List.map (categoryPill theme) categories)
-
-
-categoryPill : Theme -> String -> Element msg
-categoryPill theme label =
-    Element.el
-        [ Element.width (Element.maximum 160 Element.fill)
-        , Element.clip
-        , UiCommon.uiClass "ui-text-ellipsis"
-        ]
-        (Chip.chip theme
-            { label = label
-            , selected = False
-            }
-        )
