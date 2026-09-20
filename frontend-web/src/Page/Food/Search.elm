@@ -69,6 +69,7 @@ type alias Model =
     , date : Maybe String
     , mealSlot : Maybe MealSlot
     , quickAdd : QuickAddState
+    , quickAddToken : Ticket
     , addedItems : List { key : String, token : Ticket }
     , addedToken : Ticket
     }
@@ -127,6 +128,7 @@ init date mealSlot =
     , date = date
     , mealSlot = mealSlot
     , quickAdd = QuickAddIdle
+    , quickAddToken = Ticket.initial
     , addedItems = []
     , addedToken = Ticket.initial
     }
@@ -149,6 +151,7 @@ retarget date mealSlot model =
                     Nothing ->
                         NotAsked
             , quickAdd = QuickAddIdle
+            , quickAddToken = Ticket.next model.quickAddToken
             , addedItems = []
           }
         , True
@@ -179,7 +182,7 @@ type Msg
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived LocalContext
-    | QuickAddCompleted (Result Client.ApiError FoodLog)
+    | QuickAddCompleted Ticket (Result Client.ApiError FoodLog)
     | ClearRecentAdded String Ticket
     | ResultClicked String
     | CreateCustomFoodClicked
@@ -200,7 +203,7 @@ type OutMsg
     | RequestBarcodeScanStop
     | RequestCategorySuggestions Ticket Foods.CategorySuggestionRequest
     | RequestLocalContext
-    | RequestCreateLog Logs.CreateLogRequest
+    | RequestCreateLog Ticket Logs.CreateLogRequest
     | LogCreated FoodLog
     | Navigate Route
     | SessionExpired
@@ -566,6 +569,7 @@ update msg model =
                 ( { model
                     | quickAdd =
                         QuickAddRequestingContext { item = item, quantity = quantity }
+                    , quickAddToken = Ticket.next model.quickAddToken
                   }
                 , Cmd.none
                 , RequestLocalContext
@@ -595,7 +599,7 @@ update msg model =
                         Just request ->
                             ( { model | quickAdd = QuickAddSubmitting target }
                             , Cmd.none
-                            , RequestCreateLog request
+                            , RequestCreateLog model.quickAddToken request
                             )
 
                         Nothing ->
@@ -611,59 +615,63 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
-        QuickAddCompleted result ->
-            case result of
-                Ok log ->
-                    let
-                        key : Maybe String
-                        key =
-                            quickAddTarget model.quickAdd
-                                |> Maybe.map quickAddTargetKey
+        QuickAddCompleted token result ->
+            if token /= model.quickAddToken then
+                ( model, Cmd.none, NoOp )
 
-                        nextToken : Ticket
-                        nextToken =
-                            Ticket.next model.addedToken
-                    in
-                    ( { model
-                        | quickAdd = QuickAddIdle
-                        , addedToken = nextToken
-                        , addedItems =
-                            case key of
-                                Just value ->
-                                    { key = value, token = nextToken }
-                                        :: List.filter
-                                            (\addedItem -> addedItem.key /= value)
-                                            model.addedItems
+            else
+                case result of
+                    Ok log ->
+                        let
+                            key : Maybe String
+                            key =
+                                quickAddTarget model.quickAdd
+                                    |> Maybe.map quickAddTargetKey
 
-                                Nothing ->
-                                    model.addedItems
-                      }
-                    , case key of
-                        Just value ->
-                            clearRecentAddedAfter value nextToken
-
-                        Nothing ->
-                            Cmd.none
-                    , LogCreated log
-                    )
-
-                Err error ->
-                    if Client.isUnauthorized error then
+                            nextToken : Ticket
+                            nextToken =
+                                Ticket.next model.addedToken
+                        in
                         ( { model
                             | quickAdd = QuickAddIdle
+                            , addedToken = nextToken
+                            , addedItems =
+                                case key of
+                                    Just value ->
+                                        { key = value, token = nextToken }
+                                            :: List.filter
+                                                (\addedItem -> addedItem.key /= value)
+                                                model.addedItems
+
+                                    Nothing ->
+                                        model.addedItems
                           }
-                        , Cmd.none
-                        , SessionExpired
+                        , case key of
+                            Just value ->
+                                clearRecentAddedAfter value nextToken
+
+                            Nothing ->
+                                Cmd.none
+                        , LogCreated log
                         )
 
-                    else
-                        ( { model
-                            | quickAdd =
-                                QuickAddFailed (Client.displayError error)
-                          }
-                        , Cmd.none
-                        , NoOp
-                        )
+                    Err error ->
+                        if Client.isUnauthorized error then
+                            ( { model
+                                | quickAdd = QuickAddIdle
+                              }
+                            , Cmd.none
+                            , SessionExpired
+                            )
+
+                        else
+                            ( { model
+                                | quickAdd =
+                                    QuickAddFailed (Client.displayError error)
+                              }
+                            , Cmd.none
+                            , NoOp
+                            )
 
         ClearRecentAdded key token ->
             ( { model

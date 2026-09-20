@@ -2524,9 +2524,9 @@ applyFoodSearchOutMsg _ outMsg =
         FoodSearch.RequestBarcodeScanStop ->
             ( Cmd.none, RequestBarcodeScanStop )
 
-        FoodSearch.RequestCreateLog request ->
+        FoodSearch.RequestCreateLog token request ->
             ( Api.Logs.createLog request
-                (GotFoodSearchMsg << FoodSearch.QuickAddCompleted)
+                (GotFoodSearchMsg << FoodSearch.QuickAddCompleted token)
             , NoOutMsg
             )
 

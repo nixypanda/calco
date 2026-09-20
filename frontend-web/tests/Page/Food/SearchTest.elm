@@ -795,7 +795,7 @@ tests =
             \_ ->
                 submittingQuickAddModel
                     |> FoodSearch.update
-                        (FoodSearch.QuickAddCompleted (Err Client.NetworkError))
+                        (FoodSearch.QuickAddCompleted (ticket 1) (Err Client.NetworkError))
                     |> first
                     |> (\model ->
                             FoodSearch.quickAddChipState model recentProduct siblingQuantity
@@ -813,7 +813,7 @@ tests =
                         )
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestCreateLog
+                        (FoodSearch.RequestCreateLog (ticket 1)
                             { logDate = date "2026-05-29"
                             , deviceTimezone = Just "Asia/Kolkata"
                             , mealSlot = Just "lunch"
@@ -834,7 +834,7 @@ tests =
                         )
                     |> third
                     |> Expect.equal
-                        (FoodSearch.RequestCreateLog
+                        (FoodSearch.RequestCreateLog (ticket 1)
                             { logDate = date "2026-06-01"
                             , deviceTimezone = Just "Asia/Kolkata"
                             , mealSlot = Nothing
@@ -875,7 +875,7 @@ tests =
                             { date = "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> first
-                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (ticket 1) (Ok productLog))
                     |> first
                     |> (\model -> ( model.addedToken, model.addedItems ))
                     |> Expect.equal
@@ -891,7 +891,7 @@ tests =
                             { date = "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> first
-                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (ticket 1) (Ok productLog))
                     |> third
                     |> Expect.equal (FoodSearch.LogCreated productLog)
         , test "quick add success replaces previous added token for same item" <|
@@ -908,13 +908,15 @@ tests =
                             { date = "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> first
-                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog))
+                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (ticket 1) (Ok productLog))
                     |> first
                     |> .addedItems
                     |> Expect.equal [ { key = "product:food-1:2 serving", token = ticket 2 } ]
         , test "quick add success with no pending item does not mark added" <|
             \_ ->
-                FoodSearch.update (FoodSearch.QuickAddCompleted (Ok productLog)) emptyModel
+                FoodSearch.update
+                    (FoodSearch.QuickAddCompleted (ticket 0) (Ok productLog))
+                    emptyModel
                     |> first
                     |> .addedItems
                     |> Expect.equal []
@@ -929,7 +931,8 @@ tests =
                             { date = "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> first
-                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Err Client.NetworkError))
+                    |> FoodSearch.update
+                        (FoodSearch.QuickAddCompleted (ticket 1) (Err Client.NetworkError))
                     |> first
                     |> .addedItems
                     |> Expect.equal []
@@ -944,7 +947,8 @@ tests =
                             { date = "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> first
-                    |> FoodSearch.update (FoodSearch.QuickAddCompleted (Err Client.NetworkError))
+                    |> FoodSearch.update
+                        (FoodSearch.QuickAddCompleted (ticket 1) (Err Client.NetworkError))
                     |> first
                     |> FoodSearch.update
                         (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
@@ -962,11 +966,56 @@ tests =
                         )
                     |> first
                     |> FoodSearch.update
-                        (FoodSearch.QuickAddCompleted
+                        (FoodSearch.QuickAddCompleted (ticket 1)
                             (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                         )
                     |> third
                     |> Expect.equal FoodSearch.SessionExpired
+        , test "stale quick add completion after retarget is ignored" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+                    { emptyModel | date = Just "2026-05-29", mealSlot = Just Lunch }
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.LocalContextReceived
+                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        )
+                    |> first
+                    |> FoodSearch.retarget (Just "2026-05-30") (Just Dinner)
+                    |> Tuple.first
+                    |> FoodSearch.update
+                        (FoodSearch.QuickAddCompleted (ticket 1) (Ok productLog))
+                    |> (\( model, _, outMsg ) ->
+                            ( model.addedItems, outMsg )
+                       )
+                    |> Expect.equal
+                        ( [], FoodSearch.NoOp )
+        , test "stale quick add completion cannot mark a newer target added" <|
+            \_ ->
+                FoodSearch.update
+                    (FoodSearch.RecentQuickAddClicked recentProduct recentProduct.quantity)
+                    { emptyModel | date = Just "2026-05-29", mealSlot = Just Lunch }
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.LocalContextReceived
+                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        )
+                    |> first
+                    |> FoodSearch.retarget (Just "2026-05-30") (Just Dinner)
+                    |> Tuple.first
+                    |> FoodSearch.update
+                        (FoodSearch.RecentQuickAddClicked recentMeal recentMeal.quantity)
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.LocalContextReceived
+                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        )
+                    |> first
+                    |> FoodSearch.update
+                        (FoodSearch.QuickAddCompleted (ticket 1) (Ok productLog))
+                    |> (\( model, _, outMsg ) -> ( model.addedItems, outMsg ))
+                    |> Expect.equal ( [], FoodSearch.NoOp )
         , test "select result navigates to food detail with meal slot query context" <|
             \_ ->
                 FoodSearch.update

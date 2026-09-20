@@ -5,6 +5,7 @@ import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Ticket as Ticket
 import Page
 import Page.Diary.Day as DiaryDayPage
 import Page.Food.Search as FoodSearchPage
@@ -395,7 +396,7 @@ routeFlowTests =
                 Page.update
                     context
                     (Page.GotFoodSearchMsg
-                        (FoodSearchPage.QuickAddCompleted (Ok productLog))
+                        (FoodSearchPage.QuickAddCompleted Ticket.initial (Ok productLog))
                     )
                     model
                     |> Maybe.map first
