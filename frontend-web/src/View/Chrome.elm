@@ -120,7 +120,7 @@ topBarView config profile =
                 [ Element.width Element.fill
                 , Element.clip
                 ]
-                (Typography.subsectionTitle config.theme meta.title)
+                (Typography.screenTitle config.theme meta.title)
             , Element.el
                 [ Element.paddingEach
                     { top = 0

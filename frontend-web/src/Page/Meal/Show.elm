@@ -554,7 +554,7 @@ headerView theme model =
                 }
 
         _ ->
-            Typography.pageTitle theme "Meal"
+            Typography.truncatedHeader theme "Meal"
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
@@ -664,6 +664,8 @@ deleteModalView theme device loaded =
         device
         { title = "Delete meal?"
         , description = "This will permanently remove the meal."
+        , confirmLabel = "Confirm Delete"
+        , pendingLabel = "Deleting..."
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }
