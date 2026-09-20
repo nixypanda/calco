@@ -27,6 +27,9 @@ Thumbs.db
 result
 result-*
 
+# i18n code-generation cache (the generated Elm in frontend-web/generated is committed)
+.cache/
+
 # Import pipeline data
 data/
 data-fixed*/

@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "vite build",
     "coverage": "elm-coverage src --tests tests --silent",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "i18n": "just i18n"
   },
   "devDependencies": {
     "elm": "0.19.1-6",

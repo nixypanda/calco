@@ -76,3 +76,4 @@ config =
     , NoRecursiveUpdate.rule
     , NoUselessSubscriptions.rule
     ]
+        |> List.map (Review.Rule.ignoreErrorsForDirectories [ "generated" ])
