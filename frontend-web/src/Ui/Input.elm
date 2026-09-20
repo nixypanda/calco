@@ -83,8 +83,7 @@ textInput theme extraAttrs config =
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.inputFill
-         , Element.height (Element.px minimumTargetSize)
-         , Element.padding 10
+         , Element.paddingEach { top = 14, right = 10, bottom = 14, left = 10 }
          , uiClass "ui-motion"
          ]
             ++ extraAttrs
@@ -109,7 +108,7 @@ searchInput theme config =
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.inputFill
-         , Element.padding space12
+         , Element.paddingEach { top = 14, right = 12, bottom = 14, left = 12 }
          , uiClass "ui-motion"
          ]
             ++ config.extraAttrs
@@ -126,8 +125,7 @@ passwordInput theme config =
     Input.currentPassword
         [ Border.rounded radiusControl
         , Background.color theme.inputFill
-        , Element.height (Element.px minimumTargetSize)
-        , Element.padding 10
+        , Element.paddingEach { top = 14, right = 10, bottom = 14, left = 10 }
         , uiClass "ui-motion"
         ]
         { onChange = config.onChange
@@ -180,7 +178,7 @@ decimalInputWithSuffix theme config =
                 [ Border.rounded radiusControl
                 , Background.color theme.inputFill
                 , Element.width Element.fill
-                , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
+                , Element.paddingEach { top = 14, right = 56, bottom = 14, left = 10 }
                 , uiClass "ui-motion"
                 , inputMode "decimal"
                 ]
