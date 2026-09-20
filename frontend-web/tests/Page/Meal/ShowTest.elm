@@ -7,9 +7,13 @@ import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
+import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Page.Meal.Show as MealShow
 import Test exposing (Test, describe, test)
+import Test.Html.Query as Query
+import Test.Html.Selector as Selector
+import Ui.Theme as Theme
 import View.DeleteModal exposing (DeleteState(..))
 import View.Nutrients exposing (NutritionState(..))
 
@@ -265,6 +269,17 @@ tests =
                 MealShow.update MealShow.EditClicked loadedModel
                     |> third
                     |> Expect.equal (MealShow.Navigate (MealEdit "meal-1"))
+        , test "load failure is rendered once" <|
+            \_ ->
+                MealShow.view
+                    { model = MealShow.LoadFailed "Network error"
+                    , device = { class = Phone, orientation = Portrait }
+                    , theme = Theme.light
+                    }
+                    |> Element.layout []
+                    |> Query.fromHtml
+                    |> Query.findAll [ Selector.text "Network error" ]
+                    |> Query.count (Expect.equal 1)
         ]
 
 

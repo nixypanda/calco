@@ -497,36 +497,29 @@ failure =
 view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
-        [ Surface.section theme
-            { header = Just (headerView theme model)
-            , body =
-                [ case model of
-                    Loaded loaded ->
-                        case loaded.meal.notes of
+        (case model of
+            Loading _ ->
+                [ mealShowSkeleton theme ]
+
+            LoadFailed message ->
+                [ Feedback.errorBanner theme message ]
+
+            Loaded loaded ->
+                [ Surface.section theme
+                    { header = Just (headerView theme loaded)
+                    , body =
+                        [ case loaded.meal.notes of
                             Just notes ->
                                 Typography.mutedParagraph theme notes
 
                             Nothing ->
                                 Element.none
-
-                    LoadFailed message ->
-                        Feedback.errorBanner theme message
-
-                    Loading _ ->
-                        mealShowSkeleton theme
+                        ]
+                    , footer = Nothing
+                    }
+                , loadedView theme device loaded
                 ]
-            , footer = Nothing
-            }
-        , case model of
-            Loaded loaded ->
-                loadedView theme device loaded
-
-            LoadFailed message ->
-                Feedback.errorBanner theme message
-
-            Loading _ ->
-                mealShowSkeleton theme
-        ]
+        )
 
 
 modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
@@ -539,22 +532,17 @@ modalView { model, device, theme } =
             Nothing
 
 
-headerView : Theme -> Model -> Element Msg
-headerView theme model =
-    case model of
-        Loaded loaded ->
-            UiPage.pageHeader theme
-                { leading =
-                    loaded.meal.nutritionSummary
-                        |> Maybe.map
-                            (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
-                , title = Typography.truncatedHeader theme loaded.meal.name
-                , subtitle = Nothing
-                , actions = []
-                }
-
-        _ ->
-            Typography.pageTitle theme "Meal"
+headerView : Theme -> LoadedModel -> Element Msg
+headerView theme loaded =
+    UiPage.pageHeader theme
+        { leading =
+            loaded.meal.nutritionSummary
+                |> Maybe.map
+                    (View.Nutrients.macroDot theme << Nutrition.summaryToNutrients)
+        , title = Typography.truncatedHeader theme loaded.meal.name
+        , subtitle = Nothing
+        , actions = []
+        }
 
 
 loadedView : Theme -> Device -> LoadedModel -> Element Msg
