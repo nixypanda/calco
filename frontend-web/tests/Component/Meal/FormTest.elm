@@ -364,6 +364,55 @@ tests =
                         |> List.length
                         |> Expect.equal 1
             ]
+        , describe "component unit dropdown"
+            [ test "toggling opens the selected row and closes others" <|
+                \_ ->
+                    let
+                        base : FormFields
+                        base =
+                            emptyForm
+                                |> addRowWithId 2
+                                |> (\withRow2 ->
+                                        { withRow2
+                                            | components =
+                                                List.map
+                                                    (\row ->
+                                                        if row.rowId == 1 then
+                                                            { row | unitOpen = True }
+
+                                                        else
+                                                            row
+                                                    )
+                                                    withRow2.components
+                                        }
+                                   )
+
+                        ( form, _, _ ) =
+                            Form.updateFormField (ComponentUnitToggled 2) base
+                    in
+                    form.components
+                        |> List.map (\row -> ( row.rowId, row.unitOpen ))
+                        |> Expect.equal [ ( 1, False ), ( 2, True ) ]
+            , test "selecting a unit stores it and closes the dropdown" <|
+                \_ ->
+                    let
+                        base : FormFields
+                        base =
+                            { emptyForm
+                                | components =
+                                    List.map
+                                        (\row -> { row | unitOpen = True })
+                                        emptyForm.components
+                            }
+
+                        ( form, _, _ ) =
+                            Form.updateFormField (ComponentUnitChanged 1 "oz") base
+                    in
+                    form.components
+                        |> List.head
+                        |> Maybe.map (\row -> ( row.unit, row.unitOpen ))
+                        |> Expect.equal (Just ( "oz", False ))
+            ]
         , describe "toMealRequest"
             [ test "empty name returns MealNameRequired" <|
                 \_ ->

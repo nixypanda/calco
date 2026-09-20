@@ -529,6 +529,14 @@ hydrateUnits result pane =
             MealDetailPane key
                 (modelOnly (MealShow.update (MealShow.UnitsLoaded result) model))
 
+        MealCreatePane model ->
+            MealCreatePane
+                (modelOnly (MealCreate.update (MealCreate.UnitsLoaded result) model))
+
+        MealEditPane key model ->
+            MealEditPane key
+                (modelOnly (MealEdit.update (MealEdit.UnitsLoaded result) model))
+
         _ ->
             pane
 

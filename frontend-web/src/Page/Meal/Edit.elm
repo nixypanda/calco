@@ -10,6 +10,7 @@ module Page.Meal.Edit exposing
     )
 
 import Api.Client as Client
+import Api.Foods as Foods exposing (UnitItem)
 import Api.Meals exposing (CreateMealRequest, Meal, MealNutritionResponse)
 import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
@@ -37,6 +38,7 @@ import View.Nutrients
 type alias LoadingModel =
     { mealId : String
     , nutrition : NutritionState
+    , units : List UnitItem
     }
 
 
@@ -68,6 +70,7 @@ init mealId =
     ( LoadingEdit
         { mealId = mealId
         , nutrition = NutritionLoading defaultNutritionInput
+        , units = []
         }
     , RequestMeal mealId
     )
@@ -84,6 +87,7 @@ type Msg
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
     | RetryClicked
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -250,6 +254,7 @@ update msg model =
                     ( LoadingEdit
                         { mealId = failed.mealId
                         , nutrition = NutritionLoading defaultNutritionInput
+                        , units = []
                         }
                     , Cmd.none
                     , RequestMeal failed.mealId
@@ -257,6 +262,32 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none, NoOp )
+
+        UnitsLoaded result ->
+            case result of
+                Ok response ->
+                    ( setUnits response.items model, Cmd.none, NoOp )
+
+                Err _ ->
+                    ( model, Cmd.none, NoOp )
+
+
+setUnits : List UnitItem -> Model -> Model
+setUnits units model =
+    case model of
+        LoadingEdit loading ->
+            LoadingEdit { loading | units = units }
+
+        Editing loaded ->
+            let
+                fields : Common.FormFields
+                fields =
+                    loaded.fields
+            in
+            Editing { loaded | fields = { fields | units = units } }
+
+        EditLoadFailed _ ->
+            model
 
 
 withSubmit : Common.SubmitState -> Common.FormFields -> Common.FormFields
@@ -313,9 +344,14 @@ applyNutritionError message model =
 
 loadedFromMeal : Meal -> LoadingModel -> LoadedModel
 loadedFromMeal meal loading =
+    let
+        fields : Common.FormFields
+        fields =
+            editFormFromMeal meal
+    in
     { mealId = loading.mealId
     , meal = meal
-    , fields = editFormFromMeal meal
+    , fields = { fields | units = loading.units }
     , nutrition = loading.nutrition
     }
 

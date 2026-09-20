@@ -46,6 +46,7 @@ import Ui.Input as UiInput
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
+import View.QuantityInput as QuantityInput
 import View.Search as SearchView
 
 
@@ -62,6 +63,7 @@ type alias ComponentRow =
     , productId : String
     , quantity : String
     , unit : String
+    , unitOpen : Bool
     , search : QueryState
     , searchResults : Loadable () (List SearchResult)
     }
@@ -90,6 +92,7 @@ type alias FormFields =
     , nextRowId : RowId
     , nextSearchToken : Ticket
     , submit : SubmitState
+    , units : List Foods.UnitItem
     }
 
 
@@ -143,6 +146,7 @@ emptyFormFields =
     , nextRowId = 2
     , nextSearchToken = Ticket.next Ticket.initial
     , submit = Idle
+    , units = []
     }
 
 
@@ -152,6 +156,7 @@ emptyComponentRow rowId =
     , productId = ""
     , quantity = "100"
     , unit = defaultCode
+    , unitOpen = False
     , search = Search.empty
     , searchResults = NotAsked
     }
@@ -174,6 +179,7 @@ type FormFieldMsg
     | SelectProduct RowId SearchResult
     | ComponentQuantityChanged RowId String
     | ComponentUnitChanged RowId String
+    | ComponentUnitToggled RowId
     | AddComponentClicked
     | RemoveComponentClicked RowId
     | ProductNameLoaded String (Result Client.ApiError ProductDetail)
@@ -329,6 +335,12 @@ updateFormField msg form =
             , Nothing
             )
 
+        ComponentUnitToggled rowId ->
+            ( { form | components = List.map (toggleUnitOpen rowId) form.components }
+            , Cmd.none
+            , Nothing
+            )
+
         AddComponentClicked ->
             ( { form
                 | components = form.components ++ [ emptyComponentRow form.nextRowId ]
@@ -386,7 +398,7 @@ viewFormFields theme device toMsg form =
             { header = Just (Typography.subsectionTitle theme "Components")
             , body =
                 List.intersperse (Surface.hairline theme)
-                    (List.map (componentRowView theme device toMsg) form.components)
+                    (List.map (componentRowView theme device toMsg form.units) form.components)
             , footer =
                 Just
                     (Button.textButton device
@@ -607,7 +619,7 @@ patchRow rowId patch row =
                 { row | quantity = value }
 
             SetUnit value ->
-                { row | unit = value }
+                { row | unit = value, unitOpen = False }
 
             SetSearch queryState ->
                 { row | search = queryState }
@@ -642,8 +654,17 @@ removeRow rowId rows =
         List.filter (\row -> row.rowId /= rowId) rows
 
 
-componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
-componentRowView theme device toMsg row =
+toggleUnitOpen : RowId -> ComponentRow -> ComponentRow
+toggleUnitOpen rowId row =
+    if row.rowId == rowId then
+        { row | unitOpen = not row.unitOpen }
+
+    else
+        { row | unitOpen = False }
+
+
+componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> List Foods.UnitItem -> ComponentRow -> Element msg
+componentRowView theme device toMsg units row =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ SearchView.searchInput theme
@@ -684,14 +705,19 @@ componentRowView theme device toMsg row =
             NotAsked ->
                 Element.none
         , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            [ quantityTextInput theme
-                device
-                { amountLabel = "Qty"
-                , amount = row.quantity
-                , onAmountChange = toMsg << ComponentQuantityChanged row.rowId
-                , unitLabel = "Unit"
-                , unit = row.unit
-                , onUnitChange = toMsg << ComponentUnitChanged row.rowId
+            [ UiInput.numericInput theme
+                { label = "Qty"
+                , value = row.quantity
+                , onChange = toMsg << ComponentQuantityChanged row.rowId
+                }
+            , UiInput.selectDropdown device
+                theme
+                { label = "Unit"
+                , selected = row.unit
+                , options = QuantityInput.unitOptions row.unit units
+                , onChange = toMsg << ComponentUnitChanged row.rowId
+                , isOpen = row.unitOpen
+                , onToggle = toMsg (ComponentUnitToggled row.rowId)
                 }
             , Element.el [ Element.centerY ]
                 (Button.iconButton device

@@ -8,6 +8,7 @@ module Page.Meal.Create exposing
     )
 
 import Api.Client as Client
+import Api.Foods as Foods
 import Api.Meals exposing (CreateMealRequest, Meal)
 import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
@@ -47,6 +48,7 @@ type Msg
     = FormMsg Common.FormFieldMsg
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
+    | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -104,6 +106,14 @@ update msg fields =
                         }
                         error
                         fields
+
+        UnitsLoaded result ->
+            case result of
+                Ok response ->
+                    ( { fields | units = response.items }, Cmd.none, NoOp )
+
+                Err _ ->
+                    ( fields, Cmd.none, NoOp )
 
 
 mapFormOutMsg : Maybe Common.FormFieldOutMsg -> OutMsg
