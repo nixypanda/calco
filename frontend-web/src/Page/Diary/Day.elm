@@ -983,12 +983,7 @@ macroTolerance target =
 
 goalUnderColor : Theme -> Element.Color
 goalUnderColor theme =
-    case theme.mode of
-        Light ->
-            Element.rgb255 0 135 145
-
-        Dark ->
-            theme.calorieAccent
+    theme.underGoalAccent
 
 
 mixColor : Element.Color -> Element.Color -> Float -> Element.Color

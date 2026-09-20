@@ -1021,7 +1021,7 @@ barcodeScannerPreview theme caption =
             , Element.height (Element.px 380)
             , Border.rounded DesignTokens.radiusCard
             , Element.clip
-            , Background.color (Element.rgb255 0 0 0)
+            , Background.color theme.videoBackdrop
             , Element.inFront (barcodeScannerGuide theme)
             ]
             (Element.html barcodeScannerVideo)
@@ -1041,7 +1041,7 @@ barcodeScannerGuide theme =
             , Element.width Element.fill
             , Element.height (Element.px 96)
             , Border.rounded DesignTokens.radiusControl
-            , Border.color theme.focusRing
+            , Border.color theme.scannerGuide
             , Border.widthEach
                 { top = 2
                 , right = 0
@@ -1097,7 +1097,7 @@ scopeSegment theme selectedScope scope =
         foreground : Element.Color
         foreground =
             if selected then
-                Element.rgb255 255 255 255
+                theme.brandBlueOn
 
             else
                 theme.textMedium

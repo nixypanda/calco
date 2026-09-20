@@ -85,7 +85,7 @@ removableChip device theme config =
             , Border.color theme.dangerFg
             , hoverEffect device
                 [ Background.color theme.dangerSolid
-                , Font.color (Element.rgb255 255 255 255)
+                , Font.color theme.dangerSolidOn
                 , Border.color theme.dangerSolid
                 ]
             ]

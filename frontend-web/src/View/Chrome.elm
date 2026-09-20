@@ -575,7 +575,7 @@ drawerOverlay config =
                 , Element.height Element.fill
                 ]
                 [ drawerView viewConfig
-                , scrimOverlay (Just config.onClose)
+                , scrimOverlay config.theme (Just config.onClose)
                 ]
             )
         ]
@@ -673,12 +673,12 @@ drawerItem theme current onNavigate icon label target =
         }
 
 
-scrimOverlay : Maybe msg -> Element msg
-scrimOverlay onPress =
+scrimOverlay : Theme -> Maybe msg -> Element msg
+scrimOverlay theme onPress =
     Input.button
         [ Element.width Element.fill
         , Element.height Element.fill
-        , Background.color (Element.rgba255 0 0 0 0.28)
+        , Background.color theme.scrim
         ]
         { onPress = onPress
         , label = Element.none

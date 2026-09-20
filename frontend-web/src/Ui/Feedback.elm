@@ -103,7 +103,7 @@ modalOverlay theme config =
         (Input.button
             [ Element.width Element.fill
             , Element.height Element.fill
-            , Background.color (Element.rgba255 0 0 0 0.28)
+            , Background.color theme.scrim
             , uiClass "ui-modal-backdrop"
             ]
             { onPress = config.onBackgroundPress

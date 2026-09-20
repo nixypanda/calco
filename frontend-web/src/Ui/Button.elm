@@ -101,7 +101,7 @@ textButton device theme config =
 
                         else
                             theme.brandBlueDisabled
-                    , fg = Element.rgb255 255 255 255
+                    , fg = theme.brandBlueOn
                     , border =
                         if isActive then
                             theme.brandBlue
@@ -109,7 +109,7 @@ textButton device theme config =
                         else
                             theme.brandBlueDisabled
                     , hoverBg = theme.brandBluePressed
-                    , hoverFg = Element.rgb255 255 255 255
+                    , hoverFg = theme.brandBlueOn
                     , hoverBorder = theme.brandBluePressed
                     }
 
@@ -133,11 +133,11 @@ textButton device theme config =
 
                 Danger ->
                     { bg = theme.dangerSolid
-                    , fg = Element.rgb255 255 255 255
+                    , fg = theme.dangerSolidOn
                     , border = theme.dangerSolid
-                    , hoverBg = theme.dangerFg
-                    , hoverFg = Element.rgb255 255 255 255
-                    , hoverBorder = theme.dangerFg
+                    , hoverBg = theme.dangerSolidPressed
+                    , hoverFg = theme.dangerSolidOn
+                    , hoverBorder = theme.dangerSolidPressed
                     }
 
                 DangerOutline ->
@@ -356,8 +356,8 @@ iconButton device theme config =
                     { iconColor = theme.dangerFg
                     , bgColor = theme.cardBg
                     , border = theme.dangerFg
-                    , hoverBg = theme.dangerSolid
-                    , hoverBorder = theme.dangerSolid
+                    , hoverBg = theme.dangerBg
+                    , hoverBorder = theme.dangerFg
                     }
 
                 _ ->

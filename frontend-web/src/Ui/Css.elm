@@ -15,12 +15,15 @@ themeCssVariables theme =
         , "--ui-divider: " ++ toCssColor theme.divider
         , "--ui-input-fill: " ++ toCssColor theme.inputFill
         , "--ui-brand-blue: " ++ toCssColor theme.brandBlue
+        , "--ui-brand-blue-on: " ++ toCssColor theme.brandBlueOn
         , "--ui-brand-blue-pressed: " ++ toCssColor theme.brandBluePressed
         , "--ui-brand-blue-soft: " ++ toCssColor theme.brandBlueSoft
         , "--ui-brand-blue-disabled: " ++ toCssColor theme.brandBlueDisabled
         , "--ui-danger-bg: " ++ toCssColor theme.dangerBg
         , "--ui-danger-fg: " ++ toCssColor theme.dangerFg
         , "--ui-danger-solid: " ++ toCssColor theme.dangerSolid
+        , "--ui-danger-solid-on: " ++ toCssColor theme.dangerSolidOn
+        , "--ui-danger-solid-pressed: " ++ toCssColor theme.dangerSolidPressed
         , "--ui-drawer-selection-bg: " ++ toCssColor theme.drawerSelectionBg
         , "--ui-status-green: " ++ toCssColor theme.statusGreen
         , "--ui-status-red: " ++ toCssColor theme.statusRed
@@ -33,4 +36,8 @@ themeCssVariables theme =
         , "--ui-chip-selected-bg: " ++ toCssColor theme.chipSelectedBg
         , "--ui-chip-selected-fg: " ++ toCssColor theme.chipSelectedFg
         , "--ui-focus-ring: " ++ toCssColor theme.focusRing
+        , "--ui-scanner-guide: " ++ toCssColor theme.scannerGuide
+        , "--ui-scrim: " ++ toCssColor theme.scrim
+        , "--ui-video-backdrop: " ++ toCssColor theme.videoBackdrop
+        , "--ui-under-goal-accent: " ++ toCssColor theme.underGoalAccent
         ]
