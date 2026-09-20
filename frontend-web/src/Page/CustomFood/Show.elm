@@ -362,7 +362,7 @@ customFoodShowSkeleton theme =
         , Skeleton.card theme { rows = 3 }
         , Element.row
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
+            , Element.spacing DesignTokens.space16
             ]
             [ Skeleton.button theme
             , Skeleton.button theme

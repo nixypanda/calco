@@ -835,7 +835,7 @@ adHocLogView theme device =
         "Create an ad-hoc food log"
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
+            , Element.spacing DesignTokens.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton device
@@ -1152,7 +1152,7 @@ bodyView theme model device =
                 }
 
         Failure error ->
-            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Feedback.errorBanner theme (Client.displayError error)
                 , Feedback.emptyState theme "No foods found. Try a different search."
                 ]
@@ -1204,7 +1204,7 @@ barcodeBodyView theme device model =
             Skeleton.card theme { rows = 3 }
 
         Failure error ->
-            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Feedback.errorBanner theme (barcodeErrorMessage error)
                 , Feedback.emptyState theme "No food found for that barcode."
                 , Button.textButton device
@@ -1242,7 +1242,7 @@ textEmptyState theme device scope =
         canCreate =
             scope /= History
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (Feedback.emptyState theme message
             :: (if canCreate then
                     [ Button.textButton device

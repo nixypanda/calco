@@ -3191,7 +3191,7 @@ paneView props selectedDate pane =
             Element.map GotMealDetailMsg (MealShow.view (pageProps props sub))
 
         PlaceholderPane message ->
-            Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
+            Element.el [ Element.padding DesignTokens.space32 ] (Element.text message)
     )
 
 

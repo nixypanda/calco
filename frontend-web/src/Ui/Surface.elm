@@ -21,10 +21,8 @@ import Ui.DesignTokens
     exposing
         ( radiusCard
         , radiusHairline
-        , space12
         , space16
         , space2
-        , space20
         , space4
         , space8
         )
@@ -50,8 +48,8 @@ card theme children =
         , Border.rounded radiusCard
         , cardShadow theme
         , uiClass "ui-surface"
-        , Element.padding space20
-        , Element.spacing space12
+        , Element.padding space16
+        , Element.spacing space8
         ]
         children
 
@@ -127,11 +125,11 @@ heroCard theme config =
             [ Element.width Element.fill
             , Element.paddingEach
                 { top = 0
-                , right = space20
-                , bottom = space20
-                , left = space20
+                , right = space16
+                , bottom = space16
+                , left = space16
                 }
-            , Element.spacing space12
+            , Element.spacing space8
             ]
             config.body
         ]
@@ -177,11 +175,11 @@ sectionHeader :
 sectionHeader config =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing space4
+        , Element.spacing space8
         ]
         (Element.row
             [ Element.width Element.fill
-            , Element.spacing space12
+            , Element.spacing space16
             ]
             (Element.el [ Element.width Element.fill ] config.title
                 :: (config.trailing
@@ -240,7 +238,7 @@ listRow config =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.padding space16
-        , Element.spacing space12
+        , Element.spacing space16
         ]
         [ Input.button
             [ Element.width Element.fill
@@ -250,7 +248,7 @@ listRow config =
             , label =
                 Element.row
                     [ Element.width Element.fill
-                    , Element.spacing space12
+                    , Element.spacing space8
                     , minWidthZero
                     ]
                     [ listRowLeading config.leading
@@ -269,7 +267,7 @@ listRow config =
           else
             Element.row
                 [ Element.padding space8
-                , Element.spacing space12
+                , Element.spacing space8
                 , Element.alignTop
                 ]
                 config.trailing

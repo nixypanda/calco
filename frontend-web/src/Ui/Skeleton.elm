@@ -17,10 +17,10 @@ import Ui.DesignTokens
         ( radiusControl
         , radiusPill
         , radiusSmall
-        , space12
         , space16
         , space2
         , space4
+        , space8
         )
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -28,7 +28,7 @@ import Ui.Theme exposing (Theme)
 
 loading : Theme -> Element msg
 loading theme =
-    Element.column [ Element.width Element.fill, Element.spacing space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing space16 ]
         [ bar theme
         , bar theme
         , bar theme
@@ -113,7 +113,7 @@ listRow theme =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.padding space16
-        , Element.spacing space12
+        , Element.spacing space8
         ]
         [ Element.el
             [ Element.width (Element.px 12)

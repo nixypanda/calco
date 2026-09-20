@@ -16,7 +16,7 @@ import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
 import Ui.Common exposing (hoverEffect, isSmall, uiClass)
-import Ui.DesignTokens exposing (radiusPill, space12, space4)
+import Ui.DesignTokens exposing (radiusPill, space16, space4, space8)
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Theme exposing (Theme)
 
@@ -223,7 +223,7 @@ textButton device theme config =
          , Border.rounded radiusPill
          , widthAttr
          , Element.height (Element.px 48)
-         , Element.paddingEach { top = 17, right = 16, bottom = 17, left = 16 }
+         , Element.paddingEach { top = 17, right = space16, bottom = 17, left = space16 }
          , Font.medium
          , Font.size 14
          , uiClass "ui-motion ui-pressable"
@@ -313,21 +313,21 @@ bottomActionButtons device theme buttons =
         [ onlyButton ] ->
             Element.column
                 [ Element.width Element.fill
-                , Element.spacing space12
+                , Element.spacing space8
                 ]
                 [ onlyButton ]
 
         [ firstButton, secondButton ] ->
             Element.row
                 [ Element.width Element.fill
-                , Element.spacing space12
+                , Element.spacing space8
                 ]
                 [ firstButton, secondButton ]
 
         _ ->
             Element.column
                 [ Element.width Element.fill
-                , Element.spacing space12
+                , Element.spacing space8
                 ]
                 buttonElements
 

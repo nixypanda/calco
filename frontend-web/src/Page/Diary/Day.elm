@@ -619,7 +619,7 @@ dateCard theme model device =
     Surface.card theme
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
+            , Element.spacing DesignTokens.space8
             ]
             [ Button.iconButton device
                 theme
@@ -673,7 +673,11 @@ totalsView device theme targets summary =
         calories =
             Nutrition.caloriesFrom summary
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing DesignTokens.space16
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space8
+        ]
         [ calorieHero theme calories targets.calorieTarget
         , Surface.hairline theme
         , macroSummaryRow theme
@@ -725,11 +729,11 @@ calorieHero : Theme -> Float -> Float -> Element msg
 calorieHero theme calories target =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
+        , Element.spacing DesignTokens.space16
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
+            , Element.spacing DesignTokens.space8
             , Element.centerY
             ]
             [ Element.column
@@ -757,7 +761,7 @@ calorieHero theme calories target =
              else
                 theme.calorieAccent
             )
-            DesignTokens.space12
+            DesignTokens.space8
             calories
             target
         , if target > 0 then
@@ -807,7 +811,7 @@ calorieBalancePill theme target calories =
             [ Background.color (withAlpha 0.2 statusColor)
             , Font.color statusColor
             , Border.rounded DesignTokens.radiusPill
-            , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+            , Element.paddingXY DesignTokens.space16 DesignTokens.space8
             , Typography.body
             , Font.bold
             , Element.alignRight
@@ -1156,7 +1160,7 @@ logGroupsView theme device model logs =
         unslotted =
             section Nothing
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         ((MealSlot.all
             |> List.map (Just >> section)
             |> List.filter (shouldShowSection model.preferences)
@@ -1265,7 +1269,7 @@ emptySlotBody : Element Msg -> Element Msg
 emptySlotBody content =
     Element.el
         [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
+        , Element.padding DesignTokens.space16
         ]
         content
 
@@ -1291,8 +1295,8 @@ mealSlotHeader theme macroMode section totals =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
-        , Element.spacing DesignTokens.space12
+        , Element.padding DesignTokens.space16
+        , Element.spacing DesignTokens.space8
         ]
         [ Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
             [ Typography.sectionTitle theme (sectionTitle section.slot)
@@ -1467,11 +1471,11 @@ logRow : Theme -> FoodLog -> Element Msg
 logRow theme log =
     Input.button
         [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
+        , Element.padding DesignTokens.space16
         ]
         { onPress = Just (LogClicked log.id)
         , label =
-            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ View.Nutrients.macroDot theme log.nutrients
                 , Element.el
                     [ Element.width Element.fill
@@ -1479,7 +1483,7 @@ logRow theme log =
                     ]
                     (Typography.wrappedListItemTitle theme (FoodLog.itemName log.item))
                 , Element.row
-                    [ Element.alignRight, Element.spacing DesignTokens.space12 ]
+                    [ Element.alignRight, Element.spacing DesignTokens.space8 ]
                     [ Typography.mutedCaption theme
                         (log.quantity.amount ++ " " ++ log.quantity.unit)
                     , Typography.mutedCaption theme

@@ -783,7 +783,7 @@ conversationView theme device chat =
 
     else
         Element.column
-            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
             [ Element.row [ Element.width Element.fill ]
                 [ Element.el [ Font.bold ] (Element.text "Conversation")
                 , if chat.request == Sending || chat.draft /= Nothing then
@@ -854,7 +854,7 @@ turnView : Theme -> ConversationTurn -> Element Msg
 turnView theme turn =
     Element.column
         [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
+        , Element.padding DesignTokens.space16
         , Border.rounded DesignTokens.radiusControl
         , Background.color theme.inputFill
         , Element.spacing DesignTokens.space4
@@ -881,7 +881,7 @@ descriptionInput theme chat =
         , Element.height (Element.px 120)
         , Border.rounded DesignTokens.radiusControl
         , Background.color theme.inputFill
-        , Element.padding 10
+        , Element.padding DesignTokens.space8
         ]
         { onChange = DescriptionChanged
         , text = chat.description
@@ -1146,7 +1146,7 @@ warningView theme warnings =
                 (\warning ->
                     Element.paragraph
                         [ Element.width Element.fill
-                        , Element.padding DesignTokens.space12
+                        , Element.padding DesignTokens.space16
                         , Border.rounded DesignTokens.radiusControl
                         , Background.color theme.brandBlueSoft
                         ]
@@ -1170,8 +1170,8 @@ draftPreviewView purpose theme device formHasManualInput chat =
             in
             Element.column
                 [ Element.width Element.fill
-                , Element.spacing DesignTokens.space12
-                , Element.padding DesignTokens.space12
+                , Element.spacing DesignTokens.space8
+                , Element.padding DesignTokens.space16
                 , Border.width 1
                 , Border.color theme.divider
                 , Border.rounded DesignTokens.radiusControl
@@ -1224,7 +1224,7 @@ previewRows theme rows =
 
 previewRow : Theme -> ( String, String ) -> Element Msg
 previewRow theme ( label, value ) =
-    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.el [ Font.color theme.textMuted ] (Element.text label)
         , Element.paragraph [ Element.width Element.fill, Font.alignRight ]
             [ Element.text value ]
@@ -1385,8 +1385,8 @@ confirmationSurface : Theme -> List (Element msg) -> Element msg
 confirmationSurface theme children =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        , Element.padding DesignTokens.space12
+        , Element.spacing DesignTokens.space8
+        , Element.padding DesignTokens.space16
         , Background.color theme.dangerBg
         , Font.color theme.dangerFg
         , Border.rounded DesignTokens.radiusControl

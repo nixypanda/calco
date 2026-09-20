@@ -17,7 +17,7 @@ import Html exposing (Html)
 import Html.Attributes
 import Html.Events
 import Ui.Common exposing (hoverEffect)
-import Ui.DesignTokens exposing (radiusPill, space8)
+import Ui.DesignTokens exposing (radiusPill, space4, space8)
 import Ui.Icon as Icon
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (caption)
@@ -68,7 +68,7 @@ removableChip device theme config =
         [ Background.color (chipBackground theme False)
         , Font.color (chipForeground theme False)
         , Border.rounded radiusPill
-        , Element.paddingEach { top = 4, right = 4, bottom = 4, left = 10 }
+        , Element.paddingEach { top = space4, right = space4, bottom = space4, left = space8 }
         , Element.spacing space8
         , caption
         , Font.medium
@@ -182,9 +182,9 @@ pill horizontalPadding config =
         , Font.color config.fg
         , Border.rounded radiusPill
         , Element.paddingEach
-            { top = 4
+            { top = space4
             , right = horizontalPadding
-            , bottom = 4
+            , bottom = space4
             , left = horizontalPadding
             }
         , caption

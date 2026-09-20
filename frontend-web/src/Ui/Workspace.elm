@@ -39,10 +39,10 @@ view device panes =
             , Element.height Element.fill
             , Element.spacing DesignTokens.space16
             , Element.paddingEach
-                { top = DesignTokens.space24
-                , right = DesignTokens.space24
+                { top = DesignTokens.space32
+                , right = DesignTokens.space32
                 , bottom = 0
-                , left = DesignTokens.space24
+                , left = DesignTokens.space32
                 }
             , Element.clip
             , Element.htmlAttribute (Attr.class "ui-workspace")
@@ -66,7 +66,7 @@ view device panes =
                             DesignTokens.space16
 
                          else
-                            DesignTokens.space24
+                            DesignTokens.space32
                         )
                     ]
                     pane

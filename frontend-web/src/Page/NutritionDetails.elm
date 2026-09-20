@@ -310,7 +310,7 @@ overviewItem theme nutrient =
     Element.column
         [ Element.width (Element.minimum 130 Element.fill)
         , Element.spacing DesignTokens.space2
-        , Element.padding DesignTokens.space12
+        , Element.padding DesignTokens.space16
         , Background.color theme.inputFill
         ]
         [ Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
@@ -477,7 +477,7 @@ nutrientRow theme expandedAdvice nutrient =
                 [ Element.width Element.fill
                 , Background.color theme.inputFill
                 , Font.color theme.textMuted
-                , Element.padding DesignTokens.space12
+                , Element.padding DesignTokens.space16
                 , Typography.caption
                 ]
                 [ Element.text (dailyAdvice nutrient.code) ]

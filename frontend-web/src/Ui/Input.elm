@@ -28,7 +28,7 @@ import Ui.DesignTokens
     exposing
         ( radiusControl
         , radiusPill
-        , space12
+        , space16
         , space2
         , space4
         , space8
@@ -78,7 +78,8 @@ textInput theme extraAttrs config =
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.inputFill
-         , Element.padding 10
+         , Element.height (Element.minimum 44 Element.shrink)
+         , Element.padding space8
          , uiClass "ui-motion"
          ]
             ++ extraAttrs
@@ -103,7 +104,8 @@ searchInput theme config =
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.inputFill
-         , Element.padding space12
+         , Element.height (Element.minimum 44 Element.shrink)
+         , Element.padding space8
          , uiClass "ui-motion"
          ]
             ++ config.extraAttrs
@@ -120,7 +122,8 @@ passwordInput theme config =
     Input.currentPassword
         [ Border.rounded radiusControl
         , Background.color theme.inputFill
-        , Element.padding 10
+        , Element.height (Element.minimum 44 Element.shrink)
+        , Element.padding space8
         , uiClass "ui-motion"
         ]
         { onChange = config.onChange
@@ -162,7 +165,7 @@ decimalInputWithSuffix theme config =
                 (Element.el
                     [ Element.alignRight
                     , Element.centerY
-                    , Element.paddingEach { top = 0, right = 12, bottom = 0, left = 0 }
+                    , Element.paddingEach { top = 0, right = space8, bottom = 0, left = 0 }
                     , Font.color theme.textMuted
                     , body
                     ]
@@ -173,7 +176,8 @@ decimalInputWithSuffix theme config =
                 [ Border.rounded radiusControl
                 , Background.color theme.inputFill
                 , Element.width Element.fill
-                , Element.paddingEach { top = 10, right = 56, bottom = 10, left = 10 }
+                , Element.height (Element.minimum 44 Element.shrink)
+                , Element.paddingEach { top = space8, right = 56, bottom = space8, left = space8 }
                 , uiClass "ui-motion"
                 , inputMode "decimal"
                 ]
@@ -271,7 +275,8 @@ optionRow theme config =
     in
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY space12 10
+        , Element.height (Element.minimum 44 Element.shrink)
+        , Element.paddingXY space16 space8
         , Border.rounded radiusControl
         , Background.color
             (if config.selected then
@@ -366,9 +371,10 @@ selectDropdown device theme config =
         , Element.el triggerAnchor
             (Input.button
                 [ Element.width Element.fill
+                , Element.height (Element.minimum 44 Element.shrink)
                 , Border.rounded radiusControl
                 , Background.color theme.inputFill
-                , Element.padding space12
+                , Element.padding space8
                 , Border.width 1
                 , Border.color theme.inputFill
                 , uiClass "ui-motion"

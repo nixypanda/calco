@@ -704,7 +704,7 @@ itemHeader theme device model =
                     Element.none
 
                 else
-                    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+                    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
 
             Nothing ->
@@ -784,11 +784,11 @@ detailActionsView : Theme -> Device -> LoadedModel -> Element Msg
 detailActionsView theme device model =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
+        , Element.spacing DesignTokens.space16
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
+            , Element.spacing DesignTokens.space8
             ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton device

@@ -629,7 +629,7 @@ Current visual language:
 - `elm-ui` layout primitives, not CSS utility classes.
 - Inter/system sans typography.
 - light theme page background `#f4f6f8`.
-- white cards with 20px radius, 20px padding, and 12px internal spacing.
+- white cards with 20px radius, 16px padding, and 8px internal spacing.
 - primary action color `#4b91cf` in light mode.
 - danger action color `#ff6b7a` in light mode.
 - muted gray text for captions and secondary content.

@@ -7,7 +7,7 @@ module Ui.Page exposing
 import Element exposing (Device, Element)
 import Element.Font as Font
 import Ui.Common exposing (minWidthZero)
-import Ui.DesignTokens exposing (space12, space16, space2, space4, space8)
+import Ui.DesignTokens exposing (space16, space2, space4, space8)
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (body, mutedBody)
 
@@ -81,7 +81,7 @@ pageHeader theme config =
     in
     Element.wrappedRow
         [ Element.width Element.fill
-        , Element.spacing space12
+        , Element.spacing space16
         , minWidthZero
         ]
         [ leadingElement, titleColumn, actionsRow ]

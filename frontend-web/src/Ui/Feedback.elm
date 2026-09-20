@@ -14,7 +14,7 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Ui.Common exposing (uiClass)
-import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space8)
+import Ui.DesignTokens exposing (radiusControl, radiusPill, space16, space8)
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
 import Ui.Typography exposing (sectionTitle)
@@ -50,7 +50,7 @@ errorBanner theme message =
         [ Background.color theme.dangerBg
         , Font.color theme.dangerFg
         , Border.rounded radiusControl
-        , Element.padding space12
+        , Element.padding space16
         , Element.width Element.fill
         ]
         [ Element.text message ]
@@ -62,7 +62,7 @@ infoBanner theme message =
         [ Background.color theme.brandBlueSoft
         , Font.color theme.textPrimary
         , Border.rounded radiusControl
-        , Element.padding space12
+        , Element.padding space16
         , Element.width Element.fill
         ]
         [ Element.text message ]
@@ -85,7 +85,7 @@ modalOverlay theme config =
                 [ Element.centerX
                 , Element.centerY
                 , Element.width (Element.fill |> Element.maximum 480)
-                , Element.padding 16
+                , Element.padding space16
                 , uiClass "ui-modal-card"
                 ]
                 (Surface.section theme

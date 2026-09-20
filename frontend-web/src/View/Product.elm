@@ -42,7 +42,7 @@ foodHeader theme food extraMeta =
             Element.none
 
           else
-            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ macroDotGhost, Chip.chips theme food.categories ]
         ]
 

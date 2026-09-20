@@ -106,7 +106,7 @@ topBarView config profile =
         [ Element.width Element.fill
         , Element.height (Element.px 58)
         , Element.paddingXY DesignTokens.space16 0
-        , Element.spacing DesignTokens.space12
+        , Element.spacing DesignTokens.space16
         , Background.color config.theme.cardBg
         , Font.color config.theme.textPrimary
         ]
@@ -242,7 +242,7 @@ updateBanner : Theme -> msg -> Element msg
 updateBanner theme onPress =
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY DesignTokens.space16 DesignTokens.space12
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space8
         , Background.color theme.brandBlueSoft
         , Font.color theme.brandBlue
         , Font.size 18
@@ -488,7 +488,12 @@ bottomNavTab theme config =
     Input.button
         [ Element.width (Element.fillPortion 1)
         , Element.height Element.fill
-        , Element.paddingEach { top = 6, right = 0, bottom = 4, left = 0 }
+        , Element.paddingEach
+            { top = DesignTokens.space8
+            , right = 0
+            , bottom = DesignTokens.space4
+            , left = 0
+            }
         , Font.color iconColor
         , Border.widthEach
             { top =
@@ -508,7 +513,7 @@ bottomNavTab theme config =
             Element.column
                 [ Element.centerX
                 , Element.centerY
-                , Element.spacing 2
+                , Element.spacing DesignTokens.space2
                 ]
                 [ Element.el [ Element.centerX ]
                     (Icon.view
@@ -685,8 +690,8 @@ drawerPanel theme children =
     Element.column
         [ Element.width (Element.fill |> Element.maximum 320)
         , Element.height Element.fill
-        , Element.paddingXY 16 9
-        , Element.spacing DesignTokens.space12
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space8
+        , Element.spacing DesignTokens.space16
         , Background.color theme.cardBg
         , UiCommon.uiClass "ui-card-shadow"
         , Region.navigation
@@ -723,7 +728,7 @@ drawerItemButton theme config =
     in
     Input.button
         [ Element.width Element.fill
-        , Element.paddingXY 16 14
+        , Element.paddingXY DesignTokens.space16 DesignTokens.space16
         , Border.rounded DesignTokens.radiusControl
         , Background.color
             (if config.selected then
@@ -738,7 +743,7 @@ drawerItemButton theme config =
         { onPress = Just config.onPress
         , label =
             Element.row
-                [ Element.spacing 12
+                [ Element.spacing DesignTokens.space8
                 , Element.centerY
                 ]
                 [ iconEl
@@ -775,8 +780,8 @@ menuCard theme config =
         [ Element.alignRight
         , Element.moveDown 4
         , Element.width (Element.px config.width)
-        , Element.padding DesignTokens.space12
-        , Element.spacing 10
+        , Element.padding DesignTokens.space16
+        , Element.spacing DesignTokens.space8
         , Background.color theme.cardBg
         , Border.rounded DesignTokens.radiusCard
         , UiCommon.uiClass "ui-card-shadow"

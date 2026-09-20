@@ -356,7 +356,7 @@ viewFormFields :
     -> FormFields
     -> Element msg
 viewFormFields theme device toMsg form =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section theme
             { header = Nothing
             , body =
@@ -645,7 +645,7 @@ removeRow rowId rows =
 componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> ComponentRow -> Element msg
 componentRowView theme device toMsg row =
     Element.column
-        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ SearchView.searchInput theme
             device
             { onChange = toMsg << ComponentSearchChanged row.rowId

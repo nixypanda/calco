@@ -415,7 +415,7 @@ view { model, device, theme } =
 
 nutritionView : Theme -> LoadedModel -> Element Msg
 nutritionView theme loaded =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ View.Nutrients.preview theme loaded.nutrition
         ]
 

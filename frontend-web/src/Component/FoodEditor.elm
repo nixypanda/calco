@@ -1661,7 +1661,7 @@ validationErrorMessage error =
 
 view : Theme -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view theme device nutrients units form =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
@@ -1672,7 +1672,7 @@ view theme device nutrients units form =
 
 viewForCreate : Theme -> Device -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate theme device nutrients form =
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
         , basicInfoCard True theme device form
         , nutrientsCard Per100Grams AllNutrients theme device form nutrients
@@ -1703,7 +1703,7 @@ viewForLog visibility theme device nutrients units form =
                         SaveCustomFoodThenLog _ ->
                             True
             in
-            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 ([ basicInfoCard saving theme device form
                  , loggedPortionCard theme device units form logFields
                  , nutrientsCard PerLoggedPortion visibility theme device form nutrients
@@ -1995,7 +1995,7 @@ servingsCard theme device form units =
         , body =
             [ Element.column
                 [ Element.width Element.fill
-                , Element.spacing DesignTokens.space12
+                , Element.spacing DesignTokens.space16
                 ]
                 (if List.isEmpty form.servings then
                     [ Typography.mutedParagraph theme

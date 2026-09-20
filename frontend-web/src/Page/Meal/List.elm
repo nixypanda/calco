@@ -15,6 +15,7 @@ import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
 import Lib.Text as Text
 import Ui.Button as Button
+import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -94,7 +95,7 @@ contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
 contentView { model, device, theme } =
     Element.column
         [ Element.width Element.fill
-        , Element.spacing 16
+        , Element.spacing DesignTokens.space16
         ]
         [ case model of
             Loaded _ ->

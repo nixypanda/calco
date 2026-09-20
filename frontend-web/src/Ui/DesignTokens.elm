@@ -4,11 +4,9 @@ module Ui.DesignTokens exposing
     , radiusHairline
     , radiusPill
     , radiusSmall
-    , space12
     , space16
     , space2
-    , space20
-    , space24
+    , space32
     , space4
     , space8
     )
@@ -31,24 +29,14 @@ space8 =
     8
 
 
-space12 : Int
-space12 =
-    12
-
-
 space16 : Int
 space16 =
     16
 
 
-space20 : Int
-space20 =
-    20
-
-
-space24 : Int
-space24 =
-    24
+space32 : Int
+space32 =
+    32
 
 
 

@@ -602,7 +602,7 @@ componentView theme loaded component =
     in
     Element.row
         [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
+        , Element.spacing DesignTokens.space8
         ]
         [ Element.el
             [ Element.width (Element.px 12)
@@ -630,7 +630,7 @@ nutritionView theme device loaded =
         input =
             nutritionInput loaded.nutrition
     in
-    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+    Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.card theme
             [ View.QuantityInput.dropdown theme
                 device
@@ -685,7 +685,7 @@ mealShowSkeleton theme =
             }
         , Skeleton.card theme { rows = 2 }
         , Skeleton.card theme { rows = 3 }
-        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+        , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Element.el [ Element.width Element.fill ] (Skeleton.button theme)
             , Element.el [ Element.width Element.fill ] (Skeleton.button theme)
             ]

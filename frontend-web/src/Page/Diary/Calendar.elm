@@ -432,7 +432,7 @@ dayLabel theme today day date maybeSummary =
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.centerX
-        , Element.spacing 4
+        , Element.spacing DesignTokens.space4
         , Element.paddingXY 1 3
         ]
         [ Element.el [ Element.centerX ]
