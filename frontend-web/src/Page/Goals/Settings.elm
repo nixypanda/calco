@@ -348,22 +348,22 @@ view { model, device, theme } =
                                 }
                             )
                     , body =
-                        [ UiInput.decimalInput theme
+                        [ UiInput.numericInput theme
                             { label = "Calories"
                             , value = ready.form.calorieTarget
                             , onChange = CalorieTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Protein (g)"
                             , value = ready.form.proteinTargetG
                             , onChange = ProteinTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Carbs (g)"
                             , value = ready.form.carbsTargetG
                             , onChange = CarbsTargetChanged
                             }
-                        , UiInput.decimalInput theme
+                        , UiInput.numericInput theme
                             { label = "Fat (g)"
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged

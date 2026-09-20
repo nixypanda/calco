@@ -3,10 +3,10 @@ module Ui.Input exposing
     , checkbox
     , completionDropdown
     , completionRow
-    , decimalInput
     , decimalInputWithSuffix
     , fieldLabel
     , input
+    , numericInput
     , numericInputMode
     , optionRow
     , passwordInput
@@ -53,22 +53,25 @@ input theme config =
     textInput theme [] config
 
 
-{-| Amount field: shows the decimal keypad on mobile and folds a locale comma
-back to a period before the page ever sees the value.
--}
-decimalInput : Theme -> InputConfig msg -> Element msg
-decimalInput theme config =
-    textInput theme
-        [ inputMode "decimal" ]
-        { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
-
-
 {-| Digits-only keypad for fields such as a barcode: no decimal separator. Passed
 through `searchInput`'s `extraAttrs` so other search fields keep their keyboard.
 -}
 numericInputMode : Element.Attribute msg
 numericInputMode =
     inputMode "numeric"
+
+
+{-| Amount field matching the nutrient table: right-aligned and tabular so
+stacked values line up, with the decimal keypad on mobile.
+-}
+numericInput : Theme -> InputConfig msg -> Element msg
+numericInput theme config =
+    textInput theme
+        [ inputMode "decimal"
+        , Font.alignRight
+        , Font.variant Font.tabularNumbers
+        ]
+        { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
 
 
 inputMode : String -> Element.Attribute msg
