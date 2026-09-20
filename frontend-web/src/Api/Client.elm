@@ -14,8 +14,10 @@ module Api.Client exposing
 
 import Dict
 import Http
+import I18n
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import Translations.Ids exposing (TranslationId(..))
 
 
 type ApiError
@@ -154,31 +156,33 @@ displayError : ApiError -> String
 displayError error =
     case error of
         BadUrl ->
-            "Could not connect to the server. Refresh the page and try again."
+            I18n.t TidApiErrorBadUrl
 
         Timeout ->
-            "The server took too long to respond. Try again."
+            I18n.t TidApiErrorTimeout
 
         NetworkError ->
-            "Could not reach the server. Check your connection and try again."
+            I18n.t TidApiErrorNetwork
 
         BadStatus _ code message ->
             if String.isEmpty code || code == "unknown" then
-                "The server could not complete the request. Try again."
+                I18n.t TidApiErrorServer
 
             else
+                -- Backend-supplied message is rendered verbatim until the error
+                -- contract exposes stable codes that the frontend can map.
                 message
 
         RateLimited maybeSeconds ->
             case maybeSeconds of
                 Just seconds ->
-                    "Too many requests. Try again in " ++ String.fromInt seconds ++ " seconds."
+                    I18n.t (TidApiErrorRateLimitedSeconds (String.fromInt seconds))
 
                 Nothing ->
-                    "Too many requests. Please wait before trying again."
+                    I18n.t TidApiErrorRateLimited
 
         BadBody ->
-            "The server returned an unexpected response. Refresh the page and try again."
+            I18n.t TidApiErrorBadBody
 
 
 failure :

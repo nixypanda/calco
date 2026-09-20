@@ -11,6 +11,8 @@ module Component.Users.CredentialForm exposing
     )
 
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -144,12 +146,12 @@ view config { model, device, theme } =
                 , body =
                     [ Typography.maybeMutedParagraph theme config.description
                     , UiInput.input theme
-                        { label = "Username"
+                        { label = I18n.t TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
                     , UiInput.passwordInput theme
-                        { label = "Password"
+                        { label = I18n.t TidCommonPassword
                         , value = form.password
                         , onChange = PasswordChanged
                         }

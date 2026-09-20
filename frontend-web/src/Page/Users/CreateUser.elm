@@ -13,7 +13,9 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -193,19 +195,19 @@ view { model, device, theme } =
     UiPage.pageContainer
         (errorView theme model
             ++ [ Surface.formSection theme
-                    "Credentials"
+                    (I18n.t TidUsersCredentials)
                     [ UiInput.input theme
-                        { label = "Username"
+                        { label = I18n.t TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
                     , UiInput.input theme
-                        { label = "Display Name"
+                        { label = I18n.t TidCommonDisplayName
                         , value = form.displayName
                         , onChange = DisplayNameChanged
                         }
                     , UiInput.passwordInput theme
-                        { label = "Initial Password"
+                        { label = I18n.t TidUsersInitialPassword
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
@@ -214,10 +216,10 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Save"
+                    , label = I18n.t TidCommonSave
                     , onPress = Submitted
                     , submitState = Just (Button.submittingOrIdle (isSubmitting model))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t TidCommonSaving)
                     , trailing = Nothing
                     }
                ]
@@ -251,10 +253,10 @@ problemMessage : Problem -> String
 problemMessage problem =
     case problem of
         UsernameRequired ->
-            "Username is required"
+            I18n.t TidCommonUsernameRequired
 
         DisplayNameRequired ->
-            "Display name is required"
+            I18n.t TidUsersDisplayNameRequired
 
         InitialPasswordRequired ->
-            "Initial password is required"
+            I18n.t TidUsersInitialPasswordRequired

@@ -6,14 +6,83 @@ import Translations.Ids exposing (TranslationId(..))
 enUsTranslations : TranslationId -> String
 enUsTranslations tid =
     case tid of
+        TidApiErrorBadBody ->
+            "The server returned an unexpected response. Refresh the page and try again."
+
+        TidApiErrorBadUrl ->
+            "Could not connect to the server. Refresh the page and try again."
+
+        TidApiErrorNetwork ->
+            "Could not reach the server. Check your connection and try again."
+
+        TidApiErrorRateLimited ->
+            "Too many requests. Please wait before trying again."
+
+        TidApiErrorRateLimitedSeconds hole0 ->
+            "Too many requests. Try again in " ++ hole0 ++ " seconds."
+
+        TidApiErrorServer ->
+            "The server could not complete the request. Try again."
+
+        TidApiErrorTimeout ->
+            "The server took too long to respond. Try again."
+
+        TidCalendarMonthApril ->
+            "April"
+
+        TidCalendarMonthAugust ->
+            "August"
+
+        TidCalendarMonthDecember ->
+            "December"
+
+        TidCalendarMonthFebruary ->
+            "February"
+
+        TidCalendarMonthJanuary ->
+            "January"
+
+        TidCalendarMonthJuly ->
+            "July"
+
+        TidCalendarMonthJune ->
+            "June"
+
+        TidCalendarMonthMarch ->
+            "March"
+
+        TidCalendarMonthMay ->
+            "May"
+
+        TidCalendarMonthNovember ->
+            "November"
+
+        TidCalendarMonthOctober ->
+            "October"
+
+        TidCalendarMonthSeptember ->
+            "September"
+
+        TidCalendarMonthYear hole0 hole1 ->
+            hole0 ++ " " ++ hole1
+
         TidCommonCancel ->
             "Cancel"
 
         TidCommonClose ->
             "Close"
 
+        TidCommonCreated ->
+            "Created"
+
+        TidCommonDisplayName ->
+            "Display Name"
+
         TidCommonNewVersionAvailable ->
             "New version available"
+
+        TidCommonPassword ->
+            "Password"
 
         TidCommonProfile ->
             "Profile"
@@ -21,17 +90,32 @@ enUsTranslations tid =
         TidCommonRouteNotMigrated ->
             "This route is not migrated yet."
 
+        TidCommonSave ->
+            "Save"
+
+        TidCommonSaving ->
+            "Saving..."
+
         TidCommonSignedIn ->
             "Signed in"
 
         TidCommonSignedInAs hole0 ->
             "Signed in as " ++ hole0
 
+        TidCommonStatus ->
+            "Status"
+
         TidCommonTapToRefresh ->
             "Tap to refresh"
 
         TidCommonUseDarkTheme ->
             "Use dark theme"
+
+        TidCommonUsername ->
+            "Username"
+
+        TidCommonUsernameRequired ->
+            "Username is required"
 
         TidDateMonthApr ->
             "Apr"
@@ -68,6 +152,75 @@ enUsTranslations tid =
 
         TidDateMonthSep ->
             "Sep"
+
+        TidDiarySettingsMealSlotsDescription ->
+            "Choose the fixed meal slots shown in your diary."
+
+        TidDiarySettingsMealSlotsTitle ->
+            "Meal slots"
+
+        TidDiarySettingsSave ->
+            "Save meal slots"
+
+        TidDiarySettingsSaved ->
+            "Saved"
+
+        TidDiarySettingsSelectAtLeastOne ->
+            "Select at least one meal slot."
+
+        TidGoalSettingsCalories ->
+            "Calories"
+
+        TidGoalSettingsCarbs ->
+            "Carbs (g)"
+
+        TidGoalSettingsDailyTargetsTitle ->
+            "Daily Targets"
+
+        TidGoalSettingsErrorCaloriesMacros ->
+            "Calories must equal protein*4 + carbs*4 + fat*9."
+
+        TidGoalSettingsErrorCaloriesPositive ->
+            "Calories must be greater than 0."
+
+        TidGoalSettingsErrorInvalidNumbers ->
+            "Enter valid numbers for all goal fields."
+
+        TidGoalSettingsErrorMacrosNonNegative ->
+            "Protein, carbs, and fat must be 0 or greater."
+
+        TidGoalSettingsFat ->
+            "Fat (g)"
+
+        TidGoalSettingsProtein ->
+            "Protein (g)"
+
+        TidGoalSettingsSave ->
+            "Save Goals"
+
+        TidGoalSettingsStatusDefaultAfter hole0 ->
+            "Using backend defaults after " ++ hole0 ++ "."
+
+        TidGoalSettingsStatusDefaultForDate ->
+            "Using backend defaults for this date."
+
+        TidGoalSettingsStatusSavedActive ->
+            "Saved goals are active."
+
+        TidGoalSettingsStatusSavedFrom hole0 ->
+            "Saved goals effective from " ++ hole0 ++ "."
+
+        TidLoginPasswordRequired ->
+            "Password is required"
+
+        TidLoginSubmit ->
+            "Log In"
+
+        TidLoginSubmitting ->
+            "Logging in..."
+
+        TidLoginTitle ->
+            "Log In"
 
         TidMealSlotBreakfast ->
             "Breakfast"
@@ -243,6 +396,21 @@ enUsTranslations tid =
         TidSearchKcalPer100g hole0 ->
             hole0 ++ " kcal per 100 g"
 
+        TidSetupDescription ->
+            "Create the admin account to get started."
+
+        TidSetupPasswordMinLength ->
+            "Password must be at least 8 characters"
+
+        TidSetupSubmit ->
+            "Create Admin"
+
+        TidSetupSubmitting ->
+            "Creating..."
+
+        TidSetupTitle ->
+            "First-Time Setup"
+
         TidTitleAddToMealSlot hole0 ->
             "Add to " ++ hole0
 
@@ -335,3 +503,54 @@ enUsTranslations tid =
 
         TidUiUnitWithCode hole0 hole1 ->
             hole0 ++ " (" ++ hole1 ++ ")"
+
+        TidUsersCreateUser ->
+            "+ Create User"
+
+        TidUsersCredentials ->
+            "Credentials"
+
+        TidUsersDisableConfirmDescription ->
+            "This user will no longer be able to sign in."
+
+        TidUsersDisableConfirmTitle ->
+            "Disable user?"
+
+        TidUsersDisableUser ->
+            "Disable User"
+
+        TidUsersDisabling ->
+            "Disabling..."
+
+        TidUsersDisplayNameRequired ->
+            "Display name is required"
+
+        TidUsersEnableUser ->
+            "Enable User"
+
+        TidUsersEnabling ->
+            "Enabling..."
+
+        TidUsersInitialPassword ->
+            "Initial Password"
+
+        TidUsersInitialPasswordRequired ->
+            "Initial password is required"
+
+        TidUsersLoadFailed hole0 ->
+            "Unable to load user: " ++ hole0
+
+        TidUsersNewPassword ->
+            "New password"
+
+        TidUsersNewPasswordRequired ->
+            "New password is required"
+
+        TidUsersResetPassword ->
+            "Reset Password"
+
+        TidUsersResetting ->
+            "Resetting..."
+
+        TidUsersSectionTitle ->
+            "Users"

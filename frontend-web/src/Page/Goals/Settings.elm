@@ -16,7 +16,9 @@ import Api.Goals exposing (SaveGoalRequest)
 import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, GoalTargets)
 import Data.LocalContext exposing (LocalContext)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Date as LocalDate
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -273,7 +275,7 @@ validate form =
     case maybeTargets of
         Just targets ->
             if targets.calorieTarget <= 0 then
-                Err "Calories must be greater than 0."
+                Err (I18n.t TidGoalSettingsErrorCaloriesPositive)
 
             else if
                 targets.proteinTargetG
@@ -283,7 +285,7 @@ validate form =
                     || targets.fatTargetG
                     < 0
             then
-                Err "Protein, carbs, and fat must be 0 or greater."
+                Err (I18n.t TidGoalSettingsErrorMacrosNonNegative)
 
             else if
                 abs
@@ -295,13 +297,13 @@ validate form =
                     )
                     > 0.0001
             then
-                Err "Calories must equal protein*4 + carbs*4 + fat*9."
+                Err (I18n.t TidGoalSettingsErrorCaloriesMacros)
 
             else
                 Ok targets
 
         _ ->
-            Err "Enter valid numbers for all goal fields."
+            Err (I18n.t TidGoalSettingsErrorInvalidNumbers)
 
 
 readyModelFor : GoalSnapshot -> ReadyModel
@@ -342,7 +344,9 @@ view { model, device, theme } =
                     { header =
                         Just
                             (Surface.sectionHeader
-                                { title = Typography.sectionTitle theme "Daily Targets"
+                                { title =
+                                    Typography.sectionTitle theme
+                                        (I18n.t TidGoalSettingsDailyTargetsTitle)
                                 , description =
                                     Just
                                         (Typography.mutedParagraph theme
@@ -353,22 +357,22 @@ view { model, device, theme } =
                             )
                     , body =
                         [ UiInput.numericInput theme
-                            { label = "Calories"
+                            { label = I18n.t TidGoalSettingsCalories
                             , value = ready.form.calorieTarget
                             , onChange = CalorieTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = "Protein (g)"
+                            { label = I18n.t TidGoalSettingsProtein
                             , value = ready.form.proteinTargetG
                             , onChange = ProteinTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = "Carbs (g)"
+                            { label = I18n.t TidGoalSettingsCarbs
                             , value = ready.form.carbsTargetG
                             , onChange = CarbsTargetChanged
                             }
                         , UiInput.numericInput theme
-                            { label = "Fat (g)"
+                            { label = I18n.t TidGoalSettingsFat
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged
                             }
@@ -380,10 +384,10 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Save Goals"
+                    , label = I18n.t TidGoalSettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (isSaving ready.save))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
@@ -394,16 +398,16 @@ statusMessage : GoalStatus -> String
 statusMessage status =
     case ( status.source, status.effectiveFrom ) of
         ( Default, Nothing ) ->
-            "Using backend defaults for this date."
+            I18n.t TidGoalSettingsStatusDefaultForDate
 
         ( Saved, Just effectiveFrom ) ->
-            "Saved goals effective from " ++ LocalDate.display effectiveFrom ++ "."
+            I18n.t (TidGoalSettingsStatusSavedFrom (LocalDate.display effectiveFrom))
 
         ( Saved, Nothing ) ->
-            "Saved goals are active."
+            I18n.t TidGoalSettingsStatusSavedActive
 
         ( Default, Just effectiveFrom ) ->
-            "Using backend defaults after " ++ LocalDate.display effectiveFrom ++ "."
+            I18n.t (TidGoalSettingsStatusDefaultAfter (LocalDate.display effectiveFrom))
 
 
 isSaving : SaveState -> Bool

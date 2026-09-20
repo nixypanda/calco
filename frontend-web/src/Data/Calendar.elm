@@ -9,7 +9,9 @@ module Data.Calendar exposing
     , shiftMonth
     )
 
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
+import Translations.Ids exposing (TranslationId(..))
 
 
 monthKey : LocalDate -> String
@@ -90,7 +92,7 @@ monthLabel : String -> String
 monthLabel period =
     case parseMonth period of
         Just ( year, month ) ->
-            monthName month ++ " " ++ String.fromInt year
+            I18n.t (TidCalendarMonthYear (monthName month) (String.fromInt year))
 
         Nothing ->
             period
@@ -182,40 +184,40 @@ monthName : Int -> String
 monthName month =
     case month of
         1 ->
-            "January"
+            I18n.t TidCalendarMonthJanuary
 
         2 ->
-            "February"
+            I18n.t TidCalendarMonthFebruary
 
         3 ->
-            "March"
+            I18n.t TidCalendarMonthMarch
 
         4 ->
-            "April"
+            I18n.t TidCalendarMonthApril
 
         5 ->
-            "May"
+            I18n.t TidCalendarMonthMay
 
         6 ->
-            "June"
+            I18n.t TidCalendarMonthJune
 
         7 ->
-            "July"
+            I18n.t TidCalendarMonthJuly
 
         8 ->
-            "August"
+            I18n.t TidCalendarMonthAugust
 
         9 ->
-            "September"
+            I18n.t TidCalendarMonthSeptember
 
         10 ->
-            "October"
+            I18n.t TidCalendarMonthOctober
 
         11 ->
-            "November"
+            I18n.t TidCalendarMonthNovember
 
         12 ->
-            "December"
+            I18n.t TidCalendarMonthDecember
 
         _ ->
             ""

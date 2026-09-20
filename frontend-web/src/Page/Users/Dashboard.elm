@@ -11,6 +11,8 @@ import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Feedback as Feedback
@@ -90,7 +92,7 @@ bodyView device theme model =
     case model of
         Loaded users ->
             Surface.section theme
-                { header = Just (Typography.sectionTitle theme "Users")
+                { header = Just (Typography.sectionTitle theme (I18n.t TidUsersSectionTitle))
                 , body =
                     List.map
                         (\user ->
@@ -105,7 +107,7 @@ bodyView device theme model =
                             theme
                             { tone = Button.Ghost
                             , width = Button.FullWidth
-                            , label = "+ Create User"
+                            , label = I18n.t TidUsersCreateUser
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
                             , submittingLabel = Nothing

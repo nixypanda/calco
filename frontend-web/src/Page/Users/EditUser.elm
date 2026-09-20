@@ -15,6 +15,8 @@ module Page.Users.EditUser exposing
 import Api.Client as Client
 import Data.User as User exposing (User)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -313,10 +315,10 @@ disableConfirmModal : Device -> Theme -> { pending : Bool } -> Element Msg
 disableConfirmModal device theme state =
     View.DeleteModal.confirmModalView theme
         device
-        { title = "Disable user?"
-        , description = "This user will no longer be able to sign in."
-        , confirmLabel = "Disable User"
-        , pendingLabel = "Disabling..."
+        { title = I18n.t TidUsersDisableConfirmTitle
+        , description = I18n.t TidUsersDisableConfirmDescription
+        , confirmLabel = I18n.t TidUsersDisableUser
+        , pendingLabel = I18n.t TidUsersDisabling
         , onCancel = CancelDisableClicked
         , onConfirm = DisableConfirmClicked
         }
@@ -330,7 +332,9 @@ userDetailsView device theme model =
             [ editUserSkeleton theme ]
 
         LoadFailed error ->
-            [ Feedback.errorBanner theme ("Unable to load user: " ++ Client.displayError error) ]
+            [ Feedback.errorBanner theme
+                (I18n.t (TidUsersLoadFailed (Client.displayError error)))
+            ]
 
         Loaded loadedUser _ ->
             [ userCard device theme model.status loadedUser ]
@@ -350,15 +354,17 @@ userCard device theme status loadedUser =
                     ]
                 )
         , body =
-            [ Surface.detailRow theme "Status" (Chip.statusBadge theme loadedUser.user.status)
+            [ Surface.detailRow theme
+                (I18n.t TidCommonStatus)
+                (Chip.statusBadge theme loadedUser.user.status)
             , Surface.detailRow theme
-                "Created"
+                (I18n.t TidCommonCreated)
                 (Element.el [ Typography.caption ] (Element.text loadedUser.user.createdAt))
             , Surface.hairline theme
             , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-                [ Typography.wrappedListItemTitle theme "Reset Password"
+                [ Typography.wrappedListItemTitle theme (I18n.t TidUsersResetPassword)
                 , UiInput.passwordInput theme
-                    { label = "New password"
+                    { label = I18n.t TidUsersNewPassword
                     , value = loadedUser.password
                     , onChange = PasswordChanged
                     }
@@ -368,10 +374,10 @@ userCard device theme status loadedUser =
                     , width = Button.FullWidth
                     , label =
                         if isResetPending status then
-                            "Resetting..."
+                            I18n.t TidUsersResetting
 
                         else
-                            "Reset Password"
+                            I18n.t TidUsersResetPassword
                     , onPress = ResetSubmitted
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -392,10 +398,10 @@ accountActionView device theme model =
                 [ if loadedUser.user.status == "active" then
                     { label =
                         if isDisablePending model.status then
-                            "Disabling..."
+                            I18n.t TidUsersDisabling
 
                         else
-                            "Disable User"
+                            I18n.t TidUsersDisableUser
                     , onPress = DisableClicked
                     , tone = Button.Danger
                     }
@@ -403,10 +409,10 @@ accountActionView device theme model =
                   else
                     { label =
                         if isEnablePending model.status then
-                            "Enabling..."
+                            I18n.t TidUsersEnabling
 
                         else
-                            "Enable User"
+                            I18n.t TidUsersEnableUser
                     , onPress = EnableClicked
                     , tone = Button.Primary
                     }
@@ -464,7 +470,7 @@ problemMessage : Problem -> String
 problemMessage problem =
     case problem of
         NewPasswordRequired ->
-            "New password is required"
+            I18n.t TidUsersNewPasswordRequired
 
 
 editUserSkeleton : Theme -> Element msg

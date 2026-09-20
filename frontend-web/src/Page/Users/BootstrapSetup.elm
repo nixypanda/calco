@@ -12,7 +12,9 @@ import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Theme exposing (Theme)
 
 
@@ -46,11 +48,11 @@ type Msg
 
 validateBootstrapAdmin : CredentialForm.Form -> Result String Auth.LoginRequest
 validateBootstrapAdmin form =
-    Text.requireTrimmed "Username is required" form.username
+    Text.requireTrimmed (I18n.t TidCommonUsernameRequired) form.username
         |> Result.andThen
             (\username ->
                 if String.length form.password < 8 then
-                    Err "Password must be at least 8 characters"
+                    Err (I18n.t TidSetupPasswordMinLength)
 
                 else
                     Ok { username = username, password = form.password }
@@ -60,10 +62,10 @@ validateBootstrapAdmin form =
 config : CredentialForm.Config Auth.LoginRequest
 config =
     { validate = validateBootstrapAdmin
-    , title = "First-Time Setup"
-    , description = Just "Create the admin account to get started."
-    , submitLabel = "Create Admin"
-    , submittingLabel = "Creating..."
+    , title = I18n.t TidSetupTitle
+    , description = Just (I18n.t TidSetupDescription)
+    , submitLabel = I18n.t TidSetupSubmit
+    , submittingLabel = I18n.t TidSetupSubmitting
     }
 
 

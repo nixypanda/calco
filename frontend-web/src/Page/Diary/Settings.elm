@@ -12,6 +12,8 @@ import Api.Client as Client
 import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -108,7 +110,7 @@ update msg model =
                         ( Ready
                             { loaded
                                 | saveState =
-                                    ValidationFailed "Select at least one meal slot."
+                                    ValidationFailed (I18n.t TidDiarySettingsSelectAtLeastOne)
                             }
                         , Cmd.none
                         , NoOp
@@ -172,11 +174,13 @@ view { model, device, theme } =
                     { header =
                         Just
                             (Surface.sectionHeader
-                                { title = Typography.sectionTitle theme "Meal slots"
+                                { title =
+                                    Typography.sectionTitle theme
+                                        (I18n.t TidDiarySettingsMealSlotsTitle)
                                 , description =
                                     Just
                                         (Typography.mutedParagraph theme
-                                            "Choose the fixed meal slots shown in your diary."
+                                            (I18n.t TidDiarySettingsMealSlotsDescription)
                                         )
                                 , trailing = Nothing
                                 }
@@ -191,13 +195,13 @@ view { model, device, theme } =
                     , width = Button.FullWidth
                     , label =
                         if loaded.saveState == Saved then
-                            "Saved"
+                            I18n.t TidDiarySettingsSaved
 
                         else
-                            "Save meal slots"
+                            I18n.t TidDiarySettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (loaded.saveState == Saving))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]

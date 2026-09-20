@@ -12,7 +12,9 @@ import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Theme exposing (Theme)
 
 
@@ -46,11 +48,11 @@ type Msg
 
 loginPayload : CredentialForm.Form -> Result String Auth.LoginRequest
 loginPayload form =
-    Text.requireTrimmed "Username is required" form.username
+    Text.requireTrimmed (I18n.t TidCommonUsernameRequired) form.username
         |> Result.andThen
             (\username ->
                 if String.isEmpty form.password then
-                    Err "Password is required"
+                    Err (I18n.t TidLoginPasswordRequired)
 
                 else
                     Ok { username = username, password = form.password }
@@ -60,10 +62,10 @@ loginPayload form =
 config : CredentialForm.Config Auth.LoginRequest
 config =
     { validate = loginPayload
-    , title = "Log In"
+    , title = I18n.t TidLoginTitle
     , description = Nothing
-    , submitLabel = "Log In"
-    , submittingLabel = "Logging in..."
+    , submitLabel = I18n.t TidLoginSubmit
+    , submittingLabel = I18n.t TidLoginSubmitting
     }
 
 
