@@ -42,6 +42,7 @@ type alias Theme =
     , dangerSolidPressed : Color
     , drawerSelectionBg : Color
     , statusGreen : Color
+    , statusGreenSoft : Color
     , statusRed : Color
     , statusActiveBg : Color
     , statusDisabledBg : Color
@@ -84,6 +85,10 @@ light =
     , dangerSolidPressed = rgb255 202 55 65
     , drawerSelectionBg = rgb255 228 243 252
     , statusGreen = rgb255 50 110 60
+
+    -- A lighter good-range green for progress fills and guidance text.
+    -- Kept near 4.5:1 against `cardSurfaceBg` so 13px captions stay legible.
+    , statusGreenSoft = rgb255 60 131 73
     , statusRed = rgb255 180 60 80
     , statusActiveBg = rgb255 200 235 200
     , statusDisabledBg = rgb255 255 200 210
@@ -130,6 +135,7 @@ dark =
     , dangerSolidPressed = rgb255 250 120 135
     , drawerSelectionBg = rgb255 20 45 62
     , statusGreen = rgb255 140 220 160
+    , statusGreenSoft = rgb255 168 236 184
     , statusRed = rgb255 255 130 150
     , statusActiveBg = rgb255 60 110 70
     , statusDisabledBg = rgb255 110 50 60

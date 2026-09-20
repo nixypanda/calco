@@ -568,10 +568,10 @@ progressColor theme nutrient =
     else
         case nutrient.status of
             Details.MetReference ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             Details.WithinLimit ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             _ ->
                 theme.brandBlue
@@ -629,10 +629,10 @@ guidanceColor theme nutrient =
     else
         case ( nutrient.coverage, nutrient.status ) of
             ( Details.CompleteCoverage, Details.MetReference ) ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             ( Details.CompleteCoverage, Details.WithinLimit ) ->
-                theme.statusGreen
+                theme.statusGreenSoft
 
             _ ->
                 theme.textMuted

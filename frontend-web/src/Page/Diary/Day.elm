@@ -756,7 +756,7 @@ calorieHero theme calories target =
                 theme.dangerSolid
 
              else
-                theme.calorieAccent
+                theme.brandBlue
             )
             DesignTokens.space12
             calories
