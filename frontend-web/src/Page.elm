@@ -1916,7 +1916,14 @@ updatePane allPanes context msg pane =
                 (CustomFoodCreate.update subMsg sub)
 
         ( GotCustomFoodEditMsg subMsg, CustomFoodEditPane productId sub ) ->
-            if not (messageMatchesPane (CustomFoodEdit.loadId subMsg) (CustomFoodEdit.modelId sub)) then
+            let
+                matches : Bool
+                matches =
+                    messageMatchesPane
+                        (CustomFoodEdit.loadId subMsg)
+                        (CustomFoodEdit.modelId sub)
+            in
+            if not matches then
                 Nothing
 
             else
@@ -1928,7 +1935,14 @@ updatePane allPanes context msg pane =
                     (CustomFoodEdit.update subMsg sub)
 
         ( GotCustomFoodShowMsg subMsg, CustomFoodShowPane productId sub ) ->
-            if not (messageMatchesPane (CustomFoodShow.loadId subMsg) (CustomFoodShow.modelId sub)) then
+            let
+                matches : Bool
+                matches =
+                    messageMatchesPane
+                        (CustomFoodShow.loadId subMsg)
+                        (CustomFoodShow.modelId sub)
+            in
+            if not matches then
                 Nothing
 
             else

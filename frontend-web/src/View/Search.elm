@@ -144,11 +144,14 @@ keydownHandler config =
                                 Decode.succeed ( config.onTabComplete, True )
 
                             "ArrowDown" ->
-                                Decode.succeed
-                                    ( config.onActiveChanged
-                                        (min (List.length config.completions - 1) (config.activeIndex + 1))
-                                    , True
-                                    )
+                                let
+                                    nextActive : Int
+                                    nextActive =
+                                        min
+                                            (List.length config.completions - 1)
+                                            (config.activeIndex + 1)
+                                in
+                                Decode.succeed ( config.onActiveChanged nextActive, True )
 
                             "ArrowUp" ->
                                 Decode.succeed

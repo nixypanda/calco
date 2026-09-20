@@ -69,7 +69,10 @@ tests =
                     (CustomFoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
                     (Tuple.first (CustomFoodShow.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed { productId = "food-1", message = networkErrorMessage })
+                    |> Expect.equal
+                        (CustomFoodShow.LoadFailed
+                            { productId = "food-1", message = networkErrorMessage }
+                        )
         , test "a load response for another product is ignored" <|
             \_ ->
                 CustomFoodShow.update (CustomFoodShow.FoodLoaded "other" (Ok food)) loadedModel
@@ -103,7 +106,10 @@ tests =
                     (CustomFoodShow.FoodLoaded "food-1" (Ok food))
                     (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
+                    |> Expect.equal
+                        (CustomFoodShow.LoadFailed
+                            { productId = "food-1", message = "old" }
+                        )
         , test "edit action navigates to custom food edit" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.EditClicked loadedModel

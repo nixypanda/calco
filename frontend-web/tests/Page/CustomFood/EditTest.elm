@@ -66,7 +66,10 @@ tests =
                     (CustomFoodEdit.FoodLoaded "food-1" (Err Client.NetworkError))
                     (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = networkErrorMessage })
+                    |> Expect.equal
+                        (CustomFoodEdit.LoadFailed
+                            { productId = "food-1", message = networkErrorMessage }
+                        )
         , test "a load response for another product is ignored" <|
             \_ ->
                 CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "other" (Ok food)) loadedModel
@@ -121,7 +124,10 @@ tests =
                     (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
                     (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
                     |> first
-                    |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
+                    |> Expect.equal
+                        (CustomFoodEdit.LoadFailed
+                            { productId = "food-1", message = "old" }
+                        )
         , test "form category query forwards suggestion request" <|
             \_ ->
                 CustomFoodEdit.update

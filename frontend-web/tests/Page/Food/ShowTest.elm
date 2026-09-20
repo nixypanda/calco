@@ -76,7 +76,11 @@ tests =
                     (FoodShow.FoodLoaded "food-1" (Ok { food | defaultQuantity = Just "3" }))
                     savingModel
                     |> first
-                    |> (\model -> ( formOf model |> Maybe.map .amount, formOf model |> Maybe.map .submitState ))
+                    |> (\model ->
+                            ( formOf model |> Maybe.map .amount
+                            , formOf model |> Maybe.map .submitState
+                            )
+                       )
                     |> Expect.equal ( Just "3", Just FoodLogForm.SubmitIdle )
         , test "units reload refreshes loaded units" <|
             \_ ->

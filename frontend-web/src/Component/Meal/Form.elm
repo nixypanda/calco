@@ -677,7 +677,13 @@ toggleUnitOpen rowId row =
         { row | unitOpen = False }
 
 
-componentRowView : Theme -> Device -> (FormFieldMsg -> msg) -> List Foods.UnitItem -> ComponentRow -> Element msg
+componentRowView :
+    Theme
+    -> Device
+    -> (FormFieldMsg -> msg)
+    -> List Foods.UnitItem
+    -> ComponentRow
+    -> Element msg
 componentRowView theme device toMsg units row =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
