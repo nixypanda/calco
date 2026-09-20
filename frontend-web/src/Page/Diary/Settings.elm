@@ -228,10 +228,18 @@ saveError state =
 
 diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
-    Surface.card theme
-        [ Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.bar theme
-        , Skeleton.button theme
-        ]
+    Surface.section theme
+        { header =
+            Just
+                (Skeleton.barCustom theme
+                    { width = Element.px 140, height = 24 }
+                )
+        , body =
+            [ Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.bar theme
+            , Skeleton.button theme
+            ]
+        , footer = Nothing
+        }

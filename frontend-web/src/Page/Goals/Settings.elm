@@ -441,10 +441,18 @@ requestError save =
 
 goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
-    Surface.card theme
-        [ Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.input theme
-        , Skeleton.button theme
-        ]
+    Surface.section theme
+        { header =
+            Just
+                (Skeleton.barCustom theme
+                    { width = Element.px 160, height = 24 }
+                )
+        , body =
+            [ Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.input theme
+            , Skeleton.button theme
+            ]
+        , footer = Nothing
+        }

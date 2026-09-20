@@ -1,12 +1,13 @@
 module Ui.Surface exposing
-    ( accentDotLabeled
+    ( PanelSection
+    , accentDotLabeled
     , card
     , detailRow
     , formSection
     , hairline
     , heroCard
-    , listCard
     , listRow
+    , panel
     , section
     , sectionHeader
     )
@@ -33,7 +34,6 @@ import Ui.Theme exposing (Mode(..), Theme)
 import Ui.Typography
     exposing
         ( caption
-        , mutedParagraph
         , subsectionTitle
         )
 
@@ -175,24 +175,59 @@ headerFade theme =
         Element.none
 
 
-section :
+{-| One sub-block inside a `panel`: an optional plain-text title followed by
+content. The title is intentionally unbanded so the panel's own header stays the
+only tinted surface.
+-}
+type alias PanelSection msg =
+    { title : Maybe (Element msg)
+    , body : List (Element msg)
+    }
+
+
+{-| A titled region that gathers several sub-blocks under one surface.
+
+Use this instead of stacking several `section` cards or leaving several `card`
+blocks untitled: the panel gives the group one header band, and its sections are
+separated by hairlines so the reader sees one object with parts.
+
+-}
+panel :
     Theme
     ->
         { header : Maybe (Element msg)
-        , body : List (Element msg)
+        , sections : List (PanelSection msg)
         , footer : Maybe (Element msg)
         }
     -> Element msg
-section theme config =
+panel theme config =
     let
+        sectionChildren : List (Element msg)
+        sectionChildren =
+            config.sections
+                |> List.indexedMap
+                    (\index sectionConfig ->
+                        (if index == 0 then
+                            []
+
+                         else
+                            [ hairline theme ]
+                        )
+                            ++ (sectionConfig.title
+                                    |> Maybe.map List.singleton
+                                    |> Maybe.withDefault []
+                               )
+                            ++ sectionConfig.body
+                    )
+                |> List.concat
+
         bodySlot : List (Element msg)
         bodySlot =
-            case config.footer of
-                Just footerEl ->
-                    config.body ++ [ hairline theme, footerEl ]
-
-                Nothing ->
-                    config.body
+            sectionChildren
+                ++ (config.footer
+                        |> Maybe.map (\footerEl -> [ hairline theme, footerEl ])
+                        |> Maybe.withDefault []
+                   )
 
         bodyRegion : List (Element msg)
         bodyRegion =
@@ -254,6 +289,30 @@ section theme config =
     surfaceShell theme (headerBand ++ bodyRegion)
 
 
+{-| A single titled block on its own surface. Equivalent to a `panel` with one
+untitled section, kept as the common case for one-block-per-page layouts.
+-}
+section :
+    Theme
+    ->
+        { header : Maybe (Element msg)
+        , body : List (Element msg)
+        , footer : Maybe (Element msg)
+        }
+    -> Element msg
+section theme config =
+    panel theme
+        { header = config.header
+        , sections =
+            if List.isEmpty config.body then
+                []
+
+            else
+                [ { title = Nothing, body = config.body } ]
+        , footer = config.footer
+        }
+
+
 sectionHeader :
     { title : Element msg
     , description : Maybe (Element msg)
@@ -289,29 +348,6 @@ formSection theme title content =
         , body = content
         , footer = Nothing
         }
-
-
-listCard : Theme -> { rows : List (Element msg), footer : Maybe (Element msg) } -> Element msg
-listCard theme config =
-    section theme
-        { header = Nothing
-        , body =
-            if List.isEmpty config.rows then
-                [ emptyListBody theme ]
-
-            else
-                List.intersperse (hairline theme) config.rows
-        , footer = config.footer
-        }
-
-
-emptyListBody : Theme -> Element msg
-emptyListBody theme =
-    Element.el
-        [ Element.width Element.fill
-        , Element.padding space16
-        ]
-        (mutedParagraph theme "No items yet.")
 
 
 listRow :

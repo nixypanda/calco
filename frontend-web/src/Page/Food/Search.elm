@@ -1153,8 +1153,13 @@ bodyView theme model device =
             Feedback.emptyState theme "Search for a food to get started."
 
         Loading ->
-            Surface.listCard theme
-                { rows =
+            Surface.section theme
+                { header =
+                    Just
+                        (Skeleton.barCustom theme
+                            { width = Element.px 120, height = 24 }
+                        )
+                , body =
                     List.map (\_ -> Skeleton.listRow theme)
                         (List.range 1 3)
                 , footer = Nothing
@@ -1171,8 +1176,9 @@ bodyView theme model device =
                 textEmptyState theme device model.scope
 
             else
-                Surface.listCard theme
-                    { rows =
+                Surface.section theme
+                    { header = Just (Typography.subsectionTitle theme "Results")
+                    , body =
                         List.map
                             (\item ->
                                 SearchView.resultRow theme
@@ -1375,9 +1381,9 @@ recentsView device theme model =
                 else
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ Typography.sectionTitle theme "Recent"
-                        , Surface.listCard theme
-                            { rows = List.map (recentItemRow device theme model) items
+                        [ Surface.section theme
+                            { header = Just (Typography.sectionTitle theme "Recent")
+                            , body = List.map (recentItemRow device theme model) items
                             , footer = Nothing
                             }
                         ]

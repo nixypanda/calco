@@ -26,7 +26,9 @@ import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
+import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
+import Ui.Typography as Typography
 import View.Nutrients
 import View.Product
 
@@ -494,6 +496,10 @@ loadedView theme device loaded =
         nutrients : List Nutrition.NutrientAmount
         nutrients =
             foodNutrientsForDisplay food form
+
+        categories : List (Element Msg)
+        categories =
+            View.Product.foodCategories theme food
     in
     Element.column
         [ Element.width Element.fill
@@ -501,9 +507,23 @@ loadedView theme device loaded =
         ]
         [ Maybe.withDefault Element.none
             (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
-        , View.Product.foodHeader theme food []
-        , Element.map FormMsg (FoodLogForm.view theme device (Just food) loaded.units form)
-        , submitActionView theme device form
+        , Surface.panel theme
+            { header = Just (View.Product.foodHeaderElement theme food [])
+            , sections =
+                (if List.isEmpty categories then
+                    []
+
+                 else
+                    [ { title = Nothing, body = categories } ]
+                )
+                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                         , body =
+                            List.map (Element.map FormMsg)
+                                (FoodLogForm.fields theme device (Just food) loaded.units form)
+                         }
+                       ]
+            , footer = Just (submitActionView theme device form)
+            }
         , View.Nutrients.nutritionCard theme nutrients
         ]
 

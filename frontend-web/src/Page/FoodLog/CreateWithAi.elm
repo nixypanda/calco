@@ -385,7 +385,8 @@ warningView theme warnings =
         Element.none
 
     else
-        Surface.card theme
+        Surface.formSection theme
+            "Estimate notes"
             (List.map
                 (\warning -> Typography.mutedParagraph theme ("Estimate: " ++ warning))
                 warnings

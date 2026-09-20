@@ -653,6 +653,11 @@ Control conventions:
   form fields.
 - use `Ui.card`, `Ui.emptyState`, `Ui.errorBanner`, `Ui.loading`, and
   `Ui.skeletonLoading` for common states.
+- use `Ui.panel` when several related blocks belong under one header: the panel
+  owns one tinted header band and its sub-blocks use plain-text titles separated
+  by hairlines. Reserve a headerless `Ui.card` for content inside a panel or a
+  block that genuinely has no heading. Use `Ui.section` for a single titled
+  block on its own surface.
 - use `Ui.badge` for compact metadata.
 - use `Ui.statBlockGroup` and progress helpers for nutrition summaries.
 

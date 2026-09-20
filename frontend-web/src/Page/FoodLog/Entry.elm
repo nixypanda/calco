@@ -631,21 +631,38 @@ loadedView theme device model =
         nutrients : List Nutrition.NutrientAmount
         nutrients =
             nutrientsForDisplay (productDetail model.item) model.log model.form
+
+        categories : List (Element Msg)
+        categories =
+            itemCategories theme (productDetail model.item)
     in
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ itemHeader theme device model
-        , Element.map FormMsg
-            (FoodLogForm.view
-                theme
-                device
-                (productDetail model.item)
-                (unitsForItem model)
-                model.form
-            )
-        , detailActionsView theme device model
+        [ Surface.panel theme
+            { header = Just (itemHeaderElement theme device model)
+            , sections =
+                (if List.isEmpty categories then
+                    []
+
+                 else
+                    [ { title = Nothing, body = categories } ]
+                )
+                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                         , body =
+                            List.map (Element.map FormMsg)
+                                (FoodLogForm.fields
+                                    theme
+                                    device
+                                    (productDetail model.item)
+                                    (unitsForItem model)
+                                    model.form
+                                )
+                         }
+                       ]
+            , footer = Just (detailActionsView theme device model)
+            }
         , View.Nutrients.responsiveNutritionCard device theme nutrients
         ]
 
@@ -706,32 +723,33 @@ nutrientsForDisplay maybeFood log form =
             savedSnapshot
 
 
-itemHeader : Theme -> Device -> LoadedModel -> Element Msg
-itemHeader theme device model =
-    let
-        maybeFood : Maybe ProductDetail
-        maybeFood =
-            productDetail model.item
-    in
-    Surface.card theme
-        [ UiPage.pageHeader theme
-            { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
-            , title = itemTitle theme model.item
-            , subtitle = Just (metaSubtitle device maybeFood model.log)
-            , actions = []
-            }
-        , case maybeFood of
-            Just food ->
-                if List.isEmpty food.categories then
-                    Element.none
+itemHeaderElement : Theme -> Device -> LoadedModel -> Element Msg
+itemHeaderElement theme device model =
+    UiPage.pageHeader theme
+        { leading = Just (View.Nutrients.macroDot theme model.log.nutrients)
+        , title = itemTitle theme model.item
+        , subtitle = Just (metaSubtitle device (productDetail model.item) model.log)
+        , actions = []
+        }
 
-                else
-                    Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                        [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
 
-            Nothing ->
-                Element.none
-        ]
+itemCategories : Theme -> Maybe ProductDetail -> List (Element Msg)
+itemCategories theme maybeFood =
+    case maybeFood of
+        Just food ->
+            if List.isEmpty food.categories then
+                []
+
+            else
+                [ Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space12
+                    ]
+                    [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
+                ]
+
+        Nothing ->
+            []
 
 
 itemTitle : Theme -> LoadedItem -> Element msg

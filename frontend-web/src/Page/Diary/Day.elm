@@ -617,46 +617,45 @@ dateCard theme model device =
         logs =
             diaryLogs model.currentDate model.diary
     in
-    Surface.card theme
-        [ Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
-            ]
-            [ Button.iconButton device
-                theme
-                { icon = Icon.ChevronLeft
-                , title = "Previous Day"
-                , onPress = Just PreviousDayClicked
-                , tone = Button.Primary
-                }
-            , Element.el
-                [ Element.width Element.fill
-                , Font.center
-                ]
-                (Typography.sectionTitle theme (LocalDate.display model.currentDate))
-            , if canGoNext then
-                Button.iconButton device
-                    theme
-                    { icon = Icon.ChevronRight
-                    , title = "Next Day"
-                    , onPress = Just NextDayClicked
-                    , tone = Button.Primary
-                    }
+    Surface.section theme
+        { header =
+            Just
+                (Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing DesignTokens.space12
+                    ]
+                    [ Button.iconButton device
+                        theme
+                        { icon = Icon.ChevronLeft
+                        , title = "Previous Day"
+                        , onPress = Just PreviousDayClicked
+                        , tone = Button.Primary
+                        }
+                    , Element.el
+                        [ Element.width Element.fill
+                        , Font.center
+                        ]
+                        (Typography.sectionTitle theme (LocalDate.display model.currentDate))
+                    , if canGoNext then
+                        Button.iconButton device
+                            theme
+                            { icon = Icon.ChevronRight
+                            , title = "Next Day"
+                            , onPress = Just NextDayClicked
+                            , tone = Button.Primary
+                            }
 
-              else
-                Button.iconButton device
-                    theme
-                    { icon = Icon.ChevronRight
-                    , title = ""
-                    , onPress = Nothing
-                    , tone = Button.Primary
-                    }
-            ]
-        , Surface.hairline theme
-        , Element.column
-            [ Element.width Element.fill
-            , Element.paddingEach { top = DesignTokens.space8, right = 0, bottom = 0, left = 0 }
-            ]
+                      else
+                        Button.iconButton device
+                            theme
+                            { icon = Icon.ChevronRight
+                            , title = ""
+                            , onPress = Nothing
+                            , tone = Button.Primary
+                            }
+                    ]
+                )
+        , body =
             [ case loadedGoalTargets model.currentDate model.diary of
                 Just targets ->
                     totalsView device theme targets (Nutrition.totalsFromLogs logs)
@@ -664,7 +663,8 @@ dateCard theme model device =
                 Nothing ->
                     totalsView device theme loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
-        ]
+        , footer = Nothing
+        }
 
 
 totalsView : Device -> Theme -> GoalTargets -> List NutrientAmount -> Element Msg

@@ -670,7 +670,8 @@ nutritionView theme device loaded =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Surface.card theme
+        [ Surface.formSection theme
+            "Portion"
             [ View.QuantityInput.dropdown theme
                 device
                 { amountLabel = "Amount"
