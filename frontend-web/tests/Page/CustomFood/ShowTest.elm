@@ -69,7 +69,20 @@ tests =
                     (CustomFoodShow.FoodLoaded (Err Client.NetworkError))
                     (Tuple.first (CustomFoodShow.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed networkErrorMessage)
+                    |> Expect.equal (CustomFoodShow.LoadFailed { productId = "food-1", message = networkErrorMessage })
+        , test "retry from load failed requests initial data again" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        CustomFoodShow.update CustomFoodShow.RetryClicked
+                            (CustomFoodShow.LoadFailed
+                                { productId = "food-1"
+                                , message = networkErrorMessage
+                                }
+                            )
+                in
+                ( isCustomFoodShowLoading model, outMsg )
+                    |> Expect.equal ( True, CustomFoodShow.RequestInitialData "food-1" )
         , test "load unauthorized expires session" <|
             \_ ->
                 CustomFoodShow.update
@@ -83,9 +96,9 @@ tests =
             \_ ->
                 CustomFoodShow.update
                     (CustomFoodShow.FoodLoaded (Ok food))
-                    (CustomFoodShow.LoadFailed "old")
+                    (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
                     |> first
-                    |> Expect.equal (CustomFoodShow.LoadFailed "old")
+                    |> Expect.equal (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
         , test "edit action navigates to custom food edit" <|
             \_ ->
                 CustomFoodShow.update CustomFoodShow.EditClicked loadedModel
@@ -263,3 +276,13 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
+
+
+isCustomFoodShowLoading : CustomFoodShow.Model -> Bool
+isCustomFoodShowLoading model =
+    case model of
+        CustomFoodShow.Loading _ ->
+            True
+
+        _ ->
+            False

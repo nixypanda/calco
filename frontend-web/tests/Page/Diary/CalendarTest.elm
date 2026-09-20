@@ -119,6 +119,19 @@ tests =
                     |> summariesAfter
                 )
                     |> Expect.equal ( [], [ summaryOn "2026-07-30" 500 ] )
+        , test "retry from failed returns to loading and requests the range" <|
+            \_ ->
+                CalendarPage.update CalendarPage.RetryClicked
+                    (calendarModel [] |> withStatus (CalendarPage.Failed "boom"))
+                    |> (\( model, _, outMsg ) ->
+                            ( model.status, outMsg )
+                       )
+                    |> Expect.equal
+                        ( CalendarPage.Loading
+                        , CalendarPage.RequestSummary
+                            (date "2026-02-01")
+                            today
+                        )
         , test "formats compact calorie values" <|
             \_ ->
                 ( CalendarPage.compactCalories 842

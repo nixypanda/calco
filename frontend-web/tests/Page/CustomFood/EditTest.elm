@@ -66,7 +66,20 @@ tests =
                     (CustomFoodEdit.FoodLoaded (Err Client.NetworkError))
                     (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> first
-                    |> Expect.equal (CustomFoodEdit.LoadFailed networkErrorMessage)
+                    |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = networkErrorMessage })
+        , test "retry from load failed requests initial data again" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        CustomFoodEdit.update CustomFoodEdit.RetryClicked
+                            (CustomFoodEdit.LoadFailed
+                                { productId = "food-1"
+                                , message = networkErrorMessage
+                                }
+                            )
+                in
+                ( isCustomFoodEditLoading model, outMsg )
+                    |> Expect.equal ( True, CustomFoodEdit.RequestInitialData "food-1" )
         , test "load failure unauthorized expires session" <|
             \_ ->
                 CustomFoodEdit.update
@@ -101,9 +114,9 @@ tests =
             \_ ->
                 CustomFoodEdit.update
                     (CustomFoodEdit.FoodLoaded (Ok food))
-                    (CustomFoodEdit.LoadFailed "old")
+                    (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
                     |> first
-                    |> Expect.equal (CustomFoodEdit.LoadFailed "old")
+                    |> Expect.equal (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
         , test "form category query forwards suggestion request" <|
             \_ ->
                 CustomFoodEdit.update
@@ -343,3 +356,13 @@ nutrientItems =
 ticket : Int -> Ticket
 ticket count =
     List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)
+
+
+isCustomFoodEditLoading : CustomFoodEdit.Model -> Bool
+isCustomFoodEditLoading model =
+    case model of
+        CustomFoodEdit.Loading _ ->
+            True
+
+        _ ->
+            False

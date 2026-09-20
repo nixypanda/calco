@@ -254,6 +254,16 @@ tests =
                     GoalsSettings.Loading
                     |> first
                     |> Expect.equal (GoalsSettings.Failed networkErrorMessage)
+        , test "retry from failed returns to loading and requests the goal" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        GoalsSettings.update
+                            GoalsSettings.RetryClicked
+                            (GoalsSettings.Failed networkErrorMessage)
+                in
+                ( model, outMsg )
+                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.RequestGoal )
         , test "a failed refresh leaves a loaded page untouched" <|
             \_ ->
                 GoalsSettings.update

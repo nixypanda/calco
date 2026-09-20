@@ -50,7 +50,7 @@ type alias LoadedModel =
 
 type Model
     = LoadingEdit LoadingModel
-    | EditLoadFailed String
+    | EditLoadFailed { mealId : String, message : String }
     | Editing LoadedModel
 
 
@@ -83,6 +83,7 @@ type Msg
     | NutrientPreviewLoaded (Result Client.ApiError MealNutritionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError Meal)
+    | RetryClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -125,7 +126,23 @@ update msg model =
                     Client.failure
                         { noOp = NoOp
                         , sessionExpired = SessionExpired
-                        , applyError = \message _ -> EditLoadFailed message
+                        , applyError =
+                            \message current ->
+                                case current of
+                                    LoadingEdit loading ->
+                                        EditLoadFailed
+                                            { mealId = loading.mealId
+                                            , message = message
+                                            }
+
+                                    Editing loaded ->
+                                        EditLoadFailed
+                                            { mealId = loaded.mealId
+                                            , message = message
+                                            }
+
+                                    EditLoadFailed _ ->
+                                        current
                         }
                         error
                         model
@@ -223,6 +240,20 @@ update msg model =
                             , Cmd.none
                             , outMsg
                             )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        RetryClicked ->
+            case model of
+                EditLoadFailed failed ->
+                    ( LoadingEdit
+                        { mealId = failed.mealId
+                        , nutrition = NutritionLoading defaultNutritionInput
+                        }
+                    , Cmd.none
+                    , RequestMeal failed.mealId
+                    )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -391,8 +422,12 @@ view { model, device, theme } =
         LoadingEdit _ ->
             UiPage.pageContainer device [ mealEditSkeleton theme ]
 
-        EditLoadFailed message ->
-            UiPage.pageContainer device [ Feedback.errorBanner theme message ]
+        EditLoadFailed failed ->
+            UiPage.pageContainer device
+                [ Feedback.errorRetry theme
+                    device
+                    { message = failed.message, onRetry = RetryClicked }
+                ]
 
         Editing loaded ->
             UiPage.pageContainer device

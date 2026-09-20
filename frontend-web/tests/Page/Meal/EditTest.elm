@@ -58,13 +58,31 @@ tests =
                     |> first
                     |> (\model ->
                             case model of
-                                MealEdit.EditLoadFailed message ->
-                                    Just message
+                                MealEdit.EditLoadFailed failed ->
+                                    Just failed.message
 
                                 _ ->
                                     Nothing
                        )
                     |> Expect.equal (Just networkErrorMessage)
+        , test "retry from edit load failed requests the meal again" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        MealEdit.update MealEdit.RetryClicked
+                            (MealEdit.EditLoadFailed
+                                { mealId = "meal-1"
+                                , message = networkErrorMessage
+                                }
+                            )
+                in
+                case model of
+                    MealEdit.LoadingEdit loading ->
+                        ( loading.mealId, outMsg )
+                            |> Expect.equal ( "meal-1", MealEdit.RequestMeal "meal-1" )
+
+                    _ ->
+                        Expect.fail "expected LoadingEdit"
         , test "nutrient preview response stores nutrients" <|
             \_ ->
                 MealEdit.update

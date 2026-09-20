@@ -36,7 +36,7 @@ import View.Product
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
@@ -85,6 +85,7 @@ type Msg
     | CancelDeleteClicked
     | ConfirmDeleteClicked
     | DeleteCompleted (Result Client.ApiError ())
+    | RetryClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -182,6 +183,21 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+        RetryClicked ->
+            case model of
+                LoadFailed failed ->
+                    ( Loading
+                        { productId = failed.productId
+                        , food = Nothing
+                        , units = Nothing
+                        }
+                    , Cmd.none
+                    , RequestInitialData failed.productId
+                    )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
 
 setLoadedFood : ProductDetail -> Model -> Model
 setLoadedFood food model =
@@ -229,7 +245,23 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                case current of
+                    Loading loading ->
+                        LoadFailed
+                            { productId = loading.productId
+                            , message = message
+                            }
+
+                    Loaded loaded ->
+                        LoadFailed
+                            { productId = loaded.productId
+                            , message = message
+                            }
+
+                    LoadFailed _ ->
+                        current
         }
 
 
@@ -251,8 +283,10 @@ view : { model : Model, device : Device, theme : Theme } -> Element Msg
 view { model, device, theme } =
     UiPage.pageContainer device
         [ case model of
-            LoadFailed message ->
-                Feedback.errorBanner theme message
+            LoadFailed failed ->
+                Feedback.errorRetry theme
+                    device
+                    { message = failed.message, onRetry = RetryClicked }
 
             _ ->
                 Element.none

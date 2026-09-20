@@ -100,6 +100,7 @@ type Msg
     | LoadEarlierClicked
     | DayClicked String String
     | TodayChanged LocalDate
+    | RetryClicked
 
 
 type OutMsg
@@ -145,6 +146,12 @@ update msg model =
 
         TodayChanged today ->
             ( { model | today = today }, Cmd.none, NoOp )
+
+        RetryClicked ->
+            ( { model | status = Loading }
+            , Cmd.none
+            , requestForMonths model.oldestMonth model.newestMonth model.today
+            )
 
 
 replaceDay : LocalDate -> Maybe DaySummary -> List DaySummary -> List DaySummary
@@ -282,7 +289,7 @@ contentViewWithSelection selectedDate { model, device, theme } =
                 calendarSkeleton theme model
 
             Failed message ->
-                [ Feedback.errorBanner theme message ]
+                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
 
             Ready ->
                 monthsView device theme model selectedDate False

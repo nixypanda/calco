@@ -1,6 +1,7 @@
 module Ui.Feedback exposing
     ( emptyState
     , errorBanner
+    , errorRetry
     , infoBanner
     , linearProgress
     , loading
@@ -8,11 +9,12 @@ module Ui.Feedback exposing
     , modalOverlay
     )
 
-import Element exposing (Element)
+import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import Ui.Button as Button
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
 import Ui.Surface as Surface
@@ -54,6 +56,25 @@ errorBanner theme message =
         , Element.width Element.fill
         ]
         [ Element.text message ]
+
+
+{-| Error banner with a retry action, for failed page loads.
+-}
+errorRetry : Theme -> Device -> { message : String, onRetry : msg } -> Element msg
+errorRetry theme device config =
+    Surface.card theme
+        [ errorBanner theme config.message
+        , Button.textButton device
+            theme
+            { tone = Button.Primary
+            , width = Button.FullWidth
+            , label = "Retry"
+            , onPress = config.onRetry
+            , submitState = Nothing
+            , submittingLabel = Nothing
+            , trailing = Nothing
+            }
+        ]
 
 
 infoBanner : Theme -> String -> Element msg

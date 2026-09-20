@@ -92,6 +92,7 @@ type Msg
     | SaveClicked
     | LocalContextReceived LocalContext
     | SaveCompleted (Result Client.ApiError GoalSnapshot)
+    | RetryClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -209,6 +210,9 @@ update msg model =
 
                 _ ->
                     ( model, Cmd.none, NoOp )
+
+        RetryClicked ->
+            ( Loading, Cmd.none, RequestGoal )
 
 
 updateForm : (Form -> Form) -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -330,7 +334,7 @@ view { model, device, theme } =
                 [ goalsSettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorBanner theme message ]
+                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
 
             Ready ready ->
                 [ Feedback.maybeErrorBanner theme (requestError ready.save)

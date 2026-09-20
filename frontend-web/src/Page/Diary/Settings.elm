@@ -41,6 +41,7 @@ type Msg
     | SlotToggled MealSlot Bool
     | SaveClicked
     | SaveCompleted (Result Client.ApiError DiaryPreferences)
+    | RetryClicked
 
 
 type OutMsg
@@ -147,6 +148,9 @@ update msg model =
                 _ ->
                     ( model, Cmd.none, NoOp )
 
+        RetryClicked ->
+            ( Loading, Cmd.none, RequestPreferences )
+
 
 canonical : List MealSlot -> List MealSlot
 canonical selected =
@@ -161,7 +165,7 @@ view { model, device, theme } =
                 [ diarySettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorBanner theme message ]
+                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
 
             Ready loaded ->
                 [ Surface.section theme

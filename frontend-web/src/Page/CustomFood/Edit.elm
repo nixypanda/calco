@@ -38,7 +38,7 @@ import Ui.Theme exposing (Theme)
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
@@ -90,6 +90,7 @@ type Msg
     | CategorySuggestionsLoaded Ticket (Result Client.ApiError CategorySuggestionResponse)
     | SubmitClicked
     | SaveCompleted (Result Client.ApiError CreateFoodResponse)
+    | RetryClicked
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -186,6 +187,22 @@ update msg model =
 
                     else
                         ( model, Cmd.none, NoOp )
+
+                _ ->
+                    ( model, Cmd.none, NoOp )
+
+        RetryClicked ->
+            case model of
+                LoadFailed failed ->
+                    ( Loading
+                        { productId = failed.productId
+                        , food = Nothing
+                        , nutrients = Nothing
+                        , units = Nothing
+                        }
+                    , Cmd.none
+                    , RequestInitialData failed.productId
+                    )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -341,7 +358,23 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                case current of
+                    Loading loading ->
+                        LoadFailed
+                            { productId = loading.productId
+                            , message = message
+                            }
+
+                    Loaded loaded ->
+                        LoadFailed
+                            { productId = loaded.productId
+                            , message = message
+                            }
+
+                    LoadFailed _ ->
+                        current
         }
 
 
@@ -375,8 +408,10 @@ bodyView { model, device, theme } =
                     }
                 ]
 
-        LoadFailed message ->
-            Feedback.errorBanner theme message
+        LoadFailed failed ->
+            Feedback.errorRetry theme
+                device
+                { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
             customFoodFormSkeleton theme

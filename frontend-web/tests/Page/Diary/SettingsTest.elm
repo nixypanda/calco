@@ -42,6 +42,16 @@ tests =
                         (Settings.RequestSave
                             { enabledMealSlots = [ Breakfast, LateNightSnack ] }
                         )
+        , test "retry from failed returns to loading and requests preferences" <|
+            \_ ->
+                let
+                    ( model, _, outMsg ) =
+                        Settings.update
+                            Settings.RetryClicked
+                            (Settings.Failed "boom")
+                in
+                ( model, outMsg )
+                    |> Expect.equal ( Settings.Loading, Settings.RequestPreferences )
         ]
 
 
