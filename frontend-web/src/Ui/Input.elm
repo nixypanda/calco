@@ -24,7 +24,9 @@ import Element.Font as Font
 import Element.Input as Input
 import Html
 import Html.Attributes
+import I18n
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Common exposing (hoverEffect, minWidthZero, uiClass)
 import Ui.DesignTokens
     exposing
@@ -495,7 +497,7 @@ selectDropdown device theme config =
                     (Element.el [ body, Font.color selectedColor ]
                         (Element.text
                             (if selectedLabel == "" then
-                                "Select…"
+                                I18n.t TidUiSelectPlaceholder
 
                              else
                                 selectedLabel

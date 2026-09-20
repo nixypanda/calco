@@ -16,6 +16,8 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
@@ -92,7 +94,7 @@ errorRetry theme device config =
             theme
             { tone = Button.Primary
             , width = Button.FullWidth
-            , label = "Retry"
+            , label = I18n.t TidUiRetry
             , onPress = config.onRetry
             , submitState = Nothing
             , submittingLabel = Nothing

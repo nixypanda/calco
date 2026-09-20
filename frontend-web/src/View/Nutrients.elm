@@ -15,7 +15,9 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import I18n
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -56,85 +58,85 @@ nutrientLabel : String -> String
 nutrientLabel code =
     case code of
         "ENERGY_KCAL" ->
-            "Energy"
+            I18n.t TidNutrientEnergy
 
         "PROTEIN_G" ->
-            "Protein"
+            I18n.t TidNutrientProtein
 
         "CARBS_G" ->
-            "Carbohydrates"
+            I18n.t TidNutrientCarbohydrates
 
         "FAT_G" ->
-            "Fat"
+            I18n.t TidNutrientFat
 
         "SATURATED_FAT_G" ->
-            "Saturated Fat"
+            I18n.t TidNutrientSaturatedFat
 
         "MONOUNSATURATED_FAT_G" ->
-            "Monounsaturated Fat"
+            I18n.t TidNutrientMonounsaturatedFat
 
         "POLYUNSATURATED_FAT_G" ->
-            "Polyunsaturated Fat"
+            I18n.t TidNutrientPolyunsaturatedFat
 
         "TRANS_FAT_G" ->
-            "Trans Fat"
+            I18n.t TidNutrientTransFat
 
         "FIBER_G" ->
-            "Fiber"
+            I18n.t TidNutrientFiber
 
         "SUGAR_G" ->
-            "Sugar"
+            I18n.t TidNutrientSugar
 
         "ADDED_SUGAR_G" ->
-            "Added Sugars"
+            I18n.t TidNutrientAddedSugars
 
         "STARCH_G" ->
-            "Starch"
+            I18n.t TidNutrientStarch
 
         "SODIUM_MG" ->
-            "Sodium"
+            I18n.t TidNutrientSodium
 
         "CHOLESTEROL_MG" ->
-            "Cholesterol"
+            I18n.t TidNutrientCholesterol
 
         "POTASSIUM_MG" ->
-            "Potassium"
+            I18n.t TidNutrientPotassium
 
         "CALCIUM_MG" ->
-            "Calcium"
+            I18n.t TidNutrientCalcium
 
         "IRON_MG" ->
-            "Iron"
+            I18n.t TidNutrientIron
 
         "MAGNESIUM_MG" ->
-            "Magnesium"
+            I18n.t TidNutrientMagnesium
 
         "ZINC_MG" ->
-            "Zinc"
+            I18n.t TidNutrientZinc
 
         "PHOSPHORUS_MG" ->
-            "Phosphorus"
+            I18n.t TidNutrientPhosphorus
 
         "VITAMIN_A_UG" ->
-            "Vitamin A"
+            I18n.t TidNutrientVitaminA
 
         "VITAMIN_C_MG" ->
-            "Vitamin C"
+            I18n.t TidNutrientVitaminC
 
         "VITAMIN_D_UG" ->
-            "Vitamin D"
+            I18n.t TidNutrientVitaminD
 
         "VITAMIN_E_MG" ->
-            "Vitamin E"
+            I18n.t TidNutrientVitaminE
 
         "VITAMIN_B6_MG" ->
-            "Vitamin B6"
+            I18n.t TidNutrientVitaminB6
 
         "VITAMIN_B12_UG" ->
-            "Vitamin B12"
+            I18n.t TidNutrientVitaminB12
 
         "FOLATE_UG" ->
-            "Folate"
+            I18n.t TidNutrientFolate
 
         _ ->
             genericNutrientLabel code
@@ -155,7 +157,7 @@ macroDot theme nutrients =
         , label =
             dominant
                 |> Maybe.map macroLabel
-                |> Maybe.withDefault "Nutrition"
+                |> Maybe.withDefault (I18n.t TidNutrientNutrition)
         }
 
 
@@ -163,13 +165,13 @@ macroLabel : Nutrition.Macro -> String
 macroLabel macro =
     case macro of
         Nutrition.Protein ->
-            "Protein-rich"
+            I18n.t TidNutrientProteinRich
 
         Nutrition.Carbs ->
-            "Carb-rich"
+            I18n.t TidNutrientCarbRich
 
         Nutrition.Fat ->
-            "Fat-rich"
+            I18n.t TidNutrientFatRich
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.
@@ -283,7 +285,7 @@ preview device theme state =
                 Feedback.errorBanner theme errMsg
 
             NutritionUnavailable _ ->
-                Feedback.errorBanner theme "Unavailable"
+                Feedback.errorBanner theme (I18n.t TidNutrientUnavailable)
         ]
 
 
@@ -440,17 +442,17 @@ macroLegendItems theme portions =
     [ Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.proteinAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
+            (Element.text (I18n.t (TidNutrientLegendProtein (Number.toFixedOne portions.protein))))
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.carbsAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
+            (Element.text (I18n.t (TidNutrientLegendCarbs (Number.toFixedOne portions.carbs))))
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.fatAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
+            (Element.text (I18n.t (TidNutrientLegendFat (Number.toFixedOne portions.fat))))
         ]
     ]
 
@@ -476,7 +478,7 @@ nutrientsTableInner theme nutrients =
         , columns =
             [ { header =
                     Element.el [ Element.paddingXY 0 DesignTokens.space8 ]
-                        (Typography.tableHeader theme "Nutrient")
+                        (Typography.tableHeader theme (I18n.t TidNutrientTableNutrient))
               , width = Element.fill
               , view =
                     \n ->
@@ -494,7 +496,7 @@ nutrientsTableInner theme nutrients =
                             , right = DesignTokens.space8
                             }
                         ]
-                        (Typography.tableHeader theme "Amount")
+                        (Typography.tableHeader theme (I18n.t TidNutrientTableAmount))
               , width = Element.shrink
               , view =
                     \n ->
@@ -518,7 +520,7 @@ nutrientsTableInner theme nutrients =
                             , right = 0
                             }
                         ]
-                        (Typography.tableHeader theme "Unit")
+                        (Typography.tableHeader theme (I18n.t TidNutrientTableUnit))
               , width = Element.shrink
               , view =
                     \n ->
@@ -537,7 +539,7 @@ the prior pattern of two stacked cards.
 nutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
 nutritionCard device theme nutrients =
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Nutrition")
+        { header = Just (Typography.subsectionTitle theme (I18n.t TidNutrientNutrition))
         , body =
             [ macroBreakdownView device theme nutrients
             , Surface.hairline theme

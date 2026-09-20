@@ -19,6 +19,8 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Common exposing (minWidthZero, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
@@ -459,7 +461,7 @@ detailRow theme label value =
         , minWidthZero
         ]
         [ Element.el [ Font.color theme.textMedium, caption ]
-            (Element.text (label ++ ":"))
+            (Element.text (I18n.t (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value
         ]
 

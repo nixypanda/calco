@@ -50,6 +50,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
 import Page.CustomFood.Edit as CustomFoodEdit
@@ -76,6 +77,7 @@ import Page.Users.EditUser as AdminEditUser
 import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
+import Translations.Ids exposing (TranslationId(..))
 import Ui.DesignTokens as DesignTokens
 import Ui.Skeleton as Skeleton
 import Ui.Theme exposing (Theme)
@@ -995,7 +997,7 @@ panesForRoute context existing =
             Just
                 [ simpleDesired
                     "placeholder:unmigrated"
-                    (PlaceholderPane "This route is not migrated yet.")
+                    (PlaceholderPane (I18n.t TidCommonRouteNotMigrated))
                 ]
 
 

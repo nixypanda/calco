@@ -10,8 +10,10 @@ import Element exposing (Device, Element)
 import Html
 import Html.Attributes
 import Html.Events
+import I18n
 import Json.Decode as Decode
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
 import Ui.CategoryTag as CategoryTag exposing (CategoryTag)
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
@@ -292,7 +294,8 @@ metaText query item =
 
       else
         Nothing
-    , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.nutritionSummary.per100g.energyKcal
+    , item.nutritionSummary.per100g.energyKcal
+        |> Maybe.map (\kcal -> I18n.t (TidSearchKcalPer100g kcal))
     ]
         |> Text.dotSeparated
 

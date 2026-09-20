@@ -5,6 +5,8 @@ module View.DeleteModal exposing
     )
 
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Theme exposing (Theme)
@@ -71,7 +73,10 @@ confirmModalView theme device config state =
         , actions =
             Button.bottomActionButtons device
                 theme
-                [ { label = "Cancel", onPress = config.onCancel, tone = Button.Primary }
+                [ { label = I18n.t TidCommonCancel
+                  , onPress = config.onCancel
+                  , tone = Button.Primary
+                  }
                 , { label =
                         if state.pending then
                             config.pendingLabel

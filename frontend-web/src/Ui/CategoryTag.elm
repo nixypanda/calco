@@ -5,6 +5,8 @@ module Ui.CategoryTag exposing
     )
 
 import Element exposing (Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
 import Ui.DesignTokens exposing (space4)
@@ -88,4 +90,4 @@ label tag =
             name
 
         CategoryOverflowTag count ->
-            "+" ++ String.fromInt count ++ " more"
+            I18n.t (TidUiCategoryOverflowMore (String.fromInt count))

@@ -3,6 +3,8 @@ module View.QuantityInput exposing (dropdown, unitOptions)
 import Data.Food exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.DesignTokens as DesignTokens
 import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
@@ -74,4 +76,4 @@ label unit =
         unit.code
 
     else
-        unit.name ++ " (" ++ unit.code ++ ")"
+        I18n.t (TidUiUnitWithCode unit.name unit.code)

@@ -14,8 +14,10 @@ module Lib.Date exposing
     )
 
 import Char
+import I18n
 import Json.Decode as Decode exposing (Decoder)
 import Time
+import Translations.Ids exposing (TranslationId(..))
 
 
 type LocalDate
@@ -257,40 +259,40 @@ monthName : Int -> String
 monthName month =
     case month of
         1 ->
-            "Jan"
+            I18n.t TidDateMonthJan
 
         2 ->
-            "Feb"
+            I18n.t TidDateMonthFeb
 
         3 ->
-            "Mar"
+            I18n.t TidDateMonthMar
 
         4 ->
-            "Apr"
+            I18n.t TidDateMonthApr
 
         5 ->
-            "May"
+            I18n.t TidDateMonthMay
 
         6 ->
-            "Jun"
+            I18n.t TidDateMonthJun
 
         7 ->
-            "Jul"
+            I18n.t TidDateMonthJul
 
         8 ->
-            "Aug"
+            I18n.t TidDateMonthAug
 
         9 ->
-            "Sep"
+            I18n.t TidDateMonthSep
 
         10 ->
-            "Oct"
+            I18n.t TidDateMonthOct
 
         11 ->
-            "Nov"
+            I18n.t TidDateMonthNov
 
         12 ->
-            "Dec"
+            I18n.t TidDateMonthDec
 
         _ ->
             ""

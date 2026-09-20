@@ -6,6 +6,9 @@ module Data.MealSlot exposing
     , toString
     )
 
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+
 
 type MealSlot
     = Breakfast
@@ -65,16 +68,16 @@ label : MealSlot -> String
 label slot =
     case slot of
         Breakfast ->
-            "Breakfast"
+            I18n.t TidMealSlotBreakfast
 
         Lunch ->
-            "Lunch"
+            I18n.t TidMealSlotLunch
 
         Dinner ->
-            "Dinner"
+            I18n.t TidMealSlotDinner
 
         Snack ->
-            "Snack"
+            I18n.t TidMealSlotSnack
 
         LateNightSnack ->
-            "Late-night Snack"
+            I18n.t TidMealSlotLateNightSnack

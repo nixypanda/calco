@@ -20,6 +20,8 @@ import Element.Font as Font
 import Element.Input as Input
 import Element.Region as Region
 import Html.Attributes
+import I18n
+import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -156,7 +158,7 @@ topBarView config profile =
 themeToggle : Theme -> msg -> Element msg
 themeToggle theme onToggle =
     UiInput.toggleSwitch theme
-        { label = "Use dark theme"
+        { label = I18n.t TidCommonUseDarkTheme
         , isActive = theme.mode == Theme.Dark
         , onToggle = onToggle
         }
@@ -169,7 +171,7 @@ leadingButton device theme leading onMenuClick onNavigate =
             Button.iconButton device
                 theme
                 { icon = Icon.Menu
-                , title = "Menu"
+                , title = I18n.t TidNavMenu
                 , onPress = Just onMenuClick
                 , tone = Button.Primary
                 }
@@ -178,7 +180,7 @@ leadingButton device theme leading onMenuClick onNavigate =
             Button.iconButton device
                 theme
                 { icon = Icon.ChevronLeft
-                , title = "Back"
+                , title = I18n.t TidNavBack
                 , onPress = Just (onNavigate route)
                 , tone = Button.Primary
                 }
@@ -227,8 +229,8 @@ profileInitialButton onPress theme label =
         , Border.rounded DesignTokens.radiusPill
         , Border.width 1
         , Border.color theme.divider
-        , Element.htmlAttribute (Html.Attributes.title "Profile")
-        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" "Profile")
+        , Element.htmlAttribute (Html.Attributes.title (I18n.t TidCommonProfile))
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" (I18n.t TidCommonProfile))
         ]
         { onPress = Just onPress
         , label = Element.text label
@@ -254,13 +256,14 @@ updateBanner theme onPress =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ Element.el [ Element.centerY ] (Element.text "New version available")
+                [ Element.el [ Element.centerY ]
+                    (Element.text (I18n.t TidCommonNewVersionAvailable))
                 , Element.el
                     [ Element.alignRight
                     , Element.centerY
                     , Font.bold
                     ]
-                    (Element.text "Tap to refresh")
+                    (Element.text (I18n.t TidCommonTapToRefresh))
                 ]
         }
 
@@ -278,7 +281,7 @@ screenMeta device session route =
     in
     case route of
         Root ->
-            { title = "Diary"
+            { title = I18n.t TidTitleDiary
             , leading =
                 if phoneNonAdmin then
                     ShowAppIcon
@@ -288,7 +291,7 @@ screenMeta device session route =
             }
 
         DiaryDay _ maybeCalendarMonth ->
-            { title = "Diary"
+            { title = I18n.t TidTitleDiary
             , leading =
                 case maybeCalendarMonth of
                     Just month ->
@@ -303,73 +306,73 @@ screenMeta device session route =
             }
 
         DiaryCalendar _ ->
-            { title = "Calendar"
+            { title = I18n.t TidTitleCalendar
             , leading = GoBack (DiaryDay Nothing Nothing)
             }
 
         NutritionDetails maybeDate ->
-            { title = "Nutrition details"
+            { title = I18n.t TidTitleNutritionDetails
             , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
         AdminDashboard ->
-            { title = "Admin", leading = OpenMenu }
+            { title = I18n.t TidTitleAdmin, leading = OpenMenu }
 
         AdminCreateUser ->
-            { title = "Create User", leading = GoBack AdminDashboard }
+            { title = I18n.t TidTitleCreateUser, leading = GoBack AdminDashboard }
 
         AdminEditUser _ ->
-            { title = "Edit User", leading = GoBack AdminDashboard }
+            { title = I18n.t TidTitleEditUser, leading = GoBack AdminDashboard }
 
         GoalSettings ->
-            { title = "Goals", leading = GoBack (DiaryDay Nothing Nothing) }
+            { title = I18n.t TidTitleGoals, leading = GoBack (DiaryDay Nothing Nothing) }
 
         DiarySettings ->
-            { title = "Diary settings", leading = GoBack (DiaryDay Nothing Nothing) }
+            { title = I18n.t TidTitleDiarySettings, leading = GoBack (DiaryDay Nothing Nothing) }
 
         FoodSearch maybeDate maybeSlot ->
             { title =
                 case maybeSlot of
                     Just slot ->
-                        "Add to " ++ MealSlot.label slot
+                        I18n.t (TidTitleAddToMealSlot (MealSlot.label slot))
 
                     Nothing ->
-                        "Search Foods"
+                        I18n.t TidTitleSearchFoods
             , leading = GoBack (DiaryDay maybeDate Nothing)
             }
 
         FoodShow _ maybeDate maybeSlot _ ->
-            { title = "Log Food", leading = GoBack (FoodSearch maybeDate maybeSlot) }
+            { title = I18n.t TidTitleLogFood, leading = GoBack (FoodSearch maybeDate maybeSlot) }
 
         FoodLogEntry _ maybeDate maybeCalendarMonth ->
-            { title = "Edit Log"
+            { title = I18n.t TidTitleEditLog
             , leading = GoBack (DiaryDay maybeDate maybeCalendarMonth)
             }
 
         AdHocLogCreate maybeDate maybeSlot ->
-            { title = "Manual Food Log"
+            { title = I18n.t TidTitleManualFoodLog
             , leading = GoBack (FoodSearch maybeDate maybeSlot)
             }
 
         AiLogCreate maybeDate maybeSlot ->
-            { title = "Log with AI"
+            { title = I18n.t TidTitleLogWithAi
             , leading = GoBack (FoodSearch maybeDate maybeSlot)
             }
 
         CustomFoodCreate ->
-            { title = "Create Food", leading = GoBack CustomFoodList }
+            { title = I18n.t TidTitleCreateFood, leading = GoBack CustomFoodList }
 
         CustomFoodCreateWithAi ->
-            { title = "Create with AI", leading = GoBack CustomFoodList }
+            { title = I18n.t TidTitleCreateWithAi, leading = GoBack CustomFoodList }
 
         CustomFoodEdit _ ->
-            { title = "Edit Food", leading = GoBack CustomFoodList }
+            { title = I18n.t TidTitleEditFood, leading = GoBack CustomFoodList }
 
         CustomFoodShow _ ->
-            { title = "Food", leading = GoBack CustomFoodList }
+            { title = I18n.t TidTitleFood, leading = GoBack CustomFoodList }
 
         CustomFoodList ->
-            { title = "My Foods"
+            { title = I18n.t TidTitleMyFoods
             , leading =
                 if phoneNonAdmin then
                     NoLeadingAction
@@ -379,7 +382,7 @@ screenMeta device session route =
             }
 
         MealList ->
-            { title = "My Meals"
+            { title = I18n.t TidTitleMyMeals
             , leading =
                 if phoneNonAdmin then
                     NoLeadingAction
@@ -389,22 +392,22 @@ screenMeta device session route =
             }
 
         MealCreate ->
-            { title = "Create Meal", leading = GoBack MealList }
+            { title = I18n.t TidTitleCreateMeal, leading = GoBack MealList }
 
         MealShow _ ->
-            { title = "Meal", leading = GoBack MealList }
+            { title = I18n.t TidTitleMeal, leading = GoBack MealList }
 
         MealEdit _ ->
-            { title = "Edit Meal", leading = GoBack MealList }
+            { title = I18n.t TidTitleEditMeal, leading = GoBack MealList }
 
         AuthLogin ->
-            { title = "Login", leading = NoLeadingAction }
+            { title = I18n.t TidTitleLogin, leading = NoLeadingAction }
 
         BootstrapSetup ->
-            { title = "Setup", leading = NoLeadingAction }
+            { title = I18n.t TidTitleSetup, leading = NoLeadingAction }
 
         NotFound ->
-            { title = "Diary", leading = OpenMenu }
+            { title = I18n.t TidTitleDiary, leading = OpenMenu }
 
 
 
@@ -420,10 +423,10 @@ bottomNavBar :
     -> Element msg
 bottomNavBar config =
     bottomNavContainer config.theme
-        [ tabButton config "Diary" (DiaryDay Nothing Nothing) Icon.Home
-        , tabButton config "Search" (FoodSearch Nothing Nothing) Icon.Search
-        , tabButton config "Foods" CustomFoodList Icon.Box
-        , tabButton config "Meals" MealList Icon.Utensils
+        [ tabButton config (I18n.t TidNavDiary) (DiaryDay Nothing Nothing) Icon.Home
+        , tabButton config (I18n.t TidNavSearch) (FoodSearch Nothing Nothing) Icon.Search
+        , tabButton config (I18n.t TidNavFoods) CustomFoodList Icon.Box
+        , tabButton config (I18n.t TidNavMeals) MealList Icon.Utensils
         ]
 
 
@@ -609,7 +612,7 @@ drawerView config =
             [ Button.iconButton config.device
                 config.theme
                 { icon = Icon.Menu
-                , title = "Close"
+                , title = I18n.t TidCommonClose
                 , onPress = Just config.onClose
                 , tone = Button.Primary
                 }
@@ -629,32 +632,39 @@ drawerItems :
     -> List (Element msg)
 drawerItems config =
     if Auth.isAdmin config.session then
-        [ drawerItem config.theme config.route config.onNavigate Nothing "Admin" AdminDashboard ]
+        [ drawerItem
+            config.theme
+            config.route
+            config.onNavigate
+            Nothing
+            (I18n.t TidNavAdmin)
+            AdminDashboard
+        ]
 
     else
         [ drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Home)
-            "Diary"
+            (I18n.t TidNavDiary)
             (DiaryDay Nothing Nothing)
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Search)
-            "Search Foods"
+            (I18n.t TidNavSearchFoods)
             (FoodSearch Nothing Nothing)
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Box)
-            "My Foods"
+            (I18n.t TidNavMyFoods)
             CustomFoodList
         , drawerItem config.theme
             config.route
             config.onNavigate
             (Just Icon.Utensils)
-            "My Meals"
+            (I18n.t TidNavMyMeals)
             MealList
         ]
 
@@ -802,16 +812,16 @@ profileMenuContent config =
     [ Typography.mutedCaption config.theme
         (case config.session of
             Auth.Authenticated identity ->
-                "Signed in as " ++ identity.username
+                I18n.t (TidCommonSignedInAs identity.username)
 
             _ ->
-                "Signed in"
+                I18n.t TidCommonSignedIn
         )
     , Button.textButton config.device
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = "Calendar"
+        , label = I18n.t TidNavCalendar
         , onPress = config.onNavigate (DiaryCalendar Nothing)
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -821,7 +831,7 @@ profileMenuContent config =
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = "Goals"
+        , label = I18n.t TidNavGoals
         , onPress = config.onNavigate GoalSettings
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -831,7 +841,7 @@ profileMenuContent config =
         config.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = "Meal slots"
+        , label = I18n.t TidNavMealSlots
         , onPress = config.onNavigate DiarySettings
         , submitState = Nothing
         , submittingLabel = Nothing
@@ -841,7 +851,7 @@ profileMenuContent config =
         config.theme
         { tone = Button.Danger
         , width = Button.FullWidth
-        , label = "Logout"
+        , label = I18n.t TidNavLogout
         , onPress = config.onLogout
         , submitState = Nothing
         , submittingLabel = Nothing
