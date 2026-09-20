@@ -39,6 +39,13 @@ body {
   box-shadow: var(--ui-card-shadow);
 }
 
+.ui-unit-field:focus-within {
+  /* The inner input is clipped by the field container, so the focus ring lives on
+     the container instead of relying on the global :focus-visible outline. */
+  border-color: var(--ui-focus-ring, #008f87);
+  box-shadow: 0 0 0 2px rgba(0, 143, 135, 0.25);
+}
+
 /* Shared motion
    These classes are attached by Elm primitives and centralize transitions/animations. */
 /* Motion classes stay in CSS because transitions, keyframes, and media queries are

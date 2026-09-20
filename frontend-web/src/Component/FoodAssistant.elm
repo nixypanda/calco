@@ -880,7 +880,7 @@ descriptionInput theme chat =
         [ Element.width Element.fill
         , Element.height (Element.px 120)
         , Border.rounded DesignTokens.radiusControl
-        , Background.color theme.inputFill
+        , Background.color theme.cardBg
         , Element.padding DesignTokens.space12
         ]
         { onChange = DescriptionChanged

@@ -31,6 +31,7 @@ import Ui.DesignTokens
         , radiusControl
         , radiusPill
         , space12
+        , space16
         , space2
         , space4
         , space8
@@ -45,6 +46,35 @@ type alias InputConfig msg =
     , value : String
     , onChange : String -> msg
     }
+
+
+{-| elm-ui moves `Element.padding` on `Input.text` into the inner `<input>` as
+`height`/`line-height` (`calc(1em + 2 * padding)`), so equal top and bottom
+padding is what vertically centers the text at 44px. Setting an explicit
+`Element.height` on `Input.text` lands on the outer wrapper instead and leaves
+the text pinned to the top.
+-}
+fieldVerticalPadding : Int
+fieldVerticalPadding =
+    14
+
+
+{-| Wide enough for the longest common unit ("kcal") at body size plus the
+segment's horizontal padding, so the unit column does not resize as units change.
+-}
+unitFieldMinWidth : Int
+unitFieldMinWidth =
+    64
+
+
+{-| Shared edge for every field, so plain inputs and segmented fields (unit
+suffix, dropdown chevron) render the same border instead of elm-ui's default.
+-}
+inputBorder : Theme -> List (Element.Attribute msg)
+inputBorder theme =
+    [ Border.width 1
+    , Border.color theme.divider
+    ]
 
 
 input : Theme -> InputConfig msg -> Element msg
@@ -82,10 +112,16 @@ textInput : Theme -> List (Element.Attribute msg) -> InputConfig msg -> Element 
 textInput theme extraAttrs config =
     Input.text
         ([ Border.rounded radiusControl
-         , Background.color theme.inputFill
-         , Element.paddingEach { top = 14, right = 10, bottom = 14, left = 10 }
+         , Background.color theme.cardBg
+         , Element.paddingEach
+            { top = fieldVerticalPadding
+            , right = 10
+            , bottom = fieldVerticalPadding
+            , left = 10
+            }
          , uiClass "ui-motion"
          ]
+            ++ inputBorder theme
             ++ extraAttrs
         )
         { onChange = config.onChange
@@ -107,10 +143,16 @@ searchInput :
 searchInput theme config =
     Input.text
         ([ Border.rounded radiusControl
-         , Background.color theme.inputFill
-         , Element.paddingEach { top = 14, right = 12, bottom = 14, left = 12 }
+         , Background.color theme.cardBg
+         , Element.paddingEach
+            { top = fieldVerticalPadding
+            , right = 12
+            , bottom = fieldVerticalPadding
+            , left = 12
+            }
          , uiClass "ui-motion"
          ]
+            ++ inputBorder theme
             ++ config.extraAttrs
         )
         { onChange = config.onChange
@@ -123,11 +165,18 @@ searchInput theme config =
 passwordInput : Theme -> InputConfig msg -> Element msg
 passwordInput theme config =
     Input.currentPassword
-        [ Border.rounded radiusControl
-        , Background.color theme.inputFill
-        , Element.paddingEach { top = 14, right = 10, bottom = 14, left = 10 }
-        , uiClass "ui-motion"
-        ]
+        ([ Border.rounded radiusControl
+         , Background.color theme.cardBg
+         , Element.paddingEach
+            { top = fieldVerticalPadding
+            , right = 10
+            , bottom = fieldVerticalPadding
+            , left = 10
+            }
+         , uiClass "ui-motion"
+         ]
+            ++ inputBorder theme
+        )
         { onChange = config.onChange
         , text = config.value
         , placeholder = Nothing
@@ -156,38 +205,71 @@ decimalInputWithSuffix :
         }
     -> Element msg
 decimalInputWithSuffix theme config =
-    Element.column
-        [ Element.width Element.fill
-        , Element.spacing space4
-        ]
-        [ fieldLabel theme config.label
-        , Element.el
-            [ Element.width Element.fill
-            , Element.inFront
-                (Element.el
-                    [ Element.alignRight
-                    , Element.centerY
-                    , Element.paddingEach { top = 0, right = 12, bottom = 0, left = 0 }
-                    , Font.color theme.textMuted
-                    , body
-                    ]
-                    (Element.text config.suffix)
-                )
-            ]
-            (Input.text
-                [ Border.rounded radiusControl
-                , Background.color theme.inputFill
-                , Element.width Element.fill
-                , Element.paddingEach { top = 14, right = 56, bottom = 14, left = 10 }
+    let
+        unitId : String
+        unitId =
+            String.toLower (String.replace " " "-" config.label) ++ "-unit"
+
+        inputElement : Element msg
+        inputElement =
+            Input.text
+                [ Element.width Element.fill
+                , Element.paddingEach
+                    { top = fieldVerticalPadding
+                    , right = space12
+                    , bottom = fieldVerticalPadding
+                    , left = space16
+                    }
+                , Border.width 0
+                , Border.rounded 0
+                , Background.color theme.cardBg
+                , body
+                , Font.alignLeft
+                , Font.variant Font.tabularNumbers
                 , uiClass "ui-motion"
                 , inputMode "decimal"
+                , Element.htmlAttribute
+                    (Html.Attributes.attribute "aria-describedby" unitId)
                 ]
                 { onChange = config.onChange << Number.normalizeDecimalSeparator
                 , text = config.text
                 , placeholder = Nothing
                 , label = Input.labelHidden config.label
                 }
-            )
+
+        unitElement : Element msg
+        unitElement =
+            Element.el
+                [ Element.width (Element.shrink |> Element.minimum unitFieldMinWidth)
+                , Element.height Element.fill
+                , Element.paddingXY space16 0
+                , Background.color theme.inputFill
+                , Font.color theme.textMuted
+                , Border.widthEach { top = 0, right = 0, bottom = 0, left = 1 }
+                , Border.color theme.divider
+                , Element.htmlAttribute (Html.Attributes.id unitId)
+                ]
+                (Element.el [ Element.centerX, Element.centerY ] (Element.text config.suffix))
+
+        fieldInput : Element msg
+        fieldInput =
+            Element.row
+                ([ Element.width Element.fill
+                 , Element.height (Element.px minimumTargetSize)
+                 , Border.rounded radiusControl
+                 , Element.clip
+                 , uiClass "ui-unit-field"
+                 ]
+                    ++ inputBorder theme
+                )
+                [ inputElement, unitElement ]
+    in
+    Element.column
+        [ Element.width Element.fill
+        , Element.spacing space4
+        ]
+        [ fieldLabel theme config.label
+        , fieldInput
         ]
 
 
@@ -365,53 +447,83 @@ selectDropdown device theme config =
 
             else
                 [ Element.width Element.fill ]
+
+        selectedColor : Element.Color
+        selectedColor =
+            if selectedLabel == "" then
+                theme.textMuted
+
+            else
+                theme.textPrimary
+
+        fieldText : Element msg
+        fieldText =
+            Element.el
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
+                ]
+                (Element.el [ Element.centerY ]
+                    (Element.el [ body, Font.color selectedColor ]
+                        (Element.text
+                            (if selectedLabel == "" then
+                                "Select…"
+
+                             else
+                                selectedLabel
+                            )
+                        )
+                    )
+                )
+
+        triggerDivider : Element msg
+        triggerDivider =
+            Element.el
+                [ Element.width (Element.px 1)
+                , Element.height Element.fill
+                , Background.color theme.divider
+                ]
+                Element.none
+
+        chevronSegment : Element msg
+        chevronSegment =
+            Element.el
+                [ Element.height Element.fill
+                , Element.paddingEach { top = 0, right = space12, bottom = 0, left = space12 }
+                , Background.color theme.cardBg
+                ]
+                (Element.el [ Element.centerY ]
+                    (Icon.view
+                        { icon =
+                            if config.isOpen then
+                                Icon.ChevronUp
+
+                            else
+                                Icon.ChevronDown
+                        , size = 20
+                        , color = theme.textMuted
+                        }
+                    )
+                )
     in
     Element.column [ Element.width Element.fill, Element.spacing space4 ]
         [ fieldLabel theme config.label
         , Element.el triggerAnchor
             (Input.button
-                [ Element.width Element.fill
-                , Border.rounded radiusControl
-                , Background.color theme.inputFill
-                , Element.padding space12
-                , Border.width 1
-                , Border.color theme.inputFill
-                , uiClass "ui-motion"
-                , hoverEffect device [ Border.color theme.brandBlue ]
-                ]
+                ([ Element.width Element.fill
+                 , Element.height (Element.px minimumTargetSize)
+                 , Border.rounded radiusControl
+                 , Background.color theme.cardBg
+                 , Element.clip
+                 , uiClass "ui-motion"
+                 , hoverEffect device [ Border.color theme.brandBlue ]
+                 ]
+                    ++ inputBorder theme
+                )
                 { onPress = Just config.onToggle
                 , label =
-                    Element.row [ Element.width Element.fill, Element.spacing space8 ]
-                        [ Element.el
-                            [ Element.width Element.fill
-                            , body
-                            , Font.color
-                                (if selectedLabel == "" then
-                                    theme.textMuted
-
-                                 else
-                                    theme.textPrimary
-                                )
-                            ]
-                            (Element.text
-                                (if selectedLabel == "" then
-                                    "Select…"
-
-                                 else
-                                    selectedLabel
-                                )
-                            )
-                        , Icon.view
-                            { icon =
-                                if config.isOpen then
-                                    Icon.ChevronUp
-
-                                else
-                                    Icon.ChevronDown
-                            , size = 20
-                            , color = theme.textMuted
-                            }
-                        ]
+                    Element.row [ Element.width Element.fill, Element.height Element.fill ]
+                        [ fieldText, triggerDivider, chevronSegment ]
                 }
             )
         ]
