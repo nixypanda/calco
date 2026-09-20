@@ -505,7 +505,7 @@ view { model, device, theme } =
             UiPage.pageContainer device
                 [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
                 , Common.viewFormFields theme device FormMsg loaded.fields
-                , nutritionView theme loaded
+                , nutritionView theme device loaded
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
@@ -520,10 +520,10 @@ view { model, device, theme } =
                 ]
 
 
-nutritionView : Theme -> LoadedModel -> Element Msg
-nutritionView theme loaded =
+nutritionView : Theme -> Device -> LoadedModel -> Element Msg
+nutritionView theme device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ View.Nutrients.preview theme loaded.nutrition
+        [ View.Nutrients.preview device theme loaded.nutrition
         ]
 
 

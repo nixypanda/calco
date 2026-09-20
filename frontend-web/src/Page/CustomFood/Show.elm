@@ -362,7 +362,7 @@ loadedView theme device loaded =
         , Element.spacing DesignTokens.space16
         ]
         [ View.Product.foodHeader theme food []
-        , View.Nutrients.nutritionCard theme nutrients
+        , View.Nutrients.nutritionCard device theme nutrients
         , bottomActionsView theme device food
         ]
 

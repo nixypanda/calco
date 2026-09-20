@@ -524,7 +524,7 @@ loadedView theme device loaded =
                        ]
             , footer = Just (submitActionView theme device form)
             }
-        , View.Nutrients.nutritionCard theme nutrients
+        , View.Nutrients.nutritionCard device theme nutrients
         ]
 
 

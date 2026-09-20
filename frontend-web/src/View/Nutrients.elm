@@ -8,7 +8,6 @@ module View.Nutrients exposing
     , nutritionCard
     , nutritionInput
     , preview
-    , responsiveNutritionCard
     )
 
 import Data.Nutrition as Nutrition exposing (NutrientAmount, defaultCode)
@@ -270,15 +269,15 @@ skeletonPreview theme =
         }
 
 
-preview : Theme -> NutritionState -> Element msg
-preview theme state =
+preview : Element.Device -> Theme -> NutritionState -> Element msg
+preview device theme state =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
                 skeletonPreview theme
 
             NutritionLoaded _ nutrients ->
-                nutritionCard theme nutrients
+                nutritionCard device theme nutrients
 
             NutritionFailed _ errMsg ->
                 Feedback.errorBanner theme errMsg
@@ -328,13 +327,8 @@ mapNutritionInput transform state =
             NutritionUnavailable input
 
 
-macroBreakdownView : Theme -> List NutrientAmount -> Element msg
-macroBreakdownView theme nutrients =
-    macroBreakdownViewWithLegend (macroLegend theme) theme nutrients
-
-
-responsiveMacroBreakdownView : Element.Device -> Theme -> List NutrientAmount -> Element msg
-responsiveMacroBreakdownView device theme nutrients =
+macroBreakdownView : Element.Device -> Theme -> List NutrientAmount -> Element msg
+macroBreakdownView device theme nutrients =
     macroBreakdownViewWithLegend (responsiveMacroLegend device theme) theme nutrients
 
 
@@ -540,25 +534,12 @@ nutrientsTableInner theme nutrients =
 then the full nutrients table below — all inside a single card. Replaces
 the prior pattern of two stacked cards.
 -}
-nutritionCard : Theme -> List NutrientAmount -> Element msg
-nutritionCard theme nutrients =
+nutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
+nutritionCard device theme nutrients =
     Surface.section theme
         { header = Just (Typography.subsectionTitle theme "Nutrition")
         , body =
-            [ macroBreakdownView theme nutrients
-            , Surface.hairline theme
-            , nutrientsTableInner theme nutrients
-            ]
-        , footer = Nothing
-        }
-
-
-responsiveNutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
-responsiveNutritionCard device theme nutrients =
-    Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Nutrition")
-        , body =
-            [ responsiveMacroBreakdownView device theme nutrients
+            [ macroBreakdownView device theme nutrients
             , Surface.hairline theme
             , nutrientsTableInner theme nutrients
             ]

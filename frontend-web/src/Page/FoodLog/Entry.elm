@@ -663,7 +663,7 @@ loadedView theme device model =
                        ]
             , footer = Just (detailActionsView theme device model)
             }
-        , View.Nutrients.responsiveNutritionCard device theme nutrients
+        , View.Nutrients.nutritionCard device theme nutrients
         ]
 
 
