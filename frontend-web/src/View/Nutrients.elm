@@ -143,12 +143,34 @@ nutrientLabel code =
 
 macroDot : Theme -> List NutrientAmount -> Element msg
 macroDot theme nutrients =
-    case nutrients |> Nutrition.dominantMacro |> Maybe.map (macroColor theme) of
-        Just c ->
-            Surface.accentDot c
+    let
+        dominant : Maybe Nutrition.Macro
+        dominant =
+            Nutrition.dominantMacro nutrients
+    in
+    Surface.accentDotLabeled
+        { color =
+            dominant
+                |> Maybe.map (macroColor theme)
+                |> Maybe.withDefault theme.calorieAccent
+        , label =
+            dominant
+                |> Maybe.map macroLabel
+                |> Maybe.withDefault "Nutrition"
+        }
 
-        Nothing ->
-            Surface.accentDot theme.calorieAccent
+
+macroLabel : Nutrition.Macro -> String
+macroLabel macro =
+    case macro of
+        Nutrition.Protein ->
+            "Protein-rich"
+
+        Nutrition.Carbs ->
+            "Carb-rich"
+
+        Nutrition.Fat ->
+            "Fat-rich"
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.

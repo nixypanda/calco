@@ -1,5 +1,5 @@
 module Ui.Surface exposing
-    ( accentDot
+    ( accentDotLabeled
     , card
     , detailRow
     , formSection
@@ -344,13 +344,19 @@ detailRow theme label value =
         ]
 
 
-accentDot : Element.Color -> Element msg
-accentDot color =
+{-| Compact color bar that stands in for a macro. It carries an accessible
+label so the meaning is not conveyed by color alone.
+-}
+accentDotLabeled : { color : Element.Color, label : String } -> Element msg
+accentDotLabeled config =
     Element.el
         [ Element.width (Element.px 4)
         , Element.height (Element.px 24)
-        , Background.color color
+        , Background.color config.color
         , Border.rounded radiusHairline
+        , Element.htmlAttribute (Html.Attributes.attribute "role" "img")
+        , Element.htmlAttribute (Html.Attributes.attribute "aria-label" config.label)
+        , Element.htmlAttribute (Html.Attributes.attribute "title" config.label)
         ]
         Element.none
 
