@@ -21,6 +21,7 @@ import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -143,8 +144,8 @@ nutrientLabel language code =
             genericNutrientLabel code
 
 
-macroDot : Theme -> Language -> List NutrientAmount -> Element msg
-macroDot theme language nutrients =
+macroDot : Env -> List NutrientAmount -> Element msg
+macroDot env nutrients =
     let
         dominant : Maybe Nutrition.Macro
         dominant =
@@ -153,12 +154,12 @@ macroDot theme language nutrients =
     Surface.accentDotLabeled
         { color =
             dominant
-                |> Maybe.map (macroColor theme)
-                |> Maybe.withDefault theme.calorieAccent
+                |> Maybe.map (macroColor env.theme)
+                |> Maybe.withDefault env.theme.calorieAccent
         , label =
             dominant
-                |> Maybe.map (macroLabel language)
-                |> Maybe.withDefault (I18n.t language TidNutrientNutrition)
+                |> Maybe.map (macroLabel env.language)
+                |> Maybe.withDefault (I18n.t env.language TidNutrientNutrition)
         }
 
 
@@ -272,21 +273,21 @@ skeletonPreview theme =
         }
 
 
-preview : Element.Device -> Theme -> Language -> NutritionState -> Element msg
-preview device theme language state =
+preview : Env -> NutritionState -> Element msg
+preview env state =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
-                skeletonPreview theme
+                skeletonPreview env.theme
 
             NutritionLoaded _ nutrients ->
-                nutritionCard device theme language nutrients
+                nutritionCard env nutrients
 
             NutritionFailed _ errMsg ->
-                Feedback.errorBanner theme errMsg
+                Feedback.errorBanner env.theme errMsg
 
             NutritionUnavailable _ ->
-                Feedback.errorBanner theme (I18n.t language TidNutrientUnavailable)
+                Feedback.errorBanner env.theme (I18n.t env.language TidNutrientUnavailable)
         ]
 
 
@@ -330,9 +331,9 @@ mapNutritionInput transform state =
             NutritionUnavailable input
 
 
-macroBreakdownView : Element.Device -> Theme -> Language -> List NutrientAmount -> Element msg
-macroBreakdownView device theme language nutrients =
-    macroBreakdownViewWithLegend (responsiveMacroLegend device theme language) theme nutrients
+macroBreakdownView : Env -> List NutrientAmount -> Element msg
+macroBreakdownView env nutrients =
+    macroBreakdownViewWithLegend (responsiveMacroLegend env) env.theme nutrients
 
 
 macroBreakdownViewWithLegend :
@@ -419,46 +420,48 @@ barSegment color pct =
         Element.none
 
 
-macroLegend : Theme -> Language -> MacroPortions -> Element msg
-macroLegend theme language portions =
-    macroLegendItems theme language portions
+macroLegend : Env -> MacroPortions -> Element msg
+macroLegend env portions =
+    macroLegendItems env portions
         |> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
 
 
-responsiveMacroLegend : Element.Device -> Theme -> Language -> MacroPortions -> Element msg
-responsiveMacroLegend device theme language portions =
-    if UiCommon.isSmall device then
-        macroLegendItems theme language portions
+responsiveMacroLegend : Env -> MacroPortions -> Element msg
+responsiveMacroLegend env portions =
+    if UiCommon.isSmall env.device then
+        macroLegendItems env portions
             |> Element.column
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
 
     else
-        macroLegend theme language portions
+        macroLegend env portions
 
 
-macroLegendItems : Theme -> Language -> MacroPortions -> List (Element msg)
-macroLegendItems theme language portions =
+macroLegendItems : Env -> MacroPortions -> List (Element msg)
+macroLegendItems env portions =
     [ Element.row [ Element.spacing DesignTokens.space4 ]
-        [ legendDot theme.proteinAccent
+        [ legendDot env.theme.proteinAccent
         , Element.el [ Typography.body ]
             (Element.text
-                (I18n.t language (TidNutrientLegendProtein (Number.toFixedOne portions.protein)))
+                (I18n.t env.language
+                    (TidNutrientLegendProtein (Number.toFixedOne portions.protein))
+                )
             )
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
-        [ legendDot theme.carbsAccent
+        [ legendDot env.theme.carbsAccent
         , Element.el [ Typography.body ]
             (Element.text
-                (I18n.t language (TidNutrientLegendCarbs (Number.toFixedOne portions.carbs)))
+                (I18n.t env.language (TidNutrientLegendCarbs (Number.toFixedOne portions.carbs)))
             )
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
-        [ legendDot theme.fatAccent
+        [ legendDot env.theme.fatAccent
         , Element.el [ Typography.body ]
             (Element.text
-                (I18n.t language (TidNutrientLegendFat (Number.toFixedOne portions.fat)))
+                (I18n.t env.language (TidNutrientLegendFat (Number.toFixedOne portions.fat)))
             )
         ]
     ]
@@ -478,20 +481,22 @@ legendDot color =
 {-| The bare nutrient table (no card wrapper), used by `nutritionCard`
 to compose macro breakdown + table inside a single shared card.
 -}
-nutrientsTableInner : Theme -> Language -> List NutrientAmount -> Element msg
-nutrientsTableInner theme language nutrients =
+nutrientsTableInner : Env -> List NutrientAmount -> Element msg
+nutrientsTableInner env nutrients =
     Element.table [ Element.width Element.fill ]
         { data = nutrients
         , columns =
             [ { header =
                     Element.el [ Element.paddingXY 0 DesignTokens.space8 ]
-                        (Typography.tableHeader theme (I18n.t language TidNutrientTableNutrient))
+                        (Typography.tableHeader env.theme
+                            (I18n.t env.language TidNutrientTableNutrient)
+                        )
               , width = Element.fill
               , view =
                     \n ->
                         Element.el
                             [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
-                            (Element.text (nutrientLabel language n.code))
+                            (Element.text (nutrientLabel env.language n.code))
               }
             , { header =
                     Element.el
@@ -503,7 +508,9 @@ nutrientsTableInner theme language nutrients =
                             , right = DesignTokens.space8
                             }
                         ]
-                        (Typography.tableHeader theme (I18n.t language TidNutrientTableAmount))
+                        (Typography.tableHeader env.theme
+                            (I18n.t env.language TidNutrientTableAmount)
+                        )
               , width = Element.shrink
               , view =
                     \n ->
@@ -527,7 +534,9 @@ nutrientsTableInner theme language nutrients =
                             , right = 0
                             }
                         ]
-                        (Typography.tableHeader theme (I18n.t language TidNutrientTableUnit))
+                        (Typography.tableHeader env.theme
+                            (I18n.t env.language TidNutrientTableUnit)
+                        )
               , width = Element.shrink
               , view =
                     \n ->
@@ -543,14 +552,18 @@ nutrientsTableInner theme language nutrients =
 then the full nutrients table below — all inside a single card. Replaces
 the prior pattern of two stacked cards.
 -}
-nutritionCard : Element.Device -> Theme -> Language -> List NutrientAmount -> Element msg
-nutritionCard device theme language nutrients =
-    Surface.section theme
-        { header = Just (Typography.subsectionTitle theme (I18n.t language TidNutrientNutrition))
+nutritionCard : Env -> List NutrientAmount -> Element msg
+nutritionCard env nutrients =
+    Surface.section env.theme
+        { header =
+            Just
+                (Typography.subsectionTitle env.theme
+                    (I18n.t env.language TidNutrientNutrition)
+                )
         , body =
-            [ macroBreakdownView device theme language nutrients
-            , Surface.hairline theme
-            , nutrientsTableInner theme language nutrients
+            [ macroBreakdownView env nutrients
+            , Surface.hairline env.theme
+            , nutrientsTableInner env nutrients
             ]
         , footer = Nothing
         }

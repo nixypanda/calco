@@ -16,15 +16,15 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail, UnitItem)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
@@ -312,50 +312,50 @@ applyDeleteError message model =
 
 
 view :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Element Msg
-view { model, device, theme, language } =
+view { model, env } =
     UiPage.pageContainer
         [ case model of
             LoadFailed failed ->
-                Feedback.errorRetry theme
-                    language
-                    device
+                Feedback.errorRetry env.theme
+                    env.language
+                    env.device
                     { message = failed.message, onRetry = RetryClicked }
 
             _ ->
                 Element.none
-        , bodyView theme device language model
+        , bodyView env model
         ]
 
 
 modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Maybe (Element Msg)
-modalView { model, device, theme, language } =
+modalView { model, env } =
     case model of
         Loaded loaded ->
-            deleteModalView theme device language loaded
+            deleteModalView env loaded
 
         _ ->
             Nothing
 
 
-bodyView : Theme -> Device -> Language -> Model -> Element Msg
-bodyView theme device language model =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded loaded ->
-            loadedView theme device language loaded
+            loadedView env loaded
 
         LoadFailed _ ->
             Element.none
 
         Loading _ ->
-            customFoodShowSkeleton theme
+            customFoodShowSkeleton env.theme
 
 
-loadedView : Theme -> Device -> Language -> LoadedModel -> Element Msg
-loadedView theme device language loaded =
+loadedView : Env -> LoadedModel -> Element Msg
+loadedView env loaded =
     let
         food : ProductDetail
         food =
@@ -369,24 +369,24 @@ loadedView theme device language loaded =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
         ]
-        [ View.Product.foodHeader theme language food []
-        , View.Nutrients.nutritionCard device theme language nutrients
-        , bottomActionsView theme device language food
+        [ View.Product.foodHeader env food []
+        , View.Nutrients.nutritionCard env nutrients
+        , bottomActionsView env food
         ]
 
 
-bottomActionsView : Theme -> Device -> Language -> ProductDetail -> Element Msg
-bottomActionsView theme device language food =
+bottomActionsView : Env -> ProductDetail -> Element Msg
+bottomActionsView env food =
     let
         actions : List { label : String, onPress : Msg, tone : Button.ButtonTone }
         actions =
             case customFoodEditRoute food of
                 Just _ ->
-                    [ { label = I18n.t language TidTitleEditFood
+                    [ { label = I18n.t env.language TidTitleEditFood
                       , onPress = EditClicked
                       , tone = Button.Primary
                       }
-                    , { label = I18n.t language TidCustomFoodDelete
+                    , { label = I18n.t env.language TidCustomFoodDelete
                       , onPress = DeleteClicked
                       , tone = Button.Danger
                       }
@@ -395,18 +395,16 @@ bottomActionsView theme device language food =
                 Nothing ->
                     []
     in
-    Button.bottomActionButtons device theme actions
+    Button.bottomActionButtons env.device env.theme actions
 
 
-deleteModalView : Theme -> Device -> Language -> LoadedModel -> Maybe (Element Msg)
-deleteModalView theme device language loaded =
-    View.DeleteModal.deleteModalView theme
-        language
-        device
-        { title = I18n.t language TidCustomFoodDeleteConfirmTitle
-        , description = I18n.t language TidCustomFoodDeleteConfirmDescription
-        , confirmLabel = I18n.t language TidCustomFoodConfirmDelete
-        , pendingLabel = I18n.t language TidCustomFoodDeleting
+deleteModalView : Env -> LoadedModel -> Maybe (Element Msg)
+deleteModalView env loaded =
+    View.DeleteModal.deleteModalView env
+        { title = I18n.t env.language TidCustomFoodDeleteConfirmTitle
+        , description = I18n.t env.language TidCustomFoodDeleteConfirmDescription
+        , confirmLabel = I18n.t env.language TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t env.language TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }

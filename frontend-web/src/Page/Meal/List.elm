@@ -12,13 +12,13 @@ import Api.Client as Client
 import Api.Meals as MealsApi exposing (Meal)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -94,8 +94,8 @@ failure =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-contentView { model, device, theme, language } =
+contentView : { model : Model, env : Env } -> Element Msg
+contentView { model, env } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -105,26 +105,26 @@ contentView { model, device, theme, language } =
                 Element.none
 
             LoadFailed message ->
-                Feedback.errorBanner theme message
+                Feedback.errorBanner env.theme message
 
             Loading ->
                 Element.none
-        , bodyView theme language device model
+        , bodyView env model
         ]
 
 
-bodyView : Theme -> Language -> Device -> Model -> Element Msg
-bodyView theme language device model =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded meals ->
-            Surface.section theme
+            Surface.section env.theme
                 { header =
                     Just
-                        (Button.textButton device
-                            theme
+                        (Button.textButton env.device
+                            env.theme
                             { tone = Button.Primary
                             , width = Button.FullWidth
-                            , label = I18n.t language TidMealListCreate
+                            , label = I18n.t env.language TidMealListCreate
                             , onPress = CreateMealClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -134,13 +134,13 @@ bodyView theme language device model =
                 , body =
                     if List.isEmpty meals then
                         [ Typography.mutedBodyParagraph
-                            theme
-                            (I18n.t language TidCustomFoodListEmpty)
+                            env.theme
+                            (I18n.t env.language TidCustomFoodListEmpty)
                         ]
 
                     else
-                        List.intersperse (Surface.hairline theme)
-                            (List.map (mealRow theme language device) meals)
+                        List.intersperse (Surface.hairline env.theme)
+                            (List.map (mealRow env) meals)
                 , footer = Nothing
                 }
 
@@ -148,18 +148,18 @@ bodyView theme language device model =
             Element.none
 
         Loading ->
-            mealListSkeleton theme
+            mealListSkeleton env.theme
 
 
-mealRow : Theme -> Language -> Device -> Meal -> Element Msg
-mealRow theme language _ meal =
+mealRow : Env -> Meal -> Element Msg
+mealRow env meal =
     let
         macroDot : List (Element Msg)
         macroDot =
             Maybe.withDefault []
                 (Maybe.map
                     (List.singleton
-                        << View.Nutrients.macroDot theme language
+                        << View.Nutrients.macroDot env
                         << Nutrition.summaryToNutrients
                     )
                     meal.nutritionSummary
@@ -168,9 +168,9 @@ mealRow theme language _ meal =
     Surface.listRow
         { onSelect = OpenMealClicked meal.id
         , leading = macroDot
-        , title = Typography.wrappedListItemTitle theme meal.name
+        , title = Typography.wrappedListItemTitle env.theme meal.name
         , subtitle =
-            [ Typography.mutedBodyParagraph theme (mealSummaryText meal)
+            [ Typography.mutedBodyParagraph env.theme (mealSummaryText meal)
             ]
         , trailing = []
         }

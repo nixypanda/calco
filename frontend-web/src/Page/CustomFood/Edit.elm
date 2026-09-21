@@ -23,13 +23,13 @@ import Api.Foods as Foods
         )
 import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
@@ -415,7 +415,7 @@ failure =
 
 
 view :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Element Msg
 view config =
     UiPage.pageContainer
@@ -423,35 +423,35 @@ view config =
 
 
 bodyView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Element Msg
-bodyView { model, device, theme, language } =
+bodyView { model, env } =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
-                    (Form.view theme language device loaded.nutrients loaded.units loaded.form)
-                , Button.textButton device
-                    theme
+                    (Form.view env loaded.nutrients loaded.units loaded.form)
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidCustomFoodSave
+                    , label = I18n.t env.language TidCustomFoodSave
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Form.isSubmitting loaded.form.submit))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
 
         LoadFailed failed ->
-            Feedback.errorRetry theme
-                language
-                device
+            Feedback.errorRetry env.theme
+                env.language
+                env.device
                 { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
-            customFoodFormSkeleton theme
+            customFoodFormSkeleton env.theme
 
 
 customFoodFormSkeleton : Theme -> Element msg

@@ -12,14 +12,13 @@ import Api.Foods as Foods
 import Api.Meals exposing (CreateMealRequest, Meal)
 import Component.Meal.Form as Common
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
-import Ui.Theme exposing (Theme)
 
 
 
@@ -145,19 +144,19 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : { model : Model, env : Env } -> Element Msg
+view { model, env } =
     UiPage.pageContainer
-        [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage model.submit)
-        , Common.viewFormFields theme language device FormMsg model
-        , Button.textButton device
-            theme
+        [ Feedback.maybeErrorBanner env.theme (Common.submitErrorMessage model.submit)
+        , Common.viewFormFields env FormMsg model
+        , Button.textButton env.device
+            env.theme
             { tone = Button.Primary
             , width = Button.FullWidth
-            , label = I18n.t language TidTitleCreateMeal
+            , label = I18n.t env.language TidTitleCreateMeal
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (Common.isSubmitting model.submit))
-            , submittingLabel = Just (I18n.t language TidCommonSaving)
+            , submittingLabel = Just (I18n.t env.language TidCommonSaving)
             , trailing = Nothing
             }
         ]

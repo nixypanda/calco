@@ -10,16 +10,15 @@ module Component.Users.CredentialForm exposing
     , view
     )
 
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
 
@@ -124,9 +123,9 @@ markFailed message model =
 
 view :
     Config request
-    -> { model : Model, device : Device, theme : Theme, language : Language }
+    -> { model : Model, env : Env }
     -> Element Msg
-view config { model, device, theme, language } =
+view config { model, env } =
     let
         form : Form
         form =
@@ -142,26 +141,26 @@ view config { model, device, theme, language } =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space16
             ]
-            [ Surface.section theme
-                { header = Just (Typography.subsectionTitle theme config.title)
+            [ Surface.section env.theme
+                { header = Just (Typography.subsectionTitle env.theme config.title)
                 , body =
-                    [ Typography.maybeMutedParagraph theme config.description
-                    , UiInput.input theme
-                        { label = I18n.t language TidCommonUsername
+                    [ Typography.maybeMutedParagraph env.theme config.description
+                    , UiInput.input env.theme
+                        { label = I18n.t env.language TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
-                    , UiInput.passwordInput theme
-                        { label = I18n.t language TidCommonPassword
+                    , UiInput.passwordInput env.theme
+                        { label = I18n.t env.language TidCommonPassword
                         , value = form.password
                         , onChange = PasswordChanged
                         }
-                    , Feedback.maybeErrorBanner theme (errorMessage model)
+                    , Feedback.maybeErrorBanner env.theme (errorMessage model)
                     ]
                 , footer = Nothing
                 }
-            , Button.textButton device
-                theme
+            , Button.textButton env.device
+                env.theme
                 { tone = Button.Primary
                 , width = Button.FullWidth
                 , label = config.submitLabel

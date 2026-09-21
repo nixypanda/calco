@@ -25,7 +25,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion, QueryState)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
@@ -46,6 +46,7 @@ import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Input as UiInput
@@ -860,16 +861,16 @@ clearRecentAddedAfter key token =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-contentView { model, device, theme, language } =
+contentView : { model : Model, env : Env } -> Element Msg
+contentView { model, env } =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.spacing DesignTokens.space24
         ]
-        (searchInputView theme device language model
-            :: searchContentView theme device language model
-            :: adHocLogSection theme device language model
+        (searchInputView env model
+            :: searchContentView env model
+            :: adHocLogSection env model
         )
 
 
@@ -963,47 +964,47 @@ adHocSection model =
             AdHocShown
 
 
-adHocLogSection : Theme -> Device -> Language -> Model -> List (Element Msg)
-adHocLogSection theme device language model =
+adHocLogSection : Env -> Model -> List (Element Msg)
+adHocLogSection env model =
     case adHocSection model of
         AdHocShown ->
-            [ adHocLogView theme device language ]
+            [ adHocLogView env ]
 
         AdHocHidden ->
             []
 
 
-adHocLogView : Theme -> Device -> Language -> Element Msg
-adHocLogView theme device language =
-    Surface.formSection theme
-        (I18n.t language TidFoodSearchAdHocTitle)
-        [ Typography.mutedParagraph theme
-            (I18n.t language TidFoodSearchAdHocDescription)
+adHocLogView : Env -> Element Msg
+adHocLogView env =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodSearchAdHocTitle)
+        [ Typography.mutedParagraph env.theme
+            (I18n.t env.language TidFoodSearchAdHocDescription)
         , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
             ]
             [ Element.el [ Element.width Element.fill ]
-                (Button.textButton device
-                    theme
+                (Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidTitleCreateWithAi
+                    , label = I18n.t env.language TidTitleCreateWithAi
                     , onPress = CreateAiLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just (I18n.t language TidTitleCreateWithAi)
+                    , submittingLabel = Just (I18n.t env.language TidTitleCreateWithAi)
                     , trailing = Nothing
                     }
                 )
             , Element.el [ Element.width Element.fill ]
-                (Button.textButton device
-                    theme
+                (Button.textButton env.device
+                    env.theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = I18n.t language TidFoodSearchEnterManually
+                    , label = I18n.t env.language TidFoodSearchEnterManually
                     , onPress = CreateAdHocLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just (I18n.t language TidFoodSearchEnterManually)
+                    , submittingLabel = Just (I18n.t env.language TidFoodSearchEnterManually)
                     , trailing = Nothing
                     }
                 )
@@ -1011,32 +1012,31 @@ adHocLogView theme device language =
         ]
 
 
-searchInputView : Theme -> Device -> Language -> Model -> Element Msg
-searchInputView theme device language model =
+searchInputView : Env -> Model -> Element Msg
+searchInputView env model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
-        [ scopeControl theme language model.scope
+        [ scopeControl env model.scope
         , if model.scope == Barcode then
-            barcodeInputView theme device language model
+            barcodeInputView env model
 
           else
-            textSearchInputView theme device language model
+            textSearchInputView env model
         ]
 
 
-textSearchInputView : Theme -> Device -> Language -> Model -> Element Msg
-textSearchInputView theme device language model =
+textSearchInputView : Env -> Model -> Element Msg
+textSearchInputView env model =
     let
         options : List Completion
         options =
             Search.completions model.search.query model.search.categorySuggestions
     in
-    SearchView.searchInput theme
-        device
+    SearchView.searchInput env
         { id = "food-search-completions"
         , onChange = QueryChanged
         , text = model.search.query
-        , label = UiInput.LabelInside (searchLabel language model.scope)
+        , label = UiInput.LabelInside (searchLabel env.language model.scope)
         , completions = options
         , activeIndex = model.completionIndex
         , onActiveChanged = CompletionActiveChanged
@@ -1045,25 +1045,25 @@ textSearchInputView theme device language model =
         }
 
 
-barcodeInputView : Theme -> Device -> Language -> Model -> Element Msg
-barcodeInputView theme device language model =
+barcodeInputView : Env -> Model -> Element Msg
+barcodeInputView env model =
     let
         input : Element Msg
         input =
-            UiInput.searchInput theme
+            UiInput.searchInput env.theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
-                , label = UiInput.LabelInside (I18n.t language TidFoodSearchEnterBarcode)
+                , label = UiInput.LabelInside (I18n.t env.language TidFoodSearchEnterBarcode)
                 , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
         searchButton : Element Msg
         searchButton =
-            Button.textButton device
-                theme
+            Button.textButton env.device
+                env.theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = I18n.t language TidNavSearch
+                , label = I18n.t env.language TidNavSearch
                 , onPress = BarcodeSubmitted
                 , submitState =
                     Just
@@ -1076,7 +1076,7 @@ barcodeInputView theme device language model =
                          else
                             Button.Idle
                         )
-                , submittingLabel = Just (I18n.t language TidFoodSearchSearching)
+                , submittingLabel = Just (I18n.t env.language TidFoodSearchSearching)
                 , trailing = Nothing
                 }
 
@@ -1084,23 +1084,23 @@ barcodeInputView theme device language model =
         scanButton =
             case model.barcodeScanner of
                 ScannerStarting ->
-                    Button.textButton device
-                        theme
+                    Button.textButton env.device
+                        env.theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = I18n.t language TidFoodSearchScan
+                        , label = I18n.t env.language TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Submitting
-                        , submittingLabel = Just (I18n.t language TidFoodSearchStarting)
+                        , submittingLabel = Just (I18n.t env.language TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
                 ScannerActive ->
-                    Button.textButton device
-                        theme
+                    Button.textButton env.device
+                        env.theme
                         { tone = Button.Danger
                         , width = Button.FullWidth
-                        , label = I18n.t language TidCommonCancel
+                        , label = I18n.t env.language TidCommonCancel
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
@@ -1108,14 +1108,14 @@ barcodeInputView theme device language model =
                         }
 
                 _ ->
-                    Button.textButton device
-                        theme
+                    Button.textButton env.device
+                        env.theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = I18n.t language TidFoodSearchScan
+                        , label = I18n.t env.language TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Idle
-                        , submittingLabel = Just (I18n.t language TidFoodSearchStarting)
+                        , submittingLabel = Just (I18n.t env.language TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
@@ -1135,23 +1135,23 @@ barcodeInputView theme device language model =
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        (inputRow :: barcodeScannerStateView theme language model.barcodeScanner)
+        (inputRow :: barcodeScannerStateView env model.barcodeScanner)
 
 
-barcodeScannerStateView : Theme -> Language -> BarcodeScannerState -> List (Element Msg)
-barcodeScannerStateView theme language scanner =
+barcodeScannerStateView : Env -> BarcodeScannerState -> List (Element Msg)
+barcodeScannerStateView env scanner =
     case scanner of
         ScannerIdle ->
             []
 
         ScannerFailed message ->
-            [ Feedback.errorBanner theme message ]
+            [ Feedback.errorBanner env.theme message ]
 
         ScannerStarting ->
-            [ barcodeScannerPreview theme (I18n.t language TidFoodSearchStartingCamera) ]
+            [ barcodeScannerPreview env.theme (I18n.t env.language TidFoodSearchStartingCamera) ]
 
         ScannerActive ->
-            [ barcodeScannerPreview theme (I18n.t language TidFoodSearchCenterBarcode) ]
+            [ barcodeScannerPreview env.theme (I18n.t env.language TidFoodSearchCenterBarcode) ]
 
 
 barcodeScannerPreview : Theme -> String -> Element Msg
@@ -1222,22 +1222,22 @@ barcodeScannerVideoId =
     "calco-barcode-scanner-video"
 
 
-scopeControl : Theme -> Language -> SearchScope -> Element Msg
-scopeControl theme language selectedScope =
+scopeControl : Env -> SearchScope -> Element Msg
+scopeControl env selectedScope =
     Element.row
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space4
         , Element.padding DesignTokens.space4
-        , Background.color theme.inputFill
+        , Background.color env.theme.inputFill
         , Border.width 1
-        , Border.color theme.chipBorder
+        , Border.color env.theme.chipBorder
         , Border.rounded DesignTokens.radiusControl
         ]
-        (List.map (scopeSegment theme language selectedScope) searchScopes)
+        (List.map (scopeSegment env selectedScope) searchScopes)
 
 
-scopeSegment : Theme -> Language -> SearchScope -> SearchScope -> Element Msg
-scopeSegment theme language selectedScope scope =
+scopeSegment : Env -> SearchScope -> SearchScope -> Element Msg
+scopeSegment env selectedScope scope =
     let
         selected : Bool
         selected =
@@ -1249,15 +1249,15 @@ scopeSegment theme language selectedScope scope =
                 Element.rgb255 255 255 255
 
             else
-                theme.textMedium
+                env.theme.textMedium
 
         background : Element.Color
         background =
             if selected then
-                theme.brandBlue
+                env.theme.brandBlue
 
             else
-                theme.inputFill
+                env.theme.inputFill
     in
     Input.button
         [ Element.width (Element.fillPortion 1)
@@ -1272,7 +1272,7 @@ scopeSegment theme language selectedScope scope =
             Element.mouseOver []
 
           else
-            Element.mouseOver [ Background.color theme.brandBlueSoft ]
+            Element.mouseOver [ Background.color env.theme.brandBlueSoft ]
         ]
         { onPress = Just (ScopeSelected scope)
         , label =
@@ -1282,53 +1282,51 @@ scopeSegment theme language selectedScope scope =
                 , Element.clip
                 , UiCommon.uiClass "ui-text-ellipsis"
                 ]
-                (Element.text (scopeLabel language scope))
+                (Element.text (scopeLabel env.language scope))
         }
 
 
-bodyView : Theme -> Language -> Model -> Device -> Element Msg
-bodyView theme language model device =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model.results of
         NotAsked ->
-            Feedback.emptyState theme (I18n.t language TidFoodSearchEmptyPrompt)
+            Feedback.emptyState env.theme (I18n.t env.language TidFoodSearchEmptyPrompt)
 
         Loading ->
-            Surface.section theme
+            Surface.section env.theme
                 { header =
                     Just
-                        (Skeleton.barCustom theme
+                        (Skeleton.barCustom env.theme
                             { width = Element.px 120, height = 24 }
                         )
                 , body =
-                    List.map (\_ -> Skeleton.listRow theme)
+                    List.map (\_ -> Skeleton.listRow env.theme)
                         (List.range 1 3)
                 , footer = Nothing
                 }
 
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                [ Feedback.errorBanner theme (Client.displayError error)
-                , Feedback.emptyState theme (I18n.t language TidFoodSearchNoFoods)
+                [ Feedback.errorBanner env.theme (Client.displayError error)
+                , Feedback.emptyState env.theme (I18n.t env.language TidFoodSearchNoFoods)
                 ]
 
         Success items ->
             if List.isEmpty items then
-                textEmptyState theme language model.scope
+                textEmptyState env model.scope
 
             else
-                Surface.section theme
+                Surface.section env.theme
                     { header =
                         Just
                             (Typography.subsectionTitle
-                                theme
-                                (I18n.t language TidFoodSearchResults)
+                                env.theme
+                                (I18n.t env.language TidFoodSearchResults)
                             )
                     , body =
                         List.map
                             (\item ->
-                                SearchView.resultRow theme
-                                    language
-                                    device
+                                SearchView.resultRow env
                                     { query = model.search.query
                                     , item = item
                                     , onSelect = ResultClicked
@@ -1339,61 +1337,61 @@ bodyView theme language model device =
                     }
 
 
-searchContentView : Theme -> Device -> Language -> Model -> Element Msg
-searchContentView theme device language model =
+searchContentView : Env -> Model -> Element Msg
+searchContentView env model =
     case searchBody model of
         RecentsBody ->
-            recentsView device theme language model
+            recentsView env model
 
         ResultsBody ->
-            bodyView theme language model device
+            bodyView env model
 
         BarcodeResultsBody body ->
-            barcodeBodyView theme language body
+            barcodeBodyView env body
 
 
-barcodeBodyView : Theme -> Language -> BarcodeBody -> Element Msg
-barcodeBodyView theme language body =
+barcodeBodyView : Env -> BarcodeBody -> Element Msg
+barcodeBodyView env body =
     case body of
         BarcodeScanInProgress ->
             Element.none
 
         BarcodeAwaitingInput ->
-            Feedback.emptyState theme (I18n.t language TidFoodSearchEnterBarcodePrompt)
+            Feedback.emptyState env.theme (I18n.t env.language TidFoodSearchEnterBarcodePrompt)
 
         BarcodeInputPending ->
             Element.none
 
         BarcodeLookingUp ->
-            Skeleton.card theme { rows = 3 }
+            Skeleton.card env.theme { rows = 3 }
 
         BarcodeNotFound ->
-            Feedback.emptyStateWithIcon theme
+            Feedback.emptyStateWithIcon env.theme
                 { icon = Icon.SearchX
-                , message = I18n.t language TidFoodSearchBarcodeNotFound
+                , message = I18n.t env.language TidFoodSearchBarcodeNotFound
                 }
 
         BarcodeLookupFailed error ->
-            Feedback.errorBanner theme (Client.displayError error)
+            Feedback.errorBanner env.theme (Client.displayError error)
 
         BarcodeOpening ->
-            Feedback.emptyState theme (I18n.t language TidFoodSearchOpeningFood)
+            Feedback.emptyState env.theme (I18n.t env.language TidFoodSearchOpeningFood)
 
 
-textEmptyState : Theme -> Language -> SearchScope -> Element Msg
-textEmptyState theme language scope =
-    Feedback.emptyStateWithIcon theme
+textEmptyState : Env -> SearchScope -> Element Msg
+textEmptyState env scope =
+    Feedback.emptyStateWithIcon env.theme
         { icon = Icon.SearchX
         , message =
             case scope of
                 History ->
-                    I18n.t language TidFoodSearchNoLoggedFoods
+                    I18n.t env.language TidFoodSearchNoLoggedFoods
 
                 Custom ->
-                    I18n.t language TidFoodSearchNoCustomFoods
+                    I18n.t env.language TidFoodSearchNoCustomFoods
 
                 _ ->
-                    I18n.t language TidFoodSearchNoFoods
+                    I18n.t env.language TidFoodSearchNoFoods
         }
 
 
@@ -1469,63 +1467,63 @@ onEnterSubmit submitMsg =
         )
 
 
-recentsView : Device -> Theme -> Language -> Model -> Element Msg
-recentsView device theme language model =
+recentsView : Env -> Model -> Element Msg
+recentsView env model =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.spacing DesignTokens.space8
         ]
-        [ Feedback.maybeErrorBanner theme (quickAddError model.quickAdd)
+        [ Feedback.maybeErrorBanner env.theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
-                noRecentsState theme language
+                noRecentsState env
 
             Loading ->
-                Skeleton.card theme { rows = 2 }
+                Skeleton.card env.theme { rows = 2 }
 
             Failure _ ->
                 Element.none
 
             Success items ->
                 if List.isEmpty items then
-                    noRecentsState theme language
+                    noRecentsState env
 
                 else
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ Surface.section theme
+                        [ Surface.section env.theme
                             { header =
                                 Just
                                     (Typography.sectionTitle
-                                        theme
-                                        (I18n.t language TidFoodSearchRecent)
+                                        env.theme
+                                        (I18n.t env.language TidFoodSearchRecent)
                                     )
                             , body =
-                                List.map (recentItemRow device theme language model) items
+                                List.map (recentItemRow env model) items
                             , footer = Nothing
                             }
                         ]
         ]
 
 
-noRecentsState : Theme -> Language -> Element Msg
-noRecentsState theme language =
-    Feedback.emptyStateWithIcon theme
+noRecentsState : Env -> Element Msg
+noRecentsState env =
+    Feedback.emptyStateWithIcon env.theme
         { icon = Icon.Utensils
-        , message = I18n.t language TidFoodSearchNoRecents
+        , message = I18n.t env.language TidFoodSearchNoRecents
         }
 
 
-recentItemRow : Device -> Theme -> Language -> Model -> Logs.RecentItem -> Element Msg
-recentItemRow device theme language model item =
+recentItemRow : Env -> Model -> Logs.RecentItem -> Element Msg
+recentItemRow env model item =
     Element.column [ Element.width Element.fill ]
         [ Surface.listRow
             { onSelect = RecentItemClicked item
             , leading = [ View.Product.macroDotGhost ]
-            , title = Typography.wrappedListItemTitle theme (FoodLog.itemName item.item)
+            , title = Typography.wrappedListItemTitle env.theme (FoodLog.itemName item.item)
             , subtitle =
-                [ Typography.mutedCaptionParagraph theme
+                [ Typography.mutedCaptionParagraph env.theme
                     (Text.dotSeparated
                         [ FoodLog.itemBrand item.item
                         , Nutrition.servingCaloriesText item
@@ -1537,12 +1535,12 @@ recentItemRow device theme language model item =
 
         -- Quick-add chips sit outside `Surface.listRow`, whose subtitle slot is
         -- inside the row-select button and cannot hold nested buttons.
-        , quickAddChipRow device theme language model item
+        , quickAddChipRow env model item
         ]
 
 
-quickAddChipRow : Device -> Theme -> Language -> Model -> Logs.RecentItem -> Element Msg
-quickAddChipRow device theme language model item =
+quickAddChipRow : Env -> Model -> Logs.RecentItem -> Element Msg
+quickAddChipRow env model item =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
@@ -1553,7 +1551,7 @@ quickAddChipRow device theme language model item =
             , left = DesignTokens.space16
             }
         ]
-        (List.map (quickAddChip device theme language model item) (quickAddQuantities item))
+        (List.map (quickAddChip env model item) (quickAddQuantities item))
 
 
 quickAddQuantities : Logs.RecentItem -> List Nutrition.Quantity
@@ -1589,14 +1587,12 @@ quickAddChipState model item quantity =
 
 
 quickAddChip :
-    Device
-    -> Theme
-    -> Language
+    Env
     -> Model
     -> Logs.RecentItem
     -> Nutrition.Quantity
     -> Element Msg
-quickAddChip device theme language model item quantity =
+quickAddChip env model item quantity =
     let
         state : QuickAddButtonState
         state =
@@ -1614,7 +1610,7 @@ quickAddChip device theme language model item quantity =
                 QuickAddAdding ->
                     ( Button.GhostFilled
                     , Just Button.Submitting
-                    , Just (I18n.t language TidFoodSearchAdding)
+                    , Just (I18n.t env.language TidFoodSearchAdding)
                     )
 
                 QuickAddAdded ->
@@ -1623,8 +1619,8 @@ quickAddChip device theme language model item quantity =
                 QuickAddBlocked ->
                     ( Button.GhostFilled, Just Button.Disabled, Nothing )
     in
-    Button.textButton device
-        theme
+    Button.textButton env.device
+        env.theme
         { tone = tone
         , width = Button.ContentWidth
         , label = label

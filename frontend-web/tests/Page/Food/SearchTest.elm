@@ -66,9 +66,11 @@ tests =
             \_ ->
                 FoodSearch.contentView
                     { model = FoodSearch.init Nothing Nothing
-                    , device = { class = Phone, orientation = Portrait }
-                    , theme = Theme.light
-                    , language = Util.EN_US
+                    , env =
+                        { theme = Theme.light
+                        , device = { class = Phone, orientation = Portrait }
+                        , language = Util.EN_US
+                        }
                     }
                     |> Element.layout []
                     |> Query.fromHtml
@@ -955,9 +957,11 @@ tests =
                             , search = Search.withQuery "zzz" emptyModel.search
                             , results = Success []
                         }
-                    , device = { class = Phone, orientation = Portrait }
-                    , theme = Theme.light
-                    , language = Util.EN_US
+                    , env =
+                        { theme = Theme.light
+                        , device = { class = Phone, orientation = Portrait }
+                        , language = Util.EN_US
+                        }
                     }
                     |> Element.layout []
                     |> Query.fromHtml
@@ -1051,9 +1055,11 @@ contentFor : FoodSearch.Model -> Query.Single FoodSearch.Msg
 contentFor model =
     FoodSearch.contentView
         { model = model
-        , device = { class = Phone, orientation = Portrait }
-        , theme = Theme.light
-        , language = Util.EN_US
+        , env =
+            { theme = Theme.light
+            , device = { class = Phone, orientation = Portrait }
+            , language = Util.EN_US
+            }
         }
         |> Element.layout []
         |> Query.fromHtml

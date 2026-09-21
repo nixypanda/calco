@@ -19,6 +19,7 @@ import Ui.CategoryTag as CategoryTag exposing (CategoryTag)
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Input as UiInput
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -27,12 +28,11 @@ import View.Nutrients
 
 
 completionDropdown :
-    Theme
-    -> Device
+    Env
     -> { id : String, activeIndex : Int, onSelect : Completion -> msg }
     -> List Completion
     -> Element msg
-completionDropdown theme device config options =
+completionDropdown env config options =
     if List.isEmpty options then
         Element.none
 
@@ -41,16 +41,15 @@ completionDropdown theme device config options =
             [ Element.htmlAttribute (Html.Attributes.attribute "role" "listbox")
             , Element.htmlAttribute (Html.Attributes.attribute "id" config.id)
             ]
-            (UiInput.completionDropdown theme
-                { height = completionDropdownHeight device options
-                , rows = List.indexedMap (completionRow theme config) options
+            (UiInput.completionDropdown env.theme
+                { height = completionDropdownHeight env.device options
+                , rows = List.indexedMap (completionRow env.theme config) options
                 }
             )
 
 
 searchInput :
-    Theme
-    -> Device
+    Env
     ->
         { id : String
         , onChange : String -> msg
@@ -63,7 +62,7 @@ searchInput :
         , onCompletionClick : Completion -> msg
         }
     -> Element msg
-searchInput theme device config =
+searchInput env config =
     let
         hasCompletions : Bool
         hasCompletions =
@@ -99,7 +98,7 @@ searchInput theme device config =
                    )
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
-        [ UiInput.searchInput theme
+        [ UiInput.searchInput env.theme
             { onChange = config.onChange
             , text = config.text
             , label = config.label
@@ -116,8 +115,7 @@ searchInput theme device config =
                             )
                        ]
             }
-        , completionDropdown theme
-            device
+        , completionDropdown env
             { id = config.id
             , activeIndex = config.activeIndex
             , onSelect = config.onCompletionClick
@@ -196,17 +194,14 @@ optionId listboxId index =
 
 
 resultRow :
-    Theme
-    -> Language
-    -> Device
+    Env
     -> { query : String, item : SearchResult, onSelect : String -> msg }
     -> Element msg
-resultRow theme language device config =
+resultRow env config =
     let
         macroDot : Element msg
         macroDot =
-            View.Nutrients.macroDot theme
-                language
+            View.Nutrients.macroDot env
                 (config.item.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
 
         searchItem : Element msg
@@ -215,19 +210,19 @@ resultRow theme language device config =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space4
                 ]
-                [ if UiCommon.isSmall device then
-                    Typography.wrappedListItemTitle theme config.item.name
+                [ if UiCommon.isSmall env.device then
+                    Typography.wrappedListItemTitle env.theme config.item.name
 
                   else
-                    Typography.truncatedListItemTitle theme config.item.name
+                    Typography.truncatedListItemTitle env.theme config.item.name
                 , Typography.mutedCaptionParagraph
-                    theme
-                    (metaText language config.query config.item)
+                    env.theme
+                    (metaText env.language config.query config.item)
                 ]
 
         tagRows : List (List CategoryTag)
         tagRows =
-            if UiCommon.isSmall device then
+            if UiCommon.isSmall env.device then
                 []
 
             else
@@ -243,7 +238,7 @@ resultRow theme language device config =
                 []
 
             else
-                [ CategoryTag.view theme language tagRows ]
+                [ CategoryTag.view env.theme env.language tagRows ]
         }
 
 

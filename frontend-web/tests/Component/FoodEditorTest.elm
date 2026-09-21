@@ -344,9 +344,10 @@ tests =
                         { form | servings = [ { unit = "tbsp", gramsPerUnit = "15" } ] }
                 in
                 Form.view
-                    Theme.light
-                    Util.EN_US
-                    { class = Phone, orientation = Portrait }
+                    { theme = Theme.light
+                    , device = { class = Phone, orientation = Portrait }
+                    , language = Util.EN_US
+                    }
                     []
                     [ { code = "tbsp", name = "Tablespoon", kind = "volume" } ]
                     (Form.update Form.ToggleDefaultUnitDropdown formWithServing

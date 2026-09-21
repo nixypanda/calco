@@ -23,15 +23,14 @@ import Component.FoodEditor as Editor
 import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
-import Ui.Theme exposing (Theme)
 
 
 type alias Model =
@@ -322,7 +321,7 @@ failure error model =
 
 
 view :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Element Msg
 view =
     viewForAi True
@@ -330,9 +329,9 @@ view =
 
 viewForAi :
     Bool
-    -> { model : Model, device : Device, theme : Theme, language : Language }
+    -> { model : Model, env : Env }
     -> Element Msg
-viewForAi showOptional { model, device, theme, language } =
+viewForAi showOptional { model, env } =
     let
         visibility : Editor.NutrientVisibility
         visibility =
@@ -343,31 +342,29 @@ viewForAi showOptional { model, device, theme, language } =
                 Editor.CoreNutrientsOnly
     in
     UiPage.pageContainer
-        [ Feedback.maybeErrorBanner theme (submitError model.submit)
+        [ Feedback.maybeErrorBanner env.theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog
                 visibility
-                theme
-                language
-                device
+                env
                 model.nutrients
                 model.units
                 model.form
             )
-        , Button.textButton device
-            theme
+        , Button.textButton env.device
+            env.theme
             { tone = Button.Primary
             , width = Button.FullWidth
             , label =
                 case model.submit of
                     LogFailedAfterFoodSaved _ ->
-                        I18n.t language TidFoodLogRetryLogging
+                        I18n.t env.language TidFoodLogRetryLogging
 
                     _ ->
-                        I18n.t language TidTitleLogFood
+                        I18n.t env.language TidTitleLogFood
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (isSubmitting model.submit))
-            , submittingLabel = Just (I18n.t language TidFoodShowLogging)
+            , submittingLabel = Just (I18n.t env.language TidFoodShowLogging)
             , trailing = Nothing
             }
         ]

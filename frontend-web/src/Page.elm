@@ -49,7 +49,7 @@ import Data.LogSummary as LogSummary
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
@@ -78,10 +78,9 @@ import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 import Ui.Workspace as Workspace
 
 
@@ -3146,13 +3145,13 @@ applyMealDetailOutMsg _ outMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view : { model : Model, env : Env } -> Element Msg
 view props =
     if props.model.waitingForToday then
-        Skeleton.loading props.theme
+        Skeleton.loading props.env.theme
 
     else
-        Workspace.view props.device
+        Workspace.view props.env.device
             (List.map (paneView props (selectedDiaryDate props.model.panes)) props.model.panes)
 
 
@@ -3172,7 +3171,7 @@ selectedDiaryDate panes =
 
 
 paneView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Maybe LocalDate
     -> Pane
     -> ( String, Element Msg )
@@ -3255,7 +3254,7 @@ paneView props selectedDate pane =
 
 
 modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Maybe (Element Msg)
 modalView props =
     props.model.panes
@@ -3264,7 +3263,7 @@ modalView props =
 
 
 paneModalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Pane
     -> Maybe (Element Msg)
 paneModalView props pane =
@@ -3298,14 +3297,12 @@ paneModalView props pane =
 
 
 pageProps :
-    { props | device : Device, theme : Theme, language : Language }
+    { props | env : Env }
     -> subModel
-    -> { model : subModel, device : Device, theme : Theme, language : Language }
+    -> { model : subModel, env : Env }
 pageProps props subModel =
     { model = subModel
-    , device = props.device
-    , theme = props.theme
-    , language = props.language
+    , env = props.env
     }
 
 

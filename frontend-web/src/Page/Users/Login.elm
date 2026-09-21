@@ -11,12 +11,12 @@ module Page.Users.Login exposing
 import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
-import Ui.Theme exposing (Theme)
+import Ui.Env exposing (Env)
 
 
 
@@ -99,6 +99,6 @@ update msg model =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view : { model : Model, env : Env } -> Element Msg
 view props =
-    Element.map FormMsg (CredentialForm.view (config props.language) props)
+    Element.map FormMsg (CredentialForm.view (config props.env.language) props)

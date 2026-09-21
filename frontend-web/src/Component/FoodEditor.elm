@@ -58,7 +58,7 @@ import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Dict exposing (Dict)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.ListExtra as ListExtra
@@ -71,11 +71,11 @@ import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon exposing (Icon)
 import Ui.Input as UiInput
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.Nutrients
 import View.QuantityInput
@@ -1681,36 +1681,34 @@ validationErrorMessage error =
 -- VIEW
 
 
-view : Theme -> Language -> Device -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
-view theme language device nutrients units form =
+view : Env -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
+view env nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
-        , basicInfoCard True theme language device form
-        , nutrientsCard Per100Grams AllNutrients theme language device form nutrients
-        , servingsCard theme language device form units
-        , defaultPortionCard theme language device units form
+        [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
+        , basicInfoCard True env form
+        , nutrientsCard Per100Grams AllNutrients env form nutrients
+        , servingsCard env form units
+        , defaultPortionCard env units form
         ]
 
 
-viewForCreate : Theme -> Language -> Device -> List NutrientItem -> FormModel -> Element Msg
-viewForCreate theme language device nutrients form =
+viewForCreate : Env -> List NutrientItem -> FormModel -> Element Msg
+viewForCreate env nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Feedback.maybeErrorBanner theme (submitErrorMessage form.submit)
-        , basicInfoCard True theme language device form
-        , nutrientsCard Per100Grams AllNutrients theme language device form nutrients
+        [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
+        , basicInfoCard True env form
+        , nutrientsCard Per100Grams AllNutrients env form nutrients
         ]
 
 
 viewForLog :
     NutrientVisibility
-    -> Theme
-    -> Language
-    -> Device
+    -> Env
     -> List NutrientItem
     -> List UnitItem
     -> FormModel
     -> Element Msg
-viewForLog visibility theme language device nutrients units form =
+viewForLog visibility env nutrients units form =
     case form.context of
         CustomFoodContext ->
             Element.none
@@ -1727,14 +1725,14 @@ viewForLog visibility theme language device nutrients units form =
                             True
             in
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                ([ basicInfoCard saving theme language device form
-                 , loggedPortionCard theme language device units form logFields
-                 , nutrientsCard PerLoggedPortion visibility theme language device form nutrients
-                 , logDetailsCard theme language device form logFields
-                 , saveToFoodsCard theme language device persistence
+                ([ basicInfoCard saving env form
+                 , loggedPortionCard env units form logFields
+                 , nutrientsCard PerLoggedPortion visibility env form nutrients
+                 , logDetailsCard env form logFields
+                 , saveToFoodsCard env persistence
                  ]
                     ++ (if saving then
-                            [ servingsCard theme language device form units ]
+                            [ servingsCard env form units ]
 
                         else
                             []
@@ -1742,24 +1740,22 @@ viewForLog visibility theme language device nutrients units form =
                 )
 
 
-basicInfoCard : Bool -> Theme -> Language -> Device -> FormModel -> Element Msg
-basicInfoCard showCategories theme language device form =
-    Surface.formSection theme
-        (I18n.t language TidFoodEditorBasicInfo)
-        [ UiInput.input theme
-            { label = I18n.t language TidFoodEditorName
+basicInfoCard : Bool -> Env -> FormModel -> Element Msg
+basicInfoCard showCategories env form =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorBasicInfo)
+        [ UiInput.input env.theme
+            { label = I18n.t env.language TidFoodEditorName
             , value = form.name
             , onChange = NameChanged
             }
-        , UiInput.input theme
-            { label = I18n.t language TidFoodEditorBrand
+        , UiInput.input env.theme
+            { label = I18n.t env.language TidFoodEditorBrand
             , value = form.brand
             , onChange = BrandChanged
             }
         , if showCategories then
-            categoryInputView theme
-                language
-                device
+            categoryInputView env
                 (form.openDropdown == CategoryOpen)
                 form.categoryInput
 
@@ -1769,26 +1765,24 @@ basicInfoCard showCategories theme language device form =
 
 
 loggedPortionCard :
-    Theme
-    -> Language
-    -> Device
+    Env
     -> List UnitItem
     -> FormModel
     -> LogFields
     -> Element Msg
-loggedPortionCard theme language device units form logFields =
-    Surface.formSection theme
-        (I18n.t language TidFoodEditorLoggedPortion)
-        [ Typography.mutedParagraph theme (I18n.t language TidFoodEditorLoggedPortionHint)
-        , UiInput.numericInput theme
-            { label = I18n.t language TidNutrientTableAmount
+loggedPortionCard env units form logFields =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorLoggedPortion)
+        [ Typography.mutedParagraph env.theme (I18n.t env.language TidFoodEditorLoggedPortionHint)
+        , UiInput.numericInput env.theme
+            { label = I18n.t env.language TidNutrientTableAmount
             , value = logFields.quantity
             , onChange = LogQuantityChanged
             }
-        , UiInput.selectDropdown device
-            theme
-            language
-            { label = I18n.t language TidFoodEditorPortionUnit
+        , UiInput.selectDropdown env.device
+            env.theme
+            env.language
+            { label = I18n.t env.language TidFoodEditorPortionUnit
             , selected = logFields.unit
             , options = List.map (\unit -> ( unit.code, unit.name )) units
             , onChange = LogUnitChanged
@@ -1798,58 +1792,58 @@ loggedPortionCard theme language device units form logFields =
         ]
 
 
-logDetailsCard : Theme -> Language -> Device -> FormModel -> LogFields -> Element Msg
-logDetailsCard theme language device form logFields =
-    Surface.formSection theme
-        (I18n.t language TidFoodEditorLogDetails)
-        [ UiInput.input theme
-            { label = I18n.t language TidFoodEditorDateLabel
+logDetailsCard : Env -> FormModel -> LogFields -> Element Msg
+logDetailsCard env form logFields =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorLogDetails)
+        [ UiInput.input env.theme
+            { label = I18n.t env.language TidFoodEditorDateLabel
             , value = logFields.date
             , onChange = LogDateChanged
             }
-        , UiInput.selectDropdown device
-            theme
-            language
-            { label = I18n.t language TidTitleMeal
+        , UiInput.selectDropdown env.device
+            env.theme
+            env.language
+            { label = I18n.t env.language TidTitleMeal
             , selected = logFields.mealSlot
             , options =
-                [ ( Nothing, I18n.t language TidFoodEditorMealNone )
-                , ( Just Breakfast, MealSlot.label language Breakfast )
-                , ( Just Lunch, MealSlot.label language Lunch )
-                , ( Just Dinner, MealSlot.label language Dinner )
-                , ( Just Snack, MealSlot.label language Snack )
-                , ( Just LateNightSnack, MealSlot.label language LateNightSnack )
+                [ ( Nothing, I18n.t env.language TidFoodEditorMealNone )
+                , ( Just Breakfast, MealSlot.label env.language Breakfast )
+                , ( Just Lunch, MealSlot.label env.language Lunch )
+                , ( Just Dinner, MealSlot.label env.language Dinner )
+                , ( Just Snack, MealSlot.label env.language Snack )
+                , ( Just LateNightSnack, MealSlot.label env.language LateNightSnack )
                 ]
             , onChange = LogMealSlotChanged
             , isOpen = form.openDropdown == MealSlotOpen
             , onToggle = ToggleMealSlotDropdown
             }
-        , UiInput.input theme
-            { label = I18n.t language TidFoodEditorNotes
+        , UiInput.input env.theme
+            { label = I18n.t env.language TidFoodEditorNotes
             , value = logFields.notes
             , onChange = LogNotesChanged
             }
         ]
 
 
-saveToFoodsCard : Theme -> Language -> Device -> LogPersistence -> Element Msg
-saveToFoodsCard theme language _ persistence =
-    Surface.section theme
+saveToFoodsCard : Env -> LogPersistence -> Element Msg
+saveToFoodsCard env persistence =
+    Surface.section env.theme
         { header =
             Just
                 (Surface.sectionHeader
                     { title =
-                        Typography.sectionTitle theme
-                            (I18n.t language TidFoodEditorSaveToFoods)
+                        Typography.sectionTitle env.theme
+                            (I18n.t env.language TidFoodEditorSaveToFoods)
                     , description =
                         Just
-                            (Typography.mutedParagraph theme
-                                (I18n.t language TidFoodEditorSaveToFoodsDescription)
+                            (Typography.mutedParagraph env.theme
+                                (I18n.t env.language TidFoodEditorSaveToFoodsDescription)
                             )
                     , trailing =
                         Just
-                            (UiInput.toggleSwitch theme
-                                { label = I18n.t language TidFoodEditorSaveToFoods
+                            (UiInput.toggleSwitch env.theme
+                                { label = I18n.t env.language TidFoodEditorSaveToFoods
                                 , isActive =
                                     case persistence of
                                         LogAdHocOnly ->
@@ -1868,8 +1862,8 @@ saveToFoodsCard theme language _ persistence =
                     []
 
                 SaveCustomFoodThenLog details ->
-                    [ UiInput.numericInput theme
-                        { label = I18n.t language TidFoodEditorPortionWeightLabel
+                    [ UiInput.numericInput env.theme
+                        { label = I18n.t env.language TidFoodEditorPortionWeightLabel
                         , value = details.portionWeight
                         , onChange = PortionWeightChanged
                         }
@@ -1878,39 +1872,39 @@ saveToFoodsCard theme language _ persistence =
         }
 
 
-defaultPortionCard : Theme -> Language -> Device -> List UnitItem -> FormModel -> Element Msg
-defaultPortionCard theme language device units form =
-    Surface.formSection theme
-        (I18n.t language TidFoodEditorDefaultPortion)
-        [ defaultPortionFields theme language device units form
-        , Typography.mutedCaption theme
+defaultPortionCard : Env -> List UnitItem -> FormModel -> Element Msg
+defaultPortionCard env units form =
+    Surface.formSection env.theme
+        (I18n.t env.language TidFoodEditorDefaultPortion)
+        [ defaultPortionFields env units form
+        , Typography.mutedCaption env.theme
             (if form.defaultUnit == "" then
                 if List.isEmpty form.servings then
-                    I18n.t language TidFoodEditorDefaultPortionHint100g
+                    I18n.t env.language TidFoodEditorDefaultPortionHint100g
 
                 else
-                    I18n.t language TidFoodEditorDefaultPortionHintServing
+                    I18n.t env.language TidFoodEditorDefaultPortionHintServing
 
              else if form.defaultUnit == "g" then
-                I18n.t language TidFoodEditorDefaultPortionHintGrams
+                I18n.t env.language TidFoodEditorDefaultPortionHintGrams
 
              else
-                I18n.t language TidFoodEditorDefaultPortionHintCount
+                I18n.t env.language TidFoodEditorDefaultPortionHintCount
             )
         ]
 
 
-defaultPortionFields : Theme -> Language -> Device -> List UnitItem -> FormModel -> Element Msg
-defaultPortionFields theme language device units form =
+defaultPortionFields : Env -> List UnitItem -> FormModel -> Element Msg
+defaultPortionFields env units form =
     let
         unitSelector : Element Msg
         unitSelector =
-            UiInput.selectDropdown device
-                theme
-                language
-                { label = I18n.t language TidFoodEditorDefaultUnit
+            UiInput.selectDropdown env.device
+                env.theme
+                env.language
+                { label = I18n.t env.language TidFoodEditorDefaultUnit
                 , selected = form.defaultUnit
-                , options = defaultPortionOptions language units form
+                , options = defaultPortionOptions env.language units form
                 , onChange = DefaultUnitChanged
                 , isOpen = form.openDropdown == DefaultUnitOpen
                 , onToggle = ToggleDefaultUnitDropdown
@@ -1922,8 +1916,8 @@ defaultPortionFields theme language device units form =
                 Element.none
 
             else
-                UiInput.numericInput theme
-                    { label = I18n.t language TidFoodEditorDefaultQuantity
+                UiInput.numericInput env.theme
+                    { label = I18n.t env.language TidFoodEditorDefaultQuantity
                     , value = form.defaultQuantity
                     , onChange = DefaultQuantityChanged
                     }
@@ -1934,7 +1928,7 @@ defaultPortionFields theme language device units form =
             , Element.spacing DesignTokens.space8
             ]
     in
-    if UiCommon.isSmall device then
+    if UiCommon.isSmall env.device then
         Element.column attributes [ unitSelector, quantityInput ]
 
     else
@@ -1971,26 +1965,24 @@ servingUnitLabel language units code =
 nutrientsCard :
     NutrientBasis
     -> NutrientVisibility
-    -> Theme
-    -> Language
-    -> Device
+    -> Env
     -> FormModel
     -> List NutrientItem
     -> Element Msg
-nutrientsCard basis visibility theme language device form nutrients =
-    Surface.section theme
+nutrientsCard basis visibility env form nutrients =
+    Surface.section env.theme
         { header =
             Just
                 (Element.column [ Element.spacing DesignTokens.space8 ]
-                    [ Typography.subsectionTitle theme
+                    [ Typography.subsectionTitle env.theme
                         (case basis of
                             Per100Grams ->
-                                I18n.t language TidFoodEditorNutrientsTitle
+                                I18n.t env.language TidFoodEditorNutrientsTitle
 
                             PerLoggedPortion ->
-                                I18n.t language TidFoodEditorPortionNutrition
+                                I18n.t env.language TidFoodEditorPortionNutrition
                         )
-                    , nutrientHint basis theme language
+                    , nutrientHint basis env
                     ]
                 )
         , body =
@@ -2012,9 +2004,7 @@ nutrientsCard basis visibility theme language device form nutrients =
                     |> List.map
                         (\( index, row ) ->
                             nutrientRowView basis
-                                theme
-                                language
-                                device
+                                env
                                 nutrients
                                 form.openDropdown
                                 index
@@ -2024,11 +2014,11 @@ nutrientsCard basis visibility theme language device form nutrients =
             ]
         , footer =
             Just
-                (Button.textButton device
-                    theme
+                (Button.textButton env.device
+                    env.theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = I18n.t language TidFoodEditorAddNutrient
+                    , label = I18n.t env.language TidFoodEditorAddNutrient
                     , onPress = AddNutrientRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -2038,33 +2028,37 @@ nutrientsCard basis visibility theme language device form nutrients =
         }
 
 
-servingsCard : Theme -> Language -> Device -> FormModel -> List UnitItem -> Element Msg
-servingsCard theme language device form units =
-    Surface.section theme
-        { header = Just (Typography.subsectionTitle theme (I18n.t language TidFoodEditorServings))
+servingsCard : Env -> FormModel -> List UnitItem -> Element Msg
+servingsCard env form units =
+    Surface.section env.theme
+        { header =
+            Just
+                (Typography.subsectionTitle env.theme
+                    (I18n.t env.language TidFoodEditorServings)
+                )
         , body =
             [ Element.column
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space12
                 ]
                 (if List.isEmpty form.servings then
-                    [ Typography.mutedParagraph theme
-                        (I18n.t language TidFoodEditorServingsEmpty)
+                    [ Typography.mutedParagraph env.theme
+                        (I18n.t env.language TidFoodEditorServingsEmpty)
                     ]
 
                  else
                     List.indexedMap
-                        (servingRowView theme language device units form.openDropdown)
+                        (servingRowView env units form.openDropdown)
                         form.servings
                 )
             ]
         , footer =
             Just
-                (Button.textButton device
-                    theme
+                (Button.textButton env.device
+                    env.theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = I18n.t language TidFoodEditorAddServing
+                    , label = I18n.t env.language TidFoodEditorAddServing
                     , onPress = AddServingRow
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -2074,16 +2068,16 @@ servingsCard theme language device form units =
         }
 
 
-categoryInputView : Theme -> Language -> Device -> Bool -> CategoryInput -> Element Msg
-categoryInputView theme language device open input =
+categoryInputView : Env -> Bool -> CategoryInput -> Element Msg
+categoryInputView env open input =
     Element.column [ Element.width Element.fill ]
         [ Element.row [ Element.spacing DesignTokens.space4 ]
-            [ UiInput.fieldLabel theme (I18n.t language TidFoodEditorCategories)
-            , Typography.mutedCaption theme (I18n.t language TidFoodEditorCategoriesHint)
+            [ UiInput.fieldLabel env.theme (I18n.t env.language TidFoodEditorCategories)
+            , Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorCategoriesHint)
             ]
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
-                (UiInput.input theme
+                (UiInput.input env.theme
                     { label = ""
                     , value = input.query
                     , onChange = CategoryQueryChanged
@@ -2093,28 +2087,28 @@ categoryInputView theme language device open input =
                 [ Element.paddingEach
                     { top = DesignTokens.space4, left = DesignTokens.space4, bottom = 0, right = 0 }
                 ]
-                (addCategoryButton theme language device input)
+                (addCategoryButton env input)
             ]
-        , suggestionRowView theme language open input
-        , chipRowView theme language input.selected
+        , suggestionRowView env open input
+        , chipRowView env input.selected
         ]
 
 
-addCategoryButton : Theme -> Language -> Device -> CategoryInput -> Element Msg
-addCategoryButton theme language device input =
-    Button.iconButton device
-        theme
+addCategoryButton : Env -> CategoryInput -> Element Msg
+addCategoryButton env input =
+    Button.iconButton env.device
+        env.theme
         { icon = Icon.Plus
-        , title = I18n.t language TidFoodEditorAddCategory
+        , title = I18n.t env.language TidFoodEditorAddCategory
         , onPress = Just (AddCategory input.query)
         , tone = Button.Primary
         }
 
 
-chipRowView : Theme -> Language -> List String -> Element Msg
-chipRowView theme language tags =
+chipRowView : Env -> List String -> Element Msg
+chipRowView env tags =
     if List.isEmpty tags then
-        Typography.mutedCaption theme (I18n.t language TidFoodEditorNoCategories)
+        Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorNoCategories)
 
     else
         Element.wrappedRow
@@ -2122,20 +2116,20 @@ chipRowView theme language tags =
             , Element.paddingXY 0 DesignTokens.space4
             , Element.spacing DesignTokens.space8
             ]
-            (List.map (chipView theme language) tags)
+            (List.map (chipView env) tags)
 
 
-chipView : Theme -> Language -> String -> Element Msg
-chipView theme language tag =
-    Chip.removableChip theme
-        language
+chipView : Env -> String -> Element Msg
+chipView env tag =
+    Chip.removableChip env.theme
+        env.language
         { label = tag
         , onRemove = RemoveCategory tag
         }
 
 
-suggestionRowView : Theme -> Language -> Bool -> CategoryInput -> Element Msg
-suggestionRowView theme language open input =
+suggestionRowView : Env -> Bool -> CategoryInput -> Element Msg
+suggestionRowView env open input =
     let
         open_ : Bool
         open_ =
@@ -2160,17 +2154,17 @@ suggestionRowView theme language open input =
         Element.none
 
     else
-        UiInput.suggestionList theme (List.map (suggestionRow theme language) matching)
+        UiInput.suggestionList env.theme (List.map (suggestionRow env) matching)
 
 
-suggestionRow : Theme -> Language -> CategorySuggestion -> Element Msg
-suggestionRow theme language s =
-    UiInput.optionRow theme
+suggestionRow : Env -> CategorySuggestion -> Element Msg
+suggestionRow env s =
+    UiInput.optionRow env.theme
         { label = s.value
         , trailing =
             Just
-                (Typography.mutedCaption theme
-                    (I18n.t language (TidFoodEditorUses (String.fromInt s.count)))
+                (Typography.mutedCaption env.theme
+                    (I18n.t env.language (TidFoodEditorUses (String.fromInt s.count)))
                 )
         , selected = False
         , onPress = AcceptCategorySuggestion s.value
@@ -2179,25 +2173,23 @@ suggestionRow theme language s =
 
 nutrientRowView :
     NutrientBasis
-    -> Theme
-    -> Language
-    -> Device
+    -> Env
     -> List NutrientItem
     -> OpenDropdown
     -> Int
     -> NutrientRow
     -> Element Msg
-nutrientRowView basis theme language device nutrients openDropdown index row =
+nutrientRowView basis env nutrients openDropdown index row =
     let
         selector : Element Msg
         selector =
-            UiInput.selectDropdown device
-                theme
-                language
-                { label = I18n.t language TidNutrientTableNutrient
+            UiInput.selectDropdown env.device
+                env.theme
+                env.language
+                { label = I18n.t env.language TidNutrientTableNutrient
                 , selected = row.code
                 , options =
-                    ( "", I18n.t language TidFoodEditorSelectNutrient )
+                    ( "", I18n.t env.language TidFoodEditorSelectNutrient )
                         :: List.map (\n -> ( n.code, n.name )) nutrients
                 , onChange = NutrientCodeChanged index
                 , isOpen = openDropdown == NutrientCodeOpen index
@@ -2206,14 +2198,13 @@ nutrientRowView basis theme language device nutrients openDropdown index row =
 
         removeButton : Element Msg
         removeButton =
-            rowActionButton theme
-                device
+            rowActionButton env
                 { icon = Icon.Close
-                , title = I18n.t language TidFoodEditorRemove
+                , title = I18n.t env.language TidFoodEditorRemove
                 , onPress = RemoveNutrientRow index
                 }
     in
-    if UiCommon.isSmall device then
+    if UiCommon.isSmall env.device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
@@ -2223,7 +2214,7 @@ nutrientRowView basis theme language device nutrients openDropdown index row =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ amountInputWithUnit basis theme language index row
+                [ amountInputWithUnit basis env index row
                 , removeButton
                 ]
             ]
@@ -2234,23 +2225,23 @@ nutrientRowView basis theme language device nutrients openDropdown index row =
             , Element.spacing DesignTokens.space8
             ]
             [ selector
-            , amountInputWithUnit basis theme language index row
+            , amountInputWithUnit basis env index row
             , removeButton
             ]
 
 
-amountInputWithUnit : NutrientBasis -> Theme -> Language -> Int -> NutrientRow -> Element Msg
-amountInputWithUnit basis theme language index row =
-    UiInput.decimalInputWithSuffix theme
+amountInputWithUnit : NutrientBasis -> Env -> Int -> NutrientRow -> Element Msg
+amountInputWithUnit basis env index row =
+    UiInput.decimalInputWithSuffix env.theme
         { label =
             case basis of
                 Per100Grams ->
-                    I18n.t language TidFoodEditorAmountPer100g
+                    I18n.t env.language TidFoodEditorAmountPer100g
 
                 PerLoggedPortion ->
-                    I18n.t language TidFoodEditorAmountForPortion
+                    I18n.t env.language TidFoodEditorAmountForPortion
         , text = row.amount
-        , suffix = unitGhostText language row.unit
+        , suffix = unitGhostText env.language row.unit
         , onChange = NutrientAmountChanged index
         }
 
@@ -2269,24 +2260,22 @@ unitGhostText language unit =
 
 
 servingRowView :
-    Theme
-    -> Language
-    -> Device
+    Env
     -> List UnitItem
     -> OpenDropdown
     -> Int
     -> ServingRow
     -> Element Msg
-servingRowView theme language device units openDropdown index row =
+servingRowView env units openDropdown index row =
     let
         selector : Element Msg
         selector =
-            UiInput.selectDropdown device
-                theme
-                language
-                { label = I18n.t language TidNutrientTableUnit
+            UiInput.selectDropdown env.device
+                env.theme
+                env.language
+                { label = I18n.t env.language TidNutrientTableUnit
                 , selected = row.unit
-                , options = View.QuantityInput.unitOptions language row.unit units
+                , options = View.QuantityInput.unitOptions env.language row.unit units
                 , onChange = ServingUnitChanged index
                 , isOpen = openDropdown == ServingUnitOpen index
                 , onToggle = ToggleServingUnitDropdown index
@@ -2294,8 +2283,8 @@ servingRowView theme language device units openDropdown index row =
 
         gramsInput : Element Msg
         gramsInput =
-            UiInput.decimalInputWithSuffix theme
-                { label = I18n.t language TidFoodEditorGramsPerUnit
+            UiInput.decimalInputWithSuffix env.theme
+                { label = I18n.t env.language TidFoodEditorGramsPerUnit
                 , text = row.gramsPerUnit
                 , suffix = "g"
                 , onChange = ServingGramsPerUnitChanged index
@@ -2303,14 +2292,13 @@ servingRowView theme language device units openDropdown index row =
 
         removeButton : Element Msg
         removeButton =
-            rowActionButton theme
-                device
+            rowActionButton env
                 { icon = Icon.Close
-                , title = I18n.t language TidFoodEditorRemove
+                , title = I18n.t env.language TidFoodEditorRemove
                 , onPress = RemoveServingRow index
                 }
     in
-    if UiCommon.isSmall device then
+    if UiCommon.isSmall env.device then
         Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
@@ -2332,17 +2320,16 @@ servingRowView theme language device units openDropdown index row =
 
 
 rowActionButton :
-    Theme
-    -> Device
+    Env
     -> { icon : Icon, title : String, onPress : msg }
     -> Element msg
-rowActionButton theme device config =
+rowActionButton env config =
     Element.el
         [ Element.width (Element.px 44)
         , Element.paddingEach { top = DesignTokens.space16, right = 0, bottom = 0, left = 0 }
         ]
-        (Button.iconButton device
-            theme
+        (Button.iconButton env.device
+            env.theme
             { icon = config.icon
             , title = config.title
             , onPress = Just config.onPress
@@ -2351,16 +2338,16 @@ rowActionButton theme device config =
         )
 
 
-addRowHint : Theme -> Language -> Element msg
-addRowHint theme language =
-    Typography.mutedCaption theme (I18n.t language TidFoodEditorAddRowHint)
+addRowHint : Env -> Element msg
+addRowHint env =
+    Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorAddRowHint)
 
 
-nutrientHint : NutrientBasis -> Theme -> Language -> Element msg
-nutrientHint basis theme language =
+nutrientHint : NutrientBasis -> Env -> Element msg
+nutrientHint basis env =
     case basis of
         Per100Grams ->
-            addRowHint theme language
+            addRowHint env
 
         PerLoggedPortion ->
-            Typography.mutedCaption theme (I18n.t language TidFoodEditorPortionHint)
+            Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorPortionHint)

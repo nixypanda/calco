@@ -30,6 +30,7 @@ import Page
 import Translations.Util exposing (Language(..))
 import Ui.Common as UiCommon exposing (uiClass)
 import Ui.Css as Css
+import Ui.Env as Env exposing (Env)
 import Ui.Skeleton as Skeleton
 import Ui.Theme as Theme exposing (Theme)
 import Url exposing (Url)
@@ -55,9 +56,7 @@ type alias Model =
     , today : Maybe LocalDate
     , page : PageModel
     , chrome : Chrome.Model
-    , device : Element.Device
-    , theme : Theme
-    , language : Language
+    , env : Env
     , version : Version.Model
     }
 
@@ -99,10 +98,11 @@ init flags url key =
       , today = Nothing
       , page = Page.loading
       , chrome = Chrome.init
-      , device =
-            classifyDevice flags.windowWidth flags.windowHeight
-      , theme = Theme.forMode (Theme.modeFromString flags.themeMode)
-      , language = EN_US
+      , env =
+            { theme = Theme.forMode (Theme.modeFromString flags.themeMode)
+            , device = classifyDevice flags.windowWidth flags.windowHeight
+            , language = EN_US
+            }
       , version = versionModel
       }
     , Cmd.batch
@@ -172,9 +172,9 @@ update msg model =
             )
 
         WindowResized width height ->
-            case reclassifyDevice width height model.device of
+            case reclassifyDevice width height model.env.device of
                 Just device ->
-                    ( { model | device = device }, Cmd.none )
+                    ( { model | env = Env.withDevice device model.env }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -293,14 +293,14 @@ applyChromeOutMsg outMsg model =
             let
                 nextMode : Theme.Mode
                 nextMode =
-                    Theme.toggle model.theme.mode
+                    Theme.toggle model.env.theme.mode
             in
-            ( { model | theme = Theme.forMode nextMode }
+            ( { model | env = Env.withTheme (Theme.forMode nextMode) model.env }
             , persistThemeMode (Theme.modeToString nextMode)
             )
 
         Chrome.SetLanguage language ->
-            ( { model | language = language }, Cmd.none )
+            ( { model | env = Env.withLanguage language model.env }, Cmd.none )
 
 
 normalizeChromeNavigation : Route -> Route -> Route
@@ -535,11 +535,11 @@ view model =
             []
             [ Html.text
                 ("html, body { background: "
-                    ++ UiCommon.toCssColor model.theme.pageBg
+                    ++ UiCommon.toCssColor model.env.theme.pageBg
                     ++ "; } :root { background: "
-                    ++ UiCommon.toCssColor model.theme.pageBg
+                    ++ UiCommon.toCssColor model.env.theme.pageBg
                     ++ "; "
-                    ++ Css.themeCssVariables model.theme
+                    ++ Css.themeCssVariables model.env.theme
                     ++ "; }"
                 )
             ]
@@ -555,9 +555,7 @@ view model =
             (layoutAttrs model
                 ++ Chrome.bottomNavLayoutAttrs
                     { model = model.chrome
-                    , device = model.device
-                    , theme = model.theme
-                    , language = model.language
+                    , env = model.env
                     , session = session
                     , route = model.route
                     , isLoadingPage = isLoadingPage
@@ -565,12 +563,10 @@ view model =
                     }
             )
           <|
-            uiLayout model.theme <|
+            uiLayout model.env.theme <|
                 Chrome.viewFrame
                     { model = model.chrome
-                    , device = model.device
-                    , theme = model.theme
-                    , language = model.language
+                    , env = model.env
                     , session = session
                     , route = model.route
                     , isLoadingPage = isLoadingPage
@@ -578,8 +574,7 @@ view model =
                         if model.version.updateAvailable then
                             Just
                                 (View.Chrome.updateBanner
-                                    model.language
-                                    model.theme
+                                    model.env
                                     (GotVersionMsg Version.ReloadPageRequested)
                                 )
 
@@ -619,7 +614,7 @@ layoutAttrs model =
 pageView : Model -> Element Msg
 pageView model =
     if not (isBootstrapped model.bootstrap) then
-        Skeleton.loading model.theme
+        Skeleton.loading model.env.theme
 
     else
         Element.map GotPageMsg (Page.view (pageProps model))
@@ -629,15 +624,11 @@ pageProps :
     Model
     ->
         { model : Page.Model
-        , device : Element.Device
-        , theme : Theme
-        , language : Language
+        , env : Env
         }
 pageProps model =
     { model = model.page
-    , device = model.device
-    , theme = model.theme
-    , language = model.language
+    , env = model.env
     }
 
 

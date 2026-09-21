@@ -2,19 +2,17 @@ module View.QuantityInput exposing (dropdown, unitOptions)
 
 import Data.Food exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Input as UiInput
-import Ui.Theme exposing (Theme)
 
 
 dropdown :
-    Theme
-    -> Language
-    -> Device
+    Env
     ->
         { amountLabel : String
         , amount : String
@@ -27,19 +25,19 @@ dropdown :
         , onUnitToggle : msg
         }
     -> Element msg
-dropdown theme language device config =
+dropdown env config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ UiInput.numericInput theme
+        [ UiInput.numericInput env.theme
             { label = config.amountLabel
             , value = config.amount
             , onChange = config.onAmountChange
             }
-        , UiInput.selectDropdown device
-            theme
-            language
+        , UiInput.selectDropdown env.device
+            env.theme
+            env.language
             { label = config.unitLabel
             , selected = config.unit
-            , options = unitOptions language config.unit config.units
+            , options = unitOptions env.language config.unit config.units
             , onChange = config.onUnitChange
             , isOpen = config.unitOpen
             , onToggle = config.onUnitToggle

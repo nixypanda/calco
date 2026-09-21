@@ -13,11 +13,11 @@ module Chrome exposing
 
 import Data.Auth as Auth exposing (Session)
 import Data.Route exposing (Route)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Region as Region
 import Lib.Text as Text
 import Translations.Util exposing (Language)
-import Ui.Theme exposing (Theme)
+import Ui.Env exposing (Env)
 import View.Chrome
 
 
@@ -108,9 +108,7 @@ isMenuOpen target current =
 
 type alias LayoutConfig msg =
     { model : Model
-    , device : Device
-    , theme : Theme
-    , language : Language
+    , env : Env
     , session : Session
     , route : Route
     , isLoadingPage : Bool
@@ -127,8 +125,7 @@ bottomNavLayoutAttrs config =
                 , Element.alignBottom
                 ]
                 (View.Chrome.bottomNavBar
-                    { theme = config.theme
-                    , language = config.language
+                    { env = config.env
                     , session = config.session
                     , route = config.route
                     , onNavigate = config.toMsg << NavigateClicked
@@ -143,9 +140,7 @@ bottomNavLayoutAttrs config =
 
 type alias FrameConfig msg =
     { model : Model
-    , device : Device
-    , theme : Theme
-    , language : Language
+    , env : Env
     , session : Session
     , route : Route
     , isLoadingPage : Bool
@@ -169,9 +164,7 @@ viewFrame config =
 
             else
                 View.Chrome.drawerOverlay
-                    { device = config.device
-                    , theme = config.theme
-                    , language = config.language
+                    { env = config.env
                     , session = config.session
                     , route = config.route
                     , drawerOpen = isMenuOpen DrawerMenu config.model
@@ -187,9 +180,7 @@ viewFrame config =
             then
                 Just
                     (View.Chrome.profileMenu
-                        { device = config.device
-                        , theme = config.theme
-                        , language = config.language
+                        { env = config.env
                         , session = config.session
                         , onNavigate = config.toMsg << NavigateClicked
                         , onLogout = config.toMsg LogoutClicked
@@ -212,9 +203,7 @@ viewFrame config =
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
         (View.Chrome.topBarView
-            { device = config.device
-            , theme = config.theme
-            , language = config.language
+            { env = config.env
             , session = config.session
             , route = config.route
             , profileOpen = isMenuOpen ProfileMenu config.model
@@ -234,14 +223,14 @@ viewFrame config =
 
 showBottomNav :
     { config
-        | device : Device
+        | env : Env
         , session : Session
         , isLoadingPage : Bool
         , route : Route
     }
     -> Bool
 showBottomNav config =
-    View.Chrome.showBottomNav config.device config.session config.isLoadingPage config.route
+    View.Chrome.showBottomNav config.env config.session config.isLoadingPage config.route
 
 
 pageAttrs : Bool -> List (Element.Attribute msg)

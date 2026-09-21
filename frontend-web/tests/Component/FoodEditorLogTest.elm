@@ -117,9 +117,7 @@ tests =
             \_ ->
                 Editor.viewForLog
                     Editor.AllNutrients
-                    Theme.light
-                    Util.EN_US
-                    phone
+                    { theme = Theme.light, device = phone, language = Util.EN_US }
                     []
                     []
                     validForm
@@ -138,9 +136,7 @@ tests =
                     |> update Editor.LogPersistenceToggled
                     |> Editor.viewForLog
                         Editor.AllNutrients
-                        Theme.light
-                        Util.EN_US
-                        phone
+                        { theme = Theme.light, device = phone, language = Util.EN_US }
                         []
                         []
                     |> Element.layout []

@@ -137,9 +137,11 @@ tests =
             \_ ->
                 CustomFoodCreate.view
                     { model = validModel
-                    , device = { class = Phone, orientation = Portrait }
-                    , theme = Theme.light
-                    , language = Util.EN_US
+                    , env =
+                        { theme = Theme.light
+                        , device = { class = Phone, orientation = Portrait }
+                        , language = Util.EN_US
+                        }
                     }
                     |> Element.layout []
                     |> Query.fromHtml

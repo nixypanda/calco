@@ -9,9 +9,9 @@ module View.Product exposing
 import Data.Food exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Element exposing (Element)
-import Translations.Util exposing (Language)
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Page as UiPage
 import Ui.Surface as Surface
 import Ui.Theme exposing (Theme)
@@ -21,11 +21,11 @@ import View.Nutrients
 
 {-| The food identity as its own titled section, for pages where it stands alone.
 -}
-foodHeader : Theme -> Language -> ProductDetail -> List (Maybe String) -> Element msg
-foodHeader theme language food extraMeta =
-    Surface.section theme
-        { header = Just (foodHeaderElement theme language food extraMeta)
-        , body = foodCategories theme food
+foodHeader : Env -> ProductDetail -> List (Maybe String) -> Element msg
+foodHeader env food extraMeta =
+    Surface.section env.theme
+        { header = Just (foodHeaderElement env food extraMeta)
+        , body = foodCategories env.theme food
         , footer = Nothing
         }
 
@@ -33,8 +33,8 @@ foodHeader theme language food extraMeta =
 {-| The food name, macros, and brand/meta row, without a surface. Pages that
 merge the header into a larger panel use this as the panel header.
 -}
-foodHeaderElement : Theme -> Language -> ProductDetail -> List (Maybe String) -> Element msg
-foodHeaderElement theme language food extraMeta =
+foodHeaderElement : Env -> ProductDetail -> List (Maybe String) -> Element msg
+foodHeaderElement env food extraMeta =
     let
         macroNutrients : List Nutrition.NutrientAmount
         macroNutrients =
@@ -42,9 +42,9 @@ foodHeaderElement theme language food extraMeta =
                 |> List.map
                     (\n -> { code = n.code, amount = n.amountPer100g, unit = n.unit })
     in
-    UiPage.pageHeader theme
-        { leading = Just (View.Nutrients.macroDot theme language macroNutrients)
-        , title = Typography.truncatedHeader theme food.name
+    UiPage.pageHeader env.theme
+        { leading = Just (View.Nutrients.macroDot env macroNutrients)
+        , title = Typography.truncatedHeader env.theme food.name
         , subtitle =
             Just
                 (UiPage.SubtitleMeta

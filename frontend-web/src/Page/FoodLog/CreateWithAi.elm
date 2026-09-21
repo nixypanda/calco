@@ -17,18 +17,17 @@ import Component.FoodEditor as Editor
 import Data.FoodAssistant as FoodAssistant exposing (Conversation, FoodDraftPurpose(..))
 import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import File exposing (File)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 
 
@@ -315,66 +314,65 @@ sessionOutMsg error =
 
 
 view :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Element Msg
-view { model, device, theme, language } =
+view { model, env } =
     case model.review of
         Nothing ->
             UiPage.pageContainer
-                [ Feedback.maybeErrorBanner theme model.error
+                [ Feedback.maybeErrorBanner env.theme model.error
                 , Element.map AssistantMsg
-                    (Assistant.viewFor AdHocLog theme language device False model.assistant)
+                    (Assistant.viewFor AdHocLog env False model.assistant)
                 ]
 
         Just review ->
             UiPage.pageContainer
-                [ Typography.sectionTitle theme (I18n.t language TidAssistantReviewFoodEstimate)
-                , Typography.mutedParagraph theme
-                    (I18n.t language TidAssistantReviewNutritionTotalsNote)
-                , warningView theme language model.warnings
-                , Button.textButton device
-                    theme
+                [ Typography.sectionTitle env.theme
+                    (I18n.t env.language TidAssistantReviewFoodEstimate)
+                , Typography.mutedParagraph env.theme
+                    (I18n.t env.language TidAssistantReviewNutritionTotalsNote)
+                , warningView env model.warnings
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = I18n.t language TidAssistantAskForChanges
+                    , label = I18n.t env.language TidAssistantAskForChanges
                     , onPress = AskForChangesClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
                     , trailing = Nothing
                     }
-                , additionalNutrientsToggle device theme language model review
+                , additionalNutrientsToggle env model review
                 , Element.map ReviewMsg
                     (Review.viewForAi model.showAdditionalNutrients
                         { model = review
-                        , device = device
-                        , theme = theme
-                        , language = language
+                        , env = env
                         }
                     )
                 ]
 
 
 modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
+    { model : Model, env : Env }
     -> Maybe (Element Msg)
-modalView { model, device, theme, language } =
-    Assistant.modalView theme language device model.assistant
+modalView { model, env } =
+    Assistant.modalView env model.assistant
         |> Maybe.map (Element.map AssistantMsg)
 
 
-additionalNutrientsToggle : Device -> Theme -> Language -> Model -> Review.Model -> Element Msg
-additionalNutrientsToggle device theme language model review =
+additionalNutrientsToggle : Env -> Model -> Review.Model -> Element Msg
+additionalNutrientsToggle env model review =
     if List.any (not << isCoreNutrient << .code) review.form.nutrients then
-        Button.textButton device
-            theme
+        Button.textButton env.device
+            env.theme
             { tone = Button.Ghost
             , width = Button.FullWidth
             , label =
                 if model.showAdditionalNutrients then
-                    I18n.t language TidAssistantHideAdditionalNutrients
+                    I18n.t env.language TidAssistantHideAdditionalNutrients
 
                 else
-                    I18n.t language TidAssistantShowAdditionalNutrients
+                    I18n.t env.language TidAssistantShowAdditionalNutrients
             , onPress = ToggleAdditionalNutrients
             , submitState = Nothing
             , submittingLabel = Nothing
@@ -390,18 +388,18 @@ isCoreNutrient code =
     List.member code [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
 
 
-warningView : Theme -> Language -> List String -> Element msg
-warningView theme language warnings =
+warningView : Env -> List String -> Element msg
+warningView env warnings =
     if List.isEmpty warnings then
         Element.none
 
     else
-        Surface.formSection theme
-            (I18n.t language TidAssistantEstimateNotes)
+        Surface.formSection env.theme
+            (I18n.t env.language TidAssistantEstimateNotes)
             (List.map
                 (\warning ->
-                    Typography.mutedParagraph theme
-                        (I18n.t language (TidAssistantEstimatePrefix warning))
+                    Typography.mutedParagraph env.theme
+                        (I18n.t env.language (TidAssistantEstimatePrefix warning))
                 )
                 warnings
             )

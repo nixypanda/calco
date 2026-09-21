@@ -18,12 +18,12 @@ import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
@@ -493,43 +493,44 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : { model : Model, env : Env } -> Element Msg
+view { model, env } =
     case model of
         LoadingEdit _ ->
-            UiPage.pageContainer [ mealEditSkeleton theme ]
+            UiPage.pageContainer [ mealEditSkeleton env.theme ]
 
         EditLoadFailed failed ->
             UiPage.pageContainer
-                [ Feedback.errorRetry theme
-                    language
-                    device
+                [ Feedback.errorRetry env.theme
+                    env.language
+                    env.device
                     { message = failed.message, onRetry = RetryClicked }
                 ]
 
         Editing loaded ->
             UiPage.pageContainer
-                [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
-                , Common.viewFormFields theme language device FormMsg loaded.fields
-                , nutritionView theme language device loaded
-                , Button.textButton device
-                    theme
+                [ Feedback.maybeErrorBanner env.theme
+                    (Common.submitErrorMessage loaded.fields.submit)
+                , Common.viewFormFields env FormMsg loaded.fields
+                , nutritionView env loaded
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidMealUpdate
+                    , label = I18n.t env.language TidMealUpdate
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
 
 
-nutritionView : Theme -> Language -> Device -> LoadedModel -> Element Msg
-nutritionView theme language device loaded =
+nutritionView : Env -> LoadedModel -> Element Msg
+nutritionView env loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ View.Nutrients.preview device theme language loaded.nutrition
+        [ View.Nutrients.preview env loaded.nutrition
         ]
 
 
