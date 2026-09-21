@@ -10,9 +10,7 @@ import Ui.Common as UiCommon
 
 
 type alias Segment =
-    { color : Element.Color
-    , value : Float
-    }
+    { color : Element.Color, value : Float }
 
 
 view :
@@ -40,15 +38,9 @@ view config =
             ]
             [ Html.div
                 [ Attr.style "width"
-                    ("calc(100% - "
-                        ++ String.fromInt (config.thickness * 2)
-                        ++ "px)"
-                    )
+                    ("calc(100% - " ++ String.fromInt (config.thickness * 2) ++ "px)")
                 , Attr.style "height"
-                    ("calc(100% - "
-                        ++ String.fromInt (config.thickness * 2)
-                        ++ "px)"
-                    )
+                    ("calc(100% - " ++ String.fromInt (config.thickness * 2) ++ "px)")
                 , Attr.style "border-radius" "50%"
                 , Attr.style "background" (UiCommon.toCssColor config.centerColor)
                 , Attr.style "display" "grid"
@@ -119,9 +111,7 @@ gradient config =
 
         stops : List String
         stops =
-            positiveSegments
-                |> List.foldl step ( 0, [] )
-                |> Tuple.second
+            positiveSegments |> List.foldl step ( 0, [] ) |> Tuple.second
     in
     if total <= 0 || List.isEmpty stops then
         UiCommon.toCssColor config.emptyColor

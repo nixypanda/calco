@@ -29,9 +29,7 @@ toFixed precision value =
         String.fromInt scaled
 
     else
-        String.fromInt whole
-            ++ "."
-            ++ String.padLeft precision '0' (String.fromInt fractional)
+        String.fromInt whole ++ "." ++ String.padLeft precision '0' (String.fromInt fractional)
 
 
 toFixedTrimmed : Int -> Float -> String

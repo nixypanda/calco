@@ -20,13 +20,13 @@ import Data.ItemNameLookup as ItemNameLookup
 import Data.ItemRef as ItemRef
 import Data.Nutrition as Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Font as Font
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
@@ -49,10 +49,7 @@ type Model
 
 
 type alias LoadingModel =
-    { mealId : String
-    , units : List UnitItem
-    , nutrition : NutritionState
-    }
+    { mealId : String, units : List UnitItem, nutrition : NutritionState }
 
 
 type alias LoadedModel =
@@ -168,16 +165,10 @@ update msg model =
                         nextLoaded =
                             { loaded
                                 | productNames =
-                                    ItemNameLookup.insertProduct
-                                        productId
-                                        name
-                                        loaded.productNames
+                                    ItemNameLookup.insertProduct productId name loaded.productNames
                             }
                     in
-                    ( Loaded nextLoaded
-                    , Cmd.none
-                    , nextProductNameRequest productId nextLoaded
-                    )
+                    ( Loaded nextLoaded, Cmd.none, nextProductNameRequest productId nextLoaded )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -340,10 +331,7 @@ nextProductNameRequest : String -> LoadedModel -> OutMsg
 nextProductNameRequest completedId loaded =
     uniqueProductIds loaded.meal
         |> (\ids ->
-                ItemNameLookup.nextMissingProductId
-                    (Just completedId)
-                    ids
-                    loaded.productNames
+                ItemNameLookup.nextMissingProductId (Just completedId) ids loaded.productNames
            )
         |> Maybe.map RequestProductDetail
         |> Maybe.withDefault NoOp
@@ -353,9 +341,7 @@ componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
         Element.el
-            [ Typography.body
-            , Font.color theme.textPrimary
-            ]
+            [ Typography.body, Font.color theme.textPrimary ]
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -536,86 +522,85 @@ failure =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
         (case model of
             Loaded loaded ->
-                [ Surface.section theme
-                    { header = Just (headerView theme language model)
+                [ Surface.section env.theme
+                    { header = Just (headerView env model)
                     , body =
                         [ case loaded.meal.notes of
                             Just notes ->
-                                Typography.mutedParagraph theme notes
+                                Typography.mutedParagraph env.theme notes
 
                             Nothing ->
                                 Element.none
                         ]
                     , footer = Nothing
                     }
-                , loadedView theme language device loaded
+                , loadedView env loaded
                 ]
 
             LoadFailed message ->
-                [ Surface.section theme
-                    { header = Just (headerView theme language model)
-                    , body = [ Feedback.errorBanner theme message ]
+                [ Surface.section env.theme
+                    { header = Just (headerView env model)
+                    , body = [ Feedback.errorBanner env.theme message ]
                     , footer = Nothing
                     }
                 ]
 
             Loading _ ->
-                [ mealShowSkeleton theme ]
+                [ mealShowSkeleton env.theme ]
         )
 
 
-modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Maybe (Element Msg)
-modalView { model, device, theme, language } =
+modalView : Env -> Model -> Maybe (Element Msg)
+modalView env model =
     case model of
         Loaded loaded ->
-            deleteModalView theme language device loaded
+            deleteModalView env loaded
 
         _ ->
             Nothing
 
 
-headerView : Theme -> Language -> Model -> Element Msg
-headerView theme language model =
+headerView : Env -> Model -> Element Msg
+headerView env model =
     case model of
         Loaded loaded ->
-            UiPage.pageHeader theme
+            UiPage.pageHeader env.theme
                 { leading =
                     loaded.meal.nutritionSummary
                         |> Maybe.map
-                            (View.Nutrients.macroDot theme language << Nutrition.summaryToNutrients)
-                , title = Typography.truncatedHeader theme loaded.meal.name
+                            (View.Nutrients.macroDot env << Nutrition.summaryToNutrients)
+                , title = Typography.truncatedHeader env.theme loaded.meal.name
                 , subtitle = Nothing
                 , actions = []
                 }
 
         _ ->
-            Typography.truncatedHeader theme (I18n.t language TidTitleMeal)
+            Typography.truncatedHeader env.theme (I18n.t env.language TidTitleMeal)
 
 
-loadedView : Theme -> Language -> Device -> LoadedModel -> Element Msg
-loadedView theme language device loaded =
+loadedView : Env -> LoadedModel -> Element Msg
+loadedView env loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ Surface.section theme
-            { header = Just (Typography.subsectionTitle theme (I18n.t language TidMealComponents))
+        [ Surface.section env.theme
+            { header =
+                Just (Typography.subsectionTitle env.theme (I18n.t env.language TidMealComponents))
             , body =
-                List.intersperse (Surface.hairline theme)
-                    (List.map (componentView theme language loaded) loaded.meal.components)
+                List.intersperse (Surface.hairline env.theme)
+                    (List.map (componentView env loaded) loaded.meal.components)
             , footer = Nothing
             }
-        , nutritionView theme language device loaded
-        , bottomActionsView theme language device
+        , nutritionView env loaded
+        , bottomActionsView env
         ]
 
 
-componentView : Theme -> Language -> LoadedModel -> MealsApi.MealComponent -> Element Msg
-componentView theme language loaded component =
+componentView : Env -> LoadedModel -> MealsApi.MealComponent -> Element Msg
+componentView env loaded component =
     let
         summaryText : String
         summaryText =
@@ -624,10 +609,8 @@ componentView theme language loaded component =
                 |> Maybe.map
                     (\kcal ->
                         " ⋅ "
-                            ++ I18n.t language
-                                (TidDiaryKcal
-                                    (String.fromInt (round (Nutrition.safeAmount kcal)))
-                                )
+                            ++ I18n.t env.language
+                                (TidDiaryKcal (String.fromInt (round (Nutrition.safeAmount kcal))))
                     )
                 |> Maybe.withDefault ""
 
@@ -635,21 +618,16 @@ componentView theme language loaded component =
         macroDot =
             Maybe.withDefault Element.none
                 (Maybe.map
-                    (View.Nutrients.macroDot theme language << Nutrition.summaryToNutrients)
+                    (View.Nutrients.macroDot env << Nutrition.summaryToNutrients)
                     component.nutritionSummary
                 )
 
         quantityText : String
         quantityText =
-            component.quantity.amount
-                ++ " "
-                ++ component.quantity.unit
-                ++ summaryText
+            component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText
     in
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
@@ -657,35 +635,30 @@ componentView theme language loaded component =
             ]
             macroDot
         , Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space4
-            , Element.alignTop
-            ]
-            [ componentNameView theme loaded component.item.id
+            [ Element.width Element.fill, Element.spacing DesignTokens.space4, Element.alignTop ]
+            [ componentNameView env.theme loaded component.item.id
             , Element.el
-                [ Font.color theme.textMuted ]
+                [ Font.color env.theme.textMuted ]
                 (Element.text quantityText)
             ]
         ]
 
 
-nutritionView : Theme -> Language -> Device -> LoadedModel -> Element Msg
-nutritionView theme language device loaded =
+nutritionView : Env -> LoadedModel -> Element Msg
+nutritionView env loaded =
     let
         input : NutritionInput
         input =
             nutritionInput loaded.nutrition
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Surface.formSection theme
-            (I18n.t language TidFoodShowPortion)
-            [ View.QuantityInput.dropdown theme
-                language
-                device
-                { amountLabel = I18n.t language TidNutrientTableAmount
+        [ Surface.formSection env.theme
+            (I18n.t env.language TidFoodShowPortion)
+            [ View.QuantityInput.dropdown env
+                { amountLabel = I18n.t env.language TidNutrientTableAmount
                 , amount = input.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = I18n.t language TidNutrientTableUnit
+                , unitLabel = I18n.t env.language TidNutrientTableUnit
                 , unit = input.unit
                 , units = loaded.units
                 , onUnitChange = UnitChanged
@@ -693,28 +666,32 @@ nutritionView theme language device loaded =
                 , onUnitToggle = ToggleUnitDropdown
                 }
             ]
-        , View.Nutrients.preview device theme language loaded.nutrition
+        , View.Nutrients.preview env loaded.nutrition
         ]
 
 
-bottomActionsView : Theme -> Language -> Device -> Element Msg
-bottomActionsView theme language device =
-    Button.bottomActionButtons device
-        theme
-        [ { label = I18n.t language TidTitleEditMeal, onPress = EditClicked, tone = Button.Primary }
-        , { label = I18n.t language TidMealDelete, onPress = DeleteClicked, tone = Button.Danger }
+bottomActionsView : Env -> Element Msg
+bottomActionsView env =
+    Button.bottomActionButtons env.device
+        env.theme
+        [ { label = I18n.t env.language TidTitleEditMeal
+          , onPress = EditClicked
+          , tone = Button.Primary
+          }
+        , { label = I18n.t env.language TidMealDelete
+          , onPress = DeleteClicked
+          , tone = Button.Danger
+          }
         ]
 
 
-deleteModalView : Theme -> Language -> Device -> LoadedModel -> Maybe (Element Msg)
-deleteModalView theme language device loaded =
-    View.DeleteModal.deleteModalView theme
-        language
-        device
-        { title = I18n.t language TidMealDeleteConfirmTitle
-        , description = I18n.t language TidMealDeleteConfirmDescription
-        , confirmLabel = I18n.t language TidCustomFoodConfirmDelete
-        , pendingLabel = I18n.t language TidCustomFoodDeleting
+deleteModalView : Env -> LoadedModel -> Maybe (Element Msg)
+deleteModalView env loaded =
+    View.DeleteModal.deleteModalView env
+        { title = I18n.t env.language TidMealDeleteConfirmTitle
+        , description = I18n.t env.language TidMealDeleteConfirmDescription
+        , confirmLabel = I18n.t env.language TidCustomFoodConfirmDelete
+        , pendingLabel = I18n.t env.language TidCustomFoodDeleting
         , onCancel = CancelDeleteClicked
         , onConfirm = ConfirmDeleteClicked
         }
@@ -727,10 +704,7 @@ mealShowSkeleton theme =
         [ Skeleton.card theme { rows = 2 }
         , Surface.section theme
             { header =
-                Just
-                    (Skeleton.barCustom theme
-                        { width = Element.fillPortion 1, height = 16 }
-                    )
+                Just (Skeleton.barCustom theme { width = Element.fillPortion 1, height = 16 })
             , body = List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
             , footer = Nothing
             }

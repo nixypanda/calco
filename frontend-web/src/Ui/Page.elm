@@ -59,10 +59,7 @@ pageHeader theme config =
         titleColumn : Element msg
         titleColumn =
             Element.column
-                [ Element.width Element.fill
-                , Element.spacing space4
-                , minWidthZero
-                ]
+                [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
                 (config.title
                     :: (case config.subtitle of
                             Just subtitle ->
@@ -82,10 +79,7 @@ pageHeader theme config =
                 Element.row [ Element.spacing space8 ] config.actions
     in
     Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.spacing space12
-        , minWidthZero
-        ]
+        [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
         [ leadingElement, titleColumn, actionsRow ]
 
 
@@ -97,19 +91,12 @@ pageHeaderSubtitle theme subtitle =
 
         SubtitleMeta meta ->
             Element.paragraph
-                [ Font.color theme.textMuted
-                , body
-                , Element.width Element.fill
-                , minWidthZero
-                ]
+                [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]
                 (separatedInline meta)
 
         SubtitleMetaLines meta ->
             Element.column
-                [ Element.width Element.fill
-                , Element.spacing space2
-                , minWidthZero
-                ]
+                [ Element.width Element.fill, Element.spacing space2, minWidthZero ]
                 (List.map
                     (\items ->
                         Element.paragraph
@@ -118,9 +105,7 @@ pageHeaderSubtitle theme subtitle =
                             , Element.width Element.fill
                             , minWidthZero
                             ]
-                            (separatedInline
-                                { items = items, separator = meta.separator }
-                            )
+                            (separatedInline { items = items, separator = meta.separator })
                     )
                     meta.lines
                 )
@@ -128,6 +113,4 @@ pageHeaderSubtitle theme subtitle =
 
 separatedInline : { items : List String, separator : String } -> List (Element msg)
 separatedInline meta =
-    meta.items
-        |> List.map Element.text
-        |> List.intersperse (Element.text meta.separator)
+    meta.items |> List.map Element.text |> List.intersperse (Element.text meta.separator)

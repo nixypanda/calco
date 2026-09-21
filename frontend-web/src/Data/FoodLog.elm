@@ -106,8 +106,7 @@ decoder =
 
 mealSlotFieldDecoder : Decoder (Maybe MealSlot)
 mealSlotFieldDecoder =
-    Decode.nullable Decode.string
-        |> Decode.map (Maybe.andThen MealSlot.fromString)
+    Decode.nullable Decode.string |> Decode.map (Maybe.andThen MealSlot.fromString)
 
 
 logItemDecoder : Decoder LogItem
@@ -119,8 +118,7 @@ logItemDecoder =
                     "product" ->
                         Decode.map3
                             (\id name brand ->
-                                ProductLogItem
-                                    { id = id, name = name, brand = brand }
+                                ProductLogItem { id = id, name = name, brand = brand }
                             )
                             (Decode.field "id" Decode.string)
                             (Decode.field "name" Decode.string)
@@ -145,10 +143,7 @@ logItemDecoder =
 
 optionalBrandDecoder : Decoder (Maybe String)
 optionalBrandDecoder =
-    Decode.oneOf
-        [ Decode.field "brand" (Decode.nullable Decode.string)
-        , Decode.succeed Nothing
-        ]
+    Decode.oneOf [ Decode.field "brand" (Decode.nullable Decode.string), Decode.succeed Nothing ]
 
 
 listDecoder : Decoder (List FoodLog)

@@ -13,19 +13,13 @@ import Url.Builder as Builder
 
 
 type alias SaveGoalRequest =
-    { localDate : String
-    , deviceTimezone : String
-    , targets : GoalTargets
-    }
+    { localDate : String, deviceTimezone : String, targets : GoalTargets }
 
 
 getGoal : LocalDate -> (Result Client.ApiError GoalSnapshot -> msg) -> Cmd msg
 getGoal date toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "goal" ]
-            [ Builder.string "date" (LocalDate.format date) ]
-        )
+        (Builder.absolute [ "api", "goal" ] [ Builder.string "date" (LocalDate.format date) ])
         Goals.decoder
         toMsg
 

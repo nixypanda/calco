@@ -10,12 +10,12 @@ module Page.Users.Dashboard exposing
 import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User exposing (User)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -35,9 +35,7 @@ type Model
 
 init : ( Model, OutMsg )
 init =
-    ( Loading
-    , RequestUsers
-    )
+    ( Loading, RequestUsers )
 
 
 
@@ -83,33 +81,34 @@ update msg model =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-contentView { model, device, theme, language } =
-    bodyView device theme language model
+contentView : Env -> Model -> Element Msg
+contentView env model =
+    bodyView env model
 
 
-bodyView : Device -> Theme -> Language -> Model -> Element Msg
-bodyView device theme language model =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded users ->
-            Surface.section theme
+            Surface.section env.theme
                 { header =
-                    Just (Typography.sectionTitle theme (I18n.t language TidUsersSectionTitle))
+                    Just
+                        (Typography.sectionTitle env.theme
+                            (I18n.t env.language TidUsersSectionTitle)
+                        )
                 , body =
                     List.map
                         (\user ->
-                            userListRow
-                                theme
-                                { user = user, onSelect = NavigateEditUser }
+                            userListRow env.theme { user = user, onSelect = NavigateEditUser }
                         )
                         users
                 , footer =
                     Just
-                        (Button.textButton device
-                            theme
+                        (Button.textButton env.device
+                            env.theme
                             { tone = Button.Ghost
                             , width = Button.FullWidth
-                            , label = I18n.t language TidUsersCreateUser
+                            , label = I18n.t env.language TidUsersCreateUser
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -119,10 +118,10 @@ bodyView device theme language model =
                 }
 
         Loading ->
-            adminDashboardSkeleton theme
+            adminDashboardSkeleton env.theme
 
         LoadFailed error ->
-            Feedback.errorBanner theme (Client.displayError error)
+            Feedback.errorBanner env.theme (Client.displayError error)
 
 
 userListRow : Theme -> { user : User, onSelect : String -> msg } -> Element msg
@@ -140,12 +139,8 @@ adminDashboardSkeleton : Theme -> Element msg
 adminDashboardSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 120, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 120, height = 24 })
         , body =
-            List.map (\_ -> Skeleton.listRow theme)
-                (List.range 1 3)
+            List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
         , footer = Just (Skeleton.button theme)
         }

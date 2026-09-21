@@ -15,12 +15,13 @@ import Api.Client as Client
 import Api.Goals exposing (SaveGoalRequest)
 import Data.Goals as Goals exposing (GoalSnapshot, GoalSource(..), GoalStatus, GoalTargets)
 import Data.LocalContext exposing (LocalContext)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Page as UiPage
@@ -41,19 +42,11 @@ type Model
 
 
 type alias ReadyModel =
-    { status : GoalStatus
-    , form : Form
-    , formState : FormState
-    , save : SaveState
-    }
+    { status : GoalStatus, form : Form, formState : FormState, save : SaveState }
 
 
 type alias Form =
-    { calorieTarget : String
-    , proteinTargetG : String
-    , carbsTargetG : String
-    , fatTargetG : String
-    }
+    { calorieTarget : String, proteinTargetG : String, carbsTargetG : String, fatTargetG : String }
 
 
 type FormState
@@ -159,10 +152,7 @@ update msg model =
                             )
 
                         Err message ->
-                            ( Ready { ready | save = ValidationFailed message }
-                            , Cmd.none
-                            , NoOp
-                            )
+                            ( Ready { ready | save = ValidationFailed message }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -240,10 +230,7 @@ refreshedWith : GoalSnapshot -> ReadyModel -> ReadyModel
 refreshedWith snapshot ready =
     case ready.formState of
         Pristine ->
-            { ready
-                | status = Goals.statusOf snapshot
-                , form = formFor snapshot.targets
-            }
+            { ready | status = Goals.statusOf snapshot, form = formFor snapshot.targets }
 
         Edited ->
             { ready | status = Goals.statusOf snapshot }
@@ -329,70 +316,70 @@ formFor targets =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
         (case model of
             Loading ->
-                [ goalsSettingsSkeleton theme ]
+                [ goalsSettingsSkeleton env.theme ]
 
             Failed message ->
-                [ Feedback.errorRetry theme
-                    language
-                    device
+                [ Feedback.errorRetry env.theme
+                    env.language
+                    env.device
                     { message = message, onRetry = RetryClicked }
                 ]
 
             Ready ready ->
-                [ Feedback.maybeErrorBanner theme (requestError ready.save)
-                , Surface.section theme
+                [ Feedback.maybeErrorBanner env.theme (requestError ready.save)
+                , Surface.section env.theme
                     { header =
                         Just
                             (Surface.sectionHeader
                                 { title =
-                                    Typography.sectionTitle theme
-                                        (I18n.t language TidGoalSettingsDailyTargetsTitle)
+                                    Typography.sectionTitle env.theme
+                                        (I18n.t env.language TidGoalSettingsDailyTargetsTitle)
                                 , description =
                                     Just
-                                        (Typography.mutedParagraph theme
-                                            (statusMessage language ready.status)
+                                        (Typography.mutedParagraph env.theme
+                                            (statusMessage env.language ready.status)
                                         )
                                 , trailing = Nothing
                                 }
                             )
                     , body =
-                        [ UiInput.numericInput theme
-                            { label = I18n.t language TidGoalSettingsCalories
+                        [ UiInput.numericInput env.theme
+                            { label = I18n.t env.language TidGoalSettingsCalories
                             , value = ready.form.calorieTarget
                             , onChange = CalorieTargetChanged
                             }
-                        , UiInput.numericInput theme
-                            { label = I18n.t language TidGoalSettingsProtein
+                        , UiInput.numericInput env.theme
+                            { label = I18n.t env.language TidGoalSettingsProtein
                             , value = ready.form.proteinTargetG
                             , onChange = ProteinTargetChanged
                             }
-                        , UiInput.numericInput theme
-                            { label = I18n.t language TidGoalSettingsCarbs
+                        , UiInput.numericInput env.theme
+                            { label = I18n.t env.language TidGoalSettingsCarbs
                             , value = ready.form.carbsTargetG
                             , onChange = CarbsTargetChanged
                             }
-                        , UiInput.numericInput theme
-                            { label = I18n.t language TidGoalSettingsFat
+                        , UiInput.numericInput env.theme
+                            { label = I18n.t env.language TidGoalSettingsFat
                             , value = ready.form.fatTargetG
                             , onChange = FatTargetChanged
                             }
-                        , Feedback.maybeErrorBanner theme (formError ready.save)
+                        , Feedback.maybeErrorBanner env.theme (formError ready.save)
                         ]
                     , footer = Nothing
                     }
-                , Button.textButton device
-                    theme
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidGoalSettingsSave
+                    , label = I18n.t env.language TidGoalSettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (isSaving ready.save))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
@@ -454,10 +441,7 @@ goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 160, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 160, height = 24 })
         , body =
             [ Skeleton.input theme
             , Skeleton.input theme

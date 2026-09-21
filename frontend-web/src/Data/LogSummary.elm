@@ -10,12 +10,7 @@ import Lib.Date as LocalDate exposing (LocalDate)
 
 
 type alias DaySummary =
-    { date : LocalDate
-    , energyKcal : Float
-    , proteinG : Float
-    , carbsG : Float
-    , fatG : Float
-    }
+    { date : LocalDate, energyKcal : Float, proteinG : Float, carbsG : Float, fatG : Float }
 
 
 fromLogs : LocalDate -> List { log | nutrients : List NutrientAmount } -> Maybe DaySummary

@@ -33,10 +33,7 @@ import Lib.ListExtra as ListExtra
 
 
 type alias NutrientAmount =
-    { code : String
-    , amount : String
-    , unit : String
-    }
+    { code : String, amount : String, unit : String }
 
 
 type alias NutritionSummary =
@@ -50,12 +47,7 @@ type alias NutritionSummary =
 
 emptySummary : NutritionSummary
 emptySummary =
-    { energyKcal = Nothing
-    , proteinG = Nothing
-    , carbsG = Nothing
-    , fatG = Nothing
-    , fiberG = Nothing
-    }
+    { energyKcal = Nothing, proteinG = Nothing, carbsG = Nothing, fatG = Nothing, fiberG = Nothing }
 
 
 {-| Convert a `NutritionSummary` into a `List NutrientAmount` keyed by the
@@ -165,8 +157,7 @@ safeAmount raw =
 
 summaryValue : String -> List NutrientAmount -> Maybe NutrientAmount
 summaryValue code entries =
-    List.filter (\entry -> entry.code == code) entries
-        |> List.head
+    List.filter (\entry -> entry.code == code) entries |> List.head
 
 
 macroTotals : List { item | nutrients : List NutrientAmount } -> MacroTotals
@@ -207,16 +198,12 @@ macroTotals logs =
 
 sumNutrient : String -> List { item | nutrients : List NutrientAmount } -> Float
 sumNutrient code logs =
-    logs
-        |> List.map (\log -> nutrientAmount code log.nutrients)
-        |> List.sum
+    logs |> List.map (\log -> nutrientAmount code log.nutrients) |> List.sum
 
 
 nutrientAmount : String -> List NutrientAmount -> Float
 nutrientAmount code nutrients =
-    summaryValue code nutrients
-        |> Maybe.map (.amount >> safeAmount)
-        |> Maybe.withDefault 0
+    summaryValue code nutrients |> Maybe.map (.amount >> safeAmount) |> Maybe.withDefault 0
 
 
 servingGrams :
@@ -270,8 +257,7 @@ nutrientsForQuantity :
     -> List { nutrient | code : String, amountPer100g : String, unit : String }
     -> Maybe (List NutrientAmount)
 nutrientsForQuantity quantity servings nutrients =
-    servingGrams quantity servings
-        |> Maybe.map (\grams -> scalePer100g grams nutrients)
+    servingGrams quantity servings |> Maybe.map (\grams -> scalePer100g grams nutrients)
 
 
 scaledSnapshotForQuantity :
@@ -296,9 +282,7 @@ scaleNutrients : Float -> List NutrientAmount -> List NutrientAmount
 scaleNutrients factor nutrients =
     List.map
         (\nutrient ->
-            { nutrient
-                | amount = String.fromFloat (safeAmount nutrient.amount * factor)
-            }
+            { nutrient | amount = String.fromFloat (safeAmount nutrient.amount * factor) }
         )
         nutrients
 
@@ -333,24 +317,18 @@ gramsFromServing amount serving =
 
 
 type alias Quantity =
-    { amount : String
-    , unit : String
-    }
+    { amount : String, unit : String }
 
 
 quantityDecoder : Decoder Quantity
 quantityDecoder =
-    Decode.map2 Quantity
-        (Decode.field "amount" Decode.string)
-        (Decode.field "unit" Decode.string)
+    Decode.map2 Quantity (Decode.field "amount" Decode.string) (Decode.field "unit" Decode.string)
 
 
 quantityEncoder : Quantity -> Encode.Value
 quantityEncoder quantity =
     Encode.object
-        [ ( "amount", Encode.string quantity.amount )
-        , ( "unit", Encode.string quantity.unit )
-        ]
+        [ ( "amount", Encode.string quantity.amount ), ( "unit", Encode.string quantity.unit ) ]
 
 
 caloriesFrom : List NutrientAmount -> Float
@@ -363,14 +341,11 @@ totalsFromLogs logs =
     let
         allNutrients : List NutrientAmount
         allNutrients =
-            logs
-                |> List.concatMap .nutrients
+            logs |> List.concatMap .nutrients
 
         codes : List String
         codes =
-            allNutrients
-                |> List.map .code
-                |> uniqueCodes
+            allNutrients |> List.map .code |> uniqueCodes
 
         units : List { code : String, unit : String }
         units =

@@ -28,33 +28,23 @@ type Role
 
 
 type alias Identity =
-    { id : String
-    , username : String
-    , role : Role
-    }
+    { id : String, username : String, role : Role }
 
 
 type alias Profile =
-    { id : String
-    , displayName : String
-    }
+    { id : String, displayName : String }
 
 
 type alias LoginSession =
-    { identity : Identity
-    , profile : Maybe Profile
-    }
+    { identity : Identity, profile : Maybe Profile }
 
 
 type alias BootstrapStatus =
-    { adminExists : Bool
-    }
+    { adminExists : Bool }
 
 
 type alias LoginRequest =
-    { username : String
-    , password : String
-    }
+    { username : String, password : String }
 
 
 roleDecoder : Decoder Role
@@ -98,8 +88,7 @@ loginSessionDecoder =
 
 bootstrapStatusDecoder : Decoder BootstrapStatus
 bootstrapStatusDecoder =
-    Decode.map BootstrapStatus
-        (Decode.field "admin_exists" Decode.bool)
+    Decode.map BootstrapStatus (Decode.field "admin_exists" Decode.bool)
 
 
 loginRequestEncoder : LoginRequest -> Encode.Value

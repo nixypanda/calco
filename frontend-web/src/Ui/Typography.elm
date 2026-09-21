@@ -38,12 +38,7 @@ caption =
 
 decimalNumber : String -> Element msg
 decimalNumber value =
-    Element.el
-        [ body
-        , Font.alignRight
-        , Font.variant Font.tabularNumbers
-        ]
-        (Element.text value)
+    Element.el [ body, Font.alignRight, Font.variant Font.tabularNumbers ] (Element.text value)
 
 
 sizePageTitle : Element.Attribute msg
@@ -69,22 +64,13 @@ sizeSubsectionTitle =
 pageTitle : Theme -> String -> Element msg
 pageTitle theme text =
     Element.el
-        [ sizePageTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 1
-        ]
+        [ sizePageTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
         (Element.text text)
 
 
 heroStat : Theme -> String -> Element msg
 heroStat theme text =
-    Element.el
-        [ sizeHeroStat
-        , Font.bold
-        , Font.color theme.textPrimary
-        ]
-        (Element.text text)
+    Element.el [ sizeHeroStat, Font.bold, Font.color theme.textPrimary ] (Element.text text)
 
 
 {-| Screen title in the top app bar. Emits the page's h1 while keeping the
@@ -93,57 +79,36 @@ compact bar size.
 screenTitle : Theme -> String -> Element msg
 screenTitle theme text =
     Element.el
-        [ sizeSubsectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 1
-        ]
+        [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 1 ]
         (Element.text text)
 
 
 sectionTitle : Theme -> String -> Element msg
 sectionTitle theme text =
     Element.el
-        [ sizeSectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 2
-        ]
+        [ sizeSectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 2 ]
         (Element.text text)
 
 
 subsectionTitle : Theme -> String -> Element msg
 subsectionTitle theme text =
     Element.el
-        [ sizeSubsectionTitle
-        , Font.bold
-        , Font.color theme.textPrimary
-        , Region.heading 3
-        ]
+        [ sizeSubsectionTitle, Font.bold, Font.color theme.textPrimary, Region.heading 3 ]
         (Element.text text)
 
 
 listItemTitle : Theme -> Element msg -> Element msg
 listItemTitle theme child =
-    Element.el
-        [ body
-        , Font.bold
-        , Font.color theme.textPrimary
-        ]
-        child
+    Element.el [ body, Font.bold, Font.color theme.textPrimary ] child
 
 
 truncatedListItemTitle : Theme -> String -> Element msg
 truncatedListItemTitle theme name =
     Element.el
-        [ Element.width Element.fill
-        ]
+        [ Element.width Element.fill ]
         (listItemTitle theme
             (Element.el
-                [ Element.width Element.fill
-                , Element.clip
-                , uiClass "ui-text-ellipsis"
-                ]
+                [ Element.width Element.fill, Element.clip, uiClass "ui-text-ellipsis" ]
                 (Element.text name)
             )
         )
@@ -152,42 +117,24 @@ truncatedListItemTitle theme name =
 wrappedListItemTitle : Theme -> String -> Element msg
 wrappedListItemTitle theme name =
     listItemTitle theme
-        (Element.paragraph
-            [ Element.width Element.fill
-            , minWidthZero
-            ]
-            [ Element.text name ]
-        )
+        (Element.paragraph [ Element.width Element.fill, minWidthZero ] [ Element.text name ])
 
 
 mutedCaption : Theme -> String -> Element msg
 mutedCaption theme text =
-    Element.el
-        [ caption
-        , Font.color theme.textMuted
-        ]
-        (Element.text text)
+    Element.el [ caption, Font.color theme.textMuted ] (Element.text text)
 
 
 mutedCaptionParagraph : Theme -> String -> Element msg
 mutedCaptionParagraph theme text =
     Element.paragraph
-        [ caption
-        , Font.color theme.textMuted
-        , Element.width Element.fill
-        , minWidthZero
-        ]
+        [ caption, Font.color theme.textMuted, Element.width Element.fill, minWidthZero ]
         [ Element.text text ]
 
 
 tableHeader : Theme -> String -> Element msg
 tableHeader theme text =
-    Element.el
-        [ body
-        , Font.bold
-        , Font.color theme.textMuted
-        ]
-        (Element.text text)
+    Element.el [ body, Font.bold, Font.color theme.textMuted ] (Element.text text)
 
 
 truncatedHeader : Theme -> String -> Element msg
@@ -205,31 +152,19 @@ truncatedHeader theme heading =
 
 mutedBody : Theme -> String -> Element msg
 mutedBody theme text =
-    Element.el
-        [ Font.color theme.textMuted
-        , body
-        ]
-        (Element.text text)
+    Element.el [ Font.color theme.textMuted, body ] (Element.text text)
 
 
 mutedBodyParagraph : Theme -> String -> Element msg
 mutedBodyParagraph theme text =
     Element.paragraph
-        [ Font.color theme.textMuted
-        , body
-        , Element.width Element.fill
-        , minWidthZero
-        ]
+        [ Font.color theme.textMuted, body, Element.width Element.fill, minWidthZero ]
         [ Element.text text ]
 
 
 mutedParagraph : Theme -> String -> Element msg
 mutedParagraph theme text =
-    Element.paragraph
-        [ Font.color theme.textMuted
-        , body
-        ]
-        [ Element.text text ]
+    Element.paragraph [ Font.color theme.textMuted, body ] [ Element.text text ]
 
 
 maybeMutedParagraph : Theme -> Maybe String -> Element msg

@@ -11,12 +11,12 @@ module Page.Users.BootstrapSetup exposing
 import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
-import Ui.Theme exposing (Theme)
+import Ui.Env exposing (Env)
 
 
 
@@ -89,16 +89,13 @@ update msg model =
             ( model, Cmd.none, CreateAdminSucceeded loginSession )
 
         CreateAdminCompleted (Err error) ->
-            ( CredentialForm.markFailed (Client.displayError error) model
-            , Cmd.none
-            , NoOp
-            )
+            ( CredentialForm.markFailed (Client.displayError error) model, Cmd.none, NoOp )
 
 
 
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view props =
-    Element.map FormMsg (CredentialForm.view (config props.language) props)
+view : Env -> Model -> Element Msg
+view env model =
+    Element.map FormMsg (CredentialForm.view env (config env.language) model)

@@ -11,7 +11,16 @@ import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
 import Translations.Util as Util
+import Ui.Env exposing (Env)
 import Ui.Theme as Theme
+
+
+viewEnv : Env
+viewEnv =
+    { theme = Theme.light
+    , device = { class = Phone, orientation = Portrait }
+    , language = Util.EN_US
+    }
 
 
 tests : Test
@@ -180,9 +189,7 @@ tests =
                     |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                     |> first
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -198,9 +205,7 @@ tests =
                     |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                     |> first
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -217,9 +222,7 @@ tests =
                     |> Assistant.update Assistant.AskForChangesClicked
                     |> first
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -357,9 +360,7 @@ tests =
                     |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                     |> first
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -376,9 +377,7 @@ tests =
                     |> Assistant.update Assistant.NewSessionClicked
                     |> first
                     |> Assistant.modalView
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                     |> Maybe.map
                         (Element.layout []
                             >> Query.fromHtml
@@ -403,9 +402,7 @@ tests =
                     |> Assistant.update (Assistant.ApplyDraftClicked True)
                     |> first
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         True
                     |> Element.layout []
                     |> Query.fromHtml
@@ -417,9 +414,7 @@ tests =
             \_ ->
                 enabled
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -431,9 +426,7 @@ tests =
             \_ ->
                 enabled
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml
@@ -445,9 +438,7 @@ tests =
             \_ ->
                 imageEnabled
                     |> Assistant.view
-                        Theme.light
-                        Util.EN_US
-                        { class = Phone, orientation = Portrait }
+                        viewEnv
                         False
                     |> Element.layout []
                     |> Query.fromHtml

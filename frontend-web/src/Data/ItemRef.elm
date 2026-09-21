@@ -11,9 +11,7 @@ import Json.Encode as Encode
 
 
 type alias ItemRef =
-    { itemType : ItemType
-    , id : String
-    }
+    { itemType : ItemType, id : String }
 
 
 type ItemType
@@ -50,9 +48,7 @@ itemTypeDecoder =
 
 decoder : Decoder ItemRef
 decoder =
-    Decode.map2 ItemRef
-        (Decode.field "type" itemTypeDecoder)
-        (Decode.field "id" Decode.string)
+    Decode.map2 ItemRef (Decode.field "type" itemTypeDecoder) (Decode.field "id" Decode.string)
 
 
 encoder : ItemRef -> Encode.Value

@@ -21,12 +21,12 @@ import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -209,9 +209,7 @@ update msg model =
                             { loaded
                                 | form =
                                     FoodLogForm.setSubmitState
-                                        (FoodLogForm.SubmitFailed
-                                            FoodLogForm.AmountRequiredMessage
-                                        )
+                                        (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                                         loaded.form
                             }
                         , Cmd.none
@@ -275,10 +273,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-createLogFromLocalContext :
-    LocalContext
-    -> LoadedModel
-    -> ( Model, Cmd Msg, OutMsg )
+createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
     let
         logDate : String
@@ -295,9 +290,7 @@ createLogFromLocalContext context loaded =
             ( Loaded
                 { loaded
                     | form =
-                        FoodLogForm.setSubmitState
-                            FoodLogForm.SubmitSubmitting
-                            loaded.form
+                        FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
                 }
             , Cmd.none
             , RequestCreateLog request
@@ -308,9 +301,7 @@ createLogFromLocalContext context loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.AmountRequiredMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -322,9 +313,7 @@ createLogFromLocalContext context loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.InvalidDateMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -409,10 +398,7 @@ applyLastUsedDefault maybeQuantity model =
                     model
 
 
-formWithLastUsedDefault :
-    Maybe Nutrition.Quantity
-    -> FoodLogForm.Model
-    -> FoodLogForm.Model
+formWithLastUsedDefault : Maybe Nutrition.Quantity -> FoodLogForm.Model -> FoodLogForm.Model
 formWithLastUsedDefault maybeQuantity form =
     case maybeQuantity of
         Just quantity ->
@@ -439,9 +425,7 @@ applyLoadedError message model =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                (FoodLogForm.RequestFailed message)
-                            )
+                            (FoodLogForm.SubmitFailed (FoodLogForm.RequestFailed message))
                             loaded.form
                 }
 
@@ -453,42 +437,38 @@ applyLoadedError message model =
 -- VIEW
 
 
-contentView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Element Msg
-contentView { model, device, theme, language } =
+contentView : Env -> Model -> Element Msg
+contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             LoadFailed message ->
-                Feedback.errorBanner theme message
+                Feedback.errorBanner env.theme message
 
             Loaded _ ->
                 Element.none
 
             Loading _ ->
                 Element.none
-        , bodyView theme device language model
+        , bodyView env model
         ]
 
 
-bodyView : Theme -> Device -> Language -> Model -> Element Msg
-bodyView theme device language model =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded loaded ->
-            loadedView theme device language loaded
+            loadedView env loaded
 
         LoadFailed _ ->
             Element.none
 
         Loading _ ->
-            foodShowSkeleton theme
+            foodShowSkeleton env.theme
 
 
-loadedView : Theme -> Device -> Language -> LoadedModel -> Element Msg
-loadedView theme device language loaded =
+loadedView : Env -> LoadedModel -> Element Msg
+loadedView env loaded =
     let
         food : ProductDetail
         food =
@@ -504,17 +484,15 @@ loadedView theme device language loaded =
 
         categories : List (Element Msg)
         categories =
-            View.Product.foodCategories theme food
+            View.Product.foodCategories env.theme food
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Maybe.withDefault Element.none
-            (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
-        , Surface.panel theme
+            (Maybe.map (Feedback.infoBanner env.theme) loaded.lookupNote)
+        , Surface.panel env.theme
             { header =
-                Just (View.Product.foodHeaderElement theme language food [])
+                Just (View.Product.foodHeaderElement env food [])
             , sections =
                 (if List.isEmpty categories then
                     []
@@ -525,37 +503,30 @@ loadedView theme device language loaded =
                     ++ [ { title =
                             Just
                                 (Typography.subsectionTitle
-                                    theme
-                                    (I18n.t language TidFoodShowPortion)
+                                    env.theme
+                                    (I18n.t env.language TidFoodShowPortion)
                                 )
                          , body =
                             List.map (Element.map FormMsg)
-                                (FoodLogForm.fields
-                                    theme
-                                    language
-                                    device
-                                    (Just food)
-                                    loaded.units
-                                    form
-                                )
+                                (FoodLogForm.fields env (Just food) loaded.units form)
                          }
                        ]
-            , footer = Just (submitActionView theme device language form)
+            , footer = Just (submitActionView env form)
             }
-        , View.Nutrients.nutritionCard device theme language nutrients
+        , View.Nutrients.nutritionCard env nutrients
         ]
 
 
-submitActionView : Theme -> Device -> Language -> FoodLogForm.Model -> Element Msg
-submitActionView theme device language form =
-    Button.textButton device
-        theme
+submitActionView : Env -> FoodLogForm.Model -> Element Msg
+submitActionView env form =
+    Button.textButton env.device
+        env.theme
         { tone = Button.Primary
         , width = Button.FullWidth
-        , label = I18n.t language TidTitleLogFood
+        , label = I18n.t env.language TidTitleLogFood
         , onPress = SubmitClicked
         , submitState = Just (Button.submittingOrIdle (isSubmitting form))
-        , submittingLabel = Just (I18n.t language TidFoodShowLogging)
+        , submittingLabel = Just (I18n.t env.language TidFoodShowLogging)
         , trailing = Nothing
         }
 
@@ -572,9 +543,7 @@ foodNutrientsForDisplay food form =
 foodShowSkeleton : Theme -> Element msg
 foodShowSkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.barCustom theme
             { width = Element.fill, height = 120 }
         , Skeleton.barCustom theme

@@ -28,9 +28,7 @@ import Translations.Ids exposing (TranslationId(..))
 
 
 type alias AssistantStatus =
-    { enabled : Bool
-    , supportsImages : Bool
-    }
+    { enabled : Bool, supportsImages : Bool }
 
 
 type ConversationRole
@@ -73,22 +71,15 @@ type alias FoodDraft =
 
 
 type alias DraftNutrient =
-    { code : String
-    , amountPer100g : String
-    }
+    { code : String, amountPer100g : String }
 
 
 type alias DraftServing =
-    { unit : String
-    , gramsPerUnit : String
-    }
+    { unit : String, gramsPerUnit : String }
 
 
 type alias SuggestedLog =
-    { amount : String
-    , unit : String
-    , totalWeightGrams : String
-    }
+    { amount : String, unit : String, totalWeightGrams : String }
 
 
 assistantStatusDecoder : Decoder AssistantStatus

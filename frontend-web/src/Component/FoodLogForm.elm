@@ -22,15 +22,14 @@ import Data.FoodLog exposing (FoodLog)
 import Data.ItemRef exposing (ItemType(..))
 import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (Quantity, defaultCode)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
-import Ui.Theme exposing (Theme)
 import View.QuantityInput
 
 
@@ -126,10 +125,7 @@ initLogFormFromLog log =
 
 applyQuantityDefault : Quantity -> Model -> Model
 applyQuantityDefault quantity model =
-    { model
-        | amount = quantity.amount
-        , unit = quantity.unit
-    }
+    { model | amount = quantity.amount, unit = quantity.unit }
 
 
 
@@ -271,38 +267,29 @@ setSubmitState submitState model =
 {-| The form controls as a flat list, so a page can place them inside its own
 panel section instead of a standalone card.
 -}
-fields :
-    Theme
-    -> Language
-    -> Device
-    -> Maybe ProductDetail
-    -> List UnitItem
-    -> Model
-    -> List (Element Msg)
-fields theme language device food units model =
+fields : Env -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
+fields env food units model =
     (case submitError model.submitState of
         Just message ->
-            [ Feedback.errorBanner theme message ]
+            [ Feedback.errorBanner env.theme message ]
 
         Nothing ->
             []
     )
-        ++ [ mealSlotDropdown theme language device model
-           , View.QuantityInput.dropdown theme
-                language
-                device
-                { amountLabel = I18n.t language TidNutrientTableAmount
+        ++ [ mealSlotDropdown env model
+           , View.QuantityInput.dropdown env
+                { amountLabel = I18n.t env.language TidNutrientTableAmount
                 , amount = model.amount
                 , onAmountChange = AmountChanged
-                , unitLabel = I18n.t language TidNutrientTableUnit
+                , unitLabel = I18n.t env.language TidNutrientTableUnit
                 , unit = model.unit
                 , units = sourceForFood food units
                 , onUnitChange = UnitChanged
                 , unitOpen = model.openDropdown == UnitDropdownOpen
                 , onUnitToggle = ToggleUnitDropdown
                 }
-           , UiInput.input theme
-                { label = I18n.t language TidFoodLogNotes
+           , UiInput.input env.theme
+                { label = I18n.t env.language TidFoodLogNotes
                 , value = model.notes
                 , onChange = NotesChanged
                 }
@@ -319,20 +306,20 @@ submitError submitState =
             Nothing
 
 
-mealSlotDropdown : Theme -> Language -> Device -> Model -> Element Msg
-mealSlotDropdown theme language device model =
-    UiInput.selectDropdown device
-        theme
-        language
-        { label = I18n.t language TidTitleMeal
+mealSlotDropdown : Env -> Model -> Element Msg
+mealSlotDropdown env model =
+    UiInput.selectDropdown env.device
+        env.theme
+        env.language
+        { label = I18n.t env.language TidTitleMeal
         , selected = model.mealSlot
         , options =
-            [ ( Nothing, I18n.t language TidFoodEditorMealNone )
-            , ( Just Breakfast, MealSlot.label language Breakfast )
-            , ( Just Lunch, MealSlot.label language Lunch )
-            , ( Just Dinner, MealSlot.label language Dinner )
-            , ( Just Snack, MealSlot.label language Snack )
-            , ( Just LateNightSnack, MealSlot.label language LateNightSnack )
+            [ ( Nothing, I18n.t env.language TidFoodEditorMealNone )
+            , ( Just Breakfast, MealSlot.label env.language Breakfast )
+            , ( Just Lunch, MealSlot.label env.language Lunch )
+            , ( Just Dinner, MealSlot.label env.language Dinner )
+            , ( Just Snack, MealSlot.label env.language Snack )
+            , ( Just LateNightSnack, MealSlot.label env.language LateNightSnack )
             ]
         , onChange = MealSlotChanged
         , isOpen = model.openDropdown == MealSlotDropdownOpen

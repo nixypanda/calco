@@ -23,16 +23,15 @@ import Component.FoodAssistant as Assistant
 import Component.FoodEditor as Form
 import Data.FoodAssistant exposing (Conversation, FoodDraftPurpose)
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import File exposing (File)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
-import Ui.Theme exposing (Theme)
 
 
 
@@ -160,15 +159,10 @@ update msg model =
             let
                 ( nextForm, subCmd, _ ) =
                     Form.update
-                        (Form.CategorySuggestionsLoaded token
-                            (Result.map .items result)
-                        )
+                        (Form.CategorySuggestionsLoaded token (Result.map .items result))
                         model.form
             in
-            ( { model | form = nextForm }
-            , Cmd.map FormMsg subCmd
-            , NoOp
-            )
+            ( { model | form = nextForm }, Cmd.map FormMsg subCmd, NoOp )
 
         SubmitClicked ->
             case Form.toInitialCreateFoodRequest model.form of
@@ -202,9 +196,7 @@ update msg model =
                             \message current ->
                                 { current
                                     | form =
-                                        withSubmit
-                                            (Form.SubmitFailed message)
-                                            current.form
+                                        withSubmit (Form.SubmitFailed message) current.form
                                 }
                         }
                         error
@@ -244,11 +236,7 @@ failure =
         }
 
 
-applyAssistantOutMsg :
-    Assistant.OutMsg
-    -> Model
-    -> Cmd Msg
-    -> ( Model, Cmd Msg, OutMsg )
+applyAssistantOutMsg : Assistant.OutMsg -> Model -> Cmd Msg -> ( Model, Cmd Msg, OutMsg )
 applyAssistantOutMsg assistantOut model command =
     case assistantOut of
         Assistant.NoOutMsg ->
@@ -283,43 +271,33 @@ applyAssistantOutMsg assistantOut model command =
 -- VIEW
 
 
-view :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     let
         content : List (Element Msg)
         content =
             if model.assistantOnly then
-                [ Element.map AssistantMsg
-                    (Assistant.view theme language device False model.assistant)
-                ]
+                [ Element.map AssistantMsg (Assistant.view env False model.assistant) ]
 
             else
                 [ Element.map FormMsg
-                    (Form.viewForCreate theme language device model.nutrients model.form)
-                , Button.textButton device
-                    theme
+                    (Form.viewForCreate env model.nutrients model.form)
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidTitleCreateFood
+                    , label = I18n.t env.language TidTitleCreateFood
                     , onPress = SubmitClicked
                     , submitState =
-                        Just
-                            (Button.submittingOrIdle
-                                (Form.isSubmitting model.form.submit)
-                            )
-                    , submittingLabel = Just (I18n.t language TidCommonCreating)
+                        Just (Button.submittingOrIdle (Form.isSubmitting model.form.submit))
+                    , submittingLabel = Just (I18n.t env.language TidCommonCreating)
                     , trailing = Nothing
                     }
                 ]
     in
-    UiPage.pageContainer (Feedback.maybeErrorBanner theme model.error :: content)
+    UiPage.pageContainer (Feedback.maybeErrorBanner env.theme model.error :: content)
 
 
-modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Maybe (Element Msg)
-modalView { model, device, theme, language } =
-    Assistant.modalView theme language device model.assistant
-        |> Maybe.map (Element.map AssistantMsg)
+modalView : Env -> Model -> Maybe (Element Msg)
+modalView env model =
+    Assistant.modalView env model.assistant |> Maybe.map (Element.map AssistantMsg)

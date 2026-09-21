@@ -136,11 +136,11 @@ tests =
         , test "create view only asks for per-100 g food data" <|
             \_ ->
                 CustomFoodCreate.view
-                    { model = validModel
+                    { theme = Theme.light
                     , device = { class = Phone, orientation = Portrait }
-                    , theme = Theme.light
                     , language = Util.EN_US
                     }
+                    validModel
                     |> Element.layout []
                     |> Query.fromHtml
                     |> Expect.all

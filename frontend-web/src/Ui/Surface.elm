@@ -70,10 +70,7 @@ card : Theme -> List (Element msg) -> Element msg
 card theme children =
     surfaceShell theme
         [ Element.column
-            [ Element.width Element.fill
-            , Element.padding space20
-            , Element.spacing space12
-            ]
+            [ Element.width Element.fill, Element.padding space20, Element.spacing space12 ]
             children
         ]
 
@@ -87,9 +84,7 @@ cardFill theme children =
     surfaceShellWith [ Element.height (Element.fill |> Element.minimum 240) ]
         theme
         [ Element.el
-            [ Element.width Element.fill
-            , Element.height Element.fill
-            ]
+            [ Element.width Element.fill, Element.height Element.fill ]
             (Element.column
                 [ Element.centerX
                 , Element.centerY
@@ -165,11 +160,7 @@ heroCard theme config =
         , Element.column
             [ Element.width Element.fill
             , Element.paddingEach
-                { top = 0
-                , right = space20
-                , bottom = space20
-                , left = space20
-                }
+                { top = 0, right = space20, bottom = space20, left = space20 }
             , Element.spacing space12
             ]
             config.body
@@ -215,9 +206,7 @@ content. The title is intentionally unbanded so the panel's own header stays the
 only tinted surface.
 -}
 type alias PanelSection msg =
-    { title : Maybe (Element msg)
-    , body : List (Element msg)
-    }
+    { title : Maybe (Element msg), body : List (Element msg) }
 
 
 {-| A titled region that gathers several sub-blocks under one surface.
@@ -271,19 +260,11 @@ panel theme config =
 
             else
                 [ Element.column
-                    [ Element.width Element.fill
-                    , Element.padding space20
-                    , Element.spacing space12
-                    ]
+                    [ Element.width Element.fill, Element.padding space20, Element.spacing space12 ]
                     bodySlot
                 ]
 
-        headerRounding :
-            { bottomLeft : Int
-            , bottomRight : Int
-            , topLeft : Int
-            , topRight : Int
-            }
+        headerRounding : { bottomLeft : Int, bottomRight : Int, topLeft : Int, topRight : Int }
         headerRounding =
             if List.isEmpty bodyRegion then
                 { topLeft = radiusCard
@@ -293,11 +274,7 @@ panel theme config =
                 }
 
             else
-                { topLeft = radiusCard
-                , topRight = radiusCard
-                , bottomLeft = 0
-                , bottomRight = 0
-                }
+                { topLeft = radiusCard, topRight = radiusCard, bottomLeft = 0, bottomRight = 0 }
 
         headerBand : List (Element msg)
         headerBand =
@@ -356,13 +333,9 @@ sectionHeader :
     -> Element msg
 sectionHeader config =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing space4
-        ]
+        [ Element.width Element.fill, Element.spacing space4 ]
         (Element.row
-            [ Element.width Element.fill
-            , Element.spacing space12
-            ]
+            [ Element.width Element.fill, Element.spacing space12 ]
             (Element.el [ Element.width Element.fill ] config.title
                 :: (config.trailing
                         |> Maybe.map List.singleton
@@ -378,11 +351,7 @@ sectionHeader config =
 
 formSection : Theme -> String -> List (Element msg) -> Element msg
 formSection theme title content =
-    section theme
-        { header = Just (subsectionTitle theme title)
-        , body = content
-        , footer = Nothing
-        }
+    section theme { header = Just (subsectionTitle theme title), body = content, footer = Nothing }
 
 
 listRow :
@@ -395,21 +364,13 @@ listRow :
     -> Element msg
 listRow config =
     Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.padding space16
-        , Element.spacing space12
-        ]
+        [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
         [ Input.button
-            [ Element.width Element.fill
-            , uiClass "ui-motion ui-pressable"
-            ]
+            [ Element.width Element.fill, uiClass "ui-motion ui-pressable" ]
             { onPress = Just config.onSelect
             , label =
                 Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing space12
-                    , minWidthZero
-                    ]
+                    [ Element.width Element.fill, Element.spacing space12, minWidthZero ]
                     [ listRowLeading config.leading
                     , Element.column
                         [ Element.width Element.fill
@@ -425,10 +386,7 @@ listRow config =
 
           else
             Element.row
-                [ Element.padding space8
-                , Element.spacing space12
-                , Element.alignTop
-                ]
+                [ Element.padding space8, Element.spacing space12, Element.alignTop ]
                 config.trailing
         ]
 
@@ -438,11 +396,7 @@ listRowLeading leading =
     Element.el
         [ Element.width (Element.px 12)
         , Element.paddingEach
-            { top = space2
-            , right = 0
-            , bottom = 0
-            , left = 0
-            }
+            { top = space2, right = 0, bottom = 0, left = 0 }
         , Element.alignTop
         ]
         (case leading of
@@ -457,10 +411,7 @@ listRowLeading leading =
 detailRow : Theme -> Language -> String -> Element msg -> Element msg
 detailRow theme language label value =
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing space4
-        , minWidthZero
-        ]
+        [ Element.width Element.fill, Element.spacing space4, minWidthZero ]
         [ Element.el [ Font.color theme.textMedium, caption ]
             (Element.text (I18n.t language (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value

@@ -30,19 +30,14 @@ import Ui.Typography exposing (sectionTitle)
 
 loading : Theme -> String -> Element msg
 loading theme message =
-    Element.el
-        [ Font.color theme.textMuted ]
-        (Element.text message)
+    Element.el [ Font.color theme.textMuted ] (Element.text message)
 
 
 emptyState : Theme -> String -> Element msg
 emptyState theme message =
     Surface.card theme
         [ Element.paragraph
-            [ Font.color theme.textMuted
-            , Font.center
-            , Element.padding space8
-            ]
+            [ Font.color theme.textMuted, Font.center, Element.padding space8 ]
             [ Element.text message ]
         ]
 
@@ -55,15 +50,9 @@ emptyStateWithIcon : Theme -> { icon : Icon, message : String } -> Element msg
 emptyStateWithIcon theme config =
     Surface.cardFill theme
         [ Icon.view
-            { icon = config.icon
-            , size = 40
-            , color = theme.textMuted
-            }
+            { icon = config.icon, size = 40, color = theme.textMuted }
         , Element.paragraph
-            [ Font.color theme.textMuted
-            , Font.center
-            , Element.width Element.fill
-            ]
+            [ Font.color theme.textMuted, Font.center, Element.width Element.fill ]
             [ Element.text config.message ]
         ]
 
@@ -158,30 +147,18 @@ modalOverlay theme config =
                 )
     in
     Element.el
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Element.inFront modalCard
-        ]
+        [ Element.width Element.fill, Element.height Element.fill, Element.inFront modalCard ]
         (Input.button
             [ Element.width Element.fill
             , Element.height Element.fill
             , Background.color theme.scrim
             , uiClass "ui-modal-backdrop"
             ]
-            { onPress = config.onBackgroundPress
-            , label = Element.none
-            }
+            { onPress = config.onBackgroundPress, label = Element.none }
         )
 
 
-linearProgress :
-    Theme
-    ->
-        { value : Float
-        , max : Float
-        , color : Element.Color
-        }
-    -> Element msg
+linearProgress : Theme -> { value : Float, max : Float, color : Element.Color } -> Element msg
 linearProgress theme config =
     let
         pct : Float

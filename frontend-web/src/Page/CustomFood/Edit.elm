@@ -23,13 +23,13 @@ import Api.Foods as Foods
         )
 import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
 import Ui.Skeleton as Skeleton
@@ -74,11 +74,7 @@ type OutMsg
 init : String -> ( Model, OutMsg )
 init productId =
     ( Loading
-        { productId = productId
-        , food = Nothing
-        , nutrients = Nothing
-        , units = Nothing
-        }
+        { productId = productId, food = Nothing, nutrients = Nothing, units = Nothing }
     , RequestInitialData productId
     )
 
@@ -190,15 +186,10 @@ update msg model =
                     let
                         ( nextForm, subCmd, _ ) =
                             Form.update
-                                (Form.CategorySuggestionsLoaded token
-                                    (Result.map .items result)
-                                )
+                                (Form.CategorySuggestionsLoaded token (Result.map .items result))
                                 loaded.form
                     in
-                    ( Loaded { loaded | form = nextForm }
-                    , Cmd.map FormMsg subCmd
-                    , NoOp
-                    )
+                    ( Loaded { loaded | form = nextForm }, Cmd.map FormMsg subCmd, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -286,10 +277,7 @@ validationMessage err =
             I18n.en TidCustomFoodInvalidDefaultPortion
 
 
-completeSave :
-    Result Client.ApiError CreateFoodResponse
-    -> Model
-    -> ( Model, Cmd Msg, OutMsg )
+completeSave : Result Client.ApiError CreateFoodResponse -> Model -> ( Model, Cmd Msg, OutMsg )
 completeSave result model =
     case result of
         Ok response ->
@@ -317,8 +305,7 @@ setLoadedFood food model =
             Loaded
                 { loaded
                     | form =
-                        Form.fromProductDetail food
-                            |> Form.withNutrientCatalog loaded.nutrients
+                        Form.fromProductDetail food |> Form.withNutrientCatalog loaded.nutrients
                 }
 
         LoadFailed _ ->
@@ -362,8 +349,7 @@ completeLoading loading =
             Loaded
                 { productId = loading.productId
                 , form =
-                    Form.fromProductDetail food
-                        |> Form.withNutrientCatalog nutrients
+                    Form.fromProductDetail food |> Form.withNutrientCatalog nutrients
                 , nutrients = nutrients
                 , units = units
                 }
@@ -376,10 +362,7 @@ applySubmitError : String -> Model -> Model
 applySubmitError message model =
     case model of
         Loaded loaded ->
-            Loaded
-                { loaded
-                    | form = withSubmit (Form.SubmitFailed message) loaded.form
-                }
+            Loaded { loaded | form = withSubmit (Form.SubmitFailed message) loaded.form }
 
         _ ->
             model
@@ -394,16 +377,10 @@ failure =
             \message current ->
                 case current of
                     Loading loading ->
-                        LoadFailed
-                            { productId = loading.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loading.productId, message = message }
 
                     Loaded loaded ->
-                        LoadFailed
-                            { productId = loaded.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loaded.productId, message = message }
 
                     LoadFailed _ ->
                         current
@@ -414,44 +391,39 @@ failure =
 -- VIEW
 
 
-view :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Element Msg
-view config =
-    UiPage.pageContainer
-        [ bodyView config ]
+view : Env -> Model -> Element Msg
+view env model =
+    UiPage.pageContainer [ bodyView env model ]
 
 
-bodyView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Element Msg
-bodyView { model, device, theme, language } =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
                 [ Element.map FormMsg
-                    (Form.view theme language device loaded.nutrients loaded.units loaded.form)
-                , Button.textButton device
-                    theme
+                    (Form.view env loaded.nutrients loaded.units loaded.form)
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidCustomFoodSave
+                    , label = I18n.t env.language TidCustomFoodSave
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Form.isSubmitting loaded.form.submit))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
 
         LoadFailed failed ->
-            Feedback.errorRetry theme
-                language
-                device
+            Feedback.errorRetry env.theme
+                env.language
+                env.device
                 { message = failed.message, onRetry = RetryClicked }
 
         Loading _ ->
-            customFoodFormSkeleton theme
+            customFoodFormSkeleton env.theme
 
 
 customFoodFormSkeleton : Theme -> Element msg

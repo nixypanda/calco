@@ -11,7 +11,7 @@ module Page.NutritionDetails exposing
 import Api.Client as Client
 import Data.NutritionDetails as Details exposing (Nutrient, NutritionDetails)
 import Data.Route as Route exposing (Route)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
@@ -24,6 +24,7 @@ import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Page as UiPage
@@ -40,9 +41,7 @@ type Model
 
 
 type alias DateContext =
-    { currentDate : LocalDate
-    , today : LocalDate
-    }
+    { currentDate : LocalDate, today : LocalDate }
 
 
 type OutMsg
@@ -54,9 +53,7 @@ type OutMsg
 
 init : { date : LocalDate, today : LocalDate } -> ( Model, OutMsg )
 init args =
-    ( Loading { currentDate = args.date, today = args.today }
-    , RequestNutritionDetails args.date
-    )
+    ( Loading { currentDate = args.date, today = args.today }, RequestNutritionDetails args.date )
 
 
 type Msg
@@ -105,10 +102,7 @@ update msg model =
         NutrientAdviceToggled code ->
             case model of
                 Loaded context report expandedAdvice ->
-                    ( Loaded context report (toggleSetMember code expandedAdvice)
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( Loaded context report (toggleSetMember code expandedAdvice), Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -177,60 +171,60 @@ today =
     dateContext >> .today
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
-        [ dateHeader theme language device model
+        [ dateHeader env model
         , case model of
             Loading _ ->
-                loadingView theme
+                loadingView env.theme
 
             Loaded _ report expandedAdvice ->
-                reportView theme language report expandedAdvice
+                reportView env report expandedAdvice
 
             Failed _ message ->
-                Feedback.errorBanner theme message
+                Feedback.errorBanner env.theme message
         ]
 
 
-dateHeader : Theme -> Language -> Device -> Model -> Element Msg
-dateHeader theme language device model =
+dateHeader : Env -> Model -> Element Msg
+dateHeader env model =
     let
         canGoNext : Bool
         canGoNext =
             LocalDate.compare (currentDate model) (today model) == LT
     in
-    Surface.section theme
+    Surface.section env.theme
         { header =
             Just
-                (UiPage.pageHeader theme
+                (UiPage.pageHeader env.theme
                     { leading =
                         Just
-                            (Button.iconButton device
-                                theme
+                            (Button.iconButton env.device
+                                env.theme
                                 { icon = Icon.ChevronLeft
-                                , title = I18n.t language TidNutritionDetailsPreviousDay
+                                , title = I18n.t env.language TidNutritionDetailsPreviousDay
                                 , onPress = Just PreviousDayClicked
                                 , tone = Button.Primary
                                 }
                             )
                     , title =
-                        Typography.sectionTitle theme
-                            (LocalDate.display language (currentDate model))
+                        Typography.sectionTitle env.theme
+                            (LocalDate.display env.language (currentDate model))
                     , subtitle = Nothing
                     , actions =
                         [ if canGoNext then
-                            Button.iconButton device
-                                theme
+                            Button.iconButton env.device
+                                env.theme
                                 { icon = Icon.ChevronRight
-                                , title = I18n.t language TidNutritionDetailsNextDay
+                                , title = I18n.t env.language TidNutritionDetailsNextDay
                                 , onPress = Just NextDayClicked
                                 , tone = Button.Primary
                                 }
 
                           else
-                            Button.iconButton device
-                                theme
+                            Button.iconButton env.device
+                                env.theme
                                 { icon = Icon.ChevronRight
                                 , title = ""
                                 , onPress = Nothing
@@ -252,9 +246,7 @@ loadingView theme =
         , Surface.card theme
             [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
             , Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
@@ -263,85 +255,81 @@ loadingView theme =
         , Skeleton.card theme { rows = 3 }
         , Skeleton.card theme { rows = 3 }
         , Surface.card theme
-            [ Skeleton.bar theme
-            , Skeleton.bar theme
-            ]
+            [ Skeleton.bar theme, Skeleton.bar theme ]
         ]
 
 
-reportView : Theme -> Language -> NutritionDetails -> Set String -> Element Msg
-reportView theme language report expandedAdvice =
+reportView : Env -> NutritionDetails -> Set String -> Element Msg
+reportView env report expandedAdvice =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ coverageNotice theme language report
-        , overviewSection theme language report.nutrients
+        [ coverageNotice env report
+        , overviewSection env report.nutrients
         , nutrientSection
-            theme
-            language
+            env
             expandedAdvice
-            (I18n.t language TidNutrientCarbohydrates)
+            (I18n.t env.language TidNutrientCarbohydrates)
             Details.Carbohydrates
             report.nutrients
         , nutrientSection
-            theme
-            language
+            env
             expandedAdvice
-            (I18n.t language TidNutritionDetailsFats)
+            (I18n.t env.language TidNutritionDetailsFats)
             Details.Fats
             report.nutrients
         , nutrientSection
-            theme
-            language
+            env
             expandedAdvice
-            (I18n.t language TidNutritionDetailsNutrientsToLimit)
+            (I18n.t env.language TidNutritionDetailsNutrientsToLimit)
             Details.Limits
             report.nutrients
         , nutrientSection
-            theme
-            language
+            env
             expandedAdvice
-            (I18n.t language TidNutritionDetailsVitaminsMinerals)
+            (I18n.t env.language TidNutritionDetailsVitaminsMinerals)
             Details.VitaminsMinerals
             report.nutrients
-        , referenceSection theme language report
+        , referenceSection env report
         ]
 
 
-overviewSection : Theme -> Language -> List Nutrient -> Element Msg
-overviewSection theme language nutrients =
+overviewSection : Env -> List Nutrient -> Element Msg
+overviewSection env nutrients =
     let
         overview : List Nutrient
         overview =
             inSection Details.Overview nutrients
     in
-    Surface.section theme
+    Surface.section env.theme
         { header =
             Just
-                (Typography.subsectionTitle theme
-                    (I18n.t language TidNutritionDetailsOverview)
+                (Typography.subsectionTitle env.theme
+                    (I18n.t env.language TidNutritionDetailsOverview)
                 )
         , body =
             if List.isEmpty overview then
-                [ Feedback.loading theme (I18n.t language TidNutritionDetailsOverviewEmpty) ]
+                [ Feedback.loading env.theme
+                    (I18n.t env.language TidNutritionDetailsOverviewEmpty)
+                ]
 
             else
                 [ Element.wrappedRow
                     [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                    (List.map (overviewItem theme language) overview)
+                    (List.map (overviewItem env) overview)
                 ]
         , footer = Nothing
         }
 
 
-overviewItem : Theme -> Language -> Nutrient -> Element msg
-overviewItem theme language nutrient =
+overviewItem : Env -> Nutrient -> Element msg
+overviewItem env nutrient =
     Element.column
         [ Element.width (Element.minimum 130 Element.fill)
         , Element.spacing DesignTokens.space2
         , Element.padding DesignTokens.space12
-        , Background.color theme.inputFill
+        , Background.color env.theme.inputFill
         ]
-        [ Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
+        [ Element.paragraph [ Font.color env.theme.textMuted, Typography.caption ]
             [ Element.text nutrient.name ]
         , Element.paragraph [ Font.bold, Typography.body ]
             [ Element.text (knownAmountLabel nutrient) ]
@@ -349,8 +337,8 @@ overviewItem theme language nutrient =
             Element.none
 
           else
-            Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-                [ Element.text (coverageLabel language nutrient) ]
+            Element.paragraph [ Font.color env.theme.textMuted, Typography.caption ]
+                [ Element.text (coverageLabel env.language nutrient) ]
         ]
 
 
@@ -368,27 +356,28 @@ coverageLabel language nutrient =
 
 
 nutrientSection :
-    Theme
-    -> Language
+    Env
     -> Set String
     -> String
     -> Details.NutrientSection
     -> List Nutrient
     -> Element Msg
-nutrientSection theme language expandedAdvice title section nutrients =
+nutrientSection env expandedAdvice title section nutrients =
     let
         selected : List Nutrient
         selected =
             inSection section nutrients
     in
-    Surface.section theme
-        { header = Just (Typography.subsectionTitle theme title)
+    Surface.section env.theme
+        { header = Just (Typography.subsectionTitle env.theme title)
         , body =
             if List.isEmpty selected then
-                [ Feedback.loading theme (I18n.t language TidNutritionDetailsNoNutrientData) ]
+                [ Feedback.loading env.theme
+                    (I18n.t env.language TidNutritionDetailsNoNutrientData)
+                ]
 
             else
-                List.map (nutrientRow theme language expandedAdvice) selected
+                List.map (nutrientRow env expandedAdvice) selected
         , footer = Nothing
         }
 
@@ -398,43 +387,39 @@ inSection section =
     List.filter (\nutrient -> nutrient.section == section)
 
 
-coverageNotice : Theme -> Language -> NutritionDetails -> Element msg
-coverageNotice theme language report =
+coverageNotice : Env -> NutritionDetails -> Element msg
+coverageNotice env report =
     let
         hasIncompleteData : Bool
         hasIncompleteData =
-            report.loggedItems
-                > 0
-                && (hasPartialCoverage report || hasNoCoverage report)
+            report.loggedItems > 0 && (hasPartialCoverage report || hasNoCoverage report)
 
         message : String
         message =
             if report.loggedItems == 0 then
-                I18n.t language TidNutritionDetailsNoItemsLogged
+                I18n.t env.language TidNutritionDetailsNoItemsLogged
 
             else if hasPartialCoverage report then
-                I18n.t language TidNutritionDetailsPartialCoverageNotice
+                I18n.t env.language TidNutritionDetailsPartialCoverageNotice
 
             else if hasNoCoverage report then
-                I18n.t language TidNutritionDetailsMissingNutrientNotice
+                I18n.t env.language TidNutritionDetailsMissingNutrientNotice
 
             else if report.loggedItems == 1 then
-                I18n.t language
-                    (TidNutritionDetailsLoggedItemsIncludedOne
-                        (String.fromInt report.loggedItems)
-                    )
+                I18n.t env.language
+                    (TidNutritionDetailsLoggedItemsIncludedOne (String.fromInt report.loggedItems))
 
             else
-                I18n.t language
+                I18n.t env.language
                     (TidNutritionDetailsLoggedItemsIncludedOther
                         (String.fromInt report.loggedItems)
                     )
     in
     if hasIncompleteData then
-        Feedback.warningBanner theme message
+        Feedback.warningBanner env.theme message
 
     else
-        Feedback.infoBanner theme message
+        Feedback.infoBanner env.theme message
 
 
 hasPartialCoverage : NutritionDetails -> Bool
@@ -447,8 +432,8 @@ hasNoCoverage report =
     List.any (\nutrient -> nutrient.coverage == Details.NoCoverage) report.nutrients
 
 
-nutrientRow : Theme -> Language -> Set String -> Nutrient -> Element Msg
-nutrientRow theme language expandedAdvice nutrient =
+nutrientRow : Env -> Set String -> Nutrient -> Element Msg
+nutrientRow env expandedAdvice nutrient =
     let
         adviceIsExpanded : Bool
         adviceIsExpanded =
@@ -468,16 +453,13 @@ nutrientRow theme language expandedAdvice nutrient =
                             [ Element.width Element.fill, Font.bold, Typography.body ]
                             [ Element.text nutrient.name ]
                         , Element.el
-                            [ Element.alignRight
-                            , Font.color theme.textMedium
-                            , Typography.body
-                            ]
-                            (Element.text (amountLabel language nutrient))
+                            [ Element.alignRight, Font.color env.theme.textMedium, Typography.body ]
+                            (Element.text (amountLabel env.language nutrient))
                         ]
-                    , progressView theme nutrient
+                    , progressView env.theme nutrient
                     , Element.row
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ guidanceView theme language nutrient
+                        [ guidanceView env nutrient
                         , Icon.view
                             { icon =
                                 if adviceIsExpanded then
@@ -486,7 +468,7 @@ nutrientRow theme language expandedAdvice nutrient =
                                 else
                                     Icon.ChevronDown
                             , size = 16
-                            , color = theme.textMuted
+                            , color = env.theme.textMuted
                             }
                         ]
                     ]
@@ -494,40 +476,40 @@ nutrientRow theme language expandedAdvice nutrient =
         , if adviceIsExpanded then
             Element.paragraph
                 [ Element.width Element.fill
-                , Background.color theme.inputFill
-                , Font.color theme.textMuted
+                , Background.color env.theme.inputFill
+                , Font.color env.theme.textMuted
                 , Element.padding DesignTokens.space12
                 , Typography.caption
                 ]
-                [ Element.text (dailyAdvice language nutrient.code) ]
+                [ Element.text (dailyAdvice env.language nutrient.code) ]
 
           else
             Element.none
         ]
 
 
-guidanceView : Theme -> Language -> Nutrient -> Element msg
-guidanceView theme language nutrient =
+guidanceView : Env -> Nutrient -> Element msg
+guidanceView env nutrient =
     if nutrient.coverage == Details.PartialCoverage then
         Element.wrappedRow
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Chip.coloredPill
-                { label = I18n.t language TidNutritionDetailsPartialData
-                , bg = theme.brandBlueSoft
-                , fg = theme.brandBlue
+                { label = I18n.t env.language TidNutritionDetailsPartialData
+                , bg = env.theme.brandBlueSoft
+                , fg = env.theme.brandBlue
                 }
             , Element.paragraph
-                [ Font.color theme.textPrimary, Typography.caption ]
-                [ Element.text (guidanceSummary language nutrient) ]
+                [ Font.color env.theme.textPrimary, Typography.caption ]
+                [ Element.text (guidanceSummary env.language nutrient) ]
             ]
 
     else
         Element.paragraph
             [ Element.width Element.fill
-            , Font.color (guidanceColor theme nutrient)
+            , Font.color (guidanceColor env.theme nutrient)
             , Typography.caption
             ]
-            [ Element.text (guidanceSummary language nutrient) ]
+            [ Element.text (guidanceSummary env.language nutrient) ]
 
 
 amountLabel : Language -> Nutrient -> String
@@ -568,10 +550,7 @@ progressView theme nutrient =
     case Details.progressPercent nutrient of
         Just percent ->
             Feedback.linearProgress theme
-                { value = percent
-                , max = 100
-                , color = progressColor theme nutrient
-                }
+                { value = percent, max = 100, color = progressColor theme nutrient }
 
         Nothing ->
             Element.none
@@ -604,9 +583,7 @@ guidanceSummary language nutrient =
             case nutrient.knownAmount of
                 Just amount ->
                     I18n.t language
-                        (TidNutritionDetailsKnownMinimumAmount
-                            (formatAmount amount nutrient.unit)
-                        )
+                        (TidNutritionDetailsKnownMinimumAmount (formatAmount amount nutrient.unit))
 
                 Nothing ->
                     I18n.t language TidNutritionDetailsNoKnownAmount
@@ -722,18 +699,18 @@ formatAmount amount unit =
     Number.toFixedTrimmed 1 amount ++ " " ++ unit
 
 
-referenceSection : Theme -> Language -> NutritionDetails -> Element msg
-referenceSection theme language report =
-    Surface.section theme
+referenceSection : Env -> NutritionDetails -> Element msg
+referenceSection env report =
+    Surface.section env.theme
         { header =
             Just
-                (Typography.subsectionTitle theme
-                    (I18n.t language TidNutritionDetailsAboutReferences)
+                (Typography.subsectionTitle env.theme
+                    (I18n.t env.language TidNutritionDetailsAboutReferences)
                 )
         , body =
-            [ Element.paragraph [ Font.color theme.textMuted, Typography.body ]
+            [ Element.paragraph [ Font.color env.theme.textMuted, Typography.body ]
                 [ Element.text
-                    (I18n.t language
+                    (I18n.t env.language
                         (TidNutritionDetailsReferencesDescription
                             report.reference.name
                             report.reference.authority
@@ -743,9 +720,9 @@ referenceSection theme language report =
                     )
                 ]
             , Element.newTabLink
-                [ Font.color theme.brandBlue, Font.underline, Typography.body ]
+                [ Font.color env.theme.brandBlue, Font.underline, Typography.body ]
                 { url = report.reference.sourceUrl
-                , label = Element.text (I18n.t language TidNutritionDetailsViewReferenceSource)
+                , label = Element.text (I18n.t env.language TidNutritionDetailsViewReferenceSource)
                 }
             ]
         , footer = Nothing

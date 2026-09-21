@@ -7,10 +7,7 @@ import Url.Builder as Builder
 
 get : (Result Client.ApiError DiaryPreferences -> msg) -> Cmd msg
 get toMsg =
-    Client.get
-        (Builder.absolute [ "api", "diary-preferences" ] [])
-        DiaryPreferences.decoder
-        toMsg
+    Client.get (Builder.absolute [ "api", "diary-preferences" ] []) DiaryPreferences.decoder toMsg
 
 
 put : DiaryPreferences -> (Result Client.ApiError DiaryPreferences -> msg) -> Cmd msg

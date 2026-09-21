@@ -13,24 +13,15 @@ import Json.Encode as Encode
 
 
 type alias User =
-    { id : String
-    , username : String
-    , displayName : String
-    , status : String
-    , createdAt : String
-    }
+    { id : String, username : String, displayName : String, status : String, createdAt : String }
 
 
 type alias CreateUserRequest =
-    { username : String
-    , displayName : String
-    , initialPassword : String
-    }
+    { username : String, displayName : String, initialPassword : String }
 
 
 type alias ResetPasswordRequest =
-    { newPassword : String
-    }
+    { newPassword : String }
 
 
 userDecoder : Decoder User
@@ -59,6 +50,4 @@ createUserEncoder request =
 
 resetPasswordEncoder : ResetPasswordRequest -> Encode.Value
 resetPasswordEncoder request =
-    Encode.object
-        [ ( "new_password", Encode.string request.newPassword )
-        ]
+    Encode.object [ ( "new_password", Encode.string request.newPassword ) ]

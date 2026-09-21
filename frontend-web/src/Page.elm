@@ -49,7 +49,7 @@ import Data.LogSummary as LogSummary
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition exposing (defaultCode)
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Page.CustomFood.Create as CustomFoodCreate
@@ -78,10 +78,9 @@ import Page.Users.Login as AuthLogin
 import Set exposing (Set)
 import Store exposing (Store)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Skeleton as Skeleton
-import Ui.Theme exposing (Theme)
 import Ui.Workspace as Workspace
 
 
@@ -90,10 +89,7 @@ import Ui.Workspace as Workspace
 
 
 type alias Model =
-    { panes : List Pane
-    , waitingForToday : Bool
-    , store : Store
-    }
+    { panes : List Pane, waitingForToday : Bool, store : Store }
 
 
 type Pane
@@ -124,9 +120,7 @@ type Pane
 
 
 type alias DiaryPaneId =
-    { date : LocalDate
-    , calendarMonth : Maybe String
-    }
+    { date : LocalDate, calendarMonth : Maybe String }
 
 
 type DesiredPane
@@ -134,16 +128,11 @@ type DesiredPane
 
 
 type alias ReconcileResult pane effect =
-    { panes : List pane
-    , effects : List effect
-    , initializedKeys : List String
-    }
+    { panes : List pane, effects : List effect, initializedKeys : List String }
 
 
 type alias InitContext =
-    { route : Route
-    , today : Maybe LocalDate
-    }
+    { route : Route, today : Maybe LocalDate }
 
 
 type OutMsg
@@ -170,10 +159,7 @@ loading =
 
 clearStore : Model -> Model
 clearStore model =
-    { panes = []
-    , waitingForToday = True
-    , store = Store.reset model.store
-    }
+    { panes = [], waitingForToday = True, store = Store.reset model.store }
 
 
 paneKeys : Model -> List String
@@ -276,10 +262,7 @@ paneKey pane =
 
 diaryPaneKey : DiaryPaneId -> String
 diaryPaneKey paneId =
-    "diary:"
-        ++ LocalDate.format paneId.date
-        ++ ":"
-        ++ Maybe.withDefault "none" paneId.calendarMonth
+    "diary:" ++ LocalDate.format paneId.date ++ ":" ++ Maybe.withDefault "none" paneId.calendarMonth
 
 
 nutritionDetailsPaneKey : LocalDate -> String
@@ -294,21 +277,14 @@ goalsSettingsPaneKey date =
 
 init : InitContext -> ( Model, Cmd Msg, OutMsg )
 init context =
-    initPreserving context
-        { panes = []
-        , waitingForToday = False
-        , store = Store.empty
-        }
+    initPreserving context { panes = [], waitingForToday = False, store = Store.empty }
 
 
 initPreserving : InitContext -> Model -> ( Model, Cmd Msg, OutMsg )
 initPreserving context current =
     case panesForRoute context current.panes of
         Nothing ->
-            ( { current | panes = [], waitingForToday = True }
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( { current | panes = [], waitingForToday = True }, Cmd.none, NoOutMsg )
 
         Just desiredPanes ->
             finishReconcile context
@@ -343,9 +319,7 @@ reconcile existingKey desiredKey initialize existing desired =
 
         reversed : ReconcileResult pane effect
         reversed =
-            List.foldl step
-                { panes = [], effects = [], initializedKeys = [] }
-                desired
+            List.foldl step { panes = [], effects = [], initializedKeys = [] } desired
     in
     { panes = List.reverse reversed.panes
     , effects = List.reverse reversed.effects
@@ -391,11 +365,7 @@ finishReconcile context store result =
     in
     ( { panes = hydratedPanes, waitingForToday = False, store = finalStore }
     , Cmd.batch
-        [ result.effects |> List.map Tuple.first |> Cmd.batch
-        , retargetCmd
-        , sharedCmd
-        , dateCmd
-        ]
+        [ result.effects |> List.map Tuple.first |> Cmd.batch, retargetCmd, sharedCmd, dateCmd ]
     , result.effects |> List.map Tuple.second |> List.foldl preferOutMsg NoOutMsg
     )
 
@@ -410,9 +380,7 @@ created needs the cache poured in.
 hydrateInitialized : Set String -> Store -> Pane -> Pane
 hydrateInitialized initializedKeys store pane =
     if Set.member (paneKey pane) initializedKeys then
-        pane
-            |> hydrateShared store
-            |> hydrateDated store
+        pane |> hydrateShared store |> hydrateDated store
 
     else
         pane
@@ -501,8 +469,7 @@ hydrateUnits : UnitsResult -> Pane -> Pane
 hydrateUnits result pane =
     case pane of
         FoodDetailPane key model ->
-            FoodDetailPane key
-                (modelOnly (FoodShow.update (FoodShow.UnitsLoaded result) model))
+            FoodDetailPane key (modelOnly (FoodShow.update (FoodShow.UnitsLoaded result) model))
 
         FoodLogDetailPane key model ->
             FoodLogDetailPane key
@@ -529,16 +496,13 @@ hydrateUnits result pane =
                 (modelOnly (CustomFoodShow.update (CustomFoodShow.UnitsLoaded result) model))
 
         MealDetailPane key model ->
-            MealDetailPane key
-                (modelOnly (MealShow.update (MealShow.UnitsLoaded result) model))
+            MealDetailPane key (modelOnly (MealShow.update (MealShow.UnitsLoaded result) model))
 
         MealCreatePane model ->
-            MealCreatePane
-                (modelOnly (MealCreate.update (MealCreate.UnitsLoaded result) model))
+            MealCreatePane (modelOnly (MealCreate.update (MealCreate.UnitsLoaded result) model))
 
         MealEditPane key model ->
-            MealEditPane key
-                (modelOnly (MealEdit.update (MealEdit.UnitsLoaded result) model))
+            MealEditPane key (modelOnly (MealEdit.update (MealEdit.UnitsLoaded result) model))
 
         _ ->
             pane
@@ -573,8 +537,7 @@ hydratePreferences : PreferencesResult -> Pane -> Pane
 hydratePreferences result pane =
     case pane of
         DiaryPane paneId model ->
-            DiaryPane paneId
-                (modelOnly (DiaryDay.update (DiaryDay.PreferencesLoaded result) model))
+            DiaryPane paneId (modelOnly (DiaryDay.update (DiaryDay.PreferencesLoaded result) model))
 
         DiarySettingsPane model ->
             DiarySettingsPane
@@ -687,9 +650,7 @@ ensureSharedData panes store =
             ( withPreferences, preferencesCmd ) =
                 ensureShared preferencesResource withNutrients
         in
-        ( withPreferences
-        , Cmd.batch [ unitsCmd, nutrientsCmd, preferencesCmd ]
-        )
+        ( withPreferences, Cmd.batch [ unitsCmd, nutrientsCmd, preferencesCmd ] )
 
     else
         ( store, Cmd.none )
@@ -885,11 +846,7 @@ panesForRoute context existing =
             Just [ adminDesired context ]
 
         AdminCreateUser ->
-            Just
-                [ simpleDesired
-                    "admin-create-user"
-                    (AdminCreateUserPane AdminCreateUser.init)
-                ]
+            Just [ simpleDesired "admin-create-user" (AdminCreateUserPane AdminCreateUser.init) ]
 
         AdminEditUser userId ->
             Just [ adminEditDesired context userId ]
@@ -910,8 +867,7 @@ panesForRoute context existing =
                     )
 
         DiaryCalendar monthParam ->
-            context.today
-                |> Maybe.map (\today -> [ calendarDesired context today monthParam ])
+            context.today |> Maybe.map (\today -> [ calendarDesired context today monthParam ])
 
         NutritionDetails dateParam ->
             context.today
@@ -924,8 +880,7 @@ panesForRoute context existing =
                     )
 
         GoalSettings ->
-            context.today
-                |> Maybe.map (\today -> [ goalsDesired context today ])
+            context.today |> Maybe.map (\today -> [ goalsDesired context today ])
 
         DiarySettings ->
             Just [ diarySettingsDesired context ]
@@ -934,15 +889,7 @@ panesForRoute context existing =
             Just (searchWorkspaceDesired context existing dateParam mealSlot)
 
         FoodShow productId dateParam mealSlot lookupNote ->
-            Just
-                (foodWorkspaceDesired
-                    context
-                    existing
-                    productId
-                    dateParam
-                    mealSlot
-                    lookupNote
-                )
+            Just (foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote)
 
         FoodLogEntry logId _ _ ->
             Just [ foodLogDetailDesired context logId ]
@@ -957,11 +904,7 @@ panesForRoute context existing =
             Just [ customFoodCreatePaneDesired context CustomFoodCreate.init ]
 
         CustomFoodCreateWithAi ->
-            Just
-                [ customFoodCreatePaneDesired
-                    context
-                    CustomFoodCreate.initWithAssistant
-                ]
+            Just [ customFoodCreatePaneDesired context CustomFoodCreate.initWithAssistant ]
 
         CustomFoodEdit productId ->
             Just [ customFoodEditDesired context productId ]
@@ -1047,20 +990,14 @@ diaryDesired context today dateParam calendarMonth =
     let
         paneId : DiaryPaneId
         paneId =
-            { date = dateFromParam today dateParam
-            , calendarMonth = calendarMonth
-            }
+            { date = dateFromParam today dateParam, calendarMonth = calendarMonth }
     in
     fromInit context
         (diaryPaneKey paneId)
         (DiaryPane paneId)
         applyDiaryOutMsg
         (\_ ->
-            DiaryDay.init
-                { date = paneId.date
-                , calendarMonth = calendarMonth
-                , today = today
-                }
+            DiaryDay.init { date = paneId.date, calendarMonth = calendarMonth, today = today }
         )
 
 
@@ -1163,10 +1100,7 @@ foodWorkspaceDesired context existing productId dateParam mealSlot lookupNote =
     in
     case ( context.today, dateParam |> Maybe.andThen LocalDate.fromString ) of
         ( Just today, Just _ ) ->
-            contextualWorkspace
-                existing
-                [ diaryDesired context today dateParam Nothing ]
-                detail
+            contextualWorkspace existing [ diaryDesired context today dateParam Nothing ] detail
 
         _ ->
             contextualWorkspace existing [] detail
@@ -1216,9 +1150,7 @@ foodLogDetailDesired context logId =
 
 createAdHocLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
 createAdHocLogDesired _ dateParam mealSlot =
-    simpleDesired
-        "create-ad-hoc-log"
-        (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
+    simpleDesired "create-ad-hoc-log" (CreateAdHocLogPane (CreateAdHocLog.init dateParam mealSlot))
 
 
 createWithAiLogDesired : InitContext -> Maybe String -> Maybe MealSlot -> DesiredPane
@@ -1344,9 +1276,7 @@ initialFoodSearchCmd dateParam mealSlot =
         Just request ->
             Api.Logs.recentItems
                 request
-                (GotFoodSearchMsg
-                    << FoodSearch.RecentItemsLoaded dateParam mealSlot
-                )
+                (GotFoodSearchMsg << FoodSearch.RecentItemsLoaded dateParam mealSlot)
 
         Nothing ->
             Cmd.none
@@ -1457,10 +1387,7 @@ promoteContextualDiary msg model =
         ( True, (DiaryCalendarPane _ _) :: (DiaryPane paneId diary) :: _ ) ->
             { model
                 | panes =
-                    [ DiaryPane
-                        { paneId | calendarMonth = Nothing }
-                        (DiaryDay.asMain diary)
-                    ]
+                    [ DiaryPane { paneId | calendarMonth = Nothing } (DiaryDay.asMain diary) ]
             }
 
         _ ->
@@ -1627,11 +1554,7 @@ type Mutation
 
 
 type alias PaneUpdate pane =
-    { pane : pane
-    , cmd : Cmd Msg
-    , outMsg : OutMsg
-    , mutation : Mutation
-    }
+    { pane : pane, cmd : Cmd Msg, outMsg : OutMsg, mutation : Mutation }
 
 
 messageMatchesPane : Maybe String -> Maybe String -> Bool
@@ -1644,10 +1567,7 @@ messageMatchesPane incoming current =
             current == Just incomingId
 
 
-updateFirst :
-    (pane -> Maybe (PaneUpdate pane))
-    -> List pane
-    -> Maybe (PaneUpdate (List pane))
+updateFirst : (pane -> Maybe (PaneUpdate pane)) -> List pane -> Maybe (PaneUpdate (List pane))
 updateFirst updateOne panes =
     case panes of
         [] ->
@@ -1886,11 +1806,7 @@ updatePane allPanes context msg pane =
 
         ( GotCreateWithAiLogMsg subMsg, CreateWithAiLogPane sub ) ->
             let
-                result :
-                    ( CreateWithAiLog.Model
-                    , Cmd CreateWithAiLog.Msg
-                    , CreateWithAiLog.OutMsg
-                    )
+                result : ( CreateWithAiLog.Model, Cmd CreateWithAiLog.Msg, CreateWithAiLog.OutMsg )
                 result =
                     CreateWithAiLog.update subMsg sub
 
@@ -1922,9 +1838,7 @@ updatePane allPanes context msg pane =
             let
                 matches : Bool
                 matches =
-                    messageMatchesPane
-                        (CustomFoodEdit.loadId subMsg)
-                        (CustomFoodEdit.modelId sub)
+                    messageMatchesPane (CustomFoodEdit.loadId subMsg) (CustomFoodEdit.modelId sub)
             in
             if not matches then
                 Nothing
@@ -1941,9 +1855,7 @@ updatePane allPanes context msg pane =
             let
                 matches : Bool
                 matches =
-                    messageMatchesPane
-                        (CustomFoodShow.loadId subMsg)
-                        (CustomFoodShow.modelId sub)
+                    messageMatchesPane (CustomFoodShow.loadId subMsg) (CustomFoodShow.modelId sub)
             in
             if not matches then
                 Nothing
@@ -2056,12 +1968,7 @@ applyMutation mutation panes store =
 window reaches back `latestSlotsLookbackDays`, so the changed date may be the
 source of any date's suggestions.
 -}
-refreshAfterLogMutation :
-    Bool
-    -> LocalDate
-    -> List Pane
-    -> Store
-    -> ( List Pane, Store, Cmd Msg )
+refreshAfterLogMutation : Bool -> LocalDate -> List Pane -> Store -> ( List Pane, Store, Cmd Msg )
 refreshAfterLogMutation reloadDiary date panes store =
     let
         access : Store.Access (List Data.FoodLog.FoodLog)
@@ -2145,11 +2052,7 @@ third ( _, _, value ) =
     value
 
 
-localContextReceived :
-    InitContext
-    -> LocalContext
-    -> Model
-    -> Maybe ( Model, Cmd Msg, OutMsg )
+localContextReceived : InitContext -> LocalContext -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 localContextReceived pageContext context model =
     updateAll
         (\pane ->
@@ -2253,18 +2156,10 @@ barcodeScannerEventReceived pageContext event model =
 
 
 type alias UpdateAllResult =
-    { panes : List Pane
-    , cmds : List (Cmd Msg)
-    , outMsg : OutMsg
-    , didUpdate : Bool
-    , store : Store
-    }
+    { panes : List Pane, cmds : List (Cmd Msg), outMsg : OutMsg, didUpdate : Bool, store : Store }
 
 
-updateAll :
-    (Pane -> Maybe (PaneUpdate Pane))
-    -> Model
-    -> Maybe ( Model, Cmd Msg, OutMsg )
+updateAll : (Pane -> Maybe (PaneUpdate Pane)) -> Model -> Maybe ( Model, Cmd Msg, OutMsg )
 updateAll updateOne model =
     let
         step : Pane -> UpdateAllResult -> UpdateAllResult
@@ -2273,9 +2168,7 @@ updateAll updateOne model =
                 Just paneResult ->
                     let
                         ( refreshed, nextStore, refreshCmd ) =
-                            applyMutation paneResult.mutation
-                                [ paneResult.pane ]
-                                result.store
+                            applyMutation paneResult.mutation [ paneResult.pane ] result.store
                     in
                     { panes = refreshed ++ result.panes
                     , cmds = Cmd.batch [ paneResult.cmd, refreshCmd ] :: result.cmds
@@ -2290,12 +2183,7 @@ updateAll updateOne model =
         final : UpdateAllResult
         final =
             List.foldl step
-                { panes = []
-                , cmds = []
-                , outMsg = NoOutMsg
-                , didUpdate = False
-                , store = model.store
-                }
+                { panes = [], cmds = [], outMsg = NoOutMsg, didUpdate = False, store = model.store }
                 model.panes
     in
     if final.didUpdate then
@@ -2319,9 +2207,7 @@ applyLoginOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         AuthLogin.RequestLogin request ->
-            ( Api.Auth.login request (GotLoginMsg << AuthLogin.LoginCompleted)
-            , NoOutMsg
-            )
+            ( Api.Auth.login request (GotLoginMsg << AuthLogin.LoginCompleted), NoOutMsg )
 
         AuthLogin.LoginSucceeded loginSession ->
             ( Cmd.none, LoginSucceeded loginSession )
@@ -2350,9 +2236,7 @@ applyAdminOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         AdminDashboard.RequestUsers ->
-            ( Api.Admin.listUsers (GotAdminMsg << AdminDashboard.UsersLoaded)
-            , NoOutMsg
-            )
+            ( Api.Admin.listUsers (GotAdminMsg << AdminDashboard.UsersLoaded), NoOutMsg )
 
         AdminDashboard.Navigate route ->
             ( Cmd.none, Navigate route )
@@ -2387,9 +2271,7 @@ applyAdminEditUserOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         AdminEditUser.RequestUser userId ->
-            ( Api.Admin.getUser userId (GotAdminEditUserMsg << AdminEditUser.UserLoaded)
-            , NoOutMsg
-            )
+            ( Api.Admin.getUser userId (GotAdminEditUserMsg << AdminEditUser.UserLoaded), NoOutMsg )
 
         AdminEditUser.RequestResetPassword userId request ->
             ( Api.Admin.resetPassword
@@ -2449,10 +2331,7 @@ applyDiaryOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyDiaryCalendarOutMsg :
-    InitContext
-    -> DiaryCalendar.OutMsg
-    -> ( Cmd Msg, OutMsg )
+applyDiaryCalendarOutMsg : InitContext -> DiaryCalendar.OutMsg -> ( Cmd Msg, OutMsg )
 applyDiaryCalendarOutMsg _ outMsg =
     case outMsg of
         DiaryCalendar.NoOp ->
@@ -2460,18 +2339,14 @@ applyDiaryCalendarOutMsg _ outMsg =
 
         DiaryCalendar.RequestSummary token fromDate toDate ->
             ( Api.Logs.summary
-                { fromDate = fromDate
-                , toDate = toDate
-                }
+                { fromDate = fromDate, toDate = toDate }
                 (GotDiaryCalendarMsg << DiaryCalendar.SummaryLoaded token)
             , NoOutMsg
             )
 
         DiaryCalendar.RequestEarlierSummary token fromDate toDate ->
             ( Api.Logs.summary
-                { fromDate = fromDate
-                , toDate = toDate
-                }
+                { fromDate = fromDate, toDate = toDate }
                 (GotDiaryCalendarMsg << DiaryCalendar.EarlierSummaryLoaded token)
             , NoOutMsg
             )
@@ -2618,9 +2493,7 @@ applyFoodDetailOutMsg context outMsg =
             ( Cmd.none, RequestLocalContext )
 
         FoodShow.RequestCreateLog request ->
-            ( Api.Logs.createLog request (GotFoodDetailMsg << FoodShow.LogCompleted)
-            , NoOutMsg
-            )
+            ( Api.Logs.createLog request (GotFoodDetailMsg << FoodShow.LogCompleted), NoOutMsg )
 
         FoodShow.LogCreated _ route ->
             ( Cmd.none, Navigate route )
@@ -2629,10 +2502,7 @@ applyFoodDetailOutMsg context outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCreateAdHocLogOutMsg :
-    InitContext
-    -> CreateAdHocLog.OutMsg
-    -> ( Cmd Msg, OutMsg )
+applyCreateAdHocLogOutMsg : InitContext -> CreateAdHocLog.OutMsg -> ( Cmd Msg, OutMsg )
 applyCreateAdHocLogOutMsg _ outMsg =
     case outMsg of
         CreateAdHocLog.NoOp ->
@@ -2655,9 +2525,7 @@ applyCreateAdHocLogOutMsg _ outMsg =
 
         CreateAdHocLog.RequestCategorySuggestions token request ->
             ( Api.Foods.listCategorySuggestions request
-                (GotCreateAdHocLogMsg
-                    << CreateAdHocLog.CategorySuggestionsLoaded token
-                )
+                (GotCreateAdHocLogMsg << CreateAdHocLog.CategorySuggestionsLoaded token)
             , NoOutMsg
             )
 
@@ -2668,18 +2536,13 @@ applyCreateAdHocLogOutMsg _ outMsg =
             )
 
         CreateAdHocLog.LogCreated log ->
-            ( Cmd.none
-            , Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing)
-            )
+            ( Cmd.none, Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing) )
 
         CreateAdHocLog.SessionExpired ->
             ( Cmd.none, SessionExpired )
 
 
-applyCreateWithAiLogOutMsg :
-    InitContext
-    -> CreateWithAiLog.OutMsg
-    -> ( Cmd Msg, OutMsg )
+applyCreateWithAiLogOutMsg : InitContext -> CreateWithAiLog.OutMsg -> ( Cmd Msg, OutMsg )
 applyCreateWithAiLogOutMsg _ outMsg =
     case outMsg of
         CreateWithAiLog.NoOp ->
@@ -2748,9 +2611,7 @@ applyCreateWithAiLogOutMsg _ outMsg =
             )
 
         CreateWithAiLog.LogCreated log ->
-            ( Cmd.none
-            , Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing)
-            )
+            ( Cmd.none, Navigate (DiaryDay (Just (LocalDate.format log.logDate)) Nothing) )
 
         CreateWithAiLog.SessionExpired ->
             ( Cmd.none, SessionExpired )
@@ -2806,10 +2667,7 @@ applyFoodLogDetailOutMsg context outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCustomFoodCreateOutMsg :
-    InitContext
-    -> CustomFoodCreate.OutMsg
-    -> ( Cmd Msg, OutMsg )
+applyCustomFoodCreateOutMsg : InitContext -> CustomFoodCreate.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodCreateOutMsg _ outMsg =
     case outMsg of
         CustomFoodCreate.NoOp ->
@@ -2874,9 +2732,7 @@ applyCustomFoodCreateOutMsgForPanes :
 applyCustomFoodCreateOutMsgForPanes panes context outMsg =
     case ( outMsg, foodSearchModel panes ) of
         ( CustomFoodCreate.Navigate (CustomFoodShow productId), Just search ) ->
-            ( Cmd.none
-            , Navigate (FoodShow productId search.date search.mealSlot Nothing)
-            )
+            ( Cmd.none, Navigate (FoodShow productId search.date search.mealSlot Nothing) )
 
         _ ->
             applyCustomFoodCreateOutMsg context outMsg
@@ -2948,10 +2804,7 @@ applyCustomFoodsOutMsg _ outMsg =
             ( Cmd.none, SessionExpired )
 
 
-applyCustomFoodShowOutMsg :
-    InitContext
-    -> CustomFoodShow.OutMsg
-    -> ( Cmd Msg, OutMsg )
+applyCustomFoodShowOutMsg : InitContext -> CustomFoodShow.OutMsg -> ( Cmd Msg, OutMsg )
 applyCustomFoodShowOutMsg _ outMsg =
     case outMsg of
         CustomFoodShow.NoOp ->
@@ -2983,9 +2836,7 @@ applyMealsOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         MealList.RequestMeals ->
-            ( Api.Meals.listMeals (GotMealsMsg << MealList.MealsLoaded)
-            , NoOutMsg
-            )
+            ( Api.Meals.listMeals (GotMealsMsg << MealList.MealsLoaded), NoOutMsg )
 
         MealList.Navigate route ->
             ( Cmd.none, Navigate route )
@@ -3001,9 +2852,7 @@ applyMealCreateOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         MealCreate.FormOutMsg formOutMsg ->
-            applyMealFormOutMsg
-                { toPageMsg = GotMealCreateMsg << MealCreate.FormMsg }
-                formOutMsg
+            applyMealFormOutMsg { toPageMsg = GotMealCreateMsg << MealCreate.FormMsg } formOutMsg
 
         MealCreate.RequestCreateMeal request ->
             ( Api.Meals.createMeal request
@@ -3025,9 +2874,7 @@ applyMealEditOutMsg _ outMsg =
             ( Cmd.none, NoOutMsg )
 
         MealEdit.FormOutMsg formOutMsg ->
-            applyMealFormOutMsg
-                { toPageMsg = GotMealEditMsg << MealEdit.FormMsg }
-                formOutMsg
+            applyMealFormOutMsg { toPageMsg = GotMealEditMsg << MealEdit.FormMsg } formOutMsg
 
         MealEdit.RequestMeal mealId ->
             ( Cmd.batch
@@ -3131,9 +2978,7 @@ applyMealDetailOutMsg _ outMsg =
             )
 
         MealShow.RequestDeleteMeal mealId ->
-            ( Api.Meals.deleteMeal mealId (GotMealDetailMsg << MealShow.DeleteCompleted)
-            , NoOutMsg
-            )
+            ( Api.Meals.deleteMeal mealId (GotMealDetailMsg << MealShow.DeleteCompleted), NoOutMsg )
 
         MealShow.Navigate route ->
             ( Cmd.none, Navigate route )
@@ -3146,14 +2991,14 @@ applyMealDetailOutMsg _ outMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view props =
-    if props.model.waitingForToday then
-        Skeleton.loading props.theme
+view : Env -> Model -> Element Msg
+view env model =
+    if model.waitingForToday then
+        Skeleton.loading env.theme
 
     else
-        Workspace.view props.device
-            (List.map (paneView props (selectedDiaryDate props.model.panes)) props.model.panes)
+        Workspace.view env.device
+            (List.map (paneView env (selectedDiaryDate model.panes)) model.panes)
 
 
 selectedDiaryDate : List Pane -> Maybe LocalDate
@@ -3171,142 +3016,113 @@ selectedDiaryDate panes =
         |> List.head
 
 
-paneView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Maybe LocalDate
-    -> Pane
-    -> ( String, Element Msg )
-paneView props selectedDate pane =
+paneView : Env -> Maybe LocalDate -> Pane -> ( String, Element Msg )
+paneView env selectedDate pane =
     ( paneKey pane
     , case pane of
         LoginPane sub ->
-            Element.map GotLoginMsg (AuthLogin.view (pageProps props sub))
+            Element.map GotLoginMsg (AuthLogin.view env sub)
 
         SetupPane sub ->
-            Element.map GotSetupMsg (BootstrapSetup.view (pageProps props sub))
+            Element.map GotSetupMsg (BootstrapSetup.view env sub)
 
         AdminPane sub ->
-            Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props sub))
+            Element.map GotAdminMsg (AdminDashboard.contentView env sub)
 
         AdminCreateUserPane sub ->
-            Element.map GotAdminCreateUserMsg (AdminCreateUser.view (pageProps props sub))
+            Element.map GotAdminCreateUserMsg (AdminCreateUser.view env sub)
 
         AdminEditUserPane _ sub ->
-            Element.map GotAdminEditUserMsg (AdminEditUser.view (pageProps props sub))
+            Element.map GotAdminEditUserMsg (AdminEditUser.view env sub)
 
         DiaryPane _ sub ->
-            Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props sub))
+            Element.map GotDiaryMsg (DiaryDay.contentView env sub)
 
         DiaryCalendarPane _ sub ->
             Element.map GotDiaryCalendarMsg
-                (DiaryCalendar.contentViewWithSelection selectedDate (pageProps props sub))
+                (DiaryCalendar.contentViewWithSelection env selectedDate sub)
 
         NutritionDetailsPane _ sub ->
-            Element.map GotNutritionDetailsMsg (NutritionDetails.view (pageProps props sub))
+            Element.map GotNutritionDetailsMsg (NutritionDetails.view env sub)
 
         GoalsSettingsPane _ sub ->
-            Element.map GotGoalsSettingsMsg (GoalsSettings.view (pageProps props sub))
+            Element.map GotGoalsSettingsMsg (GoalsSettings.view env sub)
 
         DiarySettingsPane sub ->
-            Element.map GotDiarySettingsMsg (DiarySettings.view (pageProps props sub))
+            Element.map GotDiarySettingsMsg (DiarySettings.view env sub)
 
         FoodSearchPane sub ->
-            Element.map GotFoodSearchMsg (FoodSearch.contentView (pageProps props sub))
+            Element.map GotFoodSearchMsg (FoodSearch.contentView env sub)
 
         FoodDetailPane _ sub ->
-            Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props sub))
+            Element.map GotFoodDetailMsg (FoodShow.contentView env sub)
 
         FoodLogDetailPane _ sub ->
-            Element.map GotFoodLogDetailMsg (FoodLogEntry.contentView (pageProps props sub))
+            Element.map GotFoodLogDetailMsg (FoodLogEntry.contentView env sub)
 
         CreateAdHocLogPane sub ->
-            Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view (pageProps props sub))
+            Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view env sub)
 
         CreateWithAiLogPane sub ->
-            Element.map GotCreateWithAiLogMsg (CreateWithAiLog.view (pageProps props sub))
+            Element.map GotCreateWithAiLogMsg (CreateWithAiLog.view env sub)
 
         CustomFoodListPane sub ->
-            Element.map GotCustomFoodsMsg (CustomFoodList.contentView (pageProps props sub))
+            Element.map GotCustomFoodsMsg (CustomFoodList.contentView env sub)
 
         CustomFoodCreatePane sub ->
-            Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view (pageProps props sub))
+            Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view env sub)
 
         CustomFoodEditPane _ sub ->
-            Element.map GotCustomFoodEditMsg (CustomFoodEdit.view (pageProps props sub))
+            Element.map GotCustomFoodEditMsg (CustomFoodEdit.view env sub)
 
         CustomFoodShowPane _ sub ->
-            Element.map GotCustomFoodShowMsg (CustomFoodShow.view (pageProps props sub))
+            Element.map GotCustomFoodShowMsg (CustomFoodShow.view env sub)
 
         MealListPane sub ->
-            Element.map GotMealsMsg (MealList.contentView (pageProps props sub))
+            Element.map GotMealsMsg (MealList.contentView env sub)
 
         MealCreatePane sub ->
-            Element.map GotMealCreateMsg (MealCreate.view (pageProps props sub))
+            Element.map GotMealCreateMsg (MealCreate.view env sub)
 
         MealEditPane _ sub ->
-            Element.map GotMealEditMsg (MealEdit.view (pageProps props sub))
+            Element.map GotMealEditMsg (MealEdit.view env sub)
 
         MealDetailPane _ sub ->
-            Element.map GotMealDetailMsg (MealShow.view (pageProps props sub))
+            Element.map GotMealDetailMsg (MealShow.view env sub)
 
         PlaceholderPane message ->
             Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
     )
 
 
-modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Maybe (Element Msg)
-modalView props =
-    props.model.panes
-        |> List.filterMap (paneModalView props)
-        |> List.head
+modalView : Env -> Model -> Maybe (Element Msg)
+modalView env model =
+    model.panes |> List.filterMap (paneModalView env) |> List.head
 
 
-paneModalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Pane
-    -> Maybe (Element Msg)
-paneModalView props pane =
+paneModalView : Env -> Pane -> Maybe (Element Msg)
+paneModalView env pane =
     case pane of
         FoodLogDetailPane _ sub ->
-            FoodLogEntry.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotFoodLogDetailMsg)
+            FoodLogEntry.modalView env sub |> Maybe.map (Element.map GotFoodLogDetailMsg)
 
         CustomFoodShowPane _ sub ->
-            CustomFoodShow.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotCustomFoodShowMsg)
+            CustomFoodShow.modalView env sub |> Maybe.map (Element.map GotCustomFoodShowMsg)
 
         CustomFoodCreatePane sub ->
-            CustomFoodCreate.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotCustomFoodCreateMsg)
+            CustomFoodCreate.modalView env sub |> Maybe.map (Element.map GotCustomFoodCreateMsg)
 
         CreateWithAiLogPane sub ->
-            CreateWithAiLog.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotCreateWithAiLogMsg)
+            CreateWithAiLog.modalView env sub |> Maybe.map (Element.map GotCreateWithAiLogMsg)
 
         MealDetailPane _ sub ->
-            MealShow.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotMealDetailMsg)
+            MealShow.modalView env sub |> Maybe.map (Element.map GotMealDetailMsg)
 
         AdminEditUserPane _ sub ->
-            AdminEditUser.modalView (pageProps props sub)
-                |> Maybe.map (Element.map GotAdminEditUserMsg)
+            AdminEditUser.modalView env sub |> Maybe.map (Element.map GotAdminEditUserMsg)
 
         _ ->
             Nothing
-
-
-pageProps :
-    { props | device : Device, theme : Theme, language : Language }
-    -> subModel
-    -> { model : subModel, device : Device, theme : Theme, language : Language }
-pageProps props subModel =
-    { model = subModel
-    , device = props.device
-    , theme = props.theme
-    , language = props.language
-    }
 
 
 
@@ -3335,10 +3151,7 @@ lastUsedProductDefaultCmd route productId =
             []
 
 
-recentItemsRequest :
-    Maybe String
-    -> Maybe MealSlot
-    -> Maybe Api.Logs.RecentItemsRequest
+recentItemsRequest : Maybe String -> Maybe MealSlot -> Maybe Api.Logs.RecentItemsRequest
 recentItemsRequest maybeDate maybeSlot =
     maybeDate
         |> Maybe.andThen LocalDate.fromString

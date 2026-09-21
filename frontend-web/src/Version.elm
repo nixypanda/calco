@@ -15,10 +15,7 @@ import Time
 
 
 type alias Model =
-    { currentVersion : Maybe String
-    , updateAvailable : Bool
-    , versionError : Maybe String
-    }
+    { currentVersion : Maybe String, updateAvailable : Bool, versionError : Maybe String }
 
 
 type Msg
@@ -103,10 +100,7 @@ subscriptions =
 
 fetchVersion : Int -> Cmd Msg
 fetchVersion timestamp =
-    Client.get
-        ("/version.json?v=" ++ String.fromInt timestamp)
-        versionDecoder
-        GotVersionCheck
+    Client.get ("/version.json?v=" ++ String.fromInt timestamp) versionDecoder GotVersionCheck
 
 
 versionDecoder : Decode.Decoder String

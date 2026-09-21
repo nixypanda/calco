@@ -45,8 +45,7 @@ shiftMonth offset period =
 
 monthsDescending : Int -> String -> List String
 monthsDescending count first =
-    List.range 0 (max 0 (count - 1))
-        |> List.map (\offset -> shiftMonth -offset first)
+    List.range 0 (max 0 (count - 1)) |> List.map (\offset -> shiftMonth -offset first)
 
 
 monthCells : String -> List (Maybe Int)
@@ -71,8 +70,7 @@ monthCells period =
 
 monthStart : String -> Maybe LocalDate
 monthStart period =
-    parseMonth period
-        |> Maybe.andThen (\( year, month ) -> LocalDate.fromParts year month 1)
+    parseMonth period |> Maybe.andThen (\( year, month ) -> LocalDate.fromParts year month 1)
 
 
 monthEnd : String -> Maybe LocalDate

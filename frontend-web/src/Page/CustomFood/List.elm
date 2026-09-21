@@ -12,7 +12,7 @@ import Api.Client as Client
 import Api.Foods as Foods exposing (ProductDetail)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
@@ -20,6 +20,7 @@ import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Skeleton as Skeleton
 import Ui.Surface as Surface
@@ -99,45 +100,39 @@ failure =
 -- VIEW
 
 
-contentView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Element Msg
-contentView { model, device, theme, language } =
+contentView : Env -> Model -> Element Msg
+contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             Loaded _ ->
                 Element.none
 
             LoadFailed message ->
-                Feedback.errorBanner theme message
+                Feedback.errorBanner env.theme message
 
             Loading ->
                 Element.none
-        , bodyView theme device language model
+        , bodyView env model
         ]
 
 
-bodyView : Theme -> Device -> Language -> Model -> Element Msg
-bodyView theme device language model =
+bodyView : Env -> Model -> Element Msg
+bodyView env model =
     case model of
         Loaded foods ->
-            Surface.section theme
+            Surface.section env.theme
                 { header =
-                    Just
-                        (createActions device theme language)
+                    Just (createActions env)
                 , body =
                     if List.isEmpty foods then
                         [ Typography.mutedBodyParagraph
-                            theme
-                            (I18n.t language TidCustomFoodListEmpty)
+                            env.theme
+                            (I18n.t env.language TidCustomFoodListEmpty)
                         ]
 
                     else
-                        List.intersperse (Surface.hairline theme)
-                            (List.map (foodRow theme device language) foods)
+                        List.intersperse (Surface.hairline env.theme) (List.map (foodRow env) foods)
                 , footer = Nothing
                 }
 
@@ -145,58 +140,55 @@ bodyView theme device language model =
             Element.none
 
         Loading ->
-            customFoodListSkeleton theme
+            customFoodListSkeleton env.theme
 
 
-createActions : Device -> Theme -> Language -> Element Msg
-createActions device theme language =
+createActions : Env -> Element Msg
+createActions env =
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el [ Element.width Element.fill ]
-            (Button.textButton device
-                theme
+            (Button.textButton env.device
+                env.theme
                 { tone = Button.Primary
                 , width = Button.FullWidth
-                , label = I18n.t language TidTitleCreateWithAi
+                , label = I18n.t env.language TidTitleCreateWithAi
                 , onPress = CreateWithAiClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just (I18n.t language TidTitleCreateWithAi)
+                , submittingLabel = Just (I18n.t env.language TidTitleCreateWithAi)
                 , trailing = Nothing
                 }
             )
         , Element.el [ Element.width Element.fill ]
-            (Button.textButton device
-                theme
+            (Button.textButton env.device
+                env.theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = I18n.t language TidCustomFoodEnterManually
+                , label = I18n.t env.language TidCustomFoodEnterManually
                 , onPress = CreateManuallyClicked
                 , submitState = Just Button.Idle
-                , submittingLabel = Just (I18n.t language TidCustomFoodEnterManually)
+                , submittingLabel = Just (I18n.t env.language TidCustomFoodEnterManually)
                 , trailing = Nothing
                 }
             )
         ]
 
 
-foodRow : Theme -> Device -> Language -> ProductDetail -> Element Msg
-foodRow theme _ language food =
+foodRow : Env -> ProductDetail -> Element Msg
+foodRow env food =
     let
         macroDot : Element Msg
         macroDot =
-            View.Nutrients.macroDot theme
-                language
+            View.Nutrients.macroDot env
                 (food.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
     in
     Surface.listRow
         { onSelect = OpenFoodClicked food.id
         , leading = [ macroDot ]
-        , title = Typography.wrappedListItemTitle theme food.name
+        , title = Typography.wrappedListItemTitle env.theme food.name
         , subtitle =
-            [ Typography.mutedBodyParagraph theme (foodSummaryText language food)
-            , Chip.chips theme food.categories
+            [ Typography.mutedBodyParagraph env.theme (foodSummaryText env.language food)
+            , Chip.chips env.theme food.categories
             ]
         , trailing = []
         }
@@ -221,9 +213,7 @@ customFoodListSkeleton theme =
         { header =
             Just
                 (Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space12
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ Element.el [ Element.width Element.fill ]
                         (Skeleton.button theme)
                     , Element.el [ Element.width Element.fill ]
@@ -232,8 +222,6 @@ customFoodListSkeleton theme =
                 )
         , body =
             List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme)
-                    (List.range 1 3)
-                )
+                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
         , footer = Nothing
         }

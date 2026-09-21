@@ -230,9 +230,7 @@ textButton device theme config =
          ]
             ++ (if isActive then
                     [ hoverEffect device
-                        [ Background.color toneColors.hoverBg
-                        , Font.color toneColors.hoverFg
-                        ]
+                        [ Background.color toneColors.hoverBg, Font.color toneColors.hoverFg ]
                     ]
 
                 else
@@ -274,9 +272,7 @@ textButton device theme config =
 
                 Just trailingEl ->
                     Element.row [ Element.width Element.fill, Element.spacing space4 ]
-                        [ Element.text label
-                        , Element.el [ Element.alignRight ] trailingEl
-                        ]
+                        [ Element.text label, Element.el [ Element.alignRight ] trailingEl ]
         }
 
 
@@ -311,25 +307,15 @@ bottomActionButtons device theme buttons =
             Element.none
 
         [ onlyButton ] ->
-            Element.column
-                [ Element.width Element.fill
-                , Element.spacing space12
-                ]
-                [ onlyButton ]
+            Element.column [ Element.width Element.fill, Element.spacing space12 ] [ onlyButton ]
 
         [ firstButton, secondButton ] ->
             Element.row
-                [ Element.width Element.fill
-                , Element.spacing space12
-                ]
+                [ Element.width Element.fill, Element.spacing space12 ]
                 [ firstButton, secondButton ]
 
         _ ->
-            Element.column
-                [ Element.width Element.fill
-                , Element.spacing space12
-                ]
-                buttonElements
+            Element.column [ Element.width Element.fill, Element.spacing space12 ] buttonElements
 
 
 iconButton :
@@ -398,18 +384,11 @@ iconButton device theme config =
         , Border.color iconTone.border
         , uiClass "ui-motion ui-pressable"
         , hoverEffect device
-            [ Background.color iconTone.hoverBg
-            , Border.color iconTone.hoverBorder
-            ]
+            [ Background.color iconTone.hoverBg, Border.color iconTone.hoverBorder ]
         , Element.htmlAttribute (Html.Attributes.title config.title)
         ]
         { onPress = config.onPress
         , label =
             Element.el [ Element.centerX, Element.centerY ]
-                (Icon.view
-                    { icon = config.icon
-                    , size = iconSize
-                    , color = iconTone.iconColor
-                    }
-                )
+                (Icon.view { icon = config.icon, size = iconSize, color = iconTone.iconColor })
         }

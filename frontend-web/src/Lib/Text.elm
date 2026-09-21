@@ -66,10 +66,7 @@ requireTrimmed problem raw =
 
 commaSeparatedUniqueLower : String -> List String
 commaSeparatedUniqueLower raw =
-    raw
-        |> String.split ","
-        |> List.foldl addUniqueLower []
-        |> List.reverse
+    raw |> String.split "," |> List.foldl addUniqueLower [] |> List.reverse
 
 
 splitQuotedWhitespace : String -> List String
@@ -82,10 +79,7 @@ splitQuotedWhitespace raw =
 
 stripBoundingQuotes : String -> String
 stripBoundingQuotes value =
-    value
-        |> String.trim
-        |> trimLeadingQuote
-        |> trimTrailingQuote
+    value |> String.trim |> trimLeadingQuote |> trimTrailingQuote
 
 
 trimLeadingQuote : String -> String
@@ -139,9 +133,7 @@ normalizeLower raw =
     let
         value : String
         value =
-            raw
-                |> String.trim
-                |> String.toLower
+            raw |> String.trim |> String.toLower
     in
     if String.isEmpty value then
         Nothing
@@ -151,10 +143,7 @@ normalizeLower raw =
 
 
 type alias TokenState =
-    { current : String
-    , parts : List String
-    , inQuotes : Bool
-    }
+    { current : String, parts : List String, inQuotes : Bool }
 
 
 tokenStep : Char -> TokenState -> TokenState
@@ -163,10 +152,7 @@ tokenStep char state =
         { state | current = state.current ++ String.fromChar char, inQuotes = not state.inQuotes }
 
     else if isWhitespace char && not state.inQuotes then
-        { state
-            | current = ""
-            , parts = String.fromChar char :: state.current :: state.parts
-        }
+        { state | current = "", parts = String.fromChar char :: state.current :: state.parts }
 
     else
         { state | current = state.current ++ String.fromChar char }

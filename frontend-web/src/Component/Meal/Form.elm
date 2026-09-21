@@ -32,21 +32,20 @@ import Api.Meals
 import Data.ItemRef exposing (ItemType(..))
 import Data.Nutrition exposing (defaultCode)
 import Data.Search as Search exposing (Completion, QueryState)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Set exposing (Set)
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Icon as Icon
 import Ui.Input as UiInput
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 import Ui.Typography as Typography
 import View.QuantityInput as QuantityInput
 import View.Search as SearchView
@@ -275,13 +274,7 @@ updateFormField msg form =
                                 |> Maybe.withDefault Search.empty
                     in
                     ( updateComponent rowId
-                        (SetSearch
-                            (Search.setCategorySuggestions
-                                token
-                                response.items
-                                priorSearch
-                            )
-                        )
+                        (SetSearch (Search.setCategorySuggestions token response.items priorSearch))
                         form
                     , Cmd.none
                     , Nothing
@@ -327,30 +320,16 @@ updateFormField msg form =
                     ( form, Cmd.none, Nothing )
 
         ComponentCompletionActiveChanged rowId index ->
-            ( updateComponent rowId (SetCompletionIndex index) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetCompletionIndex index) form, Cmd.none, Nothing )
 
         SelectProduct rowId result ->
-            ( updateComponent rowId
-                (SetProduct result.id result.name)
-                form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetProduct result.id result.name) form, Cmd.none, Nothing )
 
         ComponentQuantityChanged rowId value ->
-            ( updateComponent rowId (SetQuantity value) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetQuantity value) form, Cmd.none, Nothing )
 
         ComponentUnitChanged rowId value ->
-            ( updateComponent rowId (SetUnit value) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetUnit value) form, Cmd.none, Nothing )
 
         ComponentUnitToggled rowId ->
             ( { form | components = List.map (toggleUnitOpen rowId) form.components }
@@ -368,71 +347,60 @@ updateFormField msg form =
             )
 
         RemoveComponentClicked rowId ->
-            ( { form | components = removeRow rowId form.components }
-            , Cmd.none
-            , Nothing
-            )
+            ( { form | components = removeRow rowId form.components }, Cmd.none, Nothing )
 
 
 
 -- VIEW
 
 
-viewFormFields :
-    Theme
-    -> Language
-    -> Device
-    -> (FormFieldMsg -> msg)
-    -> FormFields
-    -> Element msg
-viewFormFields theme language device toMsg form =
+viewFormFields : Env -> (FormFieldMsg -> msg) -> FormFields -> Element msg
+viewFormFields env toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ Surface.formSection theme
-            (I18n.t language TidFoodEditorBasicInfo)
-            [ UiInput.input theme
-                { label = I18n.t language TidFoodEditorName
+        [ Surface.formSection env.theme
+            (I18n.t env.language TidFoodEditorBasicInfo)
+            [ UiInput.input env.theme
+                { label = I18n.t env.language TidFoodEditorName
                 , value = form.name
                 , onChange = toMsg << NameChanged
                 }
-            , UiInput.input theme
-                { label = I18n.t language TidMealNotes
+            , UiInput.input env.theme
+                { label = I18n.t env.language TidMealNotes
                 , value = form.notes
                 , onChange = toMsg << NotesChanged
                 }
             ]
-        , Surface.formSection theme
-            (I18n.t language TidMealTotal)
-            [ UiInput.numericInput theme
-                { label = I18n.t language TidMealTotalQuantity
+        , Surface.formSection env.theme
+            (I18n.t env.language TidMealTotal)
+            [ UiInput.numericInput env.theme
+                { label = I18n.t env.language TidMealTotalQuantity
                 , value = form.totalQuantity
                 , onChange = toMsg << TotalQuantityChanged
                 }
-            , UiInput.selectDropdown device
-                theme
-                language
-                { label = I18n.t language TidMealTotalUnit
+            , UiInput.selectDropdown env.device
+                env.theme
+                env.language
+                { label = I18n.t env.language TidMealTotalUnit
                 , selected = form.totalUnit
-                , options = QuantityInput.unitOptions language form.totalUnit form.units
+                , options = QuantityInput.unitOptions env.language form.totalUnit form.units
                 , onChange = toMsg << TotalUnitChanged
                 , isOpen = form.totalUnitOpen
                 , onToggle = toMsg TotalUnitToggled
                 }
             ]
-        , Surface.section theme
-            { header = Just (Typography.subsectionTitle theme (I18n.t language TidMealComponents))
+        , Surface.section env.theme
+            { header =
+                Just (Typography.subsectionTitle env.theme (I18n.t env.language TidMealComponents))
             , body =
-                List.intersperse (Surface.hairline theme)
-                    (List.map
-                        (componentRowView theme language device toMsg form.units)
-                        form.components
-                    )
+                List.intersperse (Surface.hairline env.theme)
+                    (List.map (componentRowView env toMsg form.units) form.components)
             , footer =
                 Just
-                    (Button.textButton device
-                        theme
+                    (Button.textButton env.device
+                        env.theme
                         { tone = Button.Ghost
                         , width = Button.FullWidth
-                        , label = I18n.t language TidMealAddComponent
+                        , label = I18n.t env.language TidMealAddComponent
                         , onPress = toMsg AddComponentClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
@@ -498,9 +466,7 @@ onComponentSearchChanged rowId query form =
     let
         priorSearch : QueryState
         priorSearch =
-            findRow rowId form.components
-                |> Maybe.map .search
-                |> Maybe.withDefault Search.empty
+            findRow rowId form.components |> Maybe.map .search |> Maybe.withDefault Search.empty
 
         ( transitionedSearch, categoryReq ) =
             Search.onQueryChanged query priorSearch
@@ -515,10 +481,7 @@ onComponentSearchChanged rowId query form =
 
         nextSearch : QueryState
         nextSearch =
-            { transitionedSearch
-                | searchToken = token
-                , categoryToken = categoryToken
-            }
+            { transitionedSearch | searchToken = token, categoryToken = categoryToken }
 
         nextForm : FormFields
         nextForm =
@@ -560,18 +523,11 @@ onComponentSearchChanged rowId query form =
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Just
-                (RequestCategorySuggestions
-                    rowId
-                    categoryToken
-                    { query = cat.query, limit = 8 }
-                )
+                (RequestCategorySuggestions rowId categoryToken { query = cat.query, limit = 8 })
             )
 
         _ ->
-            ( nextForm |> updateComponent rowId (SetSearchResults token [])
-            , Cmd.none
-            , Nothing
-            )
+            ( nextForm |> updateComponent rowId (SetSearchResults token []), Cmd.none, Nothing )
 
 
 completeComponentSuggestion :
@@ -672,9 +628,7 @@ patchRow rowId patch row =
 
 findRow : RowId -> List ComponentRow -> Maybe ComponentRow
 findRow rowId rows =
-    rows
-        |> List.filter (\row -> row.rowId == rowId)
-        |> List.head
+    rows |> List.filter (\row -> row.rowId == rowId) |> List.head
 
 
 removeRow : RowId -> List ComponentRow -> List ComponentRow
@@ -696,22 +650,19 @@ toggleUnitOpen rowId row =
 
 
 componentRowView :
-    Theme
-    -> Language
-    -> Device
+    Env
     -> (FormFieldMsg -> msg)
     -> List Foods.UnitItem
     -> ComponentRow
     -> Element msg
-componentRowView theme language device toMsg units row =
+componentRowView env toMsg units row =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ SearchView.searchInput theme
-            device
+        [ SearchView.searchInput env
             { id = "meal-component-completions-" ++ String.fromInt row.rowId
             , onChange = toMsg << ComponentSearchChanged row.rowId
             , text = row.search.query
-            , label = UiInput.LabelAbove (I18n.t language TidMealSearchProduct)
+            , label = UiInput.LabelAbove (I18n.t env.language TidMealSearchProduct)
             , completions = Search.completions row.search.query row.search.categorySuggestions
             , activeIndex = row.completionIndex
             , onActiveChanged = toMsg << ComponentCompletionActiveChanged row.rowId
@@ -720,7 +671,7 @@ componentRowView theme language device toMsg units row =
             }
         , case row.searchResults of
             Loading ->
-                Feedback.loading theme (I18n.t language TidMealSearchingFoods)
+                Feedback.loading env.theme (I18n.t env.language TidMealSearchingFoods)
 
             Success results ->
                 if List.isEmpty results then
@@ -728,14 +679,10 @@ componentRowView theme language device toMsg units row =
 
                 else
                     Element.column
-                        [ Element.width Element.fill
-                        , Element.spacing 0
-                        ]
+                        [ Element.width Element.fill, Element.spacing 0 ]
                         (List.map
                             (\result ->
-                                searchResultView theme
-                                    language
-                                    device
+                                searchResultView env
                                     toMsg
                                     { rowId = row.rowId, query = row.search.query, result = result }
                             )
@@ -748,26 +695,26 @@ componentRowView theme language device toMsg units row =
             NotAsked ->
                 Element.none
         , Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-            [ UiInput.numericInput theme
-                { label = I18n.t language TidMealQty
+            [ UiInput.numericInput env.theme
+                { label = I18n.t env.language TidMealQty
                 , value = row.quantity
                 , onChange = toMsg << ComponentQuantityChanged row.rowId
                 }
-            , UiInput.selectDropdown device
-                theme
-                language
-                { label = I18n.t language TidNutrientTableUnit
+            , UiInput.selectDropdown env.device
+                env.theme
+                env.language
+                { label = I18n.t env.language TidNutrientTableUnit
                 , selected = row.unit
-                , options = QuantityInput.unitOptions language row.unit units
+                , options = QuantityInput.unitOptions env.language row.unit units
                 , onChange = toMsg << ComponentUnitChanged row.rowId
                 , isOpen = row.unitOpen
                 , onToggle = toMsg (ComponentUnitToggled row.rowId)
                 }
             , Element.el [ Element.centerY ]
-                (Button.iconButton device
-                    theme
+                (Button.iconButton env.device
+                    env.theme
                     { icon = Icon.Close
-                    , title = I18n.t language TidFoodEditorRemove
+                    , title = I18n.t env.language TidFoodEditorRemove
                     , onPress = Just (toMsg (RemoveComponentClicked row.rowId))
                     , tone = Button.Danger
                     }
@@ -777,23 +724,12 @@ componentRowView theme language device toMsg units row =
 
 
 type alias RowHit =
-    { rowId : RowId
-    , query : String
-    , result : SearchResult
-    }
+    { rowId : RowId, query : String, result : SearchResult }
 
 
-searchResultView :
-    Theme
-    -> Language
-    -> Device
-    -> (FormFieldMsg -> msg)
-    -> RowHit
-    -> Element msg
-searchResultView theme language device toMsg hit =
-    SearchView.resultRow theme
-        language
-        device
+searchResultView : Env -> (FormFieldMsg -> msg) -> RowHit -> Element msg
+searchResultView env toMsg hit =
+    SearchView.resultRow env
         { query = hit.query
         , item = hit.result
         , onSelect = \_ -> toMsg (SelectProduct hit.rowId hit.result)

@@ -38,9 +38,11 @@ tests =
 
 resultRowFor : DeviceClass -> Query.Single String
 resultRowFor deviceClass =
-    SearchView.resultRow Theme.light
-        Util.EN_US
-        { class = deviceClass, orientation = Portrait }
+    SearchView.resultRow
+        { theme = Theme.light
+        , device = { class = deviceClass, orientation = Portrait }
+        , language = Util.EN_US
+        }
         { query = "ferr"
         , item = searchResult
         , onSelect = identity

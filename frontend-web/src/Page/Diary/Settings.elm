@@ -11,11 +11,11 @@ module Page.Diary.Settings exposing
 import Api.Client as Client
 import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
-import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Page as UiPage
@@ -66,9 +66,7 @@ update msg model =
             case result of
                 Ok preferences ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots
-                        , saveState = Editing
-                        }
+                        { selected = canonical preferences.enabledMealSlots, saveState = Editing }
                     , Cmd.none
                     , NoOp
                     )
@@ -130,9 +128,7 @@ update msg model =
             case ( model, result ) of
                 ( Ready _, Ok preferences ) ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots
-                        , saveState = Saved
-                        }
+                        { selected = canonical preferences.enabledMealSlots, saveState = Saved }
                     , Cmd.none
                     , NoOp
                     )
@@ -160,63 +156,65 @@ canonical selected =
     List.filter (\slot -> List.member slot selected) MealSlot.all
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
         (case model of
             Loading ->
-                [ diarySettingsSkeleton theme ]
+                [ diarySettingsSkeleton env.theme ]
 
             Failed message ->
-                [ Feedback.errorRetry theme
-                    language
-                    device
+                [ Feedback.errorRetry env.theme
+                    env.language
+                    env.device
                     { message = message, onRetry = RetryClicked }
                 ]
 
             Ready loaded ->
-                [ Surface.section theme
+                [ Surface.section env.theme
                     { header =
                         Just
                             (Surface.sectionHeader
                                 { title =
-                                    Typography.sectionTitle theme
-                                        (I18n.t language TidDiarySettingsMealSlotsTitle)
+                                    Typography.sectionTitle env.theme
+                                        (I18n.t env.language TidDiarySettingsMealSlotsTitle)
                                 , description =
                                     Just
-                                        (Typography.mutedParagraph theme
-                                            (I18n.t language TidDiarySettingsMealSlotsDescription)
+                                        (Typography.mutedParagraph env.theme
+                                            (I18n.t env.language
+                                                TidDiarySettingsMealSlotsDescription
+                                            )
                                         )
                                 , trailing = Nothing
                                 }
                             )
-                    , body = List.map (slotCheckbox theme language loaded.selected) MealSlot.all
+                    , body = List.map (slotCheckbox env loaded.selected) MealSlot.all
                     , footer = Nothing
                     }
-                , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
-                , Button.textButton device
-                    theme
+                , Feedback.maybeErrorBanner env.theme (saveError loaded.saveState)
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label =
                         if loaded.saveState == Saved then
-                            I18n.t language TidDiarySettingsSaved
+                            I18n.t env.language TidDiarySettingsSaved
 
                         else
-                            I18n.t language TidDiarySettingsSave
+                            I18n.t env.language TidDiarySettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (loaded.saveState == Saving))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
         )
 
 
-slotCheckbox : Theme -> Language -> List MealSlot -> MealSlot -> Element Msg
-slotCheckbox theme language selected slot =
-    UiInput.checkbox theme
-        { label = MealSlot.label language slot
+slotCheckbox : Env -> List MealSlot -> MealSlot -> Element Msg
+slotCheckbox env selected slot =
+    UiInput.checkbox env.theme
+        { label = MealSlot.label env.language slot
         , checked = List.member slot selected
         , onChange = SlotToggled slot
         }
@@ -239,10 +237,7 @@ diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 140, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
         , body =
             [ Skeleton.bar theme
             , Skeleton.bar theme

@@ -14,13 +14,14 @@ module Page.Users.EditUser exposing
 
 import Api.Client as Client
 import Data.User as User exposing (User)
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Page as UiPage
@@ -36,9 +37,7 @@ import View.DeleteModal
 
 
 type alias Model =
-    { userId : String
-    , status : Status
-    }
+    { userId : String, status : Status }
 
 
 type Status
@@ -48,9 +47,7 @@ type Status
 
 
 type alias LoadedUser =
-    { user : User
-    , password : String
-    }
+    { user : User, password : String }
 
 
 type ActionState
@@ -69,11 +66,7 @@ type Problem
 
 init : String -> ( Model, OutMsg )
 init userId =
-    ( { userId = userId
-      , status = Loading
-      }
-    , RequestUser userId
-    )
+    ( { userId = userId, status = Loading }, RequestUser userId )
 
 
 
@@ -173,10 +166,7 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | status = Loaded loadedUser DisableConfirming }
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( { model | status = Loaded loadedUser DisableConfirming }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -184,10 +174,7 @@ update msg model =
         CancelDisableClicked ->
             case model.status of
                 Loaded loadedUser DisableConfirming ->
-                    ( { model | status = Loaded loadedUser Idle }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( { model | status = Loaded loadedUser Idle }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -290,100 +277,92 @@ completePendingAction pendingAction result model successStatus =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
-        (errorView theme language model.status
-            ++ userDetailsView device theme language model
-            ++ accountActionView device theme language model
-        )
+        (errorView env model.status ++ userDetailsView env model ++ accountActionView env model)
 
 
-modalView :
-    { model : Model, device : Device, theme : Theme, language : Language }
-    -> Maybe (Element Msg)
-modalView { model, device, theme, language } =
+modalView : Env -> Model -> Maybe (Element Msg)
+modalView env model =
     case model.status of
         Loaded _ DisableConfirming ->
-            Just (disableConfirmModal device theme language { pending = False })
+            Just (disableConfirmModal env { pending = False })
 
         Loaded _ DisablingUser ->
-            Just (disableConfirmModal device theme language { pending = True })
+            Just (disableConfirmModal env { pending = True })
 
         _ ->
             Nothing
 
 
-disableConfirmModal : Device -> Theme -> Language -> { pending : Bool } -> Element Msg
-disableConfirmModal device theme language state =
-    View.DeleteModal.confirmModalView theme
-        language
-        device
-        { title = I18n.t language TidUsersDisableConfirmTitle
-        , description = I18n.t language TidUsersDisableConfirmDescription
-        , confirmLabel = I18n.t language TidUsersDisableUser
-        , pendingLabel = I18n.t language TidUsersDisabling
+disableConfirmModal : Env -> { pending : Bool } -> Element Msg
+disableConfirmModal env state =
+    View.DeleteModal.confirmModalView env
+        { title = I18n.t env.language TidUsersDisableConfirmTitle
+        , description = I18n.t env.language TidUsersDisableConfirmDescription
+        , confirmLabel = I18n.t env.language TidUsersDisableUser
+        , pendingLabel = I18n.t env.language TidUsersDisabling
         , onCancel = CancelDisableClicked
         , onConfirm = DisableConfirmClicked
         }
         { pending = state.pending, error = Nothing }
 
 
-userDetailsView : Device -> Theme -> Language -> Model -> List (Element Msg)
-userDetailsView device theme language model =
+userDetailsView : Env -> Model -> List (Element Msg)
+userDetailsView env model =
     case model.status of
         Loading ->
-            [ editUserSkeleton theme ]
+            [ editUserSkeleton env.theme ]
 
         LoadFailed error ->
-            [ Feedback.errorBanner theme
-                (I18n.t language (TidUsersLoadFailed (Client.displayError error)))
+            [ Feedback.errorBanner env.theme
+                (I18n.t env.language (TidUsersLoadFailed (Client.displayError error)))
             ]
 
         Loaded loadedUser _ ->
-            [ userCard device theme language model.status loadedUser ]
+            [ userCard env model.status loadedUser ]
 
 
-userCard : Device -> Theme -> Language -> Status -> LoadedUser -> Element Msg
-userCard device theme language status loadedUser =
-    Surface.section theme
+userCard : Env -> Status -> LoadedUser -> Element Msg
+userCard env status loadedUser =
+    Surface.section env.theme
         { header =
             Just
                 (Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space4
-                    ]
-                    [ Typography.sectionTitle theme loadedUser.user.displayName
-                    , Typography.mutedParagraph theme loadedUser.user.username
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
+                    [ Typography.sectionTitle env.theme loadedUser.user.displayName
+                    , Typography.mutedParagraph env.theme loadedUser.user.username
                     ]
                 )
         , body =
-            [ Surface.detailRow theme
-                language
-                (I18n.t language TidCommonStatus)
-                (Chip.statusBadge theme loadedUser.user.status)
-            , Surface.detailRow theme
-                language
-                (I18n.t language TidCommonCreated)
+            [ Surface.detailRow env.theme
+                env.language
+                (I18n.t env.language TidCommonStatus)
+                (Chip.statusBadge env.theme loadedUser.user.status)
+            , Surface.detailRow env.theme
+                env.language
+                (I18n.t env.language TidCommonCreated)
                 (Element.el [ Typography.caption ] (Element.text loadedUser.user.createdAt))
-            , Surface.hairline theme
+            , Surface.hairline env.theme
             , Element.column [ Element.spacing DesignTokens.space8, Element.width Element.fill ]
-                [ Typography.wrappedListItemTitle theme (I18n.t language TidUsersResetPassword)
-                , UiInput.passwordInput theme
-                    { label = I18n.t language TidUsersNewPassword
+                [ Typography.wrappedListItemTitle env.theme
+                    (I18n.t env.language TidUsersResetPassword)
+                , UiInput.passwordInput env.theme
+                    { label = I18n.t env.language TidUsersNewPassword
                     , value = loadedUser.password
                     , onChange = PasswordChanged
                     }
-                , Button.textButton device
-                    theme
+                , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
                     , label =
                         if isResetPending status then
-                            I18n.t language TidUsersResetting
+                            I18n.t env.language TidUsersResetting
 
                         else
-                            I18n.t language TidUsersResetPassword
+                            I18n.t env.language TidUsersResetPassword
                     , onPress = ResetSubmitted
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -395,19 +374,19 @@ userCard device theme language status loadedUser =
         }
 
 
-accountActionView : Device -> Theme -> Language -> Model -> List (Element Msg)
-accountActionView device theme language model =
+accountActionView : Env -> Model -> List (Element Msg)
+accountActionView env model =
     case model.status of
         Loaded loadedUser _ ->
-            [ Button.bottomActionButtons device
-                theme
+            [ Button.bottomActionButtons env.device
+                env.theme
                 [ if loadedUser.user.status == "active" then
                     { label =
                         if isDisablePending model.status then
-                            I18n.t language TidUsersDisabling
+                            I18n.t env.language TidUsersDisabling
 
                         else
-                            I18n.t language TidUsersDisableUser
+                            I18n.t env.language TidUsersDisableUser
                     , onPress = DisableClicked
                     , tone = Button.Danger
                     }
@@ -415,10 +394,10 @@ accountActionView device theme language model =
                   else
                     { label =
                         if isEnablePending model.status then
-                            I18n.t language TidUsersEnabling
+                            I18n.t env.language TidUsersEnabling
 
                         else
-                            I18n.t language TidUsersEnableUser
+                            I18n.t env.language TidUsersEnableUser
                     , onPress = EnableClicked
                     , tone = Button.Primary
                     }
@@ -459,14 +438,14 @@ isEnablePending status =
             False
 
 
-errorView : Theme -> Language -> Status -> List (Element msg)
-errorView theme language status =
+errorView : Env -> Status -> List (Element msg)
+errorView env status =
     case status of
         Loaded _ (Invalid problem) ->
-            [ Feedback.errorBanner theme (problemMessage language problem) ]
+            [ Feedback.errorBanner env.theme (problemMessage env.language problem) ]
 
         Loaded _ (ActionFailed message) ->
-            [ Feedback.errorBanner theme message ]
+            [ Feedback.errorBanner env.theme message ]
 
         _ ->
             []
@@ -482,9 +461,5 @@ problemMessage language problem =
 editUserSkeleton : Theme -> Element msg
 editUserSkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
-        [ Skeleton.card theme { rows = 5 }
-        , Skeleton.button theme
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Skeleton.card theme { rows = 5 }, Skeleton.button theme ]

@@ -12,17 +12,17 @@ module Page.Users.CreateUser exposing
 import Api.Client as Client
 import Data.Auth as Auth
 import Data.User as User
-import Element exposing (Device, Element)
+import Element exposing (Element)
 import I18n
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Translations.Util exposing (Language)
 import Ui.Button as Button
+import Ui.Env exposing (Env)
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
 import Ui.Page as UiPage
 import Ui.Surface as Surface
-import Ui.Theme exposing (Theme)
 
 
 
@@ -30,10 +30,7 @@ import Ui.Theme exposing (Theme)
 
 
 type alias Form =
-    { username : String
-    , displayName : String
-    , initialPassword : String
-    }
+    { username : String, displayName : String, initialPassword : String }
 
 
 type Model
@@ -114,10 +111,7 @@ update msg model =
             in
             case createUserPayload form of
                 Ok request ->
-                    ( Submitting form
-                    , Cmd.none
-                    , RequestCreateUser request
-                    )
+                    ( Submitting form, Cmd.none, RequestCreateUser request )
 
                 Err problem ->
                     ( Invalid form problem, Cmd.none, NoOp )
@@ -186,41 +180,41 @@ createUserPayload form =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
-view { model, device, theme, language } =
+view : Env -> Model -> Element Msg
+view env model =
     let
         form : Form
         form =
             currentForm model
     in
     UiPage.pageContainer
-        (errorView theme language model
-            ++ [ Surface.formSection theme
-                    (I18n.t language TidUsersCredentials)
-                    [ UiInput.input theme
-                        { label = I18n.t language TidCommonUsername
+        (errorView env model
+            ++ [ Surface.formSection env.theme
+                    (I18n.t env.language TidUsersCredentials)
+                    [ UiInput.input env.theme
+                        { label = I18n.t env.language TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
-                    , UiInput.input theme
-                        { label = I18n.t language TidCommonDisplayName
+                    , UiInput.input env.theme
+                        { label = I18n.t env.language TidCommonDisplayName
                         , value = form.displayName
                         , onChange = DisplayNameChanged
                         }
-                    , UiInput.passwordInput theme
-                        { label = I18n.t language TidUsersInitialPassword
+                    , UiInput.passwordInput env.theme
+                        { label = I18n.t env.language TidUsersInitialPassword
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
                     ]
-               , Button.textButton device
-                    theme
+               , Button.textButton env.device
+                    env.theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = I18n.t language TidCommonSave
+                    , label = I18n.t env.language TidCommonSave
                     , onPress = Submitted
                     , submitState = Just (Button.submittingOrIdle (isSubmitting model))
-                    , submittingLabel = Just (I18n.t language TidCommonSaving)
+                    , submittingLabel = Just (I18n.t env.language TidCommonSaving)
                     , trailing = Nothing
                     }
                ]
@@ -237,14 +231,14 @@ isSubmitting model =
             False
 
 
-errorView : Theme -> Language -> Model -> List (Element msg)
-errorView theme language model =
+errorView : Env -> Model -> List (Element msg)
+errorView env model =
     case model of
         Invalid _ problem ->
-            [ Feedback.errorBanner theme (problemMessage language problem) ]
+            [ Feedback.errorBanner env.theme (problemMessage env.language problem) ]
 
         Failed _ message ->
-            [ Feedback.errorBanner theme message ]
+            [ Feedback.errorBanner env.theme message ]
 
         _ ->
             []
