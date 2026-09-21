@@ -528,6 +528,18 @@ view model =
         isLoadingPage : Bool
         isLoadingPage =
             Page.isLoading model.page
+
+        updateBanner : Maybe (Element Msg)
+        updateBanner =
+            if model.version.updateAvailable then
+                Just
+                    (View.Chrome.updateBanner
+                        model.env
+                        (GotVersionMsg Version.ReloadPageRequested)
+                    )
+
+            else
+                Nothing
     in
     { title = "CalCo"
     , body =
@@ -554,35 +566,23 @@ view model =
             }
             (layoutAttrs model
                 ++ Chrome.bottomNavLayoutAttrs
-                    { model = model.chrome
-                    , env = model.env
-                    , session = session
-                    , route = model.route
-                    , isLoadingPage = isLoadingPage
-                    , toMsg = GotChromeMsg
-                    }
+                    model.env
+                    session
+                    model.route
+                    isLoadingPage
+                    GotChromeMsg
             )
           <|
             uiLayout model.env.theme <|
                 Chrome.viewFrame
-                    { model = model.chrome
-                    , env = model.env
-                    , session = session
-                    , route = model.route
-                    , isLoadingPage = isLoadingPage
-                    , updateBanner =
-                        if model.version.updateAvailable then
-                            Just
-                                (View.Chrome.updateBanner
-                                    model.env
-                                    (GotVersionMsg Version.ReloadPageRequested)
-                                )
-
-                        else
-                            Nothing
-                    , page = pageView model
-                    , toMsg = GotChromeMsg
-                    }
+                    model.env
+                    model.chrome
+                    session
+                    model.route
+                    isLoadingPage
+                    updateBanner
+                    (pageView model)
+                    GotChromeMsg
         ]
     }
 

@@ -1,7 +1,5 @@
 module Chrome exposing
-    ( FrameConfig
-    , LayoutConfig
-    , Model
+    ( Model
     , Msg
     , OutMsg(..)
     , bottomNavLayoutAttrs
@@ -106,29 +104,25 @@ isMenuOpen target current =
 -- VIEW
 
 
-type alias LayoutConfig msg =
-    { model : Model
-    , env : Env
-    , session : Session
-    , route : Route
-    , isLoadingPage : Bool
-    , toMsg : Msg -> msg
-    }
-
-
-bottomNavLayoutAttrs : LayoutConfig msg -> List (Element.Attribute msg)
-bottomNavLayoutAttrs config =
-    if showBottomNav config then
+bottomNavLayoutAttrs :
+    Env
+    -> Session
+    -> Route
+    -> Bool
+    -> (Msg -> msg)
+    -> List (Element.Attribute msg)
+bottomNavLayoutAttrs env session route isLoadingPage toMsg =
+    if showBottomNav env session isLoadingPage route then
         [ Element.inFront
             (Element.el
                 [ Element.width Element.fill
                 , Element.alignBottom
                 ]
                 (View.Chrome.bottomNavBar
-                    { env = config.env
-                    , session = config.session
-                    , route = config.route
-                    , onNavigate = config.toMsg << NavigateClicked
+                    { env = env
+                    , session = session
+                    , route = route
+                    , onNavigate = toMsg << NavigateClicked
                     }
                 )
             )
@@ -138,24 +132,21 @@ bottomNavLayoutAttrs config =
         []
 
 
-type alias FrameConfig msg =
-    { model : Model
-    , env : Env
-    , session : Session
-    , route : Route
-    , isLoadingPage : Bool
-    , updateBanner : Maybe (Element msg)
-    , page : Element msg
-    , toMsg : Msg -> msg
-    }
-
-
-viewFrame : FrameConfig msg -> Element msg
-viewFrame config =
+viewFrame :
+    Env
+    -> Model
+    -> Session
+    -> Route
+    -> Bool
+    -> Maybe (Element msg)
+    -> Element msg
+    -> (Msg -> msg)
+    -> Element msg
+viewFrame env model session route isLoadingPage updateBanner page toMsg =
     let
         useBottomNav : Bool
         useBottomNav =
-            showBottomNav config
+            showBottomNav env session isLoadingPage route
 
         chromeAttrs : List (Element.Attribute msg)
         chromeAttrs =
@@ -164,27 +155,27 @@ viewFrame config =
 
             else
                 View.Chrome.drawerOverlay
-                    { env = config.env
-                    , session = config.session
-                    , route = config.route
-                    , drawerOpen = isMenuOpen DrawerMenu config.model
-                    , onClose = config.toMsg DrawerClosed
-                    , onNavigate = config.toMsg << NavigateClicked
+                    { env = env
+                    , session = session
+                    , route = route
+                    , drawerOpen = isMenuOpen DrawerMenu model
+                    , onClose = toMsg DrawerClosed
+                    , onNavigate = toMsg << NavigateClicked
                     }
 
         profileMenuEl : Maybe (Element msg)
         profileMenuEl =
             if
-                isMenuOpen ProfileMenu config.model
-                    && View.Chrome.showsAppChrome config.session config.isLoadingPage config.route
+                isMenuOpen ProfileMenu model
+                    && View.Chrome.showsAppChrome session isLoadingPage route
             then
                 Just
                     (View.Chrome.profileMenu
-                        { env = config.env
-                        , session = config.session
-                        , onNavigate = config.toMsg << NavigateClicked
-                        , onLogout = config.toMsg LogoutClicked
-                        , onSetLanguage = config.toMsg << LanguageClicked
+                        { env = env
+                        , session = session
+                        , onNavigate = toMsg << NavigateClicked
+                        , onLogout = toMsg LogoutClicked
+                        , onSetLanguage = toMsg << LanguageClicked
                         }
                     )
 
@@ -193,7 +184,7 @@ viewFrame config =
 
         updateBannerItems : List (Element msg)
         updateBannerItems =
-            case config.updateBanner of
+            case updateBanner of
                 Just banner ->
                     [ banner ]
 
@@ -203,34 +194,27 @@ viewFrame config =
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
         (View.Chrome.topBarView
-            { env = config.env
-            , session = config.session
-            , route = config.route
-            , profileOpen = isMenuOpen ProfileMenu config.model
-            , isLoadingPage = config.isLoadingPage
-            , onMenuClick = config.toMsg MenuClicked
-            , onProfileClick = config.toMsg ProfileClicked
-            , onThemeToggle = config.toMsg ThemeToggleClicked
-            , onNavigate = config.toMsg << NavigateClicked
+            { env = env
+            , session = session
+            , route = route
+            , profileOpen = isMenuOpen ProfileMenu model
+            , isLoadingPage = isLoadingPage
+            , onMenuClick = toMsg MenuClicked
+            , onProfileClick = toMsg ProfileClicked
+            , onThemeToggle = toMsg ThemeToggleClicked
+            , onNavigate = toMsg << NavigateClicked
             }
-            { profileLabel = profileLetter config.session
+            { profileLabel = profileLetter session
             , profileMenu = profileMenuEl
             }
             :: updateBannerItems
-            ++ [ Element.el (pageAttrs useBottomNav) config.page ]
+            ++ [ Element.el (pageAttrs useBottomNav) page ]
         )
 
 
-showBottomNav :
-    { config
-        | env : Env
-        , session : Session
-        , isLoadingPage : Bool
-        , route : Route
-    }
-    -> Bool
-showBottomNav config =
-    View.Chrome.showBottomNav config.env config.session config.isLoadingPage config.route
+showBottomNav : Env -> Session -> Bool -> Route -> Bool
+showBottomNav env session isLoadingPage route =
+    View.Chrome.showBottomNav env session isLoadingPage route
 
 
 pageAttrs : Bool -> List (Element.Attribute msg)
