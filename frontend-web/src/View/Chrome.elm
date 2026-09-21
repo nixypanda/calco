@@ -83,46 +83,44 @@ showBottomNav env session isLoadingPage route =
 
 
 topBarView :
-    { env : Env
-    , session : Session
-    , route : Route
-    , profileOpen : Bool
-    , isLoadingPage : Bool
-    , onMenuClick : msg
-    , onProfileClick : msg
-    , onThemeToggle : msg
-    , onNavigate : Route -> msg
-    }
+    Env
+    -> Session
+    -> Route
+    -> Bool
+    -> msg
+    -> msg
+    -> msg
+    -> (Route -> msg)
     -> { profileLabel : String, profileMenu : Maybe (Element msg) }
     -> Element msg
-topBarView config profile =
+topBarView env session route loading onMenuClick onProfileClick onThemeToggle onNavigate profile =
     let
         chromeShown : Bool
         chromeShown =
-            showsAppChrome config.session config.isLoadingPage config.route
+            showsAppChrome session loading route
 
         meta : ScreenMeta
         meta =
-            screenMeta config.env config.session config.route
+            screenMeta env session route
     in
     Element.row
         [ Element.width Element.fill
         , Element.height (Element.px 58)
         , Element.paddingXY DesignTokens.space16 0
         , Element.spacing DesignTokens.space12
-        , Background.color config.env.theme.cardBg
-        , Font.color config.env.theme.textPrimary
+        , Background.color env.theme.cardBg
+        , Font.color env.theme.textPrimary
         ]
         (if chromeShown then
-            [ leadingButton config.env
+            [ leadingButton env
                 meta.leading
-                config.onMenuClick
-                config.onNavigate
+                onMenuClick
+                onNavigate
             , Element.el
                 [ Element.width Element.fill
                 , Element.clip
                 ]
-                (Typography.screenTitle config.env.theme meta.title)
+                (Typography.screenTitle env.theme meta.title)
             , Element.el
                 [ Element.paddingEach
                     { top = 0
@@ -131,9 +129,9 @@ topBarView config profile =
                     , left = 0
                     }
                 ]
-                (themeToggle config.env config.onThemeToggle)
-            , profileButton config.env
-                config.onProfileClick
+                (themeToggle env onThemeToggle)
+            , profileButton env
+                onProfileClick
                 profile
             ]
 
@@ -149,10 +147,10 @@ topBarView config profile =
                     { src = "/android-chrome-192x192.png"
                     , description = "CalCo"
                     }
-                , Typography.pageTitle config.env.theme "CalCo"
+                , Typography.pageTitle env.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
-            , themeToggle config.env config.onThemeToggle
+            , themeToggle env onThemeToggle
             ]
         )
 
@@ -425,48 +423,58 @@ screenMeta env session route =
 
 
 bottomNavBar :
-    { env : Env
-    , session : Session
-    , route : Route
-    , onNavigate : Route -> msg
-    }
+    Env
+    -> Route
+    -> (Route -> msg)
     -> Element msg
-bottomNavBar config =
-    bottomNavContainer config.env.theme
-        [ tabButton config
-            (I18n.t config.env.language TidNavDiary)
+bottomNavBar env route onNavigate =
+    bottomNavContainer env.theme
+        [ tabButton env
+            route
+            onNavigate
+            (I18n.t env.language TidNavDiary)
             (DiaryDay Nothing Nothing)
             Icon.Home
-        , tabButton config
-            (I18n.t config.env.language TidNavSearch)
+        , tabButton env
+            route
+            onNavigate
+            (I18n.t env.language TidNavSearch)
             (FoodSearch Nothing Nothing)
             Icon.Search
-        , tabButton config (I18n.t config.env.language TidNavFoods) CustomFoodList Icon.Box
-        , tabButton config (I18n.t config.env.language TidNavMeals) MealList Icon.Utensils
+        , tabButton env
+            route
+            onNavigate
+            (I18n.t env.language TidNavFoods)
+            CustomFoodList
+            Icon.Box
+        , tabButton env
+            route
+            onNavigate
+            (I18n.t env.language TidNavMeals)
+            MealList
+            Icon.Utensils
         ]
 
 
 tabButton :
-    { env : Env
-    , session : Session
-    , route : Route
-    , onNavigate : Route -> msg
-    }
+    Env
+    -> Route
+    -> (Route -> msg)
     -> String
     -> Route
     -> Icon
     -> Element msg
-tabButton config label target icon =
+tabButton env route onNavigate label target icon =
     let
         active : Bool
         active =
-            primaryRoute config.route == primaryRoute target
+            primaryRoute route == primaryRoute target
     in
-    bottomNavTab config.env.theme
+    bottomNavTab env.theme
         { icon = icon
         , label = label
         , active = active
-        , onPress = config.onNavigate target
+        , onPress = onNavigate target
         }
 
 
@@ -556,43 +564,27 @@ bottomNavTab theme config =
 
 
 drawerOverlay :
-    { env : Env
-    , session : Session
-    , route : Route
-    , drawerOpen : Bool
-    , onClose : msg
-    , onNavigate : Route -> msg
-    }
+    Env
+    -> Session
+    -> Route
+    -> Bool
+    -> msg
+    -> (Route -> msg)
     -> List (Element.Attribute msg)
-drawerOverlay config =
+drawerOverlay env session route drawerOpen onClose onNavigate =
     let
         isLoadingPage : Bool
         isLoadingPage =
             False
-
-        viewConfig :
-            { env : Env
-            , session : Session
-            , route : Route
-            , onClose : msg
-            , onNavigate : Route -> msg
-            }
-        viewConfig =
-            { env = config.env
-            , session = config.session
-            , route = config.route
-            , onClose = config.onClose
-            , onNavigate = config.onNavigate
-            }
     in
-    if config.drawerOpen && showsAppChrome config.session isLoadingPage config.route then
+    if drawerOpen && showsAppChrome session isLoadingPage route then
         [ Element.inFront
             (Element.row
                 [ Element.width Element.fill
                 , Element.height Element.fill
                 ]
-                [ drawerView viewConfig
-                , scrimOverlay config.env.theme (Just config.onClose)
+                [ drawerView env session route onClose onNavigate
+                , scrimOverlay env.theme (Just onClose)
                 ]
             )
         ]
@@ -602,78 +594,70 @@ drawerOverlay config =
 
 
 drawerView :
-    { env : Env
-    , session : Session
-    , route : Route
-    , onClose : msg
-    , onNavigate : Route -> msg
-    }
+    Env
+    -> Session
+    -> Route
+    -> msg
+    -> (Route -> msg)
     -> Element msg
-drawerView config =
-    let
-        itemsConfig : { theme : Theme, session : Session, route : Route, onNavigate : Route -> msg }
-        itemsConfig =
-            { theme = config.env.theme
-            , session = config.session
-            , route = config.route
-            , onNavigate = config.onNavigate
-            }
-    in
-    drawerPanel config.env.theme
+drawerView env session route onClose onNavigate =
+    drawerPanel env.theme
         (Element.row [ Element.spacing DesignTokens.space8 ]
-            [ Button.iconButton config.env.device
-                config.env.theme
+            [ Button.iconButton env.device
+                env.theme
                 { icon = Icon.Menu
-                , title = I18n.t config.env.language TidCommonClose
-                , onPress = Just config.onClose
+                , title = I18n.t env.language TidCommonClose
+                , onPress = Just onClose
                 , tone = Button.Primary
                 }
-            , Typography.sectionTitle config.env.theme "CalCo"
+            , Typography.sectionTitle env.theme "CalCo"
             ]
-            :: Surface.hairline config.env.theme
-            :: drawerItems config.env.language itemsConfig
+            :: Surface.hairline env.theme
+            :: drawerItems env session route onNavigate
         )
 
 
 drawerItems :
-    Language
-    -> { theme : Theme, session : Session, route : Route, onNavigate : Route -> msg }
+    Env
+    -> Session
+    -> Route
+    -> (Route -> msg)
     -> List (Element msg)
-drawerItems language config =
-    if Auth.isAdmin config.session then
+drawerItems env session route onNavigate =
+    if Auth.isAdmin session then
         [ drawerItem
-            config.theme
-            config.route
-            config.onNavigate
+            env.theme
+            route
+            onNavigate
             Nothing
-            (I18n.t language TidNavAdmin)
+            (I18n.t env.language TidNavAdmin)
             AdminDashboard
         ]
 
     else
-        [ drawerItem config.theme
-            config.route
-            config.onNavigate
+        [ drawerItem env.theme
+            route
+            onNavigate
             (Just Icon.Home)
-            (I18n.t language TidNavDiary)
+            (I18n.t env.language TidNavDiary)
             (DiaryDay Nothing Nothing)
-        , drawerItem config.theme
-            config.route
-            config.onNavigate
+        , drawerItem env.theme
+            route
+            onNavigate
             (Just Icon.Search)
-            (I18n.t language TidNavSearchFoods)
+            (I18n.t env.language TidNavSearchFoods)
             (FoodSearch Nothing Nothing)
-        , drawerItem config.theme
-            config.route
-            config.onNavigate
+        , drawerItem env.theme
+            route
+            onNavigate
             (Just Icon.Box)
-            (I18n.t language TidNavMyFoods)
+            (I18n.t env.language TidNavMyFoods)
             CustomFoodList
-        , drawerItem config.theme
-            config.route
-            config.onNavigate
+        , drawerItem env.theme
+            route
+            onNavigate
             (Just Icon.Utensils)
-            (I18n.t language TidNavMyMeals)
+            (I18n.t env.language TidNavMyMeals)
             MealList
         ]
 
@@ -777,17 +761,16 @@ drawerItemButton theme config =
 
 
 profileMenu :
-    { env : Env
-    , session : Session
-    , onNavigate : Route -> msg
-    , onLogout : msg
-    , onSetLanguage : Language -> msg
-    }
+    Env
+    -> Session
+    -> (Route -> msg)
+    -> msg
+    -> (Language -> msg)
     -> Element msg
-profileMenu config =
-    menuCard config.env.theme
+profileMenu env session onNavigate onLogout onSetLanguage =
+    menuCard env.theme
         { width = 240
-        , children = profileMenuContent config
+        , children = profileMenuContent env session onNavigate onLogout onSetLanguage
         }
 
 
@@ -810,48 +793,47 @@ menuCard theme config =
 
 
 profileMenuContent :
-    { env : Env
-    , session : Session
-    , onNavigate : Route -> msg
-    , onLogout : msg
-    , onSetLanguage : Language -> msg
-    }
+    Env
+    -> Session
+    -> (Route -> msg)
+    -> msg
+    -> (Language -> msg)
     -> List (Element msg)
-profileMenuContent config =
-    [ Typography.mutedCaption config.env.theme
-        (case config.session of
+profileMenuContent env session onNavigate onLogout onSetLanguage =
+    [ Typography.mutedCaption env.theme
+        (case session of
             Auth.Authenticated identity ->
-                I18n.t config.env.language (TidCommonSignedInAs identity.username)
+                I18n.t env.language (TidCommonSignedInAs identity.username)
 
             _ ->
-                I18n.t config.env.language TidCommonSignedIn
+                I18n.t env.language TidCommonSignedIn
         )
-    , Button.textButton config.env.device
-        config.env.theme
+    , Button.textButton env.device
+        env.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t config.env.language TidNavCalendar
-        , onPress = config.onNavigate (DiaryCalendar Nothing)
+        , label = I18n.t env.language TidNavCalendar
+        , onPress = onNavigate (DiaryCalendar Nothing)
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Button.textButton config.env.device
-        config.env.theme
+    , Button.textButton env.device
+        env.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t config.env.language TidNavGoals
-        , onPress = config.onNavigate GoalSettings
+        , label = I18n.t env.language TidNavGoals
+        , onPress = onNavigate GoalSettings
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
         }
-    , Button.textButton config.env.device
-        config.env.theme
+    , Button.textButton env.device
+        env.theme
         { tone = Button.Ghost
         , width = Button.FullWidth
-        , label = I18n.t config.env.language TidNavMealSlots
-        , onPress = config.onNavigate DiarySettings
+        , label = I18n.t env.language TidNavMealSlots
+        , onPress = onNavigate DiarySettings
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing
@@ -860,43 +842,43 @@ profileMenuContent config =
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
         ]
-        [ Button.textButton config.env.device
-            config.env.theme
+        [ Button.textButton env.device
+            env.theme
             { tone =
-                if config.env.language == EN_US then
+                if env.language == EN_US then
                     Button.Primary
 
                 else
                     Button.Ghost
             , width = Button.FullWidth
             , label = "English"
-            , onPress = config.onSetLanguage EN_US
+            , onPress = onSetLanguage EN_US
             , submitState = Nothing
             , submittingLabel = Nothing
             , trailing = Nothing
             }
-        , Button.textButton config.env.device
-            config.env.theme
+        , Button.textButton env.device
+            env.theme
             { tone =
-                if config.env.language == HI_IN then
+                if env.language == HI_IN then
                     Button.Primary
 
                 else
                     Button.Ghost
             , width = Button.FullWidth
             , label = "हिन्दी"
-            , onPress = config.onSetLanguage HI_IN
+            , onPress = onSetLanguage HI_IN
             , submitState = Nothing
             , submittingLabel = Nothing
             , trailing = Nothing
             }
         ]
-    , Button.textButton config.env.device
-        config.env.theme
+    , Button.textButton env.device
+        env.theme
         { tone = Button.Danger
         , width = Button.FullWidth
-        , label = I18n.t config.env.language TidNavLogout
-        , onPress = config.onLogout
+        , label = I18n.t env.language TidNavLogout
+        , onPress = onLogout
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing = Nothing

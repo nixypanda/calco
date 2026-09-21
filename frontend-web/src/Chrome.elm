@@ -119,11 +119,9 @@ bottomNavLayoutAttrs env session route isLoadingPage toMsg =
                 , Element.alignBottom
                 ]
                 (View.Chrome.bottomNavBar
-                    { env = env
-                    , session = session
-                    , route = route
-                    , onNavigate = toMsg << NavigateClicked
-                    }
+                    env
+                    route
+                    (toMsg << NavigateClicked)
                 )
             )
         ]
@@ -155,13 +153,12 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
 
             else
                 View.Chrome.drawerOverlay
-                    { env = env
-                    , session = session
-                    , route = route
-                    , drawerOpen = isMenuOpen DrawerMenu model
-                    , onClose = toMsg DrawerClosed
-                    , onNavigate = toMsg << NavigateClicked
-                    }
+                    env
+                    session
+                    route
+                    (isMenuOpen DrawerMenu model)
+                    (toMsg DrawerClosed)
+                    (toMsg << NavigateClicked)
 
         profileMenuEl : Maybe (Element msg)
         profileMenuEl =
@@ -171,12 +168,11 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
             then
                 Just
                     (View.Chrome.profileMenu
-                        { env = env
-                        , session = session
-                        , onNavigate = toMsg << NavigateClicked
-                        , onLogout = toMsg LogoutClicked
-                        , onSetLanguage = toMsg << LanguageClicked
-                        }
+                        env
+                        session
+                        (toMsg << NavigateClicked)
+                        (toMsg LogoutClicked)
+                        (toMsg << LanguageClicked)
                     )
 
             else
@@ -194,16 +190,14 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
     Element.column
         ([ Element.width Element.fill, Element.height Element.fill ] ++ chromeAttrs)
         (View.Chrome.topBarView
-            { env = env
-            , session = session
-            , route = route
-            , profileOpen = isMenuOpen ProfileMenu model
-            , isLoadingPage = isLoadingPage
-            , onMenuClick = toMsg MenuClicked
-            , onProfileClick = toMsg ProfileClicked
-            , onThemeToggle = toMsg ThemeToggleClicked
-            , onNavigate = toMsg << NavigateClicked
-            }
+            env
+            session
+            route
+            isLoadingPage
+            (toMsg MenuClicked)
+            (toMsg ProfileClicked)
+            (toMsg ThemeToggleClicked)
+            (toMsg << NavigateClicked)
             { profileLabel = profileLetter session
             , profileMenu = profileMenuEl
             }
