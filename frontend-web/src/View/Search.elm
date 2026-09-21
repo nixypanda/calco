@@ -193,10 +193,7 @@ optionId listboxId index =
     listboxId ++ "-option-" ++ String.fromInt index
 
 
-resultRow :
-    Env
-    -> { query : String, item : SearchResult, onSelect : String -> msg }
-    -> Element msg
+resultRow : Env -> { query : String, item : SearchResult, onSelect : String -> msg } -> Element msg
 resultRow env config =
     let
         macroDot : Element msg
@@ -207,9 +204,7 @@ resultRow env config =
         searchItem : Element msg
         searchItem =
             Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space4
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
                 [ if UiCommon.isSmall env.device then
                     Typography.wrappedListItemTitle env.theme config.item.name
 
@@ -307,5 +302,4 @@ isBarcodeVisible query item =
 
 isNumeric : String -> Bool
 isNumeric value =
-    not (String.isEmpty value)
-        && String.all Char.isDigit value
+    not (String.isEmpty value) && String.all Char.isDigit value

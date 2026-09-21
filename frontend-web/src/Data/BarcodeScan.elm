@@ -7,7 +7,4 @@ other two fields is populated.
 
 
 type alias ScannerEvent =
-    { event : String
-    , barcode : Maybe String
-    , message : Maybe String
-    }
+    { event : String, barcode : Maybe String, message : Maybe String }

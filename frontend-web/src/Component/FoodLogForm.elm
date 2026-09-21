@@ -125,10 +125,7 @@ initLogFormFromLog log =
 
 applyQuantityDefault : Quantity -> Model -> Model
 applyQuantityDefault quantity model =
-    { model
-        | amount = quantity.amount
-        , unit = quantity.unit
-    }
+    { model | amount = quantity.amount, unit = quantity.unit }
 
 
 
@@ -270,12 +267,7 @@ setSubmitState submitState model =
 {-| The form controls as a flat list, so a page can place them inside its own
 panel section instead of a standalone card.
 -}
-fields :
-    Env
-    -> Maybe ProductDetail
-    -> List UnitItem
-    -> Model
-    -> List (Element Msg)
+fields : Env -> Maybe ProductDetail -> List UnitItem -> Model -> List (Element Msg)
 fields env food units model =
     (case submitError model.submitState of
         Just message ->

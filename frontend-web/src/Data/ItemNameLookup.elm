@@ -45,8 +45,7 @@ insertProduct id name names =
 
 nameFor : String -> { a | itemType : ItemType, id : String } -> Names -> String
 nameFor fallback item names =
-    Dict.get (key item) names
-        |> Maybe.withDefault fallback
+    Dict.get (key item) names |> Maybe.withDefault fallback
 
 
 isLoaded : ItemRef -> Names -> Bool
@@ -65,8 +64,6 @@ nextMissingProductId completedId ids names =
         |> uniqueProductIds
         |> List.filter
             (\id ->
-                Just id
-                    /= completedId
-                    && not (isLoaded (productRef id) names)
+                Just id /= completedId && not (isLoaded (productRef id) names)
             )
         |> List.head

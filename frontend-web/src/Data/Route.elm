@@ -42,8 +42,7 @@ type Route
 
 fromUrl : Url -> Route
 fromUrl url =
-    Parser.parse routeParser url
-        |> Maybe.withDefault NotFound
+    Parser.parse routeParser url |> Maybe.withDefault NotFound
 
 
 routeParser : Parser (Route -> a) a
@@ -62,25 +61,11 @@ routeParser =
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map AdHocLogCreate
-            (s "logs"
-                </> s "new"
-                </> s "ad-hoc"
-                <?> Query.string "date"
-                <?> mealSlotQuery
-            )
+            (s "logs" </> s "new" </> s "ad-hoc" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map AiLogCreate
-            (s "logs"
-                </> s "new"
-                </> s "ai"
-                <?> Query.string "date"
-                <?> mealSlotQuery
-            )
+            (s "logs" </> s "new" </> s "ai" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map FoodLogEntry
-            (s "logs"
-                </> string
-                <?> Query.string "date"
-                <?> Query.string "calendar_month"
-            )
+            (s "logs" </> string <?> Query.string "date" <?> Query.string "calendar_month")
         , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreateWithAi
@@ -104,8 +89,7 @@ routeParser =
 
 mealSlotQuery : Query.Parser (Maybe MealSlot)
 mealSlotQuery =
-    Query.string "meal_slot"
-        |> Query.map (Maybe.andThen MealSlot.fromString)
+    Query.string "meal_slot" |> Query.map (Maybe.andThen MealSlot.fromString)
 
 
 primaryRoute : Route -> Route

@@ -35,25 +35,13 @@ deleteModalView :
 deleteModalView env config deleteState =
     case deleteState of
         DeleteConfirming ->
-            Just
-                (confirmModalView env
-                    config
-                    { pending = False, error = Nothing }
-                )
+            Just (confirmModalView env config { pending = False, error = Nothing })
 
         Deleting ->
-            Just
-                (confirmModalView env
-                    config
-                    { pending = True, error = Nothing }
-                )
+            Just (confirmModalView env config { pending = True, error = Nothing })
 
         DeleteFailed message ->
-            Just
-                (confirmModalView env
-                    config
-                    { pending = False, error = Just message }
-                )
+            Just (confirmModalView env config { pending = False, error = Just message })
 
         DeleteIdle ->
             Nothing

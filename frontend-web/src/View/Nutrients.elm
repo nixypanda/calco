@@ -30,10 +30,7 @@ import Ui.Typography as Typography
 
 
 type alias NutritionInput =
-    { amount : String
-    , unit : String
-    , unitOpen : Bool
-    }
+    { amount : String, unit : String, unitOpen : Bool }
 
 
 type NutritionState
@@ -307,10 +304,7 @@ nutritionInput state =
             input
 
 
-mapNutritionInput :
-    (NutritionInput -> NutritionInput)
-    -> NutritionState
-    -> NutritionState
+mapNutritionInput : (NutritionInput -> NutritionInput) -> NutritionState -> NutritionState
 mapNutritionInput transform state =
     let
         input : NutritionInput
@@ -348,19 +342,11 @@ macroBreakdownViewWithLegend legend theme nutrients =
             macroPortions nutrients
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        [ macroBarRow theme 24 portions
-        , legend portions
-        ]
+        [ macroBarRow theme 24 portions, legend portions ]
 
 
 type alias MacroPortions =
-    { protein : Float
-    , carbs : Float
-    , fat : Float
-    , proteinPct : Int
-    , carbsPct : Int
-    , fatPct : Int
-    }
+    { protein : Float, carbs : Float, fat : Float, proteinPct : Int, carbsPct : Int, fatPct : Int }
 
 
 macroPortions : List NutrientAmount -> MacroPortions
@@ -431,9 +417,7 @@ responsiveMacroLegend env portions =
     if UiCommon.isSmall env.device then
         macroLegendItems env portions
             |> Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
 
     else
         macroLegend env portions
@@ -556,10 +540,7 @@ nutritionCard : Env -> List NutrientAmount -> Element msg
 nutritionCard env nutrients =
     Surface.section env.theme
         { header =
-            Just
-                (Typography.subsectionTitle env.theme
-                    (I18n.t env.language TidNutrientNutrition)
-                )
+            Just (Typography.subsectionTitle env.theme (I18n.t env.language TidNutrientNutrition))
         , body =
             [ macroBreakdownView env nutrients
             , Surface.hairline env.theme

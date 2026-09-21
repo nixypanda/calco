@@ -114,9 +114,7 @@ update msg model =
             applyFormMsg subMsg model
 
         CategorySuggestionsLoaded token result ->
-            applyFormMsg
-                (Editor.CategorySuggestionsLoaded token (Result.map .items result))
-                model
+            applyFormMsg (Editor.CategorySuggestionsLoaded token (Result.map .items result)) model
 
         SubmitClicked ->
             submit model
@@ -244,10 +242,7 @@ requestProductLog : String -> Model -> ( Model, Cmd Msg, OutMsg )
 requestProductLog productId model =
     case Editor.toProductLogRequest model.deviceTimezone productId model.form of
         Ok request ->
-            ( { model | submit = LoggingSavedFood productId }
-            , Cmd.none
-            , RequestProductLog request
-            )
+            ( { model | submit = LoggingSavedFood productId }, Cmd.none, RequestProductLog request )
 
         Err message ->
             validationFailure message model
@@ -281,9 +276,7 @@ productLogFailure error model =
                 ( { model
                     | submit =
                         LogFailedAfterFoodSaved
-                            { productId = productId
-                            , message = I18n.en TidFoodLogSavedNotLogged
-                            }
+                            { productId = productId, message = I18n.en TidFoodLogSavedNotLogged }
                   }
                 , Cmd.none
                 , NoOp
@@ -320,19 +313,12 @@ failure error model =
         validationFailure (Client.displayError error) model
 
 
-view :
-    Env
-    -> Model
-    -> Element Msg
+view : Env -> Model -> Element Msg
 view env model =
     viewForAi env True model
 
 
-viewForAi :
-    Env
-    -> Bool
-    -> Model
-    -> Element Msg
+viewForAi : Env -> Bool -> Model -> Element Msg
 viewForAi env showOptional model =
     let
         visibility : Editor.NutrientVisibility
@@ -346,13 +332,7 @@ viewForAi env showOptional model =
     UiPage.pageContainer
         [ Feedback.maybeErrorBanner env.theme (submitError model.submit)
         , Element.map FormMsg
-            (Editor.viewForLog
-                env
-                visibility
-                model.nutrients
-                model.units
-                model.form
-            )
+            (Editor.viewForLog env visibility model.nutrients model.units model.form)
         , Button.textButton env.device
             env.theme
             { tone = Button.Primary

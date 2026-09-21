@@ -130,9 +130,7 @@ type QuickAddState
 
 
 type alias QuickAddTarget =
-    { item : Logs.RecentItem
-    , quantity : Nutrition.Quantity
-    }
+    { item : Logs.RecentItem, quantity : Nutrition.Quantity }
 
 
 type QuickAddButtonState
@@ -267,10 +265,7 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model | search = search, results = results, completionIndex = -1 }
-    , debounceCmd
-    , NoOp
-    )
+    ( { model | search = search, results = results, completionIndex = -1 }, debounceCmd, NoOp )
 
 
 applyScopeChange : SearchScope -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -356,10 +351,7 @@ applyBarcodeSubmit model =
             Ticket.next model.barcodeToken
     in
     if String.isEmpty barcode then
-        ( { model | barcodeLookup = NotAsked, barcodeToken = nextToken }
-        , Cmd.none
-        , NoOp
-        )
+        ( { model | barcodeLookup = NotAsked, barcodeToken = nextToken }, Cmd.none, NoOp )
 
     else
         ( { model | barcodeLookup = Loading, barcodeToken = nextToken }
@@ -427,10 +419,7 @@ update msg model =
                     startScanner model
 
         BarcodeScanCancelClicked ->
-            ( { model | barcodeScanner = ScannerIdle }
-            , Cmd.none
-            , RequestBarcodeScanStop
-            )
+            ( { model | barcodeScanner = ScannerIdle }, Cmd.none, RequestBarcodeScanStop )
 
         BarcodeScannerEventReceived event ->
             applyBarcodeScannerEvent event model
@@ -455,16 +444,10 @@ update msg model =
 
                     Err error ->
                         if Client.isUnauthorized error then
-                            ( { model | barcodeLookup = Failure error }
-                            , Cmd.none
-                            , SessionExpired
-                            )
+                            ( { model | barcodeLookup = Failure error }, Cmd.none, SessionExpired )
 
                         else
-                            ( { model | barcodeLookup = Failure error }
-                            , Cmd.none
-                            , NoOp
-                            )
+                            ( { model | barcodeLookup = Failure error }, Cmd.none, NoOp )
 
         CategorySuggestionsCompleted token result ->
             if token /= model.search.categoryToken then
@@ -475,10 +458,7 @@ update msg model =
                     Ok response ->
                         ( { model
                             | search =
-                                Search.setCategorySuggestions
-                                    token
-                                    response.items
-                                    model.search
+                                Search.setCategorySuggestions token response.items model.search
                           }
                         , Cmd.none
                         , NoOp
@@ -505,21 +485,16 @@ update msg model =
 
         CompleteFirstSuggestion ->
             case
-                List.head
-                    (Search.completions model.search.query model.search.categorySuggestions)
+                List.head (Search.completions model.search.query model.search.categorySuggestions)
             of
                 Just completion ->
-                    applyQueryChange
-                        (Search.applyCompletion completion model.search.query)
-                        model
+                    applyQueryChange (Search.applyCompletion completion model.search.query) model
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
 
         CompletionClicked completion ->
-            applyQueryChange
-                (Search.applyCompletion completion model.search.query)
-                model
+            applyQueryChange (Search.applyCompletion completion model.search.query) model
 
         DebounceElapsed token query ->
             if token == model.search.searchToken then
@@ -573,10 +548,7 @@ update msg model =
 
                     Err error ->
                         if Client.isUnauthorized error then
-                            ( { model | recentItems = Failure error }
-                            , Cmd.none
-                            , SessionExpired
-                            )
+                            ( { model | recentItems = Failure error }, Cmd.none, SessionExpired )
 
                         else
                             ( { model | recentItems = Failure error }, Cmd.none, NoOp )
@@ -621,8 +593,7 @@ update msg model =
                         Nothing ->
                             ( { model
                                 | quickAdd =
-                                    QuickAddFailed
-                                        (I18n.en TidFoodSearchErrorCouldNotReadDate)
+                                    QuickAddFailed (I18n.en TidFoodSearchErrorCouldNotReadDate)
                               }
                             , Cmd.none
                             , NoOp
@@ -637,8 +608,7 @@ update msg model =
                     let
                         key : Maybe String
                         key =
-                            quickAddTarget model.quickAdd
-                                |> Maybe.map quickAddTargetKey
+                            quickAddTarget model.quickAdd |> Maybe.map quickAddTargetKey
 
                         nextToken : Ticket
                         nextToken =
@@ -669,12 +639,7 @@ update msg model =
 
                 Err error ->
                     if Client.isUnauthorized error then
-                        ( { model
-                            | quickAdd = QuickAddIdle
-                          }
-                        , Cmd.none
-                        , SessionExpired
-                        )
+                        ( { model | quickAdd = QuickAddIdle }, Cmd.none, SessionExpired )
 
                     else
                         ( { model
@@ -702,16 +667,10 @@ update msg model =
             ( model, Cmd.none, Navigate (FoodShow id model.date model.mealSlot Nothing) )
 
         CreateAdHocLogClicked ->
-            ( model
-            , Cmd.none
-            , Navigate (AdHocLogCreate model.date model.mealSlot)
-            )
+            ( model, Cmd.none, Navigate (AdHocLogCreate model.date model.mealSlot) )
 
         CreateAiLogClicked ->
-            ( model
-            , Cmd.none
-            , Navigate (AiLogCreate model.date model.mealSlot)
-            )
+            ( model, Cmd.none, Navigate (AiLogCreate model.date model.mealSlot) )
 
 
 applyBarcodeScannerEvent :
@@ -730,10 +689,7 @@ applyBarcodeScannerEvent event model =
             ( { model
                 | barcodeScanner =
                     ScannerFailed
-                        (Maybe.withDefault
-                            (I18n.en TidFoodSearchErrorScannerStart)
-                            event.message
-                        )
+                        (Maybe.withDefault (I18n.en TidFoodSearchErrorScannerStart) event.message)
               }
             , Cmd.none
             , NoOp
@@ -747,10 +703,7 @@ applyBarcodeScannerEvent event model =
 
                     else
                         applyBarcodeSubmit
-                            { model
-                                | barcodeQuery = barcode
-                                , barcodeScanner = ScannerIdle
-                            }
+                            { model | barcodeQuery = barcode, barcodeScanner = ScannerIdle }
 
                 Nothing ->
                     ( model, Cmd.none, NoOp )
@@ -759,11 +712,7 @@ applyBarcodeScannerEvent event model =
             ( model, Cmd.none, NoOp )
 
 
-quickAddRequest :
-    LocalContext
-    -> Model
-    -> QuickAddTarget
-    -> Maybe Logs.CreateLogRequest
+quickAddRequest : LocalContext -> Model -> QuickAddTarget -> Maybe Logs.CreateLogRequest
 quickAddRequest context model target =
     let
         rawDate : String
@@ -820,9 +769,7 @@ quickAddTarget quickAdd =
 
 quickAddAddingKey : QuickAddState -> Maybe String
 quickAddAddingKey quickAdd =
-    quickAdd
-        |> quickAddTarget
-        |> Maybe.map quickAddTargetKey
+    quickAdd |> quickAddTarget |> Maybe.map quickAddTargetKey
 
 
 quickAddError : QuickAddState -> Maybe String
@@ -853,8 +800,7 @@ canStartQuickAdd quickAdd =
 
 clearRecentAddedAfter : String -> Ticket -> Cmd Msg
 clearRecentAddedAfter key token =
-    Process.sleep 500
-        |> Task.perform (\_ -> ClearRecentAdded key token)
+    Process.sleep 500 |> Task.perform (\_ -> ClearRecentAdded key token)
 
 
 
@@ -868,10 +814,7 @@ contentView env model =
         , Element.height Element.fill
         , Element.spacing DesignTokens.space24
         ]
-        (searchInputView env model
-            :: searchContentView env model
-            :: adHocLogSection env model
-        )
+        (searchInputView env model :: searchContentView env model :: adHocLogSection env model)
 
 
 searchBody : Model -> SearchBody
@@ -981,9 +924,7 @@ adHocLogView env =
         [ Typography.mutedParagraph env.theme
             (I18n.t env.language TidFoodSearchAdHocDescription)
         , Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton env.device
                     env.theme
@@ -1122,9 +1063,7 @@ barcodeInputView env model =
         controls : Element Msg
         controls =
             Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ scanButton, searchButton ]
 
         inputRow : Element Msg
@@ -1192,11 +1131,7 @@ barcodeScannerGuide theme =
             , Border.rounded DesignTokens.radiusControl
             , Border.color theme.focusRing
             , Border.widthEach
-                { top = 2
-                , right = 0
-                , bottom = 2
-                , left = 0
-                }
+                { top = 2, right = 0, bottom = 2, left = 0 }
             ]
             Element.none
         )
@@ -1295,13 +1230,9 @@ bodyView env model =
         Loading ->
             Surface.section env.theme
                 { header =
-                    Just
-                        (Skeleton.barCustom env.theme
-                            { width = Element.px 120, height = 24 }
-                        )
+                    Just (Skeleton.barCustom env.theme { width = Element.px 120, height = 24 })
                 , body =
-                    List.map (\_ -> Skeleton.listRow env.theme)
-                        (List.range 1 3)
+                    List.map (\_ -> Skeleton.listRow env.theme) (List.range 1 3)
                 , footer = Nothing
                 }
 
@@ -1367,9 +1298,7 @@ barcodeBodyView env body =
 
         BarcodeNotFound ->
             Feedback.emptyStateWithIcon env.theme
-                { icon = Icon.SearchX
-                , message = I18n.t env.language TidFoodSearchBarcodeNotFound
-                }
+                { icon = Icon.SearchX, message = I18n.t env.language TidFoodSearchBarcodeNotFound }
 
         BarcodeLookupFailed error ->
             Feedback.errorBanner env.theme (Client.displayError error)
@@ -1510,9 +1439,7 @@ recentsView env model =
 noRecentsState : Env -> Element Msg
 noRecentsState env =
     Feedback.emptyStateWithIcon env.theme
-        { icon = Icon.Utensils
-        , message = I18n.t env.language TidFoodSearchNoRecents
-        }
+        { icon = Icon.Utensils, message = I18n.t env.language TidFoodSearchNoRecents }
 
 
 recentItemRow : Env -> Model -> Logs.RecentItem -> Element Msg
@@ -1525,9 +1452,7 @@ recentItemRow env model item =
             , subtitle =
                 [ Typography.mutedCaptionParagraph env.theme
                     (Text.dotSeparated
-                        [ FoodLog.itemBrand item.item
-                        , Nutrition.servingCaloriesText item
-                        ]
+                        [ FoodLog.itemBrand item.item, Nutrition.servingCaloriesText item ]
                     )
                 ]
             , trailing = []
@@ -1586,12 +1511,7 @@ quickAddChipState model item quantity =
         QuickAddCanAdd
 
 
-quickAddChip :
-    Env
-    -> Model
-    -> Logs.RecentItem
-    -> Nutrition.Quantity
-    -> Element Msg
+quickAddChip : Env -> Model -> Logs.RecentItem -> Nutrition.Quantity -> Element Msg
 quickAddChip env model item quantity =
     let
         state : QuickAddButtonState

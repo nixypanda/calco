@@ -42,19 +42,11 @@ type Model
 
 
 type alias ReadyModel =
-    { status : GoalStatus
-    , form : Form
-    , formState : FormState
-    , save : SaveState
-    }
+    { status : GoalStatus, form : Form, formState : FormState, save : SaveState }
 
 
 type alias Form =
-    { calorieTarget : String
-    , proteinTargetG : String
-    , carbsTargetG : String
-    , fatTargetG : String
-    }
+    { calorieTarget : String, proteinTargetG : String, carbsTargetG : String, fatTargetG : String }
 
 
 type FormState
@@ -160,10 +152,7 @@ update msg model =
                             )
 
                         Err message ->
-                            ( Ready { ready | save = ValidationFailed message }
-                            , Cmd.none
-                            , NoOp
-                            )
+                            ( Ready { ready | save = ValidationFailed message }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -241,10 +230,7 @@ refreshedWith : GoalSnapshot -> ReadyModel -> ReadyModel
 refreshedWith snapshot ready =
     case ready.formState of
         Pristine ->
-            { ready
-                | status = Goals.statusOf snapshot
-                , form = formFor snapshot.targets
-            }
+            { ready | status = Goals.statusOf snapshot, form = formFor snapshot.targets }
 
         Edited ->
             { ready | status = Goals.statusOf snapshot }
@@ -455,10 +441,7 @@ goalsSettingsSkeleton : Theme -> Element msg
 goalsSettingsSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 160, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 160, height = 24 })
         , body =
             [ Skeleton.input theme
             , Skeleton.input theme

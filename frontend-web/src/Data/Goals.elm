@@ -17,11 +17,7 @@ type GoalSource
 
 
 type alias GoalTargets =
-    { calorieTarget : Float
-    , proteinTargetG : Float
-    , carbsTargetG : Float
-    , fatTargetG : Float
-    }
+    { calorieTarget : Float, proteinTargetG : Float, carbsTargetG : Float, fatTargetG : Float }
 
 
 type alias GoalSnapshot =
@@ -33,16 +29,12 @@ type alias GoalSnapshot =
 
 
 type alias GoalStatus =
-    { source : GoalSource
-    , effectiveFrom : Maybe LocalDate
-    }
+    { source : GoalSource, effectiveFrom : Maybe LocalDate }
 
 
 statusOf : GoalSnapshot -> GoalStatus
 statusOf snapshot =
-    { source = snapshot.source
-    , effectiveFrom = snapshot.effectiveFrom
-    }
+    { source = snapshot.source, effectiveFrom = snapshot.effectiveFrom }
 
 
 decoder : Decoder GoalSnapshot

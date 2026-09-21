@@ -65,20 +65,14 @@ session generation with another's request id, nor mint a token for a request
 that was never made.
 -}
 type RequestToken
-    = RequestToken
-        { generation : Int
-        , requestId : Int
-        }
+    = RequestToken { generation : Int, requestId : Int }
 
 
 {-| Callers name a resource and get its operations; which field or dictionary
 key backs it stays in here.
 -}
 type Access a
-    = Access
-        { get : Store -> Entry a
-        , set : Entry a -> Store -> Store
-        }
+    = Access { get : Store -> Entry a, set : Entry a -> Store -> Store }
 
 
 empty : Store
@@ -194,9 +188,7 @@ request (Access access) store =
                 ( access.set (InFlight requestId)
                     (Store { fields | nextRequestId = requestId })
                 , RequestToken
-                    { generation = fields.generation
-                    , requestId = requestId
-                    }
+                    { generation = fields.generation, requestId = requestId }
                 )
 
         _ ->

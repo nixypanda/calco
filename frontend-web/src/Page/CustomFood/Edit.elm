@@ -74,11 +74,7 @@ type OutMsg
 init : String -> ( Model, OutMsg )
 init productId =
     ( Loading
-        { productId = productId
-        , food = Nothing
-        , nutrients = Nothing
-        , units = Nothing
-        }
+        { productId = productId, food = Nothing, nutrients = Nothing, units = Nothing }
     , RequestInitialData productId
     )
 
@@ -190,15 +186,10 @@ update msg model =
                     let
                         ( nextForm, subCmd, _ ) =
                             Form.update
-                                (Form.CategorySuggestionsLoaded token
-                                    (Result.map .items result)
-                                )
+                                (Form.CategorySuggestionsLoaded token (Result.map .items result))
                                 loaded.form
                     in
-                    ( Loaded { loaded | form = nextForm }
-                    , Cmd.map FormMsg subCmd
-                    , NoOp
-                    )
+                    ( Loaded { loaded | form = nextForm }, Cmd.map FormMsg subCmd, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -286,10 +277,7 @@ validationMessage err =
             I18n.en TidCustomFoodInvalidDefaultPortion
 
 
-completeSave :
-    Result Client.ApiError CreateFoodResponse
-    -> Model
-    -> ( Model, Cmd Msg, OutMsg )
+completeSave : Result Client.ApiError CreateFoodResponse -> Model -> ( Model, Cmd Msg, OutMsg )
 completeSave result model =
     case result of
         Ok response ->
@@ -317,8 +305,7 @@ setLoadedFood food model =
             Loaded
                 { loaded
                     | form =
-                        Form.fromProductDetail food
-                            |> Form.withNutrientCatalog loaded.nutrients
+                        Form.fromProductDetail food |> Form.withNutrientCatalog loaded.nutrients
                 }
 
         LoadFailed _ ->
@@ -362,8 +349,7 @@ completeLoading loading =
             Loaded
                 { productId = loading.productId
                 , form =
-                    Form.fromProductDetail food
-                        |> Form.withNutrientCatalog nutrients
+                    Form.fromProductDetail food |> Form.withNutrientCatalog nutrients
                 , nutrients = nutrients
                 , units = units
                 }
@@ -376,10 +362,7 @@ applySubmitError : String -> Model -> Model
 applySubmitError message model =
     case model of
         Loaded loaded ->
-            Loaded
-                { loaded
-                    | form = withSubmit (Form.SubmitFailed message) loaded.form
-                }
+            Loaded { loaded | form = withSubmit (Form.SubmitFailed message) loaded.form }
 
         _ ->
             model
@@ -394,16 +377,10 @@ failure =
             \message current ->
                 case current of
                     Loading loading ->
-                        LoadFailed
-                            { productId = loading.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loading.productId, message = message }
 
                     Loaded loaded ->
-                        LoadFailed
-                            { productId = loaded.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loaded.productId, message = message }
 
                     LoadFailed _ ->
                         current
@@ -414,19 +391,12 @@ failure =
 -- VIEW
 
 
-view :
-    Env
-    -> Model
-    -> Element Msg
+view : Env -> Model -> Element Msg
 view env model =
-    UiPage.pageContainer
-        [ bodyView env model ]
+    UiPage.pageContainer [ bodyView env model ]
 
 
-bodyView :
-    Env
-    -> Model
-    -> Element Msg
+bodyView : Env -> Model -> Element Msg
 bodyView env model =
     case model of
         Loaded loaded ->

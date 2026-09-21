@@ -29,8 +29,7 @@ type alias ProductDetail =
 
 
 type alias ProductNutritionSummary =
-    { per100g : NutritionSummary
-    }
+    { per100g : NutritionSummary }
 
 
 type alias NutrientEntry =
@@ -43,16 +42,11 @@ type alias NutrientEntry =
 
 
 type alias ServingEntry =
-    { unit : String
-    , gramsPerUnit : String
-    }
+    { unit : String, gramsPerUnit : String }
 
 
 type alias UnitItem =
-    { code : String
-    , name : String
-    , kind : String
-    }
+    { code : String, name : String, kind : String }
 
 
 type alias SearchResult =

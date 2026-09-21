@@ -89,10 +89,7 @@ update msg model =
             ( model, Cmd.none, LoginSucceeded loginSession )
 
         LoginCompleted (Err error) ->
-            ( CredentialForm.markFailed (Client.displayError error) model
-            , Cmd.none
-            , NoOp
-            )
+            ( CredentialForm.markFailed (Client.displayError error) model, Cmd.none, NoOp )
 
 
 

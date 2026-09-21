@@ -46,12 +46,7 @@ foodHeaderElement env food extraMeta =
         { leading = Just (View.Nutrients.macroDot env macroNutrients)
         , title = Typography.truncatedHeader env.theme food.name
         , subtitle =
-            Just
-                (UiPage.SubtitleMeta
-                    { items = metaItems food extraMeta
-                    , separator = " ⋅ "
-                    }
-                )
+            Just (UiPage.SubtitleMeta { items = metaItems food extraMeta, separator = " ⋅ " })
         , actions = []
         }
 
@@ -71,26 +66,18 @@ foodCategories theme food =
 
 metaItems : ProductDetail -> List (Maybe String) -> List String
 metaItems food extraItems =
-    (food.brand :: extraItems)
-        |> List.filterMap identity
+    (food.brand :: extraItems) |> List.filterMap identity
 
 
 foodNutrientsPer100g : ProductDetail -> List Nutrition.NutrientAmount
 foodNutrientsPer100g food =
     List.map
         (\nutrient ->
-            { code = nutrient.code
-            , amount = nutrient.amountPer100g
-            , unit = nutrient.unit
-            }
+            { code = nutrient.code, amount = nutrient.amountPer100g, unit = nutrient.unit }
         )
         food.nutrients
 
 
 macroDotGhost : Element msg
 macroDotGhost =
-    Element.el
-        [ Element.width (Element.px 4)
-        , Element.height (Element.px 24)
-        ]
-        Element.none
+    Element.el [ Element.width (Element.px 4), Element.height (Element.px 24) ] Element.none

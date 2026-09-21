@@ -35,9 +35,7 @@ type Model
 
 init : ( Model, OutMsg )
 init =
-    ( Loading
-    , RequestUsers
-    )
+    ( Loading, RequestUsers )
 
 
 
@@ -101,9 +99,7 @@ bodyView env model =
                 , body =
                     List.map
                         (\user ->
-                            userListRow
-                                env.theme
-                                { user = user, onSelect = NavigateEditUser }
+                            userListRow env.theme { user = user, onSelect = NavigateEditUser }
                         )
                         users
                 , footer =
@@ -143,12 +139,8 @@ adminDashboardSkeleton : Theme -> Element msg
 adminDashboardSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 120, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 120, height = 24 })
         , body =
-            List.map (\_ -> Skeleton.listRow theme)
-                (List.range 1 3)
+            List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
         , footer = Just (Skeleton.button theme)
         }

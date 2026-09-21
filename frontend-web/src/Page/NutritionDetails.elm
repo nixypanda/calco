@@ -41,9 +41,7 @@ type Model
 
 
 type alias DateContext =
-    { currentDate : LocalDate
-    , today : LocalDate
-    }
+    { currentDate : LocalDate, today : LocalDate }
 
 
 type OutMsg
@@ -55,9 +53,7 @@ type OutMsg
 
 init : { date : LocalDate, today : LocalDate } -> ( Model, OutMsg )
 init args =
-    ( Loading { currentDate = args.date, today = args.today }
-    , RequestNutritionDetails args.date
-    )
+    ( Loading { currentDate = args.date, today = args.today }, RequestNutritionDetails args.date )
 
 
 type Msg
@@ -106,10 +102,7 @@ update msg model =
         NutrientAdviceToggled code ->
             case model of
                 Loaded context report expandedAdvice ->
-                    ( Loaded context report (toggleSetMember code expandedAdvice)
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( Loaded context report (toggleSetMember code expandedAdvice), Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -253,9 +246,7 @@ loadingView theme =
         , Surface.card theme
             [ Skeleton.barCustom theme { width = Element.fillPortion 2, height = 16 }
             , Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
                 , Skeleton.barCustom theme { width = Element.fill, height = 40 }
@@ -264,9 +255,7 @@ loadingView theme =
         , Skeleton.card theme { rows = 3 }
         , Skeleton.card theme { rows = 3 }
         , Surface.card theme
-            [ Skeleton.bar theme
-            , Skeleton.bar theme
-            ]
+            [ Skeleton.bar theme, Skeleton.bar theme ]
         ]
 
 
@@ -403,9 +392,7 @@ coverageNotice env report =
     let
         hasIncompleteData : Bool
         hasIncompleteData =
-            report.loggedItems
-                > 0
-                && (hasPartialCoverage report || hasNoCoverage report)
+            report.loggedItems > 0 && (hasPartialCoverage report || hasNoCoverage report)
 
         message : String
         message =
@@ -420,9 +407,7 @@ coverageNotice env report =
 
             else if report.loggedItems == 1 then
                 I18n.t env.language
-                    (TidNutritionDetailsLoggedItemsIncludedOne
-                        (String.fromInt report.loggedItems)
-                    )
+                    (TidNutritionDetailsLoggedItemsIncludedOne (String.fromInt report.loggedItems))
 
             else
                 I18n.t env.language
@@ -468,10 +453,7 @@ nutrientRow env expandedAdvice nutrient =
                             [ Element.width Element.fill, Font.bold, Typography.body ]
                             [ Element.text nutrient.name ]
                         , Element.el
-                            [ Element.alignRight
-                            , Font.color env.theme.textMedium
-                            , Typography.body
-                            ]
+                            [ Element.alignRight, Font.color env.theme.textMedium, Typography.body ]
                             (Element.text (amountLabel env.language nutrient))
                         ]
                     , progressView env.theme nutrient
@@ -568,10 +550,7 @@ progressView theme nutrient =
     case Details.progressPercent nutrient of
         Just percent ->
             Feedback.linearProgress theme
-                { value = percent
-                , max = 100
-                , color = progressColor theme nutrient
-                }
+                { value = percent, max = 100, color = progressColor theme nutrient }
 
         Nothing ->
             Element.none
@@ -604,9 +583,7 @@ guidanceSummary language nutrient =
             case nutrient.knownAmount of
                 Just amount ->
                     I18n.t language
-                        (TidNutritionDetailsKnownMinimumAmount
-                            (formatAmount amount nutrient.unit)
-                        )
+                        (TidNutritionDetailsKnownMinimumAmount (formatAmount amount nutrient.unit))
 
                 Nothing ->
                     I18n.t language TidNutritionDetailsNoKnownAmount

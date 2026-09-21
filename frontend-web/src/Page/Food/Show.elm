@@ -209,9 +209,7 @@ update msg model =
                             { loaded
                                 | form =
                                     FoodLogForm.setSubmitState
-                                        (FoodLogForm.SubmitFailed
-                                            FoodLogForm.AmountRequiredMessage
-                                        )
+                                        (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                                         loaded.form
                             }
                         , Cmd.none
@@ -275,10 +273,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
 
-createLogFromLocalContext :
-    LocalContext
-    -> LoadedModel
-    -> ( Model, Cmd Msg, OutMsg )
+createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
     let
         logDate : String
@@ -295,9 +290,7 @@ createLogFromLocalContext context loaded =
             ( Loaded
                 { loaded
                     | form =
-                        FoodLogForm.setSubmitState
-                            FoodLogForm.SubmitSubmitting
-                            loaded.form
+                        FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
                 }
             , Cmd.none
             , RequestCreateLog request
@@ -308,9 +301,7 @@ createLogFromLocalContext context loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.AmountRequiredMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -322,9 +313,7 @@ createLogFromLocalContext context loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.InvalidDateMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -409,10 +398,7 @@ applyLastUsedDefault maybeQuantity model =
                     model
 
 
-formWithLastUsedDefault :
-    Maybe Nutrition.Quantity
-    -> FoodLogForm.Model
-    -> FoodLogForm.Model
+formWithLastUsedDefault : Maybe Nutrition.Quantity -> FoodLogForm.Model -> FoodLogForm.Model
 formWithLastUsedDefault maybeQuantity form =
     case maybeQuantity of
         Just quantity ->
@@ -439,9 +425,7 @@ applyLoadedError message model =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                (FoodLogForm.RequestFailed message)
-                            )
+                            (FoodLogForm.SubmitFailed (FoodLogForm.RequestFailed message))
                             loaded.form
                 }
 
@@ -453,15 +437,10 @@ applyLoadedError message model =
 -- VIEW
 
 
-contentView :
-    Env
-    -> Model
-    -> Element Msg
+contentView : Env -> Model -> Element Msg
 contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             LoadFailed message ->
                 Feedback.errorBanner env.theme message
@@ -508,9 +487,7 @@ loadedView env loaded =
             View.Product.foodCategories env.theme food
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Maybe.withDefault Element.none
             (Maybe.map (Feedback.infoBanner env.theme) loaded.lookupNote)
         , Surface.panel env.theme
@@ -531,12 +508,7 @@ loadedView env loaded =
                                 )
                          , body =
                             List.map (Element.map FormMsg)
-                                (FoodLogForm.fields
-                                    env
-                                    (Just food)
-                                    loaded.units
-                                    form
-                                )
+                                (FoodLogForm.fields env (Just food) loaded.units form)
                          }
                        ]
             , footer = Just (submitActionView env form)
@@ -571,9 +543,7 @@ foodNutrientsForDisplay food form =
 foodShowSkeleton : Theme -> Element msg
 foodShowSkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.barCustom theme
             { width = Element.fill, height = 120 }
         , Skeleton.barCustom theme

@@ -9,6 +9,4 @@ date field; the rollover path parses it.
 
 
 type alias LocalContext =
-    { date : String
-    , timezone : String
-    }
+    { date : String, timezone : String }

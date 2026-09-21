@@ -46,10 +46,7 @@ import Ui.Typography exposing (body, caption)
 
 
 type alias InputConfig msg =
-    { label : String
-    , value : String
-    , onChange : String -> msg
-    }
+    { label : String, value : String, onChange : String -> msg }
 
 
 {-| Where a search field's label lives. `LabelAbove` keeps the label as a
@@ -86,9 +83,7 @@ suffix, dropdown chevron) render the same border instead of elm-ui's default.
 -}
 inputBorder : Theme -> List (Element.Attribute msg)
 inputBorder theme =
-    [ Border.width 1
-    , Border.color theme.divider
-    ]
+    [ Border.width 1, Border.color theme.divider ]
 
 
 input : Theme -> InputConfig msg -> Element msg
@@ -110,10 +105,7 @@ mobile.
 numericInput : Theme -> InputConfig msg -> Element msg
 numericInput theme config =
     textInput theme
-        [ inputMode "decimal"
-        , Font.alignLeft
-        , Font.variant Font.tabularNumbers
-        ]
+        [ inputMode "decimal", Font.alignLeft, Font.variant Font.tabularNumbers ]
         { config | onChange = config.onChange << Number.normalizeDecimalSeparator }
 
 
@@ -128,11 +120,7 @@ textInput theme extraAttrs config =
         ([ Border.rounded radiusControl
          , Background.color theme.cardBg
          , Element.paddingEach
-            { top = fieldVerticalPadding
-            , right = 10
-            , bottom = fieldVerticalPadding
-            , left = 10
-            }
+            { top = fieldVerticalPadding, right = 10, bottom = fieldVerticalPadding, left = 10 }
          , uiClass "ui-motion"
          ]
             ++ inputBorder theme
@@ -159,28 +147,19 @@ searchInput theme config =
         ( labelElement, placeholderElement ) =
             case config.label of
                 LabelAbove label ->
-                    ( Input.labelAbove [ body, Font.medium ] (Element.text label)
-                    , Nothing
-                    )
+                    ( Input.labelAbove [ body, Font.medium ] (Element.text label), Nothing )
 
                 LabelInside label ->
                     ( Input.labelHidden label
                     , Just
-                        (Input.placeholder
-                            [ Font.color theme.textMuted ]
-                            (Element.text label)
-                        )
+                        (Input.placeholder [ Font.color theme.textMuted ] (Element.text label))
                     )
     in
     Input.text
         ([ Border.rounded radiusControl
          , Background.color theme.cardBg
          , Element.paddingEach
-            { top = fieldVerticalPadding
-            , right = 12
-            , bottom = fieldVerticalPadding
-            , left = 12
-            }
+            { top = fieldVerticalPadding, right = 12, bottom = fieldVerticalPadding, left = 12 }
          , uiClass "ui-motion"
          ]
             ++ inputBorder theme
@@ -199,11 +178,7 @@ passwordInput theme config =
         ([ Border.rounded radiusControl
          , Background.color theme.cardBg
          , Element.paddingEach
-            { top = fieldVerticalPadding
-            , right = 10
-            , bottom = fieldVerticalPadding
-            , left = 10
-            }
+            { top = fieldVerticalPadding, right = 10, bottom = fieldVerticalPadding, left = 10 }
          , uiClass "ui-motion"
          ]
             ++ inputBorder theme
@@ -218,12 +193,7 @@ passwordInput theme config =
 
 fieldLabel : Theme -> String -> Element msg
 fieldLabel theme label =
-    Element.el
-        [ caption
-        , Font.medium
-        , Font.color theme.textPrimary
-        ]
-        (Element.text label)
+    Element.el [ caption, Font.medium, Font.color theme.textPrimary ] (Element.text label)
 
 
 decimalInputWithSuffix :
@@ -296,33 +266,20 @@ decimalInputWithSuffix theme config =
                 [ inputElement, unitElement ]
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing space4
-        ]
-        [ fieldLabel theme config.label
-        , fieldInput
-        ]
+        [ Element.width Element.fill, Element.spacing space4 ]
+        [ fieldLabel theme config.label, fieldInput ]
 
 
 
 -- Dropdowns
 
 
-completionDropdown :
-    Theme
-    -> { height : Int, rows : List (Element msg) }
-    -> Element msg
+completionDropdown : Theme -> { height : Int, rows : List (Element msg) } -> Element msg
 completionDropdown theme config =
-    optionList theme
-        { maxHeight = Just config.height
-        , rows = config.rows
-        }
+    optionList theme { maxHeight = Just config.height, rows = config.rows }
 
 
-optionList :
-    Theme
-    -> { maxHeight : Maybe Int, rows : List (Element msg) }
-    -> Element msg
+optionList : Theme -> { maxHeight : Maybe Int, rows : List (Element msg) } -> Element msg
 optionList theme config =
     if List.isEmpty config.rows then
         Element.none
@@ -340,9 +297,7 @@ optionList theme config =
              ]
                 ++ (case config.maxHeight of
                         Just height ->
-                            [ Element.height (Element.px height)
-                            , Element.scrollbarY
-                            ]
+                            [ Element.height (Element.px height), Element.scrollbarY ]
 
                         Nothing ->
                             []
@@ -405,10 +360,7 @@ optionRow theme config =
         , label =
             Element.row [ Element.width Element.fill, Element.spacing space8, minWidthZero ]
                 [ Element.el
-                    [ Element.width Element.fill
-                    , Font.medium
-                    , minWidthZero
-                    ]
+                    [ Element.width Element.fill, Font.medium, minWidthZero ]
                     (Element.text config.label)
                 , Maybe.withDefault Element.none config.trailing
                 ]
@@ -417,10 +369,7 @@ optionRow theme config =
 
 suggestionList : Theme -> List (Element msg) -> Element msg
 suggestionList theme items =
-    optionList theme
-        { maxHeight = Nothing
-        , rows = items
-        }
+    optionList theme { maxHeight = Nothing, rows = items }
 
 
 selectDropdown :
@@ -463,13 +412,9 @@ selectDropdown device theme language config =
         optionsElement : Element msg
         optionsElement =
             Element.el
-                [ Element.moveDown 4
-                , Element.htmlAttribute (Html.Attributes.style "z-index" "20")
-                ]
+                [ Element.moveDown 4, Element.htmlAttribute (Html.Attributes.style "z-index" "20") ]
                 (optionList theme
-                    { maxHeight = Nothing
-                    , rows = List.map renderOption config.options
-                    }
+                    { maxHeight = Nothing, rows = List.map renderOption config.options }
                 )
 
         triggerAnchor : List (Element.Attribute msg)
@@ -565,14 +510,7 @@ selectDropdown device theme language config =
 -- Boolean inputs
 
 
-checkbox :
-    Theme
-    ->
-        { label : String
-        , checked : Bool
-        , onChange : Bool -> msg
-        }
-    -> Element msg
+checkbox : Theme -> { label : String, checked : Bool, onChange : Bool -> msg } -> Element msg
 checkbox theme config =
     Input.checkbox
         [ Element.width Element.fill
@@ -585,10 +523,7 @@ checkbox theme config =
         , label =
             Input.labelRight [ Element.height Element.fill ]
                 (Element.el
-                    [ body
-                    , Font.color theme.textPrimary
-                    , Element.centerY
-                    ]
+                    [ body, Font.color theme.textPrimary, Element.centerY ]
                     (Element.text config.label)
                 )
         }
@@ -619,11 +554,7 @@ checkboxIcon theme isChecked =
         , Element.centerY
         ]
         (if isChecked then
-            Icon.view
-                { icon = Icon.Check
-                , size = 18
-                , color = theme.solidControlFg
-                }
+            Icon.view { icon = Icon.Check, size = 18, color = theme.solidControlFg }
 
          else
             Element.none

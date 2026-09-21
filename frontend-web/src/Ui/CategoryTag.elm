@@ -52,27 +52,20 @@ rows categories =
 
 view : Theme -> Language -> List (List CategoryTag) -> Element msg
 view theme language tagRows =
-    Element.column
-        [ Element.spacing space4 ]
-        (List.map (tagRow theme language) tagRows)
+    Element.column [ Element.spacing space4 ] (List.map (tagRow theme language) tagRows)
 
 
 tagRow : Theme -> Language -> List CategoryTag -> Element msg
 tagRow theme language cells =
     Element.row
-        [ Element.spacing space4
-        , Element.alignRight
-        ]
+        [ Element.spacing space4, Element.alignRight ]
         (List.map (tagCell theme language) cells)
 
 
 tagCell : Theme -> Language -> CategoryTag -> Element msg
 tagCell theme language tag =
     Element.el
-        [ Element.width (Element.px cellWidth)
-        , Element.clip
-        , UiCommon.uiClass "ui-text-ellipsis"
-        ]
+        [ Element.width (Element.px cellWidth), Element.clip, UiCommon.uiClass "ui-text-ellipsis" ]
         (Chip.chip theme { label = label language tag, selected = False })
 
 

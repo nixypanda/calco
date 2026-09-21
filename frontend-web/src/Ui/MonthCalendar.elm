@@ -41,9 +41,7 @@ view config =
             Calendar.monthCells config.period
                 |> chunks 7
                 |> List.map
-                    (List.map cell
-                        >> Element.row [ Element.width Element.fill ]
-                    )
+                    (List.map cell >> Element.row [ Element.width Element.fill ])
     in
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.row [ Element.width Element.fill ]
@@ -75,9 +73,7 @@ skeleton theme config =
             (List.map
                 (\_ ->
                     Skeleton.barCustom theme
-                        { width = Element.fillPortion 1
-                        , height = config.cellHeight
-                        }
+                        { width = Element.fillPortion 1, height = config.cellHeight }
                 )
                 >> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
             )

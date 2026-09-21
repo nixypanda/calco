@@ -30,10 +30,7 @@ import Ui.Surface as Surface
 
 
 type alias Form =
-    { username : String
-    , displayName : String
-    , initialPassword : String
-    }
+    { username : String, displayName : String, initialPassword : String }
 
 
 type Model
@@ -114,10 +111,7 @@ update msg model =
             in
             case createUserPayload form of
                 Ok request ->
-                    ( Submitting form
-                    , Cmd.none
-                    , RequestCreateUser request
-                    )
+                    ( Submitting form, Cmd.none, RequestCreateUser request )
 
                 Err problem ->
                     ( Invalid form problem, Cmd.none, NoOp )

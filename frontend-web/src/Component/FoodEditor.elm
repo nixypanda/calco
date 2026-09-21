@@ -170,10 +170,7 @@ type alias CategoryInput =
 
 
 type alias NutrientRow =
-    { code : String
-    , amount : String
-    , unit : String
-    }
+    { code : String, amount : String, unit : String }
 
 
 type NutrientBasis
@@ -187,9 +184,7 @@ type NutrientVisibility
 
 
 type alias ServingRow =
-    { unit : String
-    , gramsPerUnit : String
-    }
+    { unit : String, gramsPerUnit : String }
 
 
 type ValidationError
@@ -257,19 +252,12 @@ emptyLogForm maybeDate maybeMealSlot =
 
 emptyCategoryInput : CategoryInput
 emptyCategoryInput =
-    { selected = []
-    , query = ""
-    , suggestions = []
-    , token = Ticket.initial
-    }
+    { selected = [], query = "", suggestions = [], token = Ticket.initial }
 
 
 emptyNutrientRow : NutrientRow
 emptyNutrientRow =
-    { code = ""
-    , amount = ""
-    , unit = ""
-    }
+    { code = "", amount = "", unit = "" }
 
 
 emptyServingRow : ServingRow
@@ -306,17 +294,14 @@ applyAiDraft draft form =
                     { code = nutrient.code
                     , amount = nutrient.amountPer100g
                     , unit =
-                        Dict.get nutrient.code form.nutrientCatalog
-                            |> Maybe.withDefault ""
+                        Dict.get nutrient.code form.nutrientCatalog |> Maybe.withDefault ""
                     }
                 )
                 draft.nutrients
         , servings =
             List.map
                 (\serving ->
-                    { unit = serving.unit
-                    , gramsPerUnit = serving.gramsPerUnit
-                    }
+                    { unit = serving.unit, gramsPerUnit = serving.gramsPerUnit }
                 )
                 draft.servings
         , submit = Idle
@@ -347,8 +332,7 @@ applyAiLogDraft catalog draft suggested form =
                                     | quantity = suggested.amount
                                     , unit = suggested.unit
                                     , nutrition =
-                                        DerivedPortion
-                                            { weightGrams = suggested.totalWeightGrams }
+                                        DerivedPortion { weightGrams = suggested.totalWeightGrams }
                                 }
                                 persistence
 
@@ -370,9 +354,7 @@ applyAiLogDraft catalog draft suggested form =
                 , servings =
                     List.map
                         (\serving ->
-                            { unit = serving.unit
-                            , gramsPerUnit = serving.gramsPerUnit
-                            }
+                            { unit = serving.unit, gramsPerUnit = serving.gramsPerUnit }
                         )
                         draft.servings
                 , context = context
@@ -407,10 +389,7 @@ aiLogNutrientRow catalog rawWeight nutrient =
                     , unit = item.unit
                     }
                 )
-                (positiveNumber
-                    (I18n.en TidFoodEditorLabelSuggestedPortionWeight)
-                    rawWeight
-                )
+                (positiveNumber (I18n.en TidFoodEditorLabelSuggestedPortionWeight) rawWeight)
                 (nonNegativeNumber
                     (I18n.en TidFoodEditorLabelEstimatedNutrient)
                     nutrient.amountPer100g
@@ -449,9 +428,7 @@ changeLogQuantity rawQuantity form =
                     else
                         { form
                             | context =
-                                FoodLogContext
-                                    { logFields | quantity = rawQuantity }
-                                    persistence
+                                FoodLogContext { logFields | quantity = rawQuantity } persistence
                         }
 
                 _ ->
@@ -490,9 +467,7 @@ changeLogUnit draft unit form =
                         changed
 
                 _ ->
-                    { form
-                        | context = FoodLogContext { logFields | unit = unit } persistence
-                    }
+                    { form | context = FoodLogContext { logFields | unit = unit } persistence }
 
         CustomFoodContext ->
             form
@@ -502,16 +477,12 @@ scaleLogPortion : Float -> FormModel -> FormModel
 scaleLogPortion ratio form =
     { form
         | nutrients =
-            List.map
-                (\row -> { row | amount = scaleNumberString ratio row.amount })
-                form.nutrients
+            List.map (\row -> { row | amount = scaleNumberString ratio row.amount }) form.nutrients
         , context =
             case form.context of
                 FoodLogContext logFields persistence ->
                     FoodLogContext
-                        { logFields
-                            | nutrition = scalePortionNutrition ratio logFields.nutrition
-                        }
+                        { logFields | nutrition = scalePortionNutrition ratio logFields.nutrition }
                         (scalePersistenceWeight ratio persistence)
 
                 other ->
@@ -521,9 +492,7 @@ scaleLogPortion ratio form =
 
 scaleNumberString : Float -> String -> String
 scaleNumberString ratio raw =
-    String.toFloat raw
-        |> Maybe.map ((*) ratio >> String.fromFloat)
-        |> Maybe.withDefault raw
+    String.toFloat raw |> Maybe.map ((*) ratio >> String.fromFloat) |> Maybe.withDefault raw
 
 
 effectivePortionWeight : LogFields -> LogPersistence -> Maybe Float
@@ -555,8 +524,7 @@ scalePortionNutrition : Float -> PortionNutrition -> PortionNutrition
 scalePortionNutrition ratio nutrition =
     case nutrition of
         DerivedPortion details ->
-            DerivedPortion
-                { details | weightGrams = scaleNumberString ratio details.weightGrams }
+            DerivedPortion { details | weightGrams = scaleNumberString ratio details.weightGrams }
 
         IndependentPortion ->
             IndependentPortion
@@ -623,11 +591,7 @@ logPortionWeight form =
 hasManualInput : FormModel -> Bool
 hasManualInput form =
     List.any (not << String.isEmpty << String.trim)
-        [ form.name
-        , form.brand
-        , form.categoryInput.query
-        , form.defaultQuantity
-        ]
+        [ form.name, form.brand, form.categoryInput.query, form.defaultQuantity ]
         || not (List.isEmpty form.categoryInput.selected)
         || not (String.isEmpty (String.trim form.defaultUnit))
         || List.any
@@ -694,10 +658,7 @@ fromProductDetail food =
             case
                 List.map
                     (\n ->
-                        { code = n.code
-                        , amount = n.amountPer100g
-                        , unit = n.unit
-                        }
+                        { code = n.code, amount = n.amountPer100g, unit = n.unit }
                     )
                     food.nutrients
             of
@@ -709,9 +670,7 @@ fromProductDetail food =
         , servings =
             List.map
                 (\s ->
-                    { unit = s.unit
-                    , gramsPerUnit = formatServingGrams s.gramsPerUnit
-                    }
+                    { unit = s.unit, gramsPerUnit = formatServingGrams s.gramsPerUnit }
                 )
                 food.servings
     }
@@ -719,10 +678,7 @@ fromProductDetail food =
 
 formatServingGrams : String -> String
 formatServingGrams value =
-    value
-        |> String.toFloat
-        |> Maybe.map (Number.toFixedTrimmed 3)
-        |> Maybe.withDefault value
+    value |> String.toFloat |> Maybe.map (Number.toFixedTrimmed 3) |> Maybe.withDefault value
 
 
 withNutrientCatalog : List NutrientItem -> FormModel -> FormModel
@@ -730,15 +686,9 @@ withNutrientCatalog items form =
     let
         catalog : Dict String String
         catalog =
-            List.foldl
-                (\item acc -> Dict.insert item.code item.unit acc)
-                form.nutrientCatalog
-                items
+            List.foldl (\item acc -> Dict.insert item.code item.unit acc) form.nutrientCatalog items
     in
-    { form
-        | nutrientCatalog = catalog
-        , nutrients = backfillNutrientUnits catalog form.nutrients
-    }
+    { form | nutrientCatalog = catalog, nutrients = backfillNutrientUnits catalog form.nutrients }
 
 
 toCreateFoodRequest : FormModel -> Result ValidationError CreateFoodRequest
@@ -790,12 +740,7 @@ toCreateFoodRequest form =
 
 toInitialCreateFoodRequest : FormModel -> Result ValidationError CreateFoodRequest
 toInitialCreateFoodRequest form =
-    toCreateFoodRequest
-        { form
-            | defaultQuantity = ""
-            , defaultUnit = ""
-            , servings = []
-        }
+    toCreateFoodRequest { form | defaultQuantity = "", defaultUnit = "", servings = [] }
 
 
 validateLog : FormModel -> Result String ValidatedLog
@@ -1073,8 +1018,7 @@ toDefaultPortion form =
 
 hasNutrientInput : NutrientRow -> Bool
 hasNutrientInput row =
-    not (String.isEmpty (String.trim row.code))
-        && not (String.isEmpty (String.trim row.amount))
+    not (String.isEmpty (String.trim row.code)) && not (String.isEmpty (String.trim row.amount))
 
 
 hasServingInput : ServingRow -> Bool
@@ -1091,10 +1035,7 @@ toNutrientRequest row =
                 Err (InvalidNutrientAmount row.amount)
 
             else
-                Ok
-                    { code = String.trim row.code
-                    , amountPer100g = amount
-                    }
+                Ok { code = String.trim row.code, amountPer100g = amount }
 
         Nothing ->
             Err (InvalidNutrientAmount row.amount)
@@ -1118,9 +1059,7 @@ toServingRequest row =
     in
     Result.map
         (\value ->
-            { unit = String.trim row.unit
-            , gramsPerUnit = value
-            }
+            { unit = String.trim row.unit, gramsPerUnit = value }
         )
         gramsPerUnit
 
@@ -1214,10 +1153,7 @@ update msg formIn =
             )
 
         NutrientsLoaded items ->
-            ( withNutrientCatalog items form
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( withNutrientCatalog items form, Cmd.none, NoOutMsg )
 
         CategoryQueryChanged value ->
             let
@@ -1227,10 +1163,7 @@ update msg formIn =
 
                 next : CategoryInput
                 next =
-                    { categoryInput
-                        | query = value
-                        , token = Ticket.next categoryInput.token
-                    }
+                    { categoryInput | query = value, token = Ticket.next categoryInput.token }
 
                 trimmed : String
                 trimmed =
@@ -1272,9 +1205,7 @@ update msg formIn =
             in
             ( { form
                 | categoryInput =
-                    { categoryInput
-                        | selected = List.filter ((/=) value) categoryInput.selected
-                    }
+                    { categoryInput | selected = List.filter ((/=) value) categoryInput.selected }
               }
             , Cmd.none
             , NoOutMsg
@@ -1326,8 +1257,7 @@ update msg formIn =
             let
                 unit : String
                 unit =
-                    Dict.get value form.nutrientCatalog
-                        |> Maybe.withDefault ""
+                    Dict.get value form.nutrientCatalog |> Maybe.withDefault ""
             in
             ( { form
                 | nutrients =
@@ -1350,22 +1280,14 @@ update msg formIn =
         NutrientAmountChanged index value ->
             ( { form
                 | nutrients =
-                    ListExtra.updateAt
-                        index
-                        (\row -> { row | amount = value })
-                        form.nutrients
+                    ListExtra.updateAt index (\row -> { row | amount = value }) form.nutrients
               }
             , Cmd.none
             , NoOutMsg
             )
 
         AddNutrientRow ->
-            ( { form
-                | nutrients = form.nutrients ++ [ emptyNutrientRow ]
-              }
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( { form | nutrients = form.nutrients ++ [ emptyNutrientRow ] }, Cmd.none, NoOutMsg )
 
         RemoveNutrientRow index ->
             ( { form
@@ -1388,10 +1310,7 @@ update msg formIn =
             in
             ( { form
                 | servings =
-                    ListExtra.updateAt
-                        index
-                        (\row -> { row | unit = value })
-                        form.servings
+                    ListExtra.updateAt index (\row -> { row | unit = value }) form.servings
                 , openDropdown = NoneOpen
                 , defaultUnit =
                     if oldUnit == Just form.defaultUnit then
@@ -1413,20 +1332,14 @@ update msg formIn =
         ServingGramsPerUnitChanged index value ->
             ( { form
                 | servings =
-                    ListExtra.updateAt
-                        index
-                        (\row -> { row | gramsPerUnit = value })
-                        form.servings
+                    ListExtra.updateAt index (\row -> { row | gramsPerUnit = value }) form.servings
               }
             , Cmd.none
             , NoOutMsg
             )
 
         AddServingRow ->
-            ( { form | servings = form.servings ++ [ emptyServingRow ] }
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( { form | servings = form.servings ++ [ emptyServingRow ] }, Cmd.none, NoOutMsg )
 
         RemoveServingRow index ->
             let
@@ -1475,10 +1388,7 @@ update msg formIn =
             )
 
         LogDateChanged value ->
-            ( mapLogFields (\logFields -> { logFields | date = value }) form
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( mapLogFields (\logFields -> { logFields | date = value }) form, Cmd.none, NoOutMsg )
 
         LogMealSlotChanged value ->
             ( mapLogFields (\logFields -> { logFields | mealSlot = value })
@@ -1494,10 +1404,7 @@ update msg formIn =
             )
 
         LogNotesChanged value ->
-            ( mapLogFields (\logFields -> { logFields | notes = value }) form
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( mapLogFields (\logFields -> { logFields | notes = value }) form, Cmd.none, NoOutMsg )
 
         LogPersistenceToggled ->
             ( { form
@@ -1522,10 +1429,7 @@ update msg formIn =
             )
 
         PortionWeightChanged value ->
-            ( setPortionWeight value form
-            , Cmd.none
-            , NoOutMsg
-            )
+            ( setPortionWeight value form, Cmd.none, NoOutMsg )
 
 
 mapLogFields : (LogFields -> LogFields) -> FormModel -> FormModel
@@ -1755,21 +1659,14 @@ basicInfoCard env showCategories form =
             , onChange = BrandChanged
             }
         , if showCategories then
-            categoryInputView env
-                (form.openDropdown == CategoryOpen)
-                form.categoryInput
+            categoryInputView env (form.openDropdown == CategoryOpen) form.categoryInput
 
           else
             Element.none
         ]
 
 
-loggedPortionCard :
-    Env
-    -> List UnitItem
-    -> FormModel
-    -> LogFields
-    -> Element Msg
+loggedPortionCard : Env -> List UnitItem -> FormModel -> LogFields -> Element Msg
 loggedPortionCard env units form logFields =
     Surface.formSection env.theme
         (I18n.t env.language TidFoodEditorLoggedPortion)
@@ -1924,9 +1821,7 @@ defaultPortionFields env units form =
 
         attributes : List (Element.Attribute Msg)
         attributes =
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
     in
     if UiCommon.isSmall env.device then
         Element.column attributes [ unitSelector, quantityInput ]
@@ -1941,9 +1836,7 @@ defaultPortionOptions language units form =
         :: ( "g", I18n.t language TidFoodEditorGrams )
         :: List.map
             (\serving ->
-                ( serving.unit
-                , servingUnitLabel language units serving.unit
-                )
+                ( serving.unit, servingUnitLabel language units serving.unit )
             )
             (List.filter hasServingInput form.servings)
 
@@ -1987,9 +1880,7 @@ nutrientsCard env basis visibility form nutrients =
                 )
         , body =
             [ Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 (form.nutrients
                     |> List.indexedMap Tuple.pair
                     |> List.filter
@@ -2003,12 +1894,7 @@ nutrientsCard env basis visibility form nutrients =
                         )
                     |> List.map
                         (\( index, row ) ->
-                            nutrientRowView env
-                                basis
-                                nutrients
-                                form.openDropdown
-                                index
-                                row
+                            nutrientRowView env basis nutrients form.openDropdown index row
                         )
                 )
             ]
@@ -2032,24 +1918,17 @@ servingsCard : Env -> FormModel -> List UnitItem -> Element Msg
 servingsCard env form units =
     Surface.section env.theme
         { header =
-            Just
-                (Typography.subsectionTitle env.theme
-                    (I18n.t env.language TidFoodEditorServings)
-                )
+            Just (Typography.subsectionTitle env.theme (I18n.t env.language TidFoodEditorServings))
         , body =
             [ Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space12
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 (if List.isEmpty form.servings then
                     [ Typography.mutedParagraph env.theme
                         (I18n.t env.language TidFoodEditorServingsEmpty)
                     ]
 
                  else
-                    List.indexedMap
-                        (servingRowView env units form.openDropdown)
-                        form.servings
+                    List.indexedMap (servingRowView env units form.openDropdown) form.servings
                 )
             ]
         , footer =
@@ -2078,10 +1957,7 @@ categoryInputView env open input =
         , Element.row [ Element.width Element.fill ]
             [ Element.el [ Element.width Element.fill ]
                 (UiInput.input env.theme
-                    { label = ""
-                    , value = input.query
-                    , onChange = CategoryQueryChanged
-                    }
+                    { label = "", value = input.query, onChange = CategoryQueryChanged }
                 )
             , Element.el
                 [ Element.paddingEach
@@ -2121,11 +1997,7 @@ chipRowView env tags =
 
 chipView : Env -> String -> Element Msg
 chipView env tag =
-    Chip.removableChip env.theme
-        env.language
-        { label = tag
-        , onRemove = RemoveCategory tag
-        }
+    Chip.removableChip env.theme env.language { label = tag, onRemove = RemoveCategory tag }
 
 
 suggestionRowView : Env -> Bool -> CategoryInput -> Element Msg
@@ -2206,28 +2078,17 @@ nutrientRowView env basis nutrients openDropdown index row =
     in
     if UiCommon.isSmall env.device then
         Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector
             , Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
-                [ amountInputWithUnit env basis index row
-                , removeButton
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+                [ amountInputWithUnit env basis index row, removeButton ]
             ]
 
     else
         Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
-            [ selector
-            , amountInputWithUnit env basis index row
-            , removeButton
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
+            [ selector, amountInputWithUnit env basis index row, removeButton ]
 
 
 amountInputWithUnit : Env -> NutrientBasis -> Int -> NutrientRow -> Element Msg
@@ -2259,13 +2120,7 @@ unitGhostText language unit =
         unit
 
 
-servingRowView :
-    Env
-    -> List UnitItem
-    -> OpenDropdown
-    -> Int
-    -> ServingRow
-    -> Element Msg
+servingRowView : Env -> List UnitItem -> OpenDropdown -> Int -> ServingRow -> Element Msg
 servingRowView env units openDropdown index row =
     let
         selector : Element Msg
@@ -2300,29 +2155,20 @@ servingRowView env units openDropdown index row =
     in
     if UiCommon.isSmall env.device then
         Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector
             , Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ gramsInput, removeButton ]
             ]
 
     else
         Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ selector, gramsInput, removeButton ]
 
 
-rowActionButton :
-    Env
-    -> { icon : Icon, title : String, onPress : msg }
-    -> Element msg
+rowActionButton : Env -> { icon : Icon, title : String, onPress : msg } -> Element msg
 rowActionButton env config =
     Element.el
         [ Element.width (Element.px 44)

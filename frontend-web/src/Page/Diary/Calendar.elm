@@ -91,8 +91,7 @@ init args =
 
 validMonth : String -> Maybe String
 validMonth period =
-    Calendar.monthStart period
-        |> Maybe.map (\_ -> period)
+    Calendar.monthStart period |> Maybe.map (\_ -> period)
 
 
 
@@ -136,10 +135,7 @@ update msg model =
 
         DayTotalsKnown date summary ->
             if dateIsLoaded date model then
-                ( { model | summaries = replaceDay date summary model.summaries }
-                , Cmd.none
-                , NoOp
-                )
+                ( { model | summaries = replaceDay date summary model.summaries }, Cmd.none, NoOp )
 
             else
                 ( model, Cmd.none, NoOp )
@@ -153,10 +149,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         DayClicked month date ->
-            ( model
-            , Cmd.none
-            , Navigate (DiaryDay (Just date) (Just month))
-            )
+            ( model, Cmd.none, Navigate (DiaryDay (Just date) (Just month)) )
 
         TodayChanged today ->
             ( { model | today = today }, Cmd.none, NoOp )
@@ -218,8 +211,7 @@ loadEarlier model =
 
         previousDay : Maybe LocalDate
         previousDay =
-            Calendar.monthStart model.oldestMonth
-                |> Maybe.map (LocalDate.addDays -1)
+            Calendar.monthStart model.oldestMonth |> Maybe.map (LocalDate.addDays -1)
     in
     case ( Calendar.monthStart nextOldest, previousDay ) of
         ( Just fromDate, Just toDate ) ->
@@ -276,8 +268,7 @@ mergeSummaries : List DaySummary -> List DaySummary -> List DaySummary
 mergeSummaries existing incoming =
     List.foldl
         (\summary merged ->
-            summary
-                :: List.filter (\other -> not (LocalDate.equals other.date summary.date)) merged
+            summary :: List.filter (\other -> not (LocalDate.equals other.date summary.date)) merged
         )
         existing
         incoming
@@ -298,16 +289,10 @@ requestForMonths token oldest newest today =
 -- VIEW
 
 
-contentViewWithSelection :
-    Env
-    -> Maybe LocalDate
-    -> Model
-    -> Element Msg
+contentViewWithSelection : Env -> Maybe LocalDate -> Model -> Element Msg
 contentViewWithSelection env selectedDate model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (case model.status of
             Loading ->
                 calendarSkeleton env.theme model
@@ -359,18 +344,9 @@ monthSkeleton : Theme -> String -> Element msg
 monthSkeleton theme month =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 140
-                    , height = 24
-                    }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
         , body =
-            [ MonthCalendar.skeleton theme
-                { period = month
-                , cellHeight = monthCellHeight
-                }
-            ]
+            [ MonthCalendar.skeleton theme { period = month, cellHeight = monthCellHeight } ]
         , footer = Nothing
         }
 
@@ -461,18 +437,10 @@ dayView env model selectedDate month day attributes =
                     )
                 :: attributes
             )
-            { onPress = Just (DayClicked month date)
-            , label = label
-            }
+            { onPress = Just (DayClicked month date), label = label }
 
 
-dayLabel :
-    Env
-    -> LocalDate
-    -> Int
-    -> String
-    -> Maybe DaySummary
-    -> Element msg
+dayLabel : Env -> LocalDate -> Int -> String -> Maybe DaySummary -> Element msg
 dayLabel env today day date maybeSummary =
     let
         isToday : Bool
@@ -528,9 +496,7 @@ dayLabel env today day date maybeSummary =
                         , label = dayAriaLabel env.language date maybeSummary
                         , center =
                             Html.span
-                                [ Attr.style "font-size" "13px"
-                                , Attr.style "font-weight" "600"
-                                ]
+                                [ Attr.style "font-size" "13px", Attr.style "font-weight" "600" ]
                                 [ Html.text (String.fromInt day) ]
                         }
 
@@ -562,8 +528,7 @@ macroSegments theme summary =
 
 summaryFor : LocalDate -> List DaySummary -> Maybe DaySummary
 summaryFor date summaries =
-    List.filter (\summary -> LocalDate.equals summary.date date) summaries
-        |> List.head
+    List.filter (\summary -> LocalDate.equals summary.date date) summaries |> List.head
 
 
 compactCalories : Float -> String
@@ -580,10 +545,7 @@ dayAriaLabel language date maybeSummary =
     case maybeSummary of
         Just summary ->
             I18n.t language
-                (TidDiaryCalendarDayAriaLogged
-                    date
-                    (String.fromInt (round summary.energyKcal))
-                )
+                (TidDiaryCalendarDayAriaLogged date (String.fromInt (round summary.energyKcal)))
 
         Nothing ->
             I18n.t language (TidDiaryCalendarDayAriaNoFood date)

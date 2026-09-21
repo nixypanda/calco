@@ -44,8 +44,7 @@ type alias MealComponent =
 
 
 type alias MealListResponse =
-    { items : List Meal
-    }
+    { items : List Meal }
 
 
 type alias CreateMealRequest =
@@ -57,9 +56,7 @@ type alias CreateMealRequest =
 
 
 type alias CreateMealComponentRequest =
-    { item : ItemRef
-    , quantity : Nutrition.Quantity
-    }
+    { item : ItemRef, quantity : Nutrition.Quantity }
 
 
 type alias MealNutritionResponse =
@@ -72,18 +69,12 @@ type alias MealNutritionResponse =
 
 listMeals : (Result Client.ApiError MealListResponse -> msg) -> Cmd msg
 listMeals toMsg =
-    Client.get
-        (Builder.absolute [ "api", "meals" ] [])
-        mealListDecoder
-        toMsg
+    Client.get (Builder.absolute [ "api", "meals" ] []) mealListDecoder toMsg
 
 
 getMeal : String -> (Result Client.ApiError Meal -> msg) -> Cmd msg
 getMeal id toMsg =
-    Client.get
-        (Builder.absolute [ "api", "meals", id ] [])
-        mealDecoder
-        toMsg
+    Client.get (Builder.absolute [ "api", "meals", id ] []) mealDecoder toMsg
 
 
 createMeal : CreateMealRequest -> (Result Client.ApiError Meal -> msg) -> Cmd msg
@@ -106,16 +97,11 @@ updateMeal id request toMsg =
 
 deleteMeal : String -> (Result Client.ApiError () -> msg) -> Cmd msg
 deleteMeal id toMsg =
-    Client.delete
-        (Builder.absolute [ "api", "meals", id ] [])
-        toMsg
+    Client.delete (Builder.absolute [ "api", "meals", id ] []) toMsg
 
 
 type alias MealNutrientsQuery =
-    { mealId : String
-    , amount : String
-    , unit : String
-    }
+    { mealId : String, amount : String, unit : String }
 
 
 getMealNutrients :
@@ -126,9 +112,7 @@ getMealNutrients query toMsg =
     Client.get
         (Builder.absolute
             [ "api", "meals", query.mealId, "nutrients" ]
-            [ Builder.string "amount" query.amount
-            , Builder.string "unit" query.unit
-            ]
+            [ Builder.string "amount" query.amount, Builder.string "unit" query.unit ]
         )
         mealNutritionDecoder
         toMsg
@@ -154,8 +138,7 @@ componentRequestEncoder component =
 
 mealListDecoder : Decoder MealListResponse
 mealListDecoder =
-    Decode.map MealListResponse
-        (Decode.field "items" (Decode.list mealDecoder))
+    Decode.map MealListResponse (Decode.field "items" (Decode.list mealDecoder))
 
 
 mealDecoder : Decoder Meal

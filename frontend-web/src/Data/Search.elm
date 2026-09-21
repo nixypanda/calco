@@ -29,15 +29,11 @@ type Completion
 
 
 type alias CategorySuggestion =
-    { value : String
-    , count : Int
-    }
+    { value : String, count : Int }
 
 
 type alias CategoryRequest =
-    { token : Ticket
-    , query : String
-    }
+    { token : Ticket, query : String }
 
 
 type alias QueryState =
@@ -84,9 +80,7 @@ onQueryChanged rawQuery state =
             categoryQuery rawQuery
                 |> Maybe.map
                     (\value ->
-                        { token = nextCategoryToken
-                        , query = value
-                        }
+                        { token = nextCategoryToken, query = value }
                     )
 
         nextCategorySuggestions : List CategorySuggestion
@@ -114,11 +108,7 @@ onQueryChanged rawQuery state =
     ( nextState, categoryReq )
 
 
-onQueryChangedDebounced :
-    String
-    -> QueryState
-    -> Debounce msg
-    -> ( QueryState, Cmd msg )
+onQueryChangedDebounced : String -> QueryState -> Debounce msg -> ( QueryState, Cmd msg )
 onQueryChangedDebounced rawQuery state config =
     let
         trimmed : String
@@ -144,10 +134,7 @@ onQueryChangedDebounced rawQuery state config =
             , categoryReq
                 |> Maybe.map
                     (\req ->
-                        debounceAfter config.delayMs
-                            req.token
-                            req.query
-                            config.onCategoryElapsed
+                        debounceAfter config.delayMs req.token req.query config.onCategoryElapsed
                     )
             ]
         )
@@ -156,8 +143,7 @@ onQueryChangedDebounced rawQuery state config =
 
 debounceAfter : Int -> Ticket -> String -> (Ticket -> String -> msg) -> Cmd msg
 debounceAfter delayMs token query onFire =
-    Process.sleep (toFloat delayMs)
-        |> Task.perform (\_ -> onFire token query)
+    Process.sleep (toFloat delayMs) |> Task.perform (\_ -> onFire token query)
 
 
 setCategorySuggestions : Ticket -> List CategorySuggestion -> QueryState -> QueryState
@@ -267,11 +253,7 @@ categoryPrefix token =
 
 currentToken : String -> String
 currentToken query =
-    query
-        |> tokens
-        |> List.reverse
-        |> List.head
-        |> Maybe.withDefault ""
+    query |> tokens |> List.reverse |> List.head |> Maybe.withDefault ""
 
 
 replaceCurrentToken : String -> String -> String
@@ -281,18 +263,12 @@ replaceCurrentToken query replacement =
 
 queryBeforeCurrentToken : String -> String
 queryBeforeCurrentToken query =
-    query
-        |> tokensWithSeparators
-        |> List.reverse
-        |> List.drop 1
-        |> List.reverse
-        |> String.concat
+    query |> tokensWithSeparators |> List.reverse |> List.drop 1 |> List.reverse |> String.concat
 
 
 tokens : String -> List String
 tokens query =
-    tokensWithSeparators query
-        |> List.filter (String.trim >> String.isEmpty >> not)
+    tokensWithSeparators query |> List.filter (String.trim >> String.isEmpty >> not)
 
 
 tokensWithSeparators : String -> List String

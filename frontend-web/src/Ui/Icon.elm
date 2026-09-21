@@ -23,12 +23,7 @@ type Icon
     | SearchX
 
 
-view :
-    { icon : Icon
-    , size : Int
-    , color : Element.Color
-    }
-    -> Element msg
+view : { icon : Icon, size : Int, color : Element.Color } -> Element msg
 view config =
     Element.el
         [ Element.width (Element.px config.size)
@@ -59,9 +54,7 @@ shapes : Icon -> List (Svg msg)
 shapes icon =
     case icon of
         Home ->
-            [ path [ SvgA.d "M4 10.5 12 4l8 6.5" ] []
-            , path [ SvgA.d "M6.5 9.5V20h11V9.5" ] []
-            ]
+            [ path [ SvgA.d "M4 10.5 12 4l8 6.5" ] [], path [ SvgA.d "M6.5 9.5V20h11V9.5" ] [] ]
 
         Search ->
             [ circle [ SvgA.cx "11", SvgA.cy "11", SvgA.r "6" ] []

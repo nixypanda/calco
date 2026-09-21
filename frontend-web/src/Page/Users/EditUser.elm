@@ -37,9 +37,7 @@ import View.DeleteModal
 
 
 type alias Model =
-    { userId : String
-    , status : Status
-    }
+    { userId : String, status : Status }
 
 
 type Status
@@ -49,9 +47,7 @@ type Status
 
 
 type alias LoadedUser =
-    { user : User
-    , password : String
-    }
+    { user : User, password : String }
 
 
 type ActionState
@@ -70,11 +66,7 @@ type Problem
 
 init : String -> ( Model, OutMsg )
 init userId =
-    ( { userId = userId
-      , status = Loading
-      }
-    , RequestUser userId
-    )
+    ( { userId = userId, status = Loading }, RequestUser userId )
 
 
 
@@ -174,10 +166,7 @@ update msg model =
                         ( model, Cmd.none, NoOp )
 
                     else
-                        ( { model | status = Loaded loadedUser DisableConfirming }
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( { model | status = Loaded loadedUser DisableConfirming }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -185,10 +174,7 @@ update msg model =
         CancelDisableClicked ->
             case model.status of
                 Loaded loadedUser DisableConfirming ->
-                    ( { model | status = Loaded loadedUser Idle }
-                    , Cmd.none
-                    , NoOp
-                    )
+                    ( { model | status = Loaded loadedUser Idle }, Cmd.none, NoOp )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -294,16 +280,10 @@ completePendingAction pendingAction result model successStatus =
 view : Env -> Model -> Element Msg
 view env model =
     UiPage.pageContainer
-        (errorView env model.status
-            ++ userDetailsView env model
-            ++ accountActionView env model
-        )
+        (errorView env model.status ++ userDetailsView env model ++ accountActionView env model)
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
     case model.status of
         Loaded _ DisableConfirming ->
@@ -350,9 +330,7 @@ userCard env status loadedUser =
         { header =
             Just
                 (Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space4
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
                     [ Typography.sectionTitle env.theme loadedUser.user.displayName
                     , Typography.mutedParagraph env.theme loadedUser.user.username
                     ]
@@ -483,9 +461,5 @@ problemMessage language problem =
 editUserSkeleton : Theme -> Element msg
 editUserSkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
-        [ Skeleton.card theme { rows = 5 }
-        , Skeleton.button theme
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
+        [ Skeleton.card theme { rows = 5 }, Skeleton.button theme ]

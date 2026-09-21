@@ -28,10 +28,7 @@ dropdown :
 dropdown env config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ UiInput.numericInput env.theme
-            { label = config.amountLabel
-            , value = config.amount
-            , onChange = config.onAmountChange
-            }
+            { label = config.amountLabel, value = config.amount, onChange = config.onAmountChange }
         , UiInput.selectDropdown env.device
             env.theme
             env.language
@@ -47,9 +44,7 @@ dropdown env config =
 
 unitOptions : Language -> String -> List UnitItem -> List ( String, String )
 unitOptions language selected units =
-    units
-        |> ensureSelected selected
-        |> options language
+    units |> ensureSelected selected |> options language
 
 
 ensureSelected : String -> List UnitItem -> List UnitItem

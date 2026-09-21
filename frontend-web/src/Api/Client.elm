@@ -117,12 +117,10 @@ expectJson decoder toMsg =
 
                 Http.GoodStatus_ _ body ->
                     if String.isEmpty body then
-                        Decode.decodeString decoder "null"
-                            |> Result.mapError (always BadBody)
+                        Decode.decodeString decoder "null" |> Result.mapError (always BadBody)
 
                     else
-                        Decode.decodeString decoder body
-                            |> Result.mapError (always BadBody)
+                        Decode.decodeString decoder body |> Result.mapError (always BadBody)
 
 
 decodeBackendError : Int -> String -> ApiError

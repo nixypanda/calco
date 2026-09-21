@@ -84,9 +84,7 @@ type alias ChatModel =
 
 
 type alias PhotoMetadata =
-    { mimeType : String
-    , size : Int
-    }
+    { mimeType : String, size : Int }
 
 
 type alias DraftPreviewData =
@@ -97,10 +95,7 @@ type alias DraftPreviewData =
 
 
 type alias DraftResult =
-    { draft : FoodDraft
-    , suggestedLog : SuggestedLog
-    , warnings : List String
-    }
+    { draft : FoodDraft, suggestedLog : SuggestedLog, warnings : List String }
 
 
 type RequestState
@@ -196,18 +191,13 @@ updateFor purpose msg model =
                         ( Disabled, Cmd.none, NoOutMsg )
 
                 Err error ->
-                    ( StatusFailed
-                    , Cmd.none
-                    , sessionOutMsg error
-                    )
+                    ( StatusFailed, Cmd.none, sessionOutMsg error )
 
         RetryStatusClicked ->
             ( LoadingStatus, Cmd.none, RequestStatus )
 
         DescriptionChanged description ->
-            updateChat
-                (\chat -> ( { chat | description = description }, NoOutMsg ))
-                model
+            updateChat (\chat -> ( { chat | description = description }, NoOutMsg )) model
 
         TakePhotoSelected photo ->
             addSelectedPhotos [ photo ] model
@@ -216,10 +206,7 @@ updateFor purpose msg model =
             case model of
                 Enabled chat ->
                     if canAddPhotos chat then
-                        ( model
-                        , File.Select.files [ "image/*" ] PhotosSelected
-                        , NoOutMsg
-                        )
+                        ( model, File.Select.files [ "image/*" ] PhotosSelected, NoOutMsg )
 
                     else
                         ( model, Cmd.none, NoOutMsg )
@@ -233,9 +220,7 @@ updateFor purpose msg model =
         PhotoPreviewLoaded index url ->
             updateChat
                 (\chat ->
-                    ( { chat | photoUrls = setAt index (Just url) chat.photoUrls }
-                    , NoOutMsg
-                    )
+                    ( { chat | photoUrls = setAt index (Just url) chat.photoUrls }, NoOutMsg )
                 )
                 model
 
@@ -284,9 +269,7 @@ updateFor purpose msg model =
         CancelNewSessionClicked ->
             updateChat
                 (\chat ->
-                    ( { chat | awaitingNewSessionConfirmation = False }
-                    , NoOutMsg
-                    )
+                    ( { chat | awaitingNewSessionConfirmation = False }, NoOutMsg )
                 )
                 model
 
@@ -294,9 +277,7 @@ updateFor purpose msg model =
             updateChat askForChanges model
 
         CancelChangesClicked ->
-            updateChat
-                (\chat -> ( { chat | askingForChanges = False }, NoOutMsg ))
-                model
+            updateChat (\chat -> ( { chat | askingForChanges = False }, NoOutMsg )) model
 
         ApplyDraftClicked formHasManualInput ->
             updateChat (requestApply purpose formHasManualInput) model
@@ -307,17 +288,12 @@ updateFor purpose msg model =
         CancelOverwriteClicked ->
             updateChat
                 (\chat ->
-                    ( { chat | awaitingOverwriteConfirmation = False }
-                    , NoOutMsg
-                    )
+                    ( { chat | awaitingOverwriteConfirmation = False }, NoOutMsg )
                 )
                 model
 
 
-updateChat :
-    (ChatModel -> ( ChatModel, OutMsg ))
-    -> Model
-    -> ( Model, Cmd Msg, OutMsg )
+updateChat : (ChatModel -> ( ChatModel, OutMsg )) -> Model -> ( Model, Cmd Msg, OutMsg )
 updateChat transform model =
     case model of
         Enabled chat ->
@@ -434,11 +410,7 @@ requestNewSession chat =
 
 newSession : ChatModel -> ( ChatModel, OutMsg )
 newSession chat =
-    ( { emptyChat
-        | supportsImages = chat.supportsImages
-      }
-    , revokePreviewUrls chat
-    )
+    ( { emptyChat | supportsImages = chat.supportsImages }, revokePreviewUrls chat )
 
 
 confirmNewSession : ChatModel -> ( ChatModel, OutMsg )
@@ -462,10 +434,7 @@ askForChanges chat =
 
 hasSession : ChatModel -> Bool
 hasSession chat =
-    not (List.isEmpty chat.transcript)
-        || chat.draft
-        /= Nothing
-        || not (List.isEmpty chat.photos)
+    not (List.isEmpty chat.transcript) || chat.draft /= Nothing || not (List.isEmpty chat.photos)
 
 
 requestApply : FoodDraftPurpose -> Bool -> ChatModel -> ( ChatModel, OutMsg )
@@ -480,10 +449,7 @@ requestApply purpose formHasManualInput chat =
                     Just suggestedLog ->
                         ( chat
                         , CompleteDraft
-                            { draft = draft
-                            , suggestedLog = suggestedLog
-                            , warnings = chat.warnings
-                            }
+                            { draft = draft, suggestedLog = suggestedLog, warnings = chat.warnings }
                         )
 
                     Nothing ->
@@ -556,10 +522,7 @@ addSelectedPhotos files model =
                         (List.map photoMetadata files)
                 of
                     Err message ->
-                        ( Enabled { chat | photoError = Just message }
-                        , Cmd.none
-                        , NoOutMsg
-                        )
+                        ( Enabled { chat | photoError = Just message }, Cmd.none, NoOutMsg )
 
                     Ok () ->
                         let
@@ -581,8 +544,7 @@ addSelectedPhotos files model =
                             { chat
                                 | photos = chat.photos ++ files
                                 , photoUrls =
-                                    chat.photoUrls
-                                        ++ List.repeat (List.length files) Nothing
+                                    chat.photoUrls ++ List.repeat (List.length files) Nothing
                                 , photoError = Nothing
                             }
                         , Cmd.batch previewCommands
@@ -595,18 +557,12 @@ addSelectedPhotos files model =
 
 canAddPhotos : ChatModel -> Bool
 canAddPhotos chat =
-    chat.supportsImages
-        && chat.request
-        /= Sending
-        && List.length chat.photos
-        < maxPhotoCount
+    chat.supportsImages && chat.request /= Sending && List.length chat.photos < maxPhotoCount
 
 
 photoMetadata : File -> PhotoMetadata
 photoMetadata photo =
-    { mimeType = File.mime photo
-    , size = File.size photo
-    }
+    { mimeType = File.mime photo, size = File.size photo }
 
 
 validatePhotoMetadata : List PhotoMetadata -> List PhotoMetadata -> Result String ()
@@ -685,9 +641,7 @@ setAt index value values =
 
 valueAt : Int -> List a -> Maybe a
 valueAt index values =
-    values
-        |> List.drop index
-        |> List.head
+    values |> List.drop index |> List.head
 
 
 view : Env -> Bool -> Model -> Element Msg
@@ -757,12 +711,7 @@ enabledView env purpose formHasManualInput chat =
     Surface.card env.theme (expandedContent env purpose formHasManualInput chat)
 
 
-expandedContent :
-    Env
-    -> FoodDraftPurpose
-    -> Bool
-    -> ChatModel
-    -> List (Element Msg)
+expandedContent : Env -> FoodDraftPurpose -> Bool -> ChatModel -> List (Element Msg)
 expandedContent env purpose formHasManualInput chat =
     case chat.draft of
         Just _ ->
@@ -820,9 +769,7 @@ conversationView env chat =
                         )
                 ]
             , Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 (List.map (turnView env) chat.transcript)
             ]
 
@@ -930,9 +877,7 @@ photoPicker env chat =
 
     else
         Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             ([ Element.el [ Font.bold ]
                 (Element.text (I18n.t env.language TidAssistantPhotosOptional))
              , photoActionView env chat
@@ -944,9 +889,7 @@ photoPicker env chat =
                             env
                             index
                             photo
-                            (valueAt index chat.photoUrls
-                                |> Maybe.andThen identity
-                            )
+                            (valueAt index chat.photoUrls |> Maybe.andThen identity)
                     )
                     chat.photos
             )
@@ -959,13 +902,9 @@ photoActionView env chat =
 
     else
         Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Element.el [ Element.width Element.fill ] (cameraInput env.language chat)
                 , Element.el [ Element.width Element.fill ]
                     (choosePhotosButton env chat)
@@ -1029,8 +968,7 @@ cameraInput language chat =
 
 cameraFileDecoder : Decode.Decoder Msg
 cameraFileDecoder =
-    Decode.at [ "target", "files", "0" ] File.decoder
-        |> Decode.map TakePhotoSelected
+    Decode.at [ "target", "files", "0" ] File.decoder |> Decode.map TakePhotoSelected
 
 
 photoErrorView : Theme -> Maybe String -> List (Element Msg)
@@ -1046,9 +984,7 @@ photoErrorView theme maybeError =
 photoPreview : Env -> Int -> File -> Maybe String -> Element Msg
 photoPreview env index photo maybeUrl =
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space8
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case maybeUrl of
             Just url ->
                 Element.image
@@ -1060,14 +996,10 @@ photoPreview env index photo maybeUrl =
 
             Nothing ->
                 Element.el
-                    [ Element.width (Element.px 72)
-                    , Element.height (Element.px 72)
-                    ]
+                    [ Element.width (Element.px 72), Element.height (Element.px 72) ]
                     (Element.text (I18n.t env.language TidAssistantLoadingPreview))
         , Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space4
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space4 ]
             [ Element.paragraph [ Element.width Element.fill ]
                 [ Element.text (File.name photo) ]
             , Typography.mutedParagraph env.theme (formatPhotoSize (File.size photo))
@@ -1171,12 +1103,7 @@ warningView env warnings =
             )
 
 
-draftPreviewView :
-    Env
-    -> FoodDraftPurpose
-    -> Bool
-    -> ChatModel
-    -> Element Msg
+draftPreviewView : Env -> FoodDraftPurpose -> Bool -> ChatModel -> Element Msg
 draftPreviewView env purpose formHasManualInput chat =
     case chat.draft of
         Nothing ->
@@ -1291,10 +1218,7 @@ draftPreviewData language draft =
             (\serving ->
                 ( serving.unit
                 , I18n.t language
-                    (TidAssistantServingConversion
-                        serving.unit
-                        serving.gramsPerUnit
-                    )
+                    (TidAssistantServingConversion serving.unit serving.gramsPerUnit)
                 )
             )
             draft.servings
@@ -1328,12 +1252,7 @@ defaultText fallback value =
         value
 
 
-draftActionView :
-    Env
-    -> FoodDraftPurpose
-    -> Bool
-    -> ChatModel
-    -> Element Msg
+draftActionView : Env -> FoodDraftPurpose -> Bool -> ChatModel -> Element Msg
 draftActionView env purpose formHasManualInput chat =
     case chat.draft of
         Nothing ->
@@ -1370,9 +1289,7 @@ draftActionView env purpose formHasManualInput chat =
 
             else
                 Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space8
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                     [ Element.el [ Element.width Element.fill ]
                         (Button.textButton env.device
                             env.theme
@@ -1432,15 +1349,7 @@ confirmationSurface theme children =
 compactActionRow : Device -> List (Element msg) -> Element msg
 compactActionRow device actions =
     if UiCommon.isSmall device then
-        Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
-            actions
+        Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ] actions
 
     else
-        Element.row
-            [ Element.alignRight
-            , Element.spacing DesignTokens.space8
-            ]
-            actions
+        Element.row [ Element.alignRight, Element.spacing DesignTokens.space8 ] actions

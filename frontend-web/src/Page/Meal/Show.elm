@@ -49,10 +49,7 @@ type Model
 
 
 type alias LoadingModel =
-    { mealId : String
-    , units : List UnitItem
-    , nutrition : NutritionState
-    }
+    { mealId : String, units : List UnitItem, nutrition : NutritionState }
 
 
 type alias LoadedModel =
@@ -168,16 +165,10 @@ update msg model =
                         nextLoaded =
                             { loaded
                                 | productNames =
-                                    ItemNameLookup.insertProduct
-                                        productId
-                                        name
-                                        loaded.productNames
+                                    ItemNameLookup.insertProduct productId name loaded.productNames
                             }
                     in
-                    ( Loaded nextLoaded
-                    , Cmd.none
-                    , nextProductNameRequest productId nextLoaded
-                    )
+                    ( Loaded nextLoaded, Cmd.none, nextProductNameRequest productId nextLoaded )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -340,10 +331,7 @@ nextProductNameRequest : String -> LoadedModel -> OutMsg
 nextProductNameRequest completedId loaded =
     uniqueProductIds loaded.meal
         |> (\ids ->
-                ItemNameLookup.nextMissingProductId
-                    (Just completedId)
-                    ids
-                    loaded.productNames
+                ItemNameLookup.nextMissingProductId (Just completedId) ids loaded.productNames
            )
         |> Maybe.map RequestProductDetail
         |> Maybe.withDefault NoOp
@@ -353,9 +341,7 @@ componentNameView : Theme -> LoadedModel -> String -> Element Msg
 componentNameView theme loaded id =
     if ItemNameLookup.isLoaded (ItemNameLookup.productRef id) loaded.productNames then
         Element.el
-            [ Typography.body
-            , Font.color theme.textPrimary
-            ]
+            [ Typography.body, Font.color theme.textPrimary ]
             (Element.text
                 (ItemNameLookup.nameFor "" (ItemNameLookup.productRef id) loaded.productNames)
             )
@@ -569,10 +555,7 @@ view env model =
         )
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
     case model of
         Loaded loaded ->
@@ -605,10 +588,7 @@ loadedView env loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.section env.theme
             { header =
-                Just
-                    (Typography.subsectionTitle env.theme
-                        (I18n.t env.language TidMealComponents)
-                    )
+                Just (Typography.subsectionTitle env.theme (I18n.t env.language TidMealComponents))
             , body =
                 List.intersperse (Surface.hairline env.theme)
                     (List.map (componentView env loaded) loaded.meal.components)
@@ -630,9 +610,7 @@ componentView env loaded component =
                     (\kcal ->
                         " ⋅ "
                             ++ I18n.t env.language
-                                (TidDiaryKcal
-                                    (String.fromInt (round (Nutrition.safeAmount kcal)))
-                                )
+                                (TidDiaryKcal (String.fromInt (round (Nutrition.safeAmount kcal))))
                     )
                 |> Maybe.withDefault ""
 
@@ -646,15 +624,10 @@ componentView env loaded component =
 
         quantityText : String
         quantityText =
-            component.quantity.amount
-                ++ " "
-                ++ component.quantity.unit
-                ++ summaryText
+            component.quantity.amount ++ " " ++ component.quantity.unit ++ summaryText
     in
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.paddingEach { top = DesignTokens.space2, right = 0, bottom = 0, left = 0 }
@@ -662,10 +635,7 @@ componentView env loaded component =
             ]
             macroDot
         , Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space4
-            , Element.alignTop
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space4, Element.alignTop ]
             [ componentNameView env.theme loaded component.item.id
             , Element.el
                 [ Font.color env.theme.textMuted ]
@@ -734,10 +704,7 @@ mealShowSkeleton theme =
         [ Skeleton.card theme { rows = 2 }
         , Surface.section theme
             { header =
-                Just
-                    (Skeleton.barCustom theme
-                        { width = Element.fillPortion 1, height = 16 }
-                    )
+                Just (Skeleton.barCustom theme { width = Element.fillPortion 1, height = 16 })
             , body = List.map (\_ -> Skeleton.listRow theme) (List.range 1 3)
             , footer = Nothing
             }

@@ -41,18 +41,11 @@ import View.Nutrients
 
 
 type alias LoadingModel =
-    { mealId : String
-    , nutrition : NutritionState
-    , units : List UnitItem
-    }
+    { mealId : String, nutrition : NutritionState, units : List UnitItem }
 
 
 type alias LoadedModel =
-    { mealId : String
-    , meal : Meal
-    , fields : Common.FormFields
-    , nutrition : NutritionState
-    }
+    { mealId : String, meal : Meal, fields : Common.FormFields, nutrition : NutritionState }
 
 
 type Model
@@ -73,10 +66,7 @@ type OutMsg
 init : String -> ( Model, OutMsg )
 init mealId =
     ( LoadingEdit
-        { mealId = mealId
-        , nutrition = NutritionLoading defaultNutritionInput
-        , units = []
-        }
+        { mealId = mealId, nutrition = NutritionLoading defaultNutritionInput, units = [] }
     , RequestMeal mealId
     )
 
@@ -156,10 +146,7 @@ update msg model =
                                     _ ->
                                         loadedFromMealFresh meal
                         in
-                        ( Editing loaded
-                        , Cmd.none
-                        , requestFirstProductName meal
-                        )
+                        ( Editing loaded, Cmd.none, requestFirstProductName meal )
 
                     Err error ->
                         Client.failure
@@ -170,15 +157,11 @@ update msg model =
                                     case current of
                                         LoadingEdit loading ->
                                             EditLoadFailed
-                                                { mealId = loading.mealId
-                                                , message = message
-                                                }
+                                                { mealId = loading.mealId, message = message }
 
                                         Editing loaded ->
                                             EditLoadFailed
-                                                { mealId = loaded.mealId
-                                                , message = message
-                                                }
+                                                { mealId = loaded.mealId, message = message }
 
                                         EditLoadFailed _ ->
                                             current
@@ -193,10 +176,7 @@ update msg model =
             else
                 case result of
                     Ok response ->
-                        ( applyNutritionOk response.nutrients model
-                        , Cmd.none
-                        , NoOp
-                        )
+                        ( applyNutritionOk response.nutrients model, Cmd.none, NoOp )
 
                     Err error ->
                         Client.failure
@@ -213,9 +193,7 @@ update msg model =
                     case Common.toMealRequest loaded.fields of
                         Ok request ->
                             ( Editing
-                                { loaded
-                                    | fields = withSubmit Common.Submitting loaded.fields
-                                }
+                                { loaded | fields = withSubmit Common.Submitting loaded.fields }
                             , Cmd.none
                             , RequestUpdateMeal loaded.mealId request
                             )
@@ -281,10 +259,7 @@ update msg model =
                                         error
                                         loaded
                             in
-                            ( Editing newLoaded
-                            , Cmd.none
-                            , outMsg
-                            )
+                            ( Editing newLoaded, Cmd.none, outMsg )
 
                 _ ->
                     ( model, Cmd.none, NoOp )
@@ -434,11 +409,9 @@ editFormFromMeal meal =
         | name = meal.name
         , notes = Maybe.withDefault "" meal.notes
         , totalQuantity =
-            Maybe.map .amount meal.totalQuantity
-                |> Maybe.withDefault ""
+            Maybe.map .amount meal.totalQuantity |> Maybe.withDefault ""
         , totalUnit =
-            Maybe.map .unit meal.totalQuantity
-                |> Maybe.withDefault defaultCode
+            Maybe.map .unit meal.totalQuantity |> Maybe.withDefault defaultCode
         , components =
             if List.isEmpty rows then
                 empty.components
@@ -530,8 +503,7 @@ view env model =
 nutritionView : Env -> LoadedModel -> Element Msg
 nutritionView env loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ View.Nutrients.preview env loaded.nutrition
-        ]
+        [ View.Nutrients.preview env loaded.nutrition ]
 
 
 mealEditSkeleton : Theme -> Element msg

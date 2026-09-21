@@ -61,18 +61,12 @@ update msg fields =
                 ( nextFields, cmd, formOutMsg ) =
                     Common.updateFormField formMsg fields
             in
-            ( nextFields
-            , Cmd.map FormMsg cmd
-            , mapFormOutMsg formOutMsg
-            )
+            ( nextFields, Cmd.map FormMsg cmd, mapFormOutMsg formOutMsg )
 
         SubmitClicked ->
             case Common.toMealRequest fields of
                 Ok request ->
-                    ( { fields | submit = Common.Submitting }
-                    , Cmd.none
-                    , RequestCreateMeal request
-                    )
+                    ( { fields | submit = Common.Submitting }, Cmd.none, RequestCreateMeal request )
 
                 Err Common.MealNameRequired ->
                     ( { fields | submit = Common.SubmitFailed (I18n.en TidCustomFoodNameRequired) }
@@ -83,8 +77,7 @@ update msg fields =
                 Err Common.ComponentRequired ->
                     ( { fields
                         | submit =
-                            Common.SubmitFailed
-                                (I18n.en TidMealComponentRequired)
+                            Common.SubmitFailed (I18n.en TidMealComponentRequired)
                       }
                     , Cmd.none
                     , NoOp
@@ -93,10 +86,7 @@ update msg fields =
         SaveCompleted result ->
             case result of
                 Ok meal ->
-                    ( { fields | submit = Common.Idle }
-                    , Cmd.none
-                    , Navigate (MealShow meal.id)
-                    )
+                    ( { fields | submit = Common.Idle }, Cmd.none, Navigate (MealShow meal.id) )
 
                 Err error ->
                     Client.failure

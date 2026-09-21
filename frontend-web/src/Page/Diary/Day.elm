@@ -66,17 +66,11 @@ type DiaryState
 
 
 type alias LoadingState =
-    { date : LocalDate
-    , logs : Maybe (List FoodLog)
-    , goal : Maybe GoalSnapshot
-    }
+    { date : LocalDate, logs : Maybe (List FoodLog), goal : Maybe GoalSnapshot }
 
 
 type alias LoadedState =
-    { date : LocalDate
-    , logs : List FoodLog
-    , goal : GoalSnapshot
-    }
+    { date : LocalDate, logs : List FoodLog, goal : GoalSnapshot }
 
 
 type alias Model =
@@ -113,18 +107,10 @@ type CopyState
 
 
 type alias LatestSlotSource =
-    { slot : MealSlot
-    , sourceDate : LocalDate
-    , logs : List FoodLog
-    }
+    { slot : MealSlot, sourceDate : LocalDate, logs : List FoodLog }
 
 
-init :
-    { date : LocalDate
-    , calendarMonth : Maybe String
-    , today : LocalDate
-    }
-    -> ( Model, OutMsg )
+init : { date : LocalDate, calendarMonth : Maybe String, today : LocalDate } -> ( Model, OutMsg )
 init args =
     ( { currentDate = args.date
       , today = args.today
@@ -244,9 +230,7 @@ update msg model =
                     Ok response ->
                         ( { model
                             | latestSlots =
-                                LatestSlotsLoaded
-                                    requestDate
-                                    (latestSlotSources response)
+                                LatestSlotsLoaded requestDate (latestSlotSources response)
                           }
                         , Cmd.none
                         , NoOp
@@ -257,10 +241,7 @@ update msg model =
                             ( model, Cmd.none, SessionExpired )
 
                         else
-                            ( { model | latestSlots = LatestSlotsFailed }
-                            , Cmd.none
-                            , NoOp
-                            )
+                            ( { model | latestSlots = LatestSlotsFailed }, Cmd.none, NoOp )
 
         CopyLatestClicked source ->
             ( { model | copyState = Copying source.slot }
@@ -323,10 +304,7 @@ update msg model =
             ( model
             , Cmd.none
             , Navigate
-                (DiaryDay
-                    (Just (LocalDate.format previous))
-                    model.calendarMonth
-                )
+                (DiaryDay (Just (LocalDate.format previous)) model.calendarMonth)
             )
 
         NextDayClicked ->
@@ -335,10 +313,7 @@ update msg model =
                     ( model
                     , Cmd.none
                     , Navigate
-                        (DiaryDay
-                            (Just (LocalDate.format next))
-                            model.calendarMonth
-                        )
+                        (DiaryDay (Just (LocalDate.format next)) model.calendarMonth)
                     )
 
                 Nothing ->
@@ -363,11 +338,7 @@ update msg model =
             ( model
             , Cmd.none
             , Navigate
-                (FoodLogEntry
-                    id
-                    (Just (LocalDate.format model.currentDate))
-                    model.calendarMonth
-                )
+                (FoodLogEntry id (Just (LocalDate.format model.currentDate)) model.calendarMonth)
             )
 
         MealsClicked ->
@@ -388,11 +359,7 @@ failure requestDate =
 
 loadingState : LocalDate -> DiaryState
 loadingState date =
-    Loading
-        { date = date
-        , logs = Nothing
-        , goal = Nothing
-        }
+    Loading { date = date, logs = Nothing, goal = Nothing }
 
 
 latestSlotSources : LatestSlotsResponse -> List LatestSlotSource
@@ -403,10 +370,7 @@ latestSlotSources response =
                 MealSlot.fromString slot.mealSlot
                     |> Maybe.map
                         (\parsed ->
-                            { slot = parsed
-                            , sourceDate = slot.sourceDate
-                            , logs = slot.items
-                            }
+                            { slot = parsed, sourceDate = slot.sourceDate, logs = slot.items }
                         )
             )
 
@@ -435,9 +399,7 @@ latestSlotSourceFor currentDate slot state =
     case state of
         LatestSlotsLoaded date sources ->
             if LocalDate.equals date currentDate then
-                sources
-                    |> List.filter (\source -> source.slot == slot)
-                    |> List.head
+                sources |> List.filter (\source -> source.slot == slot) |> List.head
 
             else
                 Nothing
@@ -491,8 +453,7 @@ applyCopiedLogs requestDate copiedLogs diary =
                 loading.logs
                     |> Maybe.map
                         (\logs ->
-                            toLoadedOrLoading
-                                { loading | logs = Just (logs ++ matchingLogs) }
+                            toLoadedOrLoading { loading | logs = Just (logs ++ matchingLogs) }
                         )
 
             else
@@ -511,55 +472,34 @@ applyLogsLoaded requestDate logs diary =
     in
     case diary of
         Loading loading ->
-            toLoadedOrLoading
-                { loading | date = requestDate, logs = Just filteredLogs }
+            toLoadedOrLoading { loading | date = requestDate, logs = Just filteredLogs }
 
         Loaded loaded ->
             toLoadedOrLoading
-                { date = requestDate
-                , logs = Just filteredLogs
-                , goal = Just loaded.goal
-                }
+                { date = requestDate, logs = Just filteredLogs, goal = Just loaded.goal }
 
         Failed _ _ ->
-            toLoadedOrLoading
-                { date = requestDate
-                , logs = Just filteredLogs
-                , goal = Nothing
-                }
+            toLoadedOrLoading { date = requestDate, logs = Just filteredLogs, goal = Nothing }
 
 
 applyGoalLoaded : LocalDate -> GoalSnapshot -> DiaryState -> DiaryState
 applyGoalLoaded requestDate snapshot diary =
     case diary of
         Loading loading ->
-            toLoadedOrLoading
-                { loading | date = requestDate, goal = Just snapshot }
+            toLoadedOrLoading { loading | date = requestDate, goal = Just snapshot }
 
         Loaded loaded ->
-            toLoadedOrLoading
-                { date = requestDate
-                , logs = Just loaded.logs
-                , goal = Just snapshot
-                }
+            toLoadedOrLoading { date = requestDate, logs = Just loaded.logs, goal = Just snapshot }
 
         Failed _ _ ->
-            toLoadedOrLoading
-                { date = requestDate
-                , logs = Nothing
-                , goal = Just snapshot
-                }
+            toLoadedOrLoading { date = requestDate, logs = Nothing, goal = Just snapshot }
 
 
 toLoadedOrLoading : LoadingState -> DiaryState
 toLoadedOrLoading loading =
     case ( loading.logs, loading.goal ) of
         ( Just logs, Just goal ) ->
-            Loaded
-                { date = loading.date
-                , logs = logs
-                , goal = goal
-                }
+            Loaded { date = loading.date, logs = logs, goal = goal }
 
         _ ->
             Loading loading
@@ -595,17 +535,14 @@ contentView env model =
             diaryLogs model.currentDate model.diary
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         (dateCard env model
             :: (case activeDiaryError model.currentDate model.diary of
                     Just message ->
                         [ Feedback.errorBanner env.theme message ]
 
                     Nothing ->
-                        copyErrorView env.theme model.copyState
-                            ++ [ logGroupsView env model logs ]
+                        copyErrorView env.theme model.copyState ++ [ logGroupsView env model logs ]
                )
         )
 
@@ -625,9 +562,7 @@ dateCard env model =
         { header =
             Just
                 (Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space12
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ Button.iconButton env.device
                         env.theme
                         { icon = Icon.ChevronLeft
@@ -636,9 +571,7 @@ dateCard env model =
                         , tone = Button.Primary
                         }
                     , Element.el
-                        [ Element.width Element.fill
-                        , Font.center
-                        ]
+                        [ Element.width Element.fill, Font.center ]
                         (Typography.sectionTitle env.theme
                             (LocalDate.display env.language model.currentDate)
                         )
@@ -667,10 +600,7 @@ dateCard env model =
                     totalsView env targets (Nutrition.totalsFromLogs logs)
 
                 Nothing ->
-                    totalsView
-                        env
-                        loadingGoalTargets
-                        (Nutrition.totalsFromLogs logs)
+                    totalsView env loadingGoalTargets (Nutrition.totalsFromLogs logs)
             ]
         , footer = Nothing
         }
@@ -721,36 +651,20 @@ detailsAction env =
         , submitState = Nothing
         , submittingLabel = Nothing
         , trailing =
-            Just
-                (Icon.view
-                    { icon = Icon.ChevronRight
-                    , size = 18
-                    , color = env.theme.brandBlue
-                    }
-                )
+            Just (Icon.view { icon = Icon.ChevronRight, size = 18, color = env.theme.brandBlue })
         }
 
 
 calorieHero : Env -> Float -> Float -> Element msg
 calorieHero env calories target =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
-            , Element.centerY
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12, Element.centerY ]
             [ Element.column
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space2
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space2 ]
                 [ Element.el
-                    [ Font.bold
-                    , Font.color env.theme.textMedium
-                    , Typography.caption
-                    ]
+                    [ Font.bold, Font.color env.theme.textMedium, Typography.caption ]
                     (Element.text (I18n.t env.language TidDiaryCalories))
                 , Typography.heroStat env.theme (formatWhole calories)
                 , Element.el
@@ -772,10 +686,7 @@ calorieHero env calories target =
             target
         , if target > 0 then
             Element.el
-                [ Typography.body
-                , Font.color env.theme.textMuted
-                , Element.alignRight
-                ]
+                [ Typography.body, Font.color env.theme.textMuted, Element.alignRight ]
                 (Element.text (I18n.t env.language (TidDiaryOfKcal (formatWhole target))))
 
           else
@@ -796,11 +707,7 @@ calorieBalancePill env target calories =
 
             statusColor : Element.Color
             statusColor =
-                goalScaleColor
-                    env.theme
-                    (calorieTolerance target)
-                    calories
-                    target
+                goalScaleColor env.theme (calorieTolerance target) calories target
 
             label : String
             label =
@@ -826,12 +733,7 @@ calorieBalancePill env target calories =
 
 
 type alias MacroSummary =
-    { label : String
-    , value : Float
-    , color : Element.Color
-    , target : Float
-    , tolerance : Float
-    }
+    { label : String, value : Float, color : Element.Color, target : Float, tolerance : Float }
 
 
 macroSummaryRow : Env -> List MacroSummary -> Element msg
@@ -850,22 +752,15 @@ macroSummaryRow env macros =
         |> List.map (macroSummaryItem env)
         |> List.intersperse divider
         |> Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space8
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
 
 
 macroSummaryItem : Env -> MacroSummary -> Element msg
 macroSummaryItem env macro =
     Element.column
-        [ Element.width (Element.fillPortion 1)
-        , Element.spacing DesignTokens.space8
-        ]
+        [ Element.width (Element.fillPortion 1), Element.spacing DesignTokens.space8 ]
         [ Element.el
-            [ Font.bold
-            , Font.color env.theme.textPrimary
-            , Typography.body
-            ]
+            [ Font.bold, Font.color env.theme.textPrimary, Typography.body ]
             (Element.text macro.label)
         , Element.el
             ([ Font.bold
@@ -873,12 +768,7 @@ macroSummaryItem env macro =
              ]
                 ++ (if macro.target > 0 then
                         [ Font.color
-                            (goalScaleColor
-                                env.theme
-                                macro.tolerance
-                                macro.value
-                                macro.target
-                            )
+                            (goalScaleColor env.theme macro.tolerance macro.value macro.target)
                         ]
 
                     else
@@ -911,11 +801,7 @@ progressBar theme color height value target =
         filled : Int
         filled =
             if target > 0 then
-                value
-                    / target
-                    |> clamp 0 1
-                    |> (*) 100
-                    |> round
+                value / target |> clamp 0 1 |> (*) 100 |> round
 
             else
                 0
@@ -1018,9 +904,7 @@ groupThousands digits =
             splitAt =
                 String.length digits - 3
         in
-        groupThousands (String.left splitAt digits)
-            ++ ","
-            ++ String.dropLeft splitAt digits
+        groupThousands (String.left splitAt digits) ++ "," ++ String.dropLeft splitAt digits
 
 
 summaryAmount : String -> List NutrientAmount -> Float
@@ -1074,11 +958,7 @@ loadedGoalTargets currentDate diary =
 
 loadingGoalTargets : GoalTargets
 loadingGoalTargets =
-    { calorieTarget = 0
-    , proteinTargetG = 0
-    , carbsTargetG = 0
-    , fatTargetG = 0
-    }
+    { calorieTarget = 0, proteinTargetG = 0, carbsTargetG = 0, fatTargetG = 0 }
 
 
 activeDiaryError : LocalDate -> DiaryState -> Maybe String
@@ -1106,9 +986,7 @@ copyErrorView theme copyState =
 
 
 type alias SlotSection =
-    { slot : Maybe MealSlot
-    , logs : List FoodLog
-    }
+    { slot : Maybe MealSlot, logs : List FoodLog }
 
 
 logGroupsView : Env -> Model -> List FoodLog -> Element Msg
@@ -1228,11 +1106,7 @@ emptySlotView env model slot =
 
 emptySlotBody : Element Msg -> Element Msg
 emptySlotBody content =
-    Element.el
-        [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
-        ]
-        content
+    Element.el [ Element.width Element.fill, Element.padding DesignTokens.space12 ] content
 
 
 logLatestLabel : Language -> LatestSlotSource -> String
@@ -1240,19 +1114,12 @@ logLatestLabel language source =
     I18n.t language (TidDiaryLogLatestFrom (LocalDate.display language source.sourceDate))
 
 
-mealSlotHeader :
-    Env
-    -> MacroMode
-    -> SlotSection
-    -> MacroTotals
-    -> Element Msg
+mealSlotHeader : Env -> MacroMode -> SlotSection -> MacroTotals -> Element Msg
 mealSlotHeader env macroMode section totals =
     let
         sectionKcal : Float
         sectionKcal =
-            section.logs
-                |> List.map (.nutrients >> Nutrition.caloriesFrom)
-                |> List.sum
+            section.logs |> List.map (.nutrients >> Nutrition.caloriesFrom) |> List.sum
     in
     Element.row
         [ Element.width Element.fill
@@ -1264,8 +1131,7 @@ mealSlotHeader env macroMode section totals =
             , Input.button []
                 { onPress = Just MacroModeToggled
                 , label =
-                    Typography.mutedCaption env.theme
-                        (macroSummary env.language macroMode totals)
+                    Typography.mutedCaption env.theme (macroSummary env.language macroMode totals)
                 }
             ]
         , Typography.mutedCaption env.theme
@@ -1283,20 +1149,12 @@ sectionTitle language maybeSlot =
             I18n.t language TidDiaryOther
 
 
-mealSlotCard :
-    Env
-    -> Maybe MealSlot
-    -> Element Msg
-    -> List (Element Msg)
-    -> Element Msg
+mealSlotCard : Env -> Maybe MealSlot -> Element Msg -> List (Element Msg) -> Element Msg
 mealSlotCard env maybeSlot header bodyChildren =
     case maybeSlot of
         Nothing ->
             Surface.section env.theme
-                { header = Just header
-                , body = bodyChildren
-                , footer = Nothing
-                }
+                { header = Just header, body = bodyChildren, footer = Nothing }
 
         Just slot ->
             Surface.heroCard env.theme
@@ -1334,20 +1192,11 @@ mealSlotBackground slot =
             mealSlotImage slot
     in
     [ Element.htmlAttribute
-        (Html.Attributes.style
-            "background-image"
-            ("url(\"" ++ image.url ++ "\")")
-        )
+        (Html.Attributes.style "background-image" ("url(\"" ++ image.url ++ "\")"))
     , Element.htmlAttribute
-        (Html.Attributes.style
-            "background-size"
-            "max(100%, 1120px) auto"
-        )
+        (Html.Attributes.style "background-size" "max(100%, 1120px) auto")
     , Element.htmlAttribute
-        (Html.Attributes.style
-            "background-position"
-            (image.focusX ++ " top")
-        )
+        (Html.Attributes.style "background-position" (image.focusX ++ " top"))
     , Element.htmlAttribute
         (Html.Attributes.style "background-repeat" "no-repeat")
     ]
@@ -1395,17 +1244,13 @@ macroSummary language mode totals =
 logRow : Env -> FoodLog -> Element Msg
 logRow env log =
     Input.button
-        [ Element.width Element.fill
-        , Element.padding DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.padding DesignTokens.space12 ]
         { onPress = Just (LogClicked log.id)
         , label =
             Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ View.Nutrients.macroDot env log.nutrients
                 , Element.el
-                    [ Element.width Element.fill
-                    , UiCommon.minWidthZero
-                    ]
+                    [ Element.width Element.fill, UiCommon.minWidthZero ]
                     (Typography.wrappedListItemTitle env.theme (FoodLog.itemName log.item))
                 , Element.row
                     [ Element.alignRight, Element.spacing DesignTokens.space12 ]

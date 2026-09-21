@@ -46,9 +46,7 @@ type LeadingAction
 
 
 type alias ScreenMeta =
-    { title : String
-    , leading : LeadingAction
-    }
+    { title : String, leading : LeadingAction }
 
 
 
@@ -117,17 +115,11 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
                 onMenuClick
                 onNavigate
             , Element.el
-                [ Element.width Element.fill
-                , Element.clip
-                ]
+                [ Element.width Element.fill, Element.clip ]
                 (Typography.screenTitle env.theme meta.title)
             , Element.el
                 [ Element.paddingEach
-                    { top = 0
-                    , right = DesignTokens.space8
-                    , bottom = 0
-                    , left = 0
-                    }
+                    { top = 0, right = DesignTokens.space8, bottom = 0, left = 0 }
                 ]
                 (themeToggle env onThemeToggle)
             , profileButton env
@@ -137,16 +129,10 @@ topBarView env session route loading onMenuClick onProfileClick onThemeToggle on
 
          else
             [ Element.row
-                [ Element.spacing DesignTokens.space8
-                , Element.centerY
-                ]
+                [ Element.spacing DesignTokens.space8, Element.centerY ]
                 [ Element.image
-                    [ Element.width (Element.px 28)
-                    , Element.height (Element.px 28)
-                    ]
-                    { src = "/android-chrome-192x192.png"
-                    , description = "CalCo"
-                    }
+                    [ Element.width (Element.px 28), Element.height (Element.px 28) ]
+                    { src = "/android-chrome-192x192.png", description = "CalCo" }
                 , Typography.pageTitle env.theme "CalCo"
                 ]
             , Element.el [ Element.width Element.fill ] Element.none
@@ -190,12 +176,8 @@ leadingButton env leading onMenuClick onNavigate =
 
         ShowAppIcon ->
             Element.image
-                [ Element.width (Element.px 28)
-                , Element.height (Element.px 28)
-                ]
-                { src = "/android-chrome-192x192.png"
-                , description = "CalCo"
-                }
+                [ Element.width (Element.px 28), Element.height (Element.px 28) ]
+                { src = "/android-chrome-192x192.png", description = "CalCo" }
 
 
 profileButton :
@@ -214,8 +196,7 @@ profileButton env onPress profile =
                 Nothing ->
                     []
     in
-    Element.el anchor
-        (profileInitialButton env onPress profile.profileLabel)
+    Element.el anchor (profileInitialButton env onPress profile.profileLabel)
 
 
 profileInitialButton : Env -> msg -> String -> Element msg
@@ -233,9 +214,7 @@ profileInitialButton env onPress label =
         , Element.htmlAttribute
             (Html.Attributes.attribute "aria-label" (I18n.t env.language TidCommonProfile))
         ]
-        { onPress = Just onPress
-        , label = Element.text label
-        }
+        { onPress = Just onPress, label = Element.text label }
 
 
 
@@ -254,16 +233,11 @@ updateBanner env onPress =
         { onPress = Just onPress
         , label =
             Element.row
-                [ Element.width Element.fill
-                , Element.spacing DesignTokens.space8
-                ]
+                [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                 [ Element.el [ Element.centerY ]
                     (Element.text (I18n.t env.language TidCommonNewVersionAvailable))
                 , Element.el
-                    [ Element.alignRight
-                    , Element.centerY
-                    , Font.bold
-                    ]
+                    [ Element.alignRight, Element.centerY, Font.bold ]
                     (Element.text (I18n.t env.language TidCommonTapToRefresh))
                 ]
         }
@@ -422,11 +396,7 @@ screenMeta env session route =
 -- BOTTOM NAV
 
 
-bottomNavBar :
-    Env
-    -> Route
-    -> (Route -> msg)
-    -> Element msg
+bottomNavBar : Env -> Route -> (Route -> msg) -> Element msg
 bottomNavBar env route onNavigate =
     bottomNavContainer env.theme
         [ tabButton env
@@ -456,14 +426,7 @@ bottomNavBar env route onNavigate =
         ]
 
 
-tabButton :
-    Env
-    -> Route
-    -> (Route -> msg)
-    -> String
-    -> Route
-    -> Icon
-    -> Element msg
+tabButton : Env -> Route -> (Route -> msg) -> String -> Route -> Icon -> Element msg
 tabButton env route onNavigate label target icon =
     let
         active : Bool
@@ -471,11 +434,7 @@ tabButton env route onNavigate label target icon =
             primaryRoute route == primaryRoute target
     in
     bottomNavTab env.theme
-        { icon = icon
-        , label = label
-        , active = active
-        , onPress = onNavigate target
-        }
+        { icon = icon, label = label, active = active, onPress = onNavigate target }
 
 
 bottomNavContainer : Theme -> List (Element msg) -> Element msg
@@ -499,10 +458,7 @@ bottomNavContainer theme items =
         items
 
 
-bottomNavTab :
-    Theme
-    -> { icon : Icon, label : String, active : Bool, onPress : msg }
-    -> Element msg
+bottomNavTab : Theme -> { icon : Icon, label : String, active : Bool, onPress : msg } -> Element msg
 bottomNavTab theme config =
     let
         iconColor : Element.Color
@@ -517,11 +473,7 @@ bottomNavTab theme config =
         [ Element.width (Element.fillPortion 1)
         , Element.height Element.fill
         , Element.paddingEach
-            { top = DesignTokens.space8
-            , right = 0
-            , bottom = DesignTokens.space4
-            , left = 0
-            }
+            { top = DesignTokens.space8, right = 0, bottom = DesignTokens.space4, left = 0 }
         , Font.color iconColor
         , Border.widthEach
             { top =
@@ -539,21 +491,11 @@ bottomNavTab theme config =
         { onPress = Just config.onPress
         , label =
             Element.column
-                [ Element.centerX
-                , Element.centerY
-                , Element.spacing DesignTokens.space2
-                ]
+                [ Element.centerX, Element.centerY, Element.spacing DesignTokens.space2 ]
                 [ Element.el [ Element.centerX ]
-                    (Icon.view
-                        { icon = config.icon
-                        , size = 22
-                        , color = iconColor
-                        }
-                    )
+                    (Icon.view { icon = config.icon, size = 22, color = iconColor })
                 , Element.el
-                    [ Element.centerX
-                    , Typography.caption
-                    ]
+                    [ Element.centerX, Typography.caption ]
                     (Element.text config.label)
                 ]
         }
@@ -580,9 +522,7 @@ drawerOverlay env session route drawerOpen onClose onNavigate =
     if drawerOpen && showsAppChrome session isLoadingPage route then
         [ Element.inFront
             (Element.row
-                [ Element.width Element.fill
-                , Element.height Element.fill
-                ]
+                [ Element.width Element.fill, Element.height Element.fill ]
                 [ drawerView env session route onClose onNavigate
                 , scrimOverlay env.theme (Just onClose)
                 ]
@@ -593,13 +533,7 @@ drawerOverlay env session route drawerOpen onClose onNavigate =
         []
 
 
-drawerView :
-    Env
-    -> Session
-    -> Route
-    -> msg
-    -> (Route -> msg)
-    -> Element msg
+drawerView : Env -> Session -> Route -> msg -> (Route -> msg) -> Element msg
 drawerView env session route onClose onNavigate =
     drawerPanel env.theme
         (Element.row [ Element.spacing DesignTokens.space8 ]
@@ -617,12 +551,7 @@ drawerView env session route onClose onNavigate =
         )
 
 
-drawerItems :
-    Env
-    -> Session
-    -> Route
-    -> (Route -> msg)
-    -> List (Element msg)
+drawerItems : Env -> Session -> Route -> (Route -> msg) -> List (Element msg)
 drawerItems env session route onNavigate =
     if Auth.isAdmin session then
         [ drawerItem
@@ -670,23 +599,14 @@ drawerItem theme current onNavigate icon label target =
             primaryRoute current == primaryRoute target
     in
     drawerItemButton theme
-        { icon = icon
-        , label = label
-        , selected = selected
-        , onPress = onNavigate target
-        }
+        { icon = icon, label = label, selected = selected, onPress = onNavigate target }
 
 
 scrimOverlay : Theme -> Maybe msg -> Element msg
 scrimOverlay theme onPress =
     Input.button
-        [ Element.width Element.fill
-        , Element.height Element.fill
-        , Background.color theme.scrim
-        ]
-        { onPress = onPress
-        , label = Element.none
-        }
+        [ Element.width Element.fill, Element.height Element.fill, Background.color theme.scrim ]
+        { onPress = onPress, label = Element.none }
 
 
 drawerPanel : Theme -> List (Element msg) -> Element msg
@@ -721,11 +641,7 @@ drawerItemButton theme config =
         iconEl =
             case config.icon of
                 Just icon ->
-                    Icon.view
-                        { icon = icon
-                        , size = 20
-                        , color = itemColor
-                        }
+                    Icon.view { icon = icon, size = 20, color = itemColor }
 
                 Nothing ->
                     Element.none
@@ -747,12 +663,8 @@ drawerItemButton theme config =
         { onPress = Just config.onPress
         , label =
             Element.row
-                [ Element.spacing DesignTokens.space12
-                , Element.centerY
-                ]
-                [ iconEl
-                , Element.text config.label
-                ]
+                [ Element.spacing DesignTokens.space12, Element.centerY ]
+                [ iconEl, Element.text config.label ]
         }
 
 
@@ -760,24 +672,13 @@ drawerItemButton theme config =
 -- PROFILE MENU
 
 
-profileMenu :
-    Env
-    -> Session
-    -> (Route -> msg)
-    -> msg
-    -> (Language -> msg)
-    -> Element msg
+profileMenu : Env -> Session -> (Route -> msg) -> msg -> (Language -> msg) -> Element msg
 profileMenu env session onNavigate onLogout onSetLanguage =
     menuCard env.theme
-        { width = 240
-        , children = profileMenuContent env session onNavigate onLogout onSetLanguage
-        }
+        { width = 240, children = profileMenuContent env session onNavigate onLogout onSetLanguage }
 
 
-menuCard :
-    Theme
-    -> { width : Int, children : List (Element msg) }
-    -> Element msg
+menuCard : Theme -> { width : Int, children : List (Element msg) } -> Element msg
 menuCard theme config =
     Element.column
         [ Element.alignRight
@@ -839,9 +740,7 @@ profileMenuContent env session onNavigate onLogout onSetLanguage =
         , trailing = Nothing
         }
     , Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space8
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Button.textButton env.device
             env.theme
             { tone =

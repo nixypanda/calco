@@ -66,9 +66,7 @@ update msg model =
             case result of
                 Ok preferences ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots
-                        , saveState = Editing
-                        }
+                        { selected = canonical preferences.enabledMealSlots, saveState = Editing }
                     , Cmd.none
                     , NoOp
                     )
@@ -130,9 +128,7 @@ update msg model =
             case ( model, result ) of
                 ( Ready _, Ok preferences ) ->
                     ( Ready
-                        { selected = canonical preferences.enabledMealSlots
-                        , saveState = Saved
-                        }
+                        { selected = canonical preferences.enabledMealSlots, saveState = Saved }
                     , Cmd.none
                     , NoOp
                     )
@@ -241,10 +237,7 @@ diarySettingsSkeleton : Theme -> Element msg
 diarySettingsSkeleton theme =
     Surface.section theme
         { header =
-            Just
-                (Skeleton.barCustom theme
-                    { width = Element.px 140, height = 24 }
-                )
+            Just (Skeleton.barCustom theme { width = Element.px 140, height = 24 })
         , body =
             [ Skeleton.bar theme
             , Skeleton.bar theme

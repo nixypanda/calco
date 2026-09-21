@@ -43,10 +43,7 @@ import View.Chrome
 
 
 type alias Flags =
-    { windowWidth : Int
-    , windowHeight : Int
-    , themeMode : String
-    }
+    { windowWidth : Int, windowHeight : Int, themeMode : String }
 
 
 type alias Model =
@@ -77,9 +74,7 @@ type alias BootstrapProgress =
 
 
 type alias BootstrapModel =
-    { session : Session
-    , adminExists : Bool
-    }
+    { session : Session, adminExists : Bool }
 
 
 init : Flags -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -91,10 +86,7 @@ init flags url key =
     ( { key = key
       , route = Data.Route.fromUrl url
       , bootstrap =
-            Bootstrapping
-                { session = Nothing
-                , status = Nothing
-                }
+            Bootstrapping { session = Nothing, status = Nothing }
       , today = Nothing
       , page = Page.loading
       , chrome = Chrome.init
@@ -153,14 +145,10 @@ update msg model =
             changeRouteTo route { model | route = route, chrome = Chrome.close model.chrome }
 
         GotSession result ->
-            updateBootstrapProgress
-                (\progress -> { progress | session = Just result })
-                model
+            updateBootstrapProgress (\progress -> { progress | session = Just result }) model
 
         GotBootstrapStatus result ->
-            updateBootstrapProgress
-                (\progress -> { progress | status = Just result })
-                model
+            updateBootstrapProgress (\progress -> { progress | status = Just result }) model
 
         LogoutCompleted ->
             ( { model
@@ -186,14 +174,10 @@ update msg model =
             in
             case outMsg of
                 Version.NoOutMsg ->
-                    ( { model | version = newVersion }
-                    , Cmd.map GotVersionMsg versionCmd
-                    )
+                    ( { model | version = newVersion }, Cmd.map GotVersionMsg versionCmd )
 
                 Version.ReloadPage ->
-                    ( { model | version = newVersion }
-                    , reloadPage ()
-                    )
+                    ( { model | version = newVersion }, reloadPage () )
 
         GotLocalContext context ->
             let
@@ -358,10 +342,7 @@ resolveBootstrapResults model maybeSessionResult maybeStatusResult =
             changeRouteTo model.route
                 { model
                     | bootstrap =
-                        Bootstrapped
-                            { session = nextSession
-                            , adminExists = adminExists
-                            }
+                        Bootstrapped { session = nextSession, adminExists = adminExists }
                 }
 
         _ ->
@@ -385,9 +366,7 @@ loadPage : Route -> Model -> ( Model, Cmd Msg )
 loadPage route model =
     let
         ( page, pageCmd, outMsg ) =
-            Page.initPreserving
-                { route = route, today = model.today }
-                model.page
+            Page.initPreserving { route = route, today = model.today } model.page
     in
     stepPageResult ( page, pageCmd, outMsg ) model
 
@@ -420,10 +399,7 @@ stepPageResult ( page, pageCmd, outMsg ) model =
     in
     ( finalModel
     , Cmd.batch
-        [ Cmd.map GotPageMsg pageCmd
-        , outCmd
-        , revokePhotoPreviewUrls removedPhotoUrls
-        ]
+        [ Cmd.map GotPageMsg pageCmd, outCmd, revokePhotoPreviewUrls removedPhotoUrls ]
     )
 
 
@@ -504,10 +480,7 @@ applyPageOutMsg outMsg model =
             in
             ( { model
                 | bootstrap =
-                    Bootstrapped
-                        { session = nextSession
-                        , adminExists = True
-                        }
+                    Bootstrapped { session = nextSession, adminExists = True }
                 , page = Page.clearStore model.page
               }
             , Nav.replaceUrl model.key (Data.Route.routeToPath AdminDashboard)
@@ -533,10 +506,7 @@ view model =
         updateBanner =
             if model.version.updateAvailable then
                 Just
-                    (View.Chrome.updateBanner
-                        model.env
-                        (GotVersionMsg Version.ReloadPageRequested)
-                    )
+                    (View.Chrome.updateBanner model.env (GotVersionMsg Version.ReloadPageRequested))
 
             else
                 Nothing
@@ -558,10 +528,7 @@ view model =
         , Element.layoutWith
             { options =
                 [ Element.focusStyle
-                    { borderColor = Nothing
-                    , backgroundColor = Nothing
-                    , shadow = Nothing
-                    }
+                    { borderColor = Nothing, backgroundColor = Nothing, shadow = Nothing }
                 ]
             }
             (layoutAttrs model
@@ -644,10 +611,7 @@ setSession : Session -> BootstrapState -> BootstrapState
 setSession session bootstrap =
     case bootstrap of
         Bootstrapping _ ->
-            Bootstrapped
-                { session = session
-                , adminExists = True
-                }
+            Bootstrapped { session = session, adminExists = True }
 
         Bootstrapped model ->
             Bootstrapped { model | session = session }

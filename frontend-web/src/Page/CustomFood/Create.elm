@@ -159,15 +159,10 @@ update msg model =
             let
                 ( nextForm, subCmd, _ ) =
                     Form.update
-                        (Form.CategorySuggestionsLoaded token
-                            (Result.map .items result)
-                        )
+                        (Form.CategorySuggestionsLoaded token (Result.map .items result))
                         model.form
             in
-            ( { model | form = nextForm }
-            , Cmd.map FormMsg subCmd
-            , NoOp
-            )
+            ( { model | form = nextForm }, Cmd.map FormMsg subCmd, NoOp )
 
         SubmitClicked ->
             case Form.toInitialCreateFoodRequest model.form of
@@ -201,9 +196,7 @@ update msg model =
                             \message current ->
                                 { current
                                     | form =
-                                        withSubmit
-                                            (Form.SubmitFailed message)
-                                            current.form
+                                        withSubmit (Form.SubmitFailed message) current.form
                                 }
                         }
                         error
@@ -243,11 +236,7 @@ failure =
         }
 
 
-applyAssistantOutMsg :
-    Assistant.OutMsg
-    -> Model
-    -> Cmd Msg
-    -> ( Model, Cmd Msg, OutMsg )
+applyAssistantOutMsg : Assistant.OutMsg -> Model -> Cmd Msg -> ( Model, Cmd Msg, OutMsg )
 applyAssistantOutMsg assistantOut model command =
     case assistantOut of
         Assistant.NoOutMsg ->
@@ -282,18 +271,13 @@ applyAssistantOutMsg assistantOut model command =
 -- VIEW
 
 
-view :
-    Env
-    -> Model
-    -> Element Msg
+view : Env -> Model -> Element Msg
 view env model =
     let
         content : List (Element Msg)
         content =
             if model.assistantOnly then
-                [ Element.map AssistantMsg
-                    (Assistant.view env False model.assistant)
-                ]
+                [ Element.map AssistantMsg (Assistant.view env False model.assistant) ]
 
             else
                 [ Element.map FormMsg
@@ -305,10 +289,7 @@ view env model =
                     , label = I18n.t env.language TidTitleCreateFood
                     , onPress = SubmitClicked
                     , submitState =
-                        Just
-                            (Button.submittingOrIdle
-                                (Form.isSubmitting model.form.submit)
-                            )
+                        Just (Button.submittingOrIdle (Form.isSubmitting model.form.submit))
                     , submittingLabel = Just (I18n.t env.language TidCommonCreating)
                     , trailing = Nothing
                     }
@@ -317,10 +298,6 @@ view env model =
     UiPage.pageContainer (Feedback.maybeErrorBanner env.theme model.error :: content)
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
-    Assistant.modalView env model.assistant
-        |> Maybe.map (Element.map AssistantMsg)
+    Assistant.modalView env model.assistant |> Maybe.map (Element.map AssistantMsg)

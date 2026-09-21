@@ -191,17 +191,10 @@ hydrateReview msg model =
                 ( next, command, outMsg ) =
                     Review.update msg review
             in
-            ( { model | review = Just next }
-            , Cmd.map ReviewMsg command
-            , mapReviewOutMsg outMsg
-            )
+            ( { model | review = Just next }, Cmd.map ReviewMsg command, mapReviewOutMsg outMsg )
 
 
-applyAssistantOutMsg :
-    Assistant.OutMsg
-    -> Model
-    -> Cmd Msg
-    -> ( Model, Cmd Msg, OutMsg )
+applyAssistantOutMsg : Assistant.OutMsg -> Model -> Cmd Msg -> ( Model, Cmd Msg, OutMsg )
 applyAssistantOutMsg outMsg model command =
     case outMsg of
         Assistant.NoOutMsg ->
@@ -242,11 +235,7 @@ buildReview model =
                     Review.init model.dateParam model.mealSlot
             in
             case
-                Editor.applyAiLogDraft
-                    model.nutrients
-                    result.draft
-                    result.suggestedLog
-                    base.form
+                Editor.applyAiLogDraft model.nutrients result.draft result.suggestedLog base.form
             of
                 Ok form ->
                     ( { model
@@ -313,10 +302,7 @@ sessionOutMsg error =
         NoOp
 
 
-view :
-    Env
-    -> Model
-    -> Element Msg
+view : Env -> Model -> Element Msg
 view env model =
     case model.review of
         Nothing ->
@@ -349,13 +335,9 @@ view env model =
                 ]
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
-    Assistant.modalView env model.assistant
-        |> Maybe.map (Element.map AssistantMsg)
+    Assistant.modalView env model.assistant |> Maybe.map (Element.map AssistantMsg)
 
 
 additionalNutrientsToggle : Env -> Model -> Review.Model -> Element Msg

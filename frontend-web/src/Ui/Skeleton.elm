@@ -29,10 +29,7 @@ import Ui.Theme exposing (Theme)
 loading : Theme -> Element msg
 loading theme =
     Element.column [ Element.width Element.fill, Element.spacing space12 ]
-        [ bar theme
-        , bar theme
-        , bar theme
-        ]
+        [ bar theme, bar theme, bar theme ]
 
 
 bar : Theme -> Element msg
@@ -74,9 +71,7 @@ circle theme =
 input : Theme -> Element msg
 input theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing space4
-        ]
+        [ Element.width Element.fill, Element.spacing space4 ]
         [ Element.el
             [ Element.width (Element.px 80)
             , Element.height (Element.px 12)
@@ -111,10 +106,7 @@ button theme =
 listRow : Theme -> Element msg
 listRow theme =
     Element.wrappedRow
-        [ Element.width Element.fill
-        , Element.padding space16
-        , Element.spacing space12
-        ]
+        [ Element.width Element.fill, Element.padding space16, Element.spacing space12 ]
         [ Element.el
             [ Element.width (Element.px 12)
             , Element.alignTop
@@ -122,10 +114,7 @@ listRow theme =
             ]
             (circle theme)
         , Element.column
-            [ Element.width Element.fill
-            , Element.spacing space4
-            , Element.alignTop
-            ]
+            [ Element.width Element.fill, Element.spacing space4, Element.alignTop ]
             [ Element.el
                 [ Element.width (Element.fillPortion 2)
                 , Element.height (Element.px 16)
@@ -148,7 +137,4 @@ listRow theme =
 
 card : Theme -> { rows : Int } -> Element msg
 card theme config =
-    Surface.card theme
-        (List.map (\_ -> bar theme)
-            (List.range 1 (max 1 config.rows))
-        )
+    Surface.card theme (List.map (\_ -> bar theme) (List.range 1 (max 1 config.rows)))

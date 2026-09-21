@@ -63,22 +63,15 @@ type alias CreateAdHocLogRequest =
 
 
 type alias UpdateLogRequest =
-    { mealSlot : Maybe String
-    , quantity : Nutrition.Quantity
-    , notes : Maybe String
-    }
+    { mealSlot : Maybe String, quantity : Nutrition.Quantity, notes : Maybe String }
 
 
 type alias LatestSlotResponse =
-    { sourceDate : LocalDate
-    , mealSlot : String
-    , items : List FoodLog
-    }
+    { sourceDate : LocalDate, mealSlot : String, items : List FoodLog }
 
 
 type alias LatestSlotsResponse =
-    { slots : List LatestSlotResponse
-    }
+    { slots : List LatestSlotResponse }
 
 
 type alias RecentItem =
@@ -92,40 +85,27 @@ type alias RecentItem =
 
 
 type alias QuantityUsage =
-    { quantity : Nutrition.Quantity
-    , logCount : Int
-    }
+    { quantity : Nutrition.Quantity, logCount : Int }
 
 
 type alias RecentItemsResponse =
-    { items : List RecentItem
-    }
+    { items : List RecentItem }
 
 
 type alias RecentItemsRequest =
-    { fromDate : LocalDate
-    , toDate : LocalDate
-    , mealSlot : Maybe String
-    }
+    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe String }
 
 
 type alias SummaryRequest =
-    { fromDate : LocalDate
-    , toDate : LocalDate
-    }
+    { fromDate : LocalDate, toDate : LocalDate }
 
 
 type alias LastUsedItemsRequest =
-    { fromDate : LocalDate
-    , toDate : LocalDate
-    , mealSlot : Maybe String
-    , items : List ItemRef
-    }
+    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe String, items : List ItemRef }
 
 
 type alias BatchLogResponse =
-    { items : List FoodLog
-    }
+    { items : List FoodLog }
 
 
 createLog : CreateLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
@@ -137,10 +117,7 @@ createLog request toMsg =
         toMsg
 
 
-createAdHocLog :
-    CreateAdHocLogRequest
-    -> (Result Client.ApiError FoodLog -> msg)
-    -> Cmd msg
+createAdHocLog : CreateAdHocLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 createAdHocLog request toMsg =
     Client.post
         (Builder.absolute [ "api", "logs", "ad-hoc" ] [])
@@ -156,20 +133,14 @@ createLogsBatch :
 createLogsBatch requests toMsg =
     Client.post
         (Builder.absolute [ "api", "logs", "batch" ] [])
-        (Encode.object
-            [ ( "items", Encode.list createLogRequestEncoder requests )
-            ]
-        )
+        (Encode.object [ ( "items", Encode.list createLogRequestEncoder requests ) ])
         batchLogResponseDecoder
         toMsg
 
 
 getLog : String -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
 getLog id toMsg =
-    Client.get
-        (Builder.absolute [ "api", "logs", id ] [])
-        FoodLog.decoder
-        toMsg
+    Client.get (Builder.absolute [ "api", "logs", id ] []) FoodLog.decoder toMsg
 
 
 updateLog : String -> UpdateLogRequest -> (Result Client.ApiError FoodLog -> msg) -> Cmd msg
@@ -183,9 +154,7 @@ updateLog id request toMsg =
 
 deleteLog : String -> (Result Client.ApiError () -> msg) -> Cmd msg
 deleteLog id toMsg =
-    Client.delete
-        (Builder.absolute [ "api", "logs", id ] [])
-        toMsg
+    Client.delete (Builder.absolute [ "api", "logs", id ] []) toMsg
 
 
 latestSlots :
@@ -204,10 +173,7 @@ latestSlots query toMsg =
         toMsg
 
 
-recentItems :
-    RecentItemsRequest
-    -> (Result Client.ApiError RecentItemsResponse -> msg)
-    -> Cmd msg
+recentItems : RecentItemsRequest -> (Result Client.ApiError RecentItemsResponse -> msg) -> Cmd msg
 recentItems request toMsg =
     Client.get
         (Builder.absolute
@@ -222,10 +188,7 @@ recentItems request toMsg =
         toMsg
 
 
-summary :
-    SummaryRequest
-    -> (Result Client.ApiError (List DaySummary) -> msg)
-    -> Cmd msg
+summary : SummaryRequest -> (Result Client.ApiError (List DaySummary) -> msg) -> Cmd msg
 summary request toMsg =
     Client.get
         (Builder.absolute
@@ -259,11 +222,7 @@ lastUsedItems request toMsg =
 listLogs : LocalDate -> (Result Client.ApiError (List FoodLog) -> msg) -> Cmd msg
 listLogs date toMsg =
     Client.get
-        (Builder.absolute
-            [ "api", "logs" ]
-            [ Builder.string "log_date" (LocalDate.format date)
-            ]
-        )
+        (Builder.absolute [ "api", "logs" ] [ Builder.string "log_date" (LocalDate.format date) ])
         FoodLog.listDecoder
         toMsg
 
@@ -341,8 +300,7 @@ deviceTimezoneField maybeTimezone =
 
 latestSlotsResponseDecoder : Decode.Decoder LatestSlotsResponse
 latestSlotsResponseDecoder =
-    Decode.map LatestSlotsResponse
-        (Decode.field "slots" (Decode.list latestSlotResponseDecoder))
+    Decode.map LatestSlotsResponse (Decode.field "slots" (Decode.list latestSlotResponseDecoder))
 
 
 latestSlotResponseDecoder : Decode.Decoder LatestSlotResponse
@@ -355,14 +313,12 @@ latestSlotResponseDecoder =
 
 batchLogResponseDecoder : Decode.Decoder BatchLogResponse
 batchLogResponseDecoder =
-    Decode.map BatchLogResponse
-        (Decode.field "items" (Decode.list FoodLog.decoder))
+    Decode.map BatchLogResponse (Decode.field "items" (Decode.list FoodLog.decoder))
 
 
 recentItemsResponseDecoder : Decode.Decoder RecentItemsResponse
 recentItemsResponseDecoder =
-    Decode.map RecentItemsResponse
-        (Decode.field "items" (Decode.list recentItemDecoder))
+    Decode.map RecentItemsResponse (Decode.field "items" (Decode.list recentItemDecoder))
 
 
 recentItemDecoder : Decode.Decoder RecentItem

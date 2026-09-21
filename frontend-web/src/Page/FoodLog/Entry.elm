@@ -56,10 +56,7 @@ type Model
 
 
 type alias LoadingModel =
-    { logId : String
-    , log : Maybe FoodLog
-    , units : Maybe (List UnitItem)
-    }
+    { logId : String, log : Maybe FoodLog, units : Maybe (List UnitItem) }
 
 
 type alias LoadedModel =
@@ -94,20 +91,12 @@ isSubmitting form =
 
 
 type alias LoadFailedModel =
-    { logId : String
-    , error : String
-    }
+    { logId : String, error : String }
 
 
 init : String -> ( Model, OutMsg )
 init logId =
-    ( Loading
-        { logId = logId
-        , log = Nothing
-        , units = Nothing
-        }
-    , RequestInitialData logId
-    )
+    ( Loading { logId = logId, log = Nothing, units = Nothing }, RequestInitialData logId )
 
 
 
@@ -251,18 +240,14 @@ update msg model =
                         case loaded.delete of
                             DeleteConfirming ->
                                 ( Loaded
-                                    { loaded
-                                        | delete = Deleting
-                                    }
+                                    { loaded | delete = Deleting }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
                                 )
 
                             DeleteFailed _ ->
                                 ( Loaded
-                                    { loaded
-                                        | delete = Deleting
-                                    }
+                                    { loaded | delete = Deleting }
                                 , Cmd.none
                                 , RequestDeleteLog loaded.logId
                                 )
@@ -312,9 +297,7 @@ submitLoaded loaded =
             ( Loaded
                 { loaded
                     | form =
-                        FoodLogForm.setSubmitState
-                            FoodLogForm.SubmitSubmitting
-                            loaded.form
+                        FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
                 }
             , Cmd.none
             , RequestUpdateLog loaded.logId request
@@ -325,9 +308,7 @@ submitLoaded loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.AmountRequiredMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -339,9 +320,7 @@ submitLoaded loaded =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                FoodLogForm.InvalidDateMessage
-                            )
+                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
                             loaded.form
                 }
             , Cmd.none
@@ -451,10 +430,7 @@ updateLoadedItem transform model =
             model
 
 
-applyProductDetail :
-    Result Client.ApiError ProductDetail
-    -> LoadedItem
-    -> LoadedItem
+applyProductDetail : Result Client.ApiError ProductDetail -> LoadedItem -> LoadedItem
 applyProductDetail result item =
     case item of
         ProductItem productState ->
@@ -475,10 +451,7 @@ applyProductDetail result item =
 
 productStateId : ProductState -> String
 productStateId state =
-    productStateItem state
-        |> FoodLog.itemRef
-        |> Maybe.map .id
-        |> Maybe.withDefault ""
+    productStateItem state |> FoodLog.itemRef |> Maybe.map .id |> Maybe.withDefault ""
 
 
 productStateItem : ProductState -> FoodLog.LogItem
@@ -488,8 +461,7 @@ productStateItem state =
             item
 
         DetailLoaded food ->
-            FoodLog.ProductLogItem
-                { id = food.id, name = food.name, brand = food.brand }
+            FoodLog.ProductLogItem { id = food.id, name = food.name, brand = food.brand }
 
         DetailUnavailable item ->
             item
@@ -513,9 +485,7 @@ applyLoadedError message model =
                 { loaded
                     | form =
                         FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed
-                                (FoodLogForm.RequestFailed message)
-                            )
+                            (FoodLogForm.SubmitFailed (FoodLogForm.RequestFailed message))
                             loaded.form
                     , delete = DeleteIdle
                 }
@@ -576,15 +546,10 @@ modelLogId model =
 -- VIEW
 
 
-contentView :
-    Env
-    -> Model
-    -> Element Msg
+contentView : Env -> Model -> Element Msg
 contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case pageError model of
             Just message ->
                 Feedback.errorBanner env.theme message
@@ -595,10 +560,7 @@ contentView env model =
         ]
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
     case model of
         Loaded loaded ->
@@ -646,9 +608,7 @@ loadedView env model =
             itemCategories env.theme (productDetail model.item)
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Surface.panel env.theme
             { header = Just (itemHeaderElement env model)
             , sections =
@@ -756,9 +716,7 @@ itemCategories theme maybeFood =
 
             else
                 [ Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space12
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ View.Product.macroDotGhost, Chip.chips theme food.categories ]
                 ]
 
@@ -794,8 +752,7 @@ metaSubtitle env maybeFood log =
             let
                 productMeta : List String
                 productMeta =
-                    [ food.brand ]
-                        |> List.filterMap identity
+                    [ food.brand ] |> List.filterMap identity
 
                 loggedMeta : String
                 loggedMeta =
@@ -805,16 +762,12 @@ metaSubtitle env maybeFood log =
             if UiCommon.isSmall env.device then
                 UiPage.SubtitleMetaLines
                     { lines =
-                        [ productMeta, [ loggedMeta ] ]
-                            |> List.filter (not << List.isEmpty)
+                        [ productMeta, [ loggedMeta ] ] |> List.filter (not << List.isEmpty)
                     , separator = " ⋅ "
                     }
 
             else
-                UiPage.SubtitleMeta
-                    { items = productMeta ++ [ loggedMeta ]
-                    , separator = " ⋅ "
-                    }
+                UiPage.SubtitleMeta { items = productMeta ++ [ loggedMeta ], separator = " ⋅ " }
 
         Nothing ->
             UiPage.SubtitleText
@@ -841,13 +794,9 @@ unitsForItem model =
 detailActionsView : Env -> LoadedModel -> Element Msg
 detailActionsView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.el [ Element.width Element.fill ]
                 (Button.textButton env.device
                     env.theme
@@ -889,9 +838,7 @@ deleteModalView env loaded =
 foodLogEntrySkeleton : Theme -> Element Msg
 foodLogEntrySkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Skeleton.card theme { rows = 2 }
         , Skeleton.input theme
         , Skeleton.input theme

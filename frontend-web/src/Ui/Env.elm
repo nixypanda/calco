@@ -21,10 +21,7 @@ import Ui.Theme exposing (Theme)
 
 
 type alias Env =
-    { theme : Theme
-    , device : Device
-    , language : Language
-    }
+    { theme : Theme, device : Device, language : Language }
 
 
 {-| Elm only allows record update on a bare variable, so `{ model.env | ... }`

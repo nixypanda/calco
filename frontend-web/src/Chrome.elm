@@ -115,14 +115,8 @@ bottomNavLayoutAttrs env session route isLoadingPage toMsg =
     if showBottomNav env session isLoadingPage route then
         [ Element.inFront
             (Element.el
-                [ Element.width Element.fill
-                , Element.alignBottom
-                ]
-                (View.Chrome.bottomNavBar
-                    env
-                    route
-                    (toMsg << NavigateClicked)
-                )
+                [ Element.width Element.fill, Element.alignBottom ]
+                (View.Chrome.bottomNavBar env route (toMsg << NavigateClicked))
             )
         ]
 
@@ -198,9 +192,7 @@ viewFrame env model session route isLoadingPage updateBanner page toMsg =
             (toMsg ProfileClicked)
             (toMsg ThemeToggleClicked)
             (toMsg << NavigateClicked)
-            { profileLabel = profileLetter session
-            , profileMenu = profileMenuEl
-            }
+            { profileLabel = profileLetter session, profileMenu = profileMenuEl }
             :: updateBannerItems
             ++ [ Element.el (pageAttrs useBottomNav) page ]
         )
@@ -219,11 +211,7 @@ pageAttrs useBottomNav =
     ]
         ++ (if useBottomNav then
                 [ Element.paddingEach
-                    { bottom = bottomNavClearance
-                    , top = 0
-                    , left = 0
-                    , right = 0
-                    }
+                    { bottom = bottomNavClearance, top = 0, left = 0, right = 0 }
                 ]
 
             else

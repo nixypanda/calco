@@ -97,9 +97,7 @@ failure =
 contentView : Env -> Model -> Element Msg
 contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             Loaded _ ->
                 Element.none
@@ -139,8 +137,7 @@ bodyView env model =
                         ]
 
                     else
-                        List.intersperse (Surface.hairline env.theme)
-                            (List.map (mealRow env) meals)
+                        List.intersperse (Surface.hairline env.theme) (List.map (mealRow env) meals)
                 , footer = Nothing
                 }
 
@@ -158,10 +155,7 @@ mealRow env meal =
         macroDot =
             Maybe.withDefault []
                 (Maybe.map
-                    (List.singleton
-                        << View.Nutrients.macroDot env
-                        << Nutrition.summaryToNutrients
-                    )
+                    (List.singleton << View.Nutrients.macroDot env << Nutrition.summaryToNutrients)
                     meal.nutritionSummary
                 )
     in
@@ -170,8 +164,7 @@ mealRow env meal =
         , leading = macroDot
         , title = Typography.wrappedListItemTitle env.theme meal.name
         , subtitle =
-            [ Typography.mutedBodyParagraph env.theme (mealSummaryText meal)
-            ]
+            [ Typography.mutedBodyParagraph env.theme (mealSummaryText meal) ]
         , trailing = []
         }
 
@@ -189,9 +182,7 @@ mealSummaryText meal =
         )
         meal.nutritionSummary
     , Just
-        (I18n.en
-            (TidMealComponentsCount (String.fromInt (List.length meal.components)))
-        )
+        (I18n.en (TidMealComponentsCount (String.fromInt (List.length meal.components))))
     ]
         |> Text.dotSeparated
 
@@ -203,8 +194,6 @@ mealListSkeleton theme =
             Just (Skeleton.button theme)
         , body =
             List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme)
-                    (List.range 1 3)
-                )
+                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
         , footer = Nothing
         }

@@ -17,11 +17,7 @@ import Lib.Json as Json
 
 
 type alias NutritionDetails =
-    { date : LocalDate
-    , reference : Reference
-    , loggedItems : Int
-    , nutrients : List Nutrient
-    }
+    { date : LocalDate, reference : Reference, loggedItems : Int, nutrients : List Nutrient }
 
 
 type alias Reference =

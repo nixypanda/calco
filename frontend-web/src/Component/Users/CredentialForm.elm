@@ -27,9 +27,7 @@ import Ui.Typography as Typography
 
 
 type alias Form =
-    { username : String
-    , password : String
-    }
+    { username : String, password : String }
 
 
 type Model
@@ -121,11 +119,7 @@ markFailed message model =
 -- VIEW
 
 
-view :
-    Env
-    -> Config request
-    -> Model
-    -> Element Msg
+view : Env -> Config request -> Model -> Element Msg
 view env config model =
     let
         form : Form
@@ -139,9 +133,7 @@ view env config model =
         , Element.padding DesignTokens.space16
         ]
         (Element.column
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space16
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
             [ Surface.section env.theme
                 { header = Just (Typography.subsectionTitle env.theme config.title)
                 , body =

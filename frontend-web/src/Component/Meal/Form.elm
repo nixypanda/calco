@@ -274,13 +274,7 @@ updateFormField msg form =
                                 |> Maybe.withDefault Search.empty
                     in
                     ( updateComponent rowId
-                        (SetSearch
-                            (Search.setCategorySuggestions
-                                token
-                                response.items
-                                priorSearch
-                            )
-                        )
+                        (SetSearch (Search.setCategorySuggestions token response.items priorSearch))
                         form
                     , Cmd.none
                     , Nothing
@@ -326,30 +320,16 @@ updateFormField msg form =
                     ( form, Cmd.none, Nothing )
 
         ComponentCompletionActiveChanged rowId index ->
-            ( updateComponent rowId (SetCompletionIndex index) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetCompletionIndex index) form, Cmd.none, Nothing )
 
         SelectProduct rowId result ->
-            ( updateComponent rowId
-                (SetProduct result.id result.name)
-                form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetProduct result.id result.name) form, Cmd.none, Nothing )
 
         ComponentQuantityChanged rowId value ->
-            ( updateComponent rowId (SetQuantity value) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetQuantity value) form, Cmd.none, Nothing )
 
         ComponentUnitChanged rowId value ->
-            ( updateComponent rowId (SetUnit value) form
-            , Cmd.none
-            , Nothing
-            )
+            ( updateComponent rowId (SetUnit value) form, Cmd.none, Nothing )
 
         ComponentUnitToggled rowId ->
             ( { form | components = List.map (toggleUnitOpen rowId) form.components }
@@ -367,21 +347,14 @@ updateFormField msg form =
             )
 
         RemoveComponentClicked rowId ->
-            ( { form | components = removeRow rowId form.components }
-            , Cmd.none
-            , Nothing
-            )
+            ( { form | components = removeRow rowId form.components }, Cmd.none, Nothing )
 
 
 
 -- VIEW
 
 
-viewFormFields :
-    Env
-    -> (FormFieldMsg -> msg)
-    -> FormFields
-    -> Element msg
+viewFormFields : Env -> (FormFieldMsg -> msg) -> FormFields -> Element msg
 viewFormFields env toMsg form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Surface.formSection env.theme
@@ -417,16 +390,10 @@ viewFormFields env toMsg form =
             ]
         , Surface.section env.theme
             { header =
-                Just
-                    (Typography.subsectionTitle env.theme
-                        (I18n.t env.language TidMealComponents)
-                    )
+                Just (Typography.subsectionTitle env.theme (I18n.t env.language TidMealComponents))
             , body =
                 List.intersperse (Surface.hairline env.theme)
-                    (List.map
-                        (componentRowView env toMsg form.units)
-                        form.components
-                    )
+                    (List.map (componentRowView env toMsg form.units) form.components)
             , footer =
                 Just
                     (Button.textButton env.device
@@ -499,9 +466,7 @@ onComponentSearchChanged rowId query form =
     let
         priorSearch : QueryState
         priorSearch =
-            findRow rowId form.components
-                |> Maybe.map .search
-                |> Maybe.withDefault Search.empty
+            findRow rowId form.components |> Maybe.map .search |> Maybe.withDefault Search.empty
 
         ( transitionedSearch, categoryReq ) =
             Search.onQueryChanged query priorSearch
@@ -516,10 +481,7 @@ onComponentSearchChanged rowId query form =
 
         nextSearch : QueryState
         nextSearch =
-            { transitionedSearch
-                | searchToken = token
-                , categoryToken = categoryToken
-            }
+            { transitionedSearch | searchToken = token, categoryToken = categoryToken }
 
         nextForm : FormFields
         nextForm =
@@ -561,18 +523,11 @@ onComponentSearchChanged rowId query form =
                 |> updateComponent rowId (SetSearchResults token [])
             , Cmd.none
             , Just
-                (RequestCategorySuggestions
-                    rowId
-                    categoryToken
-                    { query = cat.query, limit = 8 }
-                )
+                (RequestCategorySuggestions rowId categoryToken { query = cat.query, limit = 8 })
             )
 
         _ ->
-            ( nextForm |> updateComponent rowId (SetSearchResults token [])
-            , Cmd.none
-            , Nothing
-            )
+            ( nextForm |> updateComponent rowId (SetSearchResults token []), Cmd.none, Nothing )
 
 
 completeComponentSuggestion :
@@ -673,9 +628,7 @@ patchRow rowId patch row =
 
 findRow : RowId -> List ComponentRow -> Maybe ComponentRow
 findRow rowId rows =
-    rows
-        |> List.filter (\row -> row.rowId == rowId)
-        |> List.head
+    rows |> List.filter (\row -> row.rowId == rowId) |> List.head
 
 
 removeRow : RowId -> List ComponentRow -> List ComponentRow
@@ -726,9 +679,7 @@ componentRowView env toMsg units row =
 
                 else
                     Element.column
-                        [ Element.width Element.fill
-                        , Element.spacing 0
-                        ]
+                        [ Element.width Element.fill, Element.spacing 0 ]
                         (List.map
                             (\result ->
                                 searchResultView env
@@ -773,17 +724,10 @@ componentRowView env toMsg units row =
 
 
 type alias RowHit =
-    { rowId : RowId
-    , query : String
-    , result : SearchResult
-    }
+    { rowId : RowId, query : String, result : SearchResult }
 
 
-searchResultView :
-    Env
-    -> (FormFieldMsg -> msg)
-    -> RowHit
-    -> Element msg
+searchResultView : Env -> (FormFieldMsg -> msg) -> RowHit -> Element msg
 searchResultView env toMsg hit =
     SearchView.resultRow env
         { query = hit.query

@@ -43,22 +43,12 @@ chipForeground theme selected =
         theme.textPrimary
 
 
-chip :
-    Theme
-    ->
-        { label : String
-        , selected : Bool
-        }
-    -> Element msg
+chip : Theme -> { label : String, selected : Bool } -> Element msg
 chip theme config =
     Element.html (chipHtml theme config)
 
 
-removableChip :
-    Theme
-    -> Language
-    -> { label : String, onRemove : msg }
-    -> Element msg
+removableChip : Theme -> Language -> { label : String, onRemove : msg } -> Element msg
 removableChip theme language config =
     let
         removeSize : Int
@@ -101,23 +91,12 @@ removableChip theme language config =
                     , Border.color theme.dangerFg
                     , uiClass "ui-chip-remove-visual ui-motion"
                     ]
-                    (Icon.view
-                        { icon = Icon.Close
-                        , size = 16
-                        , color = theme.dangerFg
-                        }
-                    )
+                    (Icon.view { icon = Icon.Close, size = 16, color = theme.dangerFg })
             }
         ]
 
 
-chipHtml :
-    Theme
-    ->
-        { label : String
-        , selected : Bool
-        }
-    -> Html msg
+chipHtml : Theme -> { label : String, selected : Bool } -> Html msg
 chipHtml _ config =
     let
         chipClass : String
@@ -130,9 +109,7 @@ chipHtml _ config =
                         ""
                    )
     in
-    Html.span
-        [ Html.Attributes.class chipClass ]
-        [ Html.text config.label ]
+    Html.span [ Html.Attributes.class chipClass ] [ Html.text config.label ]
 
 
 chips : Theme -> List String -> Element msg
@@ -153,35 +130,19 @@ chips theme strings =
             )
 
 
-coloredPill :
-    { label : String
-    , bg : Element.Color
-    , fg : Element.Color
-    }
-    -> Element msg
+coloredPill : { label : String, bg : Element.Color, fg : Element.Color } -> Element msg
 coloredPill config =
     pill 10 config
 
 
-pill :
-    Int
-    ->
-        { label : String
-        , bg : Element.Color
-        , fg : Element.Color
-        }
-    -> Element msg
+pill : Int -> { label : String, bg : Element.Color, fg : Element.Color } -> Element msg
 pill horizontalPadding config =
     Element.el
         [ Background.color config.bg
         , Font.color config.fg
         , Border.rounded radiusPill
         , Element.paddingEach
-            { top = 4
-            , right = horizontalPadding
-            , bottom = 4
-            , left = horizontalPadding
-            }
+            { top = 4, right = horizontalPadding, bottom = 4, left = horizontalPadding }
         , caption
         , Font.medium
         ]
@@ -190,11 +151,7 @@ pill horizontalPadding config =
 
 badge : Theme -> String -> Element msg
 badge theme label =
-    pill 8
-        { label = label
-        , bg = theme.inputFill
-        , fg = theme.textPrimary
-        }
+    pill 8 { label = label, bg = theme.inputFill, fg = theme.textPrimary }
 
 
 statusBadge : Theme -> String -> Element msg

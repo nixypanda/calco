@@ -100,15 +100,10 @@ failure =
 -- VIEW
 
 
-contentView :
-    Env
-    -> Model
-    -> Element Msg
+contentView : Env -> Model -> Element Msg
 contentView env model =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
             Loaded _ ->
                 Element.none
@@ -128,8 +123,7 @@ bodyView env model =
         Loaded foods ->
             Surface.section env.theme
                 { header =
-                    Just
-                        (createActions env)
+                    Just (createActions env)
                 , body =
                     if List.isEmpty foods then
                         [ Typography.mutedBodyParagraph
@@ -138,8 +132,7 @@ bodyView env model =
                         ]
 
                     else
-                        List.intersperse (Surface.hairline env.theme)
-                            (List.map (foodRow env) foods)
+                        List.intersperse (Surface.hairline env.theme) (List.map (foodRow env) foods)
                 , footer = Nothing
                 }
 
@@ -153,9 +146,7 @@ bodyView env model =
 createActions : Env -> Element Msg
 createActions env =
     Element.row
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space12
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Element.el [ Element.width Element.fill ]
             (Button.textButton env.device
                 env.theme
@@ -222,9 +213,7 @@ customFoodListSkeleton theme =
         { header =
             Just
                 (Element.row
-                    [ Element.width Element.fill
-                    , Element.spacing DesignTokens.space12
-                    ]
+                    [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                     [ Element.el [ Element.width Element.fill ]
                         (Skeleton.button theme)
                     , Element.el [ Element.width Element.fill ]
@@ -233,8 +222,6 @@ customFoodListSkeleton theme =
                 )
         , body =
             List.intersperse (Surface.hairline theme)
-                (List.map (\_ -> Skeleton.listRow theme)
-                    (List.range 1 3)
-                )
+                (List.map (\_ -> Skeleton.listRow theme) (List.range 1 3))
         , footer = Nothing
         }

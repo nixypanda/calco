@@ -45,18 +45,11 @@ type Model
 
 
 type alias LoadingModel =
-    { productId : String
-    , food : Maybe ProductDetail
-    , units : Maybe (List UnitItem)
-    }
+    { productId : String, food : Maybe ProductDetail, units : Maybe (List UnitItem) }
 
 
 type alias LoadedModel =
-    { productId : String
-    , food : ProductDetail
-    , units : List UnitItem
-    , delete : DeleteState
-    }
+    { productId : String, food : ProductDetail, units : List UnitItem, delete : DeleteState }
 
 
 type OutMsg
@@ -70,10 +63,7 @@ type OutMsg
 init : String -> ( Model, OutMsg )
 init productId =
     ( Loading
-        { productId = productId
-        , food = Nothing
-        , units = Nothing
-        }
+        { productId = productId, food = Nothing, units = Nothing }
     , RequestInitialData productId
     )
 
@@ -219,10 +209,7 @@ update msg model =
             case model of
                 LoadFailed failed ->
                     ( Loading
-                        { productId = failed.productId
-                        , food = Nothing
-                        , units = Nothing
-                        }
+                        { productId = failed.productId, food = Nothing, units = Nothing }
                     , Cmd.none
                     , RequestInitialData failed.productId
                     )
@@ -262,11 +249,7 @@ completeLoading loading =
     case ( loading.food, loading.units ) of
         ( Just food, Just units ) ->
             Loaded
-                { productId = loading.productId
-                , food = food
-                , units = units
-                , delete = DeleteIdle
-                }
+                { productId = loading.productId, food = food, units = units, delete = DeleteIdle }
 
         _ ->
             Loading loading
@@ -281,16 +264,10 @@ failure =
             \message current ->
                 case current of
                     Loading loading ->
-                        LoadFailed
-                            { productId = loading.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loading.productId, message = message }
 
                     Loaded loaded ->
-                        LoadFailed
-                            { productId = loaded.productId
-                            , message = message
-                            }
+                        LoadFailed { productId = loaded.productId, message = message }
 
                     LoadFailed _ ->
                         current
@@ -311,10 +288,7 @@ applyDeleteError message model =
 -- VIEW
 
 
-view :
-    Env
-    -> Model
-    -> Element Msg
+view : Env -> Model -> Element Msg
 view env model =
     UiPage.pageContainer
         [ case model of
@@ -330,10 +304,7 @@ view env model =
         ]
 
 
-modalView :
-    Env
-    -> Model
-    -> Maybe (Element Msg)
+modalView : Env -> Model -> Maybe (Element Msg)
 modalView env model =
     case model of
         Loaded loaded ->
@@ -368,9 +339,7 @@ loadedView env loaded =
             View.Product.foodNutrientsPer100g food
     in
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ View.Product.foodHeader env food []
         , View.Nutrients.nutritionCard env nutrients
         , bottomActionsView env food
@@ -425,9 +394,7 @@ customFoodEditRoute food =
 customFoodShowSkeleton : Theme -> Element msg
 customFoodShowSkeleton theme =
     Element.column
-        [ Element.width Element.fill
-        , Element.spacing DesignTokens.space16
-        ]
+        [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ Element.el
             [ Element.width Element.fill
             , Element.height (Element.px 120)
@@ -441,10 +408,6 @@ customFoodShowSkeleton theme =
             { width = Element.fillPortion 2, height = 12 }
         , Skeleton.card theme { rows = 3 }
         , Element.row
-            [ Element.width Element.fill
-            , Element.spacing DesignTokens.space12
-            ]
-            [ Skeleton.button theme
-            , Skeleton.button theme
-            ]
+            [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
+            [ Skeleton.button theme, Skeleton.button theme ]
         ]
