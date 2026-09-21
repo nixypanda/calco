@@ -41,8 +41,11 @@ import File.Select
 import Html
 import Html.Attributes as HtmlAttributes
 import Html.Events as HtmlEvents
+import I18n
 import Json.Decode as Decode
 import Task
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -517,27 +520,25 @@ draftErrorMessage error =
         Client.RateLimited maybeSeconds ->
             case maybeSeconds of
                 Just seconds ->
-                    "The assistant is busy. Try again in "
-                        ++ String.fromInt seconds
-                        ++ " seconds."
+                    I18n.en (TidAssistantRateLimitedRetry (String.fromInt seconds))
 
                 Nothing ->
-                    "The assistant is busy. Wait a moment, then retry."
+                    I18n.en TidAssistantBusy
 
         Client.Timeout ->
-            "The assistant took too long to respond. Please retry."
+            I18n.en TidAssistantTimeout
 
         Client.NetworkError ->
-            "The assistant could not be reached. Check your connection and retry."
+            I18n.en TidAssistantNetworkError
 
         Client.BadStatus 401 _ _ ->
-            "Your session has expired."
+            I18n.en TidAssistantSessionExpired
 
         Client.BadStatus _ _ message ->
             message
 
         _ ->
-            "The assistant could not create a draft. Please retry."
+            I18n.en TidAssistantDraftFailed
 
 
 addSelectedPhotos : List File -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -615,16 +616,16 @@ validatePhotoMetadata existingPhotos selectedPhotos =
             existingPhotos ++ selectedPhotos
     in
     if List.length photos > maxPhotoCount then
-        Err "Only four photos can be attached."
+        Err (I18n.en TidAssistantPhotoLimit)
 
     else if List.any (not << supportedPhotoMime << .mimeType) photos then
-        Err "Photos must be JPEG, PNG, or WebP."
+        Err (I18n.en TidAssistantPhotoTypes)
 
     else if List.any (\photo -> photo.size > maxPhotoBytes) photos then
-        Err "Each photo must be 15 MiB or smaller."
+        Err (I18n.en TidAssistantPhotoTooLarge)
 
     else if List.sum (List.map .size photos) > maxTotalPhotoBytes then
-        Err "Photos together must be 40 MiB or smaller."
+        Err (I18n.en TidAssistantPhotosTotalTooLarge)
 
     else
         Ok ()
@@ -688,13 +689,13 @@ valueAt index values =
         |> List.head
 
 
-view : Theme -> Device -> Bool -> Model -> Element Msg
+view : Theme -> Language -> Device -> Bool -> Model -> Element Msg
 view =
     viewFor CustomFood
 
 
-viewFor : FoodDraftPurpose -> Theme -> Device -> Bool -> Model -> Element Msg
-viewFor purpose theme device formHasManualInput model =
+viewFor : FoodDraftPurpose -> Theme -> Language -> Device -> Bool -> Model -> Element Msg
+viewFor purpose theme language device formHasManualInput model =
     case model of
         LoadingStatus ->
             Surface.card theme
@@ -708,20 +709,22 @@ viewFor purpose theme device formHasManualInput model =
 
         Disabled ->
             Surface.section theme
-                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                { header =
+                    Just (Typography.subsectionTitle theme (I18n.t language TidTitleCreateWithAi))
                 , body =
                     [ Typography.mutedParagraph theme
-                        "Food assistance is unavailable on this deployment."
+                        (I18n.t language TidAssistantUnavailable)
                     ]
                 , footer = Nothing
                 }
 
         StatusFailed ->
             Surface.section theme
-                { header = Just (Typography.subsectionTitle theme "Create with AI")
+                { header =
+                    Just (Typography.subsectionTitle theme (I18n.t language TidTitleCreateWithAi))
                 , body =
                     [ Feedback.errorBanner theme
-                        "Food-assistant availability could not be checked."
+                        (I18n.t language TidAssistantStatusCheckFailed)
                     ]
                 , footer =
                     Just
@@ -729,7 +732,7 @@ viewFor purpose theme device formHasManualInput model =
                             theme
                             { tone = Button.Ghost
                             , width = Button.FullWidth
-                            , label = "Retry availability check"
+                            , label = I18n.t language TidAssistantRetryStatusCheck
                             , onPress = RetryStatusClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -739,27 +742,34 @@ viewFor purpose theme device formHasManualInput model =
                 }
 
         Enabled chat ->
-            enabledView purpose theme device formHasManualInput chat
+            enabledView purpose theme language device formHasManualInput chat
 
 
-enabledView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
-enabledView purpose theme device formHasManualInput chat =
-    Surface.card theme (expandedContent purpose theme device formHasManualInput chat)
+enabledView : FoodDraftPurpose -> Theme -> Language -> Device -> Bool -> ChatModel -> Element Msg
+enabledView purpose theme language device formHasManualInput chat =
+    Surface.card theme (expandedContent purpose theme language device formHasManualInput chat)
 
 
-expandedContent : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> List (Element Msg)
-expandedContent purpose theme device formHasManualInput chat =
+expandedContent :
+    FoodDraftPurpose
+    -> Theme
+    -> Language
+    -> Device
+    -> Bool
+    -> ChatModel
+    -> List (Element Msg)
+expandedContent purpose theme language device formHasManualInput chat =
     case chat.draft of
         Just _ ->
-            [ draftPreviewView purpose theme device formHasManualInput chat
-            , warningView theme chat.warnings
-            , requestErrorView theme device chat.request
+            [ draftPreviewView purpose theme language device formHasManualInput chat
+            , warningView theme language chat.warnings
+            , requestErrorView theme language device chat.request
             ]
                 ++ (if chat.askingForChanges then
-                        [ conversationView theme device chat
-                        , descriptionInput theme chat
-                        , photoPicker theme device chat
-                        , sendButton purpose theme device chat.request
+                        [ conversationView theme language device chat
+                        , descriptionInput theme language chat
+                        , photoPicker theme language device chat
+                        , sendButton purpose theme language device chat.request
                         ]
 
                     else
@@ -767,17 +777,17 @@ expandedContent purpose theme device formHasManualInput chat =
                    )
 
         Nothing ->
-            [ conversationView theme device chat
-            , warningView theme chat.warnings
-            , requestErrorView theme device chat.request
-            , descriptionInput theme chat
-            , photoPicker theme device chat
-            , sendButton purpose theme device chat.request
+            [ conversationView theme language device chat
+            , warningView theme language chat.warnings
+            , requestErrorView theme language device chat.request
+            , descriptionInput theme language chat
+            , photoPicker theme language device chat
+            , sendButton purpose theme language device chat.request
             ]
 
 
-conversationView : Theme -> Device -> ChatModel -> Element Msg
-conversationView theme device chat =
+conversationView : Theme -> Language -> Device -> ChatModel -> Element Msg
+conversationView theme language device chat =
     if not (hasSession chat) then
         Element.none
 
@@ -785,7 +795,7 @@ conversationView theme device chat =
         Element.column
             [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
             [ Element.row [ Element.width Element.fill ]
-                [ Element.el [ Font.bold ] (Element.text "Conversation")
+                [ Element.el [ Font.bold ] (Element.text (I18n.t language TidAssistantConversation))
                 , if chat.request == Sending || chat.draft /= Nothing then
                     Element.none
 
@@ -795,7 +805,7 @@ conversationView theme device chat =
                             theme
                             { tone = Button.Primary
                             , width = Button.ContentWidth
-                            , label = "New session"
+                            , label = I18n.t language TidAssistantNewSession
                             , onPress = NewSessionClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -807,34 +817,30 @@ conversationView theme device chat =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                (List.map (turnView theme) chat.transcript)
+                (List.map (turnView theme language) chat.transcript)
             ]
 
 
-modalView : Theme -> Device -> Model -> Maybe (Element Msg)
-modalView theme device model =
+modalView : Theme -> Language -> Device -> Model -> Maybe (Element Msg)
+modalView theme language device model =
     case model of
         Enabled chat ->
             if chat.awaitingNewSessionConfirmation && chat.request /= Sending then
                 Just
                     (Feedback.modalOverlay theme
-                        { title = "Start new session?"
+                        { title = I18n.t language TidAssistantStartNewSessionTitle
                         , body =
                             [ Typography.mutedParagraph theme
-                                (String.concat
-                                    [ "The current conversation and draft will be "
-                                    , "discarded. Your food form will not be changed."
-                                    ]
-                                )
+                                (I18n.t language TidAssistantStartNewSessionBody)
                             ]
                         , actions =
                             Button.bottomActionButtons device
                                 theme
-                                [ { label = "Cancel"
+                                [ { label = I18n.t language TidCommonCancel
                                   , onPress = CancelNewSessionClicked
                                   , tone = Button.Primary
                                   }
-                                , { label = "Start new session"
+                                , { label = I18n.t language TidAssistantStartNewSession
                                   , onPress = ConfirmNewSessionClicked
                                   , tone = Button.Danger
                                   }
@@ -850,8 +856,8 @@ modalView theme device model =
             Nothing
 
 
-turnView : Theme -> ConversationTurn -> Element Msg
-turnView theme turn =
+turnView : Theme -> Language -> ConversationTurn -> Element Msg
+turnView theme language turn =
     Element.column
         [ Element.width Element.fill
         , Element.padding DesignTokens.space12
@@ -863,10 +869,10 @@ turnView theme turn =
             (Element.text
                 (case FoodAssistant.turnRole turn of
                     User ->
-                        "You"
+                        I18n.t language TidAssistantRoleUser
 
                     Assistant ->
-                        "CalCo assistant"
+                        I18n.t language TidAssistantRoleAssistant
                 )
             )
         , Element.paragraph [ Element.width Element.fill ]
@@ -874,8 +880,8 @@ turnView theme turn =
         ]
 
 
-descriptionInput : Theme -> ChatModel -> Element Msg
-descriptionInput theme chat =
+descriptionInput : Theme -> Language -> ChatModel -> Element Msg
+descriptionInput theme language chat =
     Input.multiline
         [ Element.width Element.fill
         , Element.height (Element.px 120)
@@ -890,10 +896,10 @@ descriptionInput theme chat =
                 (Input.placeholder []
                     (Element.text
                         (if chat.draft == Nothing then
-                            "For example: one bowl of dal, about 300 g"
+                            I18n.t language TidAssistantDescriptionPlaceholder
 
                          else
-                            "For example: use 250 g and reduce the oil"
+                            I18n.t language TidAssistantChangesPlaceholder
                         )
                     )
                 )
@@ -901,18 +907,18 @@ descriptionInput theme chat =
             Input.labelAbove []
                 (UiInput.fieldLabel theme
                     (if chat.draft == Nothing then
-                        "Food description or answer"
+                        I18n.t language TidAssistantDescriptionLabel
 
                      else
-                        "What should change?"
+                        I18n.t language TidAssistantChangesLabel
                     )
                 )
         , spellcheck = True
         }
 
 
-photoPicker : Theme -> Device -> ChatModel -> Element Msg
-photoPicker theme device chat =
+photoPicker : Theme -> Language -> Device -> ChatModel -> Element Msg
+photoPicker theme language device chat =
     if not chat.supportsImages then
         Element.none
 
@@ -921,14 +927,15 @@ photoPicker theme device chat =
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space8
             ]
-            ([ Element.el [ Font.bold ] (Element.text "Photos (optional)")
-             , photoActionView theme device chat
+            ([ Element.el [ Font.bold ] (Element.text (I18n.t language TidAssistantPhotosOptional))
+             , photoActionView theme language device chat
              ]
                 ++ photoErrorView theme chat.photoError
                 ++ List.indexedMap
                     (\index photo ->
                         photoPreview
                             theme
+                            language
                             device
                             index
                             photo
@@ -940,10 +947,10 @@ photoPicker theme device chat =
             )
 
 
-photoActionView : Theme -> Device -> ChatModel -> Element Msg
-photoActionView theme device chat =
+photoActionView : Theme -> Language -> Device -> ChatModel -> Element Msg
+photoActionView theme language device chat =
     if List.length chat.photos >= maxPhotoCount then
-        Typography.mutedParagraph theme "Four photos attached (maximum)."
+        Typography.mutedParagraph theme (I18n.t language TidAssistantPhotosMax)
 
     else
         Element.column
@@ -954,23 +961,23 @@ photoActionView theme device chat =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ Element.el [ Element.width Element.fill ] (cameraInput chat)
+                [ Element.el [ Element.width Element.fill ] (cameraInput language chat)
                 , Element.el [ Element.width Element.fill ]
-                    (choosePhotosButton theme device chat)
+                    (choosePhotosButton theme language device chat)
                 ]
             ]
 
 
-choosePhotosButton : Theme -> Device -> ChatModel -> Element Msg
-choosePhotosButton theme device chat =
+choosePhotosButton : Theme -> Language -> Device -> ChatModel -> Element Msg
+choosePhotosButton theme language device chat =
     let
         label : String
         label =
             if List.isEmpty chat.photos then
-                "Choose photos"
+                I18n.t language TidAssistantChoosePhotos
 
             else
-                "Choose more photos"
+                I18n.t language TidAssistantChooseMorePhotos
     in
     Button.textButton device
         theme
@@ -991,8 +998,8 @@ choosePhotosButton theme device chat =
         }
 
 
-cameraInput : ChatModel -> Element Msg
-cameraInput chat =
+cameraInput : Language -> ChatModel -> Element Msg
+cameraInput language chat =
     Element.html <|
         Html.label
             [ HtmlAttributes.classList
@@ -1000,12 +1007,13 @@ cameraInput chat =
                 , ( "photo-capture-label--disabled", not (canAddPhotos chat) )
                 ]
             ]
-            [ Html.span [] [ Html.text "Take photo" ]
+            [ Html.span [] [ Html.text (I18n.t language TidAssistantTakePhoto) ]
             , Html.input
                 [ HtmlAttributes.type_ "file"
                 , HtmlAttributes.accept "image/*"
                 , HtmlAttributes.attribute "capture" "environment"
-                , HtmlAttributes.attribute "aria-label" "Take a food photo"
+                , HtmlAttributes.attribute "aria-label"
+                    (I18n.t language TidAssistantTakePhotoAria)
                 , HtmlAttributes.disabled (not (canAddPhotos chat))
                 , HtmlEvents.on "change" cameraFileDecoder
                 , HtmlAttributes.value ""
@@ -1030,8 +1038,8 @@ photoErrorView theme maybeError =
             []
 
 
-photoPreview : Theme -> Device -> Int -> File -> Maybe String -> Element Msg
-photoPreview theme device index photo maybeUrl =
+photoPreview : Theme -> Language -> Device -> Int -> File -> Maybe String -> Element Msg
+photoPreview theme language device index photo maybeUrl =
     Element.row
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
@@ -1050,7 +1058,7 @@ photoPreview theme device index photo maybeUrl =
                     [ Element.width (Element.px 72)
                     , Element.height (Element.px 72)
                     ]
-                    (Element.text "Loading preview…")
+                    (Element.text (I18n.t language TidAssistantLoadingPreview))
         , Element.column
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space4
@@ -1062,7 +1070,7 @@ photoPreview theme device index photo maybeUrl =
                 theme
                 { tone = Button.DangerOutline
                 , width = Button.ContentWidth
-                , label = "Remove photo"
+                , label = I18n.t language TidAssistantRemovePhoto
                 , onPress = RemovePhoto index
                 , submitState = Nothing
                 , submittingLabel = Nothing
@@ -1081,8 +1089,8 @@ formatPhotoSize bytes =
         String.fromInt ((bytes + 1023) // 1024) ++ " KiB"
 
 
-sendButton : FoodDraftPurpose -> Theme -> Device -> RequestState -> Element Msg
-sendButton purpose theme device request =
+sendButton : FoodDraftPurpose -> Theme -> Language -> Device -> RequestState -> Element Msg
+sendButton purpose theme language device request =
     Button.textButton device
         theme
         { tone = Button.Primary
@@ -1090,10 +1098,10 @@ sendButton purpose theme device request =
         , label =
             case purpose of
                 CustomFood ->
-                    "Send"
+                    I18n.t language TidAssistantSend
 
                 AdHocLog ->
-                    "Estimate Food"
+                    I18n.t language TidAssistantEstimateFood
         , onPress = SendClicked
         , submitState =
             Just
@@ -1103,13 +1111,13 @@ sendButton purpose theme device request =
                  else
                     Button.Idle
                 )
-        , submittingLabel = Just "Generating draft…"
+        , submittingLabel = Just (I18n.t language TidAssistantGeneratingDraft)
         , trailing = Nothing
         }
 
 
-requestErrorView : Theme -> Device -> RequestState -> Element Msg
-requestErrorView theme device request =
+requestErrorView : Theme -> Language -> Device -> RequestState -> Element Msg
+requestErrorView theme language device request =
     case request of
         RequestFailed message ->
             Element.column
@@ -1119,7 +1127,7 @@ requestErrorView theme device request =
                     theme
                     { tone = Button.Ghost
                     , width = Button.FullWidth
-                    , label = "Retry last request"
+                    , label = I18n.t language TidAssistantRetryLastRequest
                     , onPress = RetryClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
@@ -1134,8 +1142,8 @@ requestErrorView theme device request =
             Element.none
 
 
-warningView : Theme -> List String -> Element Msg
-warningView theme warnings =
+warningView : Theme -> Language -> List String -> Element Msg
+warningView theme language warnings =
     if List.isEmpty warnings then
         Element.none
 
@@ -1150,14 +1158,23 @@ warningView theme warnings =
                         , Border.rounded DesignTokens.radiusControl
                         , Background.color theme.brandBlueSoft
                         ]
-                        [ Element.text ("Review estimate: " ++ warning) ]
+                        [ Element.text
+                            (I18n.t language (TidAssistantReviewEstimatePrefix warning))
+                        ]
                 )
                 warnings
             )
 
 
-draftPreviewView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
-draftPreviewView purpose theme device formHasManualInput chat =
+draftPreviewView :
+    FoodDraftPurpose
+    -> Theme
+    -> Language
+    -> Device
+    -> Bool
+    -> ChatModel
+    -> Element Msg
+draftPreviewView purpose theme language device formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
@@ -1166,7 +1183,7 @@ draftPreviewView purpose theme device formHasManualInput chat =
             let
                 preview : DraftPreviewData
                 preview =
-                    draftPreviewData draft
+                    draftPreviewData language draft
             in
             Element.column
                 [ Element.width Element.fill
@@ -1177,7 +1194,7 @@ draftPreviewView purpose theme device formHasManualInput chat =
                 , Border.rounded DesignTokens.radiusControl
                 ]
                 [ Element.row [ Element.width Element.fill ]
-                    [ Typography.subsectionTitle theme "Draft preview"
+                    [ Typography.subsectionTitle theme (I18n.t language TidAssistantDraftPreview)
                     , if chat.request == Sending then
                         Element.none
 
@@ -1187,7 +1204,7 @@ draftPreviewView purpose theme device formHasManualInput chat =
                                 theme
                                 { tone = Button.DangerOutline
                                 , width = Button.ContentWidth
-                                , label = "New session"
+                                , label = I18n.t language TidAssistantNewSession
                                 , onPress = NewSessionClicked
                                 , submitState = Nothing
                                 , submittingLabel = Nothing
@@ -1196,19 +1213,27 @@ draftPreviewView purpose theme device formHasManualInput chat =
                             )
                     ]
                 , previewRows theme preview.details
-                , previewSection theme "Nutrition per 100 g" preview.nutrients
-                , previewSection theme "Servings" preview.servings
-                , draftActionView purpose theme device formHasManualInput chat
+                , previewSection
+                    theme
+                    language
+                    (I18n.t language TidAssistantNutritionPer100g)
+                    preview.nutrients
+                , previewSection
+                    theme
+                    language
+                    (I18n.t language TidFoodEditorServings)
+                    preview.servings
+                , draftActionView purpose theme language device formHasManualInput chat
                 ]
 
 
-previewSection : Theme -> String -> List ( String, String ) -> Element Msg
-previewSection theme title rows =
+previewSection : Theme -> Language -> String -> List ( String, String ) -> Element Msg
+previewSection theme language title rows =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ Element.el [ Font.bold ] (Element.text title)
         , if List.isEmpty rows then
-            Typography.mutedParagraph theme "None suggested."
+            Typography.mutedParagraph theme (I18n.t language TidAssistantNoNutrientsSuggested)
 
           else
             previewRows theme rows
@@ -1231,25 +1256,29 @@ previewRow theme ( label, value ) =
         ]
 
 
-draftPreviewData : FoodDraft -> DraftPreviewData
-draftPreviewData draft =
+draftPreviewData : Language -> FoodDraft -> DraftPreviewData
+draftPreviewData language draft =
     { details =
-        [ ( "Name", draft.name )
-        , ( "Brand", Maybe.withDefault "Not specified" draft.brand )
-        , ( "Categories", defaultText "None suggested" (String.join ", " draft.categories) )
-        , ( "Default quantity"
+        [ ( I18n.t language TidFoodEditorName, draft.name )
+        , ( I18n.t language TidFoodEditorBrand
+          , Maybe.withDefault (I18n.t language TidCommonNotSpecified) draft.brand
+          )
+        , ( I18n.t language TidFoodEditorCategories
+          , defaultText (I18n.t language TidCommonNoneSuggested) (String.join ", " draft.categories)
+          )
+        , ( I18n.t language TidAssistantDefaultQuantity
           , case ( draft.defaultQuantity, draft.defaultUnit ) of
                 ( Just quantity, Just unit ) ->
                     quantity ++ " " ++ unit
 
                 _ ->
-                    "Not specified"
+                    I18n.t language TidCommonNotSpecified
           )
         ]
     , nutrients =
         List.map
             (\nutrient ->
-                ( Nutrients.nutrientLabel nutrient.code
+                ( Nutrients.nutrientLabel language nutrient.code
                 , nutrient.amountPer100g ++ " " ++ nutrientUnit nutrient.code
                 )
             )
@@ -1258,11 +1287,11 @@ draftPreviewData draft =
         List.map
             (\serving ->
                 ( serving.unit
-                , "1 "
-                    ++ serving.unit
-                    ++ " = "
-                    ++ serving.gramsPerUnit
-                    ++ " g"
+                , I18n.t language
+                    (TidAssistantServingConversion
+                        serving.unit
+                        serving.gramsPerUnit
+                    )
                 )
             )
             draft.servings
@@ -1296,8 +1325,15 @@ defaultText fallback value =
         value
 
 
-draftActionView : FoodDraftPurpose -> Theme -> Device -> Bool -> ChatModel -> Element Msg
-draftActionView purpose theme device formHasManualInput chat =
+draftActionView :
+    FoodDraftPurpose
+    -> Theme
+    -> Language
+    -> Device
+    -> Bool
+    -> ChatModel
+    -> Element Msg
+draftActionView purpose theme language device formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
@@ -1306,15 +1342,13 @@ draftActionView purpose theme device formHasManualInput chat =
             if chat.awaitingOverwriteConfirmation then
                 confirmationSurface theme
                     [ Element.paragraph [ Element.width Element.fill ]
-                        [ Element.text
-                            "Applying this draft will replace the values already in the form."
-                        ]
+                        [ Element.text (I18n.t language TidAssistantApplyReplacesForm) ]
                     , compactActionRow device
                         [ Button.textButton device
                             theme
                             { tone = Button.Ghost
                             , width = Button.ResponsiveWidth
-                            , label = "Cancel"
+                            , label = I18n.t language TidCommonCancel
                             , onPress = CancelOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -1324,7 +1358,7 @@ draftActionView purpose theme device formHasManualInput chat =
                             theme
                             { tone = Button.Danger
                             , width = Button.ResponsiveWidth
-                            , label = "Replace form values"
+                            , label = I18n.t language TidAssistantReplaceFormValues
                             , onPress = ConfirmOverwriteClicked
                             , submitState = Nothing
                             , submittingLabel = Nothing
@@ -1345,10 +1379,10 @@ draftActionView purpose theme device formHasManualInput chat =
                             , width = Button.FullWidth
                             , label =
                                 if chat.askingForChanges then
-                                    "Cancel changes"
+                                    I18n.t language TidAssistantCancelChanges
 
                                 else
-                                    "Ask for changes"
+                                    I18n.t language TidAssistantAskForChanges
                             , onPress =
                                 if chat.askingForChanges then
                                     CancelChangesClicked
@@ -1356,7 +1390,7 @@ draftActionView purpose theme device formHasManualInput chat =
                                 else
                                     AskForChangesClicked
                             , submitState = Just Button.Idle
-                            , submittingLabel = Just "Ask for changes"
+                            , submittingLabel = Just (I18n.t language TidAssistantAskForChanges)
                             , trailing = Nothing
                             }
                         )
@@ -1368,13 +1402,13 @@ draftActionView purpose theme device formHasManualInput chat =
                             , label =
                                 case purpose of
                                     CustomFood ->
-                                        "Apply to form"
+                                        I18n.t language TidAssistantApplyToForm
 
                                     AdHocLog ->
-                                        "Review estimate"
+                                        I18n.t language TidAssistantReviewEstimate
                             , onPress = ApplyDraftClicked formHasManualInput
                             , submitState = Just Button.Idle
-                            , submittingLabel = Just "Applying…"
+                            , submittingLabel = Just (I18n.t language TidAssistantApplying)
                             , trailing = Nothing
                             }
                         )

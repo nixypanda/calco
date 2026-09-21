@@ -24,7 +24,10 @@ import Data.FoodLog exposing (FoodLog)
 import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
+import I18n
 import Lib.Ticket exposing (Ticket)
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -212,7 +215,7 @@ submitWithContext model =
                 startSubmission model
 
         Editor.CustomFoodContext ->
-            validationFailure "This editor is not configured for food logging." model
+            validationFailure (I18n.en TidFoodEditorErrorNotConfigured) model
 
 
 startSubmission : Model -> ( Model, Cmd Msg, OutMsg )
@@ -235,7 +238,7 @@ startSubmission model =
                     validationFailure message model
 
         Editor.CustomFoodContext ->
-            validationFailure "This editor is not configured for food logging." model
+            validationFailure (I18n.en TidFoodEditorErrorNotConfigured) model
 
 
 requestProductLog : String -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -280,8 +283,7 @@ productLogFailure error model =
                     | submit =
                         LogFailedAfterFoodSaved
                             { productId = productId
-                            , message =
-                                "Food was saved to My Foods, but it could not be logged."
+                            , message = I18n.en TidFoodLogSavedNotLogged
                             }
                   }
                 , Cmd.none
@@ -319,13 +321,18 @@ failure error model =
         validationFailure (Client.displayError error) model
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
 view =
     viewForAi True
 
 
-viewForAi : Bool -> { model : Model, device : Device, theme : Theme } -> Element Msg
-viewForAi showOptional { model, device, theme } =
+viewForAi :
+    Bool
+    -> { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+viewForAi showOptional { model, device, theme, language } =
     let
         visibility : Editor.NutrientVisibility
         visibility =
@@ -338,7 +345,15 @@ viewForAi showOptional { model, device, theme } =
     UiPage.pageContainer
         [ Feedback.maybeErrorBanner theme (submitError model.submit)
         , Element.map FormMsg
-            (Editor.viewForLog visibility theme device model.nutrients model.units model.form)
+            (Editor.viewForLog
+                visibility
+                theme
+                language
+                device
+                model.nutrients
+                model.units
+                model.form
+            )
         , Button.textButton device
             theme
             { tone = Button.Primary
@@ -346,13 +361,13 @@ viewForAi showOptional { model, device, theme } =
             , label =
                 case model.submit of
                     LogFailedAfterFoodSaved _ ->
-                        "Retry logging"
+                        I18n.t language TidFoodLogRetryLogging
 
                     _ ->
-                        "Log Food"
+                        I18n.t language TidTitleLogFood
             , onPress = SubmitClicked
             , submitState = Just (Button.submittingOrIdle (isSubmitting model.submit))
-            , submittingLabel = Just "Logging..."
+            , submittingLabel = Just (I18n.t language TidFoodShowLogging)
             , trailing = Nothing
             }
         ]

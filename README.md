@@ -88,6 +88,43 @@ just test-frontend
 just build-frontend
 ```
 
+## Internationalization
+
+Frontend copy is translated at compile time via
+[i18n-to-elm](https://github.com/dragonwasrobot/i18n-to-elm) (pinned to `v0.5.0`).
+
+- `frontend-web/i18n/en_US.json` is the hand-edited source of truth: one flat
+  object of strict PascalCase keys, with `{0}`, `{1}` holes for interpolation.
+- `frontend-web/generated/Translations/` is generated Elm. It is **committed**
+  and must never be hand-edited or reformatted.
+- Regenerate after editing the JSON:
+
+  ```bash
+  nix develop
+  just i18n
+  ```
+
+  The recipe builds and caches the `i18n2elm` escript on first run (needs
+  network once), then runs offline.
+
+- Render strings through the `I18n.t` seam in `frontend-web/src/I18n.elm`:
+
+  ```elm
+  import I18n
+  import Translations.Ids exposing (TranslationId(..))
+
+  Element.text (I18n.t TidNavDiary)
+  Element.text (I18n.t (TidTitleAddToMealSlot (MealSlot.label slot)))
+  ```
+
+  Note: Elm imports `TranslationId(..)`, not individual constructors.
+
+`en_US` is the only locale. `generated/` is a second Elm source directory and is
+excluded from `elm-format` and `elm-review`; `src`/`tests` stay formatted normal
+Elm. Assistant output language is handled separately in the backend system
+prompt (`backend/src/assistant/infrastructure/food_draft/prompt.rs`), not by
+this pipeline.
+
 ## Documentation
 
 - [Features](docs/features.md): product checklist and current scope

@@ -113,6 +113,29 @@ test-frontend:
 format-frontend:
     elm-format --yes src tests
 
+# Regenerate frontend-web/generated/Translations from frontend-web/i18n/*.json.
+i18n: i18n2elm
+    mkdir -p frontend-web/generated
+    cd frontend-web/generated && ../../.cache/i18n2elm/i18n2elm ../i18n
+
+# Build and cache the i18n2elm escript from the pinned upstream release.
+[private]
+i18n2elm:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -x .cache/i18n2elm/i18n2elm ]; then
+        rm -rf .cache/i18n-to-elm
+        git clone --depth 1 --branch v0.5.0 \
+            https://github.com/dragonwasrobot/i18n-to-elm.git .cache/i18n-to-elm
+        # The pinned nixpkgs ships Elixir 1.20.0-rc.6, but the tool's `~> 1.20`
+        # requirement rejects pre-releases. Relax it so the RC is accepted.
+        perl -0pi -e 's/\@elixir_version "~> 1\.20"/\@elixir_version ">= 1.20.0-rc.0"/' \
+            .cache/i18n-to-elm/mix.exs
+        (cd .cache/i18n-to-elm && MIX_ENV=prod mix do deps.get, build)
+        mkdir -p .cache/i18n2elm
+        cp .cache/i18n-to-elm/i18n2elm .cache/i18n2elm/
+    fi
+
 # Run all frontend checks.
 check-frontend: check-frontend-format check-frontend-line-length check-frontend-review build-frontend test-frontend
 

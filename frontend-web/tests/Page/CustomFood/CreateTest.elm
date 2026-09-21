@@ -11,6 +11,7 @@ import Page.CustomFood.Create as CustomFoodCreate
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.Theme as Theme
 
 
@@ -138,6 +139,7 @@ tests =
                     { model = validModel
                     , device = { class = Phone, orientation = Portrait }
                     , theme = Theme.light
+                    , language = Util.EN_US
                     }
                     |> Element.layout []
                     |> Query.fromHtml

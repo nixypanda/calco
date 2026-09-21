@@ -9,7 +9,10 @@ module Data.Calendar exposing
     , shiftMonth
     )
 
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 
 
 monthKey : LocalDate -> String
@@ -86,11 +89,11 @@ dayKey period day =
     period ++ "-" ++ String.padLeft 2 '0' (String.fromInt day)
 
 
-monthLabel : String -> String
-monthLabel period =
+monthLabel : Language -> String -> String
+monthLabel language period =
     case parseMonth period of
         Just ( year, month ) ->
-            monthName month ++ " " ++ String.fromInt year
+            I18n.t language (TidCalendarMonthYear (monthName language month) (String.fromInt year))
 
         Nothing ->
             period
@@ -178,44 +181,44 @@ dayOfWeek year month day =
     modBy 7 (zeroSunday + 6)
 
 
-monthName : Int -> String
-monthName month =
+monthName : Language -> Int -> String
+monthName language month =
     case month of
         1 ->
-            "January"
+            I18n.t language TidCalendarMonthJanuary
 
         2 ->
-            "February"
+            I18n.t language TidCalendarMonthFebruary
 
         3 ->
-            "March"
+            I18n.t language TidCalendarMonthMarch
 
         4 ->
-            "April"
+            I18n.t language TidCalendarMonthApril
 
         5 ->
-            "May"
+            I18n.t language TidCalendarMonthMay
 
         6 ->
-            "June"
+            I18n.t language TidCalendarMonthJune
 
         7 ->
-            "July"
+            I18n.t language TidCalendarMonthJuly
 
         8 ->
-            "August"
+            I18n.t language TidCalendarMonthAugust
 
         9 ->
-            "September"
+            I18n.t language TidCalendarMonthSeptember
 
         10 ->
-            "October"
+            I18n.t language TidCalendarMonthOctober
 
         11 ->
-            "November"
+            I18n.t language TidCalendarMonthNovember
 
         12 ->
-            "December"
+            I18n.t language TidCalendarMonthDecember
 
         _ ->
             ""

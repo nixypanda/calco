@@ -12,6 +12,9 @@ import Api.Client as Client
 import Data.DiaryPreferences exposing (DiaryPreferences)
 import Data.MealSlot as MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -108,7 +111,7 @@ update msg model =
                         ( Ready
                             { loaded
                                 | saveState =
-                                    ValidationFailed "Select at least one meal slot."
+                                    ValidationFailed (I18n.en TidDiarySettingsSelectAtLeastOne)
                             }
                         , Cmd.none
                         , NoOp
@@ -157,31 +160,37 @@ canonical selected =
     List.filter (\slot -> List.member slot selected) MealSlot.all
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
         (case model of
             Loading ->
                 [ diarySettingsSkeleton theme ]
 
             Failed message ->
-                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
+                [ Feedback.errorRetry theme
+                    language
+                    device
+                    { message = message, onRetry = RetryClicked }
+                ]
 
             Ready loaded ->
                 [ Surface.section theme
                     { header =
                         Just
                             (Surface.sectionHeader
-                                { title = Typography.sectionTitle theme "Meal slots"
+                                { title =
+                                    Typography.sectionTitle theme
+                                        (I18n.t language TidDiarySettingsMealSlotsTitle)
                                 , description =
                                     Just
                                         (Typography.mutedParagraph theme
-                                            "Choose the fixed meal slots shown in your diary."
+                                            (I18n.t language TidDiarySettingsMealSlotsDescription)
                                         )
                                 , trailing = Nothing
                                 }
                             )
-                    , body = List.map (slotCheckbox theme loaded.selected) MealSlot.all
+                    , body = List.map (slotCheckbox theme language loaded.selected) MealSlot.all
                     , footer = Nothing
                     }
                 , Feedback.maybeErrorBanner theme (saveError loaded.saveState)
@@ -191,23 +200,23 @@ view { model, device, theme } =
                     , width = Button.FullWidth
                     , label =
                         if loaded.saveState == Saved then
-                            "Saved"
+                            I18n.t language TidDiarySettingsSaved
 
                         else
-                            "Save meal slots"
+                            I18n.t language TidDiarySettingsSave
                     , onPress = SaveClicked
                     , submitState = Just (Button.submittingOrIdle (loaded.saveState == Saving))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
         )
 
 
-slotCheckbox : Theme -> List MealSlot -> MealSlot -> Element Msg
-slotCheckbox theme selected slot =
+slotCheckbox : Theme -> Language -> List MealSlot -> MealSlot -> Element Msg
+slotCheckbox theme language selected slot =
     UiInput.checkbox theme
-        { label = MealSlot.label slot
+        { label = MealSlot.label language slot
         , checked = List.member slot selected
         , onChange = SlotToggled slot
         }

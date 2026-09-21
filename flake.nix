@@ -76,6 +76,10 @@
               just
               docker-compose
               uv
+
+              # i18n code generation (i18n2elm escript build only)
+              beam29Packages.elixir_1_20
+              beam29Packages.erlang
             ];
 
             shellHook = ''
@@ -83,6 +87,7 @@
               echo "  Rust:  $(cargo --version)"
               echo "  Node:  $(node --version)"
               echo "  Elm:   $(elm --version)"
+              echo "  Elixir: $(elixir --version | tail -n 1)"
               echo ""
               if [ ! -d frontend-web/node_modules ]; then
                 echo "  Installing frontend-web npm dependencies (one-time)..."

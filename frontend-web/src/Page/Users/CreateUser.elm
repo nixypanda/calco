@@ -13,7 +13,10 @@ import Api.Client as Client
 import Data.Auth as Auth
 import Data.User as User
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Input as UiInput
@@ -183,29 +186,29 @@ createUserPayload form =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     let
         form : Form
         form =
             currentForm model
     in
     UiPage.pageContainer
-        (errorView theme model
+        (errorView theme language model
             ++ [ Surface.formSection theme
-                    "Credentials"
+                    (I18n.t language TidUsersCredentials)
                     [ UiInput.input theme
-                        { label = "Username"
+                        { label = I18n.t language TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
                     , UiInput.input theme
-                        { label = "Display Name"
+                        { label = I18n.t language TidCommonDisplayName
                         , value = form.displayName
                         , onChange = DisplayNameChanged
                         }
                     , UiInput.passwordInput theme
-                        { label = "Initial Password"
+                        { label = I18n.t language TidUsersInitialPassword
                         , value = form.initialPassword
                         , onChange = PasswordChanged
                         }
@@ -214,10 +217,10 @@ view { model, device, theme } =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Save"
+                    , label = I18n.t language TidCommonSave
                     , onPress = Submitted
                     , submitState = Just (Button.submittingOrIdle (isSubmitting model))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                ]
@@ -234,11 +237,11 @@ isSubmitting model =
             False
 
 
-errorView : Theme -> Model -> List (Element msg)
-errorView theme model =
+errorView : Theme -> Language -> Model -> List (Element msg)
+errorView theme language model =
     case model of
         Invalid _ problem ->
-            [ Feedback.errorBanner theme (problemMessage problem) ]
+            [ Feedback.errorBanner theme (problemMessage language problem) ]
 
         Failed _ message ->
             [ Feedback.errorBanner theme message ]
@@ -247,14 +250,14 @@ errorView theme model =
             []
 
 
-problemMessage : Problem -> String
-problemMessage problem =
+problemMessage : Language -> Problem -> String
+problemMessage language problem =
     case problem of
         UsernameRequired ->
-            "Username is required"
+            I18n.t language TidCommonUsernameRequired
 
         DisplayNameRequired ->
-            "Display name is required"
+            I18n.t language TidUsersDisplayNameRequired
 
         InitialPasswordRequired ->
-            "Initial password is required"
+            I18n.t language TidUsersInitialPasswordRequired

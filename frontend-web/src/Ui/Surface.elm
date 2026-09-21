@@ -19,6 +19,9 @@ import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
 import Html.Attributes
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Common exposing (minWidthZero, toCssColor, uiClass)
 import Ui.DesignTokens
     exposing
@@ -451,15 +454,15 @@ listRowLeading leading =
         )
 
 
-detailRow : Theme -> String -> Element msg -> Element msg
-detailRow theme label value =
+detailRow : Theme -> Language -> String -> Element msg -> Element msg
+detailRow theme language label value =
     Element.row
         [ Element.width Element.fill
         , Element.spacing space4
         , minWidthZero
         ]
         [ Element.el [ Font.color theme.textMedium, caption ]
-            (Element.text (label ++ ":"))
+            (Element.text (I18n.t language (TidUiDetailRowLabelSuffix label)))
         , Element.el [ Element.width Element.fill, minWidthZero ] value
         ]
 

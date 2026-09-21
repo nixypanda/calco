@@ -12,7 +12,10 @@ import Api.Client as Client
 import Component.Users.CredentialForm as CredentialForm
 import Data.Auth as Auth
 import Element exposing (Device, Element)
+import I18n
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Theme exposing (Theme)
 
 
@@ -46,24 +49,24 @@ type Msg
 
 loginPayload : CredentialForm.Form -> Result String Auth.LoginRequest
 loginPayload form =
-    Text.requireTrimmed "Username is required" form.username
+    Text.requireTrimmed (I18n.en TidCommonUsernameRequired) form.username
         |> Result.andThen
             (\username ->
                 if String.isEmpty form.password then
-                    Err "Password is required"
+                    Err (I18n.en TidLoginPasswordRequired)
 
                 else
                     Ok { username = username, password = form.password }
             )
 
 
-config : CredentialForm.Config Auth.LoginRequest
-config =
+config : Language -> CredentialForm.Config Auth.LoginRequest
+config language =
     { validate = loginPayload
-    , title = "Log In"
+    , title = I18n.t language TidLoginTitle
     , description = Nothing
-    , submitLabel = "Log In"
-    , submittingLabel = "Logging in..."
+    , submitLabel = I18n.t language TidLoginSubmit
+    , submittingLabel = I18n.t language TidLoginSubmitting
     }
 
 
@@ -73,7 +76,7 @@ update msg model =
         FormMsg formMsg ->
             let
                 ( newModel, formOut ) =
-                    CredentialForm.update config formMsg model
+                    CredentialForm.update (config I18n.defaultLanguage) formMsg model
             in
             case formOut of
                 CredentialForm.NoOp ->
@@ -96,6 +99,6 @@ update msg model =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
 view props =
-    Element.map FormMsg (CredentialForm.view config props)
+    Element.map FormMsg (CredentialForm.view (config props.language) props)

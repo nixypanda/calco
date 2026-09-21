@@ -19,8 +19,11 @@ import Data.FoodLog exposing (FoodLog)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Device, Element)
 import File exposing (File)
+import I18n
 import Lib.Ticket exposing (Ticket)
 import Page.FoodLog.CreateAdHoc as Review
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Page as UiPage
@@ -311,48 +314,56 @@ sessionOutMsg error =
         NoOp
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+view { model, device, theme, language } =
     case model.review of
         Nothing ->
             UiPage.pageContainer
                 [ Feedback.maybeErrorBanner theme model.error
                 , Element.map AssistantMsg
-                    (Assistant.viewFor AdHocLog theme device False model.assistant)
+                    (Assistant.viewFor AdHocLog theme language device False model.assistant)
                 ]
 
         Just review ->
             UiPage.pageContainer
-                [ Typography.sectionTitle theme "Review food estimate"
+                [ Typography.sectionTitle theme (I18n.t language TidAssistantReviewFoodEstimate)
                 , Typography.mutedParagraph theme
-                    "Nutrition values are totals for the entire portion you are logging."
-                , warningView theme model.warnings
+                    (I18n.t language TidAssistantReviewNutritionTotalsNote)
+                , warningView theme language model.warnings
                 , Button.textButton device
                     theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = "Ask for changes"
+                    , label = I18n.t language TidAssistantAskForChanges
                     , onPress = AskForChangesClicked
                     , submitState = Nothing
                     , submittingLabel = Nothing
                     , trailing = Nothing
                     }
-                , additionalNutrientsToggle device theme model review
+                , additionalNutrientsToggle device theme language model review
                 , Element.map ReviewMsg
                     (Review.viewForAi model.showAdditionalNutrients
-                        { model = review, device = device, theme = theme }
+                        { model = review
+                        , device = device
+                        , theme = theme
+                        , language = language
+                        }
                     )
                 ]
 
 
-modalView : { model : Model, device : Device, theme : Theme } -> Maybe (Element Msg)
-modalView { model, device, theme } =
-    Assistant.modalView theme device model.assistant
+modalView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Maybe (Element Msg)
+modalView { model, device, theme, language } =
+    Assistant.modalView theme language device model.assistant
         |> Maybe.map (Element.map AssistantMsg)
 
 
-additionalNutrientsToggle : Device -> Theme -> Model -> Review.Model -> Element Msg
-additionalNutrientsToggle device theme model review =
+additionalNutrientsToggle : Device -> Theme -> Language -> Model -> Review.Model -> Element Msg
+additionalNutrientsToggle device theme language model review =
     if List.any (not << isCoreNutrient << .code) review.form.nutrients then
         Button.textButton device
             theme
@@ -360,10 +371,10 @@ additionalNutrientsToggle device theme model review =
             , width = Button.FullWidth
             , label =
                 if model.showAdditionalNutrients then
-                    "Hide additional nutrients"
+                    I18n.t language TidAssistantHideAdditionalNutrients
 
                 else
-                    "Show additional nutrients"
+                    I18n.t language TidAssistantShowAdditionalNutrients
             , onPress = ToggleAdditionalNutrients
             , submitState = Nothing
             , submittingLabel = Nothing
@@ -379,15 +390,18 @@ isCoreNutrient code =
     List.member code [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G" ]
 
 
-warningView : Theme -> List String -> Element msg
-warningView theme warnings =
+warningView : Theme -> Language -> List String -> Element msg
+warningView theme language warnings =
     if List.isEmpty warnings then
         Element.none
 
     else
         Surface.formSection theme
-            "Estimate notes"
+            (I18n.t language TidAssistantEstimateNotes)
             (List.map
-                (\warning -> Typography.mutedParagraph theme ("Estimate: " ++ warning))
+                (\warning ->
+                    Typography.mutedParagraph theme
+                        (I18n.t language (TidAssistantEstimatePrefix warning))
+                )
                 warnings
             )

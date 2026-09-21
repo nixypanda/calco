@@ -20,8 +20,11 @@ import Element.Font as Font
 import Element.Input as Input
 import Html
 import Html.Attributes as Attr
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -296,9 +299,9 @@ requestForMonths token oldest newest today =
 
 contentViewWithSelection :
     Maybe LocalDate
-    -> { model : Model, device : Device, theme : Theme }
+    -> { model : Model, device : Device, theme : Theme, language : Language }
     -> Element Msg
-contentViewWithSelection selectedDate { model, device, theme } =
+contentViewWithSelection selectedDate { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -308,21 +311,25 @@ contentViewWithSelection selectedDate { model, device, theme } =
                 calendarSkeleton theme model
 
             Failed message ->
-                [ Feedback.errorRetry theme device { message = message, onRetry = RetryClicked } ]
+                [ Feedback.errorRetry theme
+                    language
+                    device
+                    { message = message, onRetry = RetryClicked }
+                ]
 
             Ready ->
-                monthsView device theme model selectedDate False
+                monthsView device theme language model selectedDate False
 
             LoadingEarlier ->
-                monthsView device theme model selectedDate True
+                monthsView device theme language model selectedDate True
         )
 
 
-monthsView : Device -> Theme -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
-monthsView device theme model selectedDate loadingEarlier =
+monthsView : Device -> Theme -> Language -> Model -> Maybe LocalDate -> Bool -> List (Element Msg)
+monthsView device theme language model selectedDate loadingEarlier =
     monthRange model.newestMonth model.oldestMonth
-        |> List.map (monthView theme model selectedDate)
-        |> (\months -> months ++ [ loadEarlierButton device theme loadingEarlier ])
+        |> List.map (monthView theme language model selectedDate)
+        |> (\months -> months ++ [ loadEarlierButton device theme language loadingEarlier ])
 
 
 monthRange : String -> String -> List String
@@ -366,17 +373,25 @@ monthSkeleton theme month =
         }
 
 
-monthView : Theme -> Model -> Maybe LocalDate -> String -> Element Msg
-monthView theme model selectedDate month =
+monthView : Theme -> Language -> Model -> Maybe LocalDate -> String -> Element Msg
+monthView theme language model selectedDate month =
     Surface.section theme
-        { header = Just (Typography.sectionTitle theme (Calendar.monthLabel month))
+        { header = Just (Typography.sectionTitle theme (Calendar.monthLabel language month))
         , body =
             [ MonthCalendar.view
                 { period = month
-                , weekdayLabels = [ "S", "M", "T", "W", "T", "F", "S" ]
+                , weekdayLabels =
+                    [ I18n.t language TidDiaryCalendarWeekdaySun
+                    , I18n.t language TidDiaryCalendarWeekdayMon
+                    , I18n.t language TidDiaryCalendarWeekdayTue
+                    , I18n.t language TidDiaryCalendarWeekdayWed
+                    , I18n.t language TidDiaryCalendarWeekdayThu
+                    , I18n.t language TidDiaryCalendarWeekdayFri
+                    , I18n.t language TidDiaryCalendarWeekdaySat
+                    ]
                 , weekdayColor = theme.textMuted
                 , cellHeight = monthCellHeight
-                , viewDay = dayView theme model selectedDate month
+                , viewDay = dayView theme language model selectedDate month
                 }
             ]
         , footer = Nothing
@@ -385,13 +400,14 @@ monthView theme model selectedDate month =
 
 dayView :
     Theme
+    -> Language
     -> Model
     -> Maybe LocalDate
     -> String
     -> Int
     -> List (Element.Attribute Msg)
     -> Element Msg
-dayView theme model selectedDate month day attributes =
+dayView theme language model selectedDate month day attributes =
     let
         date : String
         date =
@@ -413,7 +429,7 @@ dayView theme model selectedDate month day attributes =
 
         label : Element Msg
         label =
-            dayLabel theme model.today day date maybeSummary
+            dayLabel theme language model.today day date maybeSummary
     in
     if future then
         Element.el
@@ -431,7 +447,7 @@ dayView theme model selectedDate month day attributes =
                         Element.rgba 0 0 0 0
                     )
                 :: Element.htmlAttribute
-                    (Attr.attribute "aria-label" (dayAriaLabel date maybeSummary))
+                    (Attr.attribute "aria-label" (dayAriaLabel language date maybeSummary))
                 :: Element.htmlAttribute
                     (Attr.attribute
                         "aria-pressed"
@@ -451,12 +467,13 @@ dayView theme model selectedDate month day attributes =
 
 dayLabel :
     Theme
+    -> Language
     -> LocalDate
     -> Int
     -> String
     -> Maybe DaySummary
     -> Element msg
-dayLabel theme today day date maybeSummary =
+dayLabel theme language today day date maybeSummary =
     let
         isToday : Bool
         isToday =
@@ -508,7 +525,7 @@ dayLabel theme today day date maybeSummary =
 
                             else
                                 theme.cardBg
-                        , label = dayAriaLabel date maybeSummary
+                        , label = dayAriaLabel language date maybeSummary
                         , center =
                             Html.span
                                 [ Attr.style "font-size" "13px"
@@ -558,31 +575,32 @@ compactCalories calories =
         String.fromInt (round calories)
 
 
-dayAriaLabel : String -> Maybe DaySummary -> String
-dayAriaLabel date maybeSummary =
+dayAriaLabel : Language -> String -> Maybe DaySummary -> String
+dayAriaLabel language date maybeSummary =
     case maybeSummary of
         Just summary ->
-            date
-                ++ ", "
-                ++ String.fromInt (round summary.energyKcal)
-                ++ " kilocalories logged"
+            I18n.t language
+                (TidDiaryCalendarDayAriaLogged
+                    date
+                    (String.fromInt (round summary.energyKcal))
+                )
 
         Nothing ->
-            date ++ ", no food logged"
+            I18n.t language (TidDiaryCalendarDayAriaNoFood date)
 
 
-loadEarlierButton : Device -> Theme -> Bool -> Element Msg
-loadEarlierButton device theme loading =
+loadEarlierButton : Device -> Theme -> Language -> Bool -> Element Msg
+loadEarlierButton device theme language loading =
     Button.textButton device
         theme
         { tone = Button.GhostFilled
         , width = Button.FullWidth
         , label =
             if loading then
-                "Loading..."
+                I18n.t language TidCommonLoading
 
             else
-                "Load earlier"
+                I18n.t language TidDiaryCalendarLoadEarlier
         , onPress = LoadEarlierClicked
         , submitState = Nothing
         , submittingLabel = Nothing
