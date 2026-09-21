@@ -11,6 +11,9 @@ module Component.Users.CredentialForm exposing
     )
 
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -121,9 +124,9 @@ markFailed message model =
 
 view :
     Config request
-    -> { model : Model, device : Device, theme : Theme }
+    -> { model : Model, device : Device, theme : Theme, language : Language }
     -> Element Msg
-view config { model, device, theme } =
+view config { model, device, theme, language } =
     let
         form : Form
         form =
@@ -144,12 +147,12 @@ view config { model, device, theme } =
                 , body =
                     [ Typography.maybeMutedParagraph theme config.description
                     , UiInput.input theme
-                        { label = "Username"
+                        { label = I18n.t language TidCommonUsername
                         , value = form.username
                         , onChange = UsernameChanged
                         }
                     , UiInput.passwordInput theme
-                        { label = "Password"
+                        { label = I18n.t language TidCommonPassword
                         , value = form.password
                         , onChange = PasswordChanged
                         }

@@ -22,6 +22,9 @@ import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -450,8 +453,10 @@ applyLoadedError message model =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView :
+    { model : Model, device : Device, theme : Theme, language : Language }
+    -> Element Msg
+contentView { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -465,15 +470,15 @@ contentView { model, device, theme } =
 
             Loading _ ->
                 Element.none
-        , bodyView theme device model
+        , bodyView theme device language model
         ]
 
 
-bodyView : Theme -> Device -> Model -> Element Msg
-bodyView theme device model =
+bodyView : Theme -> Device -> Language -> Model -> Element Msg
+bodyView theme device language model =
     case model of
         Loaded loaded ->
-            loadedView theme device loaded
+            loadedView theme device language loaded
 
         LoadFailed _ ->
             Element.none
@@ -482,8 +487,8 @@ bodyView theme device model =
             foodShowSkeleton theme
 
 
-loadedView : Theme -> Device -> LoadedModel -> Element Msg
-loadedView theme device loaded =
+loadedView : Theme -> Device -> Language -> LoadedModel -> Element Msg
+loadedView theme device language loaded =
     let
         food : ProductDetail
         food =
@@ -508,7 +513,8 @@ loadedView theme device loaded =
         [ Maybe.withDefault Element.none
             (Maybe.map (Feedback.infoBanner theme) loaded.lookupNote)
         , Surface.panel theme
-            { header = Just (View.Product.foodHeaderElement theme food [])
+            { header =
+                Just (View.Product.foodHeaderElement theme language food [])
             , sections =
                 (if List.isEmpty categories then
                     []
@@ -516,28 +522,40 @@ loadedView theme device loaded =
                  else
                     [ { title = Nothing, body = categories } ]
                 )
-                    ++ [ { title = Just (Typography.subsectionTitle theme "Portion")
+                    ++ [ { title =
+                            Just
+                                (Typography.subsectionTitle
+                                    theme
+                                    (I18n.t language TidFoodShowPortion)
+                                )
                          , body =
                             List.map (Element.map FormMsg)
-                                (FoodLogForm.fields theme device (Just food) loaded.units form)
+                                (FoodLogForm.fields
+                                    theme
+                                    language
+                                    device
+                                    (Just food)
+                                    loaded.units
+                                    form
+                                )
                          }
                        ]
-            , footer = Just (submitActionView theme device form)
+            , footer = Just (submitActionView theme device language form)
             }
-        , View.Nutrients.nutritionCard device theme nutrients
+        , View.Nutrients.nutritionCard device theme language nutrients
         ]
 
 
-submitActionView : Theme -> Device -> FoodLogForm.Model -> Element Msg
-submitActionView theme device form =
+submitActionView : Theme -> Device -> Language -> FoodLogForm.Model -> Element Msg
+submitActionView theme device language form =
     Button.textButton device
         theme
         { tone = Button.Primary
         , width = Button.FullWidth
-        , label = "Log Food"
+        , label = I18n.t language TidTitleLogFood
         , onPress = SubmitClicked
         , submitState = Just (Button.submittingOrIdle (isSubmitting form))
-        , submittingLabel = Just "Logging..."
+        , submittingLabel = Just (I18n.t language TidFoodShowLogging)
         , trailing = Nothing
         }
 

@@ -11,6 +11,9 @@ import Api.Client as Client
 import Data.Route exposing (Route(..))
 import Data.User exposing (User)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.Feedback as Feedback
@@ -80,17 +83,18 @@ update msg model =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
-    bodyView device theme model
+contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+contentView { model, device, theme, language } =
+    bodyView device theme language model
 
 
-bodyView : Device -> Theme -> Model -> Element Msg
-bodyView device theme model =
+bodyView : Device -> Theme -> Language -> Model -> Element Msg
+bodyView device theme language model =
     case model of
         Loaded users ->
             Surface.section theme
-                { header = Just (Typography.sectionTitle theme "Users")
+                { header =
+                    Just (Typography.sectionTitle theme (I18n.t language TidUsersSectionTitle))
                 , body =
                     List.map
                         (\user ->
@@ -105,7 +109,7 @@ bodyView device theme model =
                             theme
                             { tone = Button.Ghost
                             , width = Button.FullWidth
-                            , label = "+ Create User"
+                            , label = I18n.t language TidUsersCreateUser
                             , onPress = NavigateCreateUser
                             , submitState = Nothing
                             , submittingLabel = Nothing

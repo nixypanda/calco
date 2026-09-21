@@ -16,6 +16,9 @@ import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
 import Element.Input as Input
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (radiusControl, radiusPill, space12, space16, space8)
@@ -84,15 +87,15 @@ errorBanner theme message =
 
 {-| Error banner with a retry action, for failed page loads.
 -}
-errorRetry : Theme -> Device -> { message : String, onRetry : msg } -> Element msg
-errorRetry theme device config =
+errorRetry : Theme -> Language -> Device -> { message : String, onRetry : msg } -> Element msg
+errorRetry theme language device config =
     Surface.card theme
         [ errorBanner theme config.message
         , Button.textButton device
             theme
             { tone = Button.Primary
             , width = Button.FullWidth
-            , label = "Retry"
+            , label = I18n.t language TidUiRetry
             , onPress = config.onRetry
             , submitState = Nothing
             , submittingLabel = Nothing

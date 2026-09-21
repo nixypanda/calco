@@ -16,6 +16,7 @@ import Data.Route exposing (Route)
 import Element exposing (Device, Element)
 import Element.Region as Region
 import Lib.Text as Text
+import Translations.Util exposing (Language)
 import Ui.Theme exposing (Theme)
 import View.Chrome
 
@@ -51,6 +52,7 @@ type Msg
     | NavigateClicked Route
     | LogoutClicked
     | ThemeToggleClicked
+    | LanguageClicked Language
 
 
 type OutMsg
@@ -58,6 +60,7 @@ type OutMsg
     | Navigate Route
     | Logout
     | ToggleTheme
+    | SetLanguage Language
 
 
 update : Msg -> Model -> ( Model, OutMsg )
@@ -80,6 +83,9 @@ update msg model =
 
         ThemeToggleClicked ->
             ( model, ToggleTheme )
+
+        LanguageClicked language ->
+            ( NoMenu, SetLanguage language )
 
 
 toggleMenu : Model -> Model -> Model
@@ -104,6 +110,7 @@ type alias LayoutConfig msg =
     { model : Model
     , device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , isLoadingPage : Bool
@@ -121,6 +128,7 @@ bottomNavLayoutAttrs config =
                 ]
                 (View.Chrome.bottomNavBar
                     { theme = config.theme
+                    , language = config.language
                     , session = config.session
                     , route = config.route
                     , onNavigate = config.toMsg << NavigateClicked
@@ -137,6 +145,7 @@ type alias FrameConfig msg =
     { model : Model
     , device : Device
     , theme : Theme
+    , language : Language
     , session : Session
     , route : Route
     , isLoadingPage : Bool
@@ -162,6 +171,7 @@ viewFrame config =
                 View.Chrome.drawerOverlay
                     { device = config.device
                     , theme = config.theme
+                    , language = config.language
                     , session = config.session
                     , route = config.route
                     , drawerOpen = isMenuOpen DrawerMenu config.model
@@ -179,9 +189,11 @@ viewFrame config =
                     (View.Chrome.profileMenu
                         { device = config.device
                         , theme = config.theme
+                        , language = config.language
                         , session = config.session
                         , onNavigate = config.toMsg << NavigateClicked
                         , onLogout = config.toMsg LogoutClicked
+                        , onSetLanguage = config.toMsg << LanguageClicked
                         }
                     )
 
@@ -202,6 +214,7 @@ viewFrame config =
         (View.Chrome.topBarView
             { device = config.device
             , theme = config.theme
+            , language = config.language
             , session = config.session
             , route = config.route
             , profileOpen = isMenuOpen ProfileMenu config.model

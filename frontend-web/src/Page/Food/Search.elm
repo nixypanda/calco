@@ -33,6 +33,7 @@ import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes
 import Html.Events
+import I18n
 import Json.Decode as Decode
 import Lib.Date as LocalDate
 import Lib.Loadable exposing (Loadable(..))
@@ -40,6 +41,8 @@ import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
 import Process
 import Task
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
@@ -618,7 +621,7 @@ update msg model =
                             ( { model
                                 | quickAdd =
                                     QuickAddFailed
-                                        "Could not read selected date."
+                                        (I18n.en TidFoodSearchErrorCouldNotReadDate)
                               }
                             , Cmd.none
                             , NoOp
@@ -727,7 +730,7 @@ applyBarcodeScannerEvent event model =
                 | barcodeScanner =
                     ScannerFailed
                         (Maybe.withDefault
-                            "Could not start barcode scanner."
+                            (I18n.en TidFoodSearchErrorScannerStart)
                             event.message
                         )
               }
@@ -857,16 +860,16 @@ clearRecentAddedAfter key token =
 -- VIEW
 
 
-contentView : { model : Model, device : Device, theme : Theme } -> Element Msg
-contentView { model, device, theme } =
+contentView : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+contentView { model, device, theme, language } =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
         , Element.spacing DesignTokens.space24
         ]
-        (searchInputView theme device model
-            :: searchContentView theme device model
-            :: adHocLogSection theme device model
+        (searchInputView theme device language model
+            :: searchContentView theme device language model
+            :: adHocLogSection theme device language model
         )
 
 
@@ -960,22 +963,22 @@ adHocSection model =
             AdHocShown
 
 
-adHocLogSection : Theme -> Device -> Model -> List (Element Msg)
-adHocLogSection theme device model =
+adHocLogSection : Theme -> Device -> Language -> Model -> List (Element Msg)
+adHocLogSection theme device language model =
     case adHocSection model of
         AdHocShown ->
-            [ adHocLogView theme device ]
+            [ adHocLogView theme device language ]
 
         AdHocHidden ->
             []
 
 
-adHocLogView : Theme -> Device -> Element Msg
-adHocLogView theme device =
+adHocLogView : Theme -> Device -> Language -> Element Msg
+adHocLogView theme device language =
     Surface.formSection theme
-        "Create an ad-hoc food log"
+        (I18n.t language TidFoodSearchAdHocTitle)
         [ Typography.mutedParagraph theme
-            "Log a one-off food without saving it to your foods."
+            (I18n.t language TidFoodSearchAdHocDescription)
         , Element.row
             [ Element.width Element.fill
             , Element.spacing DesignTokens.space12
@@ -985,10 +988,10 @@ adHocLogView theme device =
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Create with AI"
+                    , label = I18n.t language TidTitleCreateWithAi
                     , onPress = CreateAiLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just "Create with AI"
+                    , submittingLabel = Just (I18n.t language TidTitleCreateWithAi)
                     , trailing = Nothing
                     }
                 )
@@ -997,10 +1000,10 @@ adHocLogView theme device =
                     theme
                     { tone = Button.PrimaryOutline
                     , width = Button.FullWidth
-                    , label = "Enter manually"
+                    , label = I18n.t language TidFoodSearchEnterManually
                     , onPress = CreateAdHocLogClicked
                     , submitState = Just Button.Idle
-                    , submittingLabel = Just "Enter manually"
+                    , submittingLabel = Just (I18n.t language TidFoodSearchEnterManually)
                     , trailing = Nothing
                     }
                 )
@@ -1008,21 +1011,21 @@ adHocLogView theme device =
         ]
 
 
-searchInputView : Theme -> Device -> Model -> Element Msg
-searchInputView theme device model =
+searchInputView : Theme -> Device -> Language -> Model -> Element Msg
+searchInputView theme device language model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space24 ]
-        [ scopeControl theme model.scope
+        [ scopeControl theme language model.scope
         , if model.scope == Barcode then
-            barcodeInputView theme device model
+            barcodeInputView theme device language model
 
           else
-            textSearchInputView theme device model
+            textSearchInputView theme device language model
         ]
 
 
-textSearchInputView : Theme -> Device -> Model -> Element Msg
-textSearchInputView theme device model =
+textSearchInputView : Theme -> Device -> Language -> Model -> Element Msg
+textSearchInputView theme device language model =
     let
         options : List Completion
         options =
@@ -1033,7 +1036,7 @@ textSearchInputView theme device model =
         { id = "food-search-completions"
         , onChange = QueryChanged
         , text = model.search.query
-        , label = UiInput.LabelInside (searchLabel model.scope)
+        , label = UiInput.LabelInside (searchLabel language model.scope)
         , completions = options
         , activeIndex = model.completionIndex
         , onActiveChanged = CompletionActiveChanged
@@ -1042,15 +1045,15 @@ textSearchInputView theme device model =
         }
 
 
-barcodeInputView : Theme -> Device -> Model -> Element Msg
-barcodeInputView theme device model =
+barcodeInputView : Theme -> Device -> Language -> Model -> Element Msg
+barcodeInputView theme device language model =
     let
         input : Element Msg
         input =
             UiInput.searchInput theme
                 { onChange = BarcodeChanged
                 , text = model.barcodeQuery
-                , label = UiInput.LabelInside "Enter barcode"
+                , label = UiInput.LabelInside (I18n.t language TidFoodSearchEnterBarcode)
                 , extraAttrs = [ onEnterSubmit BarcodeSubmitted, UiInput.numericInputMode ]
                 }
 
@@ -1060,7 +1063,7 @@ barcodeInputView theme device model =
                 theme
                 { tone = Button.PrimaryOutline
                 , width = Button.FullWidth
-                , label = "Search"
+                , label = I18n.t language TidNavSearch
                 , onPress = BarcodeSubmitted
                 , submitState =
                     Just
@@ -1073,7 +1076,7 @@ barcodeInputView theme device model =
                          else
                             Button.Idle
                         )
-                , submittingLabel = Just "Searching"
+                , submittingLabel = Just (I18n.t language TidFoodSearchSearching)
                 , trailing = Nothing
                 }
 
@@ -1085,10 +1088,10 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = "Scan"
+                        , label = I18n.t language TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Submitting
-                        , submittingLabel = Just "Starting"
+                        , submittingLabel = Just (I18n.t language TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
@@ -1097,7 +1100,7 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Danger
                         , width = Button.FullWidth
-                        , label = "Cancel"
+                        , label = I18n.t language TidCommonCancel
                         , onPress = BarcodeScanCancelClicked
                         , submitState = Nothing
                         , submittingLabel = Nothing
@@ -1109,10 +1112,10 @@ barcodeInputView theme device model =
                         theme
                         { tone = Button.Primary
                         , width = Button.FullWidth
-                        , label = "Scan"
+                        , label = I18n.t language TidFoodSearchScan
                         , onPress = BarcodeScanClicked
                         , submitState = Just Button.Idle
-                        , submittingLabel = Just "Starting"
+                        , submittingLabel = Just (I18n.t language TidFoodSearchStarting)
                         , trailing = Nothing
                         }
 
@@ -1132,11 +1135,11 @@ barcodeInputView theme device model =
     in
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-        (inputRow :: barcodeScannerStateView theme model.barcodeScanner)
+        (inputRow :: barcodeScannerStateView theme language model.barcodeScanner)
 
 
-barcodeScannerStateView : Theme -> BarcodeScannerState -> List (Element Msg)
-barcodeScannerStateView theme scanner =
+barcodeScannerStateView : Theme -> Language -> BarcodeScannerState -> List (Element Msg)
+barcodeScannerStateView theme language scanner =
     case scanner of
         ScannerIdle ->
             []
@@ -1145,10 +1148,10 @@ barcodeScannerStateView theme scanner =
             [ Feedback.errorBanner theme message ]
 
         ScannerStarting ->
-            [ barcodeScannerPreview theme "Starting camera..." ]
+            [ barcodeScannerPreview theme (I18n.t language TidFoodSearchStartingCamera) ]
 
         ScannerActive ->
-            [ barcodeScannerPreview theme "Center the barcode on the guide." ]
+            [ barcodeScannerPreview theme (I18n.t language TidFoodSearchCenterBarcode) ]
 
 
 barcodeScannerPreview : Theme -> String -> Element Msg
@@ -1219,8 +1222,8 @@ barcodeScannerVideoId =
     "calco-barcode-scanner-video"
 
 
-scopeControl : Theme -> SearchScope -> Element Msg
-scopeControl theme selectedScope =
+scopeControl : Theme -> Language -> SearchScope -> Element Msg
+scopeControl theme language selectedScope =
     Element.row
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space4
@@ -1230,11 +1233,11 @@ scopeControl theme selectedScope =
         , Border.color theme.chipBorder
         , Border.rounded DesignTokens.radiusControl
         ]
-        (List.map (scopeSegment theme selectedScope) searchScopes)
+        (List.map (scopeSegment theme language selectedScope) searchScopes)
 
 
-scopeSegment : Theme -> SearchScope -> SearchScope -> Element Msg
-scopeSegment theme selectedScope scope =
+scopeSegment : Theme -> Language -> SearchScope -> SearchScope -> Element Msg
+scopeSegment theme language selectedScope scope =
     let
         selected : Bool
         selected =
@@ -1279,15 +1282,15 @@ scopeSegment theme selectedScope scope =
                 , Element.clip
                 , UiCommon.uiClass "ui-text-ellipsis"
                 ]
-                (Element.text (scopeLabel scope))
+                (Element.text (scopeLabel language scope))
         }
 
 
-bodyView : Theme -> Model -> Device -> Element Msg
-bodyView theme model device =
+bodyView : Theme -> Language -> Model -> Device -> Element Msg
+bodyView theme language model device =
     case model.results of
         NotAsked ->
-            Feedback.emptyState theme "Search for a food to get started."
+            Feedback.emptyState theme (I18n.t language TidFoodSearchEmptyPrompt)
 
         Loading ->
             Surface.section theme
@@ -1305,20 +1308,26 @@ bodyView theme model device =
         Failure error ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
                 [ Feedback.errorBanner theme (Client.displayError error)
-                , Feedback.emptyState theme "No foods found. Try a different search."
+                , Feedback.emptyState theme (I18n.t language TidFoodSearchNoFoods)
                 ]
 
         Success items ->
             if List.isEmpty items then
-                textEmptyState theme model.scope
+                textEmptyState theme language model.scope
 
             else
                 Surface.section theme
-                    { header = Just (Typography.subsectionTitle theme "Results")
+                    { header =
+                        Just
+                            (Typography.subsectionTitle
+                                theme
+                                (I18n.t language TidFoodSearchResults)
+                            )
                     , body =
                         List.map
                             (\item ->
                                 SearchView.resultRow theme
+                                    language
                                     device
                                     { query = model.search.query
                                     , item = item
@@ -1330,27 +1339,27 @@ bodyView theme model device =
                     }
 
 
-searchContentView : Theme -> Device -> Model -> Element Msg
-searchContentView theme device model =
+searchContentView : Theme -> Device -> Language -> Model -> Element Msg
+searchContentView theme device language model =
     case searchBody model of
         RecentsBody ->
-            recentsView device theme model
+            recentsView device theme language model
 
         ResultsBody ->
-            bodyView theme model device
+            bodyView theme language model device
 
         BarcodeResultsBody body ->
-            barcodeBodyView theme body
+            barcodeBodyView theme language body
 
 
-barcodeBodyView : Theme -> BarcodeBody -> Element Msg
-barcodeBodyView theme body =
+barcodeBodyView : Theme -> Language -> BarcodeBody -> Element Msg
+barcodeBodyView theme language body =
     case body of
         BarcodeScanInProgress ->
             Element.none
 
         BarcodeAwaitingInput ->
-            Feedback.emptyState theme "Enter a barcode to look up a food."
+            Feedback.emptyState theme (I18n.t language TidFoodSearchEnterBarcodePrompt)
 
         BarcodeInputPending ->
             Element.none
@@ -1361,30 +1370,30 @@ barcodeBodyView theme body =
         BarcodeNotFound ->
             Feedback.emptyStateWithIcon theme
                 { icon = Icon.SearchX
-                , message = "No food found for that barcode."
+                , message = I18n.t language TidFoodSearchBarcodeNotFound
                 }
 
         BarcodeLookupFailed error ->
             Feedback.errorBanner theme (Client.displayError error)
 
         BarcodeOpening ->
-            Feedback.emptyState theme "Opening food."
+            Feedback.emptyState theme (I18n.t language TidFoodSearchOpeningFood)
 
 
-textEmptyState : Theme -> SearchScope -> Element Msg
-textEmptyState theme scope =
+textEmptyState : Theme -> Language -> SearchScope -> Element Msg
+textEmptyState theme language scope =
     Feedback.emptyStateWithIcon theme
         { icon = Icon.SearchX
         , message =
             case scope of
                 History ->
-                    "No logged foods found. Try a different search."
+                    I18n.t language TidFoodSearchNoLoggedFoods
 
                 Custom ->
-                    "No custom foods found. Try a different search."
+                    I18n.t language TidFoodSearchNoCustomFoods
 
                 _ ->
-                    "No foods found. Try a different search."
+                    I18n.t language TidFoodSearchNoFoods
         }
 
 
@@ -1393,36 +1402,36 @@ searchScopes =
     [ All, History, Custom, Barcode ]
 
 
-scopeLabel : SearchScope -> String
-scopeLabel scope =
+scopeLabel : Language -> SearchScope -> String
+scopeLabel language scope =
     case scope of
         All ->
-            "All"
+            I18n.t language TidFoodSearchScopeAll
 
         History ->
-            "History"
+            I18n.t language TidFoodSearchScopeHistory
 
         Custom ->
-            "Custom"
+            I18n.t language TidFoodSearchScopeCustom
 
         Barcode ->
-            "Barcode"
+            I18n.t language TidFoodSearchScopeBarcode
 
 
-searchLabel : SearchScope -> String
-searchLabel scope =
+searchLabel : Language -> SearchScope -> String
+searchLabel language scope =
     case scope of
         All ->
-            "Search for a food"
+            I18n.t language TidFoodSearchPromptAll
 
         History ->
-            "Search your logged foods"
+            I18n.t language TidFoodSearchPromptHistory
 
         Custom ->
-            "Search your custom foods"
+            I18n.t language TidFoodSearchPromptCustom
 
         Barcode ->
-            "Enter barcode"
+            I18n.t language TidFoodSearchEnterBarcode
 
 
 isTextScope : SearchScope -> Bool
@@ -1460,8 +1469,8 @@ onEnterSubmit submitMsg =
         )
 
 
-recentsView : Device -> Theme -> Model -> Element Msg
-recentsView device theme model =
+recentsView : Device -> Theme -> Language -> Model -> Element Msg
+recentsView device theme language model =
     Element.column
         [ Element.width Element.fill
         , Element.height Element.fill
@@ -1470,7 +1479,7 @@ recentsView device theme model =
         [ Feedback.maybeErrorBanner theme (quickAddError model.quickAdd)
         , case model.recentItems of
             NotAsked ->
-                noRecentsState theme
+                noRecentsState theme language
 
             Loading ->
                 Skeleton.card theme { rows = 2 }
@@ -1480,30 +1489,36 @@ recentsView device theme model =
 
             Success items ->
                 if List.isEmpty items then
-                    noRecentsState theme
+                    noRecentsState theme language
 
                 else
                     Element.column
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
                         [ Surface.section theme
-                            { header = Just (Typography.sectionTitle theme "Recent")
-                            , body = List.map (recentItemRow device theme model) items
+                            { header =
+                                Just
+                                    (Typography.sectionTitle
+                                        theme
+                                        (I18n.t language TidFoodSearchRecent)
+                                    )
+                            , body =
+                                List.map (recentItemRow device theme language model) items
                             , footer = Nothing
                             }
                         ]
         ]
 
 
-noRecentsState : Theme -> Element Msg
-noRecentsState theme =
+noRecentsState : Theme -> Language -> Element Msg
+noRecentsState theme language =
     Feedback.emptyStateWithIcon theme
         { icon = Icon.Utensils
-        , message = "No recent foods yet. Search for a food to get started."
+        , message = I18n.t language TidFoodSearchNoRecents
         }
 
 
-recentItemRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
-recentItemRow device theme model item =
+recentItemRow : Device -> Theme -> Language -> Model -> Logs.RecentItem -> Element Msg
+recentItemRow device theme language model item =
     Element.column [ Element.width Element.fill ]
         [ Surface.listRow
             { onSelect = RecentItemClicked item
@@ -1522,12 +1537,12 @@ recentItemRow device theme model item =
 
         -- Quick-add chips sit outside `Surface.listRow`, whose subtitle slot is
         -- inside the row-select button and cannot hold nested buttons.
-        , quickAddChipRow device theme model item
+        , quickAddChipRow device theme language model item
         ]
 
 
-quickAddChipRow : Device -> Theme -> Model -> Logs.RecentItem -> Element Msg
-quickAddChipRow device theme model item =
+quickAddChipRow : Device -> Theme -> Language -> Model -> Logs.RecentItem -> Element Msg
+quickAddChipRow device theme language model item =
     Element.wrappedRow
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space8
@@ -1538,7 +1553,7 @@ quickAddChipRow device theme model item =
             , left = DesignTokens.space16
             }
         ]
-        (List.map (quickAddChip device theme model item) (quickAddQuantities item))
+        (List.map (quickAddChip device theme language model item) (quickAddQuantities item))
 
 
 quickAddQuantities : Logs.RecentItem -> List Nutrition.Quantity
@@ -1573,8 +1588,15 @@ quickAddChipState model item quantity =
         QuickAddCanAdd
 
 
-quickAddChip : Device -> Theme -> Model -> Logs.RecentItem -> Nutrition.Quantity -> Element Msg
-quickAddChip device theme model item quantity =
+quickAddChip :
+    Device
+    -> Theme
+    -> Language
+    -> Model
+    -> Logs.RecentItem
+    -> Nutrition.Quantity
+    -> Element Msg
+quickAddChip device theme language model item quantity =
     let
         state : QuickAddButtonState
         state =
@@ -1590,7 +1612,10 @@ quickAddChip device theme model item quantity =
                     ( Button.GhostFilled, Nothing, Nothing )
 
                 QuickAddAdding ->
-                    ( Button.GhostFilled, Just Button.Submitting, Just "Adding..." )
+                    ( Button.GhostFilled
+                    , Just Button.Submitting
+                    , Just (I18n.t language TidFoodSearchAdding)
+                    )
 
                 QuickAddAdded ->
                     ( Button.Primary, Just Button.Submitted, Nothing )

@@ -15,9 +15,12 @@ import Element exposing (Device, Element)
 import Element.Background as Background
 import Element.Font as Font
 import Element.Input as Input
+import I18n
 import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Number as Number
 import Set exposing (Set)
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Chip as Chip
 import Ui.DesignTokens as DesignTokens
@@ -174,24 +177,24 @@ today =
     dateContext >> .today
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     UiPage.pageContainer
-        [ dateHeader theme device model
+        [ dateHeader theme language device model
         , case model of
             Loading _ ->
                 loadingView theme
 
             Loaded _ report expandedAdvice ->
-                reportView theme report expandedAdvice
+                reportView theme language report expandedAdvice
 
             Failed _ message ->
                 Feedback.errorBanner theme message
         ]
 
 
-dateHeader : Theme -> Device -> Model -> Element Msg
-dateHeader theme device model =
+dateHeader : Theme -> Language -> Device -> Model -> Element Msg
+dateHeader theme language device model =
     let
         canGoNext : Bool
         canGoNext =
@@ -206,21 +209,21 @@ dateHeader theme device model =
                             (Button.iconButton device
                                 theme
                                 { icon = Icon.ChevronLeft
-                                , title = "Previous day"
+                                , title = I18n.t language TidNutritionDetailsPreviousDay
                                 , onPress = Just PreviousDayClicked
                                 , tone = Button.Primary
                                 }
                             )
                     , title =
                         Typography.sectionTitle theme
-                            (LocalDate.display (currentDate model))
+                            (LocalDate.display language (currentDate model))
                     , subtitle = Nothing
                     , actions =
                         [ if canGoNext then
                             Button.iconButton device
                                 theme
                                 { icon = Icon.ChevronRight
-                                , title = "Next day"
+                                , title = I18n.t language TidNutritionDetailsNextDay
                                 , onPress = Just NextDayClicked
                                 , tone = Button.Primary
                                 }
@@ -266,59 +269,72 @@ loadingView theme =
         ]
 
 
-reportView : Theme -> NutritionDetails -> Set String -> Element Msg
-reportView theme report expandedAdvice =
+reportView : Theme -> Language -> NutritionDetails -> Set String -> Element Msg
+reportView theme language report expandedAdvice =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
-        [ coverageNotice theme report
-        , overviewSection theme report.nutrients
+        [ coverageNotice theme language report
+        , overviewSection theme language report.nutrients
         , nutrientSection
             theme
+            language
             expandedAdvice
-            "Carbohydrates"
+            (I18n.t language TidNutrientCarbohydrates)
             Details.Carbohydrates
             report.nutrients
-        , nutrientSection theme expandedAdvice "Fats" Details.Fats report.nutrients
         , nutrientSection
             theme
+            language
             expandedAdvice
-            "Nutrients to limit"
+            (I18n.t language TidNutritionDetailsFats)
+            Details.Fats
+            report.nutrients
+        , nutrientSection
+            theme
+            language
+            expandedAdvice
+            (I18n.t language TidNutritionDetailsNutrientsToLimit)
             Details.Limits
             report.nutrients
         , nutrientSection
             theme
+            language
             expandedAdvice
-            "Vitamins & minerals"
+            (I18n.t language TidNutritionDetailsVitaminsMinerals)
             Details.VitaminsMinerals
             report.nutrients
-        , referenceSection theme report
+        , referenceSection theme language report
         ]
 
 
-overviewSection : Theme -> List Nutrient -> Element Msg
-overviewSection theme nutrients =
+overviewSection : Theme -> Language -> List Nutrient -> Element Msg
+overviewSection theme language nutrients =
     let
         overview : List Nutrient
         overview =
             inSection Details.Overview nutrients
     in
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Overview")
+        { header =
+            Just
+                (Typography.subsectionTitle theme
+                    (I18n.t language TidNutritionDetailsOverview)
+                )
         , body =
             if List.isEmpty overview then
-                [ Feedback.loading theme "No overview data is available." ]
+                [ Feedback.loading theme (I18n.t language TidNutritionDetailsOverviewEmpty) ]
 
             else
                 [ Element.wrappedRow
                     [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                    (List.map (overviewItem theme) overview)
+                    (List.map (overviewItem theme language) overview)
                 ]
         , footer = Nothing
         }
 
 
-overviewItem : Theme -> Nutrient -> Element msg
-overviewItem theme nutrient =
+overviewItem : Theme -> Language -> Nutrient -> Element msg
+overviewItem theme language nutrient =
     Element.column
         [ Element.width (Element.minimum 130 Element.fill)
         , Element.spacing DesignTokens.space2
@@ -334,18 +350,18 @@ overviewItem theme nutrient =
 
           else
             Element.paragraph [ Font.color theme.textMuted, Typography.caption ]
-                [ Element.text (coverageLabel nutrient) ]
+                [ Element.text (coverageLabel language nutrient) ]
         ]
 
 
-coverageLabel : Nutrient -> String
-coverageLabel nutrient =
+coverageLabel : Language -> Nutrient -> String
+coverageLabel language nutrient =
     case nutrient.coverage of
         Details.NoCoverage ->
-            "No data"
+            I18n.t language TidNutritionDetailsNoData
 
         Details.PartialCoverage ->
-            "Known minimum"
+            I18n.t language TidNutritionDetailsKnownMinimum
 
         Details.CompleteCoverage ->
             ""
@@ -353,12 +369,13 @@ coverageLabel nutrient =
 
 nutrientSection :
     Theme
+    -> Language
     -> Set String
     -> String
     -> Details.NutrientSection
     -> List Nutrient
     -> Element Msg
-nutrientSection theme expandedAdvice title section nutrients =
+nutrientSection theme language expandedAdvice title section nutrients =
     let
         selected : List Nutrient
         selected =
@@ -368,10 +385,10 @@ nutrientSection theme expandedAdvice title section nutrients =
         { header = Just (Typography.subsectionTitle theme title)
         , body =
             if List.isEmpty selected then
-                [ Feedback.loading theme "No nutrient data is available for this group." ]
+                [ Feedback.loading theme (I18n.t language TidNutritionDetailsNoNutrientData) ]
 
             else
-                List.map (nutrientRow theme expandedAdvice) selected
+                List.map (nutrientRow theme language expandedAdvice) selected
         , footer = Nothing
         }
 
@@ -381,8 +398,8 @@ inSection section =
     List.filter (\nutrient -> nutrient.section == section)
 
 
-coverageNotice : Theme -> NutritionDetails -> Element msg
-coverageNotice theme report =
+coverageNotice : Theme -> Language -> NutritionDetails -> Element msg
+coverageNotice theme language report =
     let
         hasIncompleteData : Bool
         hasIncompleteData =
@@ -393,20 +410,25 @@ coverageNotice theme report =
         message : String
         message =
             if report.loggedItems == 0 then
-                "No items were logged for this day, so nutrition details are unavailable."
+                I18n.t language TidNutritionDetailsNoItemsLogged
 
             else if hasPartialCoverage report then
-                "Some logged items have incomplete nutrition data. "
-                    ++ "Partial amounts are known minimums."
+                I18n.t language TidNutritionDetailsPartialCoverageNotice
 
             else if hasNoCoverage report then
-                "Some logged items do not report every nutrient, so those totals are unavailable."
+                I18n.t language TidNutritionDetailsMissingNutrientNotice
+
+            else if report.loggedItems == 1 then
+                I18n.t language
+                    (TidNutritionDetailsLoggedItemsIncludedOne
+                        (String.fromInt report.loggedItems)
+                    )
 
             else
-                String.fromInt report.loggedItems
-                    ++ loggedItemLabel report.loggedItems
-                    ++ includedVerb report.loggedItems
-                    ++ " included in these daily totals."
+                I18n.t language
+                    (TidNutritionDetailsLoggedItemsIncludedOther
+                        (String.fromInt report.loggedItems)
+                    )
     in
     if hasIncompleteData then
         Feedback.warningBanner theme message
@@ -425,26 +447,8 @@ hasNoCoverage report =
     List.any (\nutrient -> nutrient.coverage == Details.NoCoverage) report.nutrients
 
 
-loggedItemLabel : Int -> String
-loggedItemLabel count =
-    if count == 1 then
-        " logged item "
-
-    else
-        " logged items "
-
-
-includedVerb : Int -> String
-includedVerb count =
-    if count == 1 then
-        "is"
-
-    else
-        "are"
-
-
-nutrientRow : Theme -> Set String -> Nutrient -> Element Msg
-nutrientRow theme expandedAdvice nutrient =
+nutrientRow : Theme -> Language -> Set String -> Nutrient -> Element Msg
+nutrientRow theme language expandedAdvice nutrient =
     let
         adviceIsExpanded : Bool
         adviceIsExpanded =
@@ -468,12 +472,12 @@ nutrientRow theme expandedAdvice nutrient =
                             , Font.color theme.textMedium
                             , Typography.body
                             ]
-                            (Element.text (amountLabel nutrient))
+                            (Element.text (amountLabel language nutrient))
                         ]
                     , progressView theme nutrient
                     , Element.row
                         [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
-                        [ guidanceView theme nutrient
+                        [ guidanceView theme language nutrient
                         , Icon.view
                             { icon =
                                 if adviceIsExpanded then
@@ -495,26 +499,26 @@ nutrientRow theme expandedAdvice nutrient =
                 , Element.padding DesignTokens.space12
                 , Typography.caption
                 ]
-                [ Element.text (dailyAdvice nutrient.code) ]
+                [ Element.text (dailyAdvice language nutrient.code) ]
 
           else
             Element.none
         ]
 
 
-guidanceView : Theme -> Nutrient -> Element msg
-guidanceView theme nutrient =
+guidanceView : Theme -> Language -> Nutrient -> Element msg
+guidanceView theme language nutrient =
     if nutrient.coverage == Details.PartialCoverage then
         Element.wrappedRow
             [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
             [ Chip.coloredPill
-                { label = "Partial data"
+                { label = I18n.t language TidNutritionDetailsPartialData
                 , bg = theme.brandBlueSoft
                 , fg = theme.brandBlue
                 }
             , Element.paragraph
                 [ Font.color theme.textPrimary, Typography.caption ]
-                [ Element.text (guidanceSummary nutrient) ]
+                [ Element.text (guidanceSummary language nutrient) ]
             ]
 
     else
@@ -523,11 +527,11 @@ guidanceView theme nutrient =
             , Font.color (guidanceColor theme nutrient)
             , Typography.caption
             ]
-            [ Element.text (guidanceSummary nutrient) ]
+            [ Element.text (guidanceSummary language nutrient) ]
 
 
-amountLabel : Nutrient -> String
-amountLabel nutrient =
+amountLabel : Language -> Nutrient -> String
+amountLabel language nutrient =
     case nutrient.guidanceKind of
         Details.Informational ->
             knownAmountLabel nutrient
@@ -540,7 +544,10 @@ amountLabel nutrient =
                         ++ formatAmount referenceAmount nutrient.unit
 
                 ( Nothing, Just referenceAmount ) ->
-                    "— of " ++ formatAmount referenceAmount nutrient.unit
+                    I18n.t language
+                        (TidNutritionDetailsUnknownOfAmount
+                            (formatAmount referenceAmount nutrient.unit)
+                        )
 
                 ( Just amount, Nothing ) ->
                     formatAmount amount nutrient.unit
@@ -587,48 +594,58 @@ progressColor theme nutrient =
                 theme.brandBlue
 
 
-guidanceSummary : Nutrient -> String
-guidanceSummary nutrient =
+guidanceSummary : Language -> Nutrient -> String
+guidanceSummary language nutrient =
     case nutrient.coverage of
         Details.NoCoverage ->
-            "No data"
+            I18n.t language TidNutritionDetailsNoData
 
         Details.PartialCoverage ->
             case nutrient.knownAmount of
                 Just amount ->
-                    formatAmount amount nutrient.unit ++ " is a known minimum"
+                    I18n.t language
+                        (TidNutritionDetailsKnownMinimumAmount
+                            (formatAmount amount nutrient.unit)
+                        )
 
                 Nothing ->
-                    "No known amount"
+                    I18n.t language TidNutritionDetailsNoKnownAmount
 
         Details.CompleteCoverage ->
-            completeGuidanceSummary nutrient
+            completeGuidanceSummary language nutrient
 
 
-completeGuidanceSummary : Nutrient -> String
-completeGuidanceSummary nutrient =
+completeGuidanceSummary : Language -> Nutrient -> String
+completeGuidanceSummary language nutrient =
     case ( nutrient.guidanceKind, nutrient.knownAmount, nutrient.referenceAmount ) of
         ( Details.Informational, _, _ ) ->
-            "No daily reference"
+            I18n.t language TidNutritionDetailsNoDailyReference
 
         ( Details.Adequacy, Just amount, Just referenceAmount ) ->
             if amount >= referenceAmount then
-                "Daily reference reached"
+                I18n.t language TidNutritionDetailsDailyReferenceReached
 
             else
-                formatAmount (referenceAmount - amount) nutrient.unit
-                    ++ " to daily reference"
+                I18n.t language
+                    (TidNutritionDetailsToDailyReference
+                        (formatAmount (referenceAmount - amount) nutrient.unit)
+                    )
 
         ( Details.Maximum, Just amount, Just referenceAmount ) ->
             if amount > referenceAmount then
-                formatAmount (amount - referenceAmount) nutrient.unit
-                    ++ " over daily limit"
+                I18n.t language
+                    (TidNutritionDetailsOverDailyLimit
+                        (formatAmount (amount - referenceAmount) nutrient.unit)
+                    )
 
             else
-                formatAmount (referenceAmount - amount) nutrient.unit ++ " remaining"
+                I18n.t language
+                    (TidNutritionDetailsRemaining
+                        (formatAmount (referenceAmount - amount) nutrient.unit)
+                    )
 
         _ ->
-            "No daily reference"
+            I18n.t language TidNutritionDetailsNoDailyReference
 
 
 guidanceColor : Theme -> Nutrient -> Element.Color
@@ -648,62 +665,56 @@ guidanceColor theme nutrient =
                 theme.textMuted
 
 
-dailyAdvice : String -> String
-dailyAdvice code =
+dailyAdvice : Language -> String -> String
+dailyAdvice language code =
     case code of
         "FIBER_G" ->
-            "Fiber supports digestive health. One day below the reference "
-                ++ "does not indicate a deficiency."
+            I18n.t language TidNutritionDetailsAdviceFiber
 
         "SUGAR_G" ->
-            "Includes naturally occurring and added sugars; "
-                ++ "FDA sets no Daily Value for total sugars."
+            I18n.t language TidNutritionDetailsAdviceSugar
 
         "ADDED_SUGAR_G" ->
-            "Added sugars have a daily limit, not a target."
+            I18n.t language TidNutritionDetailsAdviceAddedSugar
 
         "SATURATED_FAT_G" ->
-            "This is a daily limit. Replacing some saturated fat with unsaturated fat "
-                ++ "is generally more useful than simply removing fat."
+            I18n.t language TidNutritionDetailsAdviceSaturatedFat
 
         "TRANS_FAT_G" ->
-            "No FDA Daily Value; keep intake as low as practical."
+            I18n.t language TidNutritionDetailsAdviceTransFat
 
         "MONOUNSATURATED_FAT_G" ->
-            "Unsaturated fats provide context for fat quality; there is no single FDA daily target."
+            I18n.t language TidNutritionDetailsAdviceUnsaturatedFats
 
         "POLYUNSATURATED_FAT_G" ->
-            "Unsaturated fats provide context for fat quality; there is no single FDA daily target."
+            I18n.t language TidNutritionDetailsAdviceUnsaturatedFats
 
         "SODIUM_MG" ->
-            "Sodium is a daily limit, not a target to chase."
+            I18n.t language TidNutritionDetailsAdviceSodium
 
         "CHOLESTEROL_MG" ->
-            "Dietary cholesterol is only one influence on blood cholesterol; "
-                ++ "saturated and trans fats are often more actionable."
+            I18n.t language TidNutritionDetailsAdviceCholesterol
 
         "POTASSIUM_MG" ->
-            "Potassium is shown against the FDA daily reference."
+            I18n.t language TidNutritionDetailsAdvicePotassium
 
         "CALCIUM_MG" ->
-            "Calcium totals reflect your logged items."
+            I18n.t language TidNutritionDetailsAdviceCalcium
 
         "IRON_MG" ->
-            "Iron needs vary by life stage; this is a general reference."
+            I18n.t language TidNutritionDetailsAdviceIron
 
         "MAGNESIUM_MG" ->
-            "The FDA Daily Value is 420 mg. For adults, the National Academies’ "
-                ++ "350 mg upper limit applies only to magnesium from supplements and "
-                ++ "medications, not food."
+            I18n.t language TidNutritionDetailsAdviceMagnesium
 
         "VITAMIN_D_UG" ->
-            "Vitamin D in logged items is only one part of your overall intake."
+            I18n.t language TidNutritionDetailsAdviceVitaminD
 
         "VITAMIN_B12_UG" ->
-            "More than the daily reference is not shown as a warning."
+            I18n.t language TidNutritionDetailsAdviceVitaminB12
 
         _ ->
-            "This reflects the items logged for this day."
+            I18n.t language TidNutritionDetailsAdviceDefault
 
 
 formatAmount : Float -> String -> String
@@ -711,28 +722,30 @@ formatAmount amount unit =
     Number.toFixedTrimmed 1 amount ++ " " ++ unit
 
 
-referenceSection : Theme -> NutritionDetails -> Element msg
-referenceSection theme report =
+referenceSection : Theme -> Language -> NutritionDetails -> Element msg
+referenceSection theme language report =
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "About these references")
+        { header =
+            Just
+                (Typography.subsectionTitle theme
+                    (I18n.t language TidNutritionDetailsAboutReferences)
+                )
         , body =
             [ Element.paragraph [ Font.color theme.textMuted, Typography.body ]
                 [ Element.text
-                    ("These comparisons use "
-                        ++ report.reference.name
-                        ++ " from "
-                        ++ report.reference.authority
-                        ++ " ("
-                        ++ report.reference.jurisdiction
-                        ++ ") for "
-                        ++ report.reference.populationLabel
-                        ++ ". They are informational daily comparisons, not medical diagnoses."
+                    (I18n.t language
+                        (TidNutritionDetailsReferencesDescription
+                            report.reference.name
+                            report.reference.authority
+                            report.reference.jurisdiction
+                            report.reference.populationLabel
+                        )
                     )
                 ]
             , Element.newTabLink
                 [ Font.color theme.brandBlue, Font.underline, Typography.body ]
                 { url = report.reference.sourceUrl
-                , label = Element.text "View reference source"
+                , label = Element.text (I18n.t language TidNutritionDetailsViewReferenceSource)
                 }
             ]
         , footer = Nothing

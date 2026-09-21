@@ -19,6 +19,9 @@ import Data.ItemRef as ItemRef
 import Data.Nutrition exposing (NutrientAmount, defaultCode)
 import Data.Route exposing (Route(..))
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -222,7 +225,9 @@ update msg model =
                                 { loaded
                                     | fields =
                                         withSubmit
-                                            (Common.SubmitFailed "Name is required")
+                                            (Common.SubmitFailed
+                                                (I18n.en TidCustomFoodNameRequired)
+                                            )
                                             loaded.fields
                                 }
                             , Cmd.none
@@ -333,7 +338,7 @@ withSubmit state fields =
 
 componentRequiredMessage : String
 componentRequiredMessage =
-    "At least one component with a selected product is required"
+    I18n.en TidMealComponentRequired
 
 
 applyNutritionOk : List NutrientAmount -> Model -> Model
@@ -488,8 +493,8 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, device : Device, theme : Theme } -> Element Msg
-view { model, device, theme } =
+view : { model : Model, device : Device, theme : Theme, language : Language } -> Element Msg
+view { model, device, theme, language } =
     case model of
         LoadingEdit _ ->
             UiPage.pageContainer [ mealEditSkeleton theme ]
@@ -497,6 +502,7 @@ view { model, device, theme } =
         EditLoadFailed failed ->
             UiPage.pageContainer
                 [ Feedback.errorRetry theme
+                    language
                     device
                     { message = failed.message, onRetry = RetryClicked }
                 ]
@@ -504,26 +510,26 @@ view { model, device, theme } =
         Editing loaded ->
             UiPage.pageContainer
                 [ Feedback.maybeErrorBanner theme (Common.submitErrorMessage loaded.fields.submit)
-                , Common.viewFormFields theme device FormMsg loaded.fields
-                , nutritionView theme device loaded
+                , Common.viewFormFields theme language device FormMsg loaded.fields
+                , nutritionView theme language device loaded
                 , Button.textButton device
                     theme
                     { tone = Button.Primary
                     , width = Button.FullWidth
-                    , label = "Update Meal"
+                    , label = I18n.t language TidMealUpdate
                     , onPress = SubmitClicked
                     , submitState =
                         Just (Button.submittingOrIdle (Common.isSubmitting loaded.fields.submit))
-                    , submittingLabel = Just "Saving..."
+                    , submittingLabel = Just (I18n.t language TidCommonSaving)
                     , trailing = Nothing
                     }
                 ]
 
 
-nutritionView : Theme -> Device -> LoadedModel -> Element Msg
-nutritionView theme device loaded =
+nutritionView : Theme -> Language -> Device -> LoadedModel -> Element Msg
+nutritionView theme language device loaded =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-        [ View.Nutrients.preview device theme loaded.nutrition
+        [ View.Nutrients.preview device theme language loaded.nutrition
         ]
 
 

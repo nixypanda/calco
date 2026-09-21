@@ -5,6 +5,7 @@ import Expect
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.CategoryTag as CategoryTag exposing (CategoryTag(..))
 import Ui.Theme as Theme
 
@@ -63,20 +64,23 @@ tests =
         , describe "view"
             [ test "renders one chip per visible tag" <|
                 \_ ->
-                    CategoryTag.view Theme.light (CategoryTag.rows [ "a", "b", "c" ])
+                    CategoryTag.view Theme.light Util.EN_US (CategoryTag.rows [ "a", "b", "c" ])
                         |> Element.layout []
                         |> Query.fromHtml
                         |> Query.findAll [ Selector.class "ui-chip" ]
                         |> Query.count (Expect.equal 3)
             , test "renders the overflow tag" <|
                 \_ ->
-                    CategoryTag.view Theme.light (CategoryTag.rows [ "a", "b", "c", "d", "e" ])
+                    CategoryTag.view
+                        Theme.light
+                        Util.EN_US
+                        (CategoryTag.rows [ "a", "b", "c", "d", "e" ])
                         |> Element.layout []
                         |> Query.fromHtml
                         |> Query.has [ Selector.text "+2 more" ]
             , test "caps a long list at four chips" <|
                 \_ ->
-                    CategoryTag.view Theme.light (CategoryTag.rows (List.repeat 20 "x"))
+                    CategoryTag.view Theme.light Util.EN_US (CategoryTag.rows (List.repeat 20 "x"))
                         |> Element.layout []
                         |> Query.fromHtml
                         |> Query.findAll [ Selector.class "ui-chip" ]

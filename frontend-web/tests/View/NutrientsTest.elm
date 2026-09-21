@@ -9,6 +9,7 @@ data, and asserting its entries back would just restate the source.
 
 import Expect
 import Test exposing (Test, describe, test)
+import Translations.Util as Util
 import View.Nutrients
 
 
@@ -21,7 +22,7 @@ tests =
 
 assertCode : String -> String -> Expect.Expectation
 assertCode code expected =
-    View.Nutrients.nutrientLabel code
+    View.Nutrients.nutrientLabel Util.EN_US code
         |> Expect.equal expected
 
 

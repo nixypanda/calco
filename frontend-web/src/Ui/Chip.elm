@@ -15,6 +15,9 @@ import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Html.Attributes
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Common exposing (uiClass)
 import Ui.DesignTokens exposing (minimumTargetSize, radiusPill, space8)
 import Ui.Icon as Icon
@@ -53,9 +56,10 @@ chip theme config =
 
 removableChip :
     Theme
+    -> Language
     -> { label : String, onRemove : msg }
     -> Element msg
-removableChip theme config =
+removableChip theme language config =
     let
         removeSize : Int
         removeSize =
@@ -79,7 +83,10 @@ removableChip theme config =
             , Border.rounded radiusPill
             , uiClass "ui-chip-remove-target ui-pressable"
             , Element.htmlAttribute
-                (Html.Attributes.attribute "aria-label" ("Remove " ++ config.label))
+                (Html.Attributes.attribute
+                    "aria-label"
+                    (I18n.t language (TidUiRemoveNamed config.label))
+                )
             ]
             { onPress = Just config.onRemove
             , label =

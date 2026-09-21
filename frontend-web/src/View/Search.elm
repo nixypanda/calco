@@ -10,8 +10,11 @@ import Element exposing (Device, Element)
 import Html
 import Html.Attributes
 import Html.Events
+import I18n
 import Json.Decode as Decode
 import Lib.Text as Text
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.CategoryTag as CategoryTag exposing (CategoryTag)
 import Ui.Chip as Chip
 import Ui.Common as UiCommon
@@ -194,14 +197,16 @@ optionId listboxId index =
 
 resultRow :
     Theme
+    -> Language
     -> Device
     -> { query : String, item : SearchResult, onSelect : String -> msg }
     -> Element msg
-resultRow theme device config =
+resultRow theme language device config =
     let
         macroDot : Element msg
         macroDot =
             View.Nutrients.macroDot theme
+                language
                 (config.item.nutritionSummary.per100g |> Nutrition.summaryToNutrients)
 
         searchItem : Element msg
@@ -215,7 +220,9 @@ resultRow theme device config =
 
                   else
                     Typography.truncatedListItemTitle theme config.item.name
-                , Typography.mutedCaptionParagraph theme (metaText config.query config.item)
+                , Typography.mutedCaptionParagraph
+                    theme
+                    (metaText language config.query config.item)
                 ]
 
         tagRows : List (List CategoryTag)
@@ -236,7 +243,7 @@ resultRow theme device config =
                 []
 
             else
-                [ CategoryTag.view theme tagRows ]
+                [ CategoryTag.view theme language tagRows ]
         }
 
 
@@ -284,15 +291,16 @@ completionRow theme config index completion =
         )
 
 
-metaText : String -> SearchResult -> String
-metaText query item =
+metaText : Language -> String -> SearchResult -> String
+metaText language query item =
     [ item.brand
     , if isBarcodeVisible query item then
         item.barcode
 
       else
         Nothing
-    , Maybe.map (\kcal -> kcal ++ " kcal per 100 g") item.nutritionSummary.per100g.energyKcal
+    , item.nutritionSummary.per100g.energyKcal
+        |> Maybe.map (\kcal -> I18n.t language (TidSearchKcalPer100g kcal))
     ]
         |> Text.dotSeparated
 

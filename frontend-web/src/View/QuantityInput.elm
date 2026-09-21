@@ -3,6 +3,9 @@ module View.QuantityInput exposing (dropdown, unitOptions)
 import Data.Food exposing (UnitItem)
 import Data.Nutrition exposing (defaultCode)
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.DesignTokens as DesignTokens
 import Ui.Input as UiInput
 import Ui.Theme exposing (Theme)
@@ -10,6 +13,7 @@ import Ui.Theme exposing (Theme)
 
 dropdown :
     Theme
+    -> Language
     -> Device
     ->
         { amountLabel : String
@@ -23,7 +27,7 @@ dropdown :
         , onUnitToggle : msg
         }
     -> Element msg
-dropdown theme device config =
+dropdown theme language device config =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ UiInput.numericInput theme
             { label = config.amountLabel
@@ -32,9 +36,10 @@ dropdown theme device config =
             }
         , UiInput.selectDropdown device
             theme
+            language
             { label = config.unitLabel
             , selected = config.unit
-            , options = unitOptions config.unit config.units
+            , options = unitOptions language config.unit config.units
             , onChange = config.onUnitChange
             , isOpen = config.unitOpen
             , onToggle = config.onUnitToggle
@@ -42,11 +47,11 @@ dropdown theme device config =
         ]
 
 
-unitOptions : String -> List UnitItem -> List ( String, String )
-unitOptions selected units =
+unitOptions : Language -> String -> List UnitItem -> List ( String, String )
+unitOptions language selected units =
     units
         |> ensureSelected selected
-        |> options
+        |> options language
 
 
 ensureSelected : String -> List UnitItem -> List UnitItem
@@ -58,20 +63,20 @@ ensureSelected selectedUnit units =
         { code = selectedUnit, name = selectedUnit, kind = "" } :: units
 
 
-options : List UnitItem -> List ( String, String )
-options units =
+options : Language -> List UnitItem -> List ( String, String )
+options language units =
     case units of
         [] ->
             [ ( defaultCode, defaultCode ) ]
 
         _ ->
-            List.map (\unit -> ( unit.code, label unit )) units
+            List.map (\unit -> ( unit.code, label language unit )) units
 
 
-label : UnitItem -> String
-label unit =
+label : Language -> UnitItem -> String
+label language unit =
     if unit.name == unit.code then
         unit.code
 
     else
-        unit.name ++ " (" ++ unit.code ++ ")"
+        I18n.t language (TidUiUnitWithCode unit.name unit.code)

@@ -5,6 +5,9 @@ module View.DeleteModal exposing
     )
 
 import Element exposing (Device, Element)
+import I18n
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Button as Button
 import Ui.Feedback as Feedback
 import Ui.Theme exposing (Theme)
@@ -20,6 +23,7 @@ type DeleteState
 
 deleteModalView :
     Theme
+    -> Language
     -> Device
     ->
         { title : String
@@ -31,16 +35,34 @@ deleteModalView :
         }
     -> DeleteState
     -> Maybe (Element msg)
-deleteModalView theme device config deleteState =
+deleteModalView theme language device config deleteState =
     case deleteState of
         DeleteConfirming ->
-            Just (confirmModalView theme device config { pending = False, error = Nothing })
+            Just
+                (confirmModalView theme
+                    language
+                    device
+                    config
+                    { pending = False, error = Nothing }
+                )
 
         Deleting ->
-            Just (confirmModalView theme device config { pending = True, error = Nothing })
+            Just
+                (confirmModalView theme
+                    language
+                    device
+                    config
+                    { pending = True, error = Nothing }
+                )
 
         DeleteFailed message ->
-            Just (confirmModalView theme device config { pending = False, error = Just message })
+            Just
+                (confirmModalView theme
+                    language
+                    device
+                    config
+                    { pending = False, error = Just message }
+                )
 
         DeleteIdle ->
             Nothing
@@ -50,6 +72,7 @@ deleteModalView theme device config deleteState =
 -}
 confirmModalView :
     Theme
+    -> Language
     -> Device
     ->
         { title : String
@@ -61,7 +84,7 @@ confirmModalView :
         }
     -> { pending : Bool, error : Maybe String }
     -> Element msg
-confirmModalView theme device config state =
+confirmModalView theme language device config state =
     Feedback.modalOverlay theme
         { title = config.title
         , body =
@@ -71,7 +94,10 @@ confirmModalView theme device config state =
         , actions =
             Button.bottomActionButtons device
                 theme
-                [ { label = "Cancel", onPress = config.onCancel, tone = Button.Primary }
+                [ { label = I18n.t language TidCommonCancel
+                  , onPress = config.onCancel
+                  , tone = Button.Primary
+                  }
                 , { label =
                         if state.pending then
                             config.pendingLabel

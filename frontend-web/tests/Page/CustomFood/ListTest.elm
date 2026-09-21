@@ -7,6 +7,7 @@ import Data.Route exposing (Route(..))
 import Expect
 import Page.CustomFood.List as CustomFoodList
 import Test exposing (Test, describe, test)
+import Translations.Util as Util
 
 
 networkErrorMessage : String
@@ -66,11 +67,12 @@ tests =
                     |> Expect.equal (CustomFoodList.Navigate (DiaryDay Nothing Nothing))
         , test "food summary omits brand and kcal when missing" <|
             \_ ->
-                CustomFoodList.foodSummaryText food
+                CustomFoodList.foodSummaryText Util.EN_US food
                     |> Expect.equal ""
         , test "food summary shows brand and kcal when present" <|
             \_ ->
                 CustomFoodList.foodSummaryText
+                    Util.EN_US
                     { food
                         | brand = Just "Local"
                         , nutritionSummary =

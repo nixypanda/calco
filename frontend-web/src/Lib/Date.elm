@@ -14,8 +14,11 @@ module Lib.Date exposing
     )
 
 import Char
+import I18n
 import Json.Decode as Decode exposing (Decoder)
 import Time
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 
 
 type LocalDate
@@ -78,9 +81,13 @@ format (LocalDate date) =
     pad4 date.year ++ "-" ++ pad2 date.month ++ "-" ++ pad2 date.day
 
 
-display : LocalDate -> String
-display (LocalDate date) =
-    monthName date.month ++ " " ++ String.fromInt date.day ++ ", " ++ String.fromInt date.year
+display : Language -> LocalDate -> String
+display language (LocalDate date) =
+    monthName language date.month
+        ++ " "
+        ++ String.fromInt date.day
+        ++ ", "
+        ++ String.fromInt date.year
 
 
 addDays : Int -> LocalDate -> LocalDate
@@ -253,44 +260,44 @@ monthToInt month =
             12
 
 
-monthName : Int -> String
-monthName month =
+monthName : Language -> Int -> String
+monthName language month =
     case month of
         1 ->
-            "Jan"
+            I18n.t language TidDateMonthJan
 
         2 ->
-            "Feb"
+            I18n.t language TidDateMonthFeb
 
         3 ->
-            "Mar"
+            I18n.t language TidDateMonthMar
 
         4 ->
-            "Apr"
+            I18n.t language TidDateMonthApr
 
         5 ->
-            "May"
+            I18n.t language TidDateMonthMay
 
         6 ->
-            "Jun"
+            I18n.t language TidDateMonthJun
 
         7 ->
-            "Jul"
+            I18n.t language TidDateMonthJul
 
         8 ->
-            "Aug"
+            I18n.t language TidDateMonthAug
 
         9 ->
-            "Sep"
+            I18n.t language TidDateMonthSep
 
         10 ->
-            "Oct"
+            I18n.t language TidDateMonthOct
 
         11 ->
-            "Nov"
+            I18n.t language TidDateMonthNov
 
         12 ->
-            "Dec"
+            I18n.t language TidDateMonthDec
 
         _ ->
             ""

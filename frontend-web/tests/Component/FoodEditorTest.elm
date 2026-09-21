@@ -11,6 +11,7 @@ import Lib.Ticket as Ticket exposing (Ticket)
 import Test exposing (Test, describe, test)
 import Test.Html.Query as Query
 import Test.Html.Selector as Selector
+import Translations.Util as Util
 import Ui.Theme as Theme
 
 
@@ -325,11 +326,11 @@ tests =
                     |> Expect.equal (Just "")
         , test "unitGhostText uses placeholder when unit is empty" <|
             \_ ->
-                Form.unitGhostText ""
+                Form.unitGhostText Util.EN_US ""
                     |> Expect.equal "unit"
         , test "unitGhostText keeps known unit inline" <|
             \_ ->
-                Form.unitGhostText "g"
+                Form.unitGhostText Util.EN_US "g"
                     |> Expect.equal "g"
         , test "default serving options use catalog-friendly unit labels" <|
             \_ ->
@@ -344,6 +345,7 @@ tests =
                 in
                 Form.view
                     Theme.light
+                    Util.EN_US
                     { class = Phone, orientation = Portrait }
                     []
                     [ { code = "tbsp", name = "Tablespoon", kind = "volume" } ]

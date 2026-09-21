@@ -15,7 +15,10 @@ import Element exposing (Element)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
+import I18n
 import Lib.Number as Number
+import Translations.Ids exposing (TranslationId(..))
+import Translations.Util exposing (Language)
 import Ui.Common as UiCommon
 import Ui.DesignTokens as DesignTokens
 import Ui.Feedback as Feedback
@@ -52,96 +55,96 @@ Codes that have no recognized unit suffix (e.g. a bare `MYSTERY`) fall
 back to the raw code.
 
 -}
-nutrientLabel : String -> String
-nutrientLabel code =
+nutrientLabel : Language -> String -> String
+nutrientLabel language code =
     case code of
         "ENERGY_KCAL" ->
-            "Energy"
+            I18n.t language TidNutrientEnergy
 
         "PROTEIN_G" ->
-            "Protein"
+            I18n.t language TidNutrientProtein
 
         "CARBS_G" ->
-            "Carbohydrates"
+            I18n.t language TidNutrientCarbohydrates
 
         "FAT_G" ->
-            "Fat"
+            I18n.t language TidNutrientFat
 
         "SATURATED_FAT_G" ->
-            "Saturated Fat"
+            I18n.t language TidNutrientSaturatedFat
 
         "MONOUNSATURATED_FAT_G" ->
-            "Monounsaturated Fat"
+            I18n.t language TidNutrientMonounsaturatedFat
 
         "POLYUNSATURATED_FAT_G" ->
-            "Polyunsaturated Fat"
+            I18n.t language TidNutrientPolyunsaturatedFat
 
         "TRANS_FAT_G" ->
-            "Trans Fat"
+            I18n.t language TidNutrientTransFat
 
         "FIBER_G" ->
-            "Fiber"
+            I18n.t language TidNutrientFiber
 
         "SUGAR_G" ->
-            "Sugar"
+            I18n.t language TidNutrientSugar
 
         "ADDED_SUGAR_G" ->
-            "Added Sugars"
+            I18n.t language TidNutrientAddedSugars
 
         "STARCH_G" ->
-            "Starch"
+            I18n.t language TidNutrientStarch
 
         "SODIUM_MG" ->
-            "Sodium"
+            I18n.t language TidNutrientSodium
 
         "CHOLESTEROL_MG" ->
-            "Cholesterol"
+            I18n.t language TidNutrientCholesterol
 
         "POTASSIUM_MG" ->
-            "Potassium"
+            I18n.t language TidNutrientPotassium
 
         "CALCIUM_MG" ->
-            "Calcium"
+            I18n.t language TidNutrientCalcium
 
         "IRON_MG" ->
-            "Iron"
+            I18n.t language TidNutrientIron
 
         "MAGNESIUM_MG" ->
-            "Magnesium"
+            I18n.t language TidNutrientMagnesium
 
         "ZINC_MG" ->
-            "Zinc"
+            I18n.t language TidNutrientZinc
 
         "PHOSPHORUS_MG" ->
-            "Phosphorus"
+            I18n.t language TidNutrientPhosphorus
 
         "VITAMIN_A_UG" ->
-            "Vitamin A"
+            I18n.t language TidNutrientVitaminA
 
         "VITAMIN_C_MG" ->
-            "Vitamin C"
+            I18n.t language TidNutrientVitaminC
 
         "VITAMIN_D_UG" ->
-            "Vitamin D"
+            I18n.t language TidNutrientVitaminD
 
         "VITAMIN_E_MG" ->
-            "Vitamin E"
+            I18n.t language TidNutrientVitaminE
 
         "VITAMIN_B6_MG" ->
-            "Vitamin B6"
+            I18n.t language TidNutrientVitaminB6
 
         "VITAMIN_B12_UG" ->
-            "Vitamin B12"
+            I18n.t language TidNutrientVitaminB12
 
         "FOLATE_UG" ->
-            "Folate"
+            I18n.t language TidNutrientFolate
 
         _ ->
             genericNutrientLabel code
 
 
-macroDot : Theme -> List NutrientAmount -> Element msg
-macroDot theme nutrients =
+macroDot : Theme -> Language -> List NutrientAmount -> Element msg
+macroDot theme language nutrients =
     let
         dominant : Maybe Nutrition.Macro
         dominant =
@@ -154,22 +157,22 @@ macroDot theme nutrients =
                 |> Maybe.withDefault theme.calorieAccent
         , label =
             dominant
-                |> Maybe.map macroLabel
-                |> Maybe.withDefault "Nutrition"
+                |> Maybe.map (macroLabel language)
+                |> Maybe.withDefault (I18n.t language TidNutrientNutrition)
         }
 
 
-macroLabel : Nutrition.Macro -> String
-macroLabel macro =
+macroLabel : Language -> Nutrition.Macro -> String
+macroLabel language macro =
     case macro of
         Nutrition.Protein ->
-            "Protein-rich"
+            I18n.t language TidNutrientProteinRich
 
         Nutrition.Carbs ->
-            "Carb-rich"
+            I18n.t language TidNutrientCarbRich
 
         Nutrition.Fat ->
-            "Fat-rich"
+            I18n.t language TidNutrientFatRich
 
 
 {-| Parses arbitrary backend nutrient codes into readable labels.
@@ -269,21 +272,21 @@ skeletonPreview theme =
         }
 
 
-preview : Element.Device -> Theme -> NutritionState -> Element msg
-preview device theme state =
+preview : Element.Device -> Theme -> Language -> NutritionState -> Element msg
+preview device theme language state =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space8 ]
         [ case state of
             NutritionLoading _ ->
                 skeletonPreview theme
 
             NutritionLoaded _ nutrients ->
-                nutritionCard device theme nutrients
+                nutritionCard device theme language nutrients
 
             NutritionFailed _ errMsg ->
                 Feedback.errorBanner theme errMsg
 
             NutritionUnavailable _ ->
-                Feedback.errorBanner theme "Unavailable"
+                Feedback.errorBanner theme (I18n.t language TidNutrientUnavailable)
         ]
 
 
@@ -327,9 +330,9 @@ mapNutritionInput transform state =
             NutritionUnavailable input
 
 
-macroBreakdownView : Element.Device -> Theme -> List NutrientAmount -> Element msg
-macroBreakdownView device theme nutrients =
-    macroBreakdownViewWithLegend (responsiveMacroLegend device theme) theme nutrients
+macroBreakdownView : Element.Device -> Theme -> Language -> List NutrientAmount -> Element msg
+macroBreakdownView device theme language nutrients =
+    macroBreakdownViewWithLegend (responsiveMacroLegend device theme language) theme nutrients
 
 
 macroBreakdownViewWithLegend :
@@ -416,41 +419,47 @@ barSegment color pct =
         Element.none
 
 
-macroLegend : Theme -> MacroPortions -> Element msg
-macroLegend theme portions =
-    macroLegendItems theme portions
+macroLegend : Theme -> Language -> MacroPortions -> Element msg
+macroLegend theme language portions =
+    macroLegendItems theme language portions
         |> Element.row [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
 
 
-responsiveMacroLegend : Element.Device -> Theme -> MacroPortions -> Element msg
-responsiveMacroLegend device theme portions =
+responsiveMacroLegend : Element.Device -> Theme -> Language -> MacroPortions -> Element msg
+responsiveMacroLegend device theme language portions =
     if UiCommon.isSmall device then
-        macroLegendItems theme portions
+        macroLegendItems theme language portions
             |> Element.column
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
 
     else
-        macroLegend theme portions
+        macroLegend theme language portions
 
 
-macroLegendItems : Theme -> MacroPortions -> List (Element msg)
-macroLegendItems theme portions =
+macroLegendItems : Theme -> Language -> MacroPortions -> List (Element msg)
+macroLegendItems theme language portions =
     [ Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.proteinAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Protein " ++ Number.toFixedOne portions.protein ++ "g"))
+            (Element.text
+                (I18n.t language (TidNutrientLegendProtein (Number.toFixedOne portions.protein)))
+            )
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.carbsAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Carbs " ++ Number.toFixedOne portions.carbs ++ "g"))
+            (Element.text
+                (I18n.t language (TidNutrientLegendCarbs (Number.toFixedOne portions.carbs)))
+            )
         ]
     , Element.row [ Element.spacing DesignTokens.space4 ]
         [ legendDot theme.fatAccent
         , Element.el [ Typography.body ]
-            (Element.text ("Fat " ++ Number.toFixedOne portions.fat ++ "g"))
+            (Element.text
+                (I18n.t language (TidNutrientLegendFat (Number.toFixedOne portions.fat)))
+            )
         ]
     ]
 
@@ -469,20 +478,20 @@ legendDot color =
 {-| The bare nutrient table (no card wrapper), used by `nutritionCard`
 to compose macro breakdown + table inside a single shared card.
 -}
-nutrientsTableInner : Theme -> List NutrientAmount -> Element msg
-nutrientsTableInner theme nutrients =
+nutrientsTableInner : Theme -> Language -> List NutrientAmount -> Element msg
+nutrientsTableInner theme language nutrients =
     Element.table [ Element.width Element.fill ]
         { data = nutrients
         , columns =
             [ { header =
                     Element.el [ Element.paddingXY 0 DesignTokens.space8 ]
-                        (Typography.tableHeader theme "Nutrient")
+                        (Typography.tableHeader theme (I18n.t language TidNutrientTableNutrient))
               , width = Element.fill
               , view =
                     \n ->
                         Element.el
                             [ Typography.body, Element.paddingXY 0 DesignTokens.space8 ]
-                            (Element.text (nutrientLabel n.code))
+                            (Element.text (nutrientLabel language n.code))
               }
             , { header =
                     Element.el
@@ -494,7 +503,7 @@ nutrientsTableInner theme nutrients =
                             , right = DesignTokens.space8
                             }
                         ]
-                        (Typography.tableHeader theme "Amount")
+                        (Typography.tableHeader theme (I18n.t language TidNutrientTableAmount))
               , width = Element.shrink
               , view =
                     \n ->
@@ -518,7 +527,7 @@ nutrientsTableInner theme nutrients =
                             , right = 0
                             }
                         ]
-                        (Typography.tableHeader theme "Unit")
+                        (Typography.tableHeader theme (I18n.t language TidNutrientTableUnit))
               , width = Element.shrink
               , view =
                     \n ->
@@ -534,14 +543,14 @@ nutrientsTableInner theme nutrients =
 then the full nutrients table below — all inside a single card. Replaces
 the prior pattern of two stacked cards.
 -}
-nutritionCard : Element.Device -> Theme -> List NutrientAmount -> Element msg
-nutritionCard device theme nutrients =
+nutritionCard : Element.Device -> Theme -> Language -> List NutrientAmount -> Element msg
+nutritionCard device theme language nutrients =
     Surface.section theme
-        { header = Just (Typography.subsectionTitle theme "Nutrition")
+        { header = Just (Typography.subsectionTitle theme (I18n.t language TidNutrientNutrition))
         , body =
-            [ macroBreakdownView device theme nutrients
+            [ macroBreakdownView device theme language nutrients
             , Surface.hairline theme
-            , nutrientsTableInner theme nutrients
+            , nutrientsTableInner theme language nutrients
             ]
         , footer = Nothing
         }
