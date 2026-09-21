@@ -116,8 +116,8 @@ tests =
         , test "log-only view hides reusable-food fields" <|
             \_ ->
                 Editor.viewForLog
-                    Editor.AllNutrients
                     { theme = Theme.light, device = phone, language = Util.EN_US }
+                    Editor.AllNutrients
                     []
                     []
                     validForm
@@ -135,8 +135,8 @@ tests =
                 validForm
                     |> update Editor.LogPersistenceToggled
                     |> Editor.viewForLog
-                        Editor.AllNutrients
                         { theme = Theme.light, device = phone, language = Util.EN_US }
+                        Editor.AllNutrients
                         []
                         []
                     |> Element.layout []

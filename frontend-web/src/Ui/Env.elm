@@ -30,16 +30,16 @@ type alias Env =
 {-| Elm only allows record update on a bare variable, so `{ model.env | ... }`
 is a syntax error. These helpers keep the field updates at one place.
 -}
-withTheme : Theme -> Env -> Env
-withTheme theme env =
+withTheme : Env -> Theme -> Env
+withTheme env theme =
     { env | theme = theme }
 
 
-withDevice : Device -> Env -> Env
-withDevice device env =
+withDevice : Env -> Device -> Env
+withDevice env device =
     { env | device = device }
 
 
-withLanguage : Language -> Env -> Env
-withLanguage language env =
+withLanguage : Env -> Language -> Env
+withLanguage env language =
     { env | language = language }

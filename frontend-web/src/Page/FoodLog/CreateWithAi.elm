@@ -322,7 +322,7 @@ view { model, env } =
             UiPage.pageContainer
                 [ Feedback.maybeErrorBanner env.theme model.error
                 , Element.map AssistantMsg
-                    (Assistant.viewFor AdHocLog env False model.assistant)
+                    (Assistant.viewFor env AdHocLog False model.assistant)
                 ]
 
         Just review ->

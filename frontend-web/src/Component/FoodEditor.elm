@@ -1685,8 +1685,8 @@ view : Env -> List NutrientItem -> List UnitItem -> FormModel -> Element Msg
 view env nutrients units form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
-        , basicInfoCard True env form
-        , nutrientsCard Per100Grams AllNutrients env form nutrients
+        , basicInfoCard env True form
+        , nutrientsCard env Per100Grams AllNutrients form nutrients
         , servingsCard env form units
         , defaultPortionCard env units form
         ]
@@ -1696,19 +1696,19 @@ viewForCreate : Env -> List NutrientItem -> FormModel -> Element Msg
 viewForCreate env nutrients form =
     Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
         [ Feedback.maybeErrorBanner env.theme (submitErrorMessage form.submit)
-        , basicInfoCard True env form
-        , nutrientsCard Per100Grams AllNutrients env form nutrients
+        , basicInfoCard env True form
+        , nutrientsCard env Per100Grams AllNutrients form nutrients
         ]
 
 
 viewForLog :
-    NutrientVisibility
-    -> Env
+    Env
+    -> NutrientVisibility
     -> List NutrientItem
     -> List UnitItem
     -> FormModel
     -> Element Msg
-viewForLog visibility env nutrients units form =
+viewForLog env visibility nutrients units form =
     case form.context of
         CustomFoodContext ->
             Element.none
@@ -1725,9 +1725,9 @@ viewForLog visibility env nutrients units form =
                             True
             in
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space12 ]
-                ([ basicInfoCard saving env form
+                ([ basicInfoCard env saving form
                  , loggedPortionCard env units form logFields
-                 , nutrientsCard PerLoggedPortion visibility env form nutrients
+                 , nutrientsCard env PerLoggedPortion visibility form nutrients
                  , logDetailsCard env form logFields
                  , saveToFoodsCard env persistence
                  ]
@@ -1740,8 +1740,8 @@ viewForLog visibility env nutrients units form =
                 )
 
 
-basicInfoCard : Bool -> Env -> FormModel -> Element Msg
-basicInfoCard showCategories env form =
+basicInfoCard : Env -> Bool -> FormModel -> Element Msg
+basicInfoCard env showCategories form =
     Surface.formSection env.theme
         (I18n.t env.language TidFoodEditorBasicInfo)
         [ UiInput.input env.theme
@@ -1963,13 +1963,13 @@ servingUnitLabel language units code =
 
 
 nutrientsCard :
-    NutrientBasis
+    Env
+    -> NutrientBasis
     -> NutrientVisibility
-    -> Env
     -> FormModel
     -> List NutrientItem
     -> Element Msg
-nutrientsCard basis visibility env form nutrients =
+nutrientsCard env basis visibility form nutrients =
     Surface.section env.theme
         { header =
             Just
@@ -1982,7 +1982,7 @@ nutrientsCard basis visibility env form nutrients =
                             PerLoggedPortion ->
                                 I18n.t env.language TidFoodEditorPortionNutrition
                         )
-                    , nutrientHint basis env
+                    , nutrientHint env basis
                     ]
                 )
         , body =
@@ -2003,8 +2003,8 @@ nutrientsCard basis visibility env form nutrients =
                         )
                     |> List.map
                         (\( index, row ) ->
-                            nutrientRowView basis
-                                env
+                            nutrientRowView env
+                                basis
                                 nutrients
                                 form.openDropdown
                                 index
@@ -2172,14 +2172,14 @@ suggestionRow env s =
 
 
 nutrientRowView :
-    NutrientBasis
-    -> Env
+    Env
+    -> NutrientBasis
     -> List NutrientItem
     -> OpenDropdown
     -> Int
     -> NutrientRow
     -> Element Msg
-nutrientRowView basis env nutrients openDropdown index row =
+nutrientRowView env basis nutrients openDropdown index row =
     let
         selector : Element Msg
         selector =
@@ -2214,7 +2214,7 @@ nutrientRowView basis env nutrients openDropdown index row =
                 [ Element.width Element.fill
                 , Element.spacing DesignTokens.space8
                 ]
-                [ amountInputWithUnit basis env index row
+                [ amountInputWithUnit env basis index row
                 , removeButton
                 ]
             ]
@@ -2225,13 +2225,13 @@ nutrientRowView basis env nutrients openDropdown index row =
             , Element.spacing DesignTokens.space8
             ]
             [ selector
-            , amountInputWithUnit basis env index row
+            , amountInputWithUnit env basis index row
             , removeButton
             ]
 
 
-amountInputWithUnit : NutrientBasis -> Env -> Int -> NutrientRow -> Element Msg
-amountInputWithUnit basis env index row =
+amountInputWithUnit : Env -> NutrientBasis -> Int -> NutrientRow -> Element Msg
+amountInputWithUnit env basis index row =
     UiInput.decimalInputWithSuffix env.theme
         { label =
             case basis of
@@ -2343,8 +2343,8 @@ addRowHint env =
     Typography.mutedCaption env.theme (I18n.t env.language TidFoodEditorAddRowHint)
 
 
-nutrientHint : NutrientBasis -> Env -> Element msg
-nutrientHint basis env =
+nutrientHint : Env -> NutrientBasis -> Element msg
+nutrientHint env basis =
     case basis of
         Per100Grams ->
             addRowHint env

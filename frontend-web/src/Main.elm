@@ -174,7 +174,7 @@ update msg model =
         WindowResized width height ->
             case reclassifyDevice width height model.env.device of
                 Just device ->
-                    ( { model | env = Env.withDevice device model.env }, Cmd.none )
+                    ( { model | env = Env.withDevice model.env device }, Cmd.none )
 
                 Nothing ->
                     ( model, Cmd.none )
@@ -295,12 +295,12 @@ applyChromeOutMsg outMsg model =
                 nextMode =
                     Theme.toggle model.env.theme.mode
             in
-            ( { model | env = Env.withTheme (Theme.forMode nextMode) model.env }
+            ( { model | env = Env.withTheme model.env (Theme.forMode nextMode) }
             , persistThemeMode (Theme.modeToString nextMode)
             )
 
         Chrome.SetLanguage language ->
-            ( { model | env = Env.withLanguage language model.env }, Cmd.none )
+            ( { model | env = Env.withLanguage model.env language }, Cmd.none )
 
 
 normalizeChromeNavigation : Route -> Route -> Route

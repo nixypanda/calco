@@ -345,8 +345,8 @@ viewForAi showOptional { model, env } =
         [ Feedback.maybeErrorBanner env.theme (submitError model.submit)
         , Element.map FormMsg
             (Editor.viewForLog
-                visibility
                 env
+                visibility
                 model.nutrients
                 model.units
                 model.form

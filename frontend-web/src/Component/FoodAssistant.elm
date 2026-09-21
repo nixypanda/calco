@@ -691,12 +691,12 @@ valueAt index values =
 
 
 view : Env -> Bool -> Model -> Element Msg
-view =
-    viewFor CustomFood
+view env =
+    viewFor env CustomFood
 
 
-viewFor : FoodDraftPurpose -> Env -> Bool -> Model -> Element Msg
-viewFor purpose env formHasManualInput model =
+viewFor : Env -> FoodDraftPurpose -> Bool -> Model -> Element Msg
+viewFor env purpose formHasManualInput model =
     case model of
         LoadingStatus ->
             Surface.card env.theme
@@ -749,24 +749,24 @@ viewFor purpose env formHasManualInput model =
                 }
 
         Enabled chat ->
-            enabledView purpose env formHasManualInput chat
+            enabledView env purpose formHasManualInput chat
 
 
-enabledView : FoodDraftPurpose -> Env -> Bool -> ChatModel -> Element Msg
-enabledView purpose env formHasManualInput chat =
-    Surface.card env.theme (expandedContent purpose env formHasManualInput chat)
+enabledView : Env -> FoodDraftPurpose -> Bool -> ChatModel -> Element Msg
+enabledView env purpose formHasManualInput chat =
+    Surface.card env.theme (expandedContent env purpose formHasManualInput chat)
 
 
 expandedContent :
-    FoodDraftPurpose
-    -> Env
+    Env
+    -> FoodDraftPurpose
     -> Bool
     -> ChatModel
     -> List (Element Msg)
-expandedContent purpose env formHasManualInput chat =
+expandedContent env purpose formHasManualInput chat =
     case chat.draft of
         Just _ ->
-            [ draftPreviewView purpose env formHasManualInput chat
+            [ draftPreviewView env purpose formHasManualInput chat
             , warningView env chat.warnings
             , requestErrorView env chat.request
             ]
@@ -774,7 +774,7 @@ expandedContent purpose env formHasManualInput chat =
                         [ conversationView env chat
                         , descriptionInput env chat
                         , photoPicker env chat
-                        , sendButton purpose env chat.request
+                        , sendButton env purpose chat.request
                         ]
 
                     else
@@ -787,7 +787,7 @@ expandedContent purpose env formHasManualInput chat =
             , requestErrorView env chat.request
             , descriptionInput env chat
             , photoPicker env chat
-            , sendButton purpose env chat.request
+            , sendButton env purpose chat.request
             ]
 
 
@@ -1094,8 +1094,8 @@ formatPhotoSize bytes =
         String.fromInt ((bytes + 1023) // 1024) ++ " KiB"
 
 
-sendButton : FoodDraftPurpose -> Env -> RequestState -> Element Msg
-sendButton purpose env request =
+sendButton : Env -> FoodDraftPurpose -> RequestState -> Element Msg
+sendButton env purpose request =
     Button.textButton env.device
         env.theme
         { tone = Button.Primary
@@ -1172,12 +1172,12 @@ warningView env warnings =
 
 
 draftPreviewView :
-    FoodDraftPurpose
-    -> Env
+    Env
+    -> FoodDraftPurpose
     -> Bool
     -> ChatModel
     -> Element Msg
-draftPreviewView purpose env formHasManualInput chat =
+draftPreviewView env purpose formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
@@ -1225,7 +1225,7 @@ draftPreviewView purpose env formHasManualInput chat =
                     env
                     (I18n.t env.language TidFoodEditorServings)
                     preview.servings
-                , draftActionView purpose env formHasManualInput chat
+                , draftActionView env purpose formHasManualInput chat
                 ]
 
 
@@ -1329,12 +1329,12 @@ defaultText fallback value =
 
 
 draftActionView :
-    FoodDraftPurpose
-    -> Env
+    Env
+    -> FoodDraftPurpose
     -> Bool
     -> ChatModel
     -> Element Msg
-draftActionView purpose env formHasManualInput chat =
+draftActionView env purpose formHasManualInput chat =
     case chat.draft of
         Nothing ->
             Element.none
