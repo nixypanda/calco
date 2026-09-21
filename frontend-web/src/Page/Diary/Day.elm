@@ -587,8 +587,8 @@ slotCalories slot logs =
 -- VIEW
 
 
-contentView : { model : Model, env : Env } -> Element Msg
-contentView { model, env } =
+contentView : Env -> Model -> Element Msg
+contentView env model =
     let
         logs : List FoodLog
         logs =

@@ -99,6 +99,6 @@ update msg model =
 -- VIEW
 
 
-view : { model : Model, env : Env } -> Element Msg
-view props =
-    Element.map FormMsg (CredentialForm.view (config props.env.language) props)
+view : Env -> Model -> Element Msg
+view env model =
+    Element.map FormMsg (CredentialForm.view env (config env.language) model)

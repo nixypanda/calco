@@ -122,10 +122,11 @@ markFailed message model =
 
 
 view :
-    Config request
-    -> { model : Model, env : Env }
+    Env
+    -> Config request
+    -> Model
     -> Element Msg
-view config { model, env } =
+view env config model =
     let
         form : Form
         form =

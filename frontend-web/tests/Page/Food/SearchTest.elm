@@ -65,13 +65,11 @@ tests =
         , test "ad-hoc actions follow the standard AI and manual choices" <|
             \_ ->
                 FoodSearch.contentView
-                    { model = FoodSearch.init Nothing Nothing
-                    , env =
-                        { theme = Theme.light
-                        , device = { class = Phone, orientation = Portrait }
-                        , language = Util.EN_US
-                        }
+                    { theme = Theme.light
+                    , device = { class = Phone, orientation = Portrait }
+                    , language = Util.EN_US
                     }
+                    (FoodSearch.init Nothing Nothing)
                     |> Element.layout []
                     |> Query.fromHtml
                     |> Query.has
@@ -951,17 +949,14 @@ tests =
         , test "create custom food is no longer offered from search" <|
             \_ ->
                 FoodSearch.contentView
-                    { model =
-                        { emptyModel
-                            | scope = FoodSearch.All
-                            , search = Search.withQuery "zzz" emptyModel.search
-                            , results = Success []
-                        }
-                    , env =
-                        { theme = Theme.light
-                        , device = { class = Phone, orientation = Portrait }
-                        , language = Util.EN_US
-                        }
+                    { theme = Theme.light
+                    , device = { class = Phone, orientation = Portrait }
+                    , language = Util.EN_US
+                    }
+                    { emptyModel
+                        | scope = FoodSearch.All
+                        , search = Search.withQuery "zzz" emptyModel.search
+                        , results = Success []
                     }
                     |> Element.layout []
                     |> Query.fromHtml
@@ -1054,13 +1049,11 @@ emptyModel =
 contentFor : FoodSearch.Model -> Query.Single FoodSearch.Msg
 contentFor model =
     FoodSearch.contentView
-        { model = model
-        , env =
-            { theme = Theme.light
-            , device = { class = Phone, orientation = Portrait }
-            , language = Util.EN_US
-            }
+        { theme = Theme.light
+        , device = { class = Phone, orientation = Portrait }
+        , language = Util.EN_US
         }
+        model
         |> Element.layout []
         |> Query.fromHtml
 

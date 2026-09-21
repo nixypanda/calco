@@ -94,8 +94,8 @@ failure =
 -- VIEW
 
 
-contentView : { model : Model, env : Env } -> Element Msg
-contentView { model, env } =
+contentView : Env -> Model -> Element Msg
+contentView env model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16

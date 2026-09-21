@@ -283,9 +283,10 @@ applyAssistantOutMsg assistantOut model command =
 
 
 view :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-view { model, env } =
+view env model =
     let
         content : List (Element Msg)
         content =
@@ -317,8 +318,9 @@ view { model, env } =
 
 
 modalView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Maybe (Element Msg)
-modalView { model, env } =
+modalView env model =
     Assistant.modalView env model.assistant
         |> Maybe.map (Element.map AssistantMsg)

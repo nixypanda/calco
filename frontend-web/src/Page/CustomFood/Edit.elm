@@ -415,17 +415,19 @@ failure =
 
 
 view :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-view config =
+view env model =
     UiPage.pageContainer
-        [ bodyView config ]
+        [ bodyView env model ]
 
 
 bodyView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-bodyView { model, env } =
+bodyView env model =
     case model of
         Loaded loaded ->
             Element.column [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]

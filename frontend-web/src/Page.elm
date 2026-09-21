@@ -3145,14 +3145,14 @@ applyMealDetailOutMsg _ outMsg =
 -- VIEW
 
 
-view : { model : Model, env : Env } -> Element Msg
-view props =
-    if props.model.waitingForToday then
-        Skeleton.loading props.env.theme
+view : Env -> Model -> Element Msg
+view env model =
+    if model.waitingForToday then
+        Skeleton.loading env.theme
 
     else
-        Workspace.view props.env.device
-            (List.map (paneView props (selectedDiaryDate props.model.panes)) props.model.panes)
+        Workspace.view env.device
+            (List.map (paneView env (selectedDiaryDate model.panes)) model.panes)
 
 
 selectedDiaryDate : List Pane -> Maybe LocalDate
@@ -3171,82 +3171,82 @@ selectedDiaryDate panes =
 
 
 paneView :
-    { model : Model, env : Env }
+    Env
     -> Maybe LocalDate
     -> Pane
     -> ( String, Element Msg )
-paneView props selectedDate pane =
+paneView env selectedDate pane =
     ( paneKey pane
     , case pane of
         LoginPane sub ->
-            Element.map GotLoginMsg (AuthLogin.view (pageProps props sub))
+            Element.map GotLoginMsg (AuthLogin.view env sub)
 
         SetupPane sub ->
-            Element.map GotSetupMsg (BootstrapSetup.view (pageProps props sub))
+            Element.map GotSetupMsg (BootstrapSetup.view env sub)
 
         AdminPane sub ->
-            Element.map GotAdminMsg (AdminDashboard.contentView (pageProps props sub))
+            Element.map GotAdminMsg (AdminDashboard.contentView env sub)
 
         AdminCreateUserPane sub ->
-            Element.map GotAdminCreateUserMsg (AdminCreateUser.view (pageProps props sub))
+            Element.map GotAdminCreateUserMsg (AdminCreateUser.view env sub)
 
         AdminEditUserPane _ sub ->
-            Element.map GotAdminEditUserMsg (AdminEditUser.view (pageProps props sub))
+            Element.map GotAdminEditUserMsg (AdminEditUser.view env sub)
 
         DiaryPane _ sub ->
-            Element.map GotDiaryMsg (DiaryDay.contentView (pageProps props sub))
+            Element.map GotDiaryMsg (DiaryDay.contentView env sub)
 
         DiaryCalendarPane _ sub ->
             Element.map GotDiaryCalendarMsg
-                (DiaryCalendar.contentViewWithSelection selectedDate (pageProps props sub))
+                (DiaryCalendar.contentViewWithSelection env selectedDate sub)
 
         NutritionDetailsPane _ sub ->
-            Element.map GotNutritionDetailsMsg (NutritionDetails.view (pageProps props sub))
+            Element.map GotNutritionDetailsMsg (NutritionDetails.view env sub)
 
         GoalsSettingsPane _ sub ->
-            Element.map GotGoalsSettingsMsg (GoalsSettings.view (pageProps props sub))
+            Element.map GotGoalsSettingsMsg (GoalsSettings.view env sub)
 
         DiarySettingsPane sub ->
-            Element.map GotDiarySettingsMsg (DiarySettings.view (pageProps props sub))
+            Element.map GotDiarySettingsMsg (DiarySettings.view env sub)
 
         FoodSearchPane sub ->
-            Element.map GotFoodSearchMsg (FoodSearch.contentView (pageProps props sub))
+            Element.map GotFoodSearchMsg (FoodSearch.contentView env sub)
 
         FoodDetailPane _ sub ->
-            Element.map GotFoodDetailMsg (FoodShow.contentView (pageProps props sub))
+            Element.map GotFoodDetailMsg (FoodShow.contentView env sub)
 
         FoodLogDetailPane _ sub ->
-            Element.map GotFoodLogDetailMsg (FoodLogEntry.contentView (pageProps props sub))
+            Element.map GotFoodLogDetailMsg (FoodLogEntry.contentView env sub)
 
         CreateAdHocLogPane sub ->
-            Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view (pageProps props sub))
+            Element.map GotCreateAdHocLogMsg (CreateAdHocLog.view env sub)
 
         CreateWithAiLogPane sub ->
-            Element.map GotCreateWithAiLogMsg (CreateWithAiLog.view (pageProps props sub))
+            Element.map GotCreateWithAiLogMsg (CreateWithAiLog.view env sub)
 
         CustomFoodListPane sub ->
-            Element.map GotCustomFoodsMsg (CustomFoodList.contentView (pageProps props sub))
+            Element.map GotCustomFoodsMsg (CustomFoodList.contentView env sub)
 
         CustomFoodCreatePane sub ->
-            Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view (pageProps props sub))
+            Element.map GotCustomFoodCreateMsg (CustomFoodCreate.view env sub)
 
         CustomFoodEditPane _ sub ->
-            Element.map GotCustomFoodEditMsg (CustomFoodEdit.view (pageProps props sub))
+            Element.map GotCustomFoodEditMsg (CustomFoodEdit.view env sub)
 
         CustomFoodShowPane _ sub ->
-            Element.map GotCustomFoodShowMsg (CustomFoodShow.view (pageProps props sub))
+            Element.map GotCustomFoodShowMsg (CustomFoodShow.view env sub)
 
         MealListPane sub ->
-            Element.map GotMealsMsg (MealList.contentView (pageProps props sub))
+            Element.map GotMealsMsg (MealList.contentView env sub)
 
         MealCreatePane sub ->
-            Element.map GotMealCreateMsg (MealCreate.view (pageProps props sub))
+            Element.map GotMealCreateMsg (MealCreate.view env sub)
 
         MealEditPane _ sub ->
-            Element.map GotMealEditMsg (MealEdit.view (pageProps props sub))
+            Element.map GotMealEditMsg (MealEdit.view env sub)
 
         MealDetailPane _ sub ->
-            Element.map GotMealDetailMsg (MealShow.view (pageProps props sub))
+            Element.map GotMealDetailMsg (MealShow.view env sub)
 
         PlaceholderPane message ->
             Element.el [ Element.padding DesignTokens.space24 ] (Element.text message)
@@ -3254,56 +3254,47 @@ paneView props selectedDate pane =
 
 
 modalView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Maybe (Element Msg)
-modalView props =
-    props.model.panes
-        |> List.filterMap (paneModalView props)
+modalView env model =
+    model.panes
+        |> List.filterMap (paneModalView env)
         |> List.head
 
 
 paneModalView :
-    { model : Model, env : Env }
+    Env
     -> Pane
     -> Maybe (Element Msg)
-paneModalView props pane =
+paneModalView env pane =
     case pane of
         FoodLogDetailPane _ sub ->
-            FoodLogEntry.modalView (pageProps props sub)
+            FoodLogEntry.modalView env sub
                 |> Maybe.map (Element.map GotFoodLogDetailMsg)
 
         CustomFoodShowPane _ sub ->
-            CustomFoodShow.modalView (pageProps props sub)
+            CustomFoodShow.modalView env sub
                 |> Maybe.map (Element.map GotCustomFoodShowMsg)
 
         CustomFoodCreatePane sub ->
-            CustomFoodCreate.modalView (pageProps props sub)
+            CustomFoodCreate.modalView env sub
                 |> Maybe.map (Element.map GotCustomFoodCreateMsg)
 
         CreateWithAiLogPane sub ->
-            CreateWithAiLog.modalView (pageProps props sub)
+            CreateWithAiLog.modalView env sub
                 |> Maybe.map (Element.map GotCreateWithAiLogMsg)
 
         MealDetailPane _ sub ->
-            MealShow.modalView (pageProps props sub)
+            MealShow.modalView env sub
                 |> Maybe.map (Element.map GotMealDetailMsg)
 
         AdminEditUserPane _ sub ->
-            AdminEditUser.modalView (pageProps props sub)
+            AdminEditUser.modalView env sub
                 |> Maybe.map (Element.map GotAdminEditUserMsg)
 
         _ ->
             Nothing
-
-
-pageProps :
-    { props | env : Env }
-    -> subModel
-    -> { model : subModel, env : Env }
-pageProps props subModel =
-    { model = subModel
-    , env = props.env
-    }
 
 
 

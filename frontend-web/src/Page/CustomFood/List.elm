@@ -101,9 +101,10 @@ failure =
 
 
 contentView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-contentView { model, env } =
+contentView env model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16

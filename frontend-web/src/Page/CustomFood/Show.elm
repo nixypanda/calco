@@ -312,9 +312,10 @@ applyDeleteError message model =
 
 
 view :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-view { model, env } =
+view env model =
     UiPage.pageContainer
         [ case model of
             LoadFailed failed ->
@@ -330,9 +331,10 @@ view { model, env } =
 
 
 modalView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Maybe (Element Msg)
-modalView { model, env } =
+modalView env model =
     case model of
         Loaded loaded ->
             deleteModalView env loaded

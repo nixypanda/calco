@@ -83,8 +83,8 @@ update msg model =
 -- VIEW
 
 
-contentView : { model : Model, env : Env } -> Element Msg
-contentView { model, env } =
+contentView : Env -> Model -> Element Msg
+contentView env model =
     bodyView env model
 
 

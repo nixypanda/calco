@@ -144,8 +144,8 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, env : Env } -> Element Msg
-view { model, env } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
         [ Feedback.maybeErrorBanner env.theme (Common.submitErrorMessage model.submit)
         , Common.viewFormFields env FormMsg model

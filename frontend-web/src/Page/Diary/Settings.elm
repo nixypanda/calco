@@ -160,8 +160,8 @@ canonical selected =
     List.filter (\slot -> List.member slot selected) MealSlot.all
 
 
-view : { model : Model, env : Env } -> Element Msg
-view { model, env } =
+view : Env -> Model -> Element Msg
+view env model =
     UiPage.pageContainer
         (case model of
             Loading ->

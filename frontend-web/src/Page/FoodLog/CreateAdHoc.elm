@@ -321,17 +321,19 @@ failure error model =
 
 
 view :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-view =
-    viewForAi True
+view env model =
+    viewForAi env True model
 
 
 viewForAi :
-    Bool
-    -> { model : Model, env : Env }
+    Env
+    -> Bool
+    -> Model
     -> Element Msg
-viewForAi showOptional { model, env } =
+viewForAi env showOptional model =
     let
         visibility : Editor.NutrientVisibility
         visibility =

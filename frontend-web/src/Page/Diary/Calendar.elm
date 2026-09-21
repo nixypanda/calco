@@ -299,10 +299,11 @@ requestForMonths token oldest newest today =
 
 
 contentViewWithSelection :
-    Maybe LocalDate
-    -> { model : Model, env : Env }
+    Env
+    -> Maybe LocalDate
+    -> Model
     -> Element Msg
-contentViewWithSelection selectedDate { model, env } =
+contentViewWithSelection env selectedDate model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16

@@ -186,8 +186,8 @@ createUserPayload form =
 -- VIEW
 
 
-view : { model : Model, env : Env } -> Element Msg
-view { model, env } =
+view : Env -> Model -> Element Msg
+view env model =
     let
         form : Form
         form =

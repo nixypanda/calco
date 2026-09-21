@@ -314,9 +314,10 @@ sessionOutMsg error =
 
 
 view :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-view { model, env } =
+view env model =
     case model.review of
         Nothing ->
             UiPage.pageContainer
@@ -344,18 +345,15 @@ view { model, env } =
                     }
                 , additionalNutrientsToggle env model review
                 , Element.map ReviewMsg
-                    (Review.viewForAi model.showAdditionalNutrients
-                        { model = review
-                        , env = env
-                        }
-                    )
+                    (Review.viewForAi env model.showAdditionalNutrients review)
                 ]
 
 
 modalView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Maybe (Element Msg)
-modalView { model, env } =
+modalView env model =
     Assistant.modalView env model.assistant
         |> Maybe.map (Element.map AssistantMsg)
 

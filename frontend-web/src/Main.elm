@@ -603,7 +603,7 @@ uiLayout theme content =
 
 layoutAttrs : Model -> List (Element.Attribute Msg)
 layoutAttrs model =
-    case Page.modalView (pageProps model) of
+    case Page.modalView model.env model.page of
         Just modal ->
             [ Element.inFront (Element.map GotPageMsg modal) ]
 
@@ -617,19 +617,7 @@ pageView model =
         Skeleton.loading model.env.theme
 
     else
-        Element.map GotPageMsg (Page.view (pageProps model))
-
-
-pageProps :
-    Model
-    ->
-        { model : Page.Model
-        , env : Env
-        }
-pageProps model =
-    { model = model.page
-    , env = model.env
-    }
+        Element.map GotPageMsg (Page.view model.env model.page)
 
 
 currentSession : Model -> Session

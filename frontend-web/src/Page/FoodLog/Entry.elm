@@ -577,9 +577,10 @@ modelLogId model =
 
 
 contentView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Element Msg
-contentView { model, env } =
+contentView env model =
     Element.column
         [ Element.width Element.fill
         , Element.spacing DesignTokens.space16
@@ -595,9 +596,10 @@ contentView { model, env } =
 
 
 modalView :
-    { model : Model, env : Env }
+    Env
+    -> Model
     -> Maybe (Element Msg)
-modalView { model, env } =
+modalView env model =
     case model of
         Loaded loaded ->
             deleteModalView env loaded

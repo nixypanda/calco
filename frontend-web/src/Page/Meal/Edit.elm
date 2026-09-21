@@ -493,8 +493,8 @@ mapFormOutMsg maybeOutMsg =
 -- VIEW
 
 
-view : { model : Model, env : Env } -> Element Msg
-view { model, env } =
+view : Env -> Model -> Element Msg
+view env model =
     case model of
         LoadingEdit _ ->
             UiPage.pageContainer [ mealEditSkeleton env.theme ]
