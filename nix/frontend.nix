@@ -38,7 +38,7 @@ buildNpmPackage {
   # Elm needs its package registry cache; fetchElmDeps wires it up offline.
   postConfigure = elmPackages.fetchElmDeps {
     elmPackages = import ./elm-srcs.nix;
-    elmVersion = "0.19.1";
+    elmVersion = elmPackages.elm.version;
     registryDat = ./registry.dat;
   };
 
