@@ -93,6 +93,32 @@ class ServingFetcherTests(unittest.TestCase):
 
 
 class MergeServingTests(unittest.TestCase):
+    def test_load_source_keeps_first_conversion_per_unit(self) -> None:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as source:
+            source.write(
+                '{"type":"food","source":"USDA","source_id":"1","name":"Food"}\n'
+            )
+            source.write(
+                '{"type":"serving","source":"USDA","source_id":"1","label":"small","quantity":1,"unit":"serving","grams":157}\n'
+            )
+            source.write(
+                '{"type":"serving","source":"USDA","source_id":"1","label":"large","quantity":1,"unit":"serving","grams":781}\n'
+            )
+            source.write(
+                '{"type":"serving","source":"USDA","source_id":"1","unit":"cup","grams_per_unit":230}\n'
+            )
+            source.flush()
+
+            _foods, _nutrients, servings = merge.load_source(source.name)
+
+        self.assertEqual(
+            servings["1"],
+            [
+                {"unit": "serving", "grams_per_unit": 157.0},
+                {"unit": "cup", "grams_per_unit": 230.0},
+            ],
+        )
+
     def test_load_and_merge_preserve_only_new_serving_shape(self) -> None:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8") as source:
             source.write(
