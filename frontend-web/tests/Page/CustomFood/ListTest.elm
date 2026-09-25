@@ -18,45 +18,61 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.CustomFood.List"
-        [ test "load failure stores error" <|
+        [ test "the list loads and every action navigates to its destination" <|
             \_ ->
-                CustomFoodList.update
-                    (CustomFoodList.FoodsLoaded (Err Client.NetworkError))
-                    (Tuple.first CustomFoodList.init)
-                    |> first
-                    |> errorOf
-                    |> Expect.equal (Just networkErrorMessage)
-        , test "open food navigates to food detail" <|
+                let
+                    ( initial, initialRequest ) =
+                        CustomFoodList.init
+
+                    loaded : CustomFoodList.Model
+                    loaded =
+                        step (CustomFoodList.FoodsLoaded (Ok { items = [ food ] })) initial
+                in
+                { initialRequest = initialRequest
+                , initialPhase = toScreen initial |> .phase
+                , loaded = toScreen loaded
+                , open = out (CustomFoodList.OpenFoodClicked "food-1") loaded
+                , manual = out CustomFoodList.CreateManuallyClicked loaded
+                , withAi = out CustomFoodList.CreateWithAiClicked loaded
+                , back = out CustomFoodList.BackClicked loaded
+                }
+                    |> Expect.equal
+                        { initialRequest = CustomFoodList.RequestFoods
+                        , initialPhase = "loading"
+                        , loaded = { phase = "loaded", names = [ "Paneer" ], error = Nothing }
+                        , open = CustomFoodList.Navigate (CustomFoodShow "food-1")
+                        , manual = CustomFoodList.Navigate CustomFoodCreate
+                        , withAi = CustomFoodList.Navigate CustomFoodCreateWithAi
+                        , back = CustomFoodList.Navigate (DiaryDay Nothing Nothing)
+                        }
+        , test "a failed load shows an error and an unauthorized load expires the session" <|
             \_ ->
-                CustomFoodList.update
-                    (CustomFoodList.OpenFoodClicked "food-1")
-                    (Tuple.first CustomFoodList.init)
-                    |> third
-                    |> Expect.equal (CustomFoodList.Navigate (CustomFoodShow "food-1"))
-        , test "manual create navigates to the manual form" <|
-            \_ ->
-                CustomFoodList.update
-                    CustomFoodList.CreateManuallyClicked
-                    (Tuple.first CustomFoodList.init)
-                    |> third
-                    |> Expect.equal (CustomFoodList.Navigate CustomFoodCreate)
-        , test "AI create navigates to the focused assistant" <|
-            \_ ->
-                CustomFoodList.update
-                    CustomFoodList.CreateWithAiClicked
-                    (Tuple.first CustomFoodList.init)
-                    |> third
-                    |> Expect.equal (CustomFoodList.Navigate CustomFoodCreateWithAi)
-        , test "back navigates to diary" <|
-            \_ ->
-                CustomFoodList.update CustomFoodList.BackClicked (Tuple.first CustomFoodList.init)
-                    |> third
-                    |> Expect.equal (CustomFoodList.Navigate (DiaryDay Nothing Nothing))
-        , test "food summary omits brand and kcal when missing" <|
+                let
+                    failed : CustomFoodList.Model
+                    failed =
+                        step (CustomFoodList.FoodsLoaded (Err Client.NetworkError)) emptyModel
+                in
+                { failed = toScreen failed
+                , unauthorized =
+                    out
+                        (CustomFoodList.FoodsLoaded
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        emptyModel
+                }
+                    |> Expect.equal
+                        { failed =
+                            { phase = "failed"
+                            , names = []
+                            , error = Just networkErrorMessage
+                            }
+                        , unauthorized = CustomFoodList.SessionExpired
+                        }
+        , test "the food summary omits brand and calories when missing" <|
             \_ ->
                 CustomFoodList.foodSummaryText Util.EN_US food
                     |> Expect.equal ""
-        , test "food summary shows brand and kcal when present" <|
+        , test "the food summary shows brand and calories when present" <|
             \_ ->
                 CustomFoodList.foodSummaryText
                     Util.EN_US
@@ -76,27 +92,52 @@ tests =
         ]
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+
+-- SCREEN PROJECTION
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+type alias Screen =
+    { phase : String
+    , names : List String
+    , error : Maybe String
+    }
 
 
-errorOf : CustomFoodList.Model -> Maybe String
-errorOf model =
+toScreen : CustomFoodList.Model -> Screen
+toScreen model =
     case model of
-        CustomFoodList.LoadFailed message ->
-            Just message
+        CustomFoodList.Loaded foods ->
+            { phase = "loaded"
+            , names = List.map .name foods
+            , error = Nothing
+            }
 
-        CustomFoodList.Loaded _ ->
-            Nothing
+        CustomFoodList.LoadFailed message ->
+            { phase = "failed"
+            , names = []
+            , error = Just message
+            }
 
         CustomFoodList.Loading ->
-            Nothing
+            { phase = "loading"
+            , names = []
+            , error = Nothing
+            }
+
+
+step : CustomFoodList.Msg -> CustomFoodList.Model -> CustomFoodList.Model
+step msg model =
+    first (CustomFoodList.update msg model)
+
+
+out : CustomFoodList.Msg -> CustomFoodList.Model -> CustomFoodList.OutMsg
+out msg model =
+    third (CustomFoodList.update msg model)
+
+
+emptyModel : CustomFoodList.Model
+emptyModel =
+    Tuple.first CustomFoodList.init
 
 
 food : ProductDetail
@@ -116,3 +157,13 @@ food =
     , servings = []
     , allowedUnits = []
     }
+
+
+first : ( a, b, c ) -> a
+first ( value, _, _ ) =
+    value
+
+
+third : ( a, b, c ) -> c
+third ( _, _, value ) =
+    value
