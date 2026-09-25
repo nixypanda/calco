@@ -51,6 +51,28 @@ Do not add tests that:
 Backend integration lifecycles under `backend/tests/suites/` are end-to-end and
 are kept in full.
 
+## Frontend Test Shape
+
+Elm tests cannot drive a browser, so frontend coverage is layered:
+
+- **Pure functions** (`Data.*`, `Lib.*`, `Ui.*`, `View.*`) are tested as
+  input -> output. Whole-value equality is fine here.
+- **Contracts** (`Api.*`, decoders/encoders, `Data.Route`) are tested as
+  JSON -> value and value -> JSON, including the route parse/serialize fuzz.
+- **Feature scenarios** (`Page.*`) seed a realistic screen state, drive a
+  realistic sequence of user-level messages plus simulated server responses,
+  and assert the observable outcome: the `OutMsg`, a small local screen
+  projection (`toScreen : Model -> Screen`), and the in-flight/disabled flags
+  the UI actually uses. They do not assert an arbitrary internal field after a
+  single message, and they do not compare whole models.
+- **Component tests** (`Component.*`) keep only validation, request/payload
+  shape, cross-load composition, and async races. Form row/dropdown handler
+  state is implementation detail and belongs to a page scenario, if anywhere.
+
+Async `Cmd` values are opaque, so the environment is modelled by feeding
+completion messages in the order the server would produce them; a scenario
+asserts that stale or duplicate completions change nothing.
+
 ## How Integration Tests Work
 
 - The crate exposes a library (`backend/src/lib.rs`) with `build_router(pool, config)`. `main.rs` is a thin shim that calls it; tests call the same function.
