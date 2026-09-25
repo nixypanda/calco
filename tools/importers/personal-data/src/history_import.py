@@ -266,7 +266,8 @@ def _list_logs_by_date(
         session_token=session_token,
     )
     if payload is None:
-        return []
+        msg = f"GET {api_url}/api/logs returned an empty body"
+        raise ImportError(msg)
     return list(payload.get("items", []))
 
 

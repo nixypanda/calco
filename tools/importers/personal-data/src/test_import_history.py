@@ -6,11 +6,14 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import history_import
 from history_import import (
     ReviewRow,
+    _list_logs_by_date,
     build_log_payload,
     extract_import_fingerprint,
     fingerprint_for_food_row,
@@ -138,6 +141,21 @@ class ImportHistoryTests(unittest.TestCase):
             _food_row(vitamin_d_pct_daily_value="25%")
         )
         assert first != second
+
+    def test_empty_log_response_is_rejected(self) -> None:
+        caught: history_import.ImportError | None = None
+        with mock.patch("history_import._request_json", return_value=None):
+            try:
+                _list_logs_by_date(
+                    "http://example.test",
+                    "2024-03-18",
+                    cookie_name="calco_session",
+                    session_token="token",
+                )
+            except history_import.ImportError as exc:
+                caught = exc
+        assert caught is not None
+        assert "empty body" in str(caught)
 
 
 if __name__ == "__main__":
