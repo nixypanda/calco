@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
 from mfp_nutrients import REQUIRED_MACRO_CODES
 
 if TYPE_CHECKING:

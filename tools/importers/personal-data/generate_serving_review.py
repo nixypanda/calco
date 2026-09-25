@@ -10,7 +10,10 @@ data/step-9-out-serving-review.csv.
 """
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from steps.generate_serving_review import run
 

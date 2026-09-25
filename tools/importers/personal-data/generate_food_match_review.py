@@ -2,7 +2,10 @@
 """Generate a DB food match review CSV from the serving review CSV."""
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from steps.generate_food_match_review import default_database_url, run
 

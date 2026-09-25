@@ -2,7 +2,10 @@
 """Generate custom-food creation JSONL from the merged step-10 review CSV."""
 
 import argparse
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from steps.generate_foods_to_create import run
 
