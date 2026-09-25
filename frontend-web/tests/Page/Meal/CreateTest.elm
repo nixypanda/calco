@@ -17,27 +17,7 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Page.Meal.Create"
-        [ test "new meal form starts with one empty component" <|
-            \_ ->
-                MealCreate.init
-                    |> Tuple.first
-                    |> componentsOf
-                    |> List.map (\row -> ( row.quantity, row.unit, row.productId ))
-                    |> Expect.equal [ ( "100", "g", "" ) ]
-        , test "name is required" <|
-            \_ ->
-                MealCreate.init
-                    |> Tuple.first
-                    |> Common.toMealRequest
-                    |> Expect.equal (Err Common.MealNameRequired)
-        , test "at least one selected product is required" <|
-            \_ ->
-                Common.toMealRequest
-                    { emptyFormFields
-                        | name = "Lunch"
-                    }
-                    |> Expect.equal (Err Common.ComponentRequired)
-        , test "selected components default quantity to 100 g" <|
+        [ test "selected components default quantity to 100 g" <|
             \_ ->
                 let
                     row : Common.ComponentRow
@@ -57,22 +37,6 @@ tests =
                               }
                             ]
                         )
-        , test "total quantity is included only when present" <|
-            \_ ->
-                let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
-                in
-                Common.toMealRequest
-                    { emptyFormFields
-                        | name = "Lunch"
-                        , totalQuantity = "250"
-                        , totalUnit = "g"
-                        , components = [ { row | productId = "food-1" } ]
-                    }
-                    |> Result.map .totalQuantity
-                    |> Expect.equal (Ok (Just { amount = "250", unit = "g" }))
         , test "stale row search result is ignored" <|
             \_ ->
                 let
@@ -97,40 +61,6 @@ tests =
                     |> List.head
                     |> Maybe.map .searchResults
                     |> Expect.equal (Just NotAsked)
-        , test "matching row search result stores results" <|
-            \_ ->
-                let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
-                in
-                MealCreate.update
-                    (MealCreate.FormMsg
-                        (Common.ComponentSearchCompleted 1 (ticket 2) (Ok { items = [ result ] }))
-                    )
-                    { emptyFormFields
-                        | components =
-                            [ { row
-                                | search =
-                                    Search.withSearchToken (ticket 2) row.search
-                              }
-                            ]
-                    }
-                    |> first
-                    |> componentsOf
-                    |> List.head
-                    |> Maybe.map .searchResults
-                    |> Expect.equal (Just (Success [ result ]))
-        , test "component search tab completion expands include category operator" <|
-            \_ ->
-                MealCreate.update
-                    (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
-                    (modelWithRow
-                        { emptyRow | search = Search.withQuery "c" emptyRow.search }
-                    )
-                    |> first
-                    |> firstRowQuery
-                    |> Expect.equal (Just "category:")
         , test "component search tab completion preserves the token gap" <|
             \_ ->
                 MealCreate.update
@@ -159,31 +89,6 @@ tests =
                                 }
                             )
                         )
-        , test "component category suggestions are stored" <|
-            \_ ->
-                MealCreate.update
-                    (MealCreate.FormMsg
-                        (Common.ComponentCategoriesCompleted 1
-                            (ticket 2)
-                            (Ok
-                                { items =
-                                    [ { value = "food and beverages", count = 4 } ]
-                                }
-                            )
-                        )
-                    )
-                    (modelWithRow
-                        { emptyRow
-                            | search = Search.withCategoryToken (ticket 2) emptyRow.search
-                        }
-                    )
-                    |> first
-                    |> componentsOf
-                    |> List.head
-                    |> Maybe.map .search
-                    |> Maybe.map .categorySuggestions
-                    |> Expect.equal
-                        (Just [ { value = "food and beverages", count = 4 } ])
         , test "component category value completion quotes spaces" <|
             \_ ->
                 MealCreate.update

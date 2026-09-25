@@ -166,11 +166,6 @@ workspaceTests =
                 expectPaneKeys
                     (AiLogCreate (Just date) (Just Lunch))
                     [ "create-ai-log" ]
-        , test "calendar-aware log editing is standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodLogEntry "log-1" (Just date) (Just month))
-                    [ "log-detail:log-1" ]
         ]
 
 

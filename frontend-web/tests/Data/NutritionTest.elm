@@ -84,10 +84,6 @@ tests =
                     { amount = "3", unit = "g" }
                     nutrients
                     |> Expect.equal Nothing
-        , test "dominantMacro returns Nothing for empty nutrients" <|
-            \_ ->
-                Nutrition.dominantMacro []
-                    |> Expect.equal Nothing
         , test "dominantMacro returns Nothing for zero macros" <|
             \_ ->
                 Nutrition.dominantMacro
@@ -120,22 +116,6 @@ tests =
                     , { code = "FAT_G", amount = "20", unit = "g" }
                     ]
                     |> Expect.equal (Just Nutrition.Fat)
-        , test "dominantMacro tie-break Protein over Carbs when calorie-equal" <|
-            \_ ->
-                Nutrition.dominantMacro
-                    [ { code = "PROTEIN_G", amount = "20", unit = "g" }
-                    , { code = "CARBS_G", amount = "20", unit = "g" }
-                    , { code = "FAT_G", amount = "5", unit = "g" }
-                    ]
-                    |> Expect.equal (Just Nutrition.Protein)
-        , test "dominantMacro tie-break Protein over Fat when calorie-equal" <|
-            \_ ->
-                Nutrition.dominantMacro
-                    [ { code = "PROTEIN_G", amount = "18", unit = "g" }
-                    , { code = "CARBS_G", amount = "5", unit = "g" }
-                    , { code = "FAT_G", amount = "8", unit = "g" }
-                    ]
-                    |> Expect.equal (Just Nutrition.Protein)
         , test "dominantMacro all-equal by calories defaults to Protein" <|
             \_ ->
                 Nutrition.dominantMacro

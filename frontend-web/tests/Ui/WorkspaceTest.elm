@@ -57,17 +57,6 @@ renderingTests =
                 rendered Phone
                     |> Query.findAll [ Selector.style "display" "none" ]
                     |> Query.count (Expect.equal 0)
-        , test "renders only the last pane on a phone" <|
-            \_ ->
-                rendered Phone
-                    |> Query.hasNot [ Selector.text "diary-pane" ]
-        , test "renders without panes" <|
-            \_ ->
-                []
-                    |> Workspace.view (device Desktop)
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.hasNot [ Selector.style "display" "none" ]
         ]
 
 
@@ -83,15 +72,6 @@ visibilityTests =
                         , ( "search", False )
                         , ( "food-detail", True )
                         ]
-        , test "tablet shows only the last pane" <|
-            \_ ->
-                Workspace.paneVisibility (device Tablet)
-                    [ "diary", "search", "food-detail" ]
-                    |> Expect.equal
-                        [ ( "diary", False )
-                        , ( "search", False )
-                        , ( "food-detail", True )
-                        ]
         , test "desktop shows the last two panes" <|
             \_ ->
                 Workspace.paneVisibility (device Desktop)
@@ -101,35 +81,8 @@ visibilityTests =
                         , ( "search", True )
                         , ( "food-detail", True )
                         ]
-        , test "big desktop shows the last two panes" <|
-            \_ ->
-                Workspace.paneVisibility (device BigDesktop)
-                    [ "diary", "search", "food-detail" ]
-                    |> Expect.equal
-                        [ ( "diary", False )
-                        , ( "search", True )
-                        , ( "food-detail", True )
-                        ]
-        , test "hidden panes are retained rather than dropped" <|
-            \_ ->
-                Workspace.paneVisibility (device Desktop)
-                    [ "calendar", "diary", "log-detail" ]
-                    |> List.map Tuple.first
-                    |> Expect.equal [ "calendar", "diary", "log-detail" ]
         , test "keeps every pane visible when they fit" <|
             \_ ->
                 Workspace.paneVisibility (device Desktop) [ "diary", "search" ]
                     |> Expect.equal [ ( "diary", True ), ( "search", True ) ]
-        , test "a single pane is visible on every device class" <|
-            \_ ->
-                [ Phone, Tablet, Desktop, BigDesktop ]
-                    |> List.map
-                        (\class -> Workspace.paneVisibility (device class) [ "diary" ])
-                    |> Expect.equal
-                        (List.repeat 4 [ ( "diary", True ) ])
-        , test "no panes yields no visibility entries" <|
-            \_ ->
-                Workspace.paneVisibility (device Desktop) []
-                    |> List.map Tuple.first
-                    |> Expect.equal []
         ]

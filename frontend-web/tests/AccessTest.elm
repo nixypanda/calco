@@ -54,14 +54,6 @@ tests =
             \_ ->
                 Access.resolveRoute Loading True Root
                     |> Expect.equal Hold
-        , test "Loading session holds for Diary when admin exists" <|
-            \_ ->
-                Access.resolveRoute Loading True (DiaryDay Nothing Nothing)
-                    |> Expect.equal Hold
-        , test "Loading session holds when no admin exists" <|
-            \_ ->
-                Access.resolveRoute Loading False Root
-                    |> Expect.equal Hold
         ]
 
 

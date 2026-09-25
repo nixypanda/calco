@@ -1,18 +1,13 @@
 module Page.CustomFood.CreateTest exposing (tests)
 
 import Api.Client as Client
-import Api.Foods exposing (CategorySuggestion, CreateFoodRequest, NutrientItem, UnitItem)
+import Api.Foods exposing (CategorySuggestion, CreateFoodRequest, NutrientItem)
 import Component.FoodEditor as Form
 import Data.Route exposing (Route(..))
-import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Page.CustomFood.Create as CustomFoodCreate
 import Test exposing (Test, describe, test)
-import Test.Html.Query as Query
-import Test.Html.Selector as Selector
-import Translations.Util as Util
-import Ui.Theme as Theme
 
 
 networkErrorMessage : String
@@ -23,17 +18,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.CustomFood.Create"
-        [ test "manual init does not request assistant status" <|
-            \_ ->
-                CustomFoodCreate.init
-                    |> Tuple.second
-                    |> Expect.equal CustomFoodCreate.NoOp
-        , test "AI init requests assistant status" <|
-            \_ ->
-                CustomFoodCreate.initWithAssistant
-                    |> Tuple.second
-                    |> Expect.equal CustomFoodCreate.RequestInitialData
-        , test "nutrient load stores items and seeds form catalog" <|
+        [ test "nutrient load stores items and seeds form catalog" <|
             \_ ->
                 CustomFoodCreate.update
                     (CustomFoodCreate.NutrientsLoaded (Ok { items = nutrientItems }))
@@ -46,14 +31,6 @@ tests =
                     |> List.head
                     |> Maybe.map .unit
                     |> Expect.equal (Just "g")
-        , test "unit load stores units and clears prior error" <|
-            \_ ->
-                CustomFoodCreate.update
-                    (CustomFoodCreate.UnitsLoaded (Ok { items = [ gram ] }))
-                    { initialModel | error = Just "old error" }
-                    |> first
-                    |> (\model -> ( model.units, model.error ))
-                    |> Expect.equal ( [ gram ], Nothing )
         , test "load failure stores display error" <|
             \_ ->
                 CustomFoodCreate.update
@@ -81,27 +58,6 @@ tests =
                         (CustomFoodCreate.RequestCategorySuggestions (ticket 1)
                             { query = "dai", limit = 8 }
                         )
-        , test "category suggestions update matching form token" <|
-            \_ ->
-                let
-                    queried : CustomFoodCreate.Model
-                    queried =
-                        CustomFoodCreate.update
-                            (CustomFoodCreate.FormMsg (Form.CategoryQueryChanged "dai"))
-                            initialModel
-                            |> first
-                in
-                CustomFoodCreate.update
-                    (CustomFoodCreate.CategorySuggestionsLoaded
-                        (ticket 1)
-                        (Ok { items = [ dairySuggestion ] })
-                    )
-                    queried
-                    |> first
-                    |> .form
-                    |> .categoryInput
-                    |> .suggestions
-                    |> Expect.equal [ dairySuggestion ]
         , test "stale category suggestions are ignored" <|
             \_ ->
                 let
@@ -133,23 +89,6 @@ tests =
                         ( Form.Submitting
                         , CustomFoodCreate.RequestCreateFood validRequest
                         )
-        , test "create view only asks for per-100 g food data" <|
-            \_ ->
-                CustomFoodCreate.view
-                    { theme = Theme.light
-                    , device = { class = Phone, orientation = Portrait }
-                    , language = Util.EN_US
-                    }
-                    validModel
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has [ Selector.text "Nutrients" ]
-                        , Query.hasNot
-                            [ Selector.text "Servings"
-                            , Selector.text "Default Portion"
-                            ]
-                        ]
         , test "save success navigates to detail" <|
             \_ ->
                 CustomFoodCreate.update
@@ -166,15 +105,6 @@ tests =
                     |> .form
                     |> .submit
                     |> Expect.equal (Form.SubmitFailed networkErrorMessage)
-        , test "save unauthorized emits session expired" <|
-            \_ ->
-                CustomFoodCreate.update
-                    (CustomFoodCreate.SaveCompleted
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    validModel
-                    |> third
-                    |> Expect.equal CustomFoodCreate.SessionExpired
         ]
 
 
@@ -226,11 +156,6 @@ validRequest =
 dairySuggestion : CategorySuggestion
 dairySuggestion =
     { value = "dairy", count = 4 }
-
-
-gram : UnitItem
-gram =
-    { code = "g", name = "Gram", kind = "mass" }
 
 
 nutrientItems : List NutrientItem

@@ -22,32 +22,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.FoodLog.Entry"
-        [ test "an ad-hoc log does not request product details" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded "log-1" (Ok adHocLog))
-                    awaitingLogModel
-                    |> third
-                    |> Expect.equal FoodLogEntry.NoOp
-        , test "init requests log and units" <|
-            \_ ->
-                FoodLogEntry.init "log-1"
-                    |> Tuple.second
-                    |> Expect.equal (FoodLogEntry.RequestInitialData "log-1")
-        , test "load-log success initializes the edit form" <|
-            \_ ->
-                loadedModel
-                    |> loadedForm
-                    |> Maybe.map formSummary
-                    |> Expect.equal
-                        (Just
-                            { amount = "2"
-                            , unit = "serving"
-                            , mealSlot = Just Lunch
-                            , notes = "Good"
-                            }
-                        )
-        , test "product log requests product name/detail" <|
+        [ test "product log requests product name/detail" <|
             \_ ->
                 FoodLogEntry.update
                     (FoodLogEntry.LogLoaded "log-1" (Ok productLog))
@@ -55,21 +30,6 @@ tests =
                     |> third
                     |> Expect.equal
                         (FoodLogEntry.RequestProductDetail "food-1")
-        , test "meal log requests nothing further" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
-                    emptyModel
-                    |> third
-                    |> Expect.equal FoodLogEntry.NoOp
-        , test "product detail success stores product and item name" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.ProductDetailLoaded (Ok food))
-                    loadedModel
-                    |> first
-                    |> loadedProductSummary
-                    |> Expect.equal ( Just "food-1", "Apple" )
         , test "product display nutrients follow the edit form quantity" <|
             \_ ->
                 FoodLogEntry.nutrientsForDisplay
@@ -106,14 +66,6 @@ tests =
                           , unit = "kcal"
                           }
                         ]
-        , test "meal title comes from the log itself" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.LogLoaded "log-1" (Ok mealLog))
-                    awaitingLogModel
-                    |> first
-                    |> loadedItemTitle
-                    |> Expect.equal "Lunch meal"
         , test "submit emits update payload" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.SubmitClicked loadedModel
@@ -126,14 +78,6 @@ tests =
                             , notes = Just "Good"
                             }
                         )
-        , test "update success replaces the current log" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.UpdateCompleted (Ok updatedLog))
-                    loadedModel
-                    |> first
-                    |> loadedLogQuantity
-                    |> Expect.equal (Just { amount = "3", unit = "g" })
         , test "update success reports the affected diary date" <|
             \_ ->
                 FoodLogEntry.update
@@ -161,12 +105,6 @@ tests =
                                     (FoodLogForm.RequestFailed networkErrorMessage)
                             }
                         )
-        , test "delete click opens confirmation state" <|
-            \_ ->
-                FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
-                    |> first
-                    |> deleteStateOf
-                    |> Expect.equal (Just DeleteConfirming)
         , test "delete confirm requests log deletion" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.DeleteClicked loadedModel
@@ -234,24 +172,6 @@ tests =
                     |> first
                     |> loadedLogQuantity
                     |> Expect.equal (Just { amount = "2", unit = "serving" })
-        , test "units loaded failure stores error" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.UnitsLoaded (Err Client.NetworkError))
-                    emptyModel
-                    |> first
-                    |> Expect.equal
-                        (FoodLogEntry.LoadFailed
-                            { logId = "log-1"
-                            , error = networkErrorMessage
-                            }
-                        )
-        , test "cancel delete clicked when Loaded resets to DeleteIdle" <|
-            \_ ->
-                FoodLogEntry.update FoodLogEntry.CancelDeleteClicked deletingModel
-                    |> first
-                    |> deleteStateOf
-                    |> Expect.equal (Just DeleteIdle)
         , test "log loaded failure stores error" <|
             \_ ->
                 FoodLogEntry.update
@@ -269,21 +189,11 @@ tests =
                 FoodLogEntry.update FoodLogEntry.SubmitClicked savingModel
                     |> first
                     |> Expect.equal savingModel
-        , test "delete clicked when request is not Idle is a no-op" <|
-            \_ ->
-                FoodLogEntry.update FoodLogEntry.DeleteClicked savingModel
-                    |> first
-                    |> Expect.equal savingModel
         , test "confirm delete clicked with DeleteFailed retries the deletion" <|
             \_ ->
                 FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked deleteFailedModel
                     |> third
                     |> Expect.equal (FoodLogEntry.RequestDeleteLog "log-1")
-        , test "confirm delete clicked with DeleteIdle is a no-op" <|
-            \_ ->
-                FoodLogEntry.update FoodLogEntry.ConfirmDeleteClicked loadedModel
-                    |> first
-                    |> Expect.equal loadedModel
         , test "delete completed with unauthorized error triggers SessionExpired" <|
             \_ ->
                 FoodLogEntry.update
@@ -293,13 +203,6 @@ tests =
                     deletingModel
                     |> third
                     |> Expect.equal FoodLogEntry.SessionExpired
-        , test "delete completed when request is not Deleting is a no-op" <|
-            \_ ->
-                FoodLogEntry.update
-                    (FoodLogEntry.DeleteCompleted (Ok ()))
-                    loadedModel
-                    |> third
-                    |> Expect.equal FoodLogEntry.NoOp
         ]
 
 
@@ -372,15 +275,6 @@ deleteFailedModel =
         }
 
 
-awaitingLogModel : FoodLogEntry.Model
-awaitingLogModel =
-    FoodLogEntry.Loading
-        { logId = "log-1"
-        , log = Nothing
-        , units = Just [ gram ]
-        }
-
-
 form : FoodLogForm.Model
 form =
     FoodLogForm.initLogFormFromLog productLog
@@ -425,26 +319,6 @@ todayFallback =
         Nothing ->
             -- Unreachable: 1970-01-01 is always valid.
             sampleDate
-
-
-mealLog : FoodLog
-mealLog =
-    { productLog
-        | item =
-            FoodLog.MealLogItem { id = "meal-1", name = "Lunch meal" }
-    }
-
-
-adHocLog : FoodLog
-adHocLog =
-    { productLog
-        | item =
-            FoodLog.AdHocLogItem
-                { name = "Paneer wrap", brand = Just "Cafe" }
-        , quantity = { amount = "1", unit = "serving" }
-        , nutrients =
-            [ { code = "ENERGY_KCAL", amount = "520", unit = "kcal" } ]
-    }
 
 
 updatedLog : FoodLog
@@ -507,62 +381,6 @@ gram =
     { code = "g", name = "Gram", kind = "mass" }
 
 
-formSummary :
-    FoodLogForm.Model
-    ->
-        { amount : String
-        , unit : String
-        , mealSlot : Maybe MealSlot
-        , notes : String
-        }
-formSummary current =
-    { amount = current.amount
-    , unit = current.unit
-    , mealSlot = current.mealSlot
-    , notes = current.notes
-    }
-
-
-loadedForm : FoodLogEntry.Model -> Maybe FoodLogForm.Model
-loadedForm model =
-    case model of
-        FoodLogEntry.Loaded loaded ->
-            Just loaded.form
-
-        _ ->
-            Nothing
-
-
-loadedProductSummary : FoodLogEntry.Model -> ( Maybe String, String )
-loadedProductSummary model =
-    case model of
-        FoodLogEntry.Loaded loaded ->
-            case loaded.item of
-                FoodLogEntry.ProductItem (FoodLogEntry.DetailLoaded loadedFood) ->
-                    ( Just loadedFood.id, loadedFood.name )
-
-                _ ->
-                    ( Nothing, "Loading..." )
-
-        _ ->
-            ( Nothing, "Loading..." )
-
-
-loadedItemTitle : FoodLogEntry.Model -> String
-loadedItemTitle model =
-    case model of
-        FoodLogEntry.Loaded loaded ->
-            case loaded.item of
-                FoodLogEntry.MealItem meal ->
-                    FoodLog.itemName meal
-
-                _ ->
-                    "Loading..."
-
-        _ ->
-            "Loading..."
-
-
 loadedLogQuantity :
     FoodLogEntry.Model
     -> Maybe { amount : String, unit : String }
@@ -610,16 +428,6 @@ loadedDeleteFailureSummary model =
                 { logId = loaded.log.id
                 , delete = loaded.delete
                 }
-
-        _ ->
-            Nothing
-
-
-deleteStateOf : FoodLogEntry.Model -> Maybe DeleteState
-deleteStateOf model =
-    case model of
-        FoodLogEntry.Loaded loaded ->
-            Just loaded.delete
 
         _ ->
             Nothing

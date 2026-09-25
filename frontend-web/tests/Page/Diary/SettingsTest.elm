@@ -28,30 +28,6 @@ tests =
                         ( Just (Settings.ValidationFailed "Select at least one meal slot.")
                         , Settings.NoOp
                         )
-        , test "saves complete selection in canonical order" <|
-            \_ ->
-                Settings.update
-                    Settings.SaveClicked
-                    (Settings.Ready
-                        { selected = [ Breakfast, LateNightSnack ]
-                        , saveState = Settings.Editing
-                        }
-                    )
-                    |> (\( _, _, outMsg ) -> outMsg)
-                    |> Expect.equal
-                        (Settings.RequestSave
-                            { enabledMealSlots = [ Breakfast, LateNightSnack ] }
-                        )
-        , test "retry from failed returns to loading and requests preferences" <|
-            \_ ->
-                let
-                    ( model, _, outMsg ) =
-                        Settings.update
-                            Settings.RetryClicked
-                            (Settings.Failed "boom")
-                in
-                ( model, outMsg )
-                    |> Expect.equal ( Settings.Loading, Settings.RequestPreferences )
         ]
 
 

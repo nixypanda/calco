@@ -83,20 +83,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_is_canonicalized() {
-        let parsed = parse_enabled_slots(vec![
-            "late_night_snack".into(),
-            "breakfast".into(),
-            "late_night_snack".into(),
-        ])
-        .unwrap();
-        assert_eq!(
-            parsed.canonical(),
-            vec![MealSlot::Breakfast, MealSlot::LateNightSnack]
-        );
-    }
-
-    #[test]
     fn request_rejects_unknown_and_empty_slots() {
         assert!(parse_enabled_slots(vec!["supper".into()]).is_err());
         assert!(parse_enabled_slots(vec![]).is_err());

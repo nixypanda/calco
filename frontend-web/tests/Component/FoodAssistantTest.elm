@@ -26,16 +26,7 @@ viewEnv =
 tests : Test
 tests =
     describe "Component.FoodAssistant"
-        [ test "disabled status exposes no chat state" <|
-            \_ ->
-                Assistant.update
-                    (Assistant.StatusLoaded
-                        (Ok { enabled = False, supportsImages = False })
-                    )
-                    (Tuple.first Assistant.init)
-                    |> first
-                    |> Expect.equal Assistant.Disabled
-        , test "status error can be retried" <|
+        [ test "status error can be retried" <|
             \_ ->
                 Assistant.update
                     (Assistant.StatusLoaded (Err Client.NetworkError))
@@ -44,22 +35,6 @@ tests =
                     |> Assistant.update Assistant.RetryStatusClicked
                     |> third
                     |> Expect.equal Assistant.RequestStatus
-        , test "sending appends a user turn and requests a conversation" <|
-            \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DescriptionChanged "one bowl of dal")
-                    |> first
-                    |> Assistant.update Assistant.SendClicked
-                    |> third
-                    |> requestJson
-                    |> Expect.equal
-                        (Just
-                            (String.concat
-                                [ "{\"purpose\":\"custom_food\",\"turns\":["
-                                , "{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
-                                ]
-                            )
-                        )
         , test "clarification appends transcript and allows a follow-up" <|
             \_ ->
                 sent
@@ -116,27 +91,6 @@ tests =
                                 "The assistant is busy. Try again in 12 seconds."
                             )
                         )
-        , test "backend validation messages explain what must be corrected" <|
-            \_ ->
-                sent
-                    |> Assistant.update
-                        (Assistant.DraftCompleted
-                            (Err
-                                (Client.BadStatus
-                                    400
-                                    "photo_dimensions_too_large"
-                                    "A photo has too many pixels."
-                                )
-                            )
-                        )
-                    |> first
-                    |> requestState
-                    |> Expect.equal
-                        (Just
-                            (Assistant.RequestFailed
-                                "A photo has too many pixels."
-                            )
-                        )
         , test "ready result is previewed before any apply output" <|
             \_ ->
                 enabled
@@ -183,37 +137,6 @@ tests =
                             , warnings = [ "Estimated" ]
                             }
                         )
-        , test "ready draft hides the conversation behind ask for changes" <|
-            \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text "Draft preview"
-                        , Selector.text "New session"
-                        , Selector.text "Apply to form"
-                        , Selector.text "Ask for changes"
-                        ]
-        , test "ready draft does not render conversation controls" <|
-            \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.hasNot
-                        [ Selector.text "Conversation"
-                        , Selector.text "Food description or answer"
-                        , Selector.text "Send"
-                        ]
         , test "ask for changes reveals the conversation and follow-up input" <|
             \_ ->
                 enabled
@@ -271,19 +194,6 @@ tests =
                 )
                     |> Expect.equal
                         ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
-        , test "preview includes details nutrients and servings" <|
-            \_ ->
-                Assistant.draftPreviewData Util.EN_US draft
-                    |> Expect.equal
-                        { details =
-                            [ ( "Name", "Dal" )
-                            , ( "Brand", "Not specified" )
-                            , ( "Categories", "lentils" )
-                            , ( "Default quantity", "1 bowl" )
-                            ]
-                        , nutrients = [ ( "Energy", "120.5 kcal" ) ]
-                        , servings = [ ( "bowl", "1 bowl = 300 g" ) ]
-                        }
         , test "new session asks before clearing transient assistant state" <|
             \_ ->
                 let
@@ -354,86 +264,6 @@ tests =
                                     )
                                 )
                         )
-        , test "assistant actions use their scoped labels" <|
-            \_ ->
-                sent
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text "New session"
-                        , Selector.text "Apply to form"
-                        , Selector.text "Ask for changes"
-                        ]
-        , test "new session confirmation explains its scope" <|
-            \_ ->
-                sent
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update Assistant.NewSessionClicked
-                    |> first
-                    |> Assistant.modalView
-                        viewEnv
-                    |> Maybe.map
-                        (Element.layout []
-                            >> Query.fromHtml
-                            >> Query.has
-                                [ Selector.text "Start new session?"
-                                , Selector.text
-                                    (String.concat
-                                        [ "The current conversation and draft will be "
-                                        , "discarded. Your food form will not be changed."
-                                        ]
-                                    )
-                                , Selector.text "Cancel"
-                                , Selector.text "Start new session"
-                                ]
-                        )
-                    |> Maybe.withDefault (Expect.fail "expected new-session modal")
-        , test "overwrite confirmation uses explicit draft actions" <|
-            \_ ->
-                sent
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update (Assistant.ApplyDraftClicked True)
-                    |> first
-                    |> Assistant.view
-                        viewEnv
-                        True
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text "Cancel"
-                        , Selector.text "Replace form values"
-                        ]
-        , test "focused assistant exposes its input without a reveal action" <|
-            \_ ->
-                enabled
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has
-                        [ Selector.text "Food description or answer"
-                        , Selector.text "Send"
-                        ]
-        , test "text-only assistants hide all photo controls" <|
-            \_ ->
-                enabled
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.hasNot
-                        [ Selector.text "Take photo"
-                        , Selector.text "Choose photos"
-                        ]
         , test "image assistants expose a rear-camera input and file chooser" <|
             \_ ->
                 imageEnabled

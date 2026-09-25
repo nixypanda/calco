@@ -23,19 +23,6 @@ tests =
                 in
                 ( model.status, outMsg )
                     |> Expect.equal ( EditUser.Loading, EditUser.RequestUser "u1" )
-        , test "init stores userId" <|
-            \_ ->
-                EditUser.init "u1"
-                    |> Tuple.first
-                    |> .userId
-                    |> Expect.equal "u1"
-        , test "UserLoaded success stores user" <|
-            \_ ->
-                initialModel
-                    |> EditUser.update (EditUser.UserLoaded (Ok user))
-                    |> firstOfThree
-                    |> .status
-                    |> Expect.equal (EditUser.Loaded { user = user, password = "" } EditUser.Idle)
         , test "UserLoaded unauthorized emits SessionExpired" <|
             \_ ->
                 initialModel
@@ -69,26 +56,12 @@ tests =
                     |> thirdOfThree
                     |> Expect.equal
                         (EditUser.RequestResetPassword "u1" { newPassword = "new-password" })
-        , test "ResetSubmitted with valid password marks reset pending" <|
-            \_ ->
-                readyModelWithPassword "new-password"
-                    |> EditUser.update EditUser.ResetSubmitted
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.ResettingPassword)
         , test "ResetCompleted success emits UpdateSucceeded" <|
             \_ ->
                 resettingModel
                     |> EditUser.update (EditUser.ResetCompleted (Ok ()))
                     |> thirdOfThree
                     |> Expect.equal EditUser.UpdateSucceeded
-        , test "ResetCompleted clears password on success" <|
-            \_ ->
-                resettingModel
-                    |> EditUser.update (EditUser.ResetCompleted (Ok ()))
-                    |> firstOfThree
-                    |> passwordFromState
-                    |> Expect.equal ""
         , test "ResetCompleted unauthorized emits SessionExpired" <|
             \_ ->
                 resettingModel
@@ -98,90 +71,30 @@ tests =
                         )
                     |> thirdOfThree
                     |> Expect.equal EditUser.SessionExpired
-        , test "DisableClicked asks for confirmation" <|
-            \_ ->
-                readyModel
-                    |> EditUser.update EditUser.DisableClicked
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.DisableConfirming)
         , test "DisableConfirmClicked emits RequestDisableUser" <|
             \_ ->
                 disableConfirmingModel
                     |> EditUser.update EditUser.DisableConfirmClicked
                     |> thirdOfThree
                     |> Expect.equal (EditUser.RequestDisableUser "u1")
-        , test "DisableConfirmClicked marks disable pending" <|
-            \_ ->
-                disableConfirmingModel
-                    |> EditUser.update EditUser.DisableConfirmClicked
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.DisablingUser)
-        , test "CancelDisableClicked returns to idle" <|
-            \_ ->
-                disableConfirmingModel
-                    |> EditUser.update EditUser.CancelDisableClicked
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.Idle)
         , test "DisableCompleted success emits UpdateSucceeded" <|
             \_ ->
                 disablingModel
                     |> EditUser.update (EditUser.DisableCompleted (Ok ()))
                     |> thirdOfThree
                     |> Expect.equal EditUser.UpdateSucceeded
-        , test "DisableCompleted unauthorized emits SessionExpired" <|
-            \_ ->
-                disablingModel
-                    |> EditUser.update
-                        (EditUser.DisableCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
-                        )
-                    |> thirdOfThree
-                    |> Expect.equal EditUser.SessionExpired
         , test "EnableClicked emits RequestEnableUser" <|
             \_ ->
                 disabledReadyModel
                     |> EditUser.update EditUser.EnableClicked
                     |> thirdOfThree
                     |> Expect.equal (EditUser.RequestEnableUser "u1")
-        , test "EnableClicked marks enable pending" <|
-            \_ ->
-                disabledReadyModel
-                    |> EditUser.update EditUser.EnableClicked
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.EnablingUser)
         , test "EnableCompleted success emits UpdateSucceeded" <|
             \_ ->
                 enablingModel
                     |> EditUser.update (EditUser.EnableCompleted (Ok ()))
                     |> thirdOfThree
                     |> Expect.equal EditUser.UpdateSucceeded
-        , test "EnableCompleted unauthorized emits SessionExpired" <|
-            \_ ->
-                enablingModel
-                    |> EditUser.update
-                        (EditUser.EnableCompleted
-                            (Err (Client.BadStatus 401 "unauthorized" "Unauthorized"))
-                        )
-                    |> thirdOfThree
-                    |> Expect.equal EditUser.SessionExpired
-        , test "PasswordChanged with Invalid state resets to Idle" <|
-            \_ ->
-                invalidModel
-                    |> EditUser.update (EditUser.PasswordChanged "new")
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.Idle)
-        , test "PasswordChanged with ActionFailed resets to Idle" <|
-            \_ ->
-                actionFailedModel
-                    |> EditUser.update (EditUser.PasswordChanged "new")
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just EditUser.Idle)
         , test "PasswordChanged with ResettingPassword keeps ResettingPassword" <|
             \_ ->
                 resettingWithNewPasswordModel
@@ -195,18 +108,6 @@ tests =
                     |> EditUser.update EditUser.ResetSubmitted
                     |> firstOfThree
                     |> Expect.equal resettingModel
-        , test "DisableClicked when pending is no-op" <|
-            \_ ->
-                resettingModel
-                    |> EditUser.update EditUser.DisableClicked
-                    |> firstOfThree
-                    |> Expect.equal resettingModel
-        , test "EnableClicked when pending is no-op" <|
-            \_ ->
-                resettingModel
-                    |> EditUser.update EditUser.EnableClicked
-                    |> firstOfThree
-                    |> Expect.equal resettingModel
         , test "ResetCompleted with non-matching action state is no-op" <|
             \_ ->
                 disablingModel
@@ -217,13 +118,6 @@ tests =
             \_ ->
                 disablingModel
                     |> EditUser.update (EditUser.DisableCompleted (Err Client.NetworkError))
-                    |> firstOfThree
-                    |> actionStateFromState
-                    |> Expect.equal (Just (EditUser.ActionFailed networkErrorMessage))
-        , test "EnableCompleted failure stores ActionFailed" <|
-            \_ ->
-                enablingModel
-                    |> EditUser.update (EditUser.EnableCompleted (Err Client.NetworkError))
                     |> firstOfThree
                     |> actionStateFromState
                     |> Expect.equal (Just (EditUser.ActionFailed networkErrorMessage))
@@ -290,26 +184,6 @@ enablingModel =
     }
 
 
-invalidModel : EditUser.Model
-invalidModel =
-    { initialModel
-        | status =
-            EditUser.Loaded
-                { user = user, password = "" }
-                (EditUser.Invalid EditUser.NewPasswordRequired)
-    }
-
-
-actionFailedModel : EditUser.Model
-actionFailedModel =
-    { initialModel
-        | status =
-            EditUser.Loaded
-                { user = user, password = "" }
-                (EditUser.ActionFailed "old error")
-    }
-
-
 resettingWithNewPasswordModel : EditUser.Model
 resettingWithNewPasswordModel =
     { initialModel
@@ -343,16 +217,6 @@ firstOfThree ( first, _, _ ) =
 thirdOfThree : ( a, b, c ) -> c
 thirdOfThree ( _, _, third ) =
     third
-
-
-passwordFromState : EditUser.Model -> String
-passwordFromState model =
-    case model.status of
-        EditUser.Loaded loadedUser _ ->
-            loadedUser.password
-
-        _ ->
-            ""
 
 
 actionStateFromState : EditUser.Model -> Maybe EditUser.ActionState

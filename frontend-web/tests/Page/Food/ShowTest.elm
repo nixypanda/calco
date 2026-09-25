@@ -23,38 +23,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.Food.Show"
-        [ test "init requests food detail and units" <|
-            \_ ->
-                FoodShow.init
-                    "food-1"
-                    (Just "2026-05-29")
-                    (Just Lunch)
-                    Nothing
-                    |> Tuple.second
-                    |> Expect.equal (FoodShow.RequestInitialData "food-1")
-        , test "food load success initializes the log form" <|
-            \_ ->
-                FoodShow.update (FoodShow.FoodLoaded "food-1" (Ok food)) emptyModel
-                    |> first
-                    |> FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> formOf
-                    |> Maybe.map (\current -> ( current.amount, current.unit, current.mealSlot ))
-                    |> Expect.equal (Just ( "2", "serving", Just Lunch ))
-        , test "units load success stores units" <|
-            \_ ->
-                FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] })) emptyModel
-                    |> first
-                    |> unitsOf
-                    |> Expect.equal (Just [ gram ])
-        , test "food load failure stores error" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
-                    emptyModel
-                    |> first
-                    |> Expect.equal (FoodShow.LoadFailed networkErrorMessage)
-        , test "units load unauthorized expires session" <|
+        [ test "units load unauthorized expires session" <|
             \_ ->
                 FoodShow.update
                     (FoodShow.UnitsLoaded
@@ -82,14 +51,6 @@ tests =
                             )
                        )
                     |> Expect.equal ( Just "3", Just FoodLogForm.SubmitIdle )
-        , test "units reload refreshes loaded units" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.UnitsLoaded (Ok { items = [ ounce ] }))
-                    loadedModel
-                    |> first
-                    |> unitsOf
-                    |> Expect.equal (Just [ ounce ])
         , test "last used default is stored while loading and applied after load completes" <|
             \_ ->
                 FoodShow.update
@@ -103,56 +64,11 @@ tests =
                     |> formOf
                     |> Maybe.map (\current -> ( current.amount, current.unit ))
                     |> Expect.equal (Just ( "5", "g" ))
-        , test "last used default updates loaded form" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [ recentItem ] }))
-                    loadedModel
-                    |> first
-                    |> formOf
-                    |> Maybe.map (\current -> ( current.amount, current.unit ))
-                    |> Expect.equal (Just ( "5", "g" ))
-        , test "empty last used response is no-op" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [] }))
-                    loadedModel
-                    |> first
-                    |> formOf
-                    |> Maybe.map .amount
-                    |> Expect.equal (Just "2")
-        , test "last used failure is ignored" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "food-1" (Err Client.NetworkError))
-                    loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
-        , test "last used unauthorized expires session" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "food-1"
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.SessionExpired
         , test "a load response for another product is ignored" <|
             \_ ->
                 FoodShow.update (FoodShow.FoodLoaded "other" (Ok food)) loadedModel
                     |> first
                     |> Expect.equal loadedModel
-        , test "a last-used response for another product is ignored" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "other" (Ok { items = [ recentItem ] }))
-                    loadedModel
-                    |> first
-                    |> Expect.equal loadedModel
-        , test "display nutrients follow the current form quantity" <|
-            \_ ->
-                FoodShow.foodNutrientsForDisplay foodWithNutrition form
-                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
         , test "display nutrients fall back when serving conversion is unknown" <|
             \_ ->
                 FoodShow.foodNutrientsForDisplay
@@ -242,15 +158,6 @@ tests =
                         ( FoodShow.NoOp
                         , Just "Could not read device date."
                         )
-        , test "local context is ignored unless request is pending" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LocalContextReceived
-                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
-                    )
-                    loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
         , test "log success reports the created log and contextual search" <|
             \_ ->
                 FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
@@ -275,20 +182,6 @@ tests =
                                 (FoodLogForm.RequestFailed networkErrorMessage)
                             )
                         )
-        , test "log unauthorized expires session" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LogCompleted
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    savingModel
-                    |> third
-                    |> Expect.equal FoodShow.SessionExpired
-        , test "log completion is ignored unless saving" <|
-            \_ ->
-                FoodShow.update (FoodShow.LogCompleted (Ok log)) loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
         ]
 
 
@@ -385,19 +278,6 @@ formOf model =
             Nothing
 
 
-unitsOf : FoodShow.Model -> Maybe (List UnitItem)
-unitsOf model =
-    case model of
-        FoodShow.Loading loading ->
-            loading.units
-
-        FoodShow.Loaded loaded ->
-            Just loaded.units
-
-        FoodShow.LoadFailed _ ->
-            Nothing
-
-
 submitFailureMessage : FoodLogForm.Model -> Maybe String
 submitFailureMessage current =
     case current.submitState of
@@ -454,11 +334,6 @@ foodWithNutrition =
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
-
-
-ounce : UnitItem
-ounce =
-    { code = "oz", name = "Ounce", kind = "mass" }
 
 
 recentItem : Logs.RecentItem

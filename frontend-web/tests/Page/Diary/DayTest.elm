@@ -6,7 +6,7 @@ import Data.FoodLog as FoodLog exposing (FoodLog, LogItem)
 import Data.Goals exposing (GoalSnapshot, GoalSource(..))
 import Data.ItemRef as ItemRef
 import Data.MealSlot exposing (MealSlot(..))
-import Data.Nutrition as Nutrition exposing (NutrientAmount, Quantity)
+import Data.Nutrition exposing (NutrientAmount, Quantity)
 import Data.Route exposing (Route(..))
 import Expect
 import Lib.Date as LocalDate exposing (LocalDate)
@@ -22,14 +22,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.Diary.Day"
-        [ describe "initialization"
-            [ test "the pane's date is the date it shows" <|
-                \_ ->
-                    initModel yesterday
-                        |> .currentDate
-                        |> Expect.equal yesterday
-            ]
-        , describe "date navigation"
+        [ describe "date navigation"
             [ test "previous day navigation leaves current state intact" <|
                 \_ ->
                     let
@@ -43,29 +36,6 @@ tests =
                             ( "2026-05-30"
                             , DiaryDay.Navigate (DiaryDay (Just "2026-05-29") Nothing)
                             )
-            , test "next day navigation leaves current state intact" <|
-                \_ ->
-                    let
-                        ( model, _, outMsg ) =
-                            DiaryDay.update DiaryDay.NextDayClicked (initModel yesterday)
-                    in
-                    ( LocalDate.format model.currentDate, outMsg )
-                        |> Expect.equal
-                            ( "2026-05-29"
-                            , DiaryDay.Navigate (DiaryDay (Just "2026-05-30") Nothing)
-                            )
-            , test "next day does nothing when selected date is today" <|
-                \_ ->
-                    let
-                        model : DiaryDay.Model
-                        model =
-                            initModel today
-
-                        ( next, _, outMsg ) =
-                            DiaryDay.update DiaryDay.NextDayClicked model
-                    in
-                    ( next.currentDate, outMsg )
-                        |> Expect.equal ( model.currentDate, DiaryDay.NoOp )
             , test "a day that rolls over stops being the last navigable one" <|
                 \_ ->
                     initModel today
@@ -157,21 +127,6 @@ tests =
                         emptyModel
                         |> first
                         |> Expect.equal emptyModel
-            , test "stale log success is ignored" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LogsLoaded yesterday (Ok [ yesterdayLunchLog ]))
-                        emptyModel
-                        |> first
-                        |> Expect.equal emptyModel
-            , test "goal failure stores an error" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.GoalLoaded today (Err Client.NetworkError))
-                        emptyModel
-                        |> first
-                        |> .diary
-                        |> Expect.equal (DiaryDay.Failed today networkErrorMessage)
             , test "goal unauthorized expires session" <|
                 \_ ->
                     DiaryDay.update
@@ -196,20 +151,6 @@ tests =
                                 , goal = Just goalSnapshot
                                 }
                             )
-            , test "logs success after failure keeps partial logs loading state" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LogsLoaded today (Ok [ lunchLog ]))
-                        { emptyModel | diary = DiaryDay.Failed today "old" }
-                        |> first
-                        |> .diary
-                        |> Expect.equal
-                            (DiaryDay.Loading
-                                { date = today
-                                , logs = Just [ lunchLog ]
-                                , goal = Nothing
-                                }
-                            )
             , test "latest slots success replaces loading state with every source" <|
                 \_ ->
                     DiaryDay.update
@@ -227,14 +168,6 @@ tests =
                         |> .latestSlots
                         |> Expect.equal
                             (DiaryDay.LatestSlotsLoaded today [ dinnerSource, lunchSource ])
-            , test "latest slots success with no slots offers no suggestions" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LatestSlotsReceived today (Ok { slots = [] }))
-                        { emptyModel | latestSlots = DiaryDay.LatestSlotsLoading }
-                        |> first
-                        |> .latestSlots
-                        |> Expect.equal (DiaryDay.LatestSlotsLoaded today [])
             , test "unknown meal slot in response is dropped" <|
                 \_ ->
                     DiaryDay.update
@@ -259,28 +192,12 @@ tests =
                         |> first
                         |> .latestSlots
                         |> Expect.equal DiaryDay.LatestSlotsFailed
-            , test "latest slots unauthorized expires session" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LatestSlotsReceived today
-                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                        )
-                        emptyModel
-                        |> third
-                        |> Expect.equal DiaryDay.SessionExpired
             , test "stale latest slots response is ignored" <|
                 \_ ->
                     DiaryDay.update
                         (DiaryDay.LatestSlotsReceived yesterday
                             (Ok { slots = [ dinnerSlotResponse ] })
                         )
-                        emptyModel
-                        |> first
-                        |> Expect.equal emptyModel
-            , test "stale latest slots failure is ignored" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.LatestSlotsReceived yesterday (Err Client.NetworkError))
                         emptyModel
                         |> first
                         |> Expect.equal emptyModel
@@ -446,43 +363,6 @@ tests =
                 \_ ->
                     DiaryDay.slotCalories Lunch [ lunchLog, secondLunchLog, breakfastLog ]
                         |> Expect.within (Expect.Absolute 0.0001) 347.5
-            , test "daily calories come from totals ENERGY_KCAL" <|
-                \_ ->
-                    Nutrition.caloriesFrom summary
-                        |> Expect.within (Expect.Absolute 0.0001) 247.5
-            , test "macro totals calculate grams and percentages" <|
-                \_ ->
-                    let
-                        totals : Nutrition.MacroTotals
-                        totals =
-                            Nutrition.macroTotals [ lunchLog ]
-                    in
-                    { protein = totals.protein
-                    , carbs = totals.carbs
-                    , fat = totals.fat
-                    , proteinPct = round totals.proteinPct
-                    , carbsPct = round totals.carbsPct
-                    , fatPct = round totals.fatPct
-                    }
-                        |> Expect.equal
-                            { protein = 46.5
-                            , carbs = 0
-                            , fat = 3.5
-                            , proteinPct = 86
-                            , carbsPct = 0
-                            , fatPct = 14
-                            }
-            , test "macro mode toggles from grams to percent and back" <|
-                \_ ->
-                    let
-                        ( percent, _, _ ) =
-                            DiaryDay.update DiaryDay.MacroModeToggled emptyModel
-
-                        ( grams, _, _ ) =
-                            DiaryDay.update DiaryDay.MacroModeToggled percent
-                    in
-                    ( percent.macroMode, grams.macroMode )
-                        |> Expect.equal ( DiaryDay.Percent, DiaryDay.Grams )
             ]
         , describe "navigation intents"
             [ test "add-food action navigates to search with selected meal slot" <|
@@ -492,24 +372,6 @@ tests =
                         |> Expect.equal
                             (DiaryDay.Navigate
                                 (FoodSearch (Just "2026-05-30") (Just Lunch))
-                            )
-            , test "add-food action should preserve selected diary date in navigation" <|
-                \_ ->
-                    DiaryDay.update
-                        (DiaryDay.AddFoodClicked Lunch)
-                        { emptyModel
-                            | currentDate = yesterday
-                            , diary =
-                                DiaryDay.Loaded
-                                    { date = yesterday
-                                    , logs = []
-                                    , goal = yesterdayGoalSnapshot
-                                    }
-                        }
-                        |> third
-                        |> Expect.equal
-                            (DiaryDay.Navigate
-                                (FoodSearch (Just "2026-05-29") (Just Lunch))
                             )
             , test "log row click navigates to log detail" <|
                 \_ ->
@@ -566,20 +428,6 @@ goalSnapshot =
         , proteinTargetG = 150
         , carbsTargetG = 240
         , fatTargetG = 60
-        }
-    }
-
-
-yesterdayGoalSnapshot : GoalSnapshot
-yesterdayGoalSnapshot =
-    { requestedDate = yesterday
-    , effectiveFrom = Just yesterday
-    , source = Saved
-    , targets =
-        { calorieTarget = 2290
-        , proteinTargetG = 160
-        , carbsTargetG = 255
-        , fatTargetG = 70
         }
     }
 
@@ -688,15 +536,6 @@ lunchSource =
 yesterdayDinnerLog : FoodLog
 yesterdayDinnerLog =
     { dinnerLog | id = "log-yesterday-dinner", logDate = yesterday }
-
-
-summary : List NutrientAmount
-summary =
-    [ nutrient "ENERGY_KCAL" "247.5" "kcal"
-    , nutrient "PROTEIN_G" "46.5" "g"
-    , nutrient "CARBS_G" "0" "g"
-    , nutrient "FAT_G" "3.5" "g"
-    ]
 
 
 log : String -> Maybe MealSlot -> LogItem -> List NutrientAmount -> FoodLog

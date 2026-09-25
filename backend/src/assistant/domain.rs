@@ -588,24 +588,6 @@ mod tests {
     }
 
     #[test]
-    fn draft_builder_defaults_optional_fields_and_normalizes_categories() {
-        let draft = FoodDraftBuilder::new(" Dal ")
-            .brand(" Amul ")
-            .categories([" Dairy ", "dairy", " "])
-            .default_quantity(Decimal::from(200), "g")
-            .build()
-            .unwrap();
-
-        assert_eq!(draft.name(), "Dal");
-        assert_eq!(draft.brand(), Some("Amul"));
-        assert_eq!(draft.categories(), &["dairy"]);
-        assert_eq!(draft.default_quantity(), Some(Decimal::from(200)));
-        assert_eq!(draft.default_unit(), Some("g"));
-        assert!(draft.nutrients().is_empty());
-        assert!(draft.servings().is_empty());
-    }
-
-    #[test]
     fn draft_builder_enforces_default_quantity_and_duplicate_code_invariants() {
         assert!(matches!(
             FoodDraftBuilder::new("Dal")

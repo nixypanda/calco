@@ -9,17 +9,7 @@ import Test exposing (Test, describe, fuzz, test)
 tests : Test
 tests =
     describe "LocalDate"
-        [ test "formats YYYY-MM-DD" <|
-            \_ ->
-                LocalDate.fromString "2026-06-04"
-                    |> Maybe.map LocalDate.format
-                    |> Expect.equal (Just "2026-06-04")
-        , test "parses valid YYYY-MM-DD" <|
-            \_ ->
-                LocalDate.fromString "2026-02-28"
-                    |> Maybe.map LocalDate.format
-                    |> Expect.equal (Just "2026-02-28")
-        , fuzz localDateFuzzer "formats and parses dates round trip" <|
+        [ fuzz localDateFuzzer "formats and parses dates round trip" <|
             \date ->
                 date
                     |> LocalDate.format

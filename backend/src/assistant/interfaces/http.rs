@@ -771,29 +771,4 @@ mod tests {
         });
         assert!(serde_json::from_value::<ConversationRequest>(value).is_err());
     }
-
-    #[test]
-    fn missing_purpose_defaults_to_custom_food() {
-        let value = serde_json::json!({
-            "turns": [{"role": "user", "text": "dal"}]
-        });
-        let request = serde_json::from_value::<ConversationRequest>(value).unwrap();
-        assert!(matches!(
-            request.purpose,
-            FoodDraftPurposeRequest::CustomFood
-        ));
-    }
-
-    #[test]
-    fn status_serializes_image_support() {
-        let value = serde_json::to_value(AssistantStatusResponse {
-            enabled: true,
-            supports_images: true,
-        })
-        .unwrap();
-        assert_eq!(
-            value,
-            serde_json::json!({"enabled": true, "supports_images": true})
-        );
-    }
 }

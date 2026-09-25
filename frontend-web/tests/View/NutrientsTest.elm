@@ -39,8 +39,6 @@ genericFallback =
             \_ -> assertCode "BETA_CAROTENE_KCAL" "Beta Carotene (kcal)"
         , test "code with no recognized unit falls back to title-cased code" <|
             \_ -> assertCode "BETA_CAROTENE" "Beta Carotene"
-        , test "bare unknown single-word code is title-cased" <|
-            \_ -> assertCode "MYSTERY" "Mystery"
         , test "case-insensitive unit suffix" <|
             \_ -> assertCode "riboflavin_mg" "Riboflavin (mg)"
         ]

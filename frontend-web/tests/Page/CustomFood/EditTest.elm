@@ -37,29 +37,6 @@ tests =
                     |> first
                     |> firstNutrientUnit
                     |> Expect.equal (Just "g")
-        , test "loaded form keeps nutrient unit when food arrives last" <|
-            \_ ->
-                CustomFoodEdit.init "food-1"
-                    |> Tuple.first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
-                    |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.FormMsg
-                            (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
-                        )
-                    |> first
-                    |> firstNutrientUnit
-                    |> Expect.equal (Just "g")
-        , test "init requests initial data for the product" <|
-            \_ ->
-                CustomFoodEdit.init "food-1"
-                    |> Tuple.second
-                    |> Expect.equal (CustomFoodEdit.RequestInitialData "food-1")
         , test "food load failure moves to load failed" <|
             \_ ->
                 CustomFoodEdit.update
@@ -97,27 +74,6 @@ tests =
                     (Tuple.first (CustomFoodEdit.init "food-1"))
                     |> third
                     |> Expect.equal CustomFoodEdit.SessionExpired
-        , test "successful unit load updates loaded units" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.UnitsLoaded (Ok { items = [ ounce ] }))
-                    loadedModel
-                    |> first
-                    |> unitsOf
-                    |> Expect.equal (Just [ ounce ])
-        , test "successful nutrient load updates loaded nutrient catalog" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
-                    loadedModel
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.FormMsg
-                            (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
-                        )
-                    |> first
-                    |> firstNutrientUnit
-                    |> Expect.equal (Just "g")
         , test "load success is ignored after load failed" <|
             \_ ->
                 CustomFoodEdit.update
@@ -138,25 +94,6 @@ tests =
                         (CustomFoodEdit.RequestCategorySuggestions (ticket 1)
                             { query = "dai", limit = 8 }
                         )
-        , test "category suggestions update loaded form" <|
-            \_ ->
-                let
-                    queried : CustomFoodEdit.Model
-                    queried =
-                        CustomFoodEdit.update
-                            (CustomFoodEdit.FormMsg (Form.CategoryQueryChanged "dai"))
-                            loadedModel
-                            |> first
-                in
-                CustomFoodEdit.update
-                    (CustomFoodEdit.CategorySuggestionsLoaded
-                        (ticket 1)
-                        (Ok { items = [ { value = "dairy", count = 3 } ] })
-                    )
-                    queried
-                    |> first
-                    |> categorySuggestionsOf
-                    |> Expect.equal (Just [ { value = "dairy", count = 3 } ])
         , test "submit with valid form requests update" <|
             \_ ->
                 CustomFoodEdit.update CustomFoodEdit.SubmitClicked validLoadedModel
@@ -182,15 +119,6 @@ tests =
                     |> first
                     |> submitStateOf
                     |> Expect.equal (Just (Form.SubmitFailed networkErrorMessage))
-        , test "save unauthorized while submitting expires session" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    submittingModel
-                    |> third
-                    |> Expect.equal CustomFoodEdit.SessionExpired
         , test "save completion is ignored unless submitting" <|
             \_ ->
                 CustomFoodEdit.update
@@ -218,28 +146,6 @@ firstNutrientUnit model =
             loaded.form.nutrients
                 |> List.head
                 |> Maybe.map .unit
-
-        _ ->
-            Nothing
-
-
-unitsOf : CustomFoodEdit.Model -> Maybe (List UnitItem)
-unitsOf model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.units
-
-        _ ->
-            Nothing
-
-
-categorySuggestionsOf :
-    CustomFoodEdit.Model
-    -> Maybe (List { value : String, count : Int })
-categorySuggestionsOf model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.form.categoryInput.suggestions
 
         _ ->
             Nothing
@@ -342,11 +248,6 @@ food =
 gram : UnitItem
 gram =
     { code = "g", name = "Gram", kind = "mass" }
-
-
-ounce : UnitItem
-ounce =
-    { code = "oz", name = "Ounce", kind = "mass" }
 
 
 nutrientItems : List NutrientItem

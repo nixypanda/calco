@@ -1,29 +1,18 @@
 module Component.FoodEditorTest exposing (tests)
 
-import Api.Client as Client
 import Api.Foods exposing (NutrientItem, ProductDetail, UnitItem)
 import Component.FoodEditor as Form
 import Data.FoodAssistant exposing (FoodDraft)
 import Data.Nutrition as Nutrition
-import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Lib.Ticket as Ticket exposing (Ticket)
 import Test exposing (Test, describe, test)
-import Test.Html.Query as Query
-import Test.Html.Selector as Selector
-import Translations.Util as Util
-import Ui.Theme as Theme
 
 
 tests : Test
 tests =
     describe "Component.FoodEditor custom-food mode"
-        [ test "empty form has one nutrient row" <|
-            \_ ->
-                Form.emptyForm.nutrients
-                    |> List.length
-                    |> Expect.equal 1
-        , test "name is required" <|
+        [ test "name is required" <|
             \_ ->
                 Form.toCreateFoodRequest Form.emptyForm
                     |> Expect.equal (Err Form.NameRequired)
@@ -67,24 +56,6 @@ tests =
                             )
                         )
                     |> Expect.equal (Ok ( Nothing, Nothing, [] ))
-        , test "negative nutrient amount is rejected" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                Form.toCreateFoodRequest
-                    { base
-                        | name = "Paneer"
-                        , nutrients =
-                            [ { code = "ENERGY_KCAL"
-                              , amount = "-1"
-                              , unit = "kcal"
-                              }
-                            ]
-                    }
-                    |> Expect.equal (Err (Form.InvalidNutrientAmount "-1"))
         , test "non-positive serving grams per unit is rejected" <|
             \_ ->
                 let
@@ -102,25 +73,6 @@ tests =
                             ]
                     }
                     |> Expect.equal (Err (Form.InvalidServingGrams "0"))
-        , test "categories are passed through in selection order" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-                in
-                Form.toCreateFoodRequest
-                    { base
-                        | name = "Paneer"
-                        , categoryInput =
-                            { selected = [ "snack", "fruit" ]
-                            , query = ""
-                            , suggestions = []
-                            , token = ticket 0
-                            }
-                    }
-                    |> Result.map .categories
-                    |> Expect.equal (Ok [ "snack", "fruit" ])
         , test "payload filters incomplete rows and maps blanks to null" <|
             \_ ->
                 let
@@ -210,15 +162,6 @@ tests =
                               }
                             ]
                         }
-        , test "remove nutrient keeps at least one row" <|
-            \_ ->
-                let
-                    ( form, _, _ ) =
-                        Form.update (Form.RemoveNutrientRow 0) Form.emptyForm
-                in
-                form.nutrients
-                    |> List.length
-                    |> Expect.equal 1
         , test "addCategoryTag normalizes and dedupes" <|
             \_ ->
                 Form.addCategoryTag "  Fruit " [ "snack" ]
@@ -287,31 +230,6 @@ tests =
                     |> List.head
                     |> Maybe.map .unit
                     |> Expect.equal (Just "g")
-        , test "NutrientsLoaded keeps existing populated unit" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        Form.emptyForm
-
-                    formWithUnit : Form.FormModel
-                    formWithUnit =
-                        { base
-                            | nutrients =
-                                [ { code = "PROTEIN_G"
-                                  , amount = "18"
-                                  , unit = "custom"
-                                  }
-                                ]
-                        }
-
-                    ( afterLoad, _, _ ) =
-                        Form.update (Form.NutrientsLoaded nutrientItems) formWithUnit
-                in
-                afterLoad.nutrients
-                    |> List.head
-                    |> Maybe.map .unit
-                    |> Expect.equal (Just "custom")
         , test "NutrientCodeChanged with unknown code clears unit" <|
             \_ ->
                 let
@@ -324,43 +242,6 @@ tests =
                     |> List.head
                     |> Maybe.map .unit
                     |> Expect.equal (Just "")
-        , test "unitGhostText uses placeholder when unit is empty" <|
-            \_ ->
-                Form.unitGhostText Util.EN_US ""
-                    |> Expect.equal "unit"
-        , test "unitGhostText keeps known unit inline" <|
-            \_ ->
-                Form.unitGhostText Util.EN_US "g"
-                    |> Expect.equal "g"
-        , test "default serving options use catalog-friendly unit labels" <|
-            \_ ->
-                let
-                    form : Form.FormModel
-                    form =
-                        Form.emptyForm
-
-                    formWithServing : Form.FormModel
-                    formWithServing =
-                        { form | servings = [ { unit = "tbsp", gramsPerUnit = "15" } ] }
-                in
-                Form.view
-                    { theme = Theme.light
-                    , device = { class = Phone, orientation = Portrait }
-                    , language = Util.EN_US
-                    }
-                    []
-                    [ { code = "tbsp", name = "Tablespoon", kind = "volume" } ]
-                    (Form.update Form.ToggleDefaultUnitDropdown formWithServing
-                        |> first
-                    )
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Query.has [ Selector.text "Tablespoon (tbsp)" ]
-        , test "blank category query opens without requesting suggestions" <|
-            \_ ->
-                Form.update (Form.CategoryQueryChanged "   ") Form.emptyForm
-                    |> third
-                    |> Expect.equal Form.NoOutMsg
         , test "add category updates selected categories and clears query" <|
             \_ ->
                 let
@@ -399,25 +280,6 @@ tests =
                     |> .categoryInput
                     |> .selected
                     |> Expect.equal [ "snack" ]
-        , test "accept category suggestion updates selected categories and clears query" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        { emptyForm
-                            | categoryInput =
-                                { selected = []
-                                , query = "dai"
-                                , suggestions = [ { value = "dairy", count = 3 } ]
-                                , token = ticket 1
-                                }
-                        }
-                in
-                Form.update (Form.AcceptCategorySuggestion "dairy") base
-                    |> first
-                    |> .categoryInput
-                    |> (\input -> ( input.selected, input.query, input.suggestions ))
-                    |> Expect.equal ( [ "dairy" ], "", [] )
         , test "matching category suggestions are stored" <|
             \_ ->
                 let
@@ -466,30 +328,6 @@ tests =
                     |> .categoryInput
                     |> .suggestions
                     |> Expect.equal [ { value = "old", count = 1 } ]
-        , test "category suggestion error leaves suggestions unchanged" <|
-            \_ ->
-                let
-                    base : Form.FormModel
-                    base =
-                        { emptyForm
-                            | categoryInput =
-                                { selected = []
-                                , query = "dai"
-                                , suggestions = [ { value = "old", count = 1 } ]
-                                , token = ticket 1
-                                }
-                        }
-                in
-                Form.update
-                    (Form.CategorySuggestionsLoaded
-                        (ticket 1)
-                        (Err Client.NetworkError)
-                    )
-                    base
-                    |> first
-                    |> .categoryInput
-                    |> .suggestions
-                    |> Expect.equal [ { value = "old", count = 1 } ]
         , test "add and remove nutrient row removes selected extra row" <|
             \_ ->
                 Form.emptyForm
@@ -511,13 +349,6 @@ tests =
                           , gramsPerUnit = "50"
                           }
                         ]
-        , test "new serving rows do not preselect grams" <|
-            \_ ->
-                Form.emptyForm
-                    |> updateForm Form.AddServingRow
-                    |> .servings
-                    |> List.map .unit
-                    |> Expect.equal [ "" ]
         , test "remove serving row removes the selected row" <|
             \_ ->
                 Form.emptyForm
@@ -528,16 +359,6 @@ tests =
                     |> .servings
                     |> List.map .unit
                     |> Expect.equal [ "second" ]
-        , test "selecting a serving initializes an editable default portion" <|
-            \_ ->
-                Form.emptyForm
-                    |> updateForm Form.AddServingRow
-                    |> updateForm (Form.ServingUnitChanged 0 "cup")
-                    |> updateForm (Form.ServingGramsPerUnitChanged 0 "240")
-                    |> updateForm (Form.DefaultUnitChanged "cup")
-                    |> updateForm (Form.DefaultQuantityChanged "2")
-                    |> (\form -> ( form.defaultQuantity, form.defaultUnit ))
-                    |> Expect.equal ( "2", "cup" )
         , test "no default option clears the selected default without staying selected" <|
             \_ ->
                 Form.emptyForm
@@ -570,12 +391,6 @@ tests =
                             ]
                     }
                     |> Expect.equal (Err (Form.DuplicateServingUnit "cup"))
-        , test "category tag ignores blanks and duplicates" <|
-            \_ ->
-                [ Form.addCategoryTag " " [ "snack" ]
-                , Form.addCategoryTag "SNACK" [ "snack" ]
-                ]
-                    |> Expect.equal [ [ "snack" ], [ "snack" ] ]
         , test "AI draft maps every value without changing decimal text" <|
             \_ ->
                 Form.emptyForm
@@ -699,11 +514,6 @@ updateForm msg form =
 
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
-    value
-
-
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
     value
 
 

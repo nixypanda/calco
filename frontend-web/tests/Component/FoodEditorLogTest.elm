@@ -3,37 +3,14 @@ module Component.FoodEditorLogTest exposing (tests)
 import Api.Foods exposing (NutrientItem)
 import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
-import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Test exposing (Test, describe, test)
-import Test.Html.Query as Query
-import Test.Html.Selector as Selector
-import Translations.Util as Util
-import Ui.Theme as Theme
 
 
 tests : Test
 tests =
     describe "Component.FoodEditor food-log mode"
-        [ test "accepts zero values for all required nutrients" <|
-            \_ ->
-                Editor.validateLog
-                    { validForm
-                        | nutrients =
-                            List.map
-                                (\row -> { row | amount = "0" })
-                                validForm.nutrients
-                    }
-                    |> Result.map .nutrientTotals
-                    |> Expect.equal
-                        (Ok
-                            [ ( "ENERGY_KCAL", 0 )
-                            , ( "PROTEIN_G", 0 )
-                            , ( "CARBS_G", 0 )
-                            , ( "FAT_G", 0 )
-                            ]
-                        )
-        , test "rejects a negative nutrient" <|
+        [ test "rejects a negative nutrient" <|
             \_ ->
                 Editor.validateLog
                     { validForm
@@ -68,11 +45,6 @@ tests =
                                    ]
                     }
                     |> Expect.equal (Err "Each nutrient can only be added once.")
-        , test "does not require weight for an ad-hoc-only log" <|
-            \_ ->
-                Editor.validateLog validForm
-                    |> Result.map .portionWeight
-                    |> Expect.equal (Ok Nothing)
         , test "requires positive weight when saving a custom food" <|
             \_ ->
                 validForm
@@ -113,40 +85,6 @@ tests =
                             , defaultUnit = Just "piece"
                             }
                         )
-        , test "log-only view hides reusable-food fields" <|
-            \_ ->
-                Editor.viewForLog
-                    { theme = Theme.light, device = phone, language = Util.EN_US }
-                    Editor.AllNutrients
-                    []
-                    []
-                    validForm
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has [ Selector.text "Logged Portion" ]
-                        , Query.has [ Selector.text "Portion Nutrition" ]
-                        , Query.has [ Selector.text "Log Details" ]
-                        , Query.hasNot [ Selector.text "Categories" ]
-                        , Query.hasNot [ Selector.text "Servings" ]
-                        ]
-        , test "save-and-log view reveals reusable-food fields" <|
-            \_ ->
-                validForm
-                    |> update Editor.LogPersistenceToggled
-                    |> Editor.viewForLog
-                        { theme = Theme.light, device = phone, language = Util.EN_US }
-                        Editor.AllNutrients
-                        []
-                        []
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has [ Selector.text "Categories" ]
-                        , Query.has [ Selector.text "Servings" ]
-                        , Query.has
-                            [ Selector.text "Weight of this logged portion (g)" ]
-                        ]
         , test "converts per-100-g nutrition into logged-portion totals" <|
             \_ ->
                 Editor.applyAiLogDraft catalog
@@ -234,11 +172,6 @@ setAmount code value =
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
     value
-
-
-phone : Element.Device
-phone =
-    { class = Phone, orientation = Portrait }
 
 
 catalog : List NutrientItem

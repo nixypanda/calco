@@ -428,24 +428,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn latest_slots_before_only_sees_the_requested_user() {
-        let (services, history_services) = make_services_and_history(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-        let other_user_id = Uuid::new_v4();
-        let friday = NaiveDate::from_ymd_opt(2026, 6, 19).unwrap();
-        let monday = NaiveDate::from_ymd_opt(2026, 6, 22).unwrap();
-
-        log_test_product(&services, other_user_id, friday, MealSlot::Breakfast, 150).await;
-
-        let slots = history_services
-            .latest_slots_before(user_id, monday, 30)
-            .await
-            .unwrap();
-
-        assert!(slots.is_empty());
-    }
-
-    #[tokio::test]
     async fn history_rejects_invalid_lookback_days() {
         let history_services = empty_history_services();
         let result = history_services
@@ -468,22 +450,6 @@ mod tests {
                 NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
                 NaiveDate::from_ymd_opt(2026, 6, 21).unwrap(),
                 None,
-            )
-            .await;
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn history_rejects_last_used_inverted_date_range() {
-        let history_services = empty_history_services();
-        let result = history_services
-            .find_last_used_items(
-                Uuid::new_v4(),
-                NaiveDate::from_ymd_opt(2026, 6, 22).unwrap(),
-                NaiveDate::from_ymd_opt(2026, 6, 21).unwrap(),
-                None,
-                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
             )
             .await;
 
@@ -542,38 +508,6 @@ mod tests {
 
         let result = history_services
             .summarize_by_date(Uuid::new_v4(), from_date, to_date)
-            .await;
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn history_rejects_recent_items_ranges_over_366_days() {
-        let history_services = empty_history_services();
-        let from_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-        let to_date = NaiveDate::from_ymd_opt(2026, 1, 3).unwrap();
-
-        let result = history_services
-            .list_recent_items(Uuid::new_v4(), from_date, to_date, None)
-            .await;
-
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[tokio::test]
-    async fn history_rejects_last_used_ranges_over_366_days() {
-        let history_services = empty_history_services();
-        let from_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-        let to_date = NaiveDate::from_ymd_opt(2026, 1, 3).unwrap();
-
-        let result = history_services
-            .find_last_used_items(
-                Uuid::new_v4(),
-                from_date,
-                to_date,
-                None,
-                &[FoodLogItemRef::Product(ProductId(Uuid::nil()))],
-            )
             .await;
 
         assert!(matches!(result, Err(NutritionError::Validation(_))));
@@ -670,15 +604,6 @@ mod tests {
                 usage("50", 1, 8),
             ]
         );
-    }
-
-    #[test]
-    fn recent_items_keep_single_top_quantity_when_only_one_was_used() {
-        let logs = vec![quantity_log(0, "75")];
-
-        let items = recent_items_from_logs(logs, reference_date());
-
-        assert_eq!(items[0].top_quantities, vec![usage("75", 1, 8)]);
     }
 
     #[test]

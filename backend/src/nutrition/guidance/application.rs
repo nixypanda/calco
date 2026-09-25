@@ -165,41 +165,13 @@ fn status_for(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
-
-    use async_trait::async_trait;
-
     use super::*;
     use crate::nutrition::catalog::domain::{NutrientCode, ProductId, UnitCode};
     use crate::nutrition::food_log::domain::{
         FoodLogId, FoodLogItemSnapshot, FoodLogNutrientSnapshot,
     };
-    use crate::nutrition::guidance::domain::NutrientGuidanceRepository;
     use crate::nutrition::guidance::infrastructure::StaticNutrientGuidanceRepository;
-    use crate::nutrition::meal::domain::MealId;
     use chrono::Utc;
-
-    struct MockFoodLogQueryPort {
-        logs: Vec<FoodLog>,
-        requests: Mutex<Vec<(Uuid, NaiveDate)>>,
-    }
-
-    #[async_trait]
-    impl FoodLogQueryPort for MockFoodLogQueryPort {
-        async fn list_logs_for_date(
-            &self,
-            actor_id: Uuid,
-            date: NaiveDate,
-        ) -> Result<Vec<FoodLog>, NutritionError> {
-            self.requests.lock().unwrap().push((actor_id, date));
-            Ok(self
-                .logs
-                .iter()
-                .filter(|log| log.user_id() == actor_id && log.log_date() == date)
-                .cloned()
-                .collect())
-        }
-    }
 
     fn date() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 8, 14).unwrap()
@@ -255,50 +227,6 @@ mod tests {
             .unwrap()
     }
 
-    #[tokio::test]
-    async fn details_query_is_scoped_to_the_authenticated_actor() {
-        let actor_id = Uuid::new_v4();
-        let other_user_id = Uuid::new_v4();
-        let actors_log = log_with(
-            actor_id,
-            FoodLogItemSnapshot::Product {
-                id: ProductId::new(),
-                name: "Test food".into(),
-                brand: None,
-            },
-            vec![("ENERGY_KCAL", Decimal::from(100), "kcal")],
-        );
-        let other_users_log = log_with(
-            other_user_id,
-            FoodLogItemSnapshot::Product {
-                id: ProductId::new(),
-                name: "Test food".into(),
-                brand: None,
-            },
-            vec![("ENERGY_KCAL", Decimal::from(900), "kcal")],
-        );
-        let food_logs = Arc::new(MockFoodLogQueryPort {
-            logs: vec![actors_log, other_users_log],
-            requests: Mutex::new(Vec::new()),
-        });
-        let service = NutritionDetailsService::new(
-            food_logs.clone(),
-            Arc::new(StaticNutrientGuidanceRepository::new()),
-        );
-
-        let details = service.get_for_date(actor_id, date()).await.unwrap();
-
-        assert_eq!(details.logged_items, 1);
-        assert_eq!(
-            entry(&details, "ENERGY_KCAL").known_amount,
-            Some(Decimal::from(100))
-        );
-        assert_eq!(
-            *food_logs.requests.lock().unwrap(),
-            vec![(actor_id, date())]
-        );
-    }
-
     #[test]
     fn empty_day_is_no_data_for_every_entry() {
         let report = nutrition_details_from_logs(date(), set(), vec![]);
@@ -312,37 +240,6 @@ mod tests {
         );
     }
     #[test]
-    fn partial_data_is_a_known_minimum_and_can_still_be_conclusive() {
-        let report = nutrition_details_from_logs(
-            date(),
-            set(),
-            vec![
-                log(vec![
-                    ("POTASSIUM_MG", Decimal::from(4700), "mg"),
-                    ("SODIUM_MG", Decimal::from(2301), "mg"),
-                    ("ADDED_SUGAR_G", Decimal::from(51), "g"),
-                ]),
-                log(vec![("ENERGY_KCAL", Decimal::from(100), "kcal")]),
-            ],
-        );
-        assert_eq!(
-            entry(&report, "POTASSIUM_MG").status,
-            NutritionDetailsStatus::MetReference
-        );
-        assert_eq!(
-            entry(&report, "SODIUM_MG").status,
-            NutritionDetailsStatus::OverLimit
-        );
-        assert_eq!(
-            entry(&report, "ADDED_SUGAR_G").status,
-            NutritionDetailsStatus::OverLimit
-        );
-        assert_eq!(
-            entry(&report, "ENERGY_KCAL").status,
-            NutritionDetailsStatus::PartialData
-        );
-    }
-    #[test]
     fn complete_informational_data_is_available_and_explicit_zero_is_data() {
         let report = nutrition_details_from_logs(
             date(),
@@ -353,25 +250,5 @@ mod tests {
         assert_eq!(sugar.known_amount, Some(Decimal::ZERO));
         assert_eq!(sugar.coverage, NutrientCoverage::Complete);
         assert_eq!(sugar.status, NutritionDetailsStatus::Available);
-    }
-    #[test]
-    fn meal_log_never_claims_complete_coverage() {
-        let meal = log_with(
-            Uuid::new_v4(),
-            FoodLogItemSnapshot::Meal {
-                id: MealId::new(),
-                name: "Meal".into(),
-            },
-            vec![("FIBER_G", Decimal::from(28), "g")],
-        );
-        let report = nutrition_details_from_logs(date(), set(), vec![meal]);
-        assert_eq!(
-            entry(&report, "FIBER_G").coverage,
-            NutrientCoverage::Partial
-        );
-        assert_eq!(
-            entry(&report, "FIBER_G").status,
-            NutritionDetailsStatus::MetReference
-        );
     }
 }

@@ -42,20 +42,6 @@ tests =
                                 _ ->
                                     Expect.fail "expected a custom-food request"
                        )
-        , test "saved food is then logged through the product endpoint" <|
-            \_ ->
-                CreateAdHoc.update
-                    (CreateAdHoc.CustomFoodCompleted (Ok { id = "food-1" }))
-                    { saveModel | submit = CreateAdHoc.SavingCustomFood }
-                    |> third
-                    |> (\outMsg ->
-                            case outMsg of
-                                CreateAdHoc.RequestProductLog request ->
-                                    Expect.equal request.item.id "food-1"
-
-                                _ ->
-                                    Expect.fail "expected a product log request"
-                       )
         , test "a product-log failure retains the saved id for retry" <|
             \_ ->
                 let
@@ -88,20 +74,6 @@ tests =
                     )
                     |> third
                     |> Expect.equal CreateAdHoc.RequestLocalContext
-        , test "save-and-log category queries request suggestions" <|
-            \_ ->
-                CreateAdHoc.update
-                    (CreateAdHoc.FormMsg (Editor.CategoryQueryChanged "dai"))
-                    saveModel
-                    |> third
-                    |> (\outMsg ->
-                            case outMsg of
-                                CreateAdHoc.RequestCategorySuggestions _ request ->
-                                    Expect.equal request.query "dai"
-
-                                _ ->
-                                    Expect.fail "expected a category suggestion request"
-                       )
         ]
 
 

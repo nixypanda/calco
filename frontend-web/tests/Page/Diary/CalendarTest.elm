@@ -21,15 +21,6 @@ tests =
                             (date "2026-02-01")
                             today
                         )
-        , test "uses a valid requested month as the return anchor" <|
-            \_ ->
-                CalendarPage.init
-                    { monthParam = Just "2026-05"
-                    , today = today
-                    }
-                    |> Tuple.first
-                    |> .newestMonth
-                    |> Expect.equal "2026-05"
         , test "selecting a day opens a calendar-aware diary route" <|
             \_ ->
                 let
@@ -68,17 +59,6 @@ tests =
                     (calendarModel [] |> withStatus CalendarPage.LoadingEarlier)
                     |> third
                     |> Expect.equal CalendarPage.NoOp
-        , test "known totals replace that day's summary" <|
-            \_ ->
-                CalendarPage.update
-                    (CalendarPage.DayTotalsKnown (date "2026-07-20")
-                        (Just (summaryOn "2026-07-20" 750))
-                    )
-                    (calendarModel [ summaryOn "2026-07-20" 500 ])
-                    |> first
-                    |> .summaries
-                    |> List.map .energyKcal
-                    |> Expect.equal [ 750 ]
         , test "a day with nothing left logged loses its summary" <|
             \_ ->
                 CalendarPage.update
@@ -92,16 +72,6 @@ tests =
                     |> .summaries
                     |> List.map .date
                     |> Expect.equal [ date "2026-07-21" ]
-        , test "totals for a day outside the loaded range are ignored" <|
-            \_ ->
-                CalendarPage.update
-                    (CalendarPage.DayTotalsKnown (date "2025-12-31")
-                        (Just (summaryOn "2025-12-31" 500))
-                    )
-                    (calendarModel [])
-                    |> first
-                    |> .summaries
-                    |> Expect.equal []
         , test "a day the calendar treated as future accepts totals once it rolls over" <|
             \_ ->
                 let

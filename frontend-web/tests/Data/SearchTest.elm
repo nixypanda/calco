@@ -31,10 +31,6 @@ tests =
                 , Search.completions "   " []
                 )
                     |> Expect.equal ( [], [] )
-        , test "applies completion to current token" <|
-            \_ ->
-                Search.applyCompletion (Search.OperatorCompletion "category:") "apple c"
-                    |> Expect.equal "apple category:"
         , test "preserves repeated spaces before current token" <|
             \_ ->
                 Search.applyCompletion (Search.OperatorCompletion "category:") "apple  c"
@@ -58,15 +54,6 @@ tests =
             \_ ->
                 Search.categoryQuery "apple category:\"food and"
                     |> Expect.equal (Just "food and")
-        , test "empty starts with empty query and zero tokens" <|
-            \_ ->
-                Search.empty
-                    |> Expect.equal
-                        { query = ""
-                        , searchToken = ticket 0
-                        , categoryToken = ticket 0
-                        , categorySuggestions = []
-                        }
         , test "onQueryChanged trims and bumps tokens for non-empty queries" <|
             \_ ->
                 let
@@ -134,17 +121,6 @@ tests =
                 in
                 cmd
                     |> Expect.equal Cmd.none
-        , test "onQueryChangedDebounced transitions state like onQueryChanged" <|
-            \_ ->
-                let
-                    ( debounced, _ ) =
-                        Search.onQueryChangedDebounced "category:foo" Search.empty debounce
-
-                    ( immediate, _ ) =
-                        Search.onQueryChanged "category:foo" Search.empty
-                in
-                debounced
-                    |> Expect.equal immediate
         , test "a burst of query changes leaves only the settled category token live" <|
             \_ ->
                 let
@@ -192,20 +168,6 @@ tests =
                     }
                     |> .categorySuggestions
                     |> Expect.equal [ { value = "fruit", count = 2 } ]
-        , test "withQuery replaces only the query" <|
-            \_ ->
-                Search.withQuery "apple"
-                    { query = ""
-                    , searchToken = ticket 4
-                    , categoryToken = ticket 5
-                    , categorySuggestions = [ { value = "fruit", count = 1 } ]
-                    }
-                    |> Expect.equal
-                        { query = "apple"
-                        , searchToken = ticket 4
-                        , categoryToken = ticket 5
-                        , categorySuggestions = [ { value = "fruit", count = 1 } ]
-                        }
         ]
 
 

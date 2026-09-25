@@ -33,7 +33,6 @@ module Component.FoodEditor exposing
     , toCustomFoodFromLogRequest
     , toInitialCreateFoodRequest
     , toProductLogRequest
-    , unitGhostText
     , update
     , validateLog
     , view

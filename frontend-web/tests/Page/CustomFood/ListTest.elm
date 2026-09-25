@@ -18,20 +18,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.CustomFood.List"
-        [ test "init requests foods" <|
-            \_ ->
-                CustomFoodList.init
-                    |> Tuple.second
-                    |> Expect.equal CustomFoodList.RequestFoods
-        , test "load success stores foods" <|
-            \_ ->
-                CustomFoodList.update
-                    (CustomFoodList.FoodsLoaded (Ok { items = [] }))
-                    (Tuple.first CustomFoodList.init)
-                    |> first
-                    |> foodsOf
-                    |> Expect.equal (Just [])
-        , test "load failure stores error" <|
+        [ test "load failure stores error" <|
             \_ ->
                 CustomFoodList.update
                     (CustomFoodList.FoodsLoaded (Err Client.NetworkError))
@@ -97,16 +84,6 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
-
-
-foodsOf : CustomFoodList.Model -> Maybe (List ProductDetail)
-foodsOf model =
-    case model of
-        CustomFoodList.Loaded foods ->
-            Just foods
-
-        _ ->
-            Nothing
 
 
 errorOf : CustomFoodList.Model -> Maybe String

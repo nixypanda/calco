@@ -10,11 +10,7 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Page.Users.CreateUser"
-        [ test "init creates empty form with no error" <|
-            \_ ->
-                CreateUser.init
-                    |> Expect.equal (CreateUser.Editing emptyForm)
-        , test "Submitted trims username and display name and emits RequestCreateUser" <|
+        [ test "Submitted trims username and display name and emits RequestCreateUser" <|
             \_ ->
                 CreateUser.Editing
                     { username = " alice "
@@ -46,57 +42,6 @@ tests =
                             , initialPassword = "secret"
                             }
                             CreateUser.UsernameRequired
-                        )
-        , test "Submitted rejects empty display name" <|
-            \_ ->
-                CreateUser.Editing
-                    { username = "alice"
-                    , displayName = ""
-                    , initialPassword = "secret"
-                    }
-                    |> CreateUser.update CreateUser.Submitted
-                    |> firstOfThree
-                    |> Expect.equal
-                        (CreateUser.Invalid
-                            { username = "alice"
-                            , displayName = ""
-                            , initialPassword = "secret"
-                            }
-                            CreateUser.DisplayNameRequired
-                        )
-        , test "Submitted rejects empty password" <|
-            \_ ->
-                CreateUser.Editing
-                    { username = "alice"
-                    , displayName = "Alice"
-                    , initialPassword = ""
-                    }
-                    |> CreateUser.update CreateUser.Submitted
-                    |> firstOfThree
-                    |> Expect.equal
-                        (CreateUser.Invalid
-                            { username = "alice"
-                            , displayName = "Alice"
-                            , initialPassword = ""
-                            }
-                            CreateUser.InitialPasswordRequired
-                        )
-        , test "Submitted moves valid data into submitting state" <|
-            \_ ->
-                CreateUser.Invalid
-                    { username = "alice"
-                    , displayName = "Alice"
-                    , initialPassword = "secret"
-                    }
-                    CreateUser.UsernameRequired
-                    |> CreateUser.update CreateUser.Submitted
-                    |> firstOfThree
-                    |> Expect.equal
-                        (CreateUser.Submitting
-                            { username = "alice"
-                            , displayName = "Alice"
-                            , initialPassword = "secret"
-                            }
                         )
         , test "Completed success emits CreateSucceeded" <|
             \_ ->

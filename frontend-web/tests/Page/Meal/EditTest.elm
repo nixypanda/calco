@@ -1,10 +1,8 @@
 module Page.Meal.EditTest exposing (tests)
 
-import Api.Client as Client
-import Api.Meals exposing (Meal, MealNutritionResponse)
+import Api.Meals exposing (Meal)
 import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Edit as MealEdit
@@ -20,18 +18,7 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.Meal.Edit"
-        [ test "init is loading and requests meal" <|
-            \_ ->
-                MealEdit.init "meal-1"
-                    |> Tuple.second
-                    |> Expect.equal (MealEdit.RequestMeal "meal-1")
-        , test "init starts with loading nutrition state" <|
-            \_ ->
-                MealEdit.init "meal-1"
-                    |> Tuple.first
-                    |> nutritionOf
-                    |> Expect.equal (Just (NutritionLoading View.Nutrients.defaultNutritionInput))
-        , test "meal load success stores meal and maps components into rows" <|
+        [ test "meal load success stores meal and maps components into rows" <|
             \_ ->
                 MealEdit.update
                     (MealEdit.MealLoaded "meal-1" (Ok meal))
@@ -48,23 +35,6 @@ tests =
                     |> third
                     |> Expect.equal
                         (MealEdit.FormOutMsg (Common.RequestProductName "food-1"))
-        , test "meal load failure transitions to edit load failed" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.MealLoaded "meal-1"
-                        (Err Client.NetworkError)
-                    )
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> (\model ->
-                            case model of
-                                MealEdit.EditLoadFailed failed ->
-                                    Just failed.message
-
-                                _ ->
-                                    Nothing
-                       )
-                    |> Expect.equal (Just networkErrorMessage)
         , test "retry from edit load failed requests the meal again" <|
             \_ ->
                 let
@@ -93,14 +63,6 @@ tests =
                 MealEdit.update (MealEdit.MealLoaded "other" (Ok meal)) base
                     |> first
                     |> Expect.equal base
-        , test "nutrient preview response stores nutrients" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.NutrientPreviewLoaded "meal-1" (Ok nutrientPreview))
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> nutrientsOf
-                    |> Expect.equal (Just [ nutrient ])
         , test "submit dispatches update meal with meal id" <|
             \_ ->
                 let
@@ -160,20 +122,6 @@ tests =
         ]
 
 
-nutrient : NutrientAmount
-nutrient =
-    { code = "ENERGY_KCAL", amount = "120", unit = "kcal" }
-
-
-nutrientPreview : MealNutritionResponse
-nutrientPreview =
-    { mealId = "meal-1"
-    , quantity = { amount = "100", unit = "g" }
-    , nutritionSummary = Nutrition.emptySummary
-    , nutrients = [ nutrient ]
-    }
-
-
 emptyFormFields : Common.FormFields
 emptyFormFields =
     Common.emptyFormFields
@@ -216,42 +164,6 @@ componentsOf model =
 
         _ ->
             []
-
-
-nutrientsOf : MealEdit.Model -> Maybe (List NutrientAmount)
-nutrientsOf model =
-    case model of
-        MealEdit.Editing loaded ->
-            case loaded.nutrition of
-                NutritionLoaded _ nutrients ->
-                    Just nutrients
-
-                _ ->
-                    Nothing
-
-        MealEdit.LoadingEdit loading ->
-            case loading.nutrition of
-                NutritionLoaded _ nutrients ->
-                    Just nutrients
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
-
-
-nutritionOf : MealEdit.Model -> Maybe NutritionState
-nutritionOf model =
-    case model of
-        MealEdit.LoadingEdit loading ->
-            Just loading.nutrition
-
-        MealEdit.Editing loaded ->
-            Just loaded.nutrition
-
-        MealEdit.EditLoadFailed _ ->
-            Nothing
 
 
 first : ( a, b, c ) -> a

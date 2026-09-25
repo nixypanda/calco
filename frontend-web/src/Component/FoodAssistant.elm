@@ -7,7 +7,6 @@ module Component.FoodAssistant exposing
     , OutMsg(..)
     , PhotoMetadata
     , RequestState(..)
-    , draftPreviewData
     , init
     , modalView
     , previewUrls

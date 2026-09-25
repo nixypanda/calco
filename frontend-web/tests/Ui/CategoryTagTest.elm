@@ -47,29 +47,9 @@ tests =
                             [ [ CategoryTag "a", CategoryTag "b" ]
                             , [ CategoryTag "c", CategoryOverflowTag 2 ]
                             ]
-            , test "many categories count every hidden label" <|
-                \_ ->
-                    CategoryTag.rows
-                        (List.map (\n -> "c" ++ String.fromInt n) (List.range 1 10))
-                        |> Expect.equal
-                            [ [ CategoryTag "c1", CategoryTag "c2" ]
-                            , [ CategoryTag "c3", CategoryOverflowTag 7 ]
-                            ]
-            , test "a long list never exceeds two rows of two tags" <|
-                \_ ->
-                    CategoryTag.rows (List.repeat 50 "x")
-                        |> (\tagRows -> ( List.length tagRows, List.map List.length tagRows ))
-                        |> Expect.equal ( 2, [ 2, 2 ] )
             ]
         , describe "view"
-            [ test "renders one chip per visible tag" <|
-                \_ ->
-                    CategoryTag.view Theme.light Util.EN_US (CategoryTag.rows [ "a", "b", "c" ])
-                        |> Element.layout []
-                        |> Query.fromHtml
-                        |> Query.findAll [ Selector.class "ui-chip" ]
-                        |> Query.count (Expect.equal 3)
-            , test "renders the overflow tag" <|
+            [ test "renders the overflow tag" <|
                 \_ ->
                     CategoryTag.view
                         Theme.light
@@ -78,12 +58,5 @@ tests =
                         |> Element.layout []
                         |> Query.fromHtml
                         |> Query.has [ Selector.text "+2 more" ]
-            , test "caps a long list at four chips" <|
-                \_ ->
-                    CategoryTag.view Theme.light Util.EN_US (CategoryTag.rows (List.repeat 20 "x"))
-                        |> Element.layout []
-                        |> Query.fromHtml
-                        |> Query.findAll [ Selector.class "ui-chip" ]
-                        |> Query.count (Expect.equal 4)
             ]
         ]

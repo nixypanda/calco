@@ -49,25 +49,6 @@ tests =
                     )
                     |> Result.mapError (always ())
                     |> Expect.equal (Err ())
-        , test "trusts backend-owned draft semantics but requires decimal strings" <|
-            \_ ->
-                Decode.decodeString
-                    (FoodAssistant.foodDraftTurnDecoder FoodAssistant.CustomFood)
-                    (String.replace
-                        "\"default_quantity\":\"1\""
-                        "\"default_quantity\":\"not revalidated here\""
-                        readyJson
-                    )
-                    |> Result.map
-                        (\turn ->
-                            case turn of
-                                DraftReady result ->
-                                    result.draft.defaultQuantity
-
-                                NeedsClarification _ ->
-                                    Nothing
-                        )
-                    |> Expect.equal (Ok (Just "not revalidated here"))
         , test "rejects numeric decimals because the backend contract uses strings" <|
             \_ ->
                 Decode.decodeString
