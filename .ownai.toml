@@ -1,0 +1,20 @@
+[areas]
+frontend = ["./frontend-web/"]
+backend = ["./backend/"]
+domain = [
+    "./backend/src/assistant/domain.rs",
+    "./backend/src/auth/domain.rs",
+    "./backend/src/import/domain.rs",
+    "./backend/src/nutrition/catalog/domain/",
+    "./backend/src/nutrition/diary/domain.rs",
+    "./backend/src/nutrition/food_log/domain.rs",
+    "./backend/src/nutrition/goals/domain.rs",
+    "./backend/src/nutrition/guidance/domain.rs",
+]
+core-domain = [
+    "./backend/src/nutrition/catalog/domain/",
+    "./backend/src/nutrition/diary/domain.rs",
+    "./backend/src/nutrition/food_log/domain.rs",
+    "./backend/src/nutrition/goals/domain.rs",
+    "./backend/src/nutrition/guidance/domain.rs",
+]
