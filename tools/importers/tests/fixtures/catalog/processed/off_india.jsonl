@@ -1,0 +1,12 @@
+{"type": "food", "source": "OFF", "source_id": "8900001", "barcode": "11111111", "name": "Shared Barcode Food OFF", "brand": "OffBrand", "categories": ["snacks"]}
+{"type": "serving", "source": "OFF", "source_id": "8900001", "unit": "serving", "grams_per_unit": 50}
+{"type": "nutrient", "source": "OFF", "source_id": "8900001", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 200}
+{"type": "nutrient", "source": "OFF", "source_id": "8900001", "nutrient_code": "PROTEIN_G", "amount_per_100g": 5}
+{"type": "nutrient", "source": "OFF", "source_id": "8900001", "nutrient_code": "CARBS_G", "amount_per_100g": 30}
+{"type": "nutrient", "source": "OFF", "source_id": "8900001", "nutrient_code": "FAT_G", "amount_per_100g": 8}
+{"type": "food", "source": "OFF", "source_id": "8900002", "barcode": "8900002", "name": "Test Yogurt", "brand": "OffBrand", "categories": ["dairy"]}
+{"type": "serving", "source": "OFF", "source_id": "8900002", "label": "1 serving", "quantity": 1, "unit": "serving", "grams": 100}
+{"type": "nutrient", "source": "OFF", "source_id": "8900002", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 80}
+{"type": "nutrient", "source": "OFF", "source_id": "8900002", "nutrient_code": "PROTEIN_G", "amount_per_100g": 4}
+{"type": "nutrient", "source": "OFF", "source_id": "8900002", "nutrient_code": "CARBS_G", "amount_per_100g": 9}
+{"type": "nutrient", "source": "OFF", "source_id": "8900002", "nutrient_code": "FAT_G", "amount_per_100g": 3}

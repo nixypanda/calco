@@ -35,6 +35,11 @@ def main() -> None:
         default=default_database_url(),
         help="Postgres connection string for the CalCo catalog",
     )
+    parser.add_argument(
+        "--no-barcode-hints",
+        action="store_true",
+        help="Ignore the local barcode-hints artifact (useful for hermetic runs)",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -43,6 +48,7 @@ def main() -> None:
         existing_review_path=args.existing_review,
         matches_jsonl_path=args.matches_jsonl,
         database_url=args.database_url,
+        barcode_hints={} if args.no_barcode_hints else None,
     )
     print(f"Wrote {result['review_rows']} rows to {args.output}")
     print(f"  auto-matched: {result['auto_matched']}")

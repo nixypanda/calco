@@ -83,7 +83,8 @@ def _normalize_serving(serving: dict[str, Any]) -> dict[str, Any] | None:
     grams_per_unit = serving.get("grams_per_unit")
     if grams_per_unit is None:
         try:
-            grams_per_unit = float(serving["grams"]) / float(serving.get("quantity") or 1)
+            quantity = float(serving.get("quantity") or 1)
+            grams_per_unit = float(serving["grams"]) / quantity
         except (KeyError, TypeError, ValueError, ZeroDivisionError):
             return None
 
@@ -425,28 +426,62 @@ def _create_global_foods(
     return resolved, {"import_id": import_id, "commit": commit_result}
 
 
+def _list_existing_custom_foods(
+    api_url: str,
+    user_session: requests.Session,
+) -> dict[str, str]:
+    """Map normalized custom-food name to product id for the current user."""
+    response = user_session.get(f"{api_url}/api/foods/custom", timeout=60)
+    _check_ok(response, 200)
+    existing: dict[str, str] = {}
+    for item in response.json().get("items", []):
+        name = item.get("name")
+        if not name:
+            continue
+        existing[_normalize_description(str(name)).casefold()] = str(item["id"])
+    return existing
+
+
 def _create_private_foods(
     api_url: str,
     user_session: requests.Session,
     records: list[dict[str, Any]],
 ) -> dict[str, CreatedFood]:
     created: dict[str, CreatedFood] = {}
+    # Reuse existing private foods by name so rerunning the import updates the
+    # same rows instead of creating duplicates (custom foods have no stable
+    # source_id to upsert on).
+    existing_by_description = _list_existing_custom_foods(api_url, user_session)
     for record in records:
-        payload = _custom_payload(record)
-        response = user_session.post(
-            f"{api_url}/api/foods/custom",
-            json=payload,
-            timeout=60,
-        )
-        _check_ok(response, 201)
-        product_id = str(response.json()["id"])
         description = _normalize_description(str(record["name"]))
+        lookup_key = description.casefold()
+        payload = _custom_payload(record)
+        existing_id = existing_by_description.get(lookup_key)
+        if existing_id is not None:
+            response = user_session.put(
+                f"{api_url}/api/foods/custom/{existing_id}",
+                json=payload,
+                timeout=60,
+            )
+            _check_ok(response, 200)
+            product_id = existing_id
+            mode = "custom_reused"
+        else:
+            response = user_session.post(
+                f"{api_url}/api/foods/custom",
+                json=payload,
+                timeout=60,
+            )
+            _check_ok(response, 201)
+            product_id = str(response.json()["id"])
+            mode = "custom"
+        existing_by_description[lookup_key] = product_id
         created[description] = CreatedFood(
             description=description,
             product_id=product_id,
             product_name=description,
             visibility="user_private",
-            mode="custom",
+            mode=mode,
         )
     return created
 
@@ -575,38 +610,22 @@ def main() -> None:
     review_csv = Path(args.review_csv)
     records = _load_jsonl(input_path)
 
-    if not records:
-        print(f"No records in {input_path}")
-        return
-
-    admin_session, user_session = _load_auth_sessions(api_url, args, args.visibility)
-
-    created_by_description: dict[str, CreatedFood]
+    created_by_description: dict[str, CreatedFood] = {}
     result_meta: dict[str, Any] = {}
 
-    if args.visibility in {"auto", "global"} and admin_session is not None:
-        if user_session is None:
-            raise ApiError(
-                "Admin auth was available, but no user session could be established to resolve "
-                "created global product IDs from the catalog API."
-            )
-        created_by_description, result_meta = _create_global_foods(
-            api_url,
-            admin_session,
-            user_session,
-            records,
-        )
-    elif args.visibility == "global":
-        raise ApiError(
-            "Global creation requested, but no admin session could be established."
-        )
-    else:
+    if records:
+        admin_session, user_session = _load_auth_sessions(api_url, args, args.visibility)
+
         if user_session is None:
             raise ApiError(
                 "No user session could be established for custom-food creation."
             )
         created_by_description = _create_private_foods(api_url, user_session, records)
+    else:
+        print(f"No records in {input_path}; finalizing review only.")
 
+    # Always finalize the review, even when there is nothing left to create, so
+    # matched rows get a final_food_id for the history importer.
     review_result = _update_review_csv(review_csv, created_by_description)
     created_count = len(created_by_description)
     mode = next(iter(created_by_description.values())).mode if created_by_description else "none"

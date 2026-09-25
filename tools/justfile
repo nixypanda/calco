@@ -20,8 +20,8 @@ data-sources-check:
 
 # Run data-source importer tests and syntax/import checks
 data-sources-test:
-    cd importers/data-sources && uv run python -m compileall -q src test_merge_quick.py test_off.py
-    cd importers/data-sources && uv run python -m unittest test_off.py
+    cd importers/data-sources && uv run python -m compileall -q src test_off.py test_servings.py
+    cd importers/data-sources && uv run python -m unittest test_off.py test_servings.py
 
 # Run all data-source importer checks
 data-sources-verify: data-sources-check data-sources-test
@@ -45,10 +45,6 @@ data-sources-import dataset="merged" data_dir="/tmp/calco-import":
 # Dry-run the full public catalog import workflow without upload side effects
 data-sources-dry-run dataset="merged" data_dir="/tmp/calco-import-dry-run":
     cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import --dry-run import "{{dataset}}"
-
-# Run the IFCT/INDB merge smoke test after those sources have been fetched
-data-sources-merge-smoke:
-    cd importers/data-sources && uv run python test_merge_quick.py
 
 # Run all public catalog importer checks
 importers-verify: data-sources-verify
