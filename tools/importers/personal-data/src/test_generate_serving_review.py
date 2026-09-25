@@ -198,5 +198,41 @@ class GenerateServingReviewTests(unittest.TestCase):
         self.assertEqual(out[0]["notes"], "reviewed")
 
 
+    def test_existing_review_is_preserved_despite_trailing_whitespace(self) -> None:
+        existing = [{
+            "description": "Chili Garlic Noodles",
+            "row_count": "1",
+            "serving_mode": "serving_unit",
+            "reference_basis": "per_serving",
+            "reference_calories": "961",
+            "reference_protein_g": "27",
+            "reference_carbs_g": "186.2",
+            "reference_fat_g": "13.5",
+            "example_value": "0.333",
+            "example_unit": "serving",
+            "example_serving": "0.333 package",
+            "current_serving_grams": "",
+            "corrected_serving_grams": "25",
+            "confidence": "low",
+            "notes": "one-third package dry-weight estimate",
+        }]
+        self._run([
+            _row(
+                description="Chili Garlic Noodles ",
+                value="0.333",
+                unit="serving",
+                serving="0.333 package",
+                calories="961",
+                fat_g="13.5",
+                carbs_g="186.2",
+                protein_g="27",
+            ),
+        ], existing_rows=existing)
+        out = self._read_output()
+        self.assertEqual(out[0]["corrected_serving_grams"], "25")
+        self.assertEqual(out[0]["confidence"], "low")
+        self.assertEqual(out[0]["notes"], "one-third package dry-weight estimate")
+
+
 if __name__ == "__main__":
     unittest.main()

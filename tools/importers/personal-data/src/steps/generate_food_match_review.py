@@ -231,6 +231,8 @@ class PsqlCatalogRepository(CatalogRepository):
                 p.id,
                 p.name,
                 p.brand,
+                p.default_quantity,
+                p.default_unit,
                 GREATEST(
                     similarity(lower(p.name), lower(:'normalized_query')),
                     similarity(lower(COALESCE(p.brand, '')), lower(:'query'))

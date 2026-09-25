@@ -117,7 +117,7 @@ def run(
 
     for desc, entries in sorted(groups.items()):
         units = {e.get("unit", "").strip() for e in entries}
-        existing_row = existing.get(desc, {})
+        existing_row = existing.get(desc.strip(), {})
         serving_mode = _mode_for_units(existing_row.get("serving_mode", ""), units)
         if serving_mode == "mass":
             mass_count += 1

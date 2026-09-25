@@ -11,6 +11,7 @@ import os
 import sys
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -25,7 +26,7 @@ from mfp_nutrients import REQUIRED_MACRO_CODES
 DATA_DIR = ROOT / "data"
 DEFAULT_INPUT = DATA_DIR / "foods_to_create.jsonl"
 DEFAULT_REVIEW_CSV = DATA_DIR / "step-10-out-food-match-review-merged.csv"
-DEFAULT_API_URL = "http://localhost:3000"
+DEFAULT_API_URL = "http://localhost:3001"
 DEFAULT_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "calco_session")
 
 DEFAULT_ADMIN_USERNAME = "admin"
@@ -66,6 +67,33 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _normalize_description(value: str) -> str:
     return " ".join(value.replace("\xa0", " ").split()).strip()
+
+
+def _normalize_serving(serving: dict[str, Any]) -> dict[str, Any] | None:
+    """Return an API serving in ``{unit, grams_per_unit}`` form.
+
+    Accepts both the current generator output (``grams_per_unit``) and the
+    legacy ``{label, quantity, unit, grams}`` shape so an older
+    ``foods_to_create.jsonl`` still imports instead of failing at the API.
+    """
+    unit = str(serving.get("unit") or "").strip()
+    if not unit:
+        return None
+
+    grams_per_unit = serving.get("grams_per_unit")
+    if grams_per_unit is None:
+        try:
+            grams_per_unit = float(serving["grams"]) / float(serving.get("quantity") or 1)
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            return None
+
+    try:
+        grams_per_unit = float(grams_per_unit)
+    except (TypeError, ValueError):
+        return None
+    if grams_per_unit <= 0:
+        return None
+    return {"unit": unit, "grams_per_unit": grams_per_unit}
 
 
 def _stable_source_id(description: str) -> str:
@@ -256,13 +284,16 @@ def _stage_import_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, An
             )
 
         for serving in record.get("servings", []):
+            normalized = _normalize_serving(serving)
+            if normalized is None:
+                continue
             servings.append(
                 {
                     "row_number": row_number,
                     "source": IMPORT_SOURCE,
                     "source_id": source_id,
-                    "unit": serving["unit"],
-                    "grams_per_unit": serving["grams_per_unit"],
+                    "unit": normalized["unit"],
+                    "grams_per_unit": normalized["grams_per_unit"],
                 }
             )
 
@@ -296,6 +327,13 @@ def _custom_payload(record: dict[str, Any]) -> dict[str, Any]:
                 }
             )
     payload["nutrients"] = nutrients
+    payload["servings"] = [
+        normalized
+        for normalized in (
+            _normalize_serving(serving) for serving in payload.get("servings", [])
+        )
+        if normalized is not None
+    ]
     return payload
 
 
@@ -413,7 +451,7 @@ def _create_private_foods(
     return created
 
 
-def _ensure_review_columns(fieldnames: list[str]) -> list[str]:
+def _ensure_review_columns(fieldnames: Sequence[str]) -> list[str]:
     output = list(fieldnames)
     for column in REVIEW_FINAL_COLUMNS:
         if column not in output:
@@ -503,8 +541,11 @@ def main() -> None:
     parser.add_argument(
         "--visibility",
         choices=("auto", "global", "private"),
-        default="auto",
-        help="Prefer global import, private custom foods, or auto-fallback",
+        default="private",
+        help=(
+            "Only 'private' is supported for personal imports; 'global'/'auto' "
+            "stage a USER source the catalog import API cannot accept"
+        ),
     )
     parser.add_argument(
         "--session-token",
@@ -521,6 +562,13 @@ def main() -> None:
     parser.add_argument("--admin-username", default=os.environ.get("CALCO_ADMIN_USERNAME"))
     parser.add_argument("--admin-password", default=os.environ.get("CALCO_ADMIN_PASSWORD"))
     args = parser.parse_args()
+
+    if args.visibility in {"auto", "global"}:
+        parser.error(
+            "--visibility global/auto is unsupported: the admin import API only "
+            "accepts OFF/USDA/IFCT/INDB external sources, but personal imports "
+            "stage a USER source. Re-run with --visibility private."
+        )
 
     api_url = args.api_url.rstrip("/")
     input_path = Path(args.input)

@@ -120,6 +120,36 @@ class CreateFoodsHelperTests(unittest.TestCase):
             },
         )
 
+    def test_custom_payload_normalizes_legacy_serving_shape(self) -> None:
+        payload = _custom_payload(
+            _record(
+                servings=[
+                    {"label": "three pieces", "quantity": 3, "unit": "piece", "grams": 42}
+                ]
+            )
+        )
+
+        self.assertEqual(payload["servings"], [{"unit": "piece", "grams_per_unit": 14.0}])
+
+    def test_stage_import_rows_normalizes_legacy_serving_shape(self) -> None:
+        _foods, _nutrients, servings, _source_ids = _stage_import_rows(
+            [
+                _record(
+                    servings=[
+                        {
+                            "label": "three pieces",
+                            "quantity": 3,
+                            "unit": "piece",
+                            "grams": 42,
+                        }
+                    ]
+                )
+            ]
+        )
+
+        self.assertEqual(servings[0]["unit"], "piece")
+        self.assertEqual(servings[0]["grams_per_unit"], 14.0)
+
 
 if __name__ == "__main__":
     unittest.main()
