@@ -23,269 +23,292 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.Food.Show"
-        [ test "units load unauthorized expires session" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.UnitsLoaded
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    emptyModel
-                    |> third
-                    |> Expect.equal FoodShow.SessionExpired
-        , test "load success is ignored after load failed" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.FoodLoaded "food-1" (Ok food))
-                    (FoodShow.LoadFailed "old")
-                    |> first
-                    |> Expect.equal (FoodShow.LoadFailed "old")
-        , test "food reload refreshes loaded form and clears request state" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.FoodLoaded "food-1" (Ok { food | defaultQuantity = Just "3" }))
-                    savingModel
-                    |> first
-                    |> (\model ->
-                            ( formOf model |> Maybe.map .amount
-                            , formOf model |> Maybe.map .submitState
-                            )
-                       )
-                    |> Expect.equal ( Just "3", Just FoodLogForm.SubmitIdle )
-        , test "last used default is stored while loading and applied after load completes" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LastUsedLoaded "food-1" (Ok { items = [ recentItem ] }))
-                    emptyModel
-                    |> first
-                    |> FoodShow.update (FoodShow.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> FoodShow.update (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> formOf
-                    |> Maybe.map (\current -> ( current.amount, current.unit ))
-                    |> Expect.equal (Just ( "5", "g" ))
-        , test "a load response for another product is ignored" <|
-            \_ ->
-                FoodShow.update (FoodShow.FoodLoaded "other" (Ok food)) loadedModel
-                    |> first
-                    |> Expect.equal loadedModel
-        , test "display nutrients fall back when serving conversion is unknown" <|
-            \_ ->
-                FoodShow.foodNutrientsForDisplay
-                    foodWithNutrition
-                    { form | unit = "cup" }
-                    |> Expect.equal [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
-        , test "submit requests local context after validation" <|
-            \_ ->
-                FoodShow.update FoodShow.SubmitClicked loadedModel
-                    |> third
-                    |> Expect.equal FoodShow.RequestLocalContext
-        , test "submit with blank amount stores validation error" <|
-            \_ ->
-                FoodShow.update
-                    FoodShow.SubmitClicked
-                    (loadedWithForm { form | amount = " " })
-                    |> first
-                    |> formOf
-                    |> Maybe.andThen submitFailureMessage
-                    |> Expect.equal (Just "Amount is required.")
-        , test "submit is ignored while request is in flight" <|
-            \_ ->
-                FoodShow.update FoodShow.SubmitClicked contextReadyModel
-                    |> third
-                    |> Expect.equal FoodShow.NoOp
-        , test "local context uses selected diary date for log request" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LocalContextReceived
-                        { date = "2026-06-04"
-                        , timezone = "Asia/Kolkata"
-                        }
-                    )
-                    contextReadyModel
-                    |> third
-                    |> Expect.equal
-                        (FoodShow.RequestCreateLog
-                            { logDate = sampleDate
-                            , deviceTimezone = Just "Asia/Kolkata"
-                            , mealSlot = Just "lunch"
-                            , item = { itemType = ItemRef.Product, id = "food-1" }
-                            , quantity = { amount = "2", unit = "serving" }
-                            , notes = Nothing
-                            }
-                        )
-        , test "local context without selected diary date falls back to device date" <|
-            \_ ->
-                FoodShow.update
-                    (FoodShow.LocalContextReceived
-                        { date = "2026-06-04"
-                        , timezone = "Asia/Kolkata"
-                        }
-                    )
-                    contextReadyWithoutDateModel
-                    |> third
-                    |> Expect.equal
-                        (FoodShow.RequestCreateLog
-                            { logDate = sampleDateFromString "2026-06-04"
-                            , deviceTimezone = Just "Asia/Kolkata"
-                            , mealSlot = Just "lunch"
-                            , item = { itemType = ItemRef.Product, id = "food-1" }
-                            , quantity = { amount = "2", unit = "serving" }
-                            , notes = Nothing
-                            }
-                        )
-        , test "bad device date fails when no diary date is selected" <|
+        [ test "loading composes food, units, and the last-used default into a ready form" <|
             \_ ->
                 let
-                    ( model, _, outMsg ) =
-                        FoodShow.update
-                            (FoodShow.LocalContextReceived
-                                { date = "not-a-date"
-                                , timezone = "Asia/Kolkata"
-                                }
-                            )
-                            contextReadyWithoutDateModel
+                    ( model, initial ) =
+                        FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
 
-                    formError : Maybe String
-                    formError =
-                        formOf model
-                            |> Maybe.andThen submitFailureMessage
+                    loaded : FoodShow.Model
+                    loaded =
+                        model
+                            |> step
+                                (FoodShow.LastUsedLoaded "food-1"
+                                    (Ok { items = [ recentItem ] })
+                                )
+                            |> step (FoodShow.FoodLoaded "food-1" (Ok food))
+                            |> step (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
                 in
-                ( outMsg
-                , formError
-                )
+                { initial = initial
+                , phase = toScreen loaded |> .phase
+                , amount = toScreen loaded |> .amount
+                , unit = toScreen loaded |> .unit
+                }
                     |> Expect.equal
-                        ( FoodShow.NoOp
-                        , Just "Could not read device date."
-                        )
-        , test "log success reports the created log and contextual search" <|
+                        { initial = FoodShow.RequestInitialData "food-1"
+                        , phase = "loaded"
+                        , amount = Just "5"
+                        , unit = Just "g"
+                        }
+        , test "a response for another product is ignored and a failed load stays failed" <|
             \_ ->
-                FoodShow.update (FoodShow.LogCompleted (Ok log)) savingModel
-                    |> third
+                let
+                    afterOtherProduct : FoodShow.Model
+                    afterOtherProduct =
+                        step (FoodShow.FoodLoaded "other" (Ok food)) loadedModel
+
+                    afterLateSuccess : FoodShow.Model
+                    afterLateSuccess =
+                        step (FoodShow.FoodLoaded "food-1" (Ok food)) failedModel
+                in
+                { otherPhase = toScreen afterOtherProduct |> .phase
+                , otherAmount = toScreen afterOtherProduct |> .amount
+                , failedPhase = toScreen afterLateSuccess |> .phase
+                , failedError = toScreen afterLateSuccess |> .error
+                }
+                    |> Expect.equal
+                        { otherPhase = "loaded"
+                        , otherAmount = Just "2"
+                        , failedPhase = "failed"
+                        , failedError = Just networkErrorMessage
+                        }
+        , test "submitting validates the amount and blocks a duplicate while in flight" <|
+            \_ ->
+                let
+                    blank : FoodShow.Model
+                    blank =
+                        step (FoodShow.FormMsg (FoodLogForm.AmountChanged " ")) loadedModel
+
+                    submitting : FoodShow.Model
+                    submitting =
+                        step FoodShow.SubmitClicked loadedModel
+                in
+                { blankRequest = out FoodShow.SubmitClicked blank
+                , blankError = toScreen (step FoodShow.SubmitClicked blank) |> .submitError
+                , validRequest = out FoodShow.SubmitClicked loadedModel
+                , inFlight = toScreen submitting |> .submit
+                , duplicateRequest = out FoodShow.SubmitClicked submitting
+                }
+                    |> Expect.equal
+                        { blankRequest = FoodShow.NoOp
+                        , blankError = Just "Amount is required."
+                        , validRequest = FoodShow.RequestLocalContext
+                        , inFlight = Just FoodLogForm.SubmitSubmitting
+                        , duplicateRequest = FoodShow.NoOp
+                        }
+        , test "local context builds the log request from the diary date or the device date" <|
+            \_ ->
+                let
+                    context : { date : String, timezone : String }
+                    context =
+                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
+
+                    requestFor : FoodShow.Model -> FoodShow.OutMsg
+                    requestFor model =
+                        out (FoodShow.LocalContextReceived context)
+                            (step FoodShow.SubmitClicked model)
+                in
+                { selectedDate = requestFor loadedModel
+                , deviceDate = requestFor loadedWithoutDate
+                }
+                    |> Expect.equal
+                        { selectedDate = createLogRequest (sampleDateFromString "2026-05-29")
+                        , deviceDate = createLogRequest (sampleDateFromString "2026-06-04")
+                        }
+        , test "an unreadable device date fails the submission without a request" <|
+            \_ ->
+                let
+                    contextReady : FoodShow.Model
+                    contextReady =
+                        step FoodShow.SubmitClicked loadedWithoutDate
+
+                    afterContext : FoodShow.Model
+                    afterContext =
+                        step
+                            (FoodShow.LocalContextReceived
+                                { date = "not-a-date", timezone = "Asia/Kolkata" }
+                            )
+                            contextReady
+                in
+                { request =
+                    out
+                        (FoodShow.LocalContextReceived
+                            { date = "not-a-date", timezone = "Asia/Kolkata" }
+                        )
+                        contextReady
+                , error = toScreen afterContext |> .submitError
+                }
+                    |> Expect.equal
+                        { request = FoodShow.NoOp
+                        , error = Just "Could not read device date."
+                        }
+        , test "a completed log reports the created log with its contextual search route" <|
+            \_ ->
+                out (FoodShow.LogCompleted (Ok log)) savingModel
                     |> Expect.equal
                         (FoodShow.LogCreated log
                             (FoodSearch (Just "2026-05-29") (Just Lunch))
                         )
-        , test "log failure keeps form state and stores error" <|
+        , test "a failed log keeps the current form and surfaces the request error" <|
             \_ ->
                 let
-                    ( model, _, _ ) =
-                        FoodShow.update
-                            (FoodShow.LogCompleted (Err Client.NetworkError))
-                            savingModel
+                    afterFailure : FoodShow.Model
+                    afterFailure =
+                        step (FoodShow.LogCompleted (Err Client.NetworkError)) savingModel
                 in
-                Maybe.map (\current -> ( current.amount, current.submitState )) (formOf model)
+                { request = out (FoodShow.LogCompleted (Err Client.NetworkError)) savingModel
+                , amount = toScreen afterFailure |> .amount
+                , submit = toScreen afterFailure |> .submit
+                }
                     |> Expect.equal
-                        (Just
-                            ( "2"
-                            , FoodLogForm.SubmitFailed
-                                (FoodLogForm.RequestFailed networkErrorMessage)
-                            )
+                        { request = FoodShow.NoOp
+                        , amount = Just "2"
+                        , submit =
+                            Just
+                                (FoodLogForm.SubmitFailed
+                                    (FoodLogForm.RequestFailed networkErrorMessage)
+                                )
+                        }
+        , test "a units load failure reports the page error and unauthorized expires the session" <|
+            \_ ->
+                let
+                    afterFailure : FoodShow.Model
+                    afterFailure =
+                        step (FoodShow.UnitsLoaded (Err Client.NetworkError)) emptyModel
+                in
+                { phase = toScreen afterFailure |> .phase
+                , error = toScreen afterFailure |> .error
+                , unauthorized =
+                    out
+                        (FoodShow.UnitsLoaded
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                         )
+                        emptyModel
+                }
+                    |> Expect.equal
+                        { phase = "failed"
+                        , error = Just networkErrorMessage
+                        , unauthorized = FoodShow.SessionExpired
+                        }
+        , test "display nutrients fall back to per-100g when the serving conversion is unknown" <|
+            \_ ->
+                FoodShow.foodNutrientsForDisplay foodWithNutrition { form | unit = "cup" }
+                    |> Expect.equal
+                        [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ]
         ]
 
 
-emptyModel : FoodShow.Model
-emptyModel =
-    FoodShow.Loading
-        { productId = "food-1"
-        , logDate = Just "2026-05-29"
-        , mealSlot = Just Lunch
-        , food = Nothing
-        , units = Nothing
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
+
+-- SCREEN PROJECTION
 
 
-loadedModel : FoodShow.Model
-loadedModel =
-    FoodShow.Loaded
-        { productId = "food-1"
-        , logDate = Just "2026-05-29"
-        , mealSlot = Just Lunch
-        , food = food
-        , units = [ gram ]
-        , form = form
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
+type alias Screen =
+    { phase : String
+    , amount : Maybe String
+    , unit : Maybe String
+    , submit : Maybe FoodLogForm.SubmitState
+    , submitError : Maybe String
+    , error : Maybe String
+    }
 
 
-contextReadyModel : FoodShow.Model
-contextReadyModel =
-    FoodShow.Loaded
-        { productId = "food-1"
-        , logDate = Just "2026-05-29"
-        , mealSlot = Just Lunch
-        , food = food
-        , units = [ gram ]
-        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
-
-
-contextReadyWithoutDateModel : FoodShow.Model
-contextReadyWithoutDateModel =
-    FoodShow.Loaded
-        { productId = "food-1"
-        , logDate = Nothing
-        , mealSlot = Just Lunch
-        , food = food
-        , units = [ gram ]
-        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
-
-
-savingModel : FoodShow.Model
-savingModel =
-    FoodShow.Loaded
-        { productId = "food-1"
-        , logDate = Just "2026-05-29"
-        , mealSlot = Just Lunch
-        , food = food
-        , units = [ gram ]
-        , form = { form | submitState = FoodLogForm.SubmitSubmitting }
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
-
-
-loadedWithForm : FoodLogForm.Model -> FoodShow.Model
-loadedWithForm nextForm =
-    FoodShow.Loaded
-        { productId = "food-1"
-        , logDate = Just "2026-05-29"
-        , mealSlot = Just Lunch
-        , food = food
-        , units = [ gram ]
-        , form = nextForm
-        , lastUsedDefault = Nothing
-        , lookupNote = Nothing
-        }
-
-
-formOf : FoodShow.Model -> Maybe FoodLogForm.Model
-formOf model =
+toScreen : FoodShow.Model -> Screen
+toScreen model =
     case model of
         FoodShow.Loaded loaded ->
-            Just loaded.form
+            { phase = "loaded"
+            , amount = Just loaded.form.amount
+            , unit = Just loaded.form.unit
+            , submit = Just loaded.form.submitState
+            , submitError = formError loaded.form
+            , error = Nothing
+            }
 
-        _ ->
-            Nothing
+        FoodShow.Loading _ ->
+            { phase = "loading"
+            , amount = Nothing
+            , unit = Nothing
+            , submit = Nothing
+            , submitError = Nothing
+            , error = Nothing
+            }
+
+        FoodShow.LoadFailed message ->
+            { phase = "failed"
+            , amount = Nothing
+            , unit = Nothing
+            , submit = Nothing
+            , submitError = Nothing
+            , error = Just message
+            }
 
 
-submitFailureMessage : FoodLogForm.Model -> Maybe String
-submitFailureMessage current =
+formError : FoodLogForm.Model -> Maybe String
+formError current =
     case current.submitState of
         FoodLogForm.SubmitFailed failure ->
             Just (FoodLogForm.submitFailureMessage failure)
 
         _ ->
             Nothing
+
+
+createLogRequest : LocalDate -> FoodShow.OutMsg
+createLogRequest logDate =
+    FoodShow.RequestCreateLog
+        { logDate = logDate
+        , deviceTimezone = Just "Asia/Kolkata"
+        , mealSlot = Just "lunch"
+        , item = { itemType = ItemRef.Product, id = "food-1" }
+        , quantity = { amount = "2", unit = "serving" }
+        , notes = Nothing
+        }
+
+
+step : FoodShow.Msg -> FoodShow.Model -> FoodShow.Model
+step msg model =
+    first (FoodShow.update msg model)
+
+
+out : FoodShow.Msg -> FoodShow.Model -> FoodShow.OutMsg
+out msg model =
+    third (FoodShow.update msg model)
+
+
+emptyModel : FoodShow.Model
+emptyModel =
+    FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
+        |> Tuple.first
+
+
+failedModel : FoodShow.Model
+failedModel =
+    step (FoodShow.UnitsLoaded (Err Client.NetworkError)) emptyModel
+
+
+initialLoad : Maybe String -> Maybe MealSlot -> FoodShow.Model
+initialLoad logDate mealSlot =
+    FoodShow.init "food-1" logDate mealSlot Nothing
+        |> Tuple.first
+
+
+loadedModel : FoodShow.Model
+loadedModel =
+    initialLoad (Just "2026-05-29") (Just Lunch)
+        |> step (FoodShow.FoodLoaded "food-1" (Ok food))
+        |> step (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
+
+
+loadedWithoutDate : FoodShow.Model
+loadedWithoutDate =
+    initialLoad Nothing (Just Lunch)
+        |> step (FoodShow.FoodLoaded "food-1" (Ok food))
+        |> step (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
+
+
+savingModel : FoodShow.Model
+savingModel =
+    step FoodShow.SubmitClicked loadedModel
 
 
 form : FoodLogForm.Model
