@@ -9,14 +9,13 @@ import Translations.Util as Util
 tests : Test
 tests =
     describe "Data.MealSlot"
-        [ test "parses known slot" <|
+        [ test "parses known slots and rejects unknown ones" <|
             \_ ->
-                MealSlot.fromString "lunch"
-                    |> Expect.equal (Just Lunch)
-        , test "rejects unknown slot" <|
-            \_ ->
-                MealSlot.fromString "midnight"
-                    |> Expect.equal Nothing
+                Expect.all
+                    [ \_ -> MealSlot.fromString "lunch" |> Expect.equal (Just Lunch)
+                    , \_ -> MealSlot.fromString "midnight" |> Expect.equal Nothing
+                    ]
+                    ()
         , test "supports late-night snack" <|
             \_ ->
                 ( MealSlot.fromString "late_night_snack"

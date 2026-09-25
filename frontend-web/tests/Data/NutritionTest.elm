@@ -8,26 +8,25 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Data.Nutrition"
-        [ test "parses valid amounts" <|
+        [ test "safeAmount parses valid amounts and zeroes invalid or negative input" <|
             \_ ->
-                Nutrition.safeAmount "12.5"
-                    |> Expect.within (Expect.Absolute 0.0001) 12.5
-        , test "invalid amounts become zero" <|
+                Expect.all
+                    [ \_ ->
+                        Nutrition.safeAmount "12.5"
+                            |> Expect.within (Expect.Absolute 0.0001) 12.5
+                    , \_ -> Nutrition.safeAmount "nope" |> Expect.equal 0
+                    , \_ -> Nutrition.safeAmount "-1" |> Expect.equal 0
+                    ]
+                    ()
+        , test "nutrientAmount reads present codes and zeroes missing ones" <|
             \_ ->
-                Nutrition.safeAmount "nope"
-                    |> Expect.equal 0
-        , test "negative amounts become zero" <|
-            \_ ->
-                Nutrition.safeAmount "-1"
-                    |> Expect.equal 0
-        , test "missing nutrient amount returns zero" <|
-            \_ ->
-                Nutrition.nutrientAmount "FAT_G" nutrients
-                    |> Expect.equal 0
-        , test "calories are read from ENERGY_KCAL" <|
-            \_ ->
-                Nutrition.nutrientAmount "ENERGY_KCAL" nutrients
-                    |> Expect.equal 120
+                Expect.all
+                    [ \_ -> Nutrition.nutrientAmount "FAT_G" nutrients |> Expect.equal 0
+                    , \_ ->
+                        Nutrition.nutrientAmount "ENERGY_KCAL" nutrients
+                            |> Expect.equal 120
+                    ]
+                    ()
         , test "macro totals and percentages use 4/4/9 kcal factors" <|
             \_ ->
                 Nutrition.macroTotals [ { nutrients = macros } ]
@@ -48,18 +47,20 @@ tests =
                         , carbsPct = 38
                         , fatPct = 43
                         }
-        , test "grams unit returns amount unchanged" <|
+        , test "servingGrams converts known units and rejects unknown units" <|
             \_ ->
-                Nutrition.servingGrams { amount = "125", unit = "g" } servings
-                    |> Expect.equal (Just 125)
-        , test "known serving unit converts amount to grams" <|
-            \_ ->
-                Nutrition.servingGrams { amount = "2", unit = "piece" } servings
-                    |> Expect.equal (Just 100)
-        , test "unknown serving unit returns Nothing" <|
-            \_ ->
-                Nutrition.servingGrams { amount = "1", unit = "cup" } servings
-                    |> Expect.equal Nothing
+                Expect.all
+                    [ \_ ->
+                        Nutrition.servingGrams { amount = "125", unit = "g" } servings
+                            |> Expect.equal (Just 125)
+                    , \_ ->
+                        Nutrition.servingGrams { amount = "2", unit = "piece" } servings
+                            |> Expect.equal (Just 100)
+                    , \_ ->
+                        Nutrition.servingGrams { amount = "1", unit = "cup" } servings
+                            |> Expect.equal Nothing
+                    ]
+                    ()
         , test "nutrient scaling multiplies per-100g nutrients by grams over 100" <|
             \_ ->
                 Nutrition.scalePer100g 50 per100g
@@ -69,21 +70,24 @@ tests =
                 Nutrition.nutrientsForQuantity { amount = "2", unit = "piece" } servings per100g
                     |> Expect.equal
                         (Just [ { code = "ENERGY_KCAL", amount = "120", unit = "kcal" } ])
-        , test "saved snapshot scaling requires matching units" <|
+        , test "scaledSnapshotForQuantity scales matching units and rejects changed units" <|
             \_ ->
-                Nutrition.scaledSnapshotForQuantity
-                    { amount = "2", unit = "serving" }
-                    { amount = "3", unit = "serving" }
-                    nutrients
-                    |> Expect.equal
-                        (Just [ { code = "ENERGY_KCAL", amount = "180", unit = "kcal" } ])
-        , test "saved snapshot scaling rejects changed units" <|
-            \_ ->
-                Nutrition.scaledSnapshotForQuantity
-                    { amount = "2", unit = "serving" }
-                    { amount = "3", unit = "g" }
-                    nutrients
-                    |> Expect.equal Nothing
+                Expect.all
+                    [ \_ ->
+                        Nutrition.scaledSnapshotForQuantity
+                            { amount = "2", unit = "serving" }
+                            { amount = "3", unit = "serving" }
+                            nutrients
+                            |> Expect.equal
+                                (Just [ { code = "ENERGY_KCAL", amount = "180", unit = "kcal" } ])
+                    , \_ ->
+                        Nutrition.scaledSnapshotForQuantity
+                            { amount = "2", unit = "serving" }
+                            { amount = "3", unit = "g" }
+                            nutrients
+                            |> Expect.equal Nothing
+                    ]
+                    ()
         , test "dominantMacro returns Nothing for zero macros" <|
             \_ ->
                 Nutrition.dominantMacro

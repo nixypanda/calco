@@ -27,39 +27,30 @@ tests =
                                     ( Nothing, [] )
                         )
                     |> Expect.equal (Ok ( Just "1", [ "172.125" ] ))
-        , test "rejects inconsistent clarification state" <|
+        , test "rejects malformed ready payloads" <|
             \_ ->
-                Decode.decodeString
-                    (FoodAssistant.foodDraftTurnDecoder FoodAssistant.CustomFood)
-                    (String.replace
-                        "\"status\":\"draft_ready\""
-                        "\"status\":\"needs_clarification\""
-                        readyJson
-                    )
-                    |> Result.mapError (always ())
-                    |> Expect.equal (Err ())
-        , test "rejects unknown response fields" <|
-            \_ ->
-                Decode.decodeString
-                    (FoodAssistant.foodDraftTurnDecoder FoodAssistant.CustomFood)
-                    (String.replace
-                        "\"warnings\":[]"
-                        "\"warnings\":[],\"internal\":true"
-                        readyJson
-                    )
-                    |> Result.mapError (always ())
-                    |> Expect.equal (Err ())
-        , test "rejects numeric decimals because the backend contract uses strings" <|
-            \_ ->
-                Decode.decodeString
-                    (FoodAssistant.foodDraftTurnDecoder FoodAssistant.CustomFood)
-                    (String.replace
-                        "\"default_quantity\":\"1\""
-                        "\"default_quantity\":1"
-                        readyJson
-                    )
-                    |> Result.mapError (always ())
-                    |> Expect.equal (Err ())
+                [ String.replace
+                    "\"status\":\"draft_ready\""
+                    "\"status\":\"needs_clarification\""
+                    readyJson
+                , String.replace
+                    "\"warnings\":[]"
+                    "\"warnings\":[],\"internal\":true"
+                    readyJson
+                , String.replace
+                    "\"default_quantity\":\"1\""
+                    "\"default_quantity\":1"
+                    readyJson
+                ]
+                    |> List.map
+                        (\raw ->
+                            Decode.decodeString
+                                (FoodAssistant.foodDraftTurnDecoder FoodAssistant.CustomFood)
+                                raw
+                                |> Result.mapError (always ())
+                                |> Expect.equal (Err ())
+                        )
+                    |> expectAll
         , test "decodes a required suggested portion for ad-hoc logging" <|
             \_ ->
                 Decode.decodeString
@@ -144,3 +135,8 @@ readyLogJson =
             ]
         )
         readyJson
+
+
+expectAll : List Expect.Expectation -> Expect.Expectation
+expectAll expectations =
+    Expect.all (List.map always expectations) ()

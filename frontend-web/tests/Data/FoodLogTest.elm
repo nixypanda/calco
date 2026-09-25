@@ -25,18 +25,14 @@ tests =
                         |> Expect.equal [ "unslotted-1" ]
             ]
         , describe "decoder"
-            [ test "reads a known meal slot" <|
+            [ test "reads known slots and buckets null or unknown slots as unslotted" <|
                 \_ ->
-                    decodeSlot "\"dinner\""
-                        |> Expect.equal (Ok (Just Dinner))
-            , test "a null meal slot lands in the unslotted bucket" <|
-                \_ ->
-                    decodeSlot "null"
-                        |> Expect.equal (Ok Nothing)
-            , test "a slot the client cannot represent lands in the unslotted bucket" <|
-                \_ ->
-                    decodeSlot "\"brunch\""
-                        |> Expect.equal (Ok Nothing)
+                    Expect.all
+                        [ \_ -> decodeSlot "\"dinner\"" |> Expect.equal (Ok (Just Dinner))
+                        , \_ -> decodeSlot "null" |> Expect.equal (Ok Nothing)
+                        , \_ -> decodeSlot "\"brunch\"" |> Expect.equal (Ok Nothing)
+                        ]
+                        ()
             , test "decodes an ad-hoc item without an id" <|
                 \_ ->
                     Decode.decodeString FoodLog.decoder adHocLogJson

@@ -8,14 +8,15 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Lib.Text"
-        [ test "blank strings become Nothing" <|
+        [ test "blankToMaybe trims non-blank strings and drops blanks" <|
             \_ ->
-                Text.blankToMaybe "   "
-                    |> Expect.equal Nothing
-        , test "non-blank strings are trimmed" <|
-            \_ ->
-                Text.blankToMaybe "  notes  "
-                    |> Expect.equal (Just "notes")
+                Expect.all
+                    [ \_ -> Text.blankToMaybe "   " |> Expect.equal Nothing
+                    , \_ ->
+                        Text.blankToMaybe "  notes  "
+                            |> Expect.equal (Just "notes")
+                    ]
+                    ()
         , test "trimOrDefault returns fallback for blanks" <|
             \_ ->
                 Text.trimOrDefault "g" " "

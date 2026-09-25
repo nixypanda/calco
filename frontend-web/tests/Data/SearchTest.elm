@@ -17,14 +17,17 @@ debounce =
 tests : Test
 tests =
     describe "Data.Search"
-        [ test "completes include category operator" <|
+        [ test "completes include and exclude category operators" <|
             \_ ->
-                Search.completions "c" []
-                    |> Expect.equal [ Search.OperatorCompletion "category:" ]
-        , test "completes exclude category operator" <|
-            \_ ->
-                Search.completions "-c" []
-                    |> Expect.equal [ Search.OperatorCompletion "-category:" ]
+                Expect.all
+                    [ \_ ->
+                        Search.completions "c" []
+                            |> Expect.equal [ Search.OperatorCompletion "category:" ]
+                    , \_ ->
+                        Search.completions "-c" []
+                            |> Expect.equal [ Search.OperatorCompletion "-category:" ]
+                    ]
+                    ()
         , test "returns no completions for empty or whitespace query" <|
             \_ ->
                 ( Search.completions "" []
@@ -35,14 +38,20 @@ tests =
             \_ ->
                 Search.applyCompletion (Search.OperatorCompletion "category:") "apple  c"
                     |> Expect.equal "apple  category:"
-        , test "extracts category query value" <|
+        , test "extracts category query values including quoted tokens" <|
             \_ ->
-                Search.categoryQuery "category:foo"
-                    |> Expect.equal (Just "foo")
-        , test "strips leading quote from partial category query value" <|
-            \_ ->
-                Search.categoryQuery "category:\"food and"
-                    |> Expect.equal (Just "food and")
+                Expect.all
+                    [ \_ ->
+                        Search.categoryQuery "category:foo"
+                            |> Expect.equal (Just "foo")
+                    , \_ ->
+                        Search.categoryQuery "category:\"food and"
+                            |> Expect.equal (Just "food and")
+                    , \_ ->
+                        Search.categoryQuery "apple category:\"food and"
+                            |> Expect.equal (Just "food and")
+                    ]
+                    ()
         , test "quotes category suggestions containing whitespace" <|
             \_ ->
                 Search.completions
@@ -50,10 +59,6 @@ tests =
                     [ { value = "food and beverages", count = 4 } ]
                     |> Expect.equal
                         [ Search.CategoryCompletion "category:\"food and beverages\"" 4 ]
-        , test "quoted category tokens do not split on spaces" <|
-            \_ ->
-                Search.categoryQuery "apple category:\"food and"
-                    |> Expect.equal (Just "food and")
         , test "onQueryChanged trims and bumps tokens for non-empty queries" <|
             \_ ->
                 let
@@ -71,32 +76,23 @@ tests =
                         , categoryToken = ticket 1
                         , categoryReq = Nothing
                         }
-        , test "onQueryChanged clears category suggestions when not a category value" <|
+        , test "onQueryChanged manages category suggestions for plain and category values" <|
             \_ ->
-                let
-                    ( next, _ ) =
+                Expect.all
+                    [ \_ ->
                         Search.onQueryChanged "apple"
-                            { query = ""
-                            , searchToken = ticket 0
-                            , categoryToken = ticket 0
-                            , categorySuggestions = [ { value = "fruit", count = 2 } ]
-                            }
-                in
-                next.categorySuggestions
-                    |> Expect.equal []
-        , test "onQueryChanged keeps category suggestions while typing a category value" <|
-            \_ ->
-                let
-                    ( next, _ ) =
+                            (withSuggestions [ { value = "fruit", count = 2 } ])
+                            |> Tuple.first
+                            |> .categorySuggestions
+                            |> Expect.equal []
+                    , \_ ->
                         Search.onQueryChanged "category:foo"
-                            { query = ""
-                            , searchToken = ticket 0
-                            , categoryToken = ticket 0
-                            , categorySuggestions = [ { value = "fruit", count = 2 } ]
-                            }
-                in
-                next.categorySuggestions
-                    |> Expect.equal [ { value = "fruit", count = 2 } ]
+                            (withSuggestions [ { value = "fruit", count = 2 } ])
+                            |> Tuple.first
+                            |> .categorySuggestions
+                            |> Expect.equal [ { value = "fruit", count = 2 } ]
+                    ]
+                    ()
         , test "onQueryChanged yields a category request when typing a category value" <|
             \_ ->
                 let
@@ -105,22 +101,19 @@ tests =
                 in
                 categoryReq
                     |> Expect.equal (Just { token = ticket 1, query = "foo" })
-        , test "onQueryChangedDebounced produces a cmd for non-empty queries" <|
+        , test "onQueryChangedDebounced produces a cmd only for non-empty queries" <|
             \_ ->
-                let
-                    ( _, cmd ) =
+                Expect.all
+                    [ \_ ->
                         Search.onQueryChangedDebounced "apple" Search.empty debounce
-                in
-                cmd
-                    |> Expect.notEqual Cmd.none
-        , test "onQueryChangedDebounced suppresses the cmd for empty queries" <|
-            \_ ->
-                let
-                    ( _, cmd ) =
+                            |> Tuple.second
+                            |> Expect.notEqual Cmd.none
+                    , \_ ->
                         Search.onQueryChangedDebounced "   " Search.empty debounce
-                in
-                cmd
-                    |> Expect.equal Cmd.none
+                            |> Tuple.second
+                            |> Expect.equal Cmd.none
+                    ]
+                    ()
         , test "a burst of query changes leaves only the settled category token live" <|
             \_ ->
                 let
@@ -146,29 +139,42 @@ tests =
                     |> .categorySuggestions
                 )
                     |> Expect.equal ( ticket 3, [ { value = "chocolate", count = 9 } ] )
-        , test "setCategorySuggestions drops stale responses" <|
+        , test "setCategorySuggestions drops stale and applies matching responses" <|
             \_ ->
-                Search.setCategorySuggestions (ticket 1)
-                    [ { value = "fruit", count = 2 } ]
-                    { query = ""
-                    , searchToken = ticket 0
-                    , categoryToken = ticket 2
-                    , categorySuggestions = []
-                    }
-                    |> .categorySuggestions
-                    |> Expect.equal []
-        , test "setCategorySuggestions applies matching responses" <|
-            \_ ->
-                Search.setCategorySuggestions (ticket 2)
-                    [ { value = "fruit", count = 2 } ]
-                    { query = ""
-                    , searchToken = ticket 0
-                    , categoryToken = ticket 2
-                    , categorySuggestions = []
-                    }
-                    |> .categorySuggestions
-                    |> Expect.equal [ { value = "fruit", count = 2 } ]
+                Expect.all
+                    [ \_ ->
+                        Search.setCategorySuggestions (ticket 1)
+                            [ { value = "fruit", count = 2 } ]
+                            (withToken (ticket 2))
+                            |> .categorySuggestions
+                            |> Expect.equal []
+                    , \_ ->
+                        Search.setCategorySuggestions (ticket 2)
+                            [ { value = "fruit", count = 2 } ]
+                            (withToken (ticket 2))
+                            |> .categorySuggestions
+                            |> Expect.equal [ { value = "fruit", count = 2 } ]
+                    ]
+                    ()
         ]
+
+
+withSuggestions : List { value : String, count : Int } -> Search.QueryState
+withSuggestions suggestions =
+    { query = ""
+    , searchToken = Ticket.initial
+    , categoryToken = Ticket.initial
+    , categorySuggestions = suggestions
+    }
+
+
+withToken : Ticket -> Search.QueryState
+withToken categoryToken =
+    { query = ""
+    , searchToken = Ticket.initial
+    , categoryToken = categoryToken
+    , categorySuggestions = []
+    }
 
 
 ticket : Int -> Ticket

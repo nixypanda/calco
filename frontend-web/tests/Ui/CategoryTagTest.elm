@@ -14,39 +14,36 @@ tests : Test
 tests =
     describe "Ui.CategoryTag"
         [ describe "rows"
-            [ test "no categories produce no rows" <|
+            [ test "packs categories two per row and collapses the remainder into one tag" <|
                 \_ ->
-                    CategoryTag.rows []
-                        |> Expect.equal []
-            , test "one category occupies one row" <|
-                \_ ->
-                    CategoryTag.rows [ "a" ]
-                        |> Expect.equal [ [ CategoryTag "a" ] ]
-            , test "two categories fill one row" <|
-                \_ ->
-                    CategoryTag.rows [ "a", "b" ]
-                        |> Expect.equal [ [ CategoryTag "a", CategoryTag "b" ] ]
-            , test "three categories use a second row" <|
-                \_ ->
-                    CategoryTag.rows [ "a", "b", "c" ]
-                        |> Expect.equal
-                            [ [ CategoryTag "a", CategoryTag "b" ]
-                            , [ CategoryTag "c" ]
-                            ]
-            , test "four categories fill two rows without overflow" <|
-                \_ ->
-                    CategoryTag.rows [ "a", "b", "c", "d" ]
-                        |> Expect.equal
-                            [ [ CategoryTag "a", CategoryTag "b" ]
-                            , [ CategoryTag "c", CategoryTag "d" ]
-                            ]
-            , test "five categories collapse the remainder into one tag" <|
-                \_ ->
-                    CategoryTag.rows [ "a", "b", "c", "d", "e" ]
-                        |> Expect.equal
-                            [ [ CategoryTag "a", CategoryTag "b" ]
-                            , [ CategoryTag "c", CategoryOverflowTag 2 ]
-                            ]
+                    Expect.all
+                        [ \_ -> CategoryTag.rows [] |> Expect.equal []
+                        , \_ ->
+                            CategoryTag.rows [ "a" ]
+                                |> Expect.equal [ [ CategoryTag "a" ] ]
+                        , \_ ->
+                            CategoryTag.rows [ "a", "b" ]
+                                |> Expect.equal [ [ CategoryTag "a", CategoryTag "b" ] ]
+                        , \_ ->
+                            CategoryTag.rows [ "a", "b", "c" ]
+                                |> Expect.equal
+                                    [ [ CategoryTag "a", CategoryTag "b" ]
+                                    , [ CategoryTag "c" ]
+                                    ]
+                        , \_ ->
+                            CategoryTag.rows [ "a", "b", "c", "d" ]
+                                |> Expect.equal
+                                    [ [ CategoryTag "a", CategoryTag "b" ]
+                                    , [ CategoryTag "c", CategoryTag "d" ]
+                                    ]
+                        , \_ ->
+                            CategoryTag.rows [ "a", "b", "c", "d", "e" ]
+                                |> Expect.equal
+                                    [ [ CategoryTag "a", CategoryTag "b" ]
+                                    , [ CategoryTag "c", CategoryOverflowTag 2 ]
+                                    ]
+                        ]
+                        ()
             ]
         , describe "view"
             [ test "renders the overflow tag" <|
