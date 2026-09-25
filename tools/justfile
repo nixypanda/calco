@@ -16,12 +16,12 @@ default:
 
 # Lint and type-check data-source import tools
 data-sources-check:
-    cd importers/data-sources && uv run ruff check src/ && uv run ty check src/
+    cd importers/data-sources && uv run ruff check . && uv run ty check .
 
 # Run data-source importer tests and syntax/import checks
 data-sources-test:
-    cd importers/data-sources && uv run python -m compileall -q src test_merge_quick.py test_off.py
-    cd importers/data-sources && uv run python -m unittest test_off.py
+    cd importers/data-sources && uv run python -m compileall -q src test_off.py test_servings.py
+    cd importers/data-sources && uv run python -m unittest test_off.py test_servings.py
 
 # Run all data-source importer checks
 data-sources-verify: data-sources-check data-sources-test
@@ -46,9 +46,20 @@ data-sources-import dataset="merged" data_dir="/tmp/calco-import":
 data-sources-dry-run dataset="merged" data_dir="/tmp/calco-import-dry-run":
     cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import --dry-run import "{{dataset}}"
 
-# Run the IFCT/INDB merge smoke test after those sources have been fetched
-data-sources-merge-smoke:
-    cd importers/data-sources && uv run python test_merge_quick.py
+# Run all catalog and personal importer checks
+importers-verify: data-sources-verify personal-data-verify
 
-# Run all public catalog importer checks
-importers-verify: data-sources-verify
+# ──────────────────────────────────────────────
+# Personal MFP data import
+# ──────────────────────────────────────────────
+
+# Lint and type-check personal-data import tools
+personal-data-check:
+    cd importers/personal-data && uv run ruff check . && uv run ty check .
+
+# Run personal-data importer tests
+personal-data-test:
+    cd importers/personal-data && uv run python -m unittest discover -s src -p 'test_*.py'
+
+# Run all personal-data importer checks
+personal-data-verify: personal-data-check personal-data-test

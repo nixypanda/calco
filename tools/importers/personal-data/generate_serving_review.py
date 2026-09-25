@@ -13,10 +13,11 @@ import argparse
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
 from steps.generate_serving_review import run
 
+ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 INPUT = DATA_DIR / "step-8-out-canonicalize_food_descriptions.csv"
 OUTPUT = DATA_DIR / "step-9-out-serving-review.csv"

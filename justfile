@@ -162,8 +162,8 @@ coverage-frontend:
 # Lint and type-check data-source import tools.
 [working-directory("tools/importers/data-sources")]
 check-data-sources:
-    uv run ruff check src/
-    uv run ty check src/
+    uv run ruff check .
+    uv run ty check .
 
 # Dry-run IFCT and INDB fetching to verify the importer CLI.
 [working-directory("tools/importers/data-sources")]
@@ -183,4 +183,8 @@ check-personal-data-static:
 # Run personal-data import tests.
 [working-directory("tools/importers/personal-data")]
 test-personal-data:
-    uv run python -m unittest discover -s . -p 'test_*.py'
+    uv run python -m unittest discover -s src -p 'test_*.py'
+
+# Run the end-to-end importer pipeline test (requires Postgres and the Rust build).
+test-importers-e2e:
+    python3 tools/importers/tests/test_import_pipeline.py

@@ -20,7 +20,6 @@ from pathlib import Path
 
 from steps import load_csv, write_csv
 
-
 # ---- helpers ----
 
 def _dec(val: str) -> Decimal | None:
@@ -38,9 +37,9 @@ def _dec(val: str) -> Decimal | None:
 # Volume-to-gram conversion factors.
 # Key: (food_name, from_unit) → grams per unit.
 VOLUME_TO_GRAMS: dict[tuple[str, str], Decimal] = {
-    ("Wild Blueberry Fruit Spread", "tbsp"): Decimal("15"),
-    ("Nutella", "tbsp"): Decimal("15"),
-    ("Rajma", "cup"): Decimal("200"),
+    ("Wild Blueberry Fruit Spread", "tbsp"): Decimal(15),
+    ("Nutella", "tbsp"): Decimal(15),
+    ("Rajma", "cup"): Decimal(200),
 }
 
 
@@ -79,7 +78,7 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
             val = _dec(row["value"])
             cal = _dec(row["calories"])
             if val and val > 0 and cal and cal > 0:
-                info["gram_density_sum"] += cal / val * Decimal("100")
+                info["gram_density_sum"] += cal / val * Decimal(100)
                 info["gram_density_count"] += 1
 
     # ---- Phase 2: apply resolution ----
@@ -100,7 +99,11 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
         # These 2 entries (184 cal, F=14/C=0.8/P=13, serving="1.0 omelette")
         # match the existing Sunny Side Up Egg profile (180 cal, F=13.7/C=0.8/P=12.5),
         # not the generic "Homemade" entries (77 cal/100g, moderate everything).
-        if desc == "Homemade" and unit != "g" and "omelette" in row.get("serving", "").lower():
+        if (
+            desc == "Homemade"
+            and unit != "g"
+            and "omelette" in row.get("serving", "").lower()
+        ):
             row["description"] = "Sunny Side Up Egg"
             total_relabelled += 1
             _record_review(
@@ -123,7 +126,7 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
                 _record_review(
                     review, desc, "auto",
                     _fmt_units(info["unit_counts"]),
-                    notes=f"{unit}→g (×{factor})",
+                    notes=f"{unit}→g (x{factor})",
                 )
             continue
 
@@ -134,14 +137,17 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
             avg_density = info["gram_density_sum"] / info["gram_density_count"]
             cal = _dec(row["calories"])
             if cal and cal > 0 and avg_density > 0:
-                implied_g = cal / avg_density * Decimal("100")
+                implied_g = cal / avg_density * Decimal(100)
                 row["value"] = str(implied_g)
                 row["unit"] = "g"
                 total_converted += 1
                 _record_review(
                     review, desc, "auto",
                     _fmt_units(info["unit_counts"]),
-                    notes=f"{unit}→{implied_g:.0f}g via density ({avg_density:.0f} cal/100g)",
+                    notes=(
+                        f"{unit}→{implied_g:.0f}g via density "
+                        f"({avg_density:.0f} cal/100g)"
+                    ),
                 )
 
     write_csv(output_path, fieldnames, rows)

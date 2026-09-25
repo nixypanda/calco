@@ -7,6 +7,7 @@ import json
 import re
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from typing import Any
 
 from mfp_nutrients import MFP_NUTRIENT_MAPPINGS
 
@@ -181,7 +182,7 @@ def _is_unmatched(row: dict[str, str]) -> bool:
     return not row.get("matched_food_id", "").strip()
 
 
-def _build_record(row: dict[str, str], input_path: str | Path) -> dict[str, object]:
+def _build_record(row: dict[str, str], input_path: str | Path) -> dict[str, Any]:
     description = _clean_text(row["description"])
     serving_grams = _basis_serving_grams(row)
     nutrients = []

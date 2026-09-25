@@ -1,7 +1,7 @@
 """Step 4: Check calories against macro formula.
 
 Flags rows where stated calories differ from the sum of macros
-(protein×4 + carbs×4 + fat×9) by more than 20%.
+(protein x 4 + carbs x 4 + fat x 9) by more than 20%.
 
 Resolution: Trust stated calories as more reliable. This step is
 for reporting/review only.
@@ -13,7 +13,7 @@ from pathlib import Path
 
 from steps import load_csv, write_csv
 
-MISMATCH_THRESHOLD = Decimal("20")  # percent
+MISMATCH_THRESHOLD = Decimal(20)  # percent
 REVIEW_HEADER = [
     "description",
     "date",

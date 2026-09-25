@@ -13,7 +13,6 @@ from pathlib import Path
 
 from steps import load_csv, write_csv
 
-
 RENAME_MAP = {
     "1 Hard Boiled": "Egg White",
     "Eggs, boiled": "Egg, boiled",

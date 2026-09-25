@@ -1,0 +1,13 @@
+{"type": "food", "source": "USDA", "source_id": "1001", "name": "Test Apple", "brand": null, "categories": ["fruits"]}
+{"type": "serving", "source": "USDA", "source_id": "1001", "label": "small", "quantity": 1, "unit": "serving", "grams": 100}
+{"type": "serving", "source": "USDA", "source_id": "1001", "label": "large", "quantity": 1, "unit": "serving", "grams": 200}
+{"type": "serving", "source": "USDA", "source_id": "1001", "unit": "cup", "grams_per_unit": 150}
+{"type": "nutrient", "source": "USDA", "source_id": "1001", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 52}
+{"type": "nutrient", "source": "USDA", "source_id": "1001", "nutrient_code": "PROTEIN_G", "amount_per_100g": 0.3}
+{"type": "nutrient", "source": "USDA", "source_id": "1001", "nutrient_code": "CARBS_G", "amount_per_100g": 14}
+{"type": "nutrient", "source": "USDA", "source_id": "1001", "nutrient_code": "FAT_G", "amount_per_100g": 0.2}
+{"type": "food", "source": "USDA", "source_id": "1002", "name": "Shared Barcode Food", "brand": null, "categories": [], "barcode": "11111111"}
+{"type": "nutrient", "source": "USDA", "source_id": "1002", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 120}
+{"type": "nutrient", "source": "USDA", "source_id": "1002", "nutrient_code": "PROTEIN_G", "amount_per_100g": 2}
+{"type": "nutrient", "source": "USDA", "source_id": "1002", "nutrient_code": "CARBS_G", "amount_per_100g": 20}
+{"type": "nutrient", "source": "USDA", "source_id": "1002", "nutrient_code": "FAT_G", "amount_per_100g": 3}

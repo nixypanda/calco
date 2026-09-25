@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
@@ -61,10 +62,11 @@ def _request(
     method: str,
     url: str,
     *,
-    json: object | None = None,
+    payload: Mapping[str, object] | None = None,
     headers: Mapping[str, str] | None = None,
 ) -> requests.Response:
-    resp = requests.request(method, url, json=json, headers=headers)  # type: ignore
+    data = json.dumps(payload) if payload is not None else None
+    resp = requests.request(method, url, data=data, headers=headers)
     resp.raise_for_status()
     return resp
 
@@ -84,7 +86,7 @@ def build_headers(session_token: str | None) -> Headers:
 def create_job(api_url: str, headers: Mapping[str, str], source: str) -> str:
     url = f"{api_url}/imports"
     payload = {"source": source}
-    resp = _request("POST", url, json=payload, headers=headers)
+    resp = _request("POST", url, payload=payload, headers=headers)
     job = cast("JsonRow", resp.json())
     log.info(
         "Created import job %s (source=%s, status=%s)",
@@ -110,7 +112,7 @@ def batch_upload(
         batch = rows[i : i + batch_size]
         url = f"{api_url}/imports/{job_id}/{kind}"
         payload = {"rows": batch}
-        resp = _request("POST", url, json=payload, headers=headers)
+        resp = _request("POST", url, payload=payload, headers=headers)
         result = cast("JsonRow", resp.json())
         accepted = int_field(result, "accepted")
         rejected = int_field(result, "rejected")

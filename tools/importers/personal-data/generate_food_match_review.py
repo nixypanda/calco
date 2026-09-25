@@ -5,11 +5,11 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from steps.generate_food_match_review import default_database_url, run
+
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from steps.generate_food_match_review import default_database_url, run  # noqa: E402
-
 DATA_DIR = ROOT / "data"
 INPUT = DATA_DIR / "step-9-out-serving-review.csv"
 OUTPUT = DATA_DIR / "step-10-out-food-match-review.csv"
@@ -35,6 +35,11 @@ def main() -> None:
         default=default_database_url(),
         help="Postgres connection string for the CalCo catalog",
     )
+    parser.add_argument(
+        "--no-barcode-hints",
+        action="store_true",
+        help="Ignore the local barcode-hints artifact (useful for hermetic runs)",
+    )
     args = parser.parse_args()
 
     result = run(
@@ -43,6 +48,7 @@ def main() -> None:
         existing_review_path=args.existing_review,
         matches_jsonl_path=args.matches_jsonl,
         database_url=args.database_url,
+        barcode_hints={} if args.no_barcode_hints else None,
     )
     print(f"Wrote {result['review_rows']} rows to {args.output}")
     print(f"  auto-matched: {result['auto_matched']}")

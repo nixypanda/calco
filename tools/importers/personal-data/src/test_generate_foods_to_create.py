@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from typing import Any
 
 from steps.generate_foods_to_create import run
 
@@ -98,8 +99,8 @@ def _row(**overrides: str) -> dict[str, str]:
 
 class GenerateFoodsToCreateTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.input_path: str | None = None
-        self.output_path: str | None = None
+        self.input_path: str = ""
+        self.output_path: str = ""
 
     def tearDown(self) -> None:
         for path in [self.input_path, self.output_path]:
@@ -116,7 +117,7 @@ class GenerateFoodsToCreateTests(unittest.TestCase):
         self.output_path = _temp_path(".jsonl")
         return run(self.input_path, self.output_path, selection="all-unmatched")
 
-    def _read_jsonl(self) -> list[dict[str, object]]:
+    def _read_jsonl(self) -> list[dict[str, Any]]:
         with open(self.output_path, encoding="utf-8") as handle:
             return [json.loads(line) for line in handle if line.strip()]
 

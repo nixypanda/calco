@@ -1,0 +1,6 @@
+{"type": "food", "source": "INDB", "source_id": "N1", "name": "Test Tea", "brand": null, "categories": []}
+{"type": "serving", "source": "INDB", "source_id": "N1", "unit": "serving", "grams_per_unit": 200}
+{"type": "nutrient", "source": "INDB", "source_id": "N1", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 1}
+{"type": "nutrient", "source": "INDB", "source_id": "N1", "nutrient_code": "PROTEIN_G", "amount_per_100g": 0}
+{"type": "nutrient", "source": "INDB", "source_id": "N1", "nutrient_code": "CARBS_G", "amount_per_100g": 0}
+{"type": "nutrient", "source": "INDB", "source_id": "N1", "nutrient_code": "FAT_G", "amount_per_100g": 0}

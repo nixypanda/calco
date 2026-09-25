@@ -9,8 +9,8 @@ import time
 from collections.abc import Iterator
 from typing import NamedTuple
 
-from calco_import.fetch import MAPPING_DIR
 from calco_import.fetch._download import download_file
+from calco_import.paths import MAPPING_DIR
 from calco_import.util import parse_amount, write_jsonl_row
 
 log = logging.getLogger(__name__)

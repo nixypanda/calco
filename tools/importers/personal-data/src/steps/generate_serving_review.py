@@ -10,8 +10,8 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 from pathlib import Path
 
-from steps import load_csv
 from mfp_nutrients import MFP_NUTRIENT_SPECS, parse_decimal, parse_mfp_nutrient_amount
+from steps import load_csv
 
 
 def _to_decimal(s: str) -> Decimal | None:
@@ -58,7 +58,9 @@ def load_existing_review(review_path: str | Path) -> dict[str, dict[str, str]]:
             result[desc] = {
                 "serving_mode": row.get("serving_mode", "").strip(),
                 "current_serving_grams": row.get("current_serving_grams", "").strip(),
-                "corrected_serving_grams": row.get("corrected_serving_grams", "").strip(),
+                "corrected_serving_grams": row.get(
+                    "corrected_serving_grams", ""
+                ).strip(),
                 "confidence": row.get("confidence", "").strip(),
                 "notes": row.get("notes", "").strip(),
             }
@@ -117,7 +119,7 @@ def run(
 
     for desc, entries in sorted(groups.items()):
         units = {e.get("unit", "").strip() for e in entries}
-        existing_row = existing.get(desc, {})
+        existing_row = existing.get(desc.strip(), {})
         serving_mode = _mode_for_units(existing_row.get("serving_mode", ""), units)
         if serving_mode == "mass":
             mass_count += 1

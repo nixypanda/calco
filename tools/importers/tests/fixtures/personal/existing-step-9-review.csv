@@ -1,0 +1,3 @@
+description,row_count,serving_mode,reference_basis,example_value,example_unit,example_serving,current_serving_grams,corrected_serving_grams,confidence,notes
+Test Apple,1,serving_unit,per_serving,1,serving,1.0 serving,,120,high,manual serving correction
+Mystery Custom Food,1,serving_unit,per_serving,2,serving,2.0 serving,,200,medium,manual serving correction

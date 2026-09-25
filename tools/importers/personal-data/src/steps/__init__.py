@@ -18,6 +18,9 @@ def load_csv(path: str | Path) -> tuple[list[str], list[dict]]:
     with open(path, newline="", encoding="utf-8-sig") as f:
         f.readline()
         reader = csv.DictReader(f)
+        if reader.fieldnames is None:
+            msg = f"{path}: missing CSV header row"
+            raise ValueError(msg)
         fieldnames = list(reader.fieldnames)
         rows = list(reader)
     return fieldnames, rows

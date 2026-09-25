@@ -5,11 +5,11 @@ import argparse
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
+
+from steps.generate_foods_to_create import run
+
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from steps.generate_foods_to_create import run  # noqa: E402
-
 DATA_DIR = ROOT / "data"
 INPUT = DATA_DIR / "step-10-out-food-match-review-merged.csv"
 OUTPUT = DATA_DIR / "foods_to_create.jsonl"

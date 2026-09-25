@@ -1,0 +1,5 @@
+{"type": "food", "source": "IFCT", "source_id": "I1", "name": "Test Rice", "brand": null, "categories": ["grain"]}
+{"type": "nutrient", "source": "IFCT", "source_id": "I1", "nutrient_code": "ENERGY_KCAL", "amount_per_100g": 365}
+{"type": "nutrient", "source": "IFCT", "source_id": "I1", "nutrient_code": "PROTEIN_G", "amount_per_100g": 7}
+{"type": "nutrient", "source": "IFCT", "source_id": "I1", "nutrient_code": "CARBS_G", "amount_per_100g": 78}
+{"type": "nutrient", "source": "IFCT", "source_id": "I1", "nutrient_code": "FAT_G", "amount_per_100g": 0.6}

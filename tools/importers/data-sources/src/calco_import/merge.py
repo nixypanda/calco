@@ -63,6 +63,14 @@ def load_source(filepath: str) -> SourceData:
                 conversion = serving_conversion(obj)
                 if conversion is not None:
                     unit, grams_per_unit = conversion
+                    # The catalog keys servings by unit per product, so a source
+                    # that yields several conversions under one unit (for example
+                    # USDA household portions that all fall back to "serving")
+                    # would be silently collapsed downstream. Keep the first
+                    # conversion deterministically so merged row counts match the
+                    # rows the catalog can actually store.
+                    if any(serving["unit"] == unit for serving in servings[sid]):
+                        continue
                     servings[sid].append(
                         {
                             "unit": unit,

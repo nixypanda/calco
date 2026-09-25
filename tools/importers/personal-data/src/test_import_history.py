@@ -6,11 +6,14 @@ import sys
 import unittest
 from decimal import Decimal
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import history_import
 from history_import import (
     ReviewRow,
+    _list_logs_by_date,
     build_log_payload,
     extract_import_fingerprint,
     fingerprint_for_food_row,
@@ -52,40 +55,40 @@ def _food_row(**overrides: str) -> dict[str, str]:
 
 class ImportHistoryTests(unittest.TestCase):
     def test_normalizes_snacks_and_supplements_to_snack(self) -> None:
-        self.assertEqual(normalize_meal_slot("Snacks"), "snack")
-        self.assertEqual(normalize_meal_slot("Supplements"), "snack")
+        assert normalize_meal_slot("Snacks") == "snack"
+        assert normalize_meal_slot("Supplements") == "snack"
 
     def test_computes_grams_for_mass_rows_directly(self) -> None:
         review = ReviewRow(
             description="Rice",
             final_food_id="food-1",
-            example_serving_amount=Decimal("100"),
-            serving_grams=Decimal("100"),
+            example_serving_amount=Decimal(100),
+            serving_grams=Decimal(100),
             ready_for_log_import=True,
         )
         grams = grams_for_food_row(
             _food_row(description="Rice", value="150", unit="g", serving="100.0 g"),
             review,
         )
-        self.assertEqual(grams, Decimal("150"))
+        assert grams == Decimal(150)
 
     def test_computes_grams_for_serving_unit_rows(self) -> None:
         review = ReviewRow(
             description="Egg, boiled",
             final_food_id="food-1",
-            example_serving_amount=Decimal("1"),
-            serving_grams=Decimal("50"),
+            example_serving_amount=Decimal(1),
+            serving_grams=Decimal(50),
             ready_for_log_import=True,
         )
         grams = grams_for_food_row(_food_row(), review)
-        self.assertEqual(grams, Decimal("100"))
+        assert grams == Decimal(100)
 
     def test_computes_grams_for_volume_rows(self) -> None:
         review = ReviewRow(
             description="Cappuccino",
             final_food_id="food-1",
-            example_serving_amount=Decimal("150"),
-            serving_grams=Decimal("150"),
+            example_serving_amount=Decimal(150),
+            serving_grams=Decimal(150),
             ready_for_log_import=True,
         )
         grams = grams_for_food_row(
@@ -97,14 +100,14 @@ class ImportHistoryTests(unittest.TestCase):
             ),
             review,
         )
-        self.assertEqual(grams, Decimal("300"))
+        assert grams == Decimal(300)
 
     def test_builds_gram_based_log_payload(self) -> None:
         review = ReviewRow(
             description="Egg, boiled",
             final_food_id="1e2fb787-cf24-4f05-ab1b-a8a22e40ec53",
-            example_serving_amount=Decimal("1"),
-            serving_grams=Decimal("50"),
+            example_serving_amount=Decimal(1),
+            serving_grams=Decimal(50),
             ready_for_log_import=True,
         )
         payload = build_log_payload(
@@ -112,32 +115,47 @@ class ImportHistoryTests(unittest.TestCase):
             review,
             device_timezone="Asia/Kolkata",
         )
-        self.assertEqual(payload["meal_slot"], "lunch")
-        self.assertEqual(payload["item"]["id"], review.final_food_id)
-        self.assertEqual(payload["quantity"], {"amount": 100, "unit": "g"})
-        self.assertIn("mfp_import_fingerprint=", payload["notes"])
+        assert payload["meal_slot"] == "lunch"
+        assert payload["item"]["id"] == review.final_food_id
+        assert payload["quantity"] == {"amount": 100, "unit": "g"}
+        assert "mfp_import_fingerprint=" in payload["notes"]
 
     def test_fingerprint_is_stable_and_extractable(self) -> None:
         row = _food_row()
         first = fingerprint_for_food_row(row)
         second = fingerprint_for_food_row(dict(row))
-        self.assertEqual(first, second)
+        assert first == second
         extracted = extract_import_fingerprint(
             f"imported_from=myfitnesspal mfp_import_fingerprint={first}"
         )
-        self.assertEqual(extracted, first)
+        assert extracted == first
 
     def test_fingerprint_changes_when_added_nutrient_changes(self) -> None:
         first = fingerprint_for_food_row(_food_row())
         second = fingerprint_for_food_row(_food_row(sodium_mg="143"))
-        self.assertNotEqual(first, second)
+        assert first != second
 
     def test_fingerprint_changes_when_percent_daily_value_changes(self) -> None:
         first = fingerprint_for_food_row(_food_row())
         second = fingerprint_for_food_row(
             _food_row(vitamin_d_pct_daily_value="25%")
         )
-        self.assertNotEqual(first, second)
+        assert first != second
+
+    def test_empty_log_response_is_rejected(self) -> None:
+        caught: history_import.ImportError | None = None
+        with mock.patch("history_import._request_json", return_value=None):
+            try:
+                _list_logs_by_date(
+                    "http://example.test",
+                    "2024-03-18",
+                    cookie_name="calco_session",
+                    session_token="token",
+                )
+            except history_import.ImportError as exc:
+                caught = exc
+        assert caught is not None
+        assert "empty body" in str(caught)
 
 
 if __name__ == "__main__":
