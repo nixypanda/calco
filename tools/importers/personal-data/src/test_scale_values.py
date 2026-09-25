@@ -24,11 +24,11 @@ def _write_csv(
 
 
 class ScaleValuesTests(unittest.TestCase):
-    def setUp(self):
-        self.input_path = None
-        self.output_path = None
+    def setUp(self) -> None:
+        self.input_path: str = ""
+        self.output_path: str = ""
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for p in [self.input_path, self.output_path]:
             if p:
                 os.unlink(p)
@@ -36,9 +36,8 @@ class ScaleValuesTests(unittest.TestCase):
     def _run(self, rows: list[dict]) -> dict:
         fieldnames = list(rows[0].keys())
         self.input_path = _write_csv(rows, fieldnames)
-        self.output_path = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".csv"
-        ).name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as handle:
+            self.output_path = handle.name
         return run(self.input_path, self.output_path)
 
     def _read_output(self) -> list[dict]:
@@ -66,8 +65,8 @@ class ScaleValuesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
 
-        self.assertEqual(result["rows_scaled"], 1)
-        self.assertEqual(out[0]["value"], "416.675")
+        assert result["rows_scaled"] == 1
+        assert out[0]["value"] == "416.675"
 
     def test_pseudo_gram_value_unchanged(self) -> None:
         rows = [
@@ -89,7 +88,7 @@ class ScaleValuesTests(unittest.TestCase):
         self._run(rows)
         out = self._read_output()
 
-        self.assertEqual(out[0]["value"], "400")
+        assert out[0]["value"] == "400"
 
     def test_egg_serving(self) -> None:
         rows = [
@@ -111,8 +110,8 @@ class ScaleValuesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
 
-        self.assertEqual(result["rows_scaled"], 1)
-        self.assertEqual(out[0]["value"], "2")
+        assert result["rows_scaled"] == 1
+        assert out[0]["value"] == "2"
 
     def test_empty_serving_skipped(self) -> None:
         rows = [
@@ -133,8 +132,8 @@ class ScaleValuesTests(unittest.TestCase):
 
         result = self._run(rows)
 
-        self.assertEqual(result["rows_scaled"], 0)
-        self.assertEqual(result["skipped_empty_serving"], 1)
+        assert result["rows_scaled"] == 0
+        assert result["skipped_empty_serving"] == 1
 
     def test_zero_serving_skipped(self) -> None:
         rows = [
@@ -155,8 +154,8 @@ class ScaleValuesTests(unittest.TestCase):
 
         result = self._run(rows)
 
-        self.assertEqual(result["rows_scaled"], 0)
-        self.assertEqual(result["skipped_zero_serving"], 1)
+        assert result["rows_scaled"] == 0
+        assert result["skipped_zero_serving"] == 1
 
     def test_non_food_skipped(self) -> None:
         rows = [
@@ -177,8 +176,8 @@ class ScaleValuesTests(unittest.TestCase):
 
         result = self._run(rows)
 
-        self.assertEqual(result["rows_scaled"], 0)
-        self.assertEqual(result["skipped_empty_serving"], 0)
+        assert result["rows_scaled"] == 0
+        assert result["skipped_empty_serving"] == 0
 
     def test_sample_values_captured(self) -> None:
         rows = [
@@ -199,8 +198,8 @@ class ScaleValuesTests(unittest.TestCase):
 
         result = self._run(rows)
 
-        self.assertEqual(result["sample_before"], "2")
-        self.assertEqual(result["sample_after"], "500")
+        assert result["sample_before"] == "2"
+        assert result["sample_after"] == "500"
 
 
 if __name__ == "__main__":

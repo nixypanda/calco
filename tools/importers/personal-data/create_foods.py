@@ -11,18 +11,18 @@ import os
 import sys
 import time
 import uuid
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import requests
 
-ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
 from mfp_nutrients import REQUIRED_MACRO_CODES
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 DEFAULT_INPUT = DATA_DIR / "foods_to_create.jsonl"
 DEFAULT_REVIEW_CSV = DATA_DIR / "step-10-out-food-match-review-merged.csv"
@@ -126,9 +126,12 @@ def _extract_error(response: requests.Response) -> str:
 def _check_ok(response: requests.Response, expected: int | tuple[int, ...]) -> None:
     allowed = (expected,) if isinstance(expected, int) else expected
     if response.status_code not in allowed:
-        raise ApiError(
+        msg = (
             f"{response.request.method} {response.request.url} failed with "
             f"{response.status_code}: {_extract_error(response)}"
+        )
+        raise ApiError(
+            msg
         )
 
 
@@ -250,7 +253,14 @@ def _ensure_user_session(
     return _login(api_url, temp_username, temp_password)
 
 
-def _stage_import_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, str]]:
+def _stage_import_rows(
+    records: list[dict[str, Any]],
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, str],
+]:
     foods: list[dict[str, Any]] = []
     nutrients: list[dict[str, Any]] = []
     servings: list[dict[str, Any]] = []
@@ -273,16 +283,16 @@ def _stage_import_rows(records: list[dict[str, Any]]) -> tuple[list[dict[str, An
             }
         )
 
-        for nutrient in record.get("nutrients", []):
-            nutrients.append(
-                {
-                    "row_number": row_number,
-                    "source": IMPORT_SOURCE,
-                    "source_id": source_id,
-                    "nutrient_code": nutrient["code"],
-                    "amount_per_100g": nutrient["amount_per_100g"],
-                }
-            )
+        nutrients.extend(
+            {
+                "row_number": row_number,
+                "source": IMPORT_SOURCE,
+                "source_id": source_id,
+                "nutrient_code": nutrient["code"],
+                "amount_per_100g": nutrient["amount_per_100g"],
+            }
+            for nutrient in record.get("nutrients", [])
+        )
 
         for serving in record.get("servings", []):
             normalized = _normalize_serving(serving)
@@ -317,16 +327,16 @@ def _custom_payload(record: dict[str, Any]) -> dict[str, Any]:
     }
     seen_codes = {nutrient["code"] for nutrient in payload.get("nutrients", [])}
     nutrients = list(payload.get("nutrients", []))
-    for code in REQUIRED_MACRO_CODES:
-        if code not in seen_codes:
-            nutrients.append(
-                {
-                    "code": code,
-                    "amount_per_100g": 0,
-                    "source": "mfp",
-                    "confidence": "reviewed",
-                }
-            )
+    nutrients.extend(
+        {
+            "code": code,
+            "amount_per_100g": 0,
+            "source": "mfp",
+            "confidence": "reviewed",
+        }
+        for code in REQUIRED_MACRO_CODES
+        if code not in seen_codes
+    )
     payload["nutrients"] = nutrients
     payload["servings"] = [
         normalized
@@ -365,7 +375,11 @@ def _stage_rows(
     _check_ok(response, 200)
 
 
-def _commit_import(api_url: str, admin_session: requests.Session, import_id: str) -> dict[str, Any]:
+def _commit_import(
+    api_url: str,
+    admin_session: requests.Session,
+    import_id: str,
+) -> dict[str, Any]:
     response = admin_session.post(
         f"{api_url}/api/imports/{import_id}/commit",
         timeout=120,
@@ -391,12 +405,18 @@ def _resolve_imported_products(
         matches = [
             item
             for item in items
-            if item.get("source") == IMPORT_SOURCE and item.get("source_id") == source_id
+            if (
+                item.get("source") == IMPORT_SOURCE
+                and item.get("source_id") == source_id
+            )
         ]
         if len(matches) != 1:
-            raise ApiError(
+            msg = (
                 f"Could not uniquely resolve imported product for {description!r}; "
                 f"expected 1 match, got {len(matches)}"
+            )
+            raise ApiError(
+                msg
             )
         match = matches[0]
         resolved[description] = CreatedFood(
@@ -422,7 +442,9 @@ def _create_global_foods(
     _stage_rows(api_url, admin_session, import_id, "nutrients", nutrients)
     _stage_rows(api_url, admin_session, import_id, "servings", servings)
     commit_result = _commit_import(api_url, admin_session, import_id)
-    resolved = _resolve_imported_products(api_url, user_session, source_ids_by_description)
+    resolved = _resolve_imported_products(
+        api_url, user_session, source_ids_by_description
+    )
     return resolved, {"import_id": import_id, "commit": commit_result}
 
 
@@ -532,7 +554,10 @@ def _update_review_csv(
         writer.writeheader()
         writer.writerows(rows)
 
-    return {"created_rows_updated": updated, "matched_rows_finalized": finalized_matches}
+    return {
+        "created_rows_updated": updated,
+        "matched_rows_finalized": finalized_matches,
+    }
 
 
 def _load_auth_sessions(
@@ -570,7 +595,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create MFP unmatched foods via the running CalCo API"
     )
-    parser.add_argument("--api-url", default=os.environ.get("CALCO_API_URL", DEFAULT_API_URL))
+    parser.add_argument(
+        "--api-url",
+        default=os.environ.get("CALCO_API_URL", DEFAULT_API_URL),
+    )
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--review-csv", default=str(DEFAULT_REVIEW_CSV))
     parser.add_argument(
@@ -594,8 +622,14 @@ def main() -> None:
     )
     parser.add_argument("--username", default=os.environ.get("CALCO_USERNAME"))
     parser.add_argument("--password", default=os.environ.get("CALCO_PASSWORD"))
-    parser.add_argument("--admin-username", default=os.environ.get("CALCO_ADMIN_USERNAME"))
-    parser.add_argument("--admin-password", default=os.environ.get("CALCO_ADMIN_PASSWORD"))
+    parser.add_argument(
+        "--admin-username",
+        default=os.environ.get("CALCO_ADMIN_USERNAME"),
+    )
+    parser.add_argument(
+        "--admin-password",
+        default=os.environ.get("CALCO_ADMIN_PASSWORD"),
+    )
     args = parser.parse_args()
 
     if args.visibility in {"auto", "global"}:
@@ -614,11 +648,14 @@ def main() -> None:
     result_meta: dict[str, Any] = {}
 
     if records:
-        admin_session, user_session = _load_auth_sessions(api_url, args, args.visibility)
+        _admin_session, user_session = _load_auth_sessions(
+            api_url, args, args.visibility
+        )
 
         if user_session is None:
+            msg = "No user session could be established for custom-food creation."
             raise ApiError(
-                "No user session could be established for custom-food creation."
+                msg
             )
         created_by_description = _create_private_foods(api_url, user_session, records)
     else:
@@ -628,7 +665,11 @@ def main() -> None:
     # matched rows get a final_food_id for the history importer.
     review_result = _update_review_csv(review_csv, created_by_description)
     created_count = len(created_by_description)
-    mode = next(iter(created_by_description.values())).mode if created_by_description else "none"
+    mode = (
+        next(iter(created_by_description.values())).mode
+        if created_by_description
+        else "none"
+    )
     visibility = (
         next(iter(created_by_description.values())).visibility
         if created_by_description
@@ -641,7 +682,10 @@ def main() -> None:
     print(f"  matched rows finalized:{review_result['matched_rows_finalized']}")
     if "import_id" in result_meta:
         print(f"  import_id:             {result_meta['import_id']}")
-        print(f"  commit:                {json.dumps(result_meta['commit'], sort_keys=True)}")
+        print(
+            "  commit:                "
+            f"{json.dumps(result_meta['commit'], sort_keys=True)}"
+        )
 
 
 if __name__ == "__main__":

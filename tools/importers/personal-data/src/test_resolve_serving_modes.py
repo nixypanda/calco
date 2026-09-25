@@ -7,6 +7,9 @@ import unittest
 
 from steps.resolve_serving_modes import run
 
+VALUE_TOLERANCE = 0.5
+DENSITY_VALUE_TOLERANCE = 5
+
 
 def _write_csv(rows: list[dict], fieldnames: list[str] | None = None) -> str:
     if fieldnames is None:
@@ -45,11 +48,11 @@ def _row(**overrides: str) -> dict:
 
 
 class ResolveServingModesTests(unittest.TestCase):
-    def setUp(self):
-        self.input_path = None
-        self.output_path = None
+    def setUp(self) -> None:
+        self.input_path: str = ""
+        self.output_path: str = ""
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for p in [self.input_path, self.output_path]:
             if p and os.path.exists(p):
                 os.unlink(p)
@@ -63,9 +66,8 @@ class ResolveServingModesTests(unittest.TestCase):
     def _run(self, rows: list[dict]) -> dict:
         fieldnames = list(rows[0].keys())
         self.input_path = _write_csv(rows, fieldnames)
-        self.output_path = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".csv"
-        ).name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as handle:
+            self.output_path = handle.name
         return run(self.input_path, self.output_path)
 
     def _read_output(self) -> list[dict]:
@@ -90,9 +92,9 @@ class ResolveServingModesTests(unittest.TestCase):
         ]
         result = self._run(rows)
         out = self._read_output()
-        self.assertEqual(len(out), 2)
-        self.assertEqual(out[0]["unit"], "g")
-        self.assertEqual(result["total_multi_mode_foods"], 0)
+        assert len(out) == len(rows)
+        assert out[0]["unit"] == "g"
+        assert result["total_multi_mode_foods"] == 0
 
     # --- volume-to-gram conversion ---
 
@@ -106,12 +108,12 @@ class ResolveServingModesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
         tbsp_rows = [r for r in out if r["unit"] == "tbsp"]
-        self.assertEqual(len(tbsp_rows), 0)
+        assert len(tbsp_rows) == 0
         g_rows = [r for r in out if r["unit"] == "g"]
-        self.assertEqual(len(g_rows), 2)
-        # The tbsp entry should be converted: 2 × 15 = 30g
-        self.assertAlmostEqual(float(g_rows[1]["value"]), 30, delta=0.5)
-        self.assertEqual(result["converted_to_grams"], 1)
+        assert len(g_rows) == len(rows)
+        # The tbsp entry should be converted: 2 x 15 = 30g
+        assert abs(float(g_rows[1]["value"]) - 30) <= VALUE_TOLERANCE
+        assert result["converted_to_grams"] == 1
 
     def test_cup_to_gram_conversion(self) -> None:
         rows = [
@@ -123,12 +125,12 @@ class ResolveServingModesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
         cup_rows = [r for r in out if r["unit"] == "cup"]
-        self.assertEqual(len(cup_rows), 0)
+        assert len(cup_rows) == 0
         converted = [r for r in out if r["unit"] == "g"]
-        self.assertEqual(len(converted), 2)
-        # 0.5 cup × 200 = 100g
-        self.assertAlmostEqual(float(converted[1]["value"]), 100, delta=0.5)
-        self.assertEqual(result["converted_to_grams"], 1)
+        assert len(converted) == len(rows)
+        # 0.5 cup x 200 = 100g
+        assert abs(float(converted[1]["value"]) - 100) <= VALUE_TOLERANCE
+        assert result["converted_to_grams"] == 1
 
     # --- density inference ---
 
@@ -142,11 +144,15 @@ class ResolveServingModesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
         serving_rows = [r for r in out if r["unit"] == "serving"]
-        g_rows = [r for r in out if r["description"] == "Mashed potatoes" and r["unit"] == "g"]
-        self.assertEqual(len(serving_rows), 0)
+        g_rows = [
+            r
+            for r in out
+            if r["description"] == "Mashed potatoes" and r["unit"] == "g"
+        ]
+        assert len(serving_rows) == 0
         # 167.58 cal at 114 cal/100g → 167.58/1.14 = 147g
-        self.assertAlmostEqual(float(g_rows[1]["value"]), 147, delta=5)
-        self.assertEqual(result["converted_to_grams"], 1)
+        assert abs(float(g_rows[1]["value"]) - 147) <= DENSITY_VALUE_TOLERANCE
+        assert result["converted_to_grams"] == 1
 
     def test_density_inference_no_gram_entries_skipped(self) -> None:
         rows = [
@@ -158,8 +164,8 @@ class ResolveServingModesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
         # No gram entries exist → should not convert
-        self.assertEqual(out[0]["unit"], "serving")
-        self.assertEqual(result["converted_to_grams"], 0)
+        assert out[0]["unit"] == "serving"
+        assert result["converted_to_grams"] == 0
 
     # --- Homemade relabel ---
 
@@ -175,9 +181,9 @@ class ResolveServingModesTests(unittest.TestCase):
         # The omelette entry should be relabelled
         relabelled = [r for r in out if r["description"] == "Sunny Side Up Egg"]
         homemade_g = [r for r in out if r["description"] == "Homemade"]
-        self.assertEqual(len(relabelled), 1)
-        self.assertEqual(len(homemade_g), 1)
-        self.assertEqual(result["relabelled"], 1)
+        assert len(relabelled) == 1
+        assert len(homemade_g) == 1
+        assert result["relabelled"] == 1
 
     def test_homemade_gram_entries_unchanged(self) -> None:
         rows = [
@@ -189,8 +195,8 @@ class ResolveServingModesTests(unittest.TestCase):
         result = self._run(rows)
         out = self._read_output()
         # Both are g → single mode, no action
-        self.assertEqual(len([r for r in out if r["description"] == "Homemade"]), 2)
-        self.assertEqual(result["total_multi_mode_foods"], 0)
+        assert len([r for r in out if r["description"] == "Homemade"]) == len(rows)
+        assert result["total_multi_mode_foods"] == 0
 
     # --- review file ---
 
@@ -203,10 +209,10 @@ class ResolveServingModesTests(unittest.TestCase):
         ]
         self._run(rows)
         review = self._read_review()
-        self.assertEqual(len(review), 1)
-        self.assertEqual(review[0]["food_name"], "Nutella")
-        self.assertEqual(review[0]["resolution"], "auto")
-        self.assertIn("converted_entries", review[0])
+        assert len(review) == 1
+        assert review[0]["food_name"] == "Nutella"
+        assert review[0]["resolution"] == "auto"
+        assert "converted_entries" in review[0]
 
     def test_review_file_columns(self) -> None:
         rows = [
@@ -219,7 +225,7 @@ class ResolveServingModesTests(unittest.TestCase):
         review = self._read_review()
         expected = {"food_name", "resolution", "observed_units",
                      "converted_entries", "notes"}
-        self.assertEqual(set(review[0].keys()), expected)
+        assert set(review[0].keys()) == expected
 
     def test_non_food_skipped(self) -> None:
         rows = [
@@ -227,7 +233,7 @@ class ResolveServingModesTests(unittest.TestCase):
                  value="30", unit="min"),
         ]
         result = self._run(rows)
-        self.assertEqual(result["total_multi_mode_foods"], 0)
+        assert result["total_multi_mode_foods"] == 0
 
     def test_no_change_when_single_entry(self) -> None:
         rows = [
@@ -235,9 +241,9 @@ class ResolveServingModesTests(unittest.TestCase):
         ]
         result = self._run(rows)
         out = self._read_output()
-        self.assertEqual(len(out), 1)
-        self.assertEqual(out[0]["unit"], "g")
-        self.assertEqual(result["total_multi_mode_foods"], 0)
+        assert len(out) == 1
+        assert out[0]["unit"] == "g"
+        assert result["total_multi_mode_foods"] == 0
 
 
 if __name__ == "__main__":

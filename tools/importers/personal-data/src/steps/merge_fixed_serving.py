@@ -23,11 +23,12 @@ def run(
         fixed_groups[(r["date"], r["food"])].append(r)
 
     date_idx = raw_fieldnames.index("date")
-    new_fieldnames = (
-        raw_fieldnames[: date_idx + 1]
-        + ["meal", "serving"]
-        + raw_fieldnames[date_idx + 1 :]
-    )
+    new_fieldnames = [
+        *raw_fieldnames[: date_idx + 1],
+        "meal",
+        "serving",
+        *raw_fieldnames[date_idx + 1 :],
+    ]
 
     total_foods = 0
     matched = 0

@@ -59,7 +59,7 @@ CANONICAL: dict[str, tuple[float, float, float]] = {
 
 # Template macro-ratios (fraction of calories from each macro)
 # Used when fat and protein are both zero (macros missing entirely).
-# Ratios: (fat_pct, carbs_pct, protein_pct)
+# Ratios are ordered as fat, carbs, then protein.
 TEMPLATES: dict[str, tuple[float, float, float]] = {
     "Sabji": (0.35, 0.55, 0.10),
 }
@@ -186,7 +186,6 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
         unit = row.get("unit", "").strip().lower()
         val = _dec(row.get("value", "")) or Decimal(1)
 
-        old_total = old_fat * 9 + old_carbs * 4 + old_prot * 4
         source_type = ""
         method = ""
 
@@ -208,10 +207,7 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
             c_carbs = Decimal(str(ccarbs))
             c_prot = Decimal(str(cprot))
 
-            if unit in ML_UNITS:
-                multiplier = val / 100
-            else:
-                multiplier = val / 100
+            multiplier = val / 100
 
             serving_fat = c_fat * multiplier
             serving_carbs = c_carbs * multiplier

@@ -2,14 +2,11 @@
 """Generate custom-food creation JSONL from the merged step-10 review CSV."""
 
 import argparse
-import sys
 from pathlib import Path
 
+from steps.generate_foods_to_create import run
+
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from steps.generate_foods_to_create import run  # noqa: E402
-
 DATA_DIR = ROOT / "data"
 INPUT = DATA_DIR / "step-10-out-food-match-review-merged.csv"
 OUTPUT = DATA_DIR / "foods_to_create.jsonl"

@@ -1,6 +1,6 @@
 """Step 2: Scale value column by serving number.
 
-new_value = Decimal(value) × Decimal(parse_serving(serving).number)
+new_value = Decimal(value) x Decimal(parse_serving(serving).number)
 """
 
 from decimal import Decimal, InvalidOperation

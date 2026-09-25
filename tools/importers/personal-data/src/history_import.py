@@ -55,11 +55,13 @@ def _normalize_description(value: str) -> str:
 def _parse_decimal(value: str, *, field: str) -> Decimal:
     text = value.strip()
     if not text:
-        raise ImportError(f"Missing decimal value for {field}")
+        msg = f"Missing decimal value for {field}"
+        raise ImportError(msg)
     try:
         return Decimal(text)
     except InvalidOperation as exc:
-        raise ImportError(f"Invalid decimal value for {field}: {value!r}") from exc
+        msg = f"Invalid decimal value for {field}: {value!r}"
+        raise ImportError(msg) from exc
 
 
 def _parse_optional_positive_decimal(value: str) -> Decimal | None:
@@ -69,7 +71,8 @@ def _parse_optional_positive_decimal(value: str) -> Decimal | None:
     try:
         parsed = Decimal(text)
     except InvalidOperation as exc:
-        raise ImportError(f"Invalid decimal value: {value!r}") from exc
+        msg = f"Invalid decimal value: {value!r}"
+        raise ImportError(msg) from exc
     if parsed <= 0:
         return None
     return parsed
@@ -80,7 +83,8 @@ def _serving_grams(row: dict[str, str]) -> Decimal:
         parsed = _parse_optional_positive_decimal(row.get(column, ""))
         if parsed is not None:
             return parsed
-    raise ImportError(f"Missing serving grams for {row['description']!r}")
+    msg = f"Missing serving grams for {row['description']!r}"
+    raise ImportError(msg)
 
 
 def _example_serving_amount(row: dict[str, str]) -> Decimal:
@@ -96,9 +100,10 @@ def _example_serving_amount(row: dict[str, str]) -> Decimal:
         return example_value
 
     if row.get("reference_basis", "").strip() == "per_serving":
-        return Decimal("1")
+        return Decimal(1)
 
-    raise ImportError(f"Missing example serving for {row['description']!r}")
+    msg = f"Missing example serving for {row['description']!r}"
+    raise ImportError(msg)
 
 
 def load_review_rows(path: str | Path) -> dict[str, ReviewRow]:
@@ -111,13 +116,16 @@ def load_review_rows(path: str | Path) -> dict[str, ReviewRow]:
         normalized = _normalize_description(description)
         final_food_id = row.get("final_food_id", "").strip()
         if not final_food_id:
-            raise ImportError(f"Missing final_food_id for {description!r}")
+            msg = f"Missing final_food_id for {description!r}"
+            raise ImportError(msg)
         review_rows[normalized] = ReviewRow(
             description=description,
             final_food_id=final_food_id,
             example_serving_amount=_example_serving_amount(row),
             serving_grams=_serving_grams(row),
-            ready_for_log_import=row.get("ready_for_log_import", "").strip().lower() == "true",
+            ready_for_log_import=(
+                row.get("ready_for_log_import", "").strip().lower() == "true"
+            ),
         )
     return review_rows
 
@@ -125,20 +133,25 @@ def load_review_rows(path: str | Path) -> dict[str, ReviewRow]:
 def normalize_meal_slot(value: str) -> str:
     meal_slot = MEAL_SLOT_MAP.get(_clean_text(value))
     if meal_slot is None:
-        raise ImportError(f"Unsupported meal slot: {value!r}")
+        msg = f"Unsupported meal slot: {value!r}"
+        raise ImportError(msg)
     return meal_slot
 
 
 def grams_for_food_row(food_row: dict[str, str], review_row: ReviewRow) -> Decimal:
     unit = _clean_text(food_row.get("unit", "")).casefold()
-    value = _parse_decimal(food_row["value"], field=f"value for {food_row['description']}")
+    value = _parse_decimal(
+        food_row["value"],
+        field=f"value for {food_row['description']}",
+    )
 
     if unit == "g":
         return value
 
     if review_row.example_serving_amount <= 0:
+        msg = f"Non-positive example serving amount for {review_row.description!r}"
         raise ImportError(
-            f"Non-positive example serving amount for {review_row.description!r}"
+            msg
         )
 
     return (value * review_row.serving_grams) / review_row.example_serving_amount
@@ -154,11 +167,12 @@ def fingerprint_for_food_row(food_row: dict[str, str]) -> str:
         "serving": _clean_text(food_row.get("serving", "")),
     }
     for mapping in MFP_NUTRIENT_MAPPINGS:
-        payload[mapping.source_column] = _clean_text(food_row.get(mapping.source_column, ""))
-    digest = hashlib.sha256(
+        payload[mapping.source_column] = _clean_text(
+            food_row.get(mapping.source_column, "")
+        )
+    return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    return digest
 
 
 def import_note(fingerprint: str) -> str:
@@ -213,7 +227,7 @@ def _request_json(
     cookie_name: str,
     session_token: str,
     payload: dict[str, Any] | None = None,
-) -> Any:
+) -> dict[str, Any] | None:
     headers = {
         "Accept": "application/json",
         "Cookie": f"{cookie_name}={session_token}",
@@ -230,9 +244,11 @@ def _request_json(
             return json.loads(body) if body else None
     except HTTPError as exc:
         message = exc.read().decode("utf-8", errors="replace")
-        raise ImportError(f"{method} {url} failed with {exc.code}: {message}") from exc
+        msg = f"{method} {url} failed with {exc.code}: {message}"
+        raise ImportError(msg) from exc
     except URLError as exc:
-        raise ImportError(f"{method} {url} failed: {exc}") from exc
+        msg = f"{method} {url} failed: {exc}"
+        raise ImportError(msg) from exc
 
 
 def _list_logs_by_date(
@@ -249,6 +265,8 @@ def _list_logs_by_date(
         cookie_name=cookie_name,
         session_token=session_token,
     )
+    if payload is None:
+        return []
     return list(payload.get("items", []))
 
 
@@ -275,7 +293,9 @@ def run(
     _fieldnames, rows = load_csv(history_csv)
     review_rows = load_review_rows(review_csv)
 
-    food_rows = [row for row in rows if _clean_text(row.get("item_type", "")) == "Foods"]
+    food_rows = [
+        row for row in rows if _clean_text(row.get("item_type", "")) == "Foods"
+    ]
 
     imported = 0
     skipped_existing = 0
@@ -288,7 +308,8 @@ def run(
         description_key = _normalize_description(row["description"])
         review_row = review_rows.get(description_key)
         if review_row is None:
-            raise ImportError(f"No final food mapping for {row['description']!r}")
+            msg = f"No final food mapping for {row['description']!r}"
+            raise ImportError(msg)
         if not review_row.ready_for_log_import:
             skipped_non_ready += 1
             continue

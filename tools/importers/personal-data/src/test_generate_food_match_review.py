@@ -9,14 +9,15 @@ import tempfile
 import unittest
 from decimal import Decimal
 
+from mfp_nutrients import REQUIRED_REVIEW_REFERENCE_COLUMNS
 from steps.generate_food_match_review import (
+    CatalogRepository,
     ProductCandidate,
     ProductServing,
     _normalize_description,
     _search_terms,
     run,
 )
-from mfp_nutrients import REQUIRED_REVIEW_REFERENCE_COLUMNS
 
 BASE_FIELDS = [
     "description",
@@ -76,7 +77,7 @@ def _base_row(**overrides: str) -> dict[str, str]:
     return row
 
 
-class FakeRepo:
+class FakeRepo(CatalogRepository):
     def __init__(self, mapping: dict[str, list[ProductCandidate]]) -> None:
         self.mapping = mapping
 
@@ -129,10 +130,10 @@ def _candidate(
 
 class GenerateFoodMatchReviewTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.input_path: str | None = None
-        self.output_path: str | None = None
-        self.existing_path: str | None = None
-        self.jsonl_path: str | None = None
+        self.input_path: str = ""
+        self.output_path: str = ""
+        self.existing_path: str = ""
+        self.jsonl_path: str = ""
 
     def tearDown(self) -> None:
         for path in [
@@ -506,10 +507,8 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
         self.output_path = _temp_path(".csv")
         self.jsonl_path = _temp_path(".jsonl")
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "missing required full-nutrient columns",
-        ):
+        caught: ValueError | None = None
+        try:
             run(
                 self.input_path,
                 self.output_path,
@@ -517,6 +516,10 @@ class GenerateFoodMatchReviewTests(unittest.TestCase):
                 repo=FakeRepo({}),
                 barcode_hints={},
             )
+        except ValueError as exc:
+            caught = exc
+        assert caught is not None
+        assert "missing required full-nutrient columns" in str(caught)
 
     def test_normalize_description_is_stable(self) -> None:
         assert _normalize_description("AS Protein Bread (48 gms)") == "as protein bread"

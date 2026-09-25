@@ -7,6 +7,7 @@ import unittest
 
 from steps.canonicalize_food_descriptions import run
 
+EXPECTED_EGG_ROWS = 2
 
 BASE = [
     "item_type", "date", "description", "value", "unit", "serving", "meal",
@@ -53,8 +54,8 @@ def _row(**overrides: str) -> dict[str, str]:
 
 class CanonicalizeFoodDescriptionsTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.input_path = None
-        self.output_path = None
+        self.input_path: str = ""
+        self.output_path: str = ""
 
     def tearDown(self) -> None:
         for path in [self.input_path, self.output_path]:
@@ -63,9 +64,8 @@ class CanonicalizeFoodDescriptionsTests(unittest.TestCase):
 
     def _run(self, rows: list[dict[str, str]]) -> dict:
         self.input_path = _write_csv(rows, list(rows[0].keys()))
-        self.output_path = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".csv"
-        ).name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as handle:
+            self.output_path = handle.name
         return run(self.input_path, self.output_path)
 
     def _read_output(self) -> list[dict[str, str]]:
@@ -80,11 +80,12 @@ class CanonicalizeFoodDescriptionsTests(unittest.TestCase):
             _row(description="Homemade", unit="g", serving="1.0 Gram"),
         ])
         out = self._read_output()
-        self.assertEqual(
-            [row["description"] for row in out],
-            ["Egg White", "Egg, boiled", "Kala Chana Masala"],
-        )
-        self.assertEqual(result["rows_renamed"], 3)
+        assert [row["description"] for row in out] == [
+            "Egg White",
+            "Egg, boiled",
+            "Kala Chana Masala",
+        ]
+        assert result["rows_renamed"] == len(out)
 
     def test_combined_egg_row_is_expanded(self) -> None:
         result = self._run([
@@ -98,19 +99,19 @@ class CanonicalizeFoodDescriptionsTests(unittest.TestCase):
             )
         ])
         out = self._read_output()
-        self.assertEqual(len(out), 2)
-        self.assertEqual([row["description"] for row in out], ["Egg White", "Egg, boiled"])
-        self.assertEqual(out[0]["value"], "5")
-        self.assertEqual(out[1]["value"], "1")
-        self.assertEqual(result["combined_rows_expanded"], 1)
+        assert len(out) == EXPECTED_EGG_ROWS
+        assert [row["description"] for row in out] == ["Egg White", "Egg, boiled"]
+        assert out[0]["value"] == "5"
+        assert out[1]["value"] == "1"
+        assert result["combined_rows_expanded"] == 1
 
     def test_non_food_rows_are_unchanged(self) -> None:
         result = self._run([
             _row(item_type="Measurement", description="weight", unit="kg"),
         ])
         out = self._read_output()
-        self.assertEqual(out[0]["description"], "weight")
-        self.assertEqual(result["rows_renamed"], 0)
+        assert out[0]["description"] == "weight"
+        assert result["rows_renamed"] == 0
 
 
 if __name__ == "__main__":

@@ -13,21 +13,21 @@ import argparse
 import time
 from pathlib import Path
 
-from steps import step_path
 from steps import (
+    canonicalize_food_descriptions,
+    check_macro_calories,
+    deduplicate,
+    fix_macro_mismatches,
+    flag_pseudo_grams,
     merge_fixed_serving,
     normalize_units,
-    scale_values,
-    flag_pseudo_grams,
-    check_macro_calories,
-    fix_macro_mismatches,
-    deduplicate,
     resolve_serving_modes,
-    canonicalize_food_descriptions,
+    scale_values,
+    step_path,
 )
 
-STEPS = [
-    ("merge_fixed_serving", merge_fixed_serving),
+# Step 0 merges two inputs; every later step takes a single input path.
+TWO_ARG_STEPS = [
     ("normalize_units", normalize_units),
     ("scale_values", scale_values),
     ("flag_pseudo_grams", flag_pseudo_grams),
@@ -38,7 +38,10 @@ STEPS = [
     ("canonicalize_food_descriptions", canonicalize_food_descriptions),
 ]
 
-def main():
+STEPS = [("merge_fixed_serving", merge_fixed_serving), *TWO_ARG_STEPS]
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Clean MFP merged data.")
     parser.add_argument(
         "--data-dir",
@@ -59,7 +62,7 @@ def main():
     print(f"Cleaning MFP data in {data_dir}/")
     print()
 
-    for i, (name, module) in enumerate(STEPS):
+    for i, (name, _module) in enumerate(STEPS):
         output = step_path(data_dir, i, name)
 
         if i in args.skip:
@@ -68,12 +71,14 @@ def main():
 
         t0 = time.time()
         if i == 0:
-            raw = data_dir / "mfp-data.csv"
-            fixed = data_dir / "mfp-data-fixed.csv"
-            result = module.run(raw, fixed, output)
+            result = merge_fixed_serving.run(
+                data_dir / "mfp-data.csv",
+                data_dir / "mfp-data-fixed.csv",
+                output,
+            )
         else:
             prev_output = step_path(data_dir, i - 1, STEPS[i - 1][0])
-            result = module.run(prev_output, output)
+            result = TWO_ARG_STEPS[i - 1][1].run(prev_output, output)
 
         elapsed = time.time() - t0
         print(f"  [{i}/{name}] done ({elapsed:.2f}s)")

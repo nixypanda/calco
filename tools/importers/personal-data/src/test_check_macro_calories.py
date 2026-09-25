@@ -7,6 +7,8 @@ import unittest
 
 from steps.check_macro_calories import run
 
+DIFF_PCT_TOLERANCE = 0.05
+
 
 def _write_csv(
     rows: list[dict],
@@ -29,8 +31,8 @@ BASE = [
 ]
 
 
-def _row(**overrides) -> dict:
-    r = dict.fromkeys(BASE, "")
+def _row(**overrides: str) -> dict[str, str]:
+    r: dict[str, str] = dict.fromkeys(BASE, "")
     r.update({
         "item_type": "Foods",
         "date": "2024-01-01",
@@ -49,11 +51,11 @@ def _row(**overrides) -> dict:
 
 
 class MacroCheckTests(unittest.TestCase):
-    def setUp(self):
-        self.input_path = None
-        self.output_path = None
+    def setUp(self) -> None:
+        self.input_path: str = ""
+        self.output_path: str = ""
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         for p in [self.input_path, self.output_path]:
             if p:
                 os.unlink(p)
@@ -67,9 +69,8 @@ class MacroCheckTests(unittest.TestCase):
     def _run(self, rows: list[dict]) -> dict:
         fieldnames = list(rows[0].keys())
         self.input_path = _write_csv(rows, fieldnames)
-        self.output_path = tempfile.NamedTemporaryFile(
-            delete=False, suffix=".csv"
-        ).name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as handle:
+            self.output_path = handle.name
         return run(self.input_path, self.output_path)
 
     def _read_output(self) -> list[dict]:
@@ -88,8 +89,8 @@ class MacroCheckTests(unittest.TestCase):
     def test_matches_within_threshold(self) -> None:
         result = self._run([_row()])
         out = self._read_output()
-        self.assertEqual(result["mismatches"], 0)
-        self.assertEqual(out[0]["macro_mismatch"], "FALSE")
+        assert result["mismatches"] == 0
+        assert out[0]["macro_mismatch"] == "FALSE"
 
     def test_large_mismatch_flagged(self) -> None:
         row = _row(description="Chole Palak", calories="123",
@@ -97,37 +98,43 @@ class MacroCheckTests(unittest.TestCase):
         result = self._run([row])
         out = self._read_output()
         review = self._read_review()
-        self.assertEqual(result["mismatches"], 1)
-        self.assertEqual(out[0]["macro_mismatch"], "TRUE")
-        self.assertEqual(len(review), 1)
-        self.assertIn("Chole Palak", review[0]["description"])
+        assert result["mismatches"] == 1
+        assert out[0]["macro_mismatch"] == "TRUE"
+        assert len(review) == 1
+        assert "Chole Palak" in review[0]["description"]
 
     def test_skipped_rows_marked_skip(self) -> None:
         row = _row(calories="", fat_g="10", carbs_g="20", protein_g="5")
         result = self._run([row])
         out = self._read_output()
-        self.assertEqual(result["checked"], 0)
-        self.assertEqual(out[0]["macro_mismatch"], "SKIP")
+        assert result["checked"] == 0
+        assert out[0]["macro_mismatch"] == "SKIP"
 
     def test_skipped_partial_macros(self) -> None:
         row = _row(calories="100", fat_g="10", carbs_g="", protein_g="5")
         result = self._run([row])
-        self.assertEqual(result["checked"], 0)
-        self.assertEqual(result["total_food_rows"], 1)
+        assert result["checked"] == 0
+        assert result["total_food_rows"] == 1
 
     def test_non_food_skipped(self) -> None:
-        row = _row(item_type="Measurement", calories="", fat_g="", carbs_g="", protein_g="")
+        row = _row(
+            item_type="Measurement",
+            calories="",
+            fat_g="",
+            carbs_g="",
+            protein_g="",
+        )
         result = self._run([row])
         out = self._read_output()
-        self.assertEqual(result["checked"], 0)
-        self.assertEqual(out[0]["macro_mismatch"], "FALSE")
+        assert result["checked"] == 0
+        assert out[0]["macro_mismatch"] == "FALSE"
 
     def test_zero_calories_not_flagged(self) -> None:
         row = _row(calories="0", fat_g="0", carbs_g="0", protein_g="0")
         result = self._run([row])
         out = self._read_output()
-        self.assertEqual(result["mismatches"], 0)
-        self.assertEqual(out[0]["macro_mismatch"], "FALSE")
+        assert result["mismatches"] == 0
+        assert out[0]["macro_mismatch"] == "FALSE"
 
     def test_review_file_header(self) -> None:
         self._run([_row(description="Chole Palak", calories="123",
@@ -135,14 +142,14 @@ class MacroCheckTests(unittest.TestCase):
         review = self._read_review()
         expected = {"description", "date", "meal", "calories",
                     "macro_cal", "diff_pct", "fat_g", "carbs_g", "protein_g"}
-        self.assertEqual(set(review[0].keys()), expected)
+        assert set(review[0].keys()) == expected
 
     def test_diff_pct_in_review(self) -> None:
         self._run([_row(description="Chole Palak", calories="123",
                          fat_g="20", carbs_g="24.4", protein_g="5.8")])
         review = self._read_review()
         diff = float(review[0]["diff_pct"])
-        self.assertAlmostEqual(diff, 144.6, places=1)
+        assert abs(diff - 144.6) < DIFF_PCT_TOLERANCE
 
 
 if __name__ == "__main__":

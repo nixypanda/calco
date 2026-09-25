@@ -24,6 +24,7 @@ REVIEW_HEADER = [
 
 CAL_PER_100G_LOW = Decimal(30)
 CAL_PER_100G_HIGH = Decimal(500)
+PSEUDO_GRAM_CALORIE_FLOOR = Decimal(30)
 
 
 def _fmt(d: Decimal) -> str:
@@ -75,7 +76,7 @@ def run(input_path: str | Path, output_path: str | Path) -> dict:
         except InvalidOperation:
             cal = Decimal(0)
 
-        if cal <= 30:
+        if cal <= PSEUDO_GRAM_CALORIE_FLOOR:
             row["is_pseudo_gram"] = "FALSE"
             continue
 

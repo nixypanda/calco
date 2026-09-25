@@ -2,14 +2,11 @@
 """Generate a DB food match review CSV from the serving review CSV."""
 
 import argparse
-import sys
 from pathlib import Path
 
+from steps.generate_food_match_review import default_database_url, run
+
 ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from steps.generate_food_match_review import default_database_url, run  # noqa: E402
-
 DATA_DIR = ROOT / "data"
 INPUT = DATA_DIR / "step-9-out-serving-review.csv"
 OUTPUT = DATA_DIR / "step-10-out-food-match-review.csv"

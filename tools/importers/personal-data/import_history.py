@@ -5,19 +5,16 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from pathlib import Path
 
-ROOT = Path(__file__).parent
-sys.path.insert(0, str(ROOT / "src"))
-
-from history_import import (  # noqa: E402
+from history_import import (
     DEFAULT_API_URL,
     DEFAULT_COOKIE_NAME,
     DEFAULT_DEVICE_TIMEZONE,
     run,
 )
 
+ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data"
 DEFAULT_HISTORY_CSV = DATA_DIR / "step-8-out-canonicalize_food_descriptions.csv"
 DEFAULT_REVIEW_CSV = DATA_DIR / "step-10-out-food-match-review-merged.csv"
@@ -27,7 +24,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Import MFP food history into CalCo diary logs"
     )
-    parser.add_argument("--api-url", default=os.environ.get("CALCO_API_URL", DEFAULT_API_URL))
+    parser.add_argument(
+        "--api-url",
+        default=os.environ.get("CALCO_API_URL", DEFAULT_API_URL),
+    )
     parser.add_argument("--history-csv", default=str(DEFAULT_HISTORY_CSV))
     parser.add_argument("--review-csv", default=str(DEFAULT_REVIEW_CSV))
     parser.add_argument(

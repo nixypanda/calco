@@ -18,7 +18,7 @@ def load_csv(path: str | Path) -> tuple[list[str], list[dict]]:
     with open(path, newline="", encoding="utf-8-sig") as f:
         f.readline()
         reader = csv.DictReader(f)
-        fieldnames = list(reader.fieldnames)
+        fieldnames = list(reader.fieldnames or [])
         rows = list(reader)
     return fieldnames, rows
 

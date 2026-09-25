@@ -612,7 +612,10 @@ def _nutrition_match(
     elif description_key == "whey" and "whey" in _normalize_description(candidate.name):
         fat_tolerance = EXTRA_WIDE_RELATIVE_TOLERANCE
         carbs_tolerance = WIDE_RELATIVE_TOLERANCE
-    elif description_key == "paneer" and "paneer" in _normalize_description(candidate.name):
+    elif (
+        description_key == "paneer"
+        and "paneer" in _normalize_description(candidate.name)
+    ):
         carbs_tolerance = WIDE_RELATIVE_TOLERANCE
 
     for code in MACRO_CODES:
@@ -636,7 +639,10 @@ def _nutrition_match(
             ):
                 failures.append(f"{code} mismatch")
         else:
-            if code in zeroish_codes and abs(target - candidate_value) <= ZEROISH_MACRO_ABSOLUTE_TOLERANCE:
+            if (
+                code in zeroish_codes
+                and abs(target - candidate_value) <= ZEROISH_MACRO_ABSOLUTE_TOLERANCE
+            ):
                 continue
             tolerance = {
                 "PROTEIN_G": protein_tolerance,
@@ -688,10 +694,7 @@ def _decide_match(
     description_key = _description_key(row)
     min_name_score = MIN_NAME_SCORE
     fallback_name_score = FALLBACK_NAME_SCORE
-    if description_key == "whey":
-        min_name_score = 0.50
-        fallback_name_score = 0.50
-    elif description_key == "brest":
+    if description_key in {"whey", "brest"}:
         min_name_score = 0.50
         fallback_name_score = 0.50
     best: MatchDecision | None = None
@@ -778,9 +781,12 @@ def _load_review_rows(path: str | Path) -> list[dict[str, str]]:
         ]
         if missing_columns:
             missing = ", ".join(missing_columns)
-            raise ValueError(
+            msg = (
                 "review CSV is missing required full-nutrient columns; "
-                f"regenerate step-9 serving review before matching: {missing}",
+                f"regenerate step-9 serving review before matching: {missing}"
+            )
+            raise ValueError(
+                msg,
             )
         return [
             {key: value or "" for key, value in row.items()}
@@ -907,7 +913,9 @@ def run(
 
         barcode_hint = effective_barcode_hints.get(description)
         if barcode_hint:
-            barcode_candidate = catalog_repo.find_global_product_by_barcode(barcode_hint)
+            barcode_candidate = catalog_repo.find_global_product_by_barcode(
+                barcode_hint
+            )
             if barcode_candidate is not None:
                 output_row["matched_food_id"] = barcode_candidate.id
                 output_row["matched_food_name"] = barcode_candidate.name
