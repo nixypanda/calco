@@ -10,16 +10,13 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Component.FoodEditor food-log mode"
-        [ test "rejects a negative nutrient" <|
+        [ test "log validation accepts optional nutrients and rejects negatives and duplicates" <|
             \_ ->
-                Editor.validateLog
+                ( Editor.validateLog
                     { validForm
                         | nutrients = setAmount "PROTEIN_G" "-1" validForm.nutrients
                     }
-                    |> Expect.equal (Err "Protein must be zero or greater.")
-        , test "accepts optional catalog nutrients" <|
-            \_ ->
-                Editor.validateLog
+                , Editor.validateLog
                     { validForm
                         | nutrients =
                             validForm.nutrients
@@ -30,11 +27,7 @@ tests =
                                    ]
                     }
                     |> Result.map (List.map .code << .nutrients)
-                    |> Expect.equal
-                        (Ok [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G" ])
-        , test "rejects duplicate nutrients" <|
-            \_ ->
-                Editor.validateLog
+                , Editor.validateLog
                     { validForm
                         | nutrients =
                             validForm.nutrients
@@ -44,7 +37,12 @@ tests =
                                      }
                                    ]
                     }
-                    |> Expect.equal (Err "Each nutrient can only be added once.")
+                )
+                    |> Expect.equal
+                        ( Err "Protein must be zero or greater."
+                        , Ok [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G" ]
+                        , Err "Each nutrient can only be added once."
+                        )
         , test "requires positive weight when saving a custom food" <|
             \_ ->
                 validForm

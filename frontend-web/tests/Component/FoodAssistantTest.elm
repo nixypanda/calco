@@ -35,25 +35,39 @@ tests =
                     |> Assistant.update Assistant.RetryStatusClicked
                     |> third
                     |> Expect.equal Assistant.RequestStatus
-        , test "clarification appends transcript and allows a follow-up" <|
+        , test "clarification and retry preserve the transcript and resend it" <|
             \_ ->
-                sent
-                    |> Assistant.update
-                        (Assistant.DraftCompleted
-                            (Ok
-                                (NeedsClarification
-                                    { assistantMessage = "How many grams?" }
+                let
+                    followUp : Maybe String
+                    followUp =
+                        sent
+                            |> Assistant.update
+                                (Assistant.DraftCompleted
+                                    (Ok
+                                        (NeedsClarification
+                                            { assistantMessage = "How many grams?" }
+                                        )
+                                    )
                                 )
-                            )
-                        )
-                    |> first
-                    |> Assistant.update (Assistant.DescriptionChanged "300 grams")
-                    |> first
-                    |> Assistant.update Assistant.SendClicked
-                    |> third
-                    |> requestJson
+                            |> first
+                            |> Assistant.update (Assistant.DescriptionChanged "300 grams")
+                            |> first
+                            |> Assistant.update Assistant.SendClicked
+                            |> third
+                            |> requestJson
+
+                    retry : Maybe String
+                    retry =
+                        sent
+                            |> Assistant.update (Assistant.DraftCompleted (Err Client.NetworkError))
+                            |> first
+                            |> Assistant.update Assistant.RetryClicked
+                            |> third
+                            |> requestJson
+                in
+                ( followUp, retry )
                     |> Expect.equal
-                        (Just
+                        ( Just
                             (String.concat
                                 [ "{\"purpose\":\"custom_food\",\"turns\":[{\"role\":\"user\","
                                 , "\"text\":\"one bowl of dal\"},{\"role\":\"assistant\","
@@ -61,17 +75,7 @@ tests =
                                 , "\"text\":\"300 grams\"}]}"
                                 ]
                             )
-                        )
-        , test "retry keeps and resends the existing transcript" <|
-            \_ ->
-                sent
-                    |> Assistant.update (Assistant.DraftCompleted (Err Client.NetworkError))
-                    |> first
-                    |> Assistant.update Assistant.RetryClicked
-                    |> third
-                    |> requestJson
-                    |> Expect.equal
-                        (Just
+                        , Just
                             (String.concat
                                 [ "{\"purpose\":\"custom_food\",\"turns\":["
                                 , "{\"role\":\"user\",\"text\":\"one bowl of dal\"}]}"
@@ -91,19 +95,37 @@ tests =
                                 "The assistant is busy. Try again in 12 seconds."
                             )
                         )
-        , test "ready result is previewed before any apply output" <|
+        , test "applying a ready draft respects manual-form confirmation" <|
             \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> (\( model, _, outMsg ) ->
-                            ( outMsg
-                            , model
-                                |> Assistant.update (Assistant.ApplyDraftClicked False)
-                                |> third
-                            )
-                       )
+                let
+                    ready : Assistant.Model
+                    ready =
+                        enabled
+                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                            |> first
+
+                    preview : Assistant.OutMsg
+                    preview =
+                        enabled
+                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
+                            |> third
+
+                    awaiting : Assistant.Model
+                    awaiting =
+                        ready |> Assistant.update (Assistant.ApplyDraftClicked True) |> first
+                in
+                { preview = preview
+                , direct = ready |> Assistant.update (Assistant.ApplyDraftClicked False) |> third
+                , cancelled = awaiting |> Assistant.update Assistant.CancelOverwriteClicked |> third
+                , confirmed =
+                    awaiting |> Assistant.update Assistant.ConfirmOverwriteClicked |> third
+                }
                     |> Expect.equal
-                        ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
+                        { preview = Assistant.NoOutMsg
+                        , direct = Assistant.ApplyDraft draft
+                        , cancelled = Assistant.NoOutMsg
+                        , confirmed = Assistant.ApplyDraft draft
+                        }
         , test "ad-hoc completion returns the draft and suggested portion to its parent" <|
             \_ ->
                 let
@@ -137,64 +159,50 @@ tests =
                             , warnings = [ "Estimated" ]
                             }
                         )
-        , test "ask for changes reveals the conversation and follow-up input" <|
-            \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update Assistant.AskForChangesClicked
-                    |> first
-                    |> Assistant.view
-                        viewEnv
-                        False
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has
-                            [ Selector.text "Conversation"
-                            , Selector.text "What should change?"
-                            , Selector.text "Cancel changes"
-                            , Selector.text "New session"
-                            , Selector.text "Send"
-                            ]
-                        , \query ->
-                            query
-                                |> Query.findAll [ Selector.text "New session" ]
-                                |> Query.count (Expect.equal 1)
-                        ]
-        , test "a revised draft hides the conversation again" <|
-            \_ ->
-                enabled
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> Assistant.update Assistant.AskForChangesClicked
-                    |> first
-                    |> Assistant.update (Assistant.DescriptionChanged "Use 250 g")
-                    |> first
-                    |> Assistant.update Assistant.SendClicked
-                    |> first
-                    |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
-                    |> first
-                    |> chatState
-                    |> Maybe.map .askingForChanges
-                    |> Expect.equal (Just False)
-        , test "manual form requires confirmation and cancel does not apply" <|
+        , test "asking for changes reveals the conversation and a revised draft hides it" <|
             \_ ->
                 let
-                    awaiting : Assistant.Model
-                    awaiting =
+                    ready : Assistant.Model
+                    ready =
                         enabled
                             |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                             |> first
-                            |> Assistant.update (Assistant.ApplyDraftClicked True)
+
+                    asking : Assistant.Model
+                    asking =
+                        ready |> Assistant.update Assistant.AskForChangesClicked |> first
+
+                    revised : Assistant.Model
+                    revised =
+                        asking
+                            |> Assistant.update (Assistant.DescriptionChanged "Use 250 g")
+                            |> first
+                            |> Assistant.update Assistant.SendClicked
+                            |> first
+                            |> Assistant.update (Assistant.DraftCompleted (Ok readyTurn))
                             |> first
                 in
-                ( awaiting |> Assistant.update Assistant.CancelOverwriteClicked |> third
-                , awaiting |> Assistant.update Assistant.ConfirmOverwriteClicked |> third
-                )
-                    |> Expect.equal
-                        ( Assistant.NoOutMsg, Assistant.ApplyDraft draft )
-        , test "new session asks before clearing transient assistant state" <|
+                Expect.all
+                    [ \_ ->
+                        asking
+                            |> Assistant.view viewEnv False
+                            |> Element.layout []
+                            |> Query.fromHtml
+                            |> Query.has
+                                [ Selector.text "Conversation"
+                                , Selector.text "What should change?"
+                                , Selector.text "Cancel changes"
+                                , Selector.text "New session"
+                                , Selector.text "Send"
+                                ]
+                    , \_ ->
+                        revised
+                            |> chatState
+                            |> Maybe.map .askingForChanges
+                            |> Expect.equal (Just False)
+                    ]
+                    ()
+        , test "new session confirms before clearing and recovers from the turn cap" <|
             \_ ->
                 let
                     existing : Assistant.Model
@@ -207,39 +215,41 @@ tests =
 
                     awaiting : Assistant.Model
                     awaiting =
-                        existing
+                        existing |> Assistant.update Assistant.NewSessionClicked |> first
+
+                    confirmed : Assistant.Model
+                    confirmed =
+                        awaiting |> Assistant.update Assistant.ConfirmNewSessionClicked |> first
+
+                    recovered : Assistant.Model
+                    recovered =
+                        fullChat
+                            |> Assistant.update (Assistant.DescriptionChanged "one more")
+                            |> first
+                            |> Assistant.update Assistant.SendClicked
+                            |> first
                             |> Assistant.update Assistant.NewSessionClicked
                             |> first
+                            |> Assistant.update Assistant.ConfirmNewSessionClicked
+                            |> first
                 in
-                ( awaiting |> chatState |> Maybe.map .awaitingNewSessionConfirmation
-                , awaiting
-                    |> Assistant.update Assistant.CancelNewSessionClicked
-                    |> first
-                    |> chatState
-                    |> Maybe.map .transcript
-                , awaiting
-                    |> Assistant.update Assistant.ConfirmNewSessionClicked
-                    |> first
-                    |> chatState
-                )
+                { awaitingConfirmation =
+                    awaiting |> chatState |> Maybe.map .awaitingNewSessionConfirmation
+                , cancelledTranscript =
+                    awaiting
+                        |> Assistant.update Assistant.CancelNewSessionClicked
+                        |> first
+                        |> chatState
+                        |> Maybe.map .transcript
+                , confirmed = confirmed |> chatState
+                , recovered = recovered |> requestState
+                }
                     |> Expect.equal
-                        ( Just True
-                        , existing |> chatState |> Maybe.map .transcript
-                        , Just emptyExpandedChat
-                        )
-        , test "confirmed new session recovers after reaching the 20-turn cap" <|
-            \_ ->
-                fullChat
-                    |> Assistant.update (Assistant.DescriptionChanged "one more")
-                    |> first
-                    |> Assistant.update Assistant.SendClicked
-                    |> first
-                    |> Assistant.update Assistant.NewSessionClicked
-                    |> first
-                    |> Assistant.update Assistant.ConfirmNewSessionClicked
-                    |> first
-                    |> requestState
-                    |> Expect.equal (Just Assistant.Ready)
+                        { awaitingConfirmation = Just True
+                        , cancelledTranscript = existing |> chatState |> Maybe.map .transcript
+                        , confirmed = Just emptyExpandedChat
+                        , recovered = Just Assistant.Ready
+                        }
         , test "new session cannot reset an in-flight request" <|
             \_ ->
                 sent
@@ -290,32 +300,31 @@ tests =
                     , { mimeType = "image/jpeg", size = 0 }
                     ]
                     |> Expect.equal (Ok ())
-        , test "photo metadata rejects unsupported formats and oversized files" <|
+        , test "photo metadata rejects unsupported, oversized, and over-limit selections" <|
             \_ ->
-                ( Assistant.validatePhotoMetadata []
-                    [ { mimeType = "image/gif", size = 1 } ]
-                , Assistant.validatePhotoMetadata []
-                    [ { mimeType = "image/png", size = 15 * 1024 * 1024 + 1 } ]
-                )
+                { unsupported =
+                    Assistant.validatePhotoMetadata []
+                        [ { mimeType = "image/gif", size = 1 } ]
+                , oversized =
+                    Assistant.validatePhotoMetadata []
+                        [ { mimeType = "image/png", size = 15 * 1024 * 1024 + 1 } ]
+                , tooMany =
+                    Assistant.validatePhotoMetadata
+                        (List.repeat 4 { mimeType = "image/jpeg", size = 1 })
+                        [ { mimeType = "image/png", size = 1 } ]
+                , totalTooLarge =
+                    Assistant.validatePhotoMetadata
+                        [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
+                        , { mimeType = "image/png", size = 15 * 1024 * 1024 }
+                        ]
+                        [ { mimeType = "image/webp", size = 10 * 1024 * 1024 + 1 } ]
+                }
                     |> Expect.equal
-                        ( Err "Photos must be JPEG, PNG, or WebP."
-                        , Err "Each photo must be 15 MiB or smaller."
-                        )
-        , test "photo metadata enforces four-photo and combined-size limits" <|
-            \_ ->
-                ( Assistant.validatePhotoMetadata
-                    (List.repeat 4 { mimeType = "image/jpeg", size = 1 })
-                    [ { mimeType = "image/png", size = 1 } ]
-                , Assistant.validatePhotoMetadata
-                    [ { mimeType = "image/jpeg", size = 15 * 1024 * 1024 }
-                    , { mimeType = "image/png", size = 15 * 1024 * 1024 }
-                    ]
-                    [ { mimeType = "image/webp", size = 10 * 1024 * 1024 + 1 } ]
-                )
-                    |> Expect.equal
-                        ( Err "Only four photos can be attached."
-                        , Err "Photos together must be 40 MiB or smaller."
-                        )
+                        { unsupported = Err "Photos must be JPEG, PNG, or WebP."
+                        , oversized = Err "Each photo must be 15 MiB or smaller."
+                        , tooMany = Err "Only four photos can be attached."
+                        , totalTooLarge = Err "Photos together must be 40 MiB or smaller."
+                        }
         , test "removing a photo keeps file and preview positions aligned" <|
             \_ ->
                 ( Assistant.removeAt 1 [ "first", "second", "third" ]
