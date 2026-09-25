@@ -13,7 +13,7 @@
     "i18n": "just i18n"
   },
   "devDependencies": {
-    "elm": "0.19.1-6",
+    "elm": "0.19.2-0",
     "elm-coverage": "^0.4.1",
     "vite": "^5.4.0",
     "vite-plugin-elm": "^3.0.0"

@@ -25,7 +25,7 @@ frontend-web/
   vite.config.js
 ```
 
-It is an Elm 0.19.1 `Browser.application` that talks to the Rust backend
+It is an Elm 0.19.2 `Browser.application` that talks to the Rust backend
 through HTTP JSON under `/api`. The app uses `mdgriffith/elm-ui` for layout
 and styling, with shared UI primitives centralized in the
 `frontend-web/src/Ui/` module family.

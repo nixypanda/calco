@@ -21,7 +21,7 @@ The diary and food search stay visible together on wider screens.
 ## Stack
 
 - Backend: Rust, axum, sqlx, PostgreSQL
-- Frontend: Elm 0.19.1, elm-ui
+- Frontend: Elm 0.19.2, elm-ui
 - Database: PostgreSQL via Docker Compose
 - Tooling: Nix flake, just, Python import scripts
 

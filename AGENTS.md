@@ -3,7 +3,7 @@
 ## Current Codebase Shape
 
 - Backend: Rust 2024, axum, sqlx, PostgreSQL migrations run with `sqlx-cli`.
-- Frontend: Elm 0.19.1, elm-ui, elm-test.
+- Frontend: Elm 0.19.2, elm-ui, elm-test.
 - Database: PostgreSQL via `docker-compose.yml`.
 - Test runner commands are defined in `justfile`. Enter `nix develop` once and
   run `just ...` inside that persistent development shell.
