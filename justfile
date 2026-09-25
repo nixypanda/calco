@@ -162,8 +162,8 @@ coverage-frontend:
 # Lint and type-check data-source import tools.
 [working-directory("tools/importers/data-sources")]
 check-data-sources:
-    uv run ruff check src/
-    uv run ty check src/
+    uv run ruff check .
+    uv run ty check .
 
 # Dry-run IFCT and INDB fetching to verify the importer CLI.
 [working-directory("tools/importers/data-sources")]

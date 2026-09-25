@@ -16,7 +16,7 @@ default:
 
 # Lint and type-check data-source import tools
 data-sources-check:
-    cd importers/data-sources && uv run ruff check src/ && uv run ty check src/
+    cd importers/data-sources && uv run ruff check . && uv run ty check .
 
 # Run data-source importer tests and syntax/import checks
 data-sources-test:
