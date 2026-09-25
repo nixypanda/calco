@@ -46,5 +46,20 @@ data-sources-import dataset="merged" data_dir="/tmp/calco-import":
 data-sources-dry-run dataset="merged" data_dir="/tmp/calco-import-dry-run":
     cd importers/data-sources && CALCO_DATA_DIR="{{data_dir}}" uv run calco-import --dry-run import "{{dataset}}"
 
-# Run all public catalog importer checks
-importers-verify: data-sources-verify
+# Run all catalog and personal importer checks
+importers-verify: data-sources-verify personal-data-verify
+
+# ──────────────────────────────────────────────
+# Personal MFP data import
+# ──────────────────────────────────────────────
+
+# Lint and type-check personal-data import tools
+personal-data-check:
+    cd importers/personal-data && uv run ruff check . && uv run ty check .
+
+# Run personal-data importer tests
+personal-data-test:
+    cd importers/personal-data && uv run python -m unittest discover -s src -p 'test_*.py'
+
+# Run all personal-data importer checks
+personal-data-verify: personal-data-check personal-data-test
