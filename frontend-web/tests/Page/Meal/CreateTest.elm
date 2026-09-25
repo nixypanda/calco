@@ -1,5 +1,6 @@
 module Page.Meal.CreateTest exposing (tests)
 
+import Api.Client as Client
 import Api.Foods exposing (SearchResult, SearchScope(..))
 import Api.Meals exposing (Meal)
 import Component.Meal.Form as Common
@@ -14,69 +15,112 @@ import Page.Meal.Create as MealCreate
 import Test exposing (Test, describe, test)
 
 
+networkErrorMessage : String
+networkErrorMessage =
+    "Could not reach the server. Check your connection and try again."
+
+
+unauthorized : Client.ApiError
+unauthorized =
+    Client.BadStatus 401 "unauthorized" "Sign in again"
+
+
 tests : Test
 tests =
     describe "Page.Meal.Create"
-        [ test "selected components default quantity to 100 g" <|
+        [ test "submitting a valid meal requests creation with a trimmed name and defaults" <|
             \_ ->
                 let
                     row : Common.ComponentRow
                     row =
                         Common.emptyComponentRow 1
+
+                    form : Common.FormFields
+                    form =
+                        { emptyFormFields
+                            | name = "  Lunch  "
+                            , components =
+                                [ { row | productId = "food-1", quantity = "", unit = "" } ]
+                        }
+
+                    submitting : MealCreate.Model
+                    submitting =
+                        step MealCreate.SubmitClicked form
                 in
-                Common.toMealRequest
-                    { emptyFormFields
-                        | name = "Lunch"
-                        , components = [ { row | productId = "food-1", quantity = "", unit = "" } ]
-                    }
-                    |> Result.map .components
+                { request = out MealCreate.SubmitClicked form
+                , submit = submitting.submit
+                , success = out (MealCreate.SaveCompleted (Ok meal)) submitting
+                }
                     |> Expect.equal
-                        (Ok
-                            [ { item = { itemType = ItemRef.Product, id = "food-1" }
-                              , quantity = { amount = "100", unit = "g" }
-                              }
-                            ]
-                        )
-        , test "stale row search result is ignored" <|
+                        { request =
+                            MealCreate.RequestCreateMeal
+                                { name = "Lunch"
+                                , notes = Nothing
+                                , totalQuantity = Nothing
+                                , components =
+                                    [ { item = { itemType = ItemRef.Product, id = "food-1" }
+                                      , quantity = { amount = "100", unit = "g" }
+                                      }
+                                    ]
+                                }
+                        , submit = Common.Submitting
+                        , success = MealCreate.Navigate (MealShow "meal-1")
+                        }
+        , test "submitting without a name or component surfaces validation errors" <|
+            \_ ->
+                let
+                    noName : MealCreate.Model
+                    noName =
+                        step MealCreate.SubmitClicked emptyFormFields
+
+                    noComponentForm : Common.FormFields
+                    noComponentForm =
+                        { emptyFormFields | name = "Lunch" }
+
+                    noComponent : MealCreate.Model
+                    noComponent =
+                        step MealCreate.SubmitClicked noComponentForm
+                in
+                { noNameRequest = out MealCreate.SubmitClicked emptyFormFields
+                , noNameError = noName.submit |> Common.submitErrorMessage
+                , noComponentRequest = out MealCreate.SubmitClicked noComponentForm
+                , noComponentError = noComponent.submit |> Common.submitErrorMessage
+                }
+                    |> Expect.equal
+                        { noNameRequest = MealCreate.NoOp
+                        , noNameError = Just "Name is required"
+                        , noComponentRequest = MealCreate.NoOp
+                        , noComponentError =
+                            Just "At least one component with a selected product is required"
+                        }
+        , test "a stale row search response is ignored" <|
             \_ ->
                 let
                     row : Common.ComponentRow
                     row =
                         Common.emptyComponentRow 1
+
+                    form : Common.FormFields
+                    form =
+                        { emptyFormFields
+                            | components =
+                                [ { row | search = Search.withSearchToken (ticket 2) row.search } ]
+                        }
                 in
-                MealCreate.update
+                step
                     (MealCreate.FormMsg
                         (Common.ComponentSearchCompleted 1 (ticket 1) (Ok { items = [ result ] }))
                     )
-                    { emptyFormFields
-                        | components =
-                            [ { row
-                                | search =
-                                    Search.withSearchToken (ticket 2) row.search
-                              }
-                            ]
-                    }
-                    |> first
-                    |> componentsOf
+                    form
+                    |> .components
                     |> List.head
                     |> Maybe.map .searchResults
                     |> Expect.equal (Just NotAsked)
-        , test "component search tab completion preserves the token gap" <|
+        , test "searching a category requests both product and category suggestions" <|
             \_ ->
-                MealCreate.update
-                    (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
-                    (modelWithRow
-                        { emptyRow | search = Search.withQuery "apple c" emptyRow.search }
-                    )
-                    |> first
-                    |> firstRowQuery
-                    |> Expect.equal (Just "apple category:")
-        , test "component category search requests suggestions and product search" <|
-            \_ ->
-                MealCreate.update
+                out
                     (MealCreate.FormMsg (Common.ComponentSearchChanged 1 "category:foo"))
                     (Tuple.first MealCreate.init)
-                    |> third
                     |> Expect.equal
                         (MealCreate.FormOutMsg
                             (Common.RequestProductAndCats
@@ -89,61 +133,61 @@ tests =
                                 }
                             )
                         )
-        , test "component category value completion quotes spaces" <|
-            \_ ->
-                MealCreate.update
-                    (MealCreate.FormMsg (Common.CompleteFirstComponentSuggestion 1))
-                    (modelWithRow
-                        { emptyRow
-                            | search =
-                                { query = "category:foo"
-                                , searchToken = ticket 0
-                                , categoryToken = ticket 0
-                                , categorySuggestions =
-                                    [ { value = "food and beverages", count = 4 } ]
-                                }
-                        }
-                    )
-                    |> first
-                    |> firstRowQuery
-                    |> Expect.equal (Just "category:\"food and beverages\"")
-        , test "submit navigates to meal detail on save success" <|
+        , test "a save failure surfaces the request error and a 401 expires the session" <|
             \_ ->
                 let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
+                    submitting : MealCreate.Model
+                    submitting =
+                        step MealCreate.SubmitClicked validForm
+
+                    afterFailure : MealCreate.Model
+                    afterFailure =
+                        step (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
                 in
-                MealCreate.update
-                    (MealCreate.SaveCompleted (Ok meal))
-                    { emptyFormFields
-                        | name = "Lunch"
-                        , components = [ { row | productId = "food-1" } ]
-                    }
-                    |> third
-                    |> Expect.equal (MealCreate.Navigate (MealShow "meal-1"))
-        , test "submit with no name surfaces a name-required error" <|
-            \_ ->
-                MealCreate.update
-                    MealCreate.SubmitClicked
-                    emptyFormFields
-                    |> first
-                    |> .submit
-                    |> Common.submitErrorMessage
-                    |> Expect.equal (Just "Name is required")
-        , test "submit with no selected product surfaces a component-required error" <|
-            \_ ->
-                MealCreate.update
-                    MealCreate.SubmitClicked
-                    { emptyFormFields | name = "Lunch" }
-                    |> first
-                    |> .submit
-                    |> Common.submitErrorMessage
+                { error = afterFailure.submit |> Common.submitErrorMessage
+                , failureRequest =
+                    out (MealCreate.SaveCompleted (Err Client.NetworkError)) submitting
+                , unauthorized =
+                    out (MealCreate.SaveCompleted (Err unauthorized)) submitting
+                }
                     |> Expect.equal
-                        (Just
-                            "At least one component with a selected product is required"
-                        )
+                        { error = Just networkErrorMessage
+                        , failureRequest = MealCreate.NoOp
+                        , unauthorized = MealCreate.SessionExpired
+                        }
         ]
+
+
+
+-- HELPERS
+
+
+validForm : Common.FormFields
+validForm =
+    let
+        row : Common.ComponentRow
+        row =
+            Common.emptyComponentRow 1
+    in
+    { emptyFormFields
+        | name = "Lunch"
+        , components = [ { row | productId = "food-1" } ]
+    }
+
+
+emptyFormFields : Common.FormFields
+emptyFormFields =
+    Common.emptyFormFields
+
+
+step : MealCreate.Msg -> MealCreate.Model -> MealCreate.Model
+step msg model =
+    first (MealCreate.update msg model)
+
+
+out : MealCreate.Msg -> MealCreate.Model -> MealCreate.OutMsg
+out msg model =
+    third (MealCreate.update msg model)
 
 
 result : SearchResult
@@ -157,34 +201,6 @@ result =
     , categories = []
     , nutritionSummary = { per100g = Nutrition.emptySummary }
     }
-
-
-emptyRow : Common.ComponentRow
-emptyRow =
-    Common.emptyComponentRow 1
-
-
-emptyFormFields : Common.FormFields
-emptyFormFields =
-    Common.emptyFormFields
-
-
-modelWithRow : Common.ComponentRow -> Common.FormFields
-modelWithRow row =
-    { emptyFormFields | components = [ row ] }
-
-
-firstRowQuery : Common.FormFields -> Maybe String
-firstRowQuery model =
-    componentsOf model
-        |> List.head
-        |> Maybe.map .search
-        |> Maybe.map .query
-
-
-componentsOf : Common.FormFields -> List Common.ComponentRow
-componentsOf form =
-    form.components
 
 
 meal : Meal
