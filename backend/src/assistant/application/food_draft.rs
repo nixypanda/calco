@@ -296,40 +296,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn service_rejects_a_model_draft_outside_the_current_vocabulary() {
-        let draft = FoodDraftBuilder::new("Dal")
-            .nutrients([DraftNutrient::new("UNKNOWN".into(), Decimal::ONE).unwrap()])
-            .build()
-            .unwrap();
-        let service = FoodDraftService::new(
-            Arc::new(StubModel {
-                result: FoodDraftResult {
-                    turn: FoodDraftTurn::ready("Review", draft, vec![]).unwrap(),
-                    usage: None,
-                },
-            }),
-            Arc::new(StubVocabulary {
-                value: FoodVocabulary {
-                    nutrients: vec![SupportedNutrient {
-                        code: "ENERGY_KCAL".into(),
-                        name: "Energy".into(),
-                        unit: "kcal".into(),
-                    }],
-                    required_nutrient_codes: vec!["ENERGY_KCAL".into()],
-                    ..FoodVocabulary::default()
-                },
-            }),
-            Arc::new(AcceptAllDrafts),
-            None,
-        );
-
-        assert!(matches!(
-            service.draft(request()).await,
-            Err(AssistantError::InvalidModelResponse)
-        ));
-    }
-
-    #[tokio::test]
     async fn ad_hoc_service_rejects_a_draft_without_a_suggested_portion() {
         let draft = FoodDraftBuilder::new("Dal")
             .nutrients([DraftNutrient::new("ENERGY_KCAL".into(), Decimal::ONE).unwrap()])

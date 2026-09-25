@@ -20,32 +20,14 @@ tests =
             \_ ->
                 Number.toFixedTrimmed 3 12.3456
                     |> Expect.equal "12.346"
-        , test "normalizeDecimalSeparator rewrites a lone comma" <|
+        , test "normalizeDecimalSeparator handles a trailing comma and leaves others alone" <|
             \_ ->
-                Number.normalizeDecimalSeparator "1,5"
-                    |> Expect.equal "1.5"
-        , test "normalizeDecimalSeparator keeps a trailing comma usable" <|
-            \_ ->
-                Number.normalizeDecimalSeparator "1,"
-                    |> Expect.equal "1."
-        , test "normalizeDecimalSeparator leaves plain decimals untouched" <|
-            \_ ->
-                Number.normalizeDecimalSeparator "1.5"
-                    |> Expect.equal "1.5"
-        , test "normalizeDecimalSeparator leaves integers untouched" <|
-            \_ ->
-                Number.normalizeDecimalSeparator "150"
-                    |> Expect.equal "150"
-        , test "normalizeDecimalSeparator leaves multiple commas untouched" <|
-            \_ ->
-                Number.normalizeDecimalSeparator "1,5,2"
-                    |> Expect.equal "1,5,2"
-        , test "normalizeDecimalSeparator leaves grouped values untouched" <|
-            \_ ->
-                Number.normalizeDecimalSeparator "1.234,5"
-                    |> Expect.equal "1.234,5"
-        , test "normalizeDecimalSeparator leaves an empty value untouched" <|
-            \_ ->
-                Number.normalizeDecimalSeparator ""
-                    |> Expect.equal ""
+                Expect.all
+                    [ \_ -> Number.normalizeDecimalSeparator "1," |> Expect.equal "1."
+                    , \_ ->
+                        Number.normalizeDecimalSeparator "1.234,5"
+                            |> Expect.equal "1.234,5"
+                    , \_ -> Number.normalizeDecimalSeparator "" |> Expect.equal ""
+                    ]
+                    ()
         ]

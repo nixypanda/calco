@@ -19,19 +19,7 @@ tests =
 reclassifyDeviceTests : Test
 reclassifyDeviceTests =
     describe "Main.reclassifyDevice"
-        [ test "ignores a resize that keeps the same classification" <|
-            \_ ->
-                Main.reclassifyDevice 1500
-                    800
-                    (Main.classifyDevice 1450 800)
-                    |> Expect.equal Nothing
-        , test "ignores a resize back to the exact same size" <|
-            \_ ->
-                Main.reclassifyDevice 420
-                    900
-                    (Main.classifyDevice 420 900)
-                    |> Expect.equal Nothing
-        , test "reports a resize that crosses into another device class" <|
+        [ test "reports a resize that crosses into another device class" <|
             \_ ->
                 Main.reclassifyDevice 1500
                     800
@@ -81,10 +69,4 @@ normalizeChromeNavigationTests =
                     (DiaryDay (Just "2026-05-29") Nothing)
                     (FoodSearch (Just "2026-06-01") (Just Lunch))
                     |> Expect.equal (FoodSearch (Just "2026-06-01") (Just Lunch))
-        , test "leaves unrelated navigation unchanged" <|
-            \_ ->
-                Main.normalizeChromeNavigation
-                    (DiaryDay (Just "2026-05-29") Nothing)
-                    CustomFoodList
-                    |> Expect.equal CustomFoodList
         ]

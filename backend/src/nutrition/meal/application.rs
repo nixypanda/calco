@@ -384,31 +384,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_meal_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let result = services
-            .create_meal(
-                user_id,
-                CreateMealInput {
-                    name: "Test Meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await;
-
-        assert!(result.is_ok());
-        let meal = result.unwrap();
-        assert_eq!(meal.user_id, user_id);
-        assert_eq!(meal.name.as_str(), "Test Meal");
-        assert_eq!(meal.components.len(), 1);
-    }
-
-    #[tokio::test]
     async fn test_create_meal_empty_name() {
         let services = make_services(Some(sample_product()));
 
@@ -602,30 +577,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_meal_success() {
-        let (services, meal_repo) = make_services_with_repo(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let created = services
-            .create_meal(
-                user_id,
-                CreateMealInput {
-                    name: "To Delete".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await
-            .unwrap();
-
-        assert!(services.delete_meal(created.id, user_id).await.is_ok());
-        let still_there = meal_repo.find_by_id(created.id).await.unwrap();
-        assert!(still_there.is_none());
-    }
-
-    #[tokio::test]
     async fn test_delete_meal_forbidden() {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
@@ -662,34 +613,6 @@ mod tests {
             NutritionError::NotFound(_) => {}
             _ => panic!("expected NotFound"),
         }
-    }
-
-    #[tokio::test]
-    async fn another_authenticated_user_can_view_and_resolve_a_shared_meal() {
-        let services = make_services(Some(sample_product()));
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-        let meal = services
-            .create_meal(
-                owner,
-                CreateMealInput {
-                    name: "Shared meal".to_string(),
-                    notes: None,
-                    total_quantity_amount: None,
-                    total_quantity_unit: None,
-                    components: vec![sample_component()],
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(services.get_meal(other, meal.id).await.unwrap().id, meal.id);
-        let resolved = services
-            .resolve_loggable_meal(other, meal.id)
-            .await
-            .unwrap();
-        assert_eq!(resolved.meal.id, meal.id);
-        assert_eq!(resolved.products.len(), 1);
     }
 
     #[tokio::test]

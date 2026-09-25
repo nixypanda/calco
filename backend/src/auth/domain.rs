@@ -485,28 +485,6 @@ mod tests {
     }
 
     #[test]
-    fn session_captures_the_identity_security_stamp() {
-        let now = Utc::now();
-        let identity = Identity::new_user(
-            Username::new("tester").unwrap(),
-            PasswordHash("hash".into()),
-            now,
-        );
-
-        let (_, session) = create_session(
-            &identity,
-            &SessionPolicy::new(Duration::hours(1)).unwrap(),
-            now,
-        )
-        .unwrap();
-
-        assert_eq!(
-            session.identity_security_stamp,
-            identity.session_security_stamp
-        );
-    }
-
-    #[test]
     fn session_is_revoked_when_its_identity_rotates_the_security_stamp() {
         let now = Utc::now();
         let identity = Identity::new_user(
@@ -548,46 +526,6 @@ mod tests {
     }
 
     #[test]
-    fn login_password_does_not_apply_new_password_policy() {
-        let password = Password::new("short");
-
-        assert_eq!(password.as_bytes(), b"short");
-    }
-
-    #[test]
-    fn identity_factories_create_active_identity_with_requested_role() {
-        let now = Utc::now();
-        let user = Identity::new_user(
-            Username::new("user").unwrap(),
-            PasswordHash("hash".into()),
-            now,
-        );
-        let admin = Identity::new_admin(
-            Username::new("admin").unwrap(),
-            PasswordHash("hash".into()),
-            now,
-        );
-
-        assert_eq!(user.role, IdentityRole::User);
-        assert_eq!(admin.role, IdentityRole::Admin);
-        assert_eq!(user.status, IdentityStatus::Active);
-        assert_eq!(admin.status, IdentityStatus::Active);
-        assert_eq!(user.created_at, now);
-        assert_eq!(user.updated_at, now);
-    }
-
-    #[test]
-    fn user_profile_factory_associates_a_new_profile_with_an_identity() {
-        let now = Utc::now();
-        let identity_id = IdentityId::new();
-        let profile = UserProfile::new(identity_id, "Display Name", now);
-
-        assert_eq!(profile.identity_id, identity_id);
-        assert_eq!(profile.display_name, "Display Name");
-        assert_eq!(profile.created_at, now);
-        assert_eq!(profile.updated_at, now);
-    }
-    #[test]
     fn session_policy_requires_a_positive_lifetime() {
         assert!(SessionPolicy::new(Duration::seconds(1)).is_ok());
         assert!(matches!(
@@ -598,20 +536,5 @@ mod tests {
             SessionPolicy::new(Duration::seconds(-1)),
             Err(InvalidSessionLifetime)
         ));
-    }
-
-    #[test]
-    fn session_policy_determines_session_expiration() {
-        let now = Utc::now();
-        let identity = Identity::new_user(
-            Username::new("user").unwrap(),
-            PasswordHash("hash".into()),
-            now,
-        );
-        let policy = SessionPolicy::new(Duration::hours(2)).unwrap();
-
-        let (_, session) = create_session(&identity, &policy, now).unwrap();
-
-        assert_eq!(session.expires_at, now + Duration::hours(2));
     }
 }

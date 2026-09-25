@@ -697,6 +697,9 @@ cd frontend-web
 elm-test
 ```
 
+Keep the frontend suite focused on behavior rather than implementation; the
+keep/delete bar lives in [testing.md](testing.md).
+
 Useful frontend-web checks:
 
 ```bash

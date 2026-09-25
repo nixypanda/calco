@@ -24,101 +24,15 @@ tests =
 workspaceTests : Test
 workspaceTests =
     describe "workspace pane keys"
-        [ test "calendar-aware diary opens calendar and diary panes" <|
+        [ test "each route maps to its expected pane keys" <|
             \_ ->
-                expectPaneKeys
-                    (DiaryDay (Just date) (Just month))
-                    [ "calendar:" ++ month, diaryKey date (Just month) ]
-        , test "an unparseable diary date falls back to today" <|
-            \_ ->
-                expectPaneKeys
-                    (DiaryDay (Just "not-a-date") Nothing)
-                    [ diaryKey (LocalDate.format today) Nothing ]
-        , test "a missing diary date falls back to today" <|
-            \_ ->
-                expectPaneKeys
-                    (DiaryDay Nothing Nothing)
-                    [ diaryKey (LocalDate.format today) Nothing ]
-        , test "a future diary date is clamped to today" <|
-            \_ ->
-                expectPaneKeys
-                    (DiaryDay (Just "2027-01-01") Nothing)
-                    [ diaryKey (LocalDate.format today) Nothing ]
-        , test "dated search opens diary and search panes" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodSearch (Just date) (Just Lunch))
-                    [ diaryKey date Nothing, "food-search" ]
-        , test "dated food opens diary and food detail panes" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodShow "food-1" (Just date) (Just Lunch) Nothing)
-                    [ diaryKey date Nothing
-                    , "food-detail:food-1:" ++ date ++ ":lunch"
-                    ]
-        , test "dated log editing is standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodLogEntry "log-1" (Just date) Nothing)
-                    [ "log-detail:log-1" ]
-        , test "nutrition details retain the diary pane" <|
-            \_ ->
-                expectPaneKeys
-                    (NutritionDetails (Just date))
-                    [ diaryKey date Nothing, "nutrition-details:" ++ date ]
-        , test "custom food detail retains its list pane" <|
-            \_ ->
-                expectPaneKeys
-                    (CustomFoodShow "food-1")
-                    [ "custom-food-list", "custom-food-detail:food-1" ]
-        , test "meal detail retains its list pane" <|
-            \_ ->
-                expectPaneKeys
-                    (MealShow "meal-1")
-                    [ "meal-list", "meal-detail:meal-1" ]
-        , test "user edit is standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (AdminEditUser "user-1")
-                    [ "admin-edit-user:user-1" ]
-        , test "custom food create and edit are standalone" <|
-            \_ ->
-                ( paneKeysForRoute CustomFoodCreate
-                , paneKeysForRoute (CustomFoodEdit "food-1")
-                )
-                    |> Expect.equal
-                        ( [ "custom-food-create" ]
-                        , [ "custom-food-edit:food-1" ]
+                routePaneCases
+                    |> List.map
+                        (\( label, route, expected ) ->
+                            Expect.equal expected (paneKeysForRoute route)
+                                |> Expect.onFail label
                         )
-        , test "meal create and edit are standalone" <|
-            \_ ->
-                ( paneKeysForRoute MealCreate
-                , paneKeysForRoute (MealEdit "meal-1")
-                )
-                    |> Expect.equal
-                        ( [ "meal-create" ]
-                        , [ "meal-edit:meal-1" ]
-                        )
-        , test "generic search stays standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodSearch Nothing Nothing)
-                    [ "food-search" ]
-        , test "invalid dated search degrades to standalone search" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodSearch (Just "not-a-date") (Just Lunch))
-                    [ "food-search" ]
-        , test "undated food degrades to standalone detail on direct entry" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodShow "food-1" Nothing Nothing Nothing)
-                    [ "food-detail:food-1:none:none" ]
-        , test "undated log degrades to standalone detail" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodLogEntry "log-1" Nothing Nothing)
-                    [ "log-detail:log-1" ]
+                    |> expectAll
         , test "a today-dependent route waits honestly for local context" <|
             \_ ->
                 Page.init { route = DiaryDay Nothing Nothing, today = Nothing }
@@ -137,41 +51,120 @@ workspaceTests =
                     |> Page.paneKeys
                     |> Expect.equal
                         [ "food-search", "food-detail:food-1:none:none" ]
-        , test "custom food creation replaces its entire contextual workspace" <|
+        , test "standalone creation routes replace the entire contextual workspace" <|
             \_ ->
-                Page.init
-                    { route = FoodSearch (Just date) (Just Lunch)
-                    , today = Just today
-                    }
-                    |> first
-                    |> Page.initPreserving
-                        { route = CustomFoodCreate, today = Just today }
-                    |> first
-                    |> Page.paneKeys
-                    |> Expect.equal [ "custom-food-create" ]
-        , test "AI creation is also standalone" <|
-            \_ ->
-                Page.init
-                    { route = FoodSearch (Just date) (Just Lunch)
-                    , today = Just today
-                    }
-                    |> first
-                    |> Page.initPreserving
-                        { route = CustomFoodCreateWithAi, today = Just today }
-                    |> first
-                    |> Page.paneKeys
-                    |> Expect.equal [ "custom-food-create" ]
-        , test "AI ad-hoc logging is standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (AiLogCreate (Just date) (Just Lunch))
-                    [ "create-ai-log" ]
-        , test "calendar-aware log editing is standalone" <|
-            \_ ->
-                expectPaneKeys
-                    (FoodLogEntry "log-1" (Just date) (Just month))
-                    [ "log-detail:log-1" ]
+                let
+                    replacedBy : Route -> List String
+                    replacedBy route =
+                        Page.init
+                            { route = FoodSearch (Just date) (Just Lunch)
+                            , today = Just today
+                            }
+                            |> first
+                            |> Page.initPreserving
+                                { route = route, today = Just today }
+                            |> first
+                            |> Page.paneKeys
+                in
+                Expect.all
+                    [ \_ ->
+                        replacedBy CustomFoodCreate
+                            |> Expect.equal [ "custom-food-create" ]
+                    , \_ ->
+                        replacedBy CustomFoodCreateWithAi
+                            |> Expect.equal [ "custom-food-create" ]
+                    ]
+                    ()
         ]
+
+
+routePaneCases : List ( String, Route, List String )
+routePaneCases =
+    [ ( "calendar-aware diary opens calendar and diary panes"
+      , DiaryDay (Just date) (Just month)
+      , [ "calendar:" ++ month, diaryKey date (Just month) ]
+      )
+    , ( "an unparseable diary date falls back to today"
+      , DiaryDay (Just "not-a-date") Nothing
+      , [ diaryKey (LocalDate.format today) Nothing ]
+      )
+    , ( "a missing diary date falls back to today"
+      , DiaryDay Nothing Nothing
+      , [ diaryKey (LocalDate.format today) Nothing ]
+      )
+    , ( "a future diary date is clamped to today"
+      , DiaryDay (Just "2027-01-01") Nothing
+      , [ diaryKey (LocalDate.format today) Nothing ]
+      )
+    , ( "dated search opens diary and search panes"
+      , FoodSearch (Just date) (Just Lunch)
+      , [ diaryKey date Nothing, "food-search" ]
+      )
+    , ( "dated food opens diary and food detail panes"
+      , FoodShow "food-1" (Just date) (Just Lunch) Nothing
+      , [ diaryKey date Nothing, "food-detail:food-1:" ++ date ++ ":lunch" ]
+      )
+    , ( "dated log editing is standalone"
+      , FoodLogEntry "log-1" (Just date) Nothing
+      , [ "log-detail:log-1" ]
+      )
+    , ( "nutrition details retain the diary pane"
+      , NutritionDetails (Just date)
+      , [ diaryKey date Nothing, "nutrition-details:" ++ date ]
+      )
+    , ( "custom food detail retains its list pane"
+      , CustomFoodShow "food-1"
+      , [ "custom-food-list", "custom-food-detail:food-1" ]
+      )
+    , ( "meal detail retains its list pane"
+      , MealShow "meal-1"
+      , [ "meal-list", "meal-detail:meal-1" ]
+      )
+    , ( "user edit is standalone"
+      , AdminEditUser "user-1"
+      , [ "admin-edit-user:user-1" ]
+      )
+    , ( "custom food create is standalone"
+      , CustomFoodCreate
+      , [ "custom-food-create" ]
+      )
+    , ( "custom food edit is standalone"
+      , CustomFoodEdit "food-1"
+      , [ "custom-food-edit:food-1" ]
+      )
+    , ( "meal create is standalone"
+      , MealCreate
+      , [ "meal-create" ]
+      )
+    , ( "meal edit is standalone"
+      , MealEdit "meal-1"
+      , [ "meal-edit:meal-1" ]
+      )
+    , ( "generic search stays standalone"
+      , FoodSearch Nothing Nothing
+      , [ "food-search" ]
+      )
+    , ( "invalid dated search degrades to standalone search"
+      , FoodSearch (Just "not-a-date") (Just Lunch)
+      , [ "food-search" ]
+      )
+    , ( "undated food degrades to standalone detail on direct entry"
+      , FoodShow "food-1" Nothing Nothing Nothing
+      , [ "food-detail:food-1:none:none" ]
+      )
+    , ( "undated log degrades to standalone detail"
+      , FoodLogEntry "log-1" Nothing Nothing
+      , [ "log-detail:log-1" ]
+      )
+    , ( "AI creation is also standalone"
+      , CustomFoodCreateWithAi
+      , [ "custom-food-create" ]
+      )
+    , ( "AI ad-hoc logging is standalone"
+      , AiLogCreate (Just date) (Just Lunch)
+      , [ "create-ai-log" ]
+      )
+    ]
 
 
 reconcileTests : Test
@@ -473,10 +466,9 @@ initializeDesired item =
     ( item.pane, item.effect )
 
 
-expectPaneKeys : Route -> List String -> Expect.Expectation
-expectPaneKeys route expected =
-    paneKeysForRoute route
-        |> Expect.equal expected
+expectAll : List Expect.Expectation -> Expect.Expectation
+expectAll expectations =
+    Expect.all (List.map always expectations) ()
 
 
 paneKeysForRoute : Route -> List String

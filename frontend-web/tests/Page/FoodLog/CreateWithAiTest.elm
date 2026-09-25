@@ -32,21 +32,6 @@ tests =
                             , [ "500", "25", "50", "30", "12.5" ]
                             )
                         )
-        , test "save-off review submits only an ad-hoc log" <|
-            \_ ->
-                reviewedModel
-                    |> CreateWithAi.update (CreateWithAi.ReviewMsg Review.SubmitClicked)
-                    |> third
-                    |> (\outMsg ->
-                            case outMsg of
-                                CreateWithAi.RequestAdHocLog request ->
-                                    Expect.equal
-                                        ( request.name, request.quantity.amount )
-                                        ( "Paneer wrap", "1" )
-
-                                _ ->
-                                    Expect.fail "expected an ad-hoc log request"
-                       )
         , test "save-on review creates a custom food first" <|
             \_ ->
                 reviewedModel

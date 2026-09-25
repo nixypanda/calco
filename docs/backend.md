@@ -553,4 +553,5 @@ or:
 just test-backend
 ```
 
-See [testing.md](testing.md) for the integration test harness and coverage workflow.
+See [testing.md](testing.md) for the integration test harness, coverage
+workflow, and the keep/delete bar for unit tests.

@@ -152,22 +152,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn no_saved_rows_returns_defaults() {
-        let services = GoalTargetService::new(Arc::new(MockGoalTargetRepo::new(vec![])));
-        let user_id = Uuid::new_v4();
-        let requested_date = NaiveDate::from_ymd_opt(2026, 6, 16).unwrap();
-
-        let snapshot = services
-            .get_goal_for_date(user_id, requested_date)
-            .await
-            .unwrap();
-
-        assert_eq!(snapshot.source, GoalTargetSource::Default);
-        assert_eq!(snapshot.effective_from, None);
-        assert_eq!(snapshot.targets, GoalTargets::defaults());
-    }
-
-    #[tokio::test]
     async fn multiple_saved_rows_resolve_latest_effective_date() {
         let user_id = Uuid::new_v4();
         let now = Utc::now();
@@ -220,42 +204,6 @@ mod tests {
 
         assert_eq!(snapshot.source, GoalTargetSource::Default);
         assert_eq!(snapshot.targets, GoalTargets::defaults());
-    }
-
-    #[tokio::test]
-    async fn save_same_day_overwrites_existing_row() {
-        let user_id = Uuid::new_v4();
-        let timezone = "Asia/Kolkata";
-        let local_date = Utc::now()
-            .with_timezone(&timezone.parse::<Tz>().unwrap())
-            .date_naive();
-        let now = Utc::now() - Duration::days(1);
-        let repo = Arc::new(MockGoalTargetRepo::new(vec![GoalTarget::create(
-            user_id,
-            local_date,
-            sample_targets(2100, 150, 240, 60),
-            now,
-        )]));
-        let services = GoalTargetService::new(repo.clone());
-
-        let snapshot = services
-            .save_goal_for_today(
-                user_id,
-                local_date,
-                timezone,
-                sample_targets(2290, 160, 255, 70),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(snapshot.targets, sample_targets(2290, 160, 255, 70));
-        let saved = repo
-            .find_by_user_id_and_effective_from(user_id, local_date)
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(saved.targets, sample_targets(2290, 160, 255, 70));
-        assert_eq!(repo.goal_targets.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]

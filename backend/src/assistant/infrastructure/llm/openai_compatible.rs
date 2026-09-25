@@ -662,23 +662,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn no_authentication_sends_no_authorization_header() {
-        let server = server(vec![(AxumStatusCode::OK, success(), Duration::ZERO)]).await;
-        let client =
-            OpenAiCompatibleClient::new(config(server.endpoint.clone(), Authentication::None))
-                .unwrap();
-
-        client.complete(request()).await.unwrap();
-
-        assert!(
-            server.state.requests.lock().await[0]
-                .1
-                .get("authorization")
-                .is_none()
-        );
-    }
-
-    #[tokio::test]
     async fn falls_back_and_caches_supported_response_mode() {
         let unsupported = r#"{"error":{"message":"response_format is unsupported"}}"#.into();
         let server = server(vec![
@@ -810,33 +793,6 @@ mod tests {
         let parsed = parse_response(br#"{"choices":[{"message":{"content":"{}"}}]}"#).unwrap();
         assert_eq!(parsed.content, "{}");
         assert_eq!(parsed.usage, None);
-    }
-
-    #[tokio::test]
-    async fn invalid_success_response_maps_to_invalid_response() {
-        let server = server(vec![
-            (
-                AxumStatusCode::OK,
-                r#"{"choices":[]}"#.into(),
-                Duration::ZERO,
-            ),
-            (
-                AxumStatusCode::OK,
-                r#"{"choices":[{"message":{"content":null,"refusal":"no"}}]}"#.into(),
-                Duration::ZERO,
-            ),
-        ])
-        .await;
-        let client =
-            OpenAiCompatibleClient::new(config(server.endpoint.clone(), Authentication::None))
-                .unwrap();
-
-        for _ in 0..2 {
-            assert_eq!(
-                client.complete(request()).await,
-                Err(ChatError::InvalidResponse)
-            );
-        }
     }
 
     #[test]

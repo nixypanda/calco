@@ -13,83 +13,116 @@ networkErrorMessage =
     "Could not reach the server. Check your connection and try again."
 
 
+unauthorized : Client.ApiError
+unauthorized =
+    Client.BadStatus 401 "unauthorized" "Sign in again"
+
+
 tests : Test
 tests =
     describe "Page.Meal.List"
-        [ test "init requests meals" <|
+        [ test "loading the meal list requests meals and renders each meal summary" <|
             \_ ->
-                MealList.init
-                    |> Tuple.second
-                    |> Expect.equal MealList.RequestMeals
-        , test "load success stores meals" <|
+                let
+                    loaded : MealList.Model
+                    loaded =
+                        step
+                            (MealList.MealsLoaded (Ok { items = [ mealWithNotes ] }))
+                            (Tuple.first MealList.init)
+                in
+                { initial = Tuple.second MealList.init
+                , phase = toScreen loaded |> .phase
+                , summaries = toScreen loaded |> .summaries
+                }
+                    |> Expect.equal
+                        { initial = MealList.RequestMeals
+                        , phase = "loaded"
+                        , summaries = [ "420 kcal ⋅ 0 components" ]
+                        }
+        , test "a failed meal list load shows the error and a 401 expires the session" <|
             \_ ->
-                MealList.update
-                    (MealList.MealsLoaded (Ok { items = [] }))
-                    (Tuple.first MealList.init)
-                    |> first
-                    |> mealsOf
-                    |> Expect.equal (Just [])
-        , test "load failure stores error" <|
+                let
+                    loading : MealList.Model
+                    loading =
+                        Tuple.first MealList.init
+
+                    failed : MealList.Model
+                    failed =
+                        step (MealList.MealsLoaded (Err Client.NetworkError)) loading
+                in
+                { phase = toScreen failed |> .phase
+                , error = toScreen failed |> .error
+                , unauthorized = out (MealList.MealsLoaded (Err unauthorized)) loading
+                }
+                    |> Expect.equal
+                        { phase = "failed"
+                        , error = Just networkErrorMessage
+                        , unauthorized = MealList.SessionExpired
+                        }
+        , test "list actions navigate to detail, create, and back to the diary" <|
             \_ ->
-                MealList.update
-                    (MealList.MealsLoaded (Err Client.NetworkError))
-                    (Tuple.first MealList.init)
-                    |> first
-                    |> errorOf
-                    |> Expect.equal (Just networkErrorMessage)
-        , test "meal summary joins calories and component count" <|
-            \_ ->
-                MealList.mealSummaryText mealWithNotes
-                    |> Expect.equal "420 kcal ⋅ 0 components"
-        , test "open meal navigates to meal detail" <|
-            \_ ->
-                MealList.update (MealList.OpenMealClicked "meal-1") (Tuple.first MealList.init)
-                    |> third
-                    |> Expect.equal (MealList.Navigate (MealShow "meal-1"))
-        , test "create meal navigates to meal form" <|
-            \_ ->
-                MealList.update MealList.CreateMealClicked (Tuple.first MealList.init)
-                    |> third
-                    |> Expect.equal (MealList.Navigate MealCreate)
-        , test "back navigates home" <|
-            \_ ->
-                MealList.update MealList.BackClicked (Tuple.first MealList.init)
-                    |> third
-                    |> Expect.equal (MealList.Navigate (DiaryDay Nothing Nothing))
+                let
+                    loading : MealList.Model
+                    loading =
+                        Tuple.first MealList.init
+                in
+                { open = out (MealList.OpenMealClicked "meal-1") loading
+                , create = out MealList.CreateMealClicked loading
+                , back = out MealList.BackClicked loading
+                }
+                    |> Expect.equal
+                        { open = MealList.Navigate (MealShow "meal-1")
+                        , create = MealList.Navigate MealCreate
+                        , back = MealList.Navigate (DiaryDay Nothing Nothing)
+                        }
         ]
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+
+-- SCREEN PROJECTION
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+type alias Screen =
+    { phase : String
+    , summaries : List String
+    , error : Maybe String
+    }
 
 
-mealsOf : MealList.Model -> Maybe (List Meal)
-mealsOf model =
+toScreen : MealList.Model -> Screen
+toScreen model =
     case model of
         MealList.Loaded meals ->
-            Just meals
+            { phase = "loaded"
+            , summaries = List.map MealList.mealSummaryText meals
+            , error = Nothing
+            }
 
-        _ ->
-            Nothing
-
-
-errorOf : MealList.Model -> Maybe String
-errorOf model =
-    case model of
         MealList.LoadFailed message ->
-            Just message
-
-        MealList.Loaded _ ->
-            Nothing
+            { phase = "failed"
+            , summaries = []
+            , error = Just message
+            }
 
         MealList.Loading ->
-            Nothing
+            { phase = "loading"
+            , summaries = []
+            , error = Nothing
+            }
+
+
+
+-- HELPERS
+
+
+step : MealList.Msg -> MealList.Model -> MealList.Model
+step msg model =
+    first (MealList.update msg model)
+
+
+out : MealList.Msg -> MealList.Model -> MealList.OutMsg
+out msg model =
+    third (MealList.update msg model)
 
 
 mealWithNotes : Meal
@@ -110,3 +143,13 @@ mealWithNotes =
     , createdAt = "now"
     , updatedAt = "now"
     }
+
+
+first : ( a, b, c ) -> a
+first ( value, _, _ ) =
+    value
+
+
+third : ( a, b, c ) -> c
+third ( _, _, value ) =
+    value

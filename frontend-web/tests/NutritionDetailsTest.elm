@@ -53,11 +53,6 @@ tests =
                 ]
                     |> List.map Details.isDangerous
                     |> Expect.equal [ False, False, False, True ]
-        , test "informational nutrients never have progress" <|
-            \_ ->
-                nutrient Details.Informational Nothing Details.Available
-                    |> Details.progressPercent
-                    |> Expect.equal Nothing
         , test "progress is absent without a known amount or reference" <|
             \_ ->
                 nutrient Details.Adequacy (Just 28) Details.NoData

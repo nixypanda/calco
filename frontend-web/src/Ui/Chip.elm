@@ -1,7 +1,6 @@
 module Ui.Chip exposing
     ( badge
     , chip
-    , chipBackground
     , chips
     , coloredPill
     , removableChip

@@ -18,207 +18,239 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.CustomFood.Show"
-        [ test "init requests initial data" <|
-            \_ ->
-                CustomFoodShow.init "food-1"
-                    |> Tuple.second
-                    |> Expect.equal (CustomFoodShow.RequestInitialData "food-1")
-        , test "food then units load completes model" <|
-            \_ ->
-                CustomFoodShow.init "food-1"
-                    |> Tuple.first
-                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> CustomFoodShow.update (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
-        , test "units then food load completes model" <|
-            \_ ->
-                CustomFoodShow.init "food-1"
-                    |> Tuple.first
-                    |> CustomFoodShow.update (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> CustomFoodShow.update (CustomFoodShow.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
-        , test "food load refreshes loaded food and clears delete state" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded "food-1" (Ok { food | name = "Pear" }))
-                    (CustomFoodShow.Loaded
-                        { loadedModelRecord
-                            | delete = DeleteFailed "old"
-                        }
-                    )
-                    |> first
-                    |> loadedFoodNameAndDelete
-                    |> Expect.equal (Just ( "Pear", DeleteIdle ))
-        , test "unit load refreshes loaded units" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] }))
-                    loadedModel
-                    |> first
-                    |> loadedSummary
-                    |> Expect.equal (Just ( "food-1", [ gram ], DeleteIdle ))
-        , test "load failure stores error" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
-                    (Tuple.first (CustomFoodShow.init "food-1"))
-                    |> first
-                    |> Expect.equal
-                        (CustomFoodShow.LoadFailed
-                            { productId = "food-1", message = networkErrorMessage }
-                        )
-        , test "a load response for another product is ignored" <|
-            \_ ->
-                CustomFoodShow.update (CustomFoodShow.FoodLoaded "other" (Ok food)) loadedModel
-                    |> first
-                    |> Expect.equal loadedModel
-        , test "retry from load failed requests initial data again" <|
+        [ test "loading a custom food composes the food and unit loads into the detail screen" <|
             \_ ->
                 let
-                    ( model, _, outMsg ) =
-                        CustomFoodShow.update CustomFoodShow.RetryClicked
-                            (CustomFoodShow.LoadFailed
-                                { productId = "food-1"
-                                , message = networkErrorMessage
-                                }
-                            )
+                    ( loading, initialRequest ) =
+                        CustomFoodShow.init "food-1"
+
+                    afterFood : CustomFoodShow.Model
+                    afterFood =
+                        step (CustomFoodShow.FoodLoaded "food-1" (Ok food)) loading
+
+                    loaded : CustomFoodShow.Model
+                    loaded =
+                        step (CustomFoodShow.UnitsLoaded (Ok { items = [ gram ] })) afterFood
                 in
-                ( isCustomFoodShowLoading model, outMsg )
-                    |> Expect.equal ( True, CustomFoodShow.RequestInitialData "food-1" )
-        , test "load unauthorized expires session" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.UnitsLoaded
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    (Tuple.first (CustomFoodShow.init "food-1"))
-                    |> third
-                    |> Expect.equal CustomFoodShow.SessionExpired
-        , test "load success is ignored after load failed" <|
-            \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.FoodLoaded "food-1" (Ok food))
-                    (CustomFoodShow.LoadFailed { productId = "food-1", message = "old" })
-                    |> first
+                { initialRequest = initialRequest
+                , loadingPhase = toScreen loading |> .phase
+                , partialPhase = toScreen afterFood |> .phase
+                , loaded = toScreen loaded
+                }
                     |> Expect.equal
-                        (CustomFoodShow.LoadFailed
-                            { productId = "food-1", message = "old" }
-                        )
-        , test "edit action navigates to custom food edit" <|
-            \_ ->
-                CustomFoodShow.update CustomFoodShow.EditClicked loadedModel
-                    |> third
-                    |> Expect.equal (CustomFoodShow.Navigate (CustomFoodEdit "food-1"))
-        , test "edit action is no-op for non-user food" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.EditClicked
-                    (loadedWithFood { food | source = "IFCT" })
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
-        , test "delete click opens confirmation state" <|
-            \_ ->
-                CustomFoodShow.update CustomFoodShow.DeleteClicked loadedModel
-                    |> first
-                    |> deleteStateOf
-                    |> Expect.equal (Just DeleteConfirming)
-        , test "cancel delete returns to idle" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.CancelDeleteClicked
-                    (CustomFoodShow.Loaded
-                        { loadedModelRecord | delete = DeleteConfirming }
-                    )
-                    |> first
-                    |> deleteStateOf
-                    |> Expect.equal (Just DeleteIdle)
-        , test "delete confirm requests food deletion" <|
-            \_ ->
-                CustomFoodShow.update CustomFoodShow.DeleteClicked loadedModel
-                    |> first
-                    |> CustomFoodShow.update CustomFoodShow.ConfirmDeleteClicked
-                    |> third
-                    |> Expect.equal (CustomFoodShow.RequestDeleteCustomFood "food-1")
-        , test "delete confirm retries after failure" <|
-            \_ ->
-                CustomFoodShow.update
-                    CustomFoodShow.ConfirmDeleteClicked
-                    (CustomFoodShow.Loaded
-                        { loadedModelRecord
-                            | delete = DeleteFailed "Try again"
+                        { initialRequest = CustomFoodShow.RequestInitialData "food-1"
+                        , loadingPhase = "loading"
+                        , partialPhase = "loading"
+                        , loaded =
+                            { phase = "loaded"
+                            , name = Just "Apple"
+                            , units = Just [ gram ]
+                            , delete = Just DeleteIdle
+                            , error = Nothing
+                            }
                         }
-                    )
-                    |> third
-                    |> Expect.equal (CustomFoodShow.RequestDeleteCustomFood "food-1")
-        , test "delete confirm is no-op unless confirming or failed" <|
+        , test "a failed load can be retried and an unauthorized load expires the session" <|
             \_ ->
-                CustomFoodShow.update CustomFoodShow.ConfirmDeleteClicked loadedModel
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
-        , test "delete success navigates to custom food list" <|
+                let
+                    failed : CustomFoodShow.Model
+                    failed =
+                        step
+                            (CustomFoodShow.FoodLoaded "food-1" (Err Client.NetworkError))
+                            emptyModel
+
+                    retried : CustomFoodShow.Model
+                    retried =
+                        step CustomFoodShow.RetryClicked failed
+                in
+                { failedScreen = toScreen failed
+                , retryRequest = out CustomFoodShow.RetryClicked failed
+                , retriedPhase = toScreen retried |> .phase
+                , unauthorized =
+                    out
+                        (CustomFoodShow.UnitsLoaded
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        emptyModel
+                }
+                    |> Expect.equal
+                        { failedScreen =
+                            { phase = "failed"
+                            , name = Nothing
+                            , units = Nothing
+                            , delete = Nothing
+                            , error = Just networkErrorMessage
+                            }
+                        , retryRequest = CustomFoodShow.RequestInitialData "food-1"
+                        , retriedPhase = "loading"
+                        , unauthorized = CustomFoodShow.SessionExpired
+                        }
+        , test "a response for another product or after a failure is ignored" <|
             \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.DeleteCompleted (Ok ()))
-                    deletingModel
-                    |> third
-                    |> Expect.equal (CustomFoodShow.Navigate CustomFoodList)
-        , test "delete failure keeps confirmation state open with error" <|
+                let
+                    otherProduct : CustomFoodShow.Model
+                    otherProduct =
+                        step (CustomFoodShow.FoodLoaded "other" (Ok food)) loadedModel
+
+                    lateSuccess : CustomFoodShow.Model
+                    lateSuccess =
+                        step (CustomFoodShow.FoodLoaded "food-1" (Ok food)) failedModel
+                in
+                { otherProductScreen = toScreen otherProduct
+                , lateSuccessScreen = toScreen lateSuccess
+                }
+                    |> Expect.equal
+                        { otherProductScreen = toScreen loadedModel
+                        , lateSuccessScreen = toScreen failedModel
+                        }
+        , test "edit is offered only for user foods and navigates to the editor" <|
             \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.DeleteCompleted (Err Client.NetworkError))
-                    deletingModel
-                    |> first
-                    |> deleteStateOf
-                    |> Expect.equal (Just (DeleteFailed networkErrorMessage))
-        , test "delete unauthorized expires session" <|
+                { userEdit = out CustomFoodShow.EditClicked loadedModel
+                , catalogEdit =
+                    out CustomFoodShow.EditClicked (loadedWithFood { food | source = "IFCT" })
+                }
+                    |> Expect.equal
+                        { userEdit = CustomFoodShow.Navigate (CustomFoodEdit "food-1")
+                        , catalogEdit = CustomFoodShow.NoOp
+                        }
+        , test "deleting a user food confirms, can be cancelled, and navigates to the list" <|
             \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.DeleteCompleted
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    deletingModel
-                    |> third
-                    |> Expect.equal CustomFoodShow.SessionExpired
-        , test "delete completion is ignored unless deleting" <|
+                let
+                    confirming : CustomFoodShow.Model
+                    confirming =
+                        step CustomFoodShow.DeleteClicked loadedModel
+
+                    cancelled : CustomFoodShow.Model
+                    cancelled =
+                        step CustomFoodShow.CancelDeleteClicked confirming
+
+                    reconfirmed : CustomFoodShow.Model
+                    reconfirmed =
+                        step CustomFoodShow.DeleteClicked cancelled
+
+                    requested : CustomFoodShow.Model
+                    requested =
+                        step CustomFoodShow.ConfirmDeleteClicked reconfirmed
+
+                    completed : CustomFoodShow.Model
+                    completed =
+                        step (CustomFoodShow.DeleteCompleted (Ok ())) requested
+                in
+                { confirming = toScreen confirming |> .delete
+                , cancelRequest = out CustomFoodShow.CancelDeleteClicked confirming
+                , cancelled = toScreen cancelled |> .delete
+                , deleteRequest = out CustomFoodShow.ConfirmDeleteClicked reconfirmed
+                , deleteCompleted = out (CustomFoodShow.DeleteCompleted (Ok ())) requested
+                , completedPhase = toScreen completed |> .phase
+                }
+                    |> Expect.equal
+                        { confirming = Just DeleteConfirming
+                        , cancelRequest = CustomFoodShow.NoOp
+                        , cancelled = Just DeleteIdle
+                        , deleteRequest = CustomFoodShow.RequestDeleteCustomFood "food-1"
+                        , deleteCompleted = CustomFoodShow.Navigate CustomFoodList
+                        , completedPhase = "loaded"
+                        }
+        , test "a failed delete keeps the confirmation open and retrying reissues the request" <|
             \_ ->
-                CustomFoodShow.update
-                    (CustomFoodShow.DeleteCompleted (Ok ()))
-                    loadedModel
-                    |> third
-                    |> Expect.equal CustomFoodShow.NoOp
+                let
+                    deleting : CustomFoodShow.Model
+                    deleting =
+                        step CustomFoodShow.DeleteClicked loadedModel
+                            |> step CustomFoodShow.ConfirmDeleteClicked
+
+                    failed : CustomFoodShow.Model
+                    failed =
+                        step (CustomFoodShow.DeleteCompleted (Err Client.NetworkError)) deleting
+                in
+                { afterFailure = toScreen failed
+                , retryRequest = out CustomFoodShow.ConfirmDeleteClicked failed
+                , idleCompletion = out (CustomFoodShow.DeleteCompleted (Ok ())) loadedModel
+                }
+                    |> Expect.equal
+                        { afterFailure =
+                            { phase = "loaded"
+                            , name = Just "Apple"
+                            , units = Just []
+                            , delete = Just (DeleteFailed networkErrorMessage)
+                            , error = Nothing
+                            }
+                        , retryRequest = CustomFoodShow.RequestDeleteCustomFood "food-1"
+                        , idleCompletion = CustomFoodShow.NoOp
+                        }
         ]
+
+
+
+-- SCREEN PROJECTION
+
+
+type alias Screen =
+    { phase : String
+    , name : Maybe String
+    , units : Maybe (List UnitItem)
+    , delete : Maybe DeleteState
+    , error : Maybe String
+    }
+
+
+toScreen : CustomFoodShow.Model -> Screen
+toScreen model =
+    case model of
+        CustomFoodShow.Loaded loaded ->
+            { phase = "loaded"
+            , name = Just loaded.food.name
+            , units = Just loaded.units
+            , delete = Just loaded.delete
+            , error = Nothing
+            }
+
+        CustomFoodShow.Loading _ ->
+            { phase = "loading"
+            , name = Nothing
+            , units = Nothing
+            , delete = Nothing
+            , error = Nothing
+            }
+
+        CustomFoodShow.LoadFailed failed ->
+            { phase = "failed"
+            , name = Nothing
+            , units = Nothing
+            , delete = Nothing
+            , error = Just failed.message
+            }
+
+
+step : CustomFoodShow.Msg -> CustomFoodShow.Model -> CustomFoodShow.Model
+step msg model =
+    first (CustomFoodShow.update msg model)
+
+
+out : CustomFoodShow.Msg -> CustomFoodShow.Model -> CustomFoodShow.OutMsg
+out msg model =
+    third (CustomFoodShow.update msg model)
+
+
+emptyModel : CustomFoodShow.Model
+emptyModel =
+    Tuple.first (CustomFoodShow.init "food-1")
 
 
 loadedModel : CustomFoodShow.Model
 loadedModel =
-    CustomFoodShow.Loaded
-        loadedModelRecord
-
-
-loadedModelRecord : CustomFoodShow.LoadedModel
-loadedModelRecord =
-    { productId = "food-1"
-    , food = food
-    , units = []
-    , delete = DeleteIdle
-    }
-
-
-deletingModel : CustomFoodShow.Model
-deletingModel =
-    CustomFoodShow.Loaded
-        { loadedModelRecord | delete = Deleting }
+    step (CustomFoodShow.FoodLoaded "food-1" (Ok food)) emptyModel
+        |> step (CustomFoodShow.UnitsLoaded (Ok { items = [] }))
 
 
 loadedWithFood : ProductDetail -> CustomFoodShow.Model
 loadedWithFood nextFood =
-    CustomFoodShow.Loaded { loadedModelRecord | food = nextFood }
+    step (CustomFoodShow.FoodLoaded "food-1" (Ok nextFood)) emptyModel
+        |> step (CustomFoodShow.UnitsLoaded (Ok { items = [] }))
+
+
+failedModel : CustomFoodShow.Model
+failedModel =
+    step (CustomFoodShow.FoodLoaded "food-1" (Err Client.NetworkError)) emptyModel
 
 
 food : ProductDetail
@@ -245,40 +277,6 @@ gram =
     { code = "g", name = "Gram", kind = "mass" }
 
 
-deleteStateOf : CustomFoodShow.Model -> Maybe DeleteState
-deleteStateOf model =
-    case model of
-        CustomFoodShow.Loaded loaded ->
-            Just loaded.delete
-
-        _ ->
-            Nothing
-
-
-loadedSummary :
-    CustomFoodShow.Model
-    -> Maybe ( String, List UnitItem, DeleteState )
-loadedSummary model =
-    case model of
-        CustomFoodShow.Loaded loaded ->
-            Just ( loaded.productId, loaded.units, loaded.delete )
-
-        _ ->
-            Nothing
-
-
-loadedFoodNameAndDelete :
-    CustomFoodShow.Model
-    -> Maybe ( String, DeleteState )
-loadedFoodNameAndDelete model =
-    case model of
-        CustomFoodShow.Loaded loaded ->
-            Just ( loaded.food.name, loaded.delete )
-
-        _ ->
-            Nothing
-
-
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
     value
@@ -287,13 +285,3 @@ first ( value, _, _ ) =
 third : ( a, b, c ) -> c
 third ( _, _, value ) =
     value
-
-
-isCustomFoodShowLoading : CustomFoodShow.Model -> Bool
-isCustomFoodShowLoading model =
-    case model of
-        CustomFoodShow.Loading _ ->
-            True
-
-        _ ->
-            False

@@ -48,23 +48,6 @@ mod tests {
     }
 
     #[test]
-    fn mass_to_grams_known_codes() {
-        let c = sample();
-        assert_eq!(
-            c.mass_to_grams(Decimal::from(100), &UnitCode("g".into())),
-            Some(Decimal::from(100))
-        );
-        assert_eq!(
-            c.mass_to_grams(Decimal::from(2), &UnitCode("kg".into())),
-            Some(Decimal::from(2000))
-        );
-        assert_eq!(
-            c.mass_to_grams(Decimal::from(500), &UnitCode("mg".into())),
-            Some(Decimal::from_str("0.500").unwrap())
-        );
-    }
-
-    #[test]
     fn mass_to_grams_unknown_code() {
         let c = sample();
         assert_eq!(

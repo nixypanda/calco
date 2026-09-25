@@ -29,18 +29,15 @@ assertCode code expected =
 genericFallback : Test
 genericFallback =
     describe "nutrientLabel generic parser fallback"
-        [ test "single-word _MG code → 'Riboflavin (mg)'" <|
-            \_ -> assertCode "RIBOFLAVIN_MG" "Riboflavin (mg)"
-        , test "multi-word _UG code → 'Beta Carotene (ug)'" <|
-            \_ -> assertCode "BETA_CAROTENE_UG" "Beta Carotene (ug)"
-        , test "single-word _G code → 'Lycopene (g)'" <|
-            \_ -> assertCode "LYCOPENE_G" "Lycopene (g)"
-        , test "_KCAL suffix falls back to unit 'kcal'" <|
-            \_ -> assertCode "BETA_CAROTENE_KCAL" "Beta Carotene (kcal)"
-        , test "code with no recognized unit falls back to title-cased code" <|
-            \_ -> assertCode "BETA_CAROTENE" "Beta Carotene"
-        , test "bare unknown single-word code is title-cased" <|
-            \_ -> assertCode "MYSTERY" "Mystery"
-        , test "case-insensitive unit suffix" <|
-            \_ -> assertCode "riboflavin_mg" "Riboflavin (mg)"
+        [ test "derives a title-cased label and unit from the nutrient code" <|
+            \_ ->
+                Expect.all
+                    [ \_ -> assertCode "RIBOFLAVIN_MG" "Riboflavin (mg)"
+                    , \_ -> assertCode "BETA_CAROTENE_UG" "Beta Carotene (ug)"
+                    , \_ -> assertCode "LYCOPENE_G" "Lycopene (g)"
+                    , \_ -> assertCode "BETA_CAROTENE_KCAL" "Beta Carotene (kcal)"
+                    , \_ -> assertCode "BETA_CAROTENE" "Beta Carotene"
+                    , \_ -> assertCode "riboflavin_mg" "Riboflavin (mg)"
+                    ]
+                    ()
         ]

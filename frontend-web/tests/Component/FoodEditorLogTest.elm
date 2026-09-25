@@ -3,46 +3,20 @@ module Component.FoodEditorLogTest exposing (tests)
 import Api.Foods exposing (NutrientItem)
 import Component.FoodEditor as Editor
 import Data.FoodAssistant exposing (FoodDraft, SuggestedLog)
-import Element exposing (DeviceClass(..), Orientation(..))
 import Expect
 import Test exposing (Test, describe, test)
-import Test.Html.Query as Query
-import Test.Html.Selector as Selector
-import Translations.Util as Util
-import Ui.Theme as Theme
 
 
 tests : Test
 tests =
     describe "Component.FoodEditor food-log mode"
-        [ test "accepts zero values for all required nutrients" <|
+        [ test "log validation accepts optional nutrients and rejects negatives and duplicates" <|
             \_ ->
-                Editor.validateLog
-                    { validForm
-                        | nutrients =
-                            List.map
-                                (\row -> { row | amount = "0" })
-                                validForm.nutrients
-                    }
-                    |> Result.map .nutrientTotals
-                    |> Expect.equal
-                        (Ok
-                            [ ( "ENERGY_KCAL", 0 )
-                            , ( "PROTEIN_G", 0 )
-                            , ( "CARBS_G", 0 )
-                            , ( "FAT_G", 0 )
-                            ]
-                        )
-        , test "rejects a negative nutrient" <|
-            \_ ->
-                Editor.validateLog
+                ( Editor.validateLog
                     { validForm
                         | nutrients = setAmount "PROTEIN_G" "-1" validForm.nutrients
                     }
-                    |> Expect.equal (Err "Protein must be zero or greater.")
-        , test "accepts optional catalog nutrients" <|
-            \_ ->
-                Editor.validateLog
+                , Editor.validateLog
                     { validForm
                         | nutrients =
                             validForm.nutrients
@@ -53,11 +27,7 @@ tests =
                                    ]
                     }
                     |> Result.map (List.map .code << .nutrients)
-                    |> Expect.equal
-                        (Ok [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G" ])
-        , test "rejects duplicate nutrients" <|
-            \_ ->
-                Editor.validateLog
+                , Editor.validateLog
                     { validForm
                         | nutrients =
                             validForm.nutrients
@@ -67,12 +37,12 @@ tests =
                                      }
                                    ]
                     }
-                    |> Expect.equal (Err "Each nutrient can only be added once.")
-        , test "does not require weight for an ad-hoc-only log" <|
-            \_ ->
-                Editor.validateLog validForm
-                    |> Result.map .portionWeight
-                    |> Expect.equal (Ok Nothing)
+                )
+                    |> Expect.equal
+                        ( Err "Protein must be zero or greater."
+                        , Ok [ "ENERGY_KCAL", "PROTEIN_G", "CARBS_G", "FAT_G", "FIBER_G" ]
+                        , Err "Each nutrient can only be added once."
+                        )
         , test "requires positive weight when saving a custom food" <|
             \_ ->
                 validForm
@@ -113,40 +83,6 @@ tests =
                             , defaultUnit = Just "piece"
                             }
                         )
-        , test "log-only view hides reusable-food fields" <|
-            \_ ->
-                Editor.viewForLog
-                    { theme = Theme.light, device = phone, language = Util.EN_US }
-                    Editor.AllNutrients
-                    []
-                    []
-                    validForm
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has [ Selector.text "Logged Portion" ]
-                        , Query.has [ Selector.text "Portion Nutrition" ]
-                        , Query.has [ Selector.text "Log Details" ]
-                        , Query.hasNot [ Selector.text "Categories" ]
-                        , Query.hasNot [ Selector.text "Servings" ]
-                        ]
-        , test "save-and-log view reveals reusable-food fields" <|
-            \_ ->
-                validForm
-                    |> update Editor.LogPersistenceToggled
-                    |> Editor.viewForLog
-                        { theme = Theme.light, device = phone, language = Util.EN_US }
-                        Editor.AllNutrients
-                        []
-                        []
-                    |> Element.layout []
-                    |> Query.fromHtml
-                    |> Expect.all
-                        [ Query.has [ Selector.text "Categories" ]
-                        , Query.has [ Selector.text "Servings" ]
-                        , Query.has
-                            [ Selector.text "Weight of this logged portion (g)" ]
-                        ]
         , test "converts per-100-g nutrition into logged-portion totals" <|
             \_ ->
                 Editor.applyAiLogDraft catalog
@@ -234,11 +170,6 @@ setAmount code value =
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
     value
-
-
-phone : Element.Device
-phone =
-    { class = Phone, orientation = Portrait }
 
 
 catalog : List NutrientItem

@@ -555,14 +555,4 @@ model = "model"
             );
         }
     }
-
-    #[test]
-    fn legacy_ai_section_is_rejected() {
-        let file = TempFile::new(
-            r#"[ai]
-enabled = false
-"#,
-        );
-        assert_eq!(load(Some(file.path())), Err(ConfigError::InvalidToml));
-    }
 }

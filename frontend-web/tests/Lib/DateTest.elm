@@ -9,30 +9,23 @@ import Test exposing (Test, describe, fuzz, test)
 tests : Test
 tests =
     describe "LocalDate"
-        [ test "formats YYYY-MM-DD" <|
-            \_ ->
-                LocalDate.fromString "2026-06-04"
-                    |> Maybe.map LocalDate.format
-                    |> Expect.equal (Just "2026-06-04")
-        , test "parses valid YYYY-MM-DD" <|
-            \_ ->
-                LocalDate.fromString "2026-02-28"
-                    |> Maybe.map LocalDate.format
-                    |> Expect.equal (Just "2026-02-28")
-        , fuzz localDateFuzzer "formats and parses dates round trip" <|
+        [ fuzz localDateFuzzer "formats and parses dates round trip" <|
             \date ->
                 date
                     |> LocalDate.format
                     |> LocalDate.fromString
                     |> Expect.equal (Just date)
-        , test "rejects non-date shape" <|
+        , test "rejects malformed or invalid calendar dates" <|
             \_ ->
-                LocalDate.fromString "2026/06/04"
-                    |> Expect.equal Nothing
-        , test "rejects invalid calendar date" <|
-            \_ ->
-                LocalDate.fromString "2026-02-30"
-                    |> Expect.equal Nothing
+                Expect.all
+                    [ \_ ->
+                        LocalDate.fromString "2026/06/04"
+                            |> Expect.equal Nothing
+                    , \_ ->
+                        LocalDate.fromString "2026-02-30"
+                            |> Expect.equal Nothing
+                    ]
+                    ()
         , test "prevents next day beyond today" <|
             \_ ->
                 Maybe.map2 LocalDate.nextOnOrBefore

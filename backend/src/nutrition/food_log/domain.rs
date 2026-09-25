@@ -723,89 +723,10 @@ mod tests {
     }
 
     #[test]
-    fn test_meal_slot_roundtrip() {
-        let variants = [
-            (MealSlot::Breakfast, "breakfast"),
-            (MealSlot::Lunch, "lunch"),
-            (MealSlot::Dinner, "dinner"),
-            (MealSlot::Snack, "snack"),
-        ];
-        for (slot, expected_str) in &variants {
-            assert_eq!(slot.as_str(), *expected_str);
-            assert_eq!(expected_str.parse::<MealSlot>().unwrap(), *slot);
-        }
-    }
-
-    #[test]
     fn test_meal_slot_from_str_invalid() {
         assert!("brunch".parse::<MealSlot>().is_err());
         assert!("".parse::<MealSlot>().is_err());
         assert!("LUNCH".parse::<MealSlot>().is_err());
-    }
-
-    #[test]
-    fn product_log_construction_sets_item_quantity_and_snapshots() {
-        let product = sample_product();
-        let converter = sample_unit_converter();
-        let quantity = Quantity::new(Decimal::new(100, 0), UnitCode("g".into())).unwrap();
-        let nutrition = product.nutrition_for(&quantity, &converter).unwrap();
-        let log = FoodLogBuilder::new(
-            Uuid::new_v4(),
-            sample_log_date(),
-            FoodLogItemSnapshot::from_product(&product),
-            quantity,
-            nutrition,
-        )
-        .meal_slot(Some(MealSlot::Breakfast))
-        .device_timezone(Some("Asia/Kolkata".into()))
-        .notes(Some("notes".into()))
-        .build();
-
-        assert_eq!(
-            log.item,
-            FoodLogItemSnapshot::Product {
-                id: product.id,
-                name: "Test".into(),
-                brand: None,
-            }
-        );
-        assert_eq!(log.quantity_amount, Decimal::new(100, 0));
-        assert_eq!(log.quantity_unit.0, "g");
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(250, 0));
-        assert_eq!(log.notes.as_deref(), Some("notes"));
-        assert_eq!(log.device_timezone.as_deref(), Some("Asia/Kolkata"));
-    }
-
-    #[test]
-    fn meal_log_construction_sets_item_quantity_and_snapshots() {
-        let product = sample_product();
-        let meal = sample_meal();
-        let converter = sample_unit_converter();
-        let quantity = Quantity::new(Decimal::new(50, 0), UnitCode("g".into())).unwrap();
-        let nutrition = meal
-            .nutrition_for(&quantity, &[(product.id, product.clone())], &converter)
-            .unwrap();
-        let log = FoodLogBuilder::new(
-            Uuid::new_v4(),
-            sample_log_date(),
-            FoodLogItemSnapshot::from_meal(&meal),
-            quantity,
-            nutrition,
-        )
-        .meal_slot(Some(MealSlot::Dinner))
-        .build();
-
-        assert_eq!(
-            log.item,
-            FoodLogItemSnapshot::Meal {
-                id: meal.id,
-                name: "Test".into(),
-            }
-        );
-        assert_eq!(log.quantity_amount, Decimal::new(50, 0));
-        // meal scaled to 50g of 100g = 0.5x → 250 kcal/100g * 100g comp / 100 = 250, scaled by 0.5 = 125
-        assert_eq!(log.nutrient_snapshots[0].amount, Decimal::new(125, 0));
-        assert!(log.notes.is_none());
     }
 
     #[test]

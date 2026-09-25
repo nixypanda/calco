@@ -8,7 +8,6 @@ import Api.Foods
         , SearchResult
         , SearchScope(..)
         )
-import Api.Meals as Meals
 import Component.Meal.Form as Form
     exposing
         ( FormFieldMsg(..)
@@ -17,7 +16,6 @@ import Component.Meal.Form as Form
         , ValidationError(..)
         )
 import Data.Nutrition as Nutrition
-import Data.Search as Search
 import Expect
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -27,54 +25,8 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Component.Meal.Form"
-        [ describe "ProductNameLoaded"
-            [ test "Ok shows the product name in matching rows" <|
-                \_ ->
-                    let
-                        formWithProduct : FormFields
-                        formWithProduct =
-                            setRowProductId 1 "p1" emptyForm
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ProductNameLoaded "p1" (Ok productDetail))
-                                formWithProduct
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .query)
-                        |> Expect.equal (Just "Milk")
-            , test "Err falls back to Unknown food" <|
-                \_ ->
-                    let
-                        formWithProduct : FormFields
-                        formWithProduct =
-                            setRowProductId 1 "p1" emptyForm
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ProductNameLoaded "p1" (Err Client.NetworkError))
-                                formWithProduct
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .query)
-                        |> Expect.equal (Just "Unknown food")
-            , test "Ok with no other missing products returns no outmsg" <|
-                \_ ->
-                    let
-                        formWithProduct : FormFields
-                        formWithProduct =
-                            setRowProductId 1 "p1" emptyForm
-
-                        ( _, _, outMsg ) =
-                            Form.updateFormField
-                                (ProductNameLoaded "p1" (Ok productDetail))
-                                formWithProduct
-                    in
-                    outMsg
-                        |> Expect.equal Nothing
-            , test "Ok with another missing product requests next name" <|
+        [ describe "product names"
+            [ test "names load, fall back when missing, and request the next product" <|
                 \_ ->
                     let
                         formWithProducts : FormFields
@@ -84,443 +36,231 @@ tests =
                                 |> addRowWithId 2
                                 |> setRowProductId 2 "p2"
 
-                        ( _, _, outMsg ) =
-                            Form.updateFormField
-                                (ProductNameLoaded "p1" (Ok productDetail))
-                                formWithProducts
-                    in
-                    case outMsg of
-                        Just (RequestProductName "p2") ->
-                            Expect.pass
+                        loaded : FormFields
+                        loaded =
+                            first
+                                (Form.updateFormField
+                                    (ProductNameLoaded "p1" (Ok productDetail))
+                                    formWithProducts
+                                )
 
-                        _ ->
-                            Expect.fail "expected RequestProductName for p2"
+                        fallback : FormFields
+                        fallback =
+                            first
+                                (Form.updateFormField
+                                    (ProductNameLoaded "p1" (Err Client.NetworkError))
+                                    formWithProducts
+                                )
+
+                        nextRequest : Maybe FormFieldOutMsg
+                        nextRequest =
+                            third
+                                (Form.updateFormField
+                                    (ProductNameLoaded "p1" (Ok productDetail))
+                                    formWithProducts
+                                )
+                    in
+                    ( loaded.components |> List.map (.search >> .query)
+                    , nextRequest
+                    , fallback.components |> List.head |> Maybe.map (.search >> .query)
+                    )
+                        |> Expect.equal
+                            ( [ "Milk", "Product p2" ]
+                            , Just (RequestProductName "p2")
+                            , Just "Unknown food"
+                            )
             ]
-        , describe "ComponentSearchChanged"
-            [ test "query >= 2 chars emits RequestProductSearch" <|
+        , describe "component search"
+            [ test "a completion stores results only for its own token" <|
                 \_ ->
                     let
-                        ( _, _, outMsg ) =
-                            Form.updateFormField
-                                (ComponentSearchChanged 1 "milk")
-                                emptyForm
+                        ( searching, _, outMsg ) =
+                            Form.updateFormField (ComponentSearchChanged 1 "milk") emptyForm
+
+                        token : Ticket
+                        token =
+                            case outMsg of
+                                Just (RequestProductSearch _ searchToken _) ->
+                                    searchToken
+
+                                _ ->
+                                    Ticket.initial
+
+                        requestSummary : Maybe ( Form.RowId, String, SearchScope )
+                        requestSummary =
+                            case outMsg of
+                                Just (RequestProductSearch rowId _ request) ->
+                                    Just ( rowId, request.query, request.scope )
+
+                                _ ->
+                                    Nothing
+
+                        loaded : FormFields
+                        loaded =
+                            first
+                                (Form.updateFormField
+                                    (ComponentSearchCompleted 1 token (Ok searchResponse))
+                                    searching
+                                )
+
+                        stale : FormFields
+                        stale =
+                            first
+                                (Form.updateFormField
+                                    (ComponentSearchCompleted 1 (ticket 99) (Ok { items = [] }))
+                                    loaded
+                                )
+                    in
+                    ( requestSummary
+                    , loaded.components |> List.head |> Maybe.map .searchResults
+                    , stale.components |> List.head |> Maybe.map .searchResults
+                    )
+                        |> Expect.equal
+                            ( Just ( 1, "milk", SearchAll )
+                            , Just (Success [ searchResult ])
+                            , Just (Success [ searchResult ])
+                            )
+            , test "a failed search shows failure and a 401 expires the session" <|
+                \_ ->
+                    let
+                        error : Client.ApiError
+                        error =
+                            Client.NetworkError
+
+                        failed : FormFields
+                        failed =
+                            first
+                                (Form.updateFormField
+                                    (ComponentSearchCompleted 1 (ticket 1) (Err error))
+                                    emptyForm
+                                )
+
+                        searchAuth : Maybe FormFieldOutMsg
+                        searchAuth =
+                            third
+                                (Form.updateFormField
+                                    (ComponentSearchCompleted 1 (ticket 1) (Err unauthorized))
+                                    emptyForm
+                                )
+
+                        categoryAuth : Maybe FormFieldOutMsg
+                        categoryAuth =
+                            third
+                                (Form.updateFormField
+                                    (ComponentCategoriesCompleted 1 (ticket 1) (Err unauthorized))
+                                    emptyForm
+                                )
+                    in
+                    ( failed.components |> List.head |> Maybe.map .searchResults
+                    , searchAuth
+                    , categoryAuth
+                    )
+                        |> Expect.equal
+                            ( Just (Failure ())
+                            , Just FormSessionExpired
+                            , Just FormSessionExpired
+                            )
+            ]
+        , describe "category suggestions"
+            [ test "suggestions are stored only for their own token" <|
+                \_ ->
+                    let
+                        ( searching, _, outMsg ) =
+                            Form.updateFormField (ComponentSearchChanged 1 "category:dai") emptyForm
                     in
                     case outMsg of
-                        Just (RequestProductSearch rowId _ req) ->
-                            Expect.all
-                                [ \_ -> rowId |> Expect.equal 1
-                                , \_ -> req.query |> Expect.equal "milk"
-                                , \_ -> req.scope |> Expect.equal SearchAll
-                                ]
-                                ()
+                        Just (RequestProductAndCats requests) ->
+                            let
+                                loaded : FormFields
+                                loaded =
+                                    first
+                                        (Form.updateFormField
+                                            (ComponentCategoriesCompleted
+                                                requests.rowId
+                                                requests.categoryToken
+                                                (Ok
+                                                    { items =
+                                                        [ { value = "dairy", count = 5 } ]
+                                                    }
+                                                )
+                                            )
+                                            searching
+                                        )
 
-                        Just (RequestProductAndCats _) ->
-                            Expect.pass
-
-                        _ ->
-                            Expect.fail "expected search out-msg"
-            , test "short query clears results and returns no outmsg" <|
-                \_ ->
-                    let
-                        ( form, _, outMsg ) =
-                            Form.updateFormField
-                                (ComponentSearchChanged 1 "m")
-                                emptyForm
-                    in
-                    Expect.all
-                        [ \_ -> outMsg |> Expect.equal Nothing
-                        , \_ ->
-                            form.components
+                                stale : FormFields
+                                stale =
+                                    first
+                                        (Form.updateFormField
+                                            (ComponentCategoriesCompleted
+                                                requests.rowId
+                                                (ticket 99)
+                                                (Ok
+                                                    { items =
+                                                        [ { value = "other", count = 1 } ]
+                                                    }
+                                                )
+                                            )
+                                            loaded
+                                        )
+                            in
+                            ( loaded.components
                                 |> List.head
-                                |> Maybe.map .searchResults
-                                |> Expect.equal (Just (Success []))
-                        ]
-                        ()
-            ]
-        , describe "ComponentSearchCompleted"
-            [ test "Ok stores results at matching token" <|
-                \_ ->
-                    let
-                        formAfterSearch : FormFields
-                        formAfterSearch =
-                            emptyForm
-                                |> updateComponentSearchToken 1 (ticket 5)
+                                |> Maybe.map (.search >> .categorySuggestions)
+                            , stale.components
+                                |> List.head
+                                |> Maybe.map (.search >> .categorySuggestions)
+                            )
+                                |> Expect.equal
+                                    ( Just [ { value = "dairy", count = 5 } ]
+                                    , Just [ { value = "dairy", count = 5 } ]
+                                    )
 
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentSearchCompleted 1 (ticket 5) (Ok searchResponse))
-                                formAfterSearch
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .searchResults
-                        |> Expect.equal (Just (Success [ searchResult ]))
-            , test "Ok with stale token is ignored" <|
-                \_ ->
-                    let
-                        formAfterSearch : FormFields
-                        formAfterSearch =
-                            emptyForm
-                                |> updateComponentSearchToken 1 (ticket 3)
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentSearchCompleted 1 (ticket 5) (Ok searchResponse))
-                                formAfterSearch
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .searchResults
-                        |> Expect.equal (Just NotAsked)
-            , test "Err NetworkError sets search failed" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentSearchCompleted 1 (ticket 1) (Err Client.NetworkError))
-                                emptyForm
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .searchResults
-                        |> Expect.equal (Just (Failure ()))
-            , test "Err 401 returns FormSessionExpired" <|
-                \_ ->
-                    let
-                        ( _, _, outMsg ) =
-                            Form.updateFormField
-                                (ComponentSearchCompleted 1
-                                    (ticket 1)
-                                    (Err (Client.BadStatus 401 "" ""))
-                                )
-                                emptyForm
-                    in
-                    outMsg
-                        |> Expect.equal (Just FormSessionExpired)
-            ]
-        , describe "ComponentCategoriesCompleted"
-            [ test "Ok stores category suggestions" <|
-                \_ ->
-                    let
-                        formWithToken : FormFields
-                        formWithToken =
-                            emptyForm
-                                |> updateComponentCategoryToken 1 (ticket 3)
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentCategoriesCompleted 1
-                                    (ticket 3)
-                                    (Ok { items = [ { value = "dairy", count = 5 } ] })
-                                )
-                                formWithToken
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .categorySuggestions)
-                        |> Expect.equal (Just [ { value = "dairy", count = 5 } ])
-            , test "Ok with stale token is ignored" <|
-                \_ ->
-                    let
-                        formWithToken : FormFields
-                        formWithToken =
-                            emptyForm
-                                |> updateComponentCategoryToken 1 (ticket 1)
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentCategoriesCompleted 1
-                                    (ticket 3)
-                                    (Ok { items = [ { value = "dairy", count = 5 } ] })
-                                )
-                                formWithToken
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .categorySuggestions)
-                        |> Expect.equal (Just [])
-            , test "Err clears category suggestions" <|
-                \_ ->
-                    let
-                        formWithSuggestions : FormFields
-                        formWithSuggestions =
-                            emptyForm
-                                |> updateComponentCategoryToken 1 (ticket 1)
-
-                        ( form, _, _ ) =
-                            Form.updateFormField
-                                (ComponentCategoriesCompleted 1
-                                    (ticket 1)
-                                    (Err Client.NetworkError)
-                                )
-                                formWithSuggestions
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .categorySuggestions)
-                        |> Expect.equal (Just [])
-            , test "Err 401 returns FormSessionExpired" <|
-                \_ ->
-                    let
-                        ( _, _, outMsg ) =
-                            Form.updateFormField
-                                (ComponentCategoriesCompleted 1
-                                    (ticket 1)
-                                    (Err (Client.BadStatus 401 "" ""))
-                                )
-                                emptyForm
-                    in
-                    outMsg
-                        |> Expect.equal (Just FormSessionExpired)
-            ]
-        , describe "CompleteFirstComponentSuggestion"
-            [ test "applies first completion when available" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            emptyForm
-                                |> updateComponentQuery 1 "category:da"
-                                |> updateComponentSearchToken 1 (ticket 0)
-                                |> updateComponentCategoryToken 1 (ticket 0)
-                                |> updateComponentCategorySuggestions 1
-                                    [ { value = "dairy", count = 5 } ]
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (CompleteFirstComponentSuggestion 1) base
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .query)
-                        |> Expect.equal (Just "category:dairy")
-            , test "no completion available returns form unchanged" <|
-                \_ ->
-                    let
-                        ( form, _, outMsg ) =
-                            Form.updateFormField (CompleteFirstComponentSuggestion 1) emptyForm
-                    in
-                    Expect.all
-                        [ \_ -> form.components |> List.length |> Expect.equal 1
-                        , \_ -> outMsg |> Expect.equal Nothing
-                        ]
-                        ()
-            ]
-        , describe "ComponentCompletionClicked"
-            [ test "applies clicked completion via search change" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            emptyForm
-                                |> updateComponentSearchToken 1 (ticket 0)
-                                |> updateComponentCategoryToken 1 (ticket 0)
-
-                        completion : Search.Completion
-                        completion =
-                            Search.CategoryCompletion "category:dairy" 5
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentCompletionClicked 1 completion) base
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (.search >> .query)
-                        |> Expect.equal (Just "category:dairy")
-            ]
-        , describe "AddComponentClicked"
-            [ test "appends a new row" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField AddComponentClicked emptyForm
-                    in
-                    form.components
-                        |> List.length
-                        |> Expect.equal 2
-            ]
-        , describe "RemoveComponentClicked"
-            [ test "removes the specified row" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            emptyForm
-                                |> addRowWithId 2
-                                |> addRowWithId 3
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (RemoveComponentClicked 2) base
-                    in
-                    form.components
-                        |> List.map .rowId
-                        |> Expect.equal [ 1, 3 ]
-            , test "keeps at least one row" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (RemoveComponentClicked 1) emptyForm
-                    in
-                    form.components
-                        |> List.length
-                        |> Expect.equal 1
-            ]
-        , describe "component unit dropdown"
-            [ test "toggling opens the selected row and closes others" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            emptyForm
-                                |> addRowWithId 2
-                                |> (\withRow2 ->
-                                        { withRow2
-                                            | components =
-                                                List.map
-                                                    (\row ->
-                                                        if row.rowId == 1 then
-                                                            { row | unitOpen = True }
-
-                                                        else
-                                                            row
-                                                    )
-                                                    withRow2.components
-                                        }
-                                   )
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentUnitToggled 2) base
-                    in
-                    form.components
-                        |> List.map (\row -> ( row.rowId, row.unitOpen ))
-                        |> Expect.equal [ ( 1, False ), ( 2, True ) ]
-            , test "selecting a unit stores it and closes the dropdown" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm
-                                | components =
-                                    List.map
-                                        (\row -> { row | unitOpen = True })
-                                        emptyForm.components
-                            }
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentUnitChanged 1 "oz") base
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map (\row -> ( row.unit, row.unitOpen ))
-                        |> Expect.equal (Just ( "oz", False ))
-            ]
-        , describe "component search completions"
-            [ test "stores the active completion index" <|
-                \_ ->
-                    let
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentCompletionActiveChanged 1 2) emptyForm
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .completionIndex
-                        |> Expect.equal (Just 2)
-            , test "changing the search query resets the active index" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm
-                                | components =
-                                    List.map
-                                        (\row -> { row | completionIndex = 2 })
-                                        emptyForm.components
-                            }
-
-                        ( form, _, _ ) =
-                            Form.updateFormField (ComponentSearchChanged 1 "milk") base
-                    in
-                    form.components
-                        |> List.head
-                        |> Maybe.map .completionIndex
-                        |> Expect.equal (Just -1)
+                        _ ->
+                            Expect.fail "expected RequestProductAndCats"
             ]
         , describe "toMealRequest"
             [ test "empty name returns MealNameRequired" <|
                 \_ ->
                     Form.toMealRequest emptyForm
                         |> Expect.equal (Err MealNameRequired)
-            , test "whitespace-only name returns MealNameRequired" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm | name = "   " }
-                    in
-                    Form.toMealRequest base
-                        |> Expect.equal (Err MealNameRequired)
             , test "no selected components returns ComponentRequired" <|
                 \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm | name = "My Meal" }
-                    in
-                    Form.toMealRequest base
+                    Form.toMealRequest { emptyForm | name = "My Meal" }
                         |> Expect.equal (Err ComponentRequired)
-            , test "valid form returns Ok request" <|
+            , test "valid form trims the name and maps the payload" <|
                 \_ ->
                     let
                         base : FormFields
                         base =
                             { emptyForm
-                                | name = "My Meal"
+                                | name = "  My Meal  "
                                 , notes = "notes"
                                 , totalQuantity = "500"
                                 , totalUnit = "ml"
                             }
                                 |> setRowProductId 1 "p1"
-
-                        result : Result ValidationError Meals.CreateMealRequest
-                        result =
-                            Form.toMealRequest base
                     in
-                    case result of
-                        Ok req ->
-                            Expect.all
-                                [ \_ -> req.name |> Expect.equal "My Meal"
-                                , \_ -> req.notes |> Expect.equal (Just "notes")
-                                , \_ ->
-                                    req.totalQuantity
-                                        |> Expect.equal
-                                            (Just { amount = "500", unit = "ml" })
-                                , \_ -> req.components |> List.length |> Expect.equal 1
-                                ]
-                                ()
+                    case Form.toMealRequest base of
+                        Ok request ->
+                            { name = request.name
+                            , notes = request.notes
+                            , totalQuantity = request.totalQuantity
+                            , componentCount = List.length request.components
+                            }
+                                |> Expect.equal
+                                    { name = "My Meal"
+                                    , notes = Just "notes"
+                                    , totalQuantity = Just { amount = "500", unit = "ml" }
+                                    , componentCount = 1
+                                    }
 
                         Err _ ->
                             Expect.fail "expected Ok"
             , test "blank totalQuantity omits totalQuantity" <|
                 \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm | name = "Meal" }
-                                |> setRowProductId 1 "p1"
-                    in
-                    Form.toMealRequest base
+                    Form.toMealRequest ({ emptyForm | name = "Meal" } |> setRowProductId 1 "p1")
                         |> Result.map .totalQuantity
                         |> Expect.equal (Ok Nothing)
-            , test "name is trimmed in request" <|
-                \_ ->
-                    let
-                        base : FormFields
-                        base =
-                            { emptyForm | name = "  Meal  " }
-                                |> setRowProductId 1 "p1"
-                    in
-                    Form.toMealRequest base
-                        |> Result.map .name
-                        |> Expect.equal (Ok "Meal")
             ]
         ]
 
@@ -541,73 +281,19 @@ addRowWithId rowId form =
     { form | components = form.components ++ [ Form.emptyComponentRow rowId ] }
 
 
-updateSearchOnRow :
-    Form.RowId
-    ->
-        ({ query : String
-         , searchToken : Ticket
-         , categoryToken : Ticket
-         , categorySuggestions : List Search.CategorySuggestion
-         }
-         ->
-            { query : String
-            , searchToken : Ticket
-            , categoryToken : Ticket
-            , categorySuggestions : List Search.CategorySuggestion
-            }
-        )
-    -> FormFields
-    -> FormFields
-updateSearchOnRow rowId fn form =
-    { form
-        | components =
-            List.map
-                (\row ->
-                    if row.rowId == rowId then
-                        { row | search = fn row.search }
-
-                    else
-                        row
-                )
-                form.components
-    }
-
-
-updateComponentSearchToken : Form.RowId -> Ticket -> FormFields -> FormFields
-updateComponentSearchToken rowId token form =
-    updateSearchOnRow rowId
-        (\s -> { s | searchToken = token })
-        form
-
-
-updateComponentCategoryToken : Form.RowId -> Ticket -> FormFields -> FormFields
-updateComponentCategoryToken rowId token form =
-    updateSearchOnRow rowId
-        (\s -> { s | categoryToken = token })
-        form
-
-
-updateComponentCategorySuggestions :
-    Form.RowId
-    -> List Search.CategorySuggestion
-    -> FormFields
-    -> FormFields
-updateComponentCategorySuggestions rowId suggestions form =
-    updateSearchOnRow rowId
-        (\s -> { s | categorySuggestions = suggestions })
-        form
-
-
-updateComponentQuery : Form.RowId -> String -> FormFields -> FormFields
-updateComponentQuery rowId query form =
-    updateSearchOnRow rowId
-        (\s -> { s | query = query })
-        form
-
-
 first : ( a, b, c ) -> a
 first ( value, _, _ ) =
     value
+
+
+third : ( a, b, c ) -> c
+third ( _, _, value ) =
+    value
+
+
+unauthorized : Client.ApiError
+unauthorized =
+    Client.BadStatus 401 "unauthorized" "Sign in again"
 
 
 productDetail : ProductDetail

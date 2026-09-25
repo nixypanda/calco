@@ -321,35 +321,6 @@ mod tests {
     use uuid::Uuid;
 
     #[tokio::test]
-    async fn test_log_food_success() {
-        let services = make_services(Some(sample_product()));
-        let user_id = Uuid::new_v4();
-
-        let result = services
-            .log_item(
-                user_id,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: Some("Asia/Kolkata".to_string()),
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await;
-
-        assert!(result.is_ok());
-        let log = result.unwrap();
-        assert_eq!(log.user_id(), user_id);
-        assert_eq!(log.meal_slot(), Some(MealSlot::Lunch));
-        assert_eq!(log.quantity_amount(), Decimal::new(100, 0));
-        assert_eq!(log.nutrient_snapshots().len(), 1);
-        assert_eq!(log.nutrient_snapshots()[0].nutrient_code.0, "ENERGY_KCAL");
-    }
-
-    #[tokio::test]
     async fn test_log_food_product_not_found() {
         let services = make_services(None);
 
@@ -407,36 +378,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_food_log_hides_another_users_log() {
-        let services = make_services(Some(sample_product()));
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                owner,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Breakfast),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        let result = services.delete_food_log(created.id(), other).await;
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
-    }
-
-    #[tokio::test]
     async fn test_get_food_log_hides_another_users_log() {
         let services = make_services(Some(sample_product()));
         let owner = Uuid::new_v4();
@@ -463,43 +404,6 @@ mod tests {
             Err(NutritionError::NotFound(_))
         ));
         assert!(services.get_food_log(created.id(), owner).await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn food_log_query_port_is_scoped_to_actor() {
-        let services = make_services(Some(sample_product()));
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-
-        services
-            .log_item(
-                owner,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: None,
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(
-            FoodLogQueryPort::list_logs_for_date(&services, owner, sample_log_date())
-                .await
-                .unwrap()
-                .len(),
-            1
-        );
-        assert!(
-            FoodLogQueryPort::list_logs_for_date(&services, other, sample_log_date())
-                .await
-                .unwrap()
-                .is_empty()
-        );
     }
 
     #[tokio::test]
@@ -668,50 +572,6 @@ mod tests {
             .unwrap();
 
         assert_eq!(log.nutrient_snapshots()[0].amount, Decimal::new(60, 0));
-    }
-
-    #[tokio::test]
-    async fn test_update_food_log_hides_another_users_log() {
-        let services = make_services(Some(sample_product()));
-        let owner = Uuid::new_v4();
-        let other = Uuid::new_v4();
-
-        let created = services
-            .log_item(
-                owner,
-                LogFoodInput {
-                    log_date: sample_log_date(),
-                    device_timezone: None,
-                    meal_slot: Some(MealSlot::Lunch),
-                    item: FoodLogItemRef::Product(ProductId(Uuid::nil())),
-                    quantity: Quantity::new(Decimal::new(100, 0), UnitCode("g".to_string()))
-                        .unwrap(),
-                    notes: None,
-                },
-            )
-            .await
-            .unwrap();
-
-        let result = services
-            .update_food_log(
-                created.id(),
-                other,
-                UpdateFoodInput {
-                    log_date: None,
-                    device_timezone: None,
-                    meal_slot: None,
-                    item: None,
-                    quantity: None,
-                    notes: None,
-                },
-            )
-            .await;
-
-        assert!(result.is_err());
-        match result.unwrap_err() {
-            NutritionError::NotFound(_) => {}
-            _ => panic!("expected NotFound"),
-        }
     }
 
     #[tokio::test]

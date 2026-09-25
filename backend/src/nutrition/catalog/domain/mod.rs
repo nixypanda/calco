@@ -1058,30 +1058,6 @@ mod tests {
     }
 
     #[test]
-    fn product_search_scope_defaults_to_all() {
-        assert_eq!(
-            ProductSearchScope::parse(None).unwrap(),
-            ProductSearchScope::All
-        );
-    }
-
-    #[test]
-    fn product_search_scope_parse_accepts_supported_values() {
-        assert_eq!(
-            ProductSearchScope::parse(Some("all")).unwrap(),
-            ProductSearchScope::All
-        );
-        assert_eq!(
-            ProductSearchScope::parse(Some("custom")).unwrap(),
-            ProductSearchScope::Custom
-        );
-        assert_eq!(
-            ProductSearchScope::parse(Some("history")).unwrap(),
-            ProductSearchScope::History
-        );
-    }
-
-    #[test]
     fn product_search_scope_parse_rejects_unknown_values() {
         assert!(matches!(
             ProductSearchScope::parse(Some("private")),
@@ -1164,45 +1140,6 @@ mod tests {
     }
 
     #[test]
-    fn source_provides_default_nutrient_confidence() {
-        assert_eq!(
-            ExternalSource::Usda.default_nutrient_confidence(),
-            NutrientConfidence::Approved
-        );
-        assert_eq!(
-            ExternalSource::Ifct.default_nutrient_confidence(),
-            NutrientConfidence::Approved
-        );
-        assert_eq!(
-            ExternalSource::Indb.default_nutrient_confidence(),
-            NutrientConfidence::Approved
-        );
-        assert_eq!(
-            ExternalSource::Off.default_nutrient_confidence(),
-            NutrientConfidence::Derived
-        );
-    }
-
-    #[test]
-    fn external_product_creation_accepts_missing_barcode_and_empty_children() {
-        let product = Product::new_external(
-            ExternalSource::Usda,
-            ExternalProductBuilder::new("  foundation-123  ", "  Brown rice  ")
-                .brand(Some("  Generic  ".into()))
-                .categories(vec![" Grains ".into()]),
-            &test_catalog(),
-        )
-        .unwrap();
-
-        assert_eq!(product.origin.source_id(), Some("foundation-123"));
-        assert_eq!(product.origin.barcode(), None);
-        assert_eq!(product.name.as_str(), "Brown rice");
-        assert_eq!(product.brand, Some(Brand("Generic".into())));
-        assert!(product.nutrients.is_empty());
-        assert!(product.servings.is_empty());
-    }
-
-    #[test]
     fn external_product_creation_normalizes_blank_barcode_to_none() {
         let product = Product::new_external(
             ExternalSource::Off,
@@ -1225,39 +1162,6 @@ mod tests {
             blank_source_id,
             Err(NutritionError::Validation(_))
         ));
-    }
-
-    #[test]
-    fn custom_product_creation_normalizes_and_builds_children() {
-        let catalog = test_catalog();
-        let product = Product::new_custom(
-            Uuid::new_v4(),
-            CustomProductBuilder::new("  Rice Bowl  ")
-                .brand(Some("Kitchen".into()))
-                .categories(vec![" Meals ".into(), "meals".into(), "Dinner".into()])
-                .default_portion(Decimal::new(1, 0), "g")
-                .nutrients(required_nutrient_inputs(Decimal::new(120, 0)))
-                .servings(vec![serving_input(Decimal::new(250, 0))]),
-            &catalog,
-        )
-        .unwrap();
-
-        assert!(matches!(product.origin, ProductOrigin::Custom { .. }));
-        assert_eq!(product.visibility, ProductVisibility::Global);
-        assert_eq!(product.name.as_str(), "Rice Bowl");
-        assert_eq!(
-            product
-                .categories
-                .iter()
-                .map(|c| c.0.as_str())
-                .collect::<Vec<_>>(),
-            vec!["meals", "dinner"]
-        );
-        assert_eq!(
-            product.nutrients[0].confidence,
-            Some(NutrientConfidence::Approved)
-        );
-        assert_eq!(product.servings[0].grams_per_unit, Decimal::new(250, 0));
     }
 
     #[test]
@@ -1305,54 +1209,6 @@ mod tests {
             AmountPer100g::new("0.08333333333333333333333333333".parse().unwrap()).unwrap();
 
         assert_eq!(amount.value(), Decimal::new(83333, 6));
-    }
-
-    #[test]
-    fn custom_product_creation_rejects_unknown_nutrient_code() {
-        let user_id = Uuid::new_v4();
-        let catalog = test_catalog();
-        let result = Product::new_custom(
-            user_id,
-            CustomProductBuilder::new("Food")
-                .nutrients(vec![ProductNutrientInput {
-                    code: "NOT_A_CODE".into(),
-                    amount_per_100g: Decimal::new(10, 0),
-                    source: None,
-                    confidence: None,
-                }])
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        );
-        assert!(matches!(result, Err(NutritionError::Validation(_))));
-    }
-
-    #[test]
-    fn custom_product_update_preserves_identity_and_source_fields() {
-        let user_id = Uuid::new_v4();
-        let catalog = test_catalog();
-        let product = Product::new_custom(
-            user_id,
-            CustomProductBuilder::new("Original")
-                .categories(vec!["old".into()])
-                .nutrients(required_nutrient_inputs(Decimal::new(10, 0)))
-                .servings(vec![serving_input(Decimal::new(100, 0))]),
-            &catalog,
-        )
-        .unwrap();
-        let input = CustomProductBuilder::new(" Updated ")
-            .brand(Some("Brand".into()))
-            .categories(vec!["New".into()])
-            .default_portion(Decimal::new(2, 0), "serving")
-            .nutrients(required_nutrient_inputs(Decimal::new(20, 0)))
-            .servings(vec![serving_input(Decimal::new(50, 0))]);
-        let updated = product.update_custom(input, &catalog).unwrap();
-
-        assert_eq!(updated.id, product.id);
-        assert_eq!(updated.origin, product.origin);
-        assert_eq!(updated.visibility, product.visibility);
-        assert_eq!(updated.name.as_str(), "Updated");
-        assert_eq!(updated.brand.unwrap().0, "Brand");
-        assert_eq!(updated.default_unit.unwrap().0, "serving");
     }
 
     #[test]

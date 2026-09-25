@@ -50,6 +50,8 @@ just test-frontend
 
 - Tests live in `frontend-web/tests/`.
 - Elm tests are pure unit tests (no DOM, no mocks).
+- Don't add constructor or field-assignment tests; see `docs/testing.md` for
+  the keep/delete bar.
 
 ### Frontend Quality Gates
 

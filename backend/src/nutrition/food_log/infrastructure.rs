@@ -537,18 +537,6 @@ mod tests {
     }
 
     #[test]
-    fn filter_query_omits_item_predicate_for_empty_items() {
-        let sql = filter_sql(base_filter(
-            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
-        ));
-
-        assert_eq!(
-            sql,
-            expected_filter_sql("AND log_date >= $2 AND log_date <= $3")
-        );
-    }
-
-    #[test]
     fn filter_query_adds_product_item_predicate() {
         let mut filter =
             base_filter(DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap());
@@ -599,18 +587,6 @@ mod tests {
                 "AND log_date >= $2 AND log_date <= $3 AND \
                  (item_product_id = ANY($4) OR item_meal_id = ANY($5))"
             )
-        );
-    }
-
-    #[test]
-    fn filter_query_orders_by_date_and_created_at_desc() {
-        let sql = filter_sql(base_filter(
-            DateRange::inclusive(date(2026, 6, 1), date(2026, 6, 3)).unwrap(),
-        ));
-
-        assert_eq!(
-            sql,
-            expected_filter_sql("AND log_date >= $2 AND log_date <= $3")
         );
     }
 }

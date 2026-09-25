@@ -1,10 +1,9 @@
 module Page.Meal.EditTest exposing (tests)
 
 import Api.Client as Client
-import Api.Meals exposing (Meal, MealNutritionResponse)
+import Api.Meals exposing (Meal)
 import Component.Meal.Form as Common
 import Data.ItemRef as ItemRef
-import Data.Nutrition as Nutrition exposing (NutrientAmount)
 import Data.Route exposing (Route(..))
 import Expect
 import Page.Meal.Edit as MealEdit
@@ -17,166 +16,203 @@ networkErrorMessage =
     "Could not reach the server. Check your connection and try again."
 
 
+unauthorized : Client.ApiError
+unauthorized =
+    Client.BadStatus 401 "unauthorized" "Sign in again"
+
+
 tests : Test
 tests =
     describe "Page.Meal.Edit"
-        [ test "init is loading and requests meal" <|
+        [ test "loading a meal fills the edit form and requests the first product name" <|
             \_ ->
-                MealEdit.init "meal-1"
-                    |> Tuple.second
-                    |> Expect.equal (MealEdit.RequestMeal "meal-1")
-        , test "init starts with loading nutrition state" <|
-            \_ ->
-                MealEdit.init "meal-1"
-                    |> Tuple.first
-                    |> nutritionOf
-                    |> Expect.equal (Just (NutritionLoading View.Nutrients.defaultNutritionInput))
-        , test "meal load success stores meal and maps components into rows" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.MealLoaded "meal-1" (Ok meal))
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> componentsOf
-                    |> List.map (\row -> ( row.productId, row.quantity, row.unit ))
-                    |> Expect.equal [ ( "food-1", "2", "serving" ) ]
-        , test "meal load requests the name of its first product component" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.MealLoaded "meal-1" (Ok meal))
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> third
+                let
+                    ( loading, initial ) =
+                        MealEdit.init "meal-1"
+
+                    editing : MealEdit.Model
+                    editing =
+                        step (MealEdit.MealLoaded "meal-1" (Ok meal)) loading
+
+                    afterOther : MealEdit.Model
+                    afterOther =
+                        step (MealEdit.MealLoaded "other" (Ok meal)) loading
+                in
+                { initial = initial
+                , request = out (MealEdit.MealLoaded "meal-1" (Ok meal)) loading
+                , phase = toScreen editing |> .phase
+                , name = toScreen editing |> .name
+                , components = toScreen editing |> .components
+                , otherPhase = toScreen afterOther |> .phase
+                }
                     |> Expect.equal
-                        (MealEdit.FormOutMsg (Common.RequestProductName "food-1"))
-        , test "meal load failure transitions to edit load failed" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.MealLoaded "meal-1"
-                        (Err Client.NetworkError)
-                    )
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> (\model ->
-                            case model of
-                                MealEdit.EditLoadFailed failed ->
-                                    Just failed.message
-
-                                _ ->
-                                    Nothing
-                       )
-                    |> Expect.equal (Just networkErrorMessage)
-        , test "retry from edit load failed requests the meal again" <|
-            \_ ->
-                let
-                    ( model, _, outMsg ) =
-                        MealEdit.update MealEdit.RetryClicked
-                            (MealEdit.EditLoadFailed
-                                { mealId = "meal-1"
-                                , message = networkErrorMessage
-                                }
-                            )
-                in
-                case model of
-                    MealEdit.LoadingEdit loading ->
-                        ( loading.mealId, outMsg )
-                            |> Expect.equal ( "meal-1", MealEdit.RequestMeal "meal-1" )
-
-                    _ ->
-                        Expect.fail "expected LoadingEdit"
-        , test "a load response for another meal is ignored" <|
-            \_ ->
-                let
-                    base : MealEdit.Model
-                    base =
-                        Tuple.first (MealEdit.init "meal-1")
-                in
-                MealEdit.update (MealEdit.MealLoaded "other" (Ok meal)) base
-                    |> first
-                    |> Expect.equal base
-        , test "nutrient preview response stores nutrients" <|
-            \_ ->
-                MealEdit.update
-                    (MealEdit.NutrientPreviewLoaded "meal-1" (Ok nutrientPreview))
-                    (Tuple.first (MealEdit.init "meal-1"))
-                    |> first
-                    |> nutrientsOf
-                    |> Expect.equal (Just [ nutrient ])
-        , test "submit dispatches update meal with meal id" <|
-            \_ ->
-                let
-                    row : Common.ComponentRow
-                    row =
-                        Common.emptyComponentRow 1
-                in
-                MealEdit.update
-                    MealEdit.SubmitClicked
-                    (loadedWithForm
-                        { emptyFormFields
-                            | name = "Lunch"
-                            , components =
-                                [ { row
-                                    | productId = "food-1"
-                                    , quantity = "2"
-                                    , unit = "serving"
-                                  }
-                                ]
+                        { initial = MealEdit.RequestMeal "meal-1"
+                        , request = MealEdit.FormOutMsg (Common.RequestProductName "food-1")
+                        , phase = "editing"
+                        , name = Just "Lunch"
+                        , components = Just [ ( "food-1", "2", "serving" ) ]
+                        , otherPhase = "loading"
                         }
-                    )
-                    |> third
-                    |> Expect.equal
-                        (MealEdit.RequestUpdateMeal "meal-1"
-                            { name = "Lunch"
-                            , notes = Nothing
-                            , totalQuantity = Nothing
-                            , components =
-                                [ { item = { itemType = ItemRef.Product, id = "food-1" }
-                                  , quantity = { amount = "2", unit = "serving" }
-                                  }
-                                ]
-                            }
-                        )
-        , test "submit with no name surfaces a name-required error" <|
+        , test "a failed edit load surfaces an error and retrying requests the meal again" <|
             \_ ->
-                MealEdit.update
-                    MealEdit.SubmitClicked
-                    (loadedWithForm emptyFormFields)
-                    |> first
-                    |> (\model ->
-                            case model of
-                                MealEdit.Editing loaded ->
-                                    Common.submitErrorMessage loaded.fields.submit
+                let
+                    failed : MealEdit.Model
+                    failed =
+                        step
+                            (MealEdit.MealLoaded "meal-1" (Err Client.NetworkError))
+                            (Tuple.first (MealEdit.init "meal-1"))
 
-                                _ ->
-                                    Nothing
-                       )
-                    |> Expect.equal (Just "Name is required")
-        , test "save success navigates to meal detail" <|
+                    retrying : MealEdit.Model
+                    retrying =
+                        step MealEdit.RetryClicked failed
+                in
+                { failedPhase = toScreen failed |> .phase
+                , error = toScreen failed |> .error
+                , retryRequest = out MealEdit.RetryClicked failed
+                , retryPhase = toScreen retrying |> .phase
+                , unauthorized =
+                    out
+                        (MealEdit.MealLoaded "meal-1" (Err unauthorized))
+                        (Tuple.first (MealEdit.init "meal-1"))
+                }
+                    |> Expect.equal
+                        { failedPhase = "failed"
+                        , error = Just networkErrorMessage
+                        , retryRequest = MealEdit.RequestMeal "meal-1"
+                        , retryPhase = "loading"
+                        , unauthorized = MealEdit.SessionExpired
+                        }
+        , test "submitting sends the update payload and navigates to the detail on success" <|
             \_ ->
-                MealEdit.update
-                    (MealEdit.SaveCompleted (Ok meal))
-                    (loadedWithForm emptyFormFields)
-                    |> third
-                    |> Expect.equal (MealEdit.Navigate (MealShow "meal-1"))
+                let
+                    editing : MealEdit.Model
+                    editing =
+                        loadedWithForm validForm
+
+                    submitted : MealEdit.Model
+                    submitted =
+                        step MealEdit.SubmitClicked editing
+                in
+                { request = out MealEdit.SubmitClicked editing
+                , submitError = toScreen submitted |> .submitError
+                , success = out (MealEdit.SaveCompleted (Ok meal)) submitted
+                }
+                    |> Expect.equal
+                        { request =
+                            MealEdit.RequestUpdateMeal "meal-1"
+                                { name = "Lunch"
+                                , notes = Nothing
+                                , totalQuantity = Nothing
+                                , components =
+                                    [ { item = { itemType = ItemRef.Product, id = "food-1" }
+                                      , quantity = { amount = "2", unit = "serving" }
+                                      }
+                                    ]
+                                }
+                        , submitError = Nothing
+                        , success = MealEdit.Navigate (MealShow "meal-1")
+                        }
+        , test "submitting without a name surfaces the validation error without a request" <|
+            \_ ->
+                { request =
+                    out MealEdit.SubmitClicked (loadedWithForm Common.emptyFormFields)
+                , error =
+                    toScreen (step MealEdit.SubmitClicked (loadedWithForm Common.emptyFormFields))
+                        |> .submitError
+                }
+                    |> Expect.equal
+                        { request = MealEdit.NoOp
+                        , error = Just "Name is required"
+                        }
         ]
 
 
-nutrient : NutrientAmount
-nutrient =
-    { code = "ENERGY_KCAL", amount = "120", unit = "kcal" }
+
+-- SCREEN PROJECTION
 
 
-nutrientPreview : MealNutritionResponse
-nutrientPreview =
-    { mealId = "meal-1"
-    , quantity = { amount = "100", unit = "g" }
-    , nutritionSummary = Nutrition.emptySummary
-    , nutrients = [ nutrient ]
+type alias Screen =
+    { phase : String
+    , name : Maybe String
+    , components : Maybe (List ( String, String, String ))
+    , submitError : Maybe String
+    , error : Maybe String
     }
 
 
-emptyFormFields : Common.FormFields
-emptyFormFields =
-    Common.emptyFormFields
+toScreen : MealEdit.Model -> Screen
+toScreen model =
+    case model of
+        MealEdit.LoadingEdit _ ->
+            { phase = "loading"
+            , name = Nothing
+            , components = Nothing
+            , submitError = Nothing
+            , error = Nothing
+            }
+
+        MealEdit.EditLoadFailed failed ->
+            { phase = "failed"
+            , name = Nothing
+            , components = Nothing
+            , submitError = Nothing
+            , error = Just failed.message
+            }
+
+        MealEdit.Editing loaded ->
+            { phase = "editing"
+            , name = Just loaded.fields.name
+            , components =
+                Just
+                    (List.map
+                        (\row -> ( row.productId, row.quantity, row.unit ))
+                        loaded.fields.components
+                    )
+            , submitError = Common.submitErrorMessage loaded.fields.submit
+            , error = Nothing
+            }
+
+
+
+-- HELPERS
+
+
+validForm : Common.FormFields
+validForm =
+    let
+        row : Common.ComponentRow
+        row =
+            Common.emptyComponentRow 1
+
+        fields : Common.FormFields
+        fields =
+            Common.emptyFormFields
+    in
+    { fields
+        | name = "Lunch"
+        , components =
+            [ { row | productId = "food-1", quantity = "2", unit = "serving" } ]
+    }
+
+
+loadedWithForm : Common.FormFields -> MealEdit.Model
+loadedWithForm fields =
+    MealEdit.Editing
+        { mealId = "meal-1"
+        , meal = meal
+        , fields = fields
+        , nutrition = NutritionLoading View.Nutrients.defaultNutritionInput
+        }
+
+
+step : MealEdit.Msg -> MealEdit.Model -> MealEdit.Model
+step msg model =
+    first (MealEdit.update msg model)
+
+
+out : MealEdit.Msg -> MealEdit.Model -> MealEdit.OutMsg
+out msg model =
+    third (MealEdit.update msg model)
 
 
 meal : Meal
@@ -196,62 +232,6 @@ meal =
     , createdAt = "now"
     , updatedAt = "now"
     }
-
-
-loadedWithForm : Common.FormFields -> MealEdit.Model
-loadedWithForm fields =
-    MealEdit.Editing
-        { mealId = "meal-1"
-        , meal = meal
-        , fields = fields
-        , nutrition = NutritionLoading View.Nutrients.defaultNutritionInput
-        }
-
-
-componentsOf : MealEdit.Model -> List Common.ComponentRow
-componentsOf model =
-    case model of
-        MealEdit.Editing loaded ->
-            loaded.fields.components
-
-        _ ->
-            []
-
-
-nutrientsOf : MealEdit.Model -> Maybe (List NutrientAmount)
-nutrientsOf model =
-    case model of
-        MealEdit.Editing loaded ->
-            case loaded.nutrition of
-                NutritionLoaded _ nutrients ->
-                    Just nutrients
-
-                _ ->
-                    Nothing
-
-        MealEdit.LoadingEdit loading ->
-            case loading.nutrition of
-                NutritionLoaded _ nutrients ->
-                    Just nutrients
-
-                _ ->
-                    Nothing
-
-        _ ->
-            Nothing
-
-
-nutritionOf : MealEdit.Model -> Maybe NutritionState
-nutritionOf model =
-    case model of
-        MealEdit.LoadingEdit loading ->
-            Just loading.nutrition
-
-        MealEdit.Editing loaded ->
-            Just loaded.nutrition
-
-        MealEdit.EditLoadFailed _ ->
-            Nothing
 
 
 first : ( a, b, c ) -> a

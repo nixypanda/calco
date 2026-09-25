@@ -19,245 +19,206 @@ networkErrorMessage =
 tests : Test
 tests =
     describe "Page.CustomFood.Edit"
-        [ test "loaded form keeps nutrient unit when food arrives before nutrients" <|
-            \_ ->
-                CustomFoodEdit.init "food-1"
-                    |> Tuple.first
-                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
-                    |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.FormMsg
-                            (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
-                        )
-                    |> first
-                    |> firstNutrientUnit
-                    |> Expect.equal (Just "g")
-        , test "loaded form keeps nutrient unit when food arrives last" <|
-            \_ ->
-                CustomFoodEdit.init "food-1"
-                    |> Tuple.first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
-                    |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
-                    |> first
-                    |> CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.FormMsg
-                            (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
-                        )
-                    |> first
-                    |> firstNutrientUnit
-                    |> Expect.equal (Just "g")
-        , test "init requests initial data for the product" <|
-            \_ ->
-                CustomFoodEdit.init "food-1"
-                    |> Tuple.second
-                    |> Expect.equal (CustomFoodEdit.RequestInitialData "food-1")
-        , test "food load failure moves to load failed" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.FoodLoaded "food-1" (Err Client.NetworkError))
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
-                    |> first
-                    |> Expect.equal
-                        (CustomFoodEdit.LoadFailed
-                            { productId = "food-1", message = networkErrorMessage }
-                        )
-        , test "a load response for another product is ignored" <|
-            \_ ->
-                CustomFoodEdit.update (CustomFoodEdit.FoodLoaded "other" (Ok food)) loadedModel
-                    |> first
-                    |> Expect.equal loadedModel
-        , test "retry from load failed requests initial data again" <|
+        [ test "loading composes the edit form and seeds the nutrient catalog" <|
             \_ ->
                 let
-                    ( model, _, outMsg ) =
-                        CustomFoodEdit.update CustomFoodEdit.RetryClicked
-                            (CustomFoodEdit.LoadFailed
-                                { productId = "food-1"
-                                , message = networkErrorMessage
-                                }
-                            )
+                    ( _, initialRequest ) =
+                        CustomFoodEdit.init "food-1"
+
+                    loaded : CustomFoodEdit.Model
+                    loaded =
+                        emptyModel
+                            |> step (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
+                            |> step (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
+                            |> step (CustomFoodEdit.UnitsLoaded (Ok { items = [ gram ] }))
+                            |> step
+                                (CustomFoodEdit.FormMsg
+                                    (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
+                                )
                 in
-                ( isCustomFoodEditLoading model, outMsg )
-                    |> Expect.equal ( True, CustomFoodEdit.RequestInitialData "food-1" )
-        , test "load failure unauthorized expires session" <|
+                { initialRequest = initialRequest
+                , screen = toScreen loaded
+                }
+                    |> Expect.equal
+                        { initialRequest = CustomFoodEdit.RequestInitialData "food-1"
+                        , screen =
+                            { phase = "loaded"
+                            , name = Just "Curd"
+                            , firstNutrientUnit = Just "g"
+                            , submit = Just Form.Idle
+                            , error = Nothing
+                            }
+                        }
+        , test "a failed load shows a retryable error and retry restarts the load" <|
             \_ ->
-                CustomFoodEdit.update
+                let
+                    failed : CustomFoodEdit.Model
+                    failed =
+                        step (CustomFoodEdit.NutrientsLoaded (Err Client.NetworkError)) emptyModel
+
+                    retried : CustomFoodEdit.Model
+                    retried =
+                        step CustomFoodEdit.RetryClicked failed
+                in
+                { failedScreen = toScreen failed
+                , retryRequest = out CustomFoodEdit.RetryClicked failed
+                , retriedPhase = toScreen retried |> .phase
+                }
+                    |> Expect.equal
+                        { failedScreen =
+                            { phase = "failed"
+                            , name = Nothing
+                            , firstNutrientUnit = Nothing
+                            , submit = Nothing
+                            , error = Just networkErrorMessage
+                            }
+                        , retryRequest = CustomFoodEdit.RequestInitialData "food-1"
+                        , retriedPhase = "loading"
+                        }
+        , test "an unauthorized load expires the session" <|
+            \_ ->
+                out
                     (CustomFoodEdit.NutrientsLoaded
                         (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                     )
-                    (Tuple.first (CustomFoodEdit.init "food-1"))
-                    |> third
+                    emptyModel
                     |> Expect.equal CustomFoodEdit.SessionExpired
-        , test "successful unit load updates loaded units" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.UnitsLoaded (Ok { items = [ ounce ] }))
-                    loadedModel
-                    |> first
-                    |> unitsOf
-                    |> Expect.equal (Just [ ounce ])
-        , test "successful nutrient load updates loaded nutrient catalog" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.NutrientsLoaded (Ok { items = nutrientItems }))
-                    loadedModel
-                    |> first
-                    |> CustomFoodEdit.update
-                        (CustomFoodEdit.FormMsg
-                            (Form.NutrientCodeChanged 0 "MONOUNSATURATED_FAT_G")
-                        )
-                    |> first
-                    |> firstNutrientUnit
-                    |> Expect.equal (Just "g")
-        , test "load success is ignored after load failed" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.FoodLoaded "food-1" (Ok food))
-                    (CustomFoodEdit.LoadFailed { productId = "food-1", message = "old" })
-                    |> first
-                    |> Expect.equal
-                        (CustomFoodEdit.LoadFailed
-                            { productId = "food-1", message = "old" }
-                        )
-        , test "form category query forwards suggestion request" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.FormMsg (Form.CategoryQueryChanged "dai"))
-                    loadedModel
-                    |> third
-                    |> Expect.equal
-                        (CustomFoodEdit.RequestCategorySuggestions (ticket 1)
-                            { query = "dai", limit = 8 }
-                        )
-        , test "category suggestions update loaded form" <|
+        , test "a response for another product or after a failure is ignored" <|
             \_ ->
                 let
-                    queried : CustomFoodEdit.Model
-                    queried =
-                        CustomFoodEdit.update
-                            (CustomFoodEdit.FormMsg (Form.CategoryQueryChanged "dai"))
-                            loadedModel
-                            |> first
+                    otherProduct : CustomFoodEdit.Model
+                    otherProduct =
+                        step (CustomFoodEdit.FoodLoaded "other" (Ok food)) validLoadedModel
+
+                    lateSuccess : CustomFoodEdit.Model
+                    lateSuccess =
+                        step (CustomFoodEdit.FoodLoaded "food-1" (Ok food)) failedModel
                 in
-                CustomFoodEdit.update
-                    (CustomFoodEdit.CategorySuggestionsLoaded
-                        (ticket 1)
-                        (Ok { items = [ { value = "dairy", count = 3 } ] })
-                    )
-                    queried
-                    |> first
-                    |> categorySuggestionsOf
-                    |> Expect.equal (Just [ { value = "dairy", count = 3 } ])
-        , test "submit with valid form requests update" <|
-            \_ ->
-                CustomFoodEdit.update CustomFoodEdit.SubmitClicked validLoadedModel
-                    |> (\( model, _, outMsg ) ->
-                            ( submitStateOf model, outMsg )
-                       )
+                { otherName = toScreen otherProduct |> .name
+                , lateSuccess = toScreen lateSuccess
+                }
                     |> Expect.equal
-                        ( Just Form.Submitting
-                        , CustomFoodEdit.RequestUpdateFood "food-1" validRequest
-                        )
-        , test "save success while submitting navigates to detail" <|
+                        { otherName = Just "Paneer"
+                        , lateSuccess = toScreen failedModel
+                        }
+        , test "submitting requests an update and a confirmed save navigates to the detail" <|
             \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
-                    submittingModel
-                    |> third
-                    |> Expect.equal (CustomFoodEdit.Navigate (CustomFoodShow "food-1"))
-        , test "save failure while submitting stores submit error" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted (Err Client.NetworkError))
-                    submittingModel
-                    |> first
-                    |> submitStateOf
-                    |> Expect.equal (Just (Form.SubmitFailed networkErrorMessage))
-        , test "save unauthorized while submitting expires session" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted
-                        (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
-                    )
-                    submittingModel
-                    |> third
-                    |> Expect.equal CustomFoodEdit.SessionExpired
-        , test "save completion is ignored unless submitting" <|
-            \_ ->
-                CustomFoodEdit.update
-                    (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" }))
-                    validLoadedModel
-                    |> third
-                    |> Expect.equal CustomFoodEdit.NoOp
+                let
+                    invalidSubmit : UpdateResult
+                    invalidSubmit =
+                        submit (loadedWithForm Form.emptyForm)
+
+                    validSubmit : UpdateResult
+                    validSubmit =
+                        submit validLoadedModel
+
+                    submitting : CustomFoodEdit.Model
+                    submitting =
+                        first validSubmit
+
+                    saveFailed : UpdateResult
+                    saveFailed =
+                        saveCompleted (Err Client.NetworkError) submitting
+
+                    saved : CustomFoodEdit.OutMsg
+                    saved =
+                        out (CustomFoodEdit.SaveCompleted (Ok { id = "food-1" })) submitting
+                in
+                { invalidRequest = third invalidSubmit
+                , invalidSubmitState = toScreen (first invalidSubmit) |> .submit
+                , validRequest = third validSubmit
+                , validSubmitState = toScreen submitting |> .submit
+                , failureRequest = third saveFailed
+                , failureSubmitState = toScreen (first saveFailed) |> .submit
+                , retryRequest = out CustomFoodEdit.SubmitClicked (first saveFailed)
+                , saveSuccess = saved
+                }
+                    |> Expect.equal
+                        { invalidRequest = CustomFoodEdit.NoOp
+                        , invalidSubmitState = Just (Form.SubmitFailed "Name is required")
+                        , validRequest = CustomFoodEdit.RequestUpdateFood "food-1" validRequest
+                        , validSubmitState = Just Form.Submitting
+                        , failureRequest = CustomFoodEdit.NoOp
+                        , failureSubmitState = Just (Form.SubmitFailed networkErrorMessage)
+                        , retryRequest = CustomFoodEdit.RequestUpdateFood "food-1" validRequest
+                        , saveSuccess = CustomFoodEdit.Navigate (CustomFoodShow "food-1")
+                        }
         ]
 
 
-first : ( a, b, c ) -> a
-first ( value, _, _ ) =
-    value
+
+-- SCREEN PROJECTION
 
 
-third : ( a, b, c ) -> c
-third ( _, _, value ) =
-    value
+type alias Screen =
+    { phase : String
+    , name : Maybe String
+    , firstNutrientUnit : Maybe String
+    , submit : Maybe Form.SubmitState
+    , error : Maybe String
+    }
 
 
-firstNutrientUnit : CustomFoodEdit.Model -> Maybe String
-firstNutrientUnit model =
+toScreen : CustomFoodEdit.Model -> Screen
+toScreen model =
     case model of
         CustomFoodEdit.Loaded loaded ->
-            loaded.form.nutrients
-                |> List.head
-                |> Maybe.map .unit
+            { phase = "loaded"
+            , name = Just loaded.form.name
+            , firstNutrientUnit = loaded.form.nutrients |> List.head |> Maybe.map .unit
+            , submit = Just loaded.form.submit
+            , error = Nothing
+            }
 
-        _ ->
-            Nothing
+        CustomFoodEdit.Loading _ ->
+            { phase = "loading"
+            , name = Nothing
+            , firstNutrientUnit = Nothing
+            , submit = Nothing
+            , error = Nothing
+            }
 
-
-unitsOf : CustomFoodEdit.Model -> Maybe (List UnitItem)
-unitsOf model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.units
-
-        _ ->
-            Nothing
-
-
-categorySuggestionsOf :
-    CustomFoodEdit.Model
-    -> Maybe (List { value : String, count : Int })
-categorySuggestionsOf model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.form.categoryInput.suggestions
-
-        _ ->
-            Nothing
+        CustomFoodEdit.LoadFailed failed ->
+            { phase = "failed"
+            , name = Nothing
+            , firstNutrientUnit = Nothing
+            , submit = Nothing
+            , error = Just failed.message
+            }
 
 
-submitStateOf : CustomFoodEdit.Model -> Maybe Form.SubmitState
-submitStateOf model =
-    case model of
-        CustomFoodEdit.Loaded loaded ->
-            Just loaded.form.submit
-
-        _ ->
-            Nothing
+type alias UpdateResult =
+    ( CustomFoodEdit.Model, Cmd CustomFoodEdit.Msg, CustomFoodEdit.OutMsg )
 
 
-loadedModel : CustomFoodEdit.Model
-loadedModel =
-    loadedWithForm Form.emptyForm
+step : CustomFoodEdit.Msg -> CustomFoodEdit.Model -> CustomFoodEdit.Model
+step msg model =
+    first (CustomFoodEdit.update msg model)
+
+
+out : CustomFoodEdit.Msg -> CustomFoodEdit.Model -> CustomFoodEdit.OutMsg
+out msg model =
+    third (CustomFoodEdit.update msg model)
+
+
+submit : CustomFoodEdit.Model -> UpdateResult
+submit model =
+    CustomFoodEdit.update CustomFoodEdit.SubmitClicked model
+
+
+saveCompleted : Result Client.ApiError { id : String } -> CustomFoodEdit.Model -> UpdateResult
+saveCompleted result model =
+    CustomFoodEdit.update (CustomFoodEdit.SaveCompleted result) model
+
+
+emptyModel : CustomFoodEdit.Model
+emptyModel =
+    Tuple.first (CustomFoodEdit.init "food-1")
+
+
+failedModel : CustomFoodEdit.Model
+failedModel =
+    step (CustomFoodEdit.NutrientsLoaded (Err Client.NetworkError)) emptyModel
 
 
 validLoadedModel : CustomFoodEdit.Model
@@ -280,22 +241,6 @@ validLoadedModel =
             , nutrients = [ { code = "PROTEIN_G", amount = "18", unit = "g" } ]
             , servings = [ { unit = "piece", gramsPerUnit = "50" } ]
         }
-
-
-submittingModel : CustomFoodEdit.Model
-submittingModel =
-    case validLoadedModel of
-        CustomFoodEdit.Loaded loaded ->
-            let
-                form : Form.FormModel
-                form =
-                    loaded.form
-            in
-            CustomFoodEdit.Loaded
-                { loaded | form = { form | submit = Form.Submitting } }
-
-        _ ->
-            validLoadedModel
 
 
 loadedWithForm : Form.FormModel -> CustomFoodEdit.Model
@@ -344,11 +289,6 @@ gram =
     { code = "g", name = "Gram", kind = "mass" }
 
 
-ounce : UnitItem
-ounce =
-    { code = "oz", name = "Ounce", kind = "mass" }
-
-
 nutrientItems : List NutrientItem
 nutrientItems =
     [ { code = "ENERGY_KCAL"
@@ -369,11 +309,11 @@ ticket count =
     List.foldl (\_ value -> Ticket.next value) Ticket.initial (List.range 1 count)
 
 
-isCustomFoodEditLoading : CustomFoodEdit.Model -> Bool
-isCustomFoodEditLoading model =
-    case model of
-        CustomFoodEdit.Loading _ ->
-            True
+first : ( a, b, c ) -> a
+first ( value, _, _ ) =
+    value
 
-        _ ->
-            False
+
+third : ( a, b, c ) -> c
+third ( _, _, value ) =
+    value

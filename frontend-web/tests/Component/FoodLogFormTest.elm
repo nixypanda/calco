@@ -14,23 +14,7 @@ import Test exposing (Test, describe, test)
 tests : Test
 tests =
     describe "Component.FoodLogForm"
-        [ test "default amount uses default_quantity" <|
-            \_ ->
-                FoodLogForm.initLogFormFromFood Nothing { food | defaultQuantity = Just "2.5" }
-                    |> .amount
-                    |> Expect.equal "2.5"
-        , test "default unit uses default_unit" <|
-            \_ ->
-                FoodLogForm.initLogFormFromFood Nothing { food | defaultUnit = Just "serving" }
-                    |> .unit
-                    |> Expect.equal "serving"
-        , test "missing defaults initialize 100 g" <|
-            \_ ->
-                FoodLogForm.initLogFormFromFood Nothing
-                    { food | defaultQuantity = Nothing, defaultUnit = Nothing }
-                    |> (\current -> ( current.amount, current.unit ))
-                    |> Expect.equal ( "100", "g" )
-        , test "missing defaults use the first configured serving" <|
+        [ test "missing defaults use the first configured serving" <|
             \_ ->
                 FoodLogForm.initLogFormFromFood Nothing
                     { food
@@ -42,28 +26,6 @@ tests =
                     }
                     |> (\current -> ( current.amount, current.unit ))
                     |> Expect.equal ( "1", "cup" )
-        , test "meal dropdown toggle opens only meal dropdown" <|
-            \_ ->
-                FoodLogForm.update FoodLogForm.ToggleMealSlotDropdown form
-                    |> .openDropdown
-                    |> Expect.equal FoodLogForm.MealSlotDropdownOpen
-        , test "unit dropdown toggle closes meal dropdown" <|
-            \_ ->
-                FoodLogForm.update FoodLogForm.ToggleMealSlotDropdown form
-                    |> FoodLogForm.update FoodLogForm.ToggleUnitDropdown
-                    |> .openDropdown
-                    |> Expect.equal FoodLogForm.UnitDropdownOpen
-        , test "editing clears submit failure" <|
-            \_ ->
-                FoodLogForm.update
-                    (FoodLogForm.AmountChanged "2")
-                    { form
-                        | submitState =
-                            FoodLogForm.SubmitFailed
-                                FoodLogForm.AmountRequiredMessage
-                    }
-                    |> .submitState
-                    |> Expect.equal FoodLogForm.SubmitIdle
         , test "amount is required" <|
             \_ ->
                 FoodLogForm.createProductLogRequest rawDate
@@ -71,43 +33,43 @@ tests =
                     "food-1"
                     { form | amount = " " }
                     |> Expect.equal (Err FoodLogForm.AmountRequired)
-        , test "create-log payload uses product item" <|
+        , test "create-log payload maps item, portion, meal slot, and blank notes" <|
             \_ ->
-                FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" form
-                    |> Result.map .item
-                    |> Expect.equal (Ok { itemType = ItemRef.Product, id = "food-1" })
-        , test "selected meal slot is included" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest rawDate
-                    deviceTimezone
-                    "food-1"
-                    { form | mealSlot = Just Lunch }
+                let
+                    withSlot : FoodLogForm.Model
+                    withSlot =
+                        { form
+                            | amount = "2"
+                            , unit = "serving"
+                            , mealSlot = Just Lunch
+                            , notes = "   "
+                        }
+
+                    withoutSlot : FoodLogForm.Model
+                    withoutSlot =
+                        { form | mealSlot = Nothing }
+                in
+                ( FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" withSlot
+                    |> Result.map
+                        (\request ->
+                            { item = request.item
+                            , quantity = request.quantity
+                            , mealSlot = request.mealSlot
+                            , notes = request.notes
+                            }
+                        )
+                , FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" withoutSlot
                     |> Result.map .mealSlot
-                    |> Expect.equal (Ok (Just "lunch"))
-        , test "no meal slot is omitted from request model" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest rawDate
-                    deviceTimezone
-                    "food-1"
-                    { form | mealSlot = Nothing }
-                    |> Result.map .mealSlot
-                    |> Expect.equal (Ok Nothing)
-        , test "blank notes become null request value" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest rawDate
-                    deviceTimezone
-                    "food-1"
-                    { form | notes = "   " }
-                    |> Result.map .notes
-                    |> Expect.equal (Ok Nothing)
-        , test "create-log payload passes through log date and timezone" <|
-            \_ ->
-                FoodLogForm.createProductLogRequest rawDate
-                    deviceTimezone
-                    "food-1"
-                    form
-                    |> Result.map (\request -> ( request.logDate, request.deviceTimezone ))
-                    |> Expect.equal (Ok ( sampleDate, deviceTimezone ))
+                )
+                    |> Expect.equal
+                        ( Ok
+                            { item = { itemType = ItemRef.Product, id = "food-1" }
+                            , quantity = { amount = "2", unit = "serving" }
+                            , mealSlot = Just "lunch"
+                            , notes = Nothing
+                            }
+                        , Ok Nothing
+                        )
         , test "create-log payload rejects malformed date strings" <|
             \_ ->
                 FoodLogForm.createProductLogRequest "not-a-date"
@@ -141,93 +103,6 @@ tests =
                             , notes = Just "Saved"
                             }
                         )
-        , test "update no-slot and blank notes encode as null request values" <|
-            \_ ->
-                FoodLogForm.createUpdateLogRequest { form | mealSlot = Nothing, notes = "   " }
-                    |> Result.map (\request -> ( request.mealSlot, request.notes ))
-                    |> Expect.equal (Ok ( Nothing, Nothing ))
-        , test "UnitChanged sets unit and closes dropdown" <|
-            \_ ->
-                FoodLogForm.update
-                    (FoodLogForm.UnitChanged "serving")
-                    { form
-                        | openDropdown = FoodLogForm.UnitDropdownOpen
-                        , submitState =
-                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
-                    }
-                    |> (\current ->
-                            ( current.unit, current.openDropdown, current.submitState )
-                       )
-                    |> Expect.equal
-                        ( "serving"
-                        , FoodLogForm.NoDropdownOpen
-                        , FoodLogForm.SubmitIdle
-                        )
-        , test "MealSlotChanged sets meal slot and closes dropdown" <|
-            \_ ->
-                FoodLogForm.update
-                    (FoodLogForm.MealSlotChanged (Just Lunch))
-                    { form
-                        | openDropdown = FoodLogForm.MealSlotDropdownOpen
-                        , submitState =
-                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
-                    }
-                    |> (\current ->
-                            ( current.mealSlot, current.openDropdown, current.submitState )
-                       )
-                    |> Expect.equal
-                        ( Just Lunch
-                        , FoodLogForm.NoDropdownOpen
-                        , FoodLogForm.SubmitIdle
-                        )
-        , test "NotesChanged sets notes and closes dropdown" <|
-            \_ ->
-                FoodLogForm.update
-                    (FoodLogForm.NotesChanged "tasty")
-                    { form
-                        | openDropdown = FoodLogForm.UnitDropdownOpen
-                        , submitState =
-                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
-                    }
-                    |> (\current ->
-                            ( current.notes, current.openDropdown, current.submitState )
-                       )
-                    |> Expect.equal
-                        ( "tasty"
-                        , FoodLogForm.NoDropdownOpen
-                        , FoodLogForm.SubmitIdle
-                        )
-        , test "AmountChanged updates amount field" <|
-            \_ ->
-                FoodLogForm.update
-                    (FoodLogForm.AmountChanged "5")
-                    { form
-                        | openDropdown = FoodLogForm.MealSlotDropdownOpen
-                        , submitState =
-                            FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage
-                    }
-                    |> (\current ->
-                            ( current.amount, current.openDropdown, current.submitState )
-                       )
-                    |> Expect.equal
-                        ( "5"
-                        , FoodLogForm.NoDropdownOpen
-                        , FoodLogForm.SubmitIdle
-                        )
-        , test "ToggleMealSlotDropdown closes when already open" <|
-            \_ ->
-                FoodLogForm.update
-                    FoodLogForm.ToggleMealSlotDropdown
-                    { form | openDropdown = FoodLogForm.MealSlotDropdownOpen }
-                    |> .openDropdown
-                    |> Expect.equal FoodLogForm.NoDropdownOpen
-        , test "ToggleUnitDropdown closes when already open" <|
-            \_ ->
-                FoodLogForm.update
-                    FoodLogForm.ToggleUnitDropdown
-                    { form | openDropdown = FoodLogForm.UnitDropdownOpen }
-                    |> .openDropdown
-                    |> Expect.equal FoodLogForm.NoDropdownOpen
         ]
 
 
