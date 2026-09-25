@@ -8,226 +8,343 @@ import Page.Goals.Settings as GoalsSettings
 import Test exposing (Test, describe, test)
 
 
-networkErrorMessage : String
-networkErrorMessage =
-    "Could not reach the server. Check your connection and try again."
+macroErrorMessage : String
+macroErrorMessage =
+    "Calories must equal protein*4 + carbs*4 + fat*9."
+
+
+invalidNumbersMessage : String
+invalidNumbersMessage =
+    "Enter valid numbers for all goal fields."
+
+
+positiveCaloriesMessage : String
+positiveCaloriesMessage =
+    "Calories must be greater than 0."
 
 
 tests : Test
 tests =
     describe "Page.Goals.Settings"
-        [ test "a refresh replaces a pristine form" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.GoalLoaded (Ok updatedSnapshot))
-                    (GoalsSettings.Ready pristineModel)
-                    |> first
-                    |> fields
-                    |> Expect.equal (Just [ "2100", "150", "240", "60" ])
-        , test "a refresh keeps edits the user has not saved" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.GoalLoaded (Ok updatedSnapshot))
-                    (GoalsSettings.Ready editingModel)
-                    |> first
-                    |> fields
-                    |> Expect.equal (Just [ "2290", "160", "255", "70" ])
-        , test "invalid macro formula blocks save" <|
+        [ test "opening the settings loads targets and a refresh replaces a pristine form" <|
             \_ ->
                 let
-                    ( model, _, outMsg ) =
-                        GoalsSettings.update GoalsSettings.SaveClicked
-                            (readyWith (\form -> { form | calorieTarget = "2200" }))
+                    loaded : GoalsSettings.Model
+                    loaded =
+                        loadedFrom defaultSnapshot
+
+                    refreshed : GoalsSettings.Model
+                    refreshed =
+                        step (GoalsSettings.GoalLoaded (Ok savedSnapshot)) loaded
                 in
-                ( outMsg, saveState model )
+                { request = Tuple.second GoalsSettings.init
+                , loaded = toScreen loaded
+                , refreshed = toScreen refreshed
+                }
                     |> Expect.equal
-                        ( GoalsSettings.NoOp
-                        , Just
-                            (GoalsSettings.ValidationFailed
-                                "Calories must equal protein*4 + carbs*4 + fat*9."
-                            )
-                        )
-        , test "save click requests local context after validation" <|
-            \_ ->
-                GoalsSettings.update GoalsSettings.SaveClicked (GoalsSettings.Ready editingModel)
-                    |> third
-                    |> Expect.equal GoalsSettings.RequestLocalContext
-        , test "invalid numeric input blocks save with validation failure" <|
-            \_ ->
-                GoalsSettings.update GoalsSettings.SaveClicked
-                    (readyWith (\form -> { form | proteinTargetG = "abc" }))
-                    |> first
-                    |> saveState
-                    |> Expect.equal
-                        (Just
-                            (GoalsSettings.ValidationFailed
-                                "Enter valid numbers for all goal fields."
-                            )
-                        )
-        , test "local context saves the targets validated at submit, not the current text" <|
-            \_ ->
-                let
-                    editedWhileWaiting : GoalsSettings.Model
-                    editedWhileWaiting =
-                        GoalsSettings.Ready
-                            { editingModel
-                                | form =
-                                    { calorieTarget = "abc"
-                                    , proteinTargetG = "abc"
-                                    , carbsTargetG = "abc"
-                                    , fatTargetG = "abc"
-                                    }
-                                , save = GoalsSettings.AwaitingLocalContext savedTargets
+                        { request = GoalsSettings.RequestGoal
+                        , loaded =
+                            { phase = "ready"
+                            , fields = [ "2290", "160", "255", "70" ]
+                            , status = Just { source = Default, effectiveFrom = Nothing }
+                            , save = Just GoalsSettings.Idle
+                            , error = Nothing
                             }
-                in
-                GoalsSettings.update
-                    (GoalsSettings.LocalContextReceived
-                        { date = "2026-06-16"
-                        , timezone = "Asia/Kolkata"
+                        , refreshed =
+                            { phase = "ready"
+                            , fields = [ "2100", "150", "240", "60" ]
+                            , status = Just { source = Saved, effectiveFrom = Just today }
+                            , save = Just GoalsSettings.Idle
+                            , error = Nothing
+                            }
                         }
-                    )
-                    editedWhileWaiting
-                    |> third
-                    |> Expect.equal
-                        (GoalsSettings.RequestSaveGoal
-                            { localDate = "2026-06-16"
-                            , deviceTimezone = "Asia/Kolkata"
-                            , targets = savedTargets
-                            }
-                        )
-        , test "stale local context is ignored outside waiting state" <|
+        , test "an incoming refresh leaves edits the user has not saved untouched" <|
             \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.LocalContextReceived
-                        { date = "2026-06-16"
-                        , timezone = "Asia/Kolkata"
+                loadedFrom defaultSnapshot
+                    |> step (GoalsSettings.CalorieTargetChanged "2300")
+                    |> step (GoalsSettings.GoalLoaded (Ok savedSnapshot))
+                    |> toScreen
+                    |> Expect.equal
+                        { phase = "ready"
+                        , fields = [ "2300", "160", "255", "70" ]
+                        , status = Just { source = Saved, effectiveFrom = Just today }
+                        , save = Just GoalsSettings.Idle
+                        , error = Nothing
                         }
-                    )
-                    (GoalsSettings.Ready editingModel)
-                    |> third
-                    |> Expect.equal GoalsSettings.NoOp
-        , test "typing during a save does not cancel the save" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.CalorieTargetChanged "2300")
-                    savingModel
-                    |> first
-                    |> saveState
-                    |> Expect.equal (Just GoalsSettings.Saving)
-        , test "a save completing under the user's typing keeps their text" <|
+        , test "a valid save waits for local context and submits the targets validated at submit" <|
             \_ ->
                 let
-                    typedWhileSaving : GoalsSettings.Model
-                    typedWhileSaving =
-                        GoalsSettings.Ready
-                            { pristineModel
-                                | save = GoalsSettings.Saving
-                                , formState = GoalsSettings.Edited
-                                , form =
-                                    { savedForm | calorieTarget = "2300" }
-                            }
-                in
-                GoalsSettings.update
-                    (GoalsSettings.SaveCompleted (Ok defaultSnapshot))
-                    typedWhileSaving
-                    |> first
-                    |> (\model -> ( fields model, status model ))
-                    |> Expect.equal
-                        ( Just [ "2300", "160", "255", "70" ]
-                        , Just { source = Default, effectiveFrom = Nothing }
-                        )
-        , test "save failure stores request error" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.SaveCompleted (Err Client.NetworkError))
-                    savingModel
-                    |> first
-                    |> saveState
-                    |> Expect.equal (Just (GoalsSettings.SaveFailed networkErrorMessage))
-        , test "stale save completion is ignored outside saving state" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.SaveCompleted (Err Client.NetworkError))
-                    (GoalsSettings.Ready editingModel)
-                    |> third
-                    |> Expect.equal GoalsSettings.NoOp
-        , test "goal load error on loading moves to failed" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.GoalLoaded (Err Client.NetworkError))
-                    GoalsSettings.Loading
-                    |> first
-                    |> Expect.equal (GoalsSettings.Failed networkErrorMessage)
-        , test "retry from failed returns to loading and requests the goal" <|
-            \_ ->
-                let
-                    ( model, _, outMsg ) =
-                        GoalsSettings.update
-                            GoalsSettings.RetryClicked
-                            (GoalsSettings.Failed networkErrorMessage)
-                in
-                ( model, outMsg )
-                    |> Expect.equal ( GoalsSettings.Loading, GoalsSettings.RequestGoal )
-        , test "a 401 refresh on a loaded page still expires the session" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.GoalLoaded (Err (Client.BadStatus 401 "" "")))
-                    (GoalsSettings.Ready editingModel)
-                    |> third
-                    |> Expect.equal GoalsSettings.SessionExpired
-        , test "save completed 401 triggers session expired" <|
-            \_ ->
-                GoalsSettings.update
-                    (GoalsSettings.SaveCompleted (Err (Client.BadStatus 401 "" "")))
-                    savingModel
-                    |> third
-                    |> Expect.equal GoalsSettings.SessionExpired
-        , test "negative calorie target blocks save" <|
-            \_ ->
-                GoalsSettings.update GoalsSettings.SaveClicked
-                    (readyWith (\form -> { form | calorieTarget = "-1" }))
-                    |> first
-                    |> saveState
-                    |> Expect.equal
-                        (Just
-                            (GoalsSettings.ValidationFailed
-                                "Calories must be greater than 0."
+                    edited : GoalsSettings.Model
+                    edited =
+                        loadedFrom defaultSnapshot
+                            |> step (GoalsSettings.CalorieTargetChanged "2330")
+                            |> step (GoalsSettings.ProteinTargetChanged "170")
+
+                    awaiting : GoalsSettings.Model
+                    awaiting =
+                        step GoalsSettings.SaveClicked edited
+
+                    typedWhileWaiting : GoalsSettings.Model
+                    typedWhileWaiting =
+                        step (GoalsSettings.CalorieTargetChanged "abc") awaiting
+
+                    submitted : GoalsSettings.Model
+                    submitted =
+                        step
+                            (GoalsSettings.LocalContextReceived
+                                { date = "2026-06-16", timezone = "Asia/Kolkata" }
                             )
+                            typedWhileWaiting
+                in
+                { request = out GoalsSettings.SaveClicked edited
+                , awaiting = toScreen awaiting
+                , typed = toScreen typedWhileWaiting
+                , save =
+                    out
+                        (GoalsSettings.LocalContextReceived
+                            { date = "2026-06-16", timezone = "Asia/Kolkata" }
                         )
+                        typedWhileWaiting
+                , submitted = saveState submitted
+                }
+                    |> Expect.equal
+                        { request = GoalsSettings.RequestLocalContext
+                        , awaiting =
+                            { phase = "ready"
+                            , fields = [ "2330", "170", "255", "70" ]
+                            , status = Just { source = Default, effectiveFrom = Nothing }
+                            , save = Just (GoalsSettings.AwaitingLocalContext validatedTargets)
+                            , error = Nothing
+                            }
+                        , typed =
+                            { phase = "ready"
+                            , fields = [ "abc", "170", "255", "70" ]
+                            , status = Just { source = Default, effectiveFrom = Nothing }
+                            , save = Just (GoalsSettings.AwaitingLocalContext validatedTargets)
+                            , error = Nothing
+                            }
+                        , save =
+                            GoalsSettings.RequestSaveGoal
+                                { localDate = "2026-06-16"
+                                , deviceTimezone = "Asia/Kolkata"
+                                , targets = validatedTargets
+                                }
+                        , submitted = Just GoalsSettings.Saving
+                        }
+        , test "a calorie and macro imbalance blocks save" <|
+            \_ ->
+                let
+                    imbalanced : GoalsSettings.Model
+                    imbalanced =
+                        loadedFrom defaultSnapshot
+                            |> step (GoalsSettings.CalorieTargetChanged "2200")
+                in
+                { request = out GoalsSettings.SaveClicked imbalanced
+                , screen = toScreen (step GoalsSettings.SaveClicked imbalanced)
+                }
+                    |> Expect.equal
+                        { request = GoalsSettings.NoOp
+                        , screen =
+                            { phase = "ready"
+                            , fields = [ "2200", "160", "255", "70" ]
+                            , status = Just { source = Default, effectiveFrom = Nothing }
+                            , save = Just (GoalsSettings.ValidationFailed macroErrorMessage)
+                            , error = Just macroErrorMessage
+                            }
+                        }
+        , test "invalid or non-positive numbers block save" <|
+            \_ ->
+                let
+                    nonNumeric : GoalsSettings.Model
+                    nonNumeric =
+                        loadedFrom defaultSnapshot
+                            |> step (GoalsSettings.ProteinTargetChanged "abc")
+
+                    nonPositive : GoalsSettings.Model
+                    nonPositive =
+                        loadedFrom defaultSnapshot
+                            |> step (GoalsSettings.CalorieTargetChanged "-1")
+                in
+                { invalid =
+                    toScreen (step GoalsSettings.SaveClicked nonNumeric) |> .error
+                , nonPositive =
+                    toScreen (step GoalsSettings.SaveClicked nonPositive) |> .error
+                }
+                    |> Expect.equal
+                        { invalid = Just invalidNumbersMessage
+                        , nonPositive = Just positiveCaloriesMessage
+                        }
+        , test "a save completion outside saving state is ignored" <|
+            \_ ->
+                let
+                    edited : GoalsSettings.Model
+                    edited =
+                        loadedFrom defaultSnapshot
+                            |> step (GoalsSettings.CalorieTargetChanged "2300")
+                in
+                { request =
+                    out (GoalsSettings.SaveCompleted (Err Client.NetworkError)) edited
+                , screen = saveState (step (GoalsSettings.SaveCompleted (Ok savedSnapshot)) edited)
+                }
+                    |> Expect.equal
+                        { request = GoalsSettings.NoOp
+                        , screen = Just GoalsSettings.Idle
+                        }
+        , test "an unauthorized refresh or save expires the session" <|
+            \_ ->
+                { refresh =
+                    out
+                        (GoalsSettings.GoalLoaded
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        (loadedFrom defaultSnapshot)
+                , save =
+                    out
+                        (GoalsSettings.SaveCompleted
+                            (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
+                        )
+                        savingModel
+                }
+                    |> Expect.equal
+                        { refresh = GoalsSettings.SessionExpired
+                        , save = GoalsSettings.SessionExpired
+                        }
+        , test "typing during a save keeps the text and the completion refreshes the status" <|
+            \_ ->
+                let
+                    typed : GoalsSettings.Model
+                    typed =
+                        step (GoalsSettings.CalorieTargetChanged "2300") savingModel
+
+                    completed : GoalsSettings.Model
+                    completed =
+                        step (GoalsSettings.SaveCompleted (Ok savedSnapshot)) typed
+                in
+                { during = toScreen typed
+                , completed = toScreen completed
+                }
+                    |> Expect.equal
+                        { during =
+                            { phase = "ready"
+                            , fields = [ "2300", "160", "255", "70" ]
+                            , status = Just { source = Default, effectiveFrom = Nothing }
+                            , save = Just GoalsSettings.Saving
+                            , error = Nothing
+                            }
+                        , completed =
+                            { phase = "ready"
+                            , fields = [ "2300", "160", "255", "70" ]
+                            , status = Just { source = Saved, effectiveFrom = Just today }
+                            , save = Just GoalsSettings.Idle
+                            , error = Nothing
+                            }
+                        }
+        , test "a local context that arrives outside the waiting state is ignored" <|
+            \_ ->
+                let
+                    model : GoalsSettings.Model
+                    model =
+                        loadedFrom defaultSnapshot
+                in
+                { request =
+                    out
+                        (GoalsSettings.LocalContextReceived
+                            { date = "2026-06-16", timezone = "Asia/Kolkata" }
+                        )
+                        model
+                , save = saveState model
+                }
+                    |> Expect.equal
+                        { request = GoalsSettings.NoOp
+                        , save = Just GoalsSettings.Idle
+                        }
         ]
 
 
-savedForm : GoalsSettings.Form
-savedForm =
-    { calorieTarget = "2290"
-    , proteinTargetG = "160"
-    , carbsTargetG = "255"
-    , fatTargetG = "70"
+
+-- SCREEN PROJECTION
+
+
+type alias Screen =
+    { phase : String
+    , fields : List String
+    , status : Maybe GoalStatus
+    , save : Maybe GoalsSettings.SaveState
+    , error : Maybe String
     }
 
 
-pristineModel : GoalsSettings.ReadyModel
-pristineModel =
-    { status = { source = Saved, effectiveFrom = Just today }
-    , form = savedForm
-    , formState = GoalsSettings.Pristine
-    , save = GoalsSettings.Idle
-    }
+toScreen : GoalsSettings.Model -> Screen
+toScreen model =
+    case model of
+        GoalsSettings.Loading ->
+            { phase = "loading", fields = [], status = Nothing, save = Nothing, error = Nothing }
+
+        GoalsSettings.Failed message ->
+            { phase = "failed"
+            , fields = []
+            , status = Nothing
+            , save = Nothing
+            , error = Just message
+            }
+
+        GoalsSettings.Ready ready ->
+            { phase = "ready"
+            , fields =
+                [ ready.form.calorieTarget
+                , ready.form.proteinTargetG
+                , ready.form.carbsTargetG
+                , ready.form.fatTargetG
+                ]
+            , status = Just ready.status
+            , save = Just ready.save
+            , error = saveError ready.save
+            }
 
 
-editingModel : GoalsSettings.ReadyModel
-editingModel =
-    { pristineModel | formState = GoalsSettings.Edited }
+saveError : GoalsSettings.SaveState -> Maybe String
+saveError save =
+    case save of
+        GoalsSettings.ValidationFailed message ->
+            Just message
 
+        GoalsSettings.SaveFailed message ->
+            Just message
 
-readyWith : (GoalsSettings.Form -> GoalsSettings.Form) -> GoalsSettings.Model
-readyWith transform =
-    GoalsSettings.Ready { editingModel | form = transform editingModel.form }
+        _ ->
+            Nothing
 
 
 savingModel : GoalsSettings.Model
 savingModel =
-    GoalsSettings.Ready { pristineModel | save = GoalsSettings.Saving }
+    loadedFrom defaultSnapshot
+        |> step GoalsSettings.SaveClicked
+        |> step
+            (GoalsSettings.LocalContextReceived
+                { date = "2026-06-16", timezone = "Asia/Kolkata" }
+            )
+
+
+loadedFrom : GoalSnapshot -> GoalsSettings.Model
+loadedFrom snapshot =
+    GoalsSettings.init
+        |> Tuple.first
+        |> step (GoalsSettings.GoalLoaded (Ok snapshot))
+
+
+saveState : GoalsSettings.Model -> Maybe GoalsSettings.SaveState
+saveState model =
+    (toScreen model).save
+
+
+step : GoalsSettings.Msg -> GoalsSettings.Model -> GoalsSettings.Model
+step msg model =
+    first (GoalsSettings.update msg model)
+
+
+out : GoalsSettings.Msg -> GoalsSettings.Model -> GoalsSettings.OutMsg
+out msg model =
+    third (GoalsSettings.update msg model)
 
 
 savedTargets : GoalTargets
@@ -239,17 +356,12 @@ savedTargets =
     }
 
 
-updatedSnapshot : GoalSnapshot
-updatedSnapshot =
-    { requestedDate = today
-    , effectiveFrom = Just today
-    , source = Saved
-    , targets =
-        { calorieTarget = 2100
-        , proteinTargetG = 150
-        , carbsTargetG = 240
-        , fatTargetG = 60
-        }
+validatedTargets : GoalTargets
+validatedTargets =
+    { calorieTarget = 2330
+    , proteinTargetG = 170
+    , carbsTargetG = 255
+    , fatTargetG = 70
     }
 
 
@@ -259,6 +371,20 @@ defaultSnapshot =
     , effectiveFrom = Nothing
     , source = Default
     , targets = savedTargets
+    }
+
+
+savedSnapshot : GoalSnapshot
+savedSnapshot =
+    { requestedDate = today
+    , effectiveFrom = Just today
+    , source = Saved
+    , targets =
+        { calorieTarget = 2100
+        , proteinTargetG = 150
+        , carbsTargetG = 240
+        , fatTargetG = 60
+        }
     }
 
 
@@ -280,41 +406,6 @@ date raw =
 
                 Nothing ->
                     date "1970-01-01"
-
-
-fields : GoalsSettings.Model -> Maybe (List String)
-fields model =
-    case model of
-        GoalsSettings.Ready ready ->
-            Just
-                [ ready.form.calorieTarget
-                , ready.form.proteinTargetG
-                , ready.form.carbsTargetG
-                , ready.form.fatTargetG
-                ]
-
-        _ ->
-            Nothing
-
-
-status : GoalsSettings.Model -> Maybe GoalStatus
-status model =
-    case model of
-        GoalsSettings.Ready ready ->
-            Just ready.status
-
-        _ ->
-            Nothing
-
-
-saveState : GoalsSettings.Model -> Maybe GoalsSettings.SaveState
-saveState model =
-    case model of
-        GoalsSettings.Ready ready ->
-            Just ready.save
-
-        _ ->
-            Nothing
 
 
 first : ( a, b, c ) -> a
