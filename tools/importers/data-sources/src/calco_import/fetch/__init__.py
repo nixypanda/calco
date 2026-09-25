@@ -1,17 +1,7 @@
-import os
-
-MAPPING_DIR = os.path.join(
-    os.path.dirname(__file__),
-    "..",
-    "..",
-    "..",
-    "nutrient_mapping",
-)
-
-from calco_import.fetch.ifct import fetch_ifct  # noqa: E402
-from calco_import.fetch.indb import fetch_indb  # noqa: E402
-from calco_import.fetch.off import fetch_off  # noqa: E402
-from calco_import.fetch.usda import fetch_usda  # noqa: E402
+from calco_import.fetch.ifct import fetch_ifct
+from calco_import.fetch.indb import fetch_indb
+from calco_import.fetch.off import fetch_off
+from calco_import.fetch.usda import fetch_usda
 
 
 def dispatch(data_dir: str, dataset: str) -> None:

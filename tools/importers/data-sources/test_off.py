@@ -5,7 +5,6 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from calco_import.fetch import MAPPING_DIR
 from calco_import.fetch.off import (
     OffIndices,
     _build_off_nutrient_rows,
@@ -13,6 +12,7 @@ from calco_import.fetch.off import (
     _parse_off_header,
     has_gs1_india_prefix,
 )
+from calco_import.paths import MAPPING_DIR
 
 
 class KeepOffRowTests(unittest.TestCase):
