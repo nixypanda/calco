@@ -5,6 +5,7 @@ import Api.Logs as Logs
 import Data.Auth as Auth
 import Data.FoodLog as FoodLog
 import Data.ItemRef as ItemRef exposing (ItemRef)
+import Data.MealSlot exposing (MealSlot(..))
 import Data.Nutrition as Nutrition
 import Data.User as User
 import Expect
@@ -130,7 +131,7 @@ tests =
                 Logs.createLogRequestEncoder
                     { logDate = date "2026-06-04"
                     , deviceTimezone = Just "Asia/Kolkata"
-                    , mealSlot = Just "lunch"
+                    , mealSlot = Just Lunch
                     , item = { itemType = ItemRef.Product, id = "food-1" }
                     , quantity = { amount = "1", unit = "g" }
                     , notes = Just "Ate after run"

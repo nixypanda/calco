@@ -3159,6 +3159,6 @@ recentItemsRequest maybeDate maybeSlot =
             (\toDate ->
                 { fromDate = LocalDate.addDays -30 toDate
                 , toDate = toDate
-                , mealSlot = Maybe.map MealSlot.toString maybeSlot
+                , mealSlot = maybeSlot
                 }
             )

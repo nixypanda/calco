@@ -21,7 +21,7 @@ import Data.BarcodeScan exposing (ScannerEvent)
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef
 import Data.LocalContext exposing (LocalContext)
-import Data.MealSlot as MealSlot exposing (MealSlot)
+import Data.MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Data.Search as Search exposing (Completion, QueryState)
@@ -727,7 +727,7 @@ quickAddRequest context model target =
                         (\item ->
                             { logDate = logDate
                             , deviceTimezone = Just context.timezone
-                            , mealSlot = Maybe.map MealSlot.toString model.mealSlot
+                            , mealSlot = model.mealSlot
                             , item = item
                             , quantity = target.quantity
                             , notes = Nothing

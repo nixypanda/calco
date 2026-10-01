@@ -321,7 +321,7 @@ tests =
                                 DiaryDay.RequestCopyLatestSlot today
                                     [ { logDate = today
                                       , deviceTimezone = Nothing
-                                      , mealSlot = Just "dinner"
+                                      , mealSlot = Just Dinner
                                       , item =
                                             { itemType = ItemRef.Product
                                             , id = "food-1"

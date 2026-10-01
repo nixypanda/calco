@@ -125,7 +125,7 @@ tests =
                     |> Expect.equal
                         { request =
                             FoodLogEntry.RequestUpdateLog "log-1"
-                                { mealSlot = Just "lunch"
+                                { mealSlot = Just Lunch
                                 , quantity = { amount = "2", unit = "serving" }
                                 , notes = Just "Good"
                                 }

@@ -65,7 +65,7 @@ tests =
                         ( Ok
                             { item = { itemType = ItemRef.Product, id = "food-1" }
                             , quantity = { amount = "2", unit = "serving" }
-                            , mealSlot = Just "lunch"
+                            , mealSlot = Just Lunch
                             , notes = Nothing
                             }
                         , Ok Nothing
@@ -98,7 +98,7 @@ tests =
                 FoodLogForm.createUpdateLogRequest { form | mealSlot = Just Lunch, notes = "Saved" }
                     |> Expect.equal
                         (Ok
-                            { mealSlot = Just "lunch"
+                            { mealSlot = Just Lunch
                             , quantity = { amount = "1", unit = "g" }
                             , notes = Just "Saved"
                             }

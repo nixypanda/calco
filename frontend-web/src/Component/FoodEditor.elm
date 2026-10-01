@@ -862,7 +862,7 @@ toAdHocLogRequest timezone form =
             (\validated ->
                 { logDate = validated.date
                 , deviceTimezone = timezone
-                , mealSlot = Maybe.map MealSlot.toString validated.mealSlot
+                , mealSlot = validated.mealSlot
                 , name = String.trim form.name
                 , brand = Text.blankToMaybe form.brand
                 , quantity = validated.quantity
@@ -952,7 +952,7 @@ toProductLogRequest timezone productId form =
             (\validated ->
                 { logDate = validated.date
                 , deviceTimezone = timezone
-                , mealSlot = Maybe.map MealSlot.toString validated.mealSlot
+                , mealSlot = validated.mealSlot
                 , item = { itemType = Product, id = productId }
                 , quantity = validated.quantity
                 , notes = validated.notes

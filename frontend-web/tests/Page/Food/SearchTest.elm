@@ -612,7 +612,7 @@ tests =
                         ( FoodSearch.RequestCreateLog
                             { logDate = date "2026-05-29"
                             , deviceTimezone = Just "Asia/Kolkata"
-                            , mealSlot = Just "lunch"
+                            , mealSlot = Just Lunch
                             , item = { itemType = ItemRef.Product, id = "food-1" }
                             , quantity = { amount = "2", unit = "serving" }
                             , notes = Nothing

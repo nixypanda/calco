@@ -415,7 +415,7 @@ copyRequestFromLog targetDate slot log =
             (\item ->
                 { logDate = targetDate
                 , deviceTimezone = log.deviceTimezone
-                , mealSlot = Just (MealSlot.toString slot)
+                , mealSlot = Just slot
                 , item = item
                 , quantity = log.quantity
                 , notes = log.notes

@@ -222,7 +222,7 @@ createProductLogRequest rawDate deviceTimezone productId model =
                 Ok
                     { logDate = logDate
                     , deviceTimezone = deviceTimezone
-                    , mealSlot = Maybe.map MealSlot.toString model.mealSlot
+                    , mealSlot = model.mealSlot
                     , item = { itemType = Product, id = productId }
                     , quantity = Quantity model.amount model.unit
                     , notes = Text.blankToMaybe model.notes
@@ -236,7 +236,7 @@ createUpdateLogRequest model =
 
     else
         Ok
-            { mealSlot = Maybe.map MealSlot.toString model.mealSlot
+            { mealSlot = model.mealSlot
             , quantity = Quantity model.amount model.unit
             , notes = Text.blankToMaybe model.notes
             }

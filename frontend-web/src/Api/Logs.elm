@@ -32,6 +32,7 @@ import Api.Client as Client
 import Data.FoodLog as FoodLog exposing (FoodLog)
 import Data.ItemRef as ItemRef exposing (ItemRef)
 import Data.LogSummary as LogSummary exposing (DaySummary)
+import Data.MealSlot as MealSlot exposing (MealSlot)
 import Data.Nutrition as Nutrition
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -43,7 +44,7 @@ import Url.Builder as Builder
 type alias CreateLogRequest =
     { logDate : LocalDate
     , deviceTimezone : Maybe String
-    , mealSlot : Maybe String
+    , mealSlot : Maybe MealSlot
     , item : ItemRef
     , quantity : Nutrition.Quantity
     , notes : Maybe String
@@ -53,7 +54,7 @@ type alias CreateLogRequest =
 type alias CreateAdHocLogRequest =
     { logDate : LocalDate
     , deviceTimezone : Maybe String
-    , mealSlot : Maybe String
+    , mealSlot : Maybe MealSlot
     , name : String
     , brand : Maybe String
     , quantity : Nutrition.Quantity
@@ -63,7 +64,7 @@ type alias CreateAdHocLogRequest =
 
 
 type alias UpdateLogRequest =
-    { mealSlot : Maybe String, quantity : Nutrition.Quantity, notes : Maybe String }
+    { mealSlot : Maybe MealSlot, quantity : Nutrition.Quantity, notes : Maybe String }
 
 
 type alias LatestSlotResponse =
@@ -93,7 +94,7 @@ type alias RecentItemsResponse =
 
 
 type alias RecentItemsRequest =
-    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe String }
+    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe MealSlot }
 
 
 type alias SummaryRequest =
@@ -101,7 +102,7 @@ type alias SummaryRequest =
 
 
 type alias LastUsedItemsRequest =
-    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe String, items : List ItemRef }
+    { fromDate : LocalDate, toDate : LocalDate, mealSlot : Maybe MealSlot, items : List ItemRef }
 
 
 type alias BatchLogResponse =
@@ -211,7 +212,7 @@ lastUsedItems request toMsg =
         (Encode.object
             [ ( "from_date", Encode.string (LocalDate.format request.fromDate) )
             , ( "to_date", Encode.string (LocalDate.format request.toDate) )
-            , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
+            , ( "meal_slot", Json.maybe (Encode.string << MealSlot.toString) request.mealSlot )
             , ( "items", Encode.list ItemRef.encoder request.items )
             ]
         )
@@ -264,7 +265,7 @@ updateLogRequestEncoder : UpdateLogRequest -> Encode.Value
 updateLogRequestEncoder request =
     Encode.object
         [ ( "quantity", Nutrition.quantityEncoder request.quantity )
-        , ( "meal_slot", Json.maybe Encode.string request.mealSlot )
+        , ( "meal_slot", Json.maybe (Encode.string << MealSlot.toString) request.mealSlot )
         , ( "notes", Json.maybe Encode.string request.notes )
         ]
 
@@ -278,11 +279,11 @@ baseLogFields request =
     ]
 
 
-mealSlotField : Maybe String -> List ( String, Encode.Value )
+mealSlotField : Maybe MealSlot -> List ( String, Encode.Value )
 mealSlotField maybeSlot =
     case maybeSlot of
         Just slot ->
-            [ ( "meal_slot", Encode.string slot ) ]
+            [ ( "meal_slot", Encode.string (MealSlot.toString slot) ) ]
 
         Nothing ->
             []
@@ -339,11 +340,11 @@ quantityUsageDecoder =
         (Decode.field "log_count" Decode.int)
 
 
-maybeMealSlotQuery : Maybe String -> List Builder.QueryParameter
+maybeMealSlotQuery : Maybe MealSlot -> List Builder.QueryParameter
 maybeMealSlotQuery maybeSlot =
     case maybeSlot of
         Just slot ->
-            [ Builder.string "meal_slot" slot ]
+            [ Builder.string "meal_slot" (MealSlot.toString slot) ]
 
         Nothing ->
             []

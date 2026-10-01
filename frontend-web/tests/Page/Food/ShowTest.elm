@@ -258,7 +258,7 @@ createLogRequest logDate =
     FoodShow.RequestCreateLog
         { logDate = logDate
         , deviceTimezone = Just "Asia/Kolkata"
-        , mealSlot = Just "lunch"
+        , mealSlot = Just Lunch
         , item = { itemType = ItemRef.Product, id = "food-1" }
         , quantity = { amount = "2", unit = "serving" }
         , notes = Nothing
