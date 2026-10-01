@@ -13,7 +13,7 @@ import Url.Builder as Builder
 
 
 type alias SaveGoalRequest =
-    { localDate : String, deviceTimezone : String, targets : GoalTargets }
+    { localDate : LocalDate, deviceTimezone : String, targets : GoalTargets }
 
 
 getGoal : LocalDate -> (Result Client.ApiError GoalSnapshot -> msg) -> Cmd msg
@@ -36,7 +36,7 @@ saveGoal request toMsg =
 saveGoalRequestEncoder : SaveGoalRequest -> Encode.Value
 saveGoalRequestEncoder request =
     Encode.object
-        [ ( "local_date", Encode.string request.localDate )
+        [ ( "local_date", Encode.string (LocalDate.format request.localDate) )
         , ( "device_timezone", Encode.string request.deviceTimezone )
         , ( "calorie_target", Encode.float request.targets.calorieTarget )
         , ( "protein_target_g", Encode.float request.targets.proteinTargetG )

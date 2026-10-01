@@ -23,7 +23,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
-import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Date exposing (LocalDate)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
@@ -284,7 +284,7 @@ createLogFromLocalContext context loaded =
                     Just date
 
                 Nothing ->
-                    LocalDate.fromString context.date
+                    Just context.date
     in
     case maybeLogDate of
         Nothing ->

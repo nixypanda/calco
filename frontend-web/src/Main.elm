@@ -19,7 +19,7 @@ import Browser.Navigation as Nav
 import Chrome
 import Data.Auth as Auth exposing (Session)
 import Data.BarcodeScan exposing (ScannerEvent)
-import Data.LocalContext exposing (LocalContext)
+import Data.LocalContext as LocalContext exposing (LocalContext, RawLocalContext)
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import Element.Background as Background
@@ -117,7 +117,7 @@ type Msg
     | LogoutCompleted
     | WindowResized Int Int
     | GotPageMsg Page.Msg
-    | GotLocalContext LocalContext
+    | GotLocalContext RawLocalContext
     | GotBarcodeScannerEvent ScannerEvent
     | GotChromeMsg Chrome.Msg
     | GotVersionMsg Version.Msg
@@ -179,17 +179,22 @@ update msg model =
                 Version.ReloadPage ->
                     ( { model | version = newVersion }, reloadPage () )
 
-        GotLocalContext context ->
-            let
-                ( dated, dateCmd ) =
-                    adoptToday context model
+        GotLocalContext raw ->
+            case LocalContext.fromRaw raw of
+                Nothing ->
+                    ( model, Cmd.none )
 
-                ( final, contextCmd ) =
-                    stepPageUpdate
-                        (Page.localContextReceived (pageContext dated) context dated.page)
-                        dated
-            in
-            ( final, Cmd.batch [ dateCmd, contextCmd ] )
+                Just context ->
+                    let
+                        ( dated, dateCmd ) =
+                            adoptToday context model
+
+                        ( final, contextCmd ) =
+                            stepPageUpdate
+                                (Page.localContextReceived (pageContext dated) context dated.page)
+                                dated
+                    in
+                    ( final, Cmd.batch [ dateCmd, contextCmd ] )
 
         GotBarcodeScannerEvent event ->
             stepPageUpdate
@@ -409,19 +414,16 @@ pane for the new day, while an explicitly dated route keeps the one it has.
 -}
 adoptToday : LocalContext -> Model -> ( Model, Cmd Msg )
 adoptToday context model =
-    case ( LocalDate.fromString context.date, model.today ) of
-        ( Just today, Just current ) ->
-            if LocalDate.equals today current then
+    case model.today of
+        Just current ->
+            if LocalDate.equals context.date current then
                 ( model, Cmd.none )
 
             else
-                changeRouteTo model.route { model | today = Just today }
+                changeRouteTo model.route { model | today = Just context.date }
 
-        ( Just today, Nothing ) ->
-            changeRouteTo model.route { model | today = Just today }
-
-        ( Nothing, _ ) ->
-            ( model, Cmd.none )
+        Nothing ->
+            changeRouteTo model.route { model | today = Just context.date }
 
 
 pageContext : Model -> Page.InitContext
@@ -648,7 +650,7 @@ subscriptions _ =
 port requestLocalContext : () -> Cmd msg
 
 
-port localContextReceived : (LocalContext -> msg) -> Sub msg
+port localContextReceived : (RawLocalContext -> msg) -> Sub msg
 
 
 port requestBarcodeScanStart : () -> Cmd msg

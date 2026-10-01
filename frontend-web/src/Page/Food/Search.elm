@@ -35,7 +35,7 @@ import Html.Attributes
 import Html.Events
 import I18n
 import Json.Decode as Decode
-import Lib.Date as LocalDate exposing (LocalDate)
+import Lib.Date exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -733,7 +733,7 @@ quickAddRequest context model target =
                     Just date
 
                 Nothing ->
-                    LocalDate.fromString context.date
+                    Just context.date
     in
     resolvedDate
         |> Maybe.map

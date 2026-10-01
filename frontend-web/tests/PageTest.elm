@@ -438,7 +438,7 @@ routeFlowTests =
                 ( nextDay mounted
                 , mounted
                     |> Page.localContextReceived context
-                        { date = "2026-07-30", timezone = "Asia/Kolkata" }
+                        { date = dateValue "2026-07-30", timezone = "Asia/Kolkata" }
                     |> Maybe.map first
                     |> Maybe.andThen nextDay
                 )

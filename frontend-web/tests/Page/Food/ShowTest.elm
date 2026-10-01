@@ -99,9 +99,9 @@ tests =
         , test "local context builds the log request from the diary date or the device date" <|
             \_ ->
                 let
-                    context : { date : String, timezone : String }
+                    context : { date : LocalDate, timezone : String }
                     context =
-                        { date = "2026-06-04", timezone = "Asia/Kolkata" }
+                        { date = sampleDateFromString "2026-06-04", timezone = "Asia/Kolkata" }
 
                     requestFor : FoodShow.Model -> FoodShow.OutMsg
                     requestFor model =
@@ -114,33 +114,6 @@ tests =
                     |> Expect.equal
                         { selectedDate = createLogRequest (sampleDateFromString "2026-05-29")
                         , deviceDate = createLogRequest (sampleDateFromString "2026-06-04")
-                        }
-        , test "an unreadable device date fails the submission without a request" <|
-            \_ ->
-                let
-                    contextReady : FoodShow.Model
-                    contextReady =
-                        step FoodShow.SubmitClicked loadedWithoutDate
-
-                    afterContext : FoodShow.Model
-                    afterContext =
-                        step
-                            (FoodShow.LocalContextReceived
-                                { date = "not-a-date", timezone = "Asia/Kolkata" }
-                            )
-                            contextReady
-                in
-                { request =
-                    out
-                        (FoodShow.LocalContextReceived
-                            { date = "not-a-date", timezone = "Asia/Kolkata" }
-                        )
-                        contextReady
-                , error = toScreen afterContext |> .submitError
-                }
-                    |> Expect.equal
-                        { request = FoodShow.NoOp
-                        , error = Just "Could not read device date."
                         }
         , test "a completed log reports the created log with its contextual search route" <|
             \_ ->

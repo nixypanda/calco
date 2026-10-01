@@ -92,7 +92,7 @@ tests =
                     submitted =
                         step
                             (GoalsSettings.LocalContextReceived
-                                { date = "2026-06-16", timezone = "Asia/Kolkata" }
+                                { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                             )
                             typedWhileWaiting
                 in
@@ -102,7 +102,7 @@ tests =
                 , save =
                     out
                         (GoalsSettings.LocalContextReceived
-                            { date = "2026-06-16", timezone = "Asia/Kolkata" }
+                            { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                         )
                         typedWhileWaiting
                 , submitted = saveState submitted
@@ -125,7 +125,7 @@ tests =
                             }
                         , save =
                             GoalsSettings.RequestSaveGoal
-                                { localDate = "2026-06-16"
+                                { localDate = date "2026-06-16"
                                 , deviceTimezone = "Asia/Kolkata"
                                 , targets = validatedTargets
                                 }
@@ -249,7 +249,7 @@ tests =
                 { request =
                     out
                         (GoalsSettings.LocalContextReceived
-                            { date = "2026-06-16", timezone = "Asia/Kolkata" }
+                            { date = date "2026-06-16", timezone = "Asia/Kolkata" }
                         )
                         model
                 , save = saveState model
@@ -321,7 +321,7 @@ savingModel =
         |> step GoalsSettings.SaveClicked
         |> step
             (GoalsSettings.LocalContextReceived
-                { date = "2026-06-16", timezone = "Asia/Kolkata" }
+                { date = date "2026-06-16", timezone = "Asia/Kolkata" }
             )
 
 

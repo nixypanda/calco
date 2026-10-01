@@ -597,7 +597,7 @@ tests =
                 let
                     context : LocalContext
                     context =
-                        { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                        { date = date "2026-06-01", timezone = "Asia/Kolkata" }
 
                     requestFor : FoodSearch.Model -> FoodSearch.OutMsg
                     requestFor model =
@@ -628,37 +628,6 @@ tests =
                             , notes = Nothing
                             }
                         )
-        , test "a quick add with an unreadable device date stops and shows an error" <|
-            \_ ->
-                let
-                    context : LocalContext
-                    context =
-                        { date = "bad-date", timezone = "Asia/Kolkata" }
-
-                    afterContext : FoodSearch.Model
-                    afterContext =
-                        FoodSearch.init Nothing (Just Lunch)
-                            |> step
-                                quickAddRecent
-                            |> step (FoodSearch.LocalContextReceived context)
-                in
-                Expect.all
-                    [ \_ ->
-                        contentFor afterContext
-                            |> Query.has [ Selector.text "Could not read selected date." ]
-                    , \_ ->
-                        out
-                            (FoodSearch.LocalContextReceived context)
-                            (step
-                                (FoodSearch.RecentQuickAddClicked
-                                    recentProduct
-                                    recentProduct.quantity
-                                )
-                                (FoodSearch.init Nothing (Just Lunch))
-                            )
-                            |> Expect.equal FoodSearch.NoOp
-                    ]
-                    ()
         , test "a quick add badges the item and reports the created log" <|
             \_ ->
                 let
@@ -669,7 +638,7 @@ tests =
                                 quickAddRecent
                             |> step
                                 (FoodSearch.LocalContextReceived
-                                    { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
 
                     once : FoodSearch.Model
@@ -704,7 +673,7 @@ tests =
                                 quickAddRecent
                             |> step
                                 (FoodSearch.LocalContextReceived
-                                    { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
 
                     recovered : FoodSearch.Model
@@ -732,7 +701,7 @@ tests =
                     |> step quickAddRecent
                     |> step
                         (FoodSearch.LocalContextReceived
-                            { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                            { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                         )
                     |> out
                         (FoodSearch.QuickAddCompleted
@@ -753,7 +722,7 @@ tests =
                                 quickAddRecent
                             |> step
                                 (FoodSearch.LocalContextReceived
-                                    { date = "2026-06-01", timezone = "Asia/Kolkata" }
+                                    { date = date "2026-06-01", timezone = "Asia/Kolkata" }
                                 )
                             |> step (FoodSearch.QuickAddCompleted (Ok productLog))
 

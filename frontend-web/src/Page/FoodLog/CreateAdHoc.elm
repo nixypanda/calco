@@ -25,7 +25,7 @@ import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import I18n
-import Lib.Date exposing (LocalDate)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
@@ -249,14 +249,16 @@ requestProductLog productId model =
             validationFailure message model
 
 
-setDateIfBlank : String -> Editor.FormModel -> Editor.FormModel
+setDateIfBlank : LocalDate -> Editor.FormModel -> Editor.FormModel
 setDateIfBlank date form =
     case form.context of
         Editor.FoodLogContext logFields persistence ->
             if String.isEmpty (String.trim logFields.date) then
                 { form
                     | context =
-                        Editor.FoodLogContext { logFields | date = date } persistence
+                        Editor.FoodLogContext
+                            { logFields | date = LocalDate.format date }
+                            persistence
                 }
 
             else

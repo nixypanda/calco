@@ -2128,8 +2128,7 @@ todayChangedIn :
     -> (LocalDate -> Msg)
     -> Maybe (PaneUpdate Pane)
 todayChangedIn pageContext model context pane toMsg =
-    LocalDate.fromString context.date
-        |> Maybe.andThen (\today -> updatePane model.panes pageContext (toMsg today) pane)
+    updatePane model.panes pageContext (toMsg context.date) pane
 
 
 barcodeScannerEventReceived :
