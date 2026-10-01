@@ -28,7 +28,7 @@ tests =
                     |> Expect.equal ( "1", "cup" )
         , test "amount is required" <|
             \_ ->
-                FoodLogForm.createProductLogRequest rawDate
+                FoodLogForm.createProductLogRequest sampleDate
                     deviceTimezone
                     "food-1"
                     { form | amount = " " }
@@ -49,7 +49,7 @@ tests =
                     withoutSlot =
                         { form | mealSlot = Nothing }
                 in
-                ( FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" withSlot
+                ( FoodLogForm.createProductLogRequest sampleDate deviceTimezone "food-1" withSlot
                     |> Result.map
                         (\request ->
                             { item = request.item
@@ -58,7 +58,7 @@ tests =
                             , notes = request.notes
                             }
                         )
-                , FoodLogForm.createProductLogRequest rawDate deviceTimezone "food-1" withoutSlot
+                , FoodLogForm.createProductLogRequest sampleDate deviceTimezone "food-1" withoutSlot
                     |> Result.map .mealSlot
                 )
                     |> Expect.equal
@@ -70,13 +70,14 @@ tests =
                             }
                         , Ok Nothing
                         )
-        , test "create-log payload rejects malformed date strings" <|
+        , test "create-log payload uses the supplied date directly" <|
             \_ ->
-                FoodLogForm.createProductLogRequest "not-a-date"
+                FoodLogForm.createProductLogRequest sampleDate
                     deviceTimezone
                     "food-1"
                     form
-                    |> Expect.equal (Err FoodLogForm.InvalidDate)
+                    |> Result.map .logDate
+                    |> Expect.equal (Ok sampleDate)
         , test "load-log success form uses existing quantity, unit, meal slot, and notes" <|
             \_ ->
                 FoodLogForm.initLogFormFromLog log

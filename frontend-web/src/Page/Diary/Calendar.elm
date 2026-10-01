@@ -103,7 +103,7 @@ type Msg
     | EarlierSummaryLoaded Int (Result Client.ApiError (List DaySummary))
     | DayTotalsKnown LocalDate (Maybe DaySummary)
     | LoadEarlierClicked
-    | DayClicked String String
+    | DayClicked String LocalDate
     | TodayChanged LocalDate
     | RetryClicked
 
@@ -437,7 +437,7 @@ dayView env model selectedDate month day attributes =
                     )
                 :: attributes
             )
-            { onPress = Just (DayClicked month date), label = label }
+            { onPress = Maybe.map (DayClicked month) maybeDate, label = label }
 
 
 dayLabel : Env -> LocalDate -> Int -> String -> Maybe DaySummary -> Element msg

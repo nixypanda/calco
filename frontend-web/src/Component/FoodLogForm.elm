@@ -24,7 +24,7 @@ import Data.MealSlot as MealSlot exposing (MealSlot(..))
 import Data.Nutrition exposing (Quantity, defaultCode)
 import Element exposing (Element)
 import I18n
-import Lib.Date as LocalDate
+import Lib.Date exposing (LocalDate)
 import Lib.Text as Text
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Env exposing (Env)
@@ -86,7 +86,6 @@ type SubmitFailure
 
 type ValidationError
     = AmountRequired
-    | InvalidDate
 
 
 initLogFormFromFood : Maybe MealSlot -> ProductDetail -> Model
@@ -204,29 +203,24 @@ clearSubmitFailure submitState =
 
 
 createProductLogRequest :
-    String
+    LocalDate
     -> Maybe String
     -> String
     -> Model
     -> Result ValidationError CreateLogRequest
-createProductLogRequest rawDate deviceTimezone productId model =
+createProductLogRequest logDate deviceTimezone productId model =
     if Text.isBlank model.amount then
         Err AmountRequired
 
     else
-        case LocalDate.fromString rawDate of
-            Nothing ->
-                Err InvalidDate
-
-            Just logDate ->
-                Ok
-                    { logDate = logDate
-                    , deviceTimezone = deviceTimezone
-                    , mealSlot = model.mealSlot
-                    , item = { itemType = Product, id = productId }
-                    , quantity = Quantity model.amount model.unit
-                    , notes = Text.blankToMaybe model.notes
-                    }
+        Ok
+            { logDate = logDate
+            , deviceTimezone = deviceTimezone
+            , mealSlot = model.mealSlot
+            , item = { itemType = Product, id = productId }
+            , quantity = Quantity model.amount model.unit
+            , notes = Text.blankToMaybe model.notes
+            }
 
 
 createUpdateLogRequest : Model -> Result ValidationError UpdateLogRequest

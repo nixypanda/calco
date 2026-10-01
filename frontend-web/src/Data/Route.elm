@@ -6,6 +6,7 @@ module Data.Route exposing
     )
 
 import Data.MealSlot as MealSlot exposing (MealSlot)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Url exposing (Url)
 import Url.Parser as Parser exposing ((</>), (<?>), Parser, oneOf, s, string, top)
 import Url.Parser.Query as Query
@@ -18,16 +19,16 @@ type Route
     | AdminDashboard
     | AdminCreateUser
     | AdminEditUser String
-    | DiaryDay (Maybe String) (Maybe String)
+    | DiaryDay (Maybe LocalDate) (Maybe String)
     | DiaryCalendar (Maybe String)
-    | NutritionDetails (Maybe String)
+    | NutritionDetails (Maybe LocalDate)
     | GoalSettings
     | DiarySettings
-    | FoodLogEntry String (Maybe String) (Maybe String)
-    | AdHocLogCreate (Maybe String) (Maybe MealSlot)
-    | AiLogCreate (Maybe String) (Maybe MealSlot)
-    | FoodSearch (Maybe String) (Maybe MealSlot)
-    | FoodShow String (Maybe String) (Maybe MealSlot) (Maybe String)
+    | FoodLogEntry String (Maybe LocalDate) (Maybe String)
+    | AdHocLogCreate (Maybe LocalDate) (Maybe MealSlot)
+    | AiLogCreate (Maybe LocalDate) (Maybe MealSlot)
+    | FoodSearch (Maybe LocalDate) (Maybe MealSlot)
+    | FoodShow String (Maybe LocalDate) (Maybe MealSlot) (Maybe String)
     | CustomFoodList
     | CustomFoodCreate
     | CustomFoodCreateWithAi
@@ -55,18 +56,18 @@ routeParser =
         , Parser.map AdminCreateUser (s "admin" </> s "users" </> s "new")
         , Parser.map AdminEditUser (s "admin" </> s "users" </> string </> s "edit")
         , Parser.map DiaryDay
-            (s "home" <?> Query.string "date" <?> Query.string "calendar_month")
+            (s "home" <?> dateQuery <?> Query.string "calendar_month")
         , Parser.map DiaryCalendar (s "calendar" <?> Query.string "month")
-        , Parser.map NutritionDetails (s "details" <?> Query.string "date")
+        , Parser.map NutritionDetails (s "details" <?> dateQuery)
         , Parser.map GoalSettings (s "settings" </> s "goals")
         , Parser.map DiarySettings (s "settings" </> s "diary")
         , Parser.map AdHocLogCreate
-            (s "logs" </> s "new" </> s "ad-hoc" <?> Query.string "date" <?> mealSlotQuery)
+            (s "logs" </> s "new" </> s "ad-hoc" <?> dateQuery <?> mealSlotQuery)
         , Parser.map AiLogCreate
-            (s "logs" </> s "new" </> s "ai" <?> Query.string "date" <?> mealSlotQuery)
+            (s "logs" </> s "new" </> s "ai" <?> dateQuery <?> mealSlotQuery)
         , Parser.map FoodLogEntry
-            (s "logs" </> string <?> Query.string "date" <?> Query.string "calendar_month")
-        , Parser.map FoodSearch (s "search" <?> Query.string "date" <?> mealSlotQuery)
+            (s "logs" </> string <?> dateQuery <?> Query.string "calendar_month")
+        , Parser.map FoodSearch (s "search" <?> dateQuery <?> mealSlotQuery)
         , Parser.map CustomFoodList (s "foods" </> s "custom")
         , Parser.map CustomFoodCreateWithAi
             (s "foods" </> s "custom" </> s "new" </> s "ai")
@@ -76,7 +77,7 @@ routeParser =
         , Parser.map FoodShow
             (s "foods"
                 </> string
-                <?> Query.string "date"
+                <?> dateQuery
                 <?> mealSlotQuery
                 <?> Query.string "lookup_note"
             )
@@ -90,6 +91,11 @@ routeParser =
 mealSlotQuery : Query.Parser (Maybe MealSlot)
 mealSlotQuery =
     Query.string "meal_slot" |> Query.map (Maybe.andThen MealSlot.fromString)
+
+
+dateQuery : Query.Parser (Maybe LocalDate)
+dateQuery =
+    Query.string "date" |> Query.map (Maybe.andThen LocalDate.fromString)
 
 
 primaryRoute : Route -> Route
@@ -173,7 +179,9 @@ routeToPath route =
 
         DiaryDay maybeDate maybeCalendarMonth ->
             withQueryParams "/home"
-                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
                 , Maybe.map
                     (\month -> "calendar_month=" ++ Url.percentEncode month)
                     maybeCalendarMonth
@@ -185,7 +193,10 @@ routeToPath route =
 
         NutritionDetails maybeDate ->
             withQueryParams "/details"
-                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate ]
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
+                ]
 
         GoalSettings ->
             "/settings/goals"
@@ -195,7 +206,9 @@ routeToPath route =
 
         FoodLogEntry id maybeDate maybeCalendarMonth ->
             withQueryParams ("/logs/" ++ id)
-                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
                 , Maybe.map
                     (\month -> "calendar_month=" ++ Url.percentEncode month)
                     maybeCalendarMonth
@@ -212,7 +225,9 @@ routeToPath route =
 
         FoodShow id maybeDate maybeSlot lookupNote ->
             withQueryParams ("/foods/" ++ id)
-                [ Maybe.map (\date -> "date=" ++ Url.percentEncode date) maybeDate
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
                 , Maybe.map
                     (\slot -> "meal_slot=" ++ MealSlot.toString slot)
                     maybeSlot
@@ -252,13 +267,15 @@ routeToPath route =
             "/"
 
 
-withFoodContext : String -> Maybe String -> Maybe MealSlot -> String
+withFoodContext : String -> Maybe LocalDate -> Maybe MealSlot -> String
 withFoodContext path maybeDate maybeSlot =
     let
         params : List String
         params =
             List.filterMap identity
-                [ Maybe.map (\date -> "date=" ++ date) maybeDate
+                [ Maybe.map
+                    (\date -> "date=" ++ Url.percentEncode (LocalDate.format date))
+                    maybeDate
                 , Maybe.map (\slot -> "meal_slot=" ++ MealSlot.toString slot) maybeSlot
                 ]
     in

@@ -304,7 +304,7 @@ update msg model =
             ( model
             , Cmd.none
             , Navigate
-                (DiaryDay (Just (LocalDate.format previous)) model.calendarMonth)
+                (DiaryDay (Just previous) model.calendarMonth)
             )
 
         NextDayClicked ->
@@ -313,7 +313,7 @@ update msg model =
                     ( model
                     , Cmd.none
                     , Navigate
-                        (DiaryDay (Just (LocalDate.format next)) model.calendarMonth)
+                        (DiaryDay (Just next) model.calendarMonth)
                     )
 
                 Nothing ->
@@ -322,7 +322,7 @@ update msg model =
         DetailsClicked ->
             ( model
             , Cmd.none
-            , Navigate (NutritionDetails (Just (LocalDate.format model.currentDate)))
+            , Navigate (NutritionDetails (Just model.currentDate))
             )
 
         MacroModeToggled ->
@@ -331,14 +331,14 @@ update msg model =
         AddFoodClicked slot ->
             ( model
             , Cmd.none
-            , Navigate (FoodSearch (Just (LocalDate.format model.currentDate)) (Just slot))
+            , Navigate (FoodSearch (Just model.currentDate) (Just slot))
             )
 
         LogClicked id ->
             ( model
             , Cmd.none
             , Navigate
-                (FoodLogEntry id (Just (LocalDate.format model.currentDate)) model.calendarMonth)
+                (FoodLogEntry id (Just model.currentDate) model.calendarMonth)
             )
 
         MealsClicked ->

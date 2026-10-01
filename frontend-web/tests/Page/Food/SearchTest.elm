@@ -32,33 +32,35 @@ tests =
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-06-01")) (Just Lunch)
                 in
                 ( out FoodSearch.CreateAdHocLogClicked model
                 , out FoodSearch.CreateAiLogClicked model
                 )
                     |> Expect.equal
-                        ( FoodSearch.Navigate (AdHocLogCreate (Just "2026-06-01") (Just Lunch))
-                        , FoodSearch.Navigate (AiLogCreate (Just "2026-06-01") (Just Lunch))
+                        ( FoodSearch.Navigate
+                            (AdHocLogCreate (Just (date "2026-06-01")) (Just Lunch))
+                        , FoodSearch.Navigate
+                            (AiLogCreate (Just (date "2026-06-01")) (Just Lunch))
                         )
         , test "retargeting a different diary context keeps the query and reloads recents" <|
             \_ ->
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-06-01") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-06-01")) (Just Lunch)
                             |> step (FoodSearch.QueryChanged "apple")
                             |> step
-                                (FoodSearch.RecentItemsLoaded (Just "2026-06-01")
+                                (FoodSearch.RecentItemsLoaded (Just (date "2026-06-01"))
                                     (Just Lunch)
                                     (Ok { items = [ recentProduct ] })
                                 )
 
                     ( retargeted, changed ) =
-                        FoodSearch.retarget (Just "2026-06-02") (Just Dinner) model
+                        FoodSearch.retarget (Just (date "2026-06-02")) (Just Dinner) model
 
                     ( _, changedAgain ) =
-                        FoodSearch.retarget (Just "2026-06-02") (Just Dinner) retargeted
+                        FoodSearch.retarget (Just (date "2026-06-02")) (Just Dinner) retargeted
                 in
                 { query = toScreen retargeted |> .query
                 , chrono = toScreen retargeted |> .chrono
@@ -78,7 +80,7 @@ tests =
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-05-29") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
 
                     searched : FoodSearch.OutMsg
                     searched =
@@ -99,14 +101,14 @@ tests =
                             { query = "apple", scope = Foods.SearchHistory }
                         , Success [ "Apple" ]
                         , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) Nothing)
+                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) Nothing)
                         )
         , test "clearing a search drops its results and returns to the recents view" <|
             \_ ->
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-05-29") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
 
                     failed : FoodSearch.Model
                     failed =
@@ -309,7 +311,7 @@ tests =
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-05-29") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
                             |> step (FoodSearch.ScopeSelected FoodSearch.Barcode)
                             |> step (FoodSearch.BarcodeChanged " 12345 ")
 
@@ -338,9 +340,9 @@ tests =
                     |> Expect.equal
                         ( FoodSearch.RequestBarcodeLookup (ticket 2) "12345"
                         , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) Nothing)
+                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) Nothing)
                         , FoodSearch.Navigate
-                            (FoodShow "food-1" (Just "2026-05-29") (Just Lunch) (Just note))
+                            (FoodShow "food-1" (Just (date "2026-05-29")) (Just Lunch) (Just note))
                         )
         , test "a stale barcode lookup response is ignored" <|
             \_ ->
@@ -530,12 +532,12 @@ tests =
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-05-29") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
 
                     loaded : FoodSearch.Model
                     loaded =
                         step
-                            (FoodSearch.RecentItemsLoaded (Just "2026-05-29")
+                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
                                 (Just Lunch)
                                 (Ok { items = List.repeat 11 recentProduct })
                             )
@@ -544,7 +546,7 @@ tests =
                     stale : FoodSearch.Model
                     stale =
                         step
-                            (FoodSearch.RecentItemsLoaded (Just "2026-05-29")
+                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
                                 (Just Dinner)
                                 (Ok { items = [ recentProduct ] })
                             )
@@ -553,7 +555,7 @@ tests =
                     failed : FoodSearch.Model
                     failed =
                         step
-                            (FoodSearch.RecentItemsLoaded (Just "2026-05-29")
+                            (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
                                 (Just Lunch)
                                 (Err Client.NetworkError)
                             )
@@ -564,7 +566,7 @@ tests =
                 , failedRecents = toScreen failed |> .recentItems
                 , unauthorized =
                     out
-                        (FoodSearch.RecentItemsLoaded (Just "2026-05-29")
+                        (FoodSearch.RecentItemsLoaded (Just (date "2026-05-29"))
                             (Just Lunch)
                             (Err (Client.BadStatus 401 "unauthorized" "Sign in again"))
                         )
@@ -581,7 +583,7 @@ tests =
                 let
                     model : FoodSearch.Model
                     model =
-                        FoodSearch.init (Just "2026-05-29") (Just Lunch)
+                        FoodSearch.init (Just (date "2026-05-29")) (Just Lunch)
                 in
                 ( out (FoodSearch.RecentItemClicked recentMeal) model
                 , out quickAddRecent model
@@ -605,7 +607,7 @@ tests =
                                 model
                             )
                 in
-                ( requestFor (FoodSearch.init (Just "2026-05-29") (Just Lunch))
+                ( requestFor (FoodSearch.init (Just (date "2026-05-29")) (Just Lunch))
                 , requestFor (FoodSearch.init Nothing Nothing)
                 )
                     |> Expect.equal
@@ -626,18 +628,19 @@ tests =
                             , notes = Nothing
                             }
                         )
-        , test "a quick add with an unreadable diary date stops and shows an error" <|
+        , test "a quick add with an unreadable device date stops and shows an error" <|
             \_ ->
                 let
+                    context : LocalContext
+                    context =
+                        { date = "bad-date", timezone = "Asia/Kolkata" }
+
                     afterContext : FoodSearch.Model
                     afterContext =
-                        FoodSearch.init (Just "bad-date") (Just Lunch)
+                        FoodSearch.init Nothing (Just Lunch)
                             |> step
                                 quickAddRecent
-                            |> step
-                                (FoodSearch.LocalContextReceived
-                                    { date = "2026-06-01", timezone = "Asia/Kolkata" }
-                                )
+                            |> step (FoodSearch.LocalContextReceived context)
                 in
                 Expect.all
                     [ \_ ->
@@ -645,15 +648,13 @@ tests =
                             |> Query.has [ Selector.text "Could not read selected date." ]
                     , \_ ->
                         out
-                            (FoodSearch.LocalContextReceived
-                                { date = "2026-06-01", timezone = "Asia/Kolkata" }
-                            )
+                            (FoodSearch.LocalContextReceived context)
                             (step
                                 (FoodSearch.RecentQuickAddClicked
                                     recentProduct
                                     recentProduct.quantity
                                 )
-                                (FoodSearch.init (Just "bad-date") (Just Lunch))
+                                (FoodSearch.init Nothing (Just Lunch))
                             )
                             |> Expect.equal FoodSearch.NoOp
                     ]
@@ -791,7 +792,7 @@ toScreen : FoodSearch.Model -> Screen
 toScreen model =
     { scope = model.scope
     , chrono =
-        Maybe.withDefault "none" model.date
+        (Maybe.map LocalDate.format model.date |> Maybe.withDefault "none")
             ++ "/"
             ++ (model.mealSlot |> Maybe.map mealSlotLabel |> Maybe.withDefault "none")
     , query = model.search.query

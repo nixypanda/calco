@@ -35,7 +35,7 @@ import Html.Attributes
 import Html.Events
 import I18n
 import Json.Decode as Decode
-import Lib.Date as LocalDate
+import Lib.Date as LocalDate exposing (LocalDate)
 import Lib.Loadable exposing (Loadable(..))
 import Lib.Text as Text
 import Lib.Ticket as Ticket exposing (Ticket)
@@ -71,7 +71,7 @@ type alias Model =
     , barcodeToken : Ticket
     , barcodeScanner : BarcodeScannerState
     , recentItems : Loadable Client.ApiError (List Logs.RecentItem)
-    , date : Maybe String
+    , date : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , quickAdd : QuickAddState
     , addedItems : List { key : String, token : Ticket }
@@ -140,7 +140,7 @@ type QuickAddButtonState
     | QuickAddAdded
 
 
-init : Maybe String -> Maybe MealSlot -> Model
+init : Maybe LocalDate -> Maybe MealSlot -> Model
 init date mealSlot =
     { search = Search.empty
     , scope = History
@@ -150,7 +150,7 @@ init date mealSlot =
     , barcodeToken = Ticket.initial
     , barcodeScanner = ScannerIdle
     , recentItems =
-        case date |> Maybe.andThen LocalDate.fromString of
+        case date of
             Just _ ->
                 Loading
 
@@ -165,7 +165,7 @@ init date mealSlot =
     }
 
 
-retarget : Maybe String -> Maybe MealSlot -> Model -> ( Model, Bool )
+retarget : Maybe LocalDate -> Maybe MealSlot -> Model -> ( Model, Bool )
 retarget date mealSlot model =
     if model.date == date && model.mealSlot == mealSlot then
         ( model, False )
@@ -175,7 +175,7 @@ retarget date mealSlot model =
             | date = date
             , mealSlot = mealSlot
             , recentItems =
-                case date |> Maybe.andThen LocalDate.fromString of
+                case date of
                     Just _ ->
                         Loading
 
@@ -208,7 +208,7 @@ type Msg
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
-    | RecentItemsLoaded (Maybe String) (Maybe MealSlot) RecentItemsResult
+    | RecentItemsLoaded (Maybe LocalDate) (Maybe MealSlot) RecentItemsResult
     | RecentQuickAddClicked Logs.RecentItem Nutrition.Quantity
     | RecentItemClicked Logs.RecentItem
     | LocalContextReceived LocalContext
@@ -726,11 +726,16 @@ applyBarcodeScannerEvent event model =
 quickAddRequest : LocalContext -> Model -> QuickAddTarget -> Maybe Logs.CreateLogRequest
 quickAddRequest context model target =
     let
-        rawDate : String
-        rawDate =
-            Maybe.withDefault context.date model.date
+        resolvedDate : Maybe LocalDate
+        resolvedDate =
+            case model.date of
+                Just date ->
+                    Just date
+
+                Nothing ->
+                    LocalDate.fromString context.date
     in
-    LocalDate.fromString rawDate
+    resolvedDate
         |> Maybe.map
             (\logDate ->
                 FoodLog.itemRef target.item.item

@@ -23,6 +23,7 @@ import Data.Nutrition as Nutrition
 import Data.Route exposing (Route(..))
 import Element exposing (Element)
 import I18n
+import Lib.Date as LocalDate exposing (LocalDate)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
 import Ui.DesignTokens as DesignTokens
@@ -48,7 +49,7 @@ type Model
 
 type alias LoadingModel =
     { productId : String
-    , logDate : Maybe String
+    , logDate : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , food : Maybe ProductDetail
     , units : Maybe (List UnitItem)
@@ -59,7 +60,7 @@ type alias LoadingModel =
 
 type alias LoadedModel =
     { productId : String
-    , logDate : Maybe String
+    , logDate : Maybe LocalDate
     , mealSlot : Maybe MealSlot
     , food : ProductDetail
     , units : List UnitItem
@@ -83,7 +84,7 @@ type OutMsg
     | SessionExpired
 
 
-init : String -> Maybe String -> Maybe MealSlot -> Maybe String -> ( Model, OutMsg )
+init : String -> Maybe LocalDate -> Maybe MealSlot -> Maybe String -> ( Model, OutMsg )
 init productId logDate mealSlot lookupNote =
     ( Loading
         { productId = productId
@@ -276,39 +277,17 @@ update msg model =
 createLogFromLocalContext : LocalContext -> LoadedModel -> ( Model, Cmd Msg, OutMsg )
 createLogFromLocalContext context loaded =
     let
-        logDate : String
-        logDate =
-            Maybe.withDefault context.date loaded.logDate
+        maybeLogDate : Maybe LocalDate
+        maybeLogDate =
+            case loaded.logDate of
+                Just date ->
+                    Just date
+
+                Nothing ->
+                    LocalDate.fromString context.date
     in
-    case
-        FoodLogForm.createProductLogRequest logDate
-            (Just context.timezone)
-            loaded.productId
-            loaded.form
-    of
-        Ok request ->
-            ( Loaded
-                { loaded
-                    | form =
-                        FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
-                }
-            , Cmd.none
-            , RequestCreateLog request
-            )
-
-        Err FoodLogForm.AmountRequired ->
-            ( Loaded
-                { loaded
-                    | form =
-                        FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
-                            loaded.form
-                }
-            , Cmd.none
-            , NoOp
-            )
-
-        Err FoodLogForm.InvalidDate ->
+    case maybeLogDate of
+        Nothing ->
             ( Loaded
                 { loaded
                     | form =
@@ -319,6 +298,35 @@ createLogFromLocalContext context loaded =
             , Cmd.none
             , NoOp
             )
+
+        Just logDate ->
+            case
+                FoodLogForm.createProductLogRequest logDate
+                    (Just context.timezone)
+                    loaded.productId
+                    loaded.form
+            of
+                Ok request ->
+                    ( Loaded
+                        { loaded
+                            | form =
+                                FoodLogForm.setSubmitState FoodLogForm.SubmitSubmitting loaded.form
+                        }
+                    , Cmd.none
+                    , RequestCreateLog request
+                    )
+
+                Err FoodLogForm.AmountRequired ->
+                    ( Loaded
+                        { loaded
+                            | form =
+                                FoodLogForm.setSubmitState
+                                    (FoodLogForm.SubmitFailed FoodLogForm.AmountRequiredMessage)
+                                    loaded.form
+                        }
+                    , Cmd.none
+                    , NoOp
+                    )
 
 
 setLoadedFood : ProductDetail -> Model -> Model

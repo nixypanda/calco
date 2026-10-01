@@ -231,7 +231,7 @@ emptyForm =
     }
 
 
-emptyLogForm : Maybe String -> Maybe MealSlot -> FormModel
+emptyLogForm : Maybe LocalDate -> Maybe MealSlot -> FormModel
 emptyLogForm maybeDate maybeMealSlot =
     { emptyForm
         | nutrients =
@@ -242,7 +242,9 @@ emptyLogForm maybeDate maybeMealSlot =
             ]
         , context =
             FoodLogContext
-                { date = Maybe.withDefault "" maybeDate
+                { date =
+                    Maybe.map LocalDate.format maybeDate
+                        |> Maybe.withDefault ""
                 , mealSlot = maybeMealSlot
                 , quantity = "1"
                 , unit = "serving"

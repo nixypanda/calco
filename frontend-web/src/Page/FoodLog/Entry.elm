@@ -315,18 +315,6 @@ submitLoaded loaded =
             , NoOp
             )
 
-        Err FoodLogForm.InvalidDate ->
-            ( Loaded
-                { loaded
-                    | form =
-                        FoodLogForm.setSubmitState
-                            (FoodLogForm.SubmitFailed FoodLogForm.InvalidDateMessage)
-                            loaded.form
-                }
-            , Cmd.none
-            , NoOp
-            )
-
 
 setLoadedLog : FoodLog -> Model -> Model
 setLoadedLog log model =

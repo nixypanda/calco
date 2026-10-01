@@ -27,7 +27,7 @@ tests =
             \_ ->
                 let
                     ( model, initial ) =
-                        FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
+                        FoodShow.init "food-1" (Just sampleDate) (Just Lunch) Nothing
 
                     loaded : FoodShow.Model
                     loaded =
@@ -147,7 +147,7 @@ tests =
                 out (FoodShow.LogCompleted (Ok log)) savingModel
                     |> Expect.equal
                         (FoodShow.LogCreated log
-                            (FoodSearch (Just "2026-05-29") (Just Lunch))
+                            (FoodSearch (Just sampleDate) (Just Lunch))
                         )
         , test "a failed log keeps the current form and surfaces the request error" <|
             \_ ->
@@ -277,7 +277,7 @@ out msg model =
 
 emptyModel : FoodShow.Model
 emptyModel =
-    FoodShow.init "food-1" (Just "2026-05-29") (Just Lunch) Nothing
+    FoodShow.init "food-1" (Just sampleDate) (Just Lunch) Nothing
         |> Tuple.first
 
 
@@ -286,7 +286,7 @@ failedModel =
     step (FoodShow.UnitsLoaded (Err Client.NetworkError)) emptyModel
 
 
-initialLoad : Maybe String -> Maybe MealSlot -> FoodShow.Model
+initialLoad : Maybe LocalDate -> Maybe MealSlot -> FoodShow.Model
 initialLoad logDate mealSlot =
     FoodShow.init "food-1" logDate mealSlot Nothing
         |> Tuple.first
@@ -294,7 +294,7 @@ initialLoad logDate mealSlot =
 
 loadedModel : FoodShow.Model
 loadedModel =
-    initialLoad (Just "2026-05-29") (Just Lunch)
+    initialLoad (Just sampleDate) (Just Lunch)
         |> step (FoodShow.FoodLoaded "food-1" (Ok food))
         |> step (FoodShow.UnitsLoaded (Ok { items = [ gram ] }))
 

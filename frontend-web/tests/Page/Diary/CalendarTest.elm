@@ -88,10 +88,10 @@ tests =
                         }
         , test "selecting a day opens a calendar-aware diary route" <|
             \_ ->
-                out (CalendarPage.DayClicked "2026-07" "2026-07-20") (loaded [])
+                out (CalendarPage.DayClicked "2026-07" (date "2026-07-20")) (loaded [])
                     |> Expect.equal
                         (CalendarPage.Navigate
-                            (DiaryDay (Just "2026-07-20") (Just "2026-07"))
+                            (DiaryDay (Just (date "2026-07-20")) (Just "2026-07"))
                         )
         , test "day totals replace or clear loaded days and ignore days still in the future" <|
             \_ ->

@@ -4,6 +4,7 @@ import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Element
 import Expect
+import Lib.Date as LocalDate exposing (LocalDate)
 import Main
 import Test exposing (Test, describe, test)
 
@@ -54,9 +55,9 @@ normalizeChromeNavigationTests =
         [ test "adds current diary date to generic food search navigation" <|
             \_ ->
                 Main.normalizeChromeNavigation
-                    (DiaryDay (Just "2026-05-29") Nothing)
+                    (DiaryDay (Just (date "2026-05-29")) Nothing)
                     (FoodSearch Nothing Nothing)
-                    |> Expect.equal (FoodSearch (Just "2026-05-29") Nothing)
+                    |> Expect.equal (FoodSearch (Just (date "2026-05-29")) Nothing)
         , test "leaves generic food search unchanged without a diary date" <|
             \_ ->
                 Main.normalizeChromeNavigation
@@ -66,7 +67,22 @@ normalizeChromeNavigationTests =
         , test "leaves explicit food search context unchanged" <|
             \_ ->
                 Main.normalizeChromeNavigation
-                    (DiaryDay (Just "2026-05-29") Nothing)
-                    (FoodSearch (Just "2026-06-01") (Just Lunch))
-                    |> Expect.equal (FoodSearch (Just "2026-06-01") (Just Lunch))
+                    (DiaryDay (Just (date "2026-05-29")) Nothing)
+                    (FoodSearch (Just (date "2026-06-01")) (Just Lunch))
+                    |> Expect.equal (FoodSearch (Just (date "2026-06-01")) (Just Lunch))
         ]
+
+
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    date raw

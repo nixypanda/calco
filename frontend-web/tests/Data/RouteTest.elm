@@ -4,6 +4,7 @@ import Data.MealSlot exposing (MealSlot(..))
 import Data.Route exposing (Route(..))
 import Expect
 import Fuzz exposing (Fuzzer)
+import Lib.Date as LocalDate exposing (LocalDate)
 import Test exposing (Test, describe, fuzz, test)
 import Url
 
@@ -15,32 +16,32 @@ tests =
         , parses "/login" AuthLogin
         , parses "/admin" AdminDashboard
         , parses "/home" (DiaryDay Nothing Nothing)
-        , parses "/home?date=2026-06-04" (DiaryDay (Just "2026-06-04") Nothing)
+        , parses "/home?date=2026-06-04" (DiaryDay (Just (date "2026-06-04")) Nothing)
         , parses "/home?date=2026-06-04&calendar_month=2026-06"
-            (DiaryDay (Just "2026-06-04") (Just "2026-06"))
+            (DiaryDay (Just (date "2026-06-04")) (Just "2026-06"))
         , parses "/calendar" (DiaryCalendar Nothing)
         , parses "/calendar?month=2026-06" (DiaryCalendar (Just "2026-06"))
         , parses "/details" (NutritionDetails Nothing)
-        , parses "/details?date=2026-06-04" (NutritionDetails (Just "2026-06-04"))
+        , parses "/details?date=2026-06-04" (NutritionDetails (Just (date "2026-06-04")))
         , parses "/settings/goals" GoalSettings
         , parses "/logs/abc" (FoodLogEntry "abc" Nothing Nothing)
         , parses "/logs/abc?date=2026-06-04"
-            (FoodLogEntry "abc" (Just "2026-06-04") Nothing)
+            (FoodLogEntry "abc" (Just (date "2026-06-04")) Nothing)
         , parses "/logs/abc?date=2026-06-04&calendar_month=2026-06"
-            (FoodLogEntry "abc" (Just "2026-06-04") (Just "2026-06"))
+            (FoodLogEntry "abc" (Just (date "2026-06-04")) (Just "2026-06"))
         , parses "/logs/new/ad-hoc?date=2026-06-04&meal_slot=lunch"
-            (AdHocLogCreate (Just "2026-06-04") (Just Lunch))
+            (AdHocLogCreate (Just (date "2026-06-04")) (Just Lunch))
         , parses "/logs/new/ai?date=2026-06-04&meal_slot=lunch"
-            (AiLogCreate (Just "2026-06-04") (Just Lunch))
+            (AiLogCreate (Just (date "2026-06-04")) (Just Lunch))
         , parses "/search" (FoodSearch Nothing Nothing)
         , parses "/search?meal_slot=breakfast" (FoodSearch Nothing (Just Breakfast))
         , parses "/search?date=2026-06-04&meal_slot=breakfast"
-            (FoodSearch (Just "2026-06-04") (Just Breakfast))
+            (FoodSearch (Just (date "2026-06-04")) (Just Breakfast))
         , parses "/foods/abc" (FoodShow "abc" Nothing Nothing Nothing)
         , parses "/foods/abc?meal_slot=breakfast"
             (FoodShow "abc" Nothing (Just Breakfast) Nothing)
         , parses "/foods/abc?date=2026-06-04&meal_slot=breakfast"
-            (FoodShow "abc" (Just "2026-06-04") (Just Breakfast) Nothing)
+            (FoodShow "abc" (Just (date "2026-06-04")) (Just Breakfast) Nothing)
         , parses "/foods/abc?lookup_note=Imported%20from%20OFF"
             (FoodShow "abc" Nothing Nothing (Just "Imported from OFF"))
         , parses "/foods/custom/new" CustomFoodCreate
@@ -111,11 +112,11 @@ routeFuzzer =
         ]
 
 
-maybeDateFuzzer : Fuzzer (Maybe String)
+maybeDateFuzzer : Fuzzer (Maybe LocalDate)
 maybeDateFuzzer =
     Fuzz.oneOf
         [ Fuzz.constant Nothing
-        , Fuzz.map Just dateStringFuzzer
+        , Fuzz.map Just dateFuzzer
         ]
 
 
@@ -156,17 +157,31 @@ mealSlotFuzzer =
         ]
 
 
-dateStringFuzzer : Fuzzer String
-dateStringFuzzer =
-    Fuzz.map3 formatDate
-        (Fuzz.intRange 1 9999)
+dateFuzzer : Fuzzer LocalDate
+dateFuzzer =
+    Fuzz.map3
+        (\year month day ->
+            LocalDate.fromParts year month day
+                |> Maybe.withDefault (date "2026-01-01")
+        )
+        (Fuzz.intRange 1000 9999)
         (Fuzz.intRange 1 12)
         (Fuzz.intRange 1 28)
 
 
-formatDate : Int -> Int -> Int -> String
-formatDate year month day =
-    String.fromInt year ++ "-" ++ pad2 month ++ "-" ++ pad2 day
+date : String -> LocalDate
+date raw =
+    case LocalDate.fromString raw of
+        Just value ->
+            value
+
+        Nothing ->
+            case LocalDate.fromParts 1970 1 1 of
+                Just fallback ->
+                    fallback
+
+                Nothing ->
+                    date raw
 
 
 safeSegmentFuzzer : Fuzzer String

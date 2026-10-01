@@ -25,6 +25,7 @@ import Data.LocalContext exposing (LocalContext)
 import Data.MealSlot exposing (MealSlot)
 import Element exposing (Element)
 import I18n
+import Lib.Date exposing (LocalDate)
 import Lib.Ticket exposing (Ticket)
 import Translations.Ids exposing (TranslationId(..))
 import Ui.Button as Button
@@ -52,7 +53,7 @@ type SubmitState
     | LogFailedAfterFoodSaved { productId : String, message : String }
 
 
-init : Maybe String -> Maybe MealSlot -> Model
+init : Maybe LocalDate -> Maybe MealSlot -> Model
 init date mealSlot =
     { form = Editor.emptyLogForm date mealSlot
     , units = []
