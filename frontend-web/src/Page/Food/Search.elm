@@ -76,7 +76,7 @@ type alias Model =
     , quickAdd : QuickAddState
     , addedItems : List { key : String, token : Ticket }
     , addedToken : Ticket
-    , completionIndex : Int
+    , completionSelection : Maybe Completion
     }
 
 
@@ -161,7 +161,7 @@ init date mealSlot =
     , quickAdd = QuickAddIdle
     , addedItems = []
     , addedToken = Ticket.initial
-    , completionIndex = -1
+    , completionSelection = Nothing
     }
 
 
@@ -204,7 +204,7 @@ type Msg
     | CategorySuggestionsCompleted Ticket (Result Client.ApiError Foods.CategorySuggestionResponse)
     | CompleteFirstSuggestion
     | CompletionClicked Completion
-    | CompletionActiveChanged Int
+    | CompletionSelectionChanged (Maybe Completion)
     | DebounceElapsed Ticket String
     | CategoryDebounceElapsed Ticket String
     | SearchCompleted Ticket (Result Client.ApiError Foods.SearchResponse)
@@ -265,7 +265,14 @@ applyQueryChange rawQuery model =
             else
                 Loading
     in
-    ( { model | search = search, results = results, completionIndex = -1 }, debounceCmd, NoOp )
+    ( { model
+        | search = search
+        , results = results
+        , completionSelection = Nothing
+      }
+    , debounceCmd
+    , NoOp
+    )
 
 
 applyScopeChange : SearchScope -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -381,8 +388,8 @@ update msg model =
         QueryChanged rawQuery ->
             applyQueryChange rawQuery model
 
-        CompletionActiveChanged index ->
-            ( { model | completionIndex = index }, Cmd.none, NoOp )
+        CompletionSelectionChanged selection ->
+            ( { model | completionSelection = selection }, Cmd.none, NoOp )
 
         ScopeSelected scope ->
             applyScopeChange scope model
@@ -980,8 +987,8 @@ textSearchInputView env model =
         , text = model.search.query
         , label = UiInput.LabelInside (searchLabel env.language model.scope)
         , completions = options
-        , activeIndex = model.completionIndex
-        , onActiveChanged = CompletionActiveChanged
+        , selection = model.completionSelection
+        , onSelectionChanged = CompletionSelectionChanged
         , onTabComplete = CompleteFirstSuggestion
         , onCompletionClick = CompletionClicked
         }

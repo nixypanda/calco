@@ -6,11 +6,14 @@ module Data.Search exposing
     , QueryState
     , applyCompletion
     , categoryQuery
+    , completionIndex
     , completionLabel
     , completions
     , empty
+    , nextCompletion
     , onQueryChanged
     , onQueryChangedDebounced
+    , previousCompletion
     , setCategorySuggestions
     , withCategoryToken
     , withQuery
@@ -211,6 +214,51 @@ completions query suggestions =
 
             Nothing ->
                 []
+
+
+completionIndex : Completion -> List Completion -> Maybe Int
+completionIndex target options =
+    options
+        |> List.indexedMap Tuple.pair
+        |> List.filter (\( _, candidate ) -> candidate == target)
+        |> List.head
+        |> Maybe.map Tuple.first
+
+
+nextCompletion : Maybe Completion -> List Completion -> Maybe Completion
+nextCompletion current options =
+    case current of
+        Nothing ->
+            List.head options
+
+        Just selected ->
+            case completionIndex selected options of
+                Nothing ->
+                    List.head options
+
+                Just index ->
+                    List.drop (index + 1) options
+                        |> List.head
+                        |> Maybe.withDefault selected
+                        |> Just
+
+
+previousCompletion : Maybe Completion -> List Completion -> Maybe Completion
+previousCompletion current options =
+    case current of
+        Nothing ->
+            List.head options
+
+        Just selected ->
+            case completionIndex selected options of
+                Nothing ->
+                    List.head options
+
+                Just index ->
+                    List.drop (max 0 (index - 1)) options
+                        |> List.head
+                        |> Maybe.withDefault selected
+                        |> Just
 
 
 completionLabel : Completion -> String

@@ -68,7 +68,7 @@ type alias ComponentRow =
     , unitOpen : Bool
     , search : QueryState
     , searchResults : Loadable () (List SearchResult)
-    , completionIndex : Int
+    , completionSelection : Maybe Completion
     }
 
 
@@ -167,7 +167,7 @@ emptyComponentRow rowId =
     , unitOpen = False
     , search = Search.empty
     , searchResults = NotAsked
-    , completionIndex = -1
+    , completionSelection = Nothing
     }
 
 
@@ -186,7 +186,7 @@ type FormFieldMsg
     | ComponentCategoriesCompleted RowId Ticket CategorySuggestionResult
     | CompleteFirstComponentSuggestion RowId
     | ComponentCompletionClicked RowId Completion
-    | ComponentCompletionActiveChanged RowId Int
+    | ComponentCompletionSelectionChanged RowId (Maybe Completion)
     | SelectProduct RowId SearchResult
     | ComponentQuantityChanged RowId String
     | ComponentUnitChanged RowId String
@@ -323,8 +323,8 @@ updateFormField msg form =
                 Nothing ->
                     ( form, Cmd.none, Nothing )
 
-        ComponentCompletionActiveChanged rowId index ->
-            ( updateComponent rowId (SetCompletionIndex index) form, Cmd.none, Nothing )
+        ComponentCompletionSelectionChanged rowId selection ->
+            ( updateComponent rowId (SetCompletionSelection selection) form, Cmd.none, Nothing )
 
         SelectProduct rowId result ->
             ( updateComponent rowId (SetProduct result.id result.name) form, Cmd.none, Nothing )
@@ -586,7 +586,7 @@ type ComponentPatch
     | SetSearchResults Ticket (List SearchResult)
     | SetSearchLoading
     | SetSearchFailed
-    | SetCompletionIndex Int
+    | SetCompletionSelection (Maybe Completion)
 
 
 patchRow : RowId -> ComponentPatch -> ComponentRow -> ComponentRow
@@ -601,7 +601,7 @@ patchRow rowId patch row =
                     | productId = id
                     , search = Search.withQuery name Search.empty
                     , searchResults = NotAsked
-                    , completionIndex = -1
+                    , completionSelection = Nothing
                 }
 
             SetQuantity value ->
@@ -611,7 +611,7 @@ patchRow rowId patch row =
                 { row | unit = value, unitOpen = False }
 
             SetSearch queryState ->
-                { row | search = queryState, completionIndex = -1 }
+                { row | search = queryState, completionSelection = Nothing }
 
             SetSearchResults token results ->
                 if row.search.searchToken == token then
@@ -626,8 +626,8 @@ patchRow rowId patch row =
             SetSearchFailed ->
                 { row | searchResults = Failure () }
 
-            SetCompletionIndex index ->
-                { row | completionIndex = index }
+            SetCompletionSelection selection ->
+                { row | completionSelection = selection }
 
 
 findRow : RowId -> List ComponentRow -> Maybe ComponentRow
@@ -668,8 +668,8 @@ componentRowView env toMsg units row =
             , text = row.search.query
             , label = UiInput.LabelAbove (I18n.t env.language TidMealSearchProduct)
             , completions = Search.completions row.search.query row.search.categorySuggestions
-            , activeIndex = row.completionIndex
-            , onActiveChanged = toMsg << ComponentCompletionActiveChanged row.rowId
+            , selection = row.completionSelection
+            , onSelectionChanged = toMsg << ComponentCompletionSelectionChanged row.rowId
             , onTabComplete = toMsg (CompleteFirstComponentSuggestion row.rowId)
             , onCompletionClick = toMsg << ComponentCompletionClicked row.rowId
             }
