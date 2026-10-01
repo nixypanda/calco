@@ -1,6 +1,9 @@
-# CalCo NixOS module
+# Deployment
 
-This flake exports:
+This document covers running CalCo on a host. For a local dev environment, see
+[local-development.md](local-development.md).
+
+The flake exports:
 
 - `packages.${system}.backend` — axum binary + `share/calco/migrations/`
 - `packages.${system}.frontend` — static Elm/Vite bundle in `share/calco/web/`
@@ -11,9 +14,9 @@ from your own system flake (dotfiles / nixos-config repo).
 
 ## Files
 
-- `backend.nix` — Rust derivation (no `.sqlx/` needed; backend uses runtime queries only).
-- `frontend.nix` — Elm + Vite static site. Pinned via `elm-srcs.nix`, `registry.dat`, and `npmDepsHash`.
-- `module.nix` — defines `services.calco`. Sets up `services.postgresql`, a migrate oneshot, the backend systemd unit, and an nginx vhost.
+- `nix/backend.nix` — Rust derivation (no `.sqlx/` needed; backend uses runtime queries only).
+- `nix/frontend.nix` — Elm + Vite static site. Pinned via `elm-srcs.nix`, `registry.dat`, and `npmDepsHash`.
+- `nix/module.nix` — defines `services.calco`. Sets up `services.postgresql`, a migrate oneshot, the backend systemd unit, and an nginx vhost.
 
 ## Consuming from your system flake
 
@@ -202,3 +205,22 @@ has a sane default except `DATABASE_URL` (set by the module).
 
 The module does **not** configure a reverse proxy, TLS, or open firewall
 ports — that's the consumer's job.
+
+## Backups
+
+The NixOS module enables nightly PostgreSQL backups through
+`services.postgresqlBackup`. Outside NixOS, back up PostgreSQL with normal
+PostgreSQL tooling such as `pg_dump` or volume snapshots.
+
+Tables worth treating as user-critical:
+
+- `identities`
+- `user_profiles`
+- `sessions` if preserving login sessions matters
+- `products`
+- `product_nutrients`
+- `product_servings`
+- `food_logs`
+- `food_log_nutrients`
+- `meals`
+- `meal_components`

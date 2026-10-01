@@ -1,6 +1,6 @@
 # Tools Agent Guardrails
 
-Read the repository root `AGENTS.md` and the relevant README before changing
+Read the repository root `AGENTS.md` and the relevant docs before changing
 anything in this directory.
 
 ## Boundaries
@@ -13,10 +13,9 @@ anything in this directory.
 
 ## Where To Start
 
-- `README.md` explains the tools tree.
-- `importers/README.md` explains catalog and personal-data importers.
-- `../docs/imports.md` explains the backend import API and normalized row
-  contracts.
+- `../docs/imports.md` explains the tools tree, the catalog data-sources
+  pipeline, and the backend import API and normalized row contracts.
+- `../docs/personal-data-import.md` explains the personal-data importer.
 
-Use repository-level `just` checks when they apply, and importer-specific
-checks from each importer README when touching Python tooling.
+Use repository-level `just` checks when they apply, and the importer-specific
+checks documented in `../docs/imports.md` when touching Python tooling.

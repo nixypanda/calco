@@ -1,7 +1,7 @@
 # Personal Data Import Agent Guardrails
 
-Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
-`../../../docs/imports.md` before changing this importer.
+Read `../../../AGENTS.md` and `../../../docs/personal-data-import.md` before
+changing this importer.
 
 - This directory handles private user import workflows, currently centered on
   MyFitnessPal exports.
@@ -15,4 +15,5 @@ Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
 - Do not overwrite finalized review CSVs blindly; write a new output and
   compare before merging decisions.
 
-Run the checks documented in `README.md` before handing off importer changes.
+Run the checks documented in `../../../docs/personal-data-import.md` before
+handing off importer changes.

@@ -1,7 +1,7 @@
 # Data Sources Agent Guardrails
 
-Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
-`../../../docs/imports.md` before changing this importer.
+Read `../../../AGENTS.md` and `../../../docs/imports.md` before changing this
+importer.
 
 - This is the public catalog dataset pipeline for USDA, IFCT, INDB, and Open
   Food Facts.
@@ -15,4 +15,5 @@ Read `../../../AGENTS.md`, `../../README.md`, `README.md`, and
 - Do not commit downloaded source archives, generated processed data, or local
   caches.
 
-Run the checks documented in `README.md` before handing off converter changes.
+Run the checks documented in `../../../docs/imports.md` before handing off
+converter changes.

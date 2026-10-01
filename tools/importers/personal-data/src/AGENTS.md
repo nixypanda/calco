@@ -1,6 +1,7 @@
 # MFP Cleaning Pipeline Agent Guardrails
 
-Read `../README.md` and `README.md` before changing the cleaning pipeline.
+Read `../../../../docs/personal-data-import.md` before changing the cleaning
+pipeline.
 
 - Keep each numbered step deterministic and reviewable.
 - Preserve the MFP CSV title-row-plus-header format through shared helpers.

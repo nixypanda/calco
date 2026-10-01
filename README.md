@@ -44,94 +44,20 @@ Not the goal right now:
 - Offline/service-worker behavior
 - Native mobile app
 
-## Command Runner
-
-This is a Nix-based project. Run repository `just` recipes through the dev shell:
-
-```bash
-just <recipe>
-```
-
-## Quick Start
-
-Start PostgreSQL:
-
-```bash
-nix develop
-just db-up
-just db-wait
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just migrate-backend
-```
-
-Run the backend:
-
-```bash
-DATABASE_URL=postgres://calco:calco@localhost:5432/calco just dev-backend
-```
-
-Run the frontend:
-
-```bash
-just dev-frontend
-```
-
-The backend listens on port `3001` by default. The Elm frontend dev server listens on port `1234`.
-
-## Verification
-
-Reliable current checks:
-
-```bash
-just test
-just test-backend
-just test-frontend
-just build-frontend
-```
-
-## Internationalization
-
-Frontend copy is translated at compile time via
-[i18n-to-elm](https://github.com/dragonwasrobot/i18n-to-elm) (pinned to `v0.5.0`).
-
-- `frontend-web/i18n/en_US.json` is the hand-edited source of truth: one flat
-  object of strict PascalCase keys, with `{0}`, `{1}` holes for interpolation.
-- `frontend-web/generated/Translations/` is generated Elm. It is **committed**
-  and must never be hand-edited or reformatted.
-- Regenerate after editing the JSON:
-
-  ```bash
-  nix develop
-  just i18n
-  ```
-
-  The recipe builds and caches the `i18n2elm` escript on first run (needs
-  network once), then runs offline.
-
-- Render strings through the `I18n.t` seam in `frontend-web/src/I18n.elm`:
-
-  ```elm
-  import I18n
-  import Translations.Ids exposing (TranslationId(..))
-
-  Element.text (I18n.t TidNavDiary)
-  Element.text (I18n.t (TidTitleAddToMealSlot (MealSlot.label slot)))
-  ```
-
-  Note: Elm imports `TranslationId(..)`, not individual constructors.
-
-`en_US` is the only locale. `generated/` is a second Elm source directory and is
-excluded from `elm-format` and `elm-review`; `src`/`tests` stay formatted normal
-Elm. Assistant output language is handled separately in the backend system
-prompt (`backend/src/assistant/infrastructure/food_draft/prompt.rs`), not by
-this pipeline.
-
 ## Documentation
 
 - [Features](docs/features.md): product checklist and current scope
 - [Architecture](docs/architecture.md): system structure and DDD decisions
 - [Backend](docs/backend.md): backend domains, APIs, persistence, and invariants
 - [Frontend](docs/frontend.md): frontend routes, UI structure, and design rules
-- [Imports](docs/imports.md): CLI import pipeline and source merging
-- [Operations](docs/operations.md): local operations, env vars, database, tests
+- [Button System](docs/buttons.md): unified button API and documented exceptions
+- [Local Development](docs/local-development.md): dev shell, services, env vars, tests, i18n
+- [Deployment](docs/deployment.md): NixOS module, reverse proxy, and production setup
+- [Imports](docs/imports.md): catalog CLI import pipeline and source merging
+- [Personal Data Import](docs/personal-data-import.md): MyFitnessPal export workflow
 - [Testing](docs/testing.md): automated test layout and commands
 - [QA Runbook](docs/qa-runbook.md): end-to-end browser release checks
+
+Setup details live in the docs above, not in this README. Start with
+[Local Development](docs/local-development.md) for a working dev environment, or
+[Deployment](docs/deployment.md) to run CalCo on a server.
