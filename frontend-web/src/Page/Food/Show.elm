@@ -43,7 +43,7 @@ import View.Product
 type Model
     = Loading LoadingModel
     | Loaded LoadedModel
-    | LoadFailed String
+    | LoadFailed { productId : String, message : String }
 
 
 type alias LoadingModel =
@@ -112,17 +112,17 @@ type Msg
     | LogCompleted (Result Client.ApiError FoodLog)
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         Loading loading ->
-            Just loading.productId
+            loading.productId
 
         Loaded loaded ->
-            Just loaded.productId
+            loaded.productId
 
-        LoadFailed _ ->
-            Nothing
+        LoadFailed failed ->
+            failed.productId
 
 
 loadId : Msg -> Maybe String
@@ -140,7 +140,7 @@ loadId msg =
 
 isCurrent : String -> Model -> Bool
 isCurrent incomingId model =
-    modelId model == Just incomingId
+    modelId model == incomingId
 
 
 update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
@@ -413,7 +413,9 @@ failure =
     Client.failure
         { noOp = NoOp
         , sessionExpired = SessionExpired
-        , applyError = \message _ -> LoadFailed message
+        , applyError =
+            \message current ->
+                LoadFailed { productId = modelId current, message = message }
         }
 
 
@@ -442,8 +444,8 @@ contentView env model =
     Element.column
         [ Element.width Element.fill, Element.spacing DesignTokens.space16 ]
         [ case model of
-            LoadFailed message ->
-                Feedback.errorBanner env.theme message
+            LoadFailed failed ->
+                Feedback.errorBanner env.theme failed.message
 
             Loaded _ ->
                 Element.none

@@ -85,17 +85,17 @@ type Msg
     | UnitsLoaded (Result Client.ApiError Foods.UnitListResponse)
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         LoadingEdit loading ->
-            Just loading.mealId
+            loading.mealId
 
         EditLoadFailed failed ->
-            Just failed.mealId
+            failed.mealId
 
         Editing loaded ->
-            Just loaded.mealId
+            loaded.mealId
 
 
 loadId : Msg -> Maybe String
@@ -130,7 +130,7 @@ update msg model =
                     ( model, Cmd.none, NoOp )
 
         MealLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if modelId model /= incomingId then
                 ( model, Cmd.none, NoOp )
 
             else
@@ -170,7 +170,7 @@ update msg model =
                             model
 
         NutrientPreviewLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if modelId model /= incomingId then
                 ( model, Cmd.none, NoOp )
 
             else

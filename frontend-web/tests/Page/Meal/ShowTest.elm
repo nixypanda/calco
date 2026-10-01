@@ -297,7 +297,7 @@ toScreen model =
             , error = Nothing
             }
 
-        MealShow.LoadFailed message ->
+        MealShow.LoadFailed failed ->
             { phase = "failed"
             , units = Nothing
             , nutrition = "none"
@@ -305,7 +305,7 @@ toScreen model =
             , amount = Nothing
             , unit = Nothing
             , delete = Nothing
-            , error = Just message
+            , error = Just failed.message
             }
 
 

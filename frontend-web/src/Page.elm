@@ -1557,14 +1557,14 @@ type alias PaneUpdate pane =
     { pane : pane, cmd : Cmd Msg, outMsg : OutMsg, mutation : Mutation }
 
 
-messageMatchesPane : Maybe String -> Maybe String -> Bool
+messageMatchesPane : Maybe String -> String -> Bool
 messageMatchesPane incoming current =
     case incoming of
         Nothing ->
             True
 
         Just incomingId ->
-            current == Just incomingId
+            current == incomingId
 
 
 updateFirst : (pane -> Maybe (PaneUpdate pane)) -> List pane -> Maybe (PaneUpdate (List pane))

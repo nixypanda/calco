@@ -83,17 +83,17 @@ type Msg
     | RetryClicked
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         Loading loading ->
-            Just loading.productId
+            loading.productId
 
         Loaded loaded ->
-            Just loaded.productId
+            loaded.productId
 
-        LoadFailed _ ->
-            Nothing
+        LoadFailed failed ->
+            failed.productId
 
 
 loadId : Msg -> Maybe String
@@ -110,7 +110,7 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         FoodLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if modelId model /= incomingId then
                 ( model, Cmd.none, NoOp )
 
             else

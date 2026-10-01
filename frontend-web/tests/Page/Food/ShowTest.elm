@@ -233,13 +233,13 @@ toScreen model =
             , error = Nothing
             }
 
-        FoodShow.LoadFailed message ->
+        FoodShow.LoadFailed failed ->
             { phase = "failed"
             , amount = Nothing
             , unit = Nothing
             , submit = Nothing
             , submitError = Nothing
-            , error = Just message
+            , error = Just failed.message
             }
 
 

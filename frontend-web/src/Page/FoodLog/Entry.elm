@@ -116,17 +116,17 @@ type Msg
     | DeleteCompleted (Result Client.ApiError ())
 
 
-modelId : Model -> Maybe String
+modelId : Model -> String
 modelId model =
     case model of
         Loading loading ->
-            Just loading.logId
+            loading.logId
 
         Loaded loaded ->
-            Just loaded.logId
+            loaded.logId
 
         LoadFailed failed ->
-            Just failed.logId
+            failed.logId
 
 
 loadId : Msg -> Maybe String
@@ -154,7 +154,7 @@ update : Msg -> Model -> ( Model, Cmd Msg, OutMsg )
 update msg model =
     case msg of
         LogLoaded incomingId result ->
-            if modelId model /= Just incomingId then
+            if modelId model /= incomingId then
                 ( model, Cmd.none, NoOp )
 
             else
